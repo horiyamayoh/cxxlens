@@ -891,26 +891,36 @@ format_compatibility:
           attachment_identity: checked-nonreusable-per-main-native_file_node-xOpen-and-open-epoch-token-bound-to-process-runtime-vfs-file-family-alias-connection-and-exact-xShmMap-xShmUnmap-callback-cohort-never-file-pointer-connection-or-path-alone
           holder_model: retain-one-holder-specific-map-authority-per-successful-map-callback-and-atomically-group-all-post-native-pending-and-live-holders-by-their-exact-native-attachment-identity
           per_map_authority: each-group-member-retains-its-own-caller-delegated-extend-pair-effect-receipt-page-range-pointer-sealed-size-writer-epoch-and-promotion-receipt
+          attachment_page_support: each-live-group-retains-the-exact-set-of-page-members-it-currently-supports-and-support-never-transfers-between-attachments
+          generation_fresh_reader_page_set: union-of-page-support-from-exact-live-attachment-groups-recomputed-atomically-after-nonlast-cleanup
+          zero_support_page: remove-from-fresh-reader-admission-before-confirming-nonlast-cleanup-and-require-a-fresh-exact-live-attachment-map-and-reseal-to-reenter-while-existing-exact-reader-handoffs-retain-only-their-already-sealed-lifetime
+          sealed_size_after_nonlast_cleanup: retain-the-monotonic-physical-high-water-observation-without-inferring-shrink-and-never-use-it-alone-as-page-authority
+          retired_attachment_evidence: retain-only-as-immutable-audit-history-never-live-page-support-cleanup-eligibility-or-transferable-authority
           same_attachment_admission: later-map-attempts-must-match-the-exact-attachment-identity-and-may-add-or-revalidate-one-page-only-after-the-existing-predelegate-post-map-gate-generation-page-set-and-size-rules
           repeated_same_page: revalidates-and-retains-the-new-per-callback-authority-without-creating-another-native-attachment-cleanup-obligation
           cross_attachment_grouping: forbidden-even-for-equal-connection-path-pointer-object-page-size-or-generation
           map_before_gate_group: all-complete-pending-members-for-one-attachment-promote-under-one-exact-eligibility-or-a-gate-failure-hides-the-complete-group-before-one-nonremoving-unmap
+          gate_completion_total_order: same-attachment-gate-completion-and-later-map-admission-are-serialized-at-one-registry-state-boundary-before-the-later-native-callback
+          map_winning_gate_order: a-later-map-inflight-visible-before-the-gate-boundary-is-a-bounded-gate-blocker-and-the-gate-waits-for-that-attempt-to-join-or-fail-before-complete-group-promotion-or-cleanup
+          gate_winning_map_order: gate-atomically-seals-eligibility-and-the-complete-group-boundary-and-any-later-map-takes-the-gate-before-map-route-with-promotion-before-callback-return
+          gate_order_failure: timeout-unknown-outcome-or-open-epoch-drift-hides-the-complete-group-and-quarantines-with-no-partial-promotion-retry-or-revival
+          successful_gate_postcondition: every-member-visible-before-the-sealed-boundary-is-live-or-cleaned-and-no-same-attachment-pending-only-member-survives-gate-success-while-later-maps-use-the-gate-before-map-route
           native_no_mapping_failure: resolves-only-that-predelegate-attempt-and-never-invalidates-an-already-live-attachment
           post_native_failure_without_live_member: hide-the-complete-post-native-or-pending-group-attempt-one-nonremoving-unmap-and-on-confirmed-success-remove-it-without-minting-generation-or-reader-authority
           post_native_failure_with_live_member: hide-the-complete-attachment-group-before-one-nonremoving-unmap-and-quarantine-the-generation-and-all-related-attachment-authority-with-no-new-admission-retry-or-revival
           cleanup_admission: atomically-seal-the-complete-exact-attachment-member-set-and-consume-one-callback-invocation-before-native-unmap-without-holding-the-registry-mutex-through-the-callback
           cleanup_completion: one-exact-native-xShmUnmap-zero-outcome-completes-the-sealed-group-once-and-is-never-replayed-as-multiple-native-effects
-          nonlast_attachment: confirmed-unmap-removes-only-that-group-while-another-exact-live-attachment-may-continue-the-generation-unless-the-group-entered-post-native-failure-quarantine
+          nonlast_attachment: confirmed-unmap-removes-only-that-group-atomically-recomputes-fresh-reader-page-support-and-allows-another-exact-live-attachment-to-continue-the-generation-unless-the-group-entered-post-native-failure-quarantine
           last_attachment: hide-generation-reader-admission-first-then-apply-the-existing-bounded-inflight-retirement-and-reader-handoff-rules-before-the-one-native-unmap
           pending_and_live_membership: a-cleanup-group-may-contain-post-native-pending-and-live-members-only-when-every-member-has-the-identical-attachment-identity-and-the-sealed-set-is-complete
           close_without_prior_unmap: revoke-eligibility-hide-the-complete-group-attempt-one-trusted-nonremoving-unmap-then-close-only-after-confirmed-unmap-success
-          close_after_confirmed_unmap: close-without-a-second-unmap-or-cleanup-completion
+          close_after_confirmed_unmap: close-once-without-a-second-unmap-or-cleanup-completion-and-any-close-nonOK-throw-or-unknown-keeps-group-authority-retired-and-quarantines-the-opaque-handle-with-no-authority-revival-or-retry
           unmap_nonOK_throw_or_unknown: quarantine-opaque-handle-complete-attachment-group-runtime-vfs-and-generation-with-no-close-retry-reregister-or-revival
           remap_after_unmap: require-a-fresh-nonreusable-attachment-epoch-and-when-the-prior-generation-retired-a-fresh-mapping-generation-even-for-equal-object-page-size-and-pointer
           concurrency: same-attachment-later-map-versus-unmap-is-total-ordered-map-winning-becomes-a-cleanup-blocker-and-unmap-winning-rejects-predelegate-before-native-callback
           fail_closed_matrix:
-            required: [cross-attachment-aggregation, incomplete-attachment-member-set, duplicate-member-token, duplicate-group-unmap, repeated-same-page-extra-cleanup-obligation, second-page-post-validation-failure-keeps-first-page-live, map-before-gate-partial-group-promotion-or-cleanup, unmap-remap-attachment-epoch-reuse, close-before-unmap-without-cleanup, close-after-unmap-double-cleanup, concurrent-last-unmap-versus-later-map]
-            positive: [one-connection-page-zero-and-page-one-one-native-unmap, repeated-same-page-one-attachment-one-native-unmap, two-connections-multiple-pages-exactly-two-native-unmaps, same-attachment-map-before-gate-group-promotion]
+            required: [cross-attachment-aggregation, incomplete-attachment-member-set, duplicate-member-token, duplicate-group-unmap, repeated-same-page-extra-cleanup-obligation, second-page-post-validation-failure-keeps-first-page-live, map-before-gate-partial-group-promotion-or-cleanup, gate-snapshot-versus-later-map-partial-promotion, nonlast-removal-sole-page-support-reused-by-fresh-reader, retired-attachment-page-receipt-transferred-to-live-attachment, nonlast-removal-infers-sealed-size-shrink, unmap-remap-attachment-epoch-reuse, close-before-unmap-without-cleanup, close-after-unmap-double-cleanup, close-after-inner-unmap-success-revives-authority-on-close-failure, concurrent-last-unmap-versus-later-map]
+            positive: [one-connection-page-zero-and-page-one-one-native-unmap, repeated-same-page-one-attachment-one-native-unmap, two-connections-multiple-pages-exactly-two-native-unmaps, same-attachment-map-before-gate-group-promotion, map-winning-gate-waits-for-complete-group-resolution, gate-winning-later-map-promotes-before-callback-return, nonlast-removal-of-sole-page-support-requires-live-attachment-remap-reseal, confirmed-unmap-fresh-attachment-epoch-remap, close-before-unmap-inner-unmap-OK-then-close-OK]
           authorization:
             before_independent_acceptance: authority-edit-readonly-audit-and-temporary-reproduction-only-no-attachment-group-implementation-or-production-binding
             after_proposal_acceptance: internal-attachment-group-state-machine-callback-gates-and-focused-tests-may-be-implemented

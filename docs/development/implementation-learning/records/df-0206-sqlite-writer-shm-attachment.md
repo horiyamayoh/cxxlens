@@ -144,3 +144,24 @@ cross-attachment, partial-set, duplicate-unmap, second-page failure, remap, clos
 counterexamples. The proposal remains `proposed-unqualified-non-authorizing`; this record remains
 `observed`, blocked, with empty `resolution_refs` and independent review pending. No attachment
 group implementation or production binding is authorized by this draft.
+
+2026-07-28: Independent counterexample review of exact proposal commit
+`3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` returned `P0=0 / P1=2 / P2=1` and
+rejected it. The blocking review is recorded at
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097510242>. A non-last
+attachment could remove the only live support for one page without defining fresh-reader
+admission, page receipt transfer, or the relation between page authority and monotonic sealed
+size. Separately, a gate snapshot could promote a partial map-before-gate group while a later map
+became in-flight or post-native. Focused nested status, authorization, identity, platform, and
+these two rules also lacked direct mutation coverage.
+
+2026-07-28: The revised four-mirror proposal tracks exact page support per live attachment group,
+atomically recomputes fresh-reader-admissible pages after non-last cleanup, prevents retired
+receipt transfer, and keeps sealed size only as a monotonic physical observation. It total-orders
+gate completion with later-map admission: map-winning attempts become bounded gate blockers,
+gate-winning attempts use callback-local gate-before-map promotion, and timeout, unknown outcome,
+or open-epoch drift hides and quarantines the complete group. Direct mutation negatives and the
+expanded close/remap matrix bind these rules. The revised enclosing lease digest is
+`sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550`.
+This record remains `observed` / blocked with empty `resolution_refs`; the revised proposal remains
+`proposed-unqualified-non-authorizing` pending a fresh independent exact review.

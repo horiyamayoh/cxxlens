@@ -82,6 +82,20 @@ cross-attachment grouping、partial group、duplicate unmap、second-page valida
 継続、closeのdouble cleanupを禁止する。fresh independent authority reviewまでattachment group実装と
 writer VFS production bindingをblockし、current blanket native `SQLITE_OK` rejectionを維持する。
 
+exact proposal `3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` の独立 review は
+`P0=0 / P1=2 / P2=1` でrejectした。non-last attachmentが唯一supportしたpageをcleanup後も
+fresh readerへ見せ得る点と、map-before-gate group snapshotが同じattachmentのlater mapと
+total-orderされずpartial promotionを作り得る点がP1である。revised proposalはlive attachment
+groupごとのpage supportを保持し、non-last cleanup後にfresh-reader-admissible page setをatomicに
+再計算する。support zeroのpageはlive attachmentが再map/resealするまでfresh admissionへ戻さず、
+sealed SHM sizeはpage authorityと分離したmonotonic physical observationとしてだけ保持する。
+またgate boundaryとlater-map admissionを一つのregistry state boundaryでtotal-orderし、map-winningは
+bounded blocker、gate-winningはcallback return前promotion routeとする。timeout、unknown、open-epoch
+driftはcomplete groupをhide/quarantineし、successful gate後にpre-boundary pendingを残さない。
+revised enclosing lease digestは
+`sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550`
+であり、fresh independent reviewまでは引き続きnon-authorizingである。
+
 ADR 0097 はこの hybrid と logical payload policy を維持しつつ、current physical layout を
 `cxxlens.sqlite-semantic-store.v3` / `3.0.0` の bounded chunk table に置き換える。本 ADR の v2.6.0 schema は
 read-only direct-open predecessor と registered migration source としてのみ authority を保つ。新規 DB と write は

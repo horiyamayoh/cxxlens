@@ -2284,6 +2284,20 @@ post-native/pending/live member setを一回のnative unmapへatomicにbindし�
 group、outcome複製、duplicate cleanupを拒否する。independent acceptance前にattachment groupや
 production VFS bindingを実装せず、既存 blanket native OK rejectionを変更しない。
 
+exact proposal `3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` の独立 review は
+`P0=0 / P1=2 / P2=1` でrejectした。non-last attachmentが唯一supportしたpageのfresh-reader
+authorityと、map-before-gate group snapshot対later-map admissionのtotal orderが未定義だったためである。
+revised proposalは各live attachment groupのexact page-support setを保持し、non-last cleanup後に残存
+support unionからfresh-reader-admissible page setをatomicに再計算する。support zeroのpageは既存exact
+handoffのsealed lifetimeを除きfresh admission不可とし、live attachmentのfresh map/resealだけで復活する。
+cleanup済みreceiptはtransferせず、sealed SHM sizeはpage authorityと分離したmonotonic physical
+observationとして保持する。gate completionとlater mapは一つのregistry state boundaryでtotal-orderし、
+map-winningはbounded blocker、gate-winningはcallback return前promotionとする。timeout、unknown、
+open-epoch driftはcomplete groupをhide/quarantineし、successful gate後にboundary前pendingを残さない。
+revised enclosing lease digest
+`sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550`
+は四つのmirror/checkerへbindするが、fresh independent acceptanceまではnon-authorizingである。
+
 local attemptはnative writer map前にwriter generation/first-writer cohort in-flight pinを取得し、
 pre-statより先に別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace watchを
 開始する。registry mutexはnative callback越しに保持しない。pre-existing SHMはnamespace event zeroを

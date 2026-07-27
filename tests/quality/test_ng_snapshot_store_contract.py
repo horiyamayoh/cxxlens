@@ -96,6 +96,17 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             "attachment-group-implementation-or-production-binding",
         )
         self.assertEqual(
+            attachment["generation_fresh_reader_page_set"],
+            "union-of-page-support-from-exact-live-attachment-groups-recomputed-"
+            "atomically-after-nonlast-cleanup",
+        )
+        self.assertEqual(
+            attachment["gate_completion_total_order"],
+            "same-attachment-gate-completion-and-later-map-admission-are-"
+            "serialized-at-one-registry-state-boundary-before-the-later-native-"
+            "callback",
+        )
+        self.assertEqual(
             lease["authorization"]["production_activation"],
             "blocked-until-the-exact-implementation-and-complete-counterexample-"
             "matrix-receive-a-distinct-independent-review",
@@ -140,12 +151,83 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "attachment-status-self-accepted",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "status", "accepted-authority-implementation-pending"
+                ),
+            ),
+            (
+                "attachment-pre-review-implementation-authorized",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ]["authorization"].__setitem__(
+                    "before_independent_acceptance",
+                    "attachment-group-implementation-authorized",
+                ),
+            ),
+            (
+                "attachment-production-self-authorized",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ]["authorization"].__setitem__(
+                    "production_activation", "allowed"
+                ),
+            ),
+            (
+                "attachment-pointer-only-identity",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "attachment_identity",
+                    "native-pointer-and-connection-only",
+                ),
+            ),
+            (
                 "attachment-group",
                 lambda value: value[
                     "writer_native_attachment_amendment_proposal"
                 ].__setitem__(
                     "cleanup_completion",
                     "reuse-one-native-outcome-for-independent-holders",
+                ),
+            ),
+            (
+                "attachment-page-support-removed",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].pop("generation_fresh_reader_page_set"),
+            ),
+            (
+                "attachment-retired-evidence-transferable",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "retired_attachment_evidence",
+                    "transfer-to-any-live-attachment-in-the-generation",
+                ),
+            ),
+            (
+                "attachment-gate-total-order-removed",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].pop("gate_completion_total_order"),
+            ),
+            (
+                "attachment-gate-partial-pending-allowed",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "successful_gate_postcondition",
+                    "same-attachment-pending-members-may-survive-gate-success",
+                ),
+            ),
+            (
+                "attachment-untrusted-platform-mints",
+                lambda value: value["two_stage_writer_authority"].__setitem__(
+                    "writer_mapping_epoch_failure",
+                    "non-Linux-or-unavailable-stat-watch-may-mint-from-final-state",
                 ),
             ),
             (

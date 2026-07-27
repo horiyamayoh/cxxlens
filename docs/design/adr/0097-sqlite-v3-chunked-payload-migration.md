@@ -235,6 +235,12 @@ exact map/unmap callback cohort に bindし、file pointer、connection、path�
 同じ attachment の後続 page map と repeated same-page map は既存 predelegate/post-map/gate/page-set/size
 rules を再実行し、別 attachment の member を group に混ぜない。map-before-gate の複数 pending は
 complete groupとしてpromoteまたはcleanupし、partial promotion/cleanupを許さない。
+gate completionと同じattachmentのlater-map admissionは一つのregistry state boundaryでtotal-orderする。
+map inflightが先にvisibleならgateのbounded blockerになり、そのattemptがjoin/failしてcomplete groupが
+確定するまでpromote/cleanupしない。gate boundaryが先ならeligibilityとcomplete group boundaryを
+atomicにsealし、後続mapはgate-before-map routeでcallback return前にpromoteする。timeout、unknown、
+open-epoch driftはcomplete groupをhide/quarantineし、successful gateはboundary前にvisibleだったmemberを
+liveまたはcleanedにしてpending-only memberを残さない。
 
 native mappingを得なかった later attempt の failure はその attemptだけを解決し、既存 live groupを
 無効化しない。native OK+nonnull後のpost validation failureでlive memberがない場合はgroupを先にhideし、
@@ -251,11 +257,30 @@ non-OK、throw、unknownはopaque handle/group/runtime/VFS/generationをquaranti
 remapはfresh attachment epochを要求し、prior generationがretireした場合は同じobject/page/pointerでも
 fresh generationを要求する。
 
+各live attachment groupは現在supportするexact page member setを保持する。non-last cleanupでは残る
+live groupのsupport unionからfresh-reader-admissible page setをatomicに再計算し、support zeroになった
+pageは既存exact reader handoffのsealed lifetimeを除いてfresh admissionから外す。別live attachmentが
+そのpageをfresh map/resealした場合だけ再加入でき、cleanup済みreceiptを別attachmentへtransferしない。
+generationのsealed SHM sizeは物理縮小を推測せずmonotonic high-water observationとして保持するが、
+それ単独をpage authorityにしない。retired attachment receiptはimmutable audit historyにだけ残し、
+live support、cleanup eligibility、transfer authorityへ戻さない。inner unmap成功後のclose失敗も
+retired group authorityを復元せず、opaque handleをquarantineしてretryしない。
+
 acceptance review は少なくとも、one connectionのpage 0/page 1を一 unmapで解放するpositive、repeated
 same-page、two connectionsのexact two unmaps、pending/live mixed group、cross-attachment、incomplete set、
 duplicate unmap、second-page post-validation failure、unmap/remap epoch reuse、close before/after unmap、
 later-map対last-unmap raceを反証する。proposal digestは四つのSQLite/Snapshot contract/schema mirrorと
 checker mutation negativeに固定し、fresh independent review前は対象実装をblockする。
+
+exact proposal `3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` の
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097510242> に記録した独立 reviewは
+`P0=0 / P1=2 / P2=1` でrejectした。上記の
+per-attachment page-support recomputationとgate/later-map total orderは二つのP1 counterexampleを閉じ、
+nested status/authorization/identity、untrusted platform mint、両P1 ruleのremoval/weakeningを直接
+mutation negativeへ追加した。revised enclosing lease digestは
+`sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550`
+である。四mirrorは同一だが、fresh independent reviewがこのrevised exact proposalをacceptするまでは
+`proposed-unqualified-non-authorizing` のままであり、attachment-group implementationを認可しない。
 
 lease は二段階で構築する。owned current-v3 writer の native `xShmMap` delegation前に保持できるのは
 callback-localなnon-authoritative attempt/pre-map receipt、generationまたはfirst-writer cohortの

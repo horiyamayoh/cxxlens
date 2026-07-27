@@ -167,6 +167,11 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "same_process_writer_mapping_lease_proposal"
             ]
 
+        def writer_native_attachment(value: dict[str, Any]) -> dict[str, Any]:
+            return writer_mapping_lease(value)[
+                "writer_native_attachment_amendment_proposal"
+            ]
+
         mutations: list[tuple[str, Mutation]] = [
             (
                 "source-shm-runtime-symbol",
@@ -481,20 +486,80 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "writer-native-attachment-cross-grouping-weakened",
-                lambda value: writer_mapping_lease(value)[
-                    "writer_native_attachment_amendment_proposal"
+                "writer-native-attachment-status-self-accepted",
+                lambda value: writer_native_attachment(value).__setitem__(
+                    "status", "accepted-authority-implementation-pending"
+                ),
+            ),
+            (
+                "writer-native-attachment-pre-review-implementation-authorized",
+                lambda value: writer_native_attachment(value)[
+                    "authorization"
                 ].__setitem__(
+                    "before_independent_acceptance",
+                    "attachment-group-implementation-authorized",
+                ),
+            ),
+            (
+                "writer-native-attachment-production-self-authorized",
+                lambda value: writer_native_attachment(value)[
+                    "authorization"
+                ].__setitem__("production_activation", "allowed"),
+            ),
+            (
+                "writer-native-attachment-pointer-only-identity",
+                lambda value: writer_native_attachment(value).__setitem__(
+                    "attachment_identity",
+                    "native-pointer-and-connection-only",
+                ),
+            ),
+            (
+                "writer-native-attachment-cross-grouping-weakened",
+                lambda value: writer_native_attachment(value).__setitem__(
                     "cross_attachment_grouping",
                     "allowed-when-the-native-pointer-and-generation-match",
                 ),
             ),
             (
+                "writer-native-attachment-page-support-removed",
+                lambda value: writer_native_attachment(value).pop(
+                    "generation_fresh_reader_page_set"
+                ),
+            ),
+            (
+                "writer-native-attachment-retired-evidence-transferable",
+                lambda value: writer_native_attachment(value).__setitem__(
+                    "retired_attachment_evidence",
+                    "transfer-to-any-live-attachment-in-the-generation",
+                ),
+            ),
+            (
+                "writer-native-attachment-gate-total-order-removed",
+                lambda value: writer_native_attachment(value).pop(
+                    "gate_completion_total_order"
+                ),
+            ),
+            (
+                "writer-native-attachment-gate-partial-pending-allowed",
+                lambda value: writer_native_attachment(value).__setitem__(
+                    "successful_gate_postcondition",
+                    "same-attachment-pending-members-may-survive-gate-success",
+                ),
+            ),
+            (
                 "writer-native-attachment-one-unmap-positive-removed",
-                lambda value: writer_mapping_lease(value)[
-                    "writer_native_attachment_amendment_proposal"
-                ]["fail_closed_matrix"]["positive"].remove(
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["positive"].remove(
                     "one-connection-page-zero-and-page-one-one-native-unmap"
+                ),
+            ),
+            (
+                "writer-native-attachment-sole-page-negative-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["required"].remove(
+                    "nonlast-removal-sole-page-support-reused-by-fresh-reader"
                 ),
             ),
             (
@@ -550,6 +615,15 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ].__setitem__(
                     "writer_mapping_epoch_start",
                     "arm-watch-after-pre-stat-or-native-map",
+                ),
+            ),
+            (
+                "writer-mapping-lease-untrusted-platform-mints",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].__setitem__(
+                    "writer_mapping_epoch_failure",
+                    "non-Linux-or-unavailable-stat-watch-may-mint-from-final-state",
                 ),
             ),
             (
