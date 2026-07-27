@@ -7154,6 +7154,54 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             validate(lifecycle_implementation=duplicate_close)
 
+        empty_handle_without_release = lifecycle_source.replace(
+            "if (owned->connection == nullptr)\n"
+            "\t\t{\n"
+            "\t\t\trelease_known_safe(owned);",
+            "if (owned->connection == nullptr)\n"
+            "\t\t{\n"
+            "\t\t\t/* retained known-safe empty handle */",
+            1,
+        )
+        self.assertNotEqual(empty_handle_without_release, lifecycle_source)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact-once close lifecycle",
+        ):
+            validate(lifecycle_implementation=empty_handle_without_release)
+
+        successful_close_without_release = lifecycle_source.replace(
+            "if (code == sqlite_ok)\n"
+            "\t\t\t{\n"
+            "\t\t\t\trelease_known_safe(owned);",
+            "if (code == sqlite_ok)\n"
+            "\t\t\t{\n"
+            "\t\t\t\t/* retained successfully closed handle */",
+            1,
+        )
+        self.assertNotEqual(successful_close_without_release, lifecycle_source)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact-once close lifecycle|release known-safe state twice",
+        ):
+            validate(lifecycle_implementation=successful_close_without_release)
+
+        release_without_breaking_quarantine_cycle = lifecycle_source.replace(
+            "owned->quarantine_self.reset();",
+            "/* quarantine self-cycle retained */",
+            1,
+        )
+        self.assertNotEqual(
+            release_without_breaking_quarantine_cycle, lifecycle_source
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "known-safe lifecycle release helper differs",
+        ):
+            validate(
+                lifecycle_implementation=release_without_breaking_quarantine_cycle
+            )
+
         destructor_without_cleanup = lifecycle_source.replace(
             "sqlite_connection_lifecycle::~sqlite_connection_lifecycle() noexcept\n"
             "\t{\n"

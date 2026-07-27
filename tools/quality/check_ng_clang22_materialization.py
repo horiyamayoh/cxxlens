@@ -16470,6 +16470,7 @@ def validate_sqlite_effect_root_implementation_text(
         "sqlite_connection_lifecycle& operator=(const sqlite_connection_lifecycle&) = delete;",
         "void** open_handle_out_parameter() noexcept;",
         "sqlite_connection_close_outcome close_exactly_once() noexcept;",
+        "static void release_known_safe(std::shared_ptr<state>& owned) noexcept;",
     )
     for marker in lifecycle_header_markers:
         if marker not in sqlite_lifecycle_header:
@@ -16499,11 +16500,14 @@ def validate_sqlite_effect_root_implementation_text(
         close_body,
         (
             "auto owned = std::move(state_);",
-            "if (owned == nullptr || owned->connection == nullptr)",
+            "if (owned == nullptr)",
+            "if (owned->connection == nullptr)",
+            "release_known_safe(owned);",
             "if (owned->close_v2 == nullptr)",
             "try",
             "const auto code = owned->close_v2(owned->connection);",
             "if (code == sqlite_ok)",
+            "release_known_safe(owned);",
             "catch (...)",
         ),
         "SQLite exact-once close lifecycle",
@@ -16511,10 +16515,24 @@ def validate_sqlite_effect_root_implementation_text(
     if (
         close_body.count("std::move(state_)") != 1
         or close_body.count("owned->close_v2(owned->connection)") != 1
+        or close_body.count("release_known_safe(owned)") != 2
     ):
         fail(
             "materialization.sqlite-effect-root-invalid",
-            "SQLite lifecycle does not consume ownership and close at most once",
+            "SQLite lifecycle does not consume ownership, release known-safe state twice, "
+            "and close at most once",
+        )
+
+    release_body = function_body(
+        sqlite_lifecycle_source,
+        "sqlite_connection_lifecycle::release_known_safe(",
+    )
+    if normalized_body_contents(release_body) != (
+        "if(owned)owned->quarantine_self.reset();owned.reset();"
+    ):
+        fail(
+            "materialization.sqlite-effect-root-invalid",
+            "SQLite known-safe lifecycle release helper differs",
         )
 
     cleanup_body = function_body(
