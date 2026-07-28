@@ -156,6 +156,17 @@ namespace cxxlens::sdk
 			return registry.coordinator_for_activity_for_testing(activity);
 		}
 
+		[[nodiscard]] static bool
+		activity_seal_matches(sqlite_same_process_shm_mapping_registry& registry,
+							  const sqlite_shm_registry_activity_seal& seal,
+							  const sqlite_backend_opaque_identity& process_instance,
+							  const sqlite_shm_lease_family_binding& family,
+							  const sqlite_backend_opaque_identity& alias_lifetime) noexcept
+		{
+			return registry.activity_seal_matches_for_testing(
+				seal, process_instance, family, alias_lifetime);
+		}
+
 		[[nodiscard]] static std::uint64_t state_destruction_count() noexcept
 		{
 			return sqlite_same_process_shm_mapping_registry::state_destruction_count_for_testing();
@@ -223,6 +234,10 @@ namespace
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_registry_alias_pin>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_registry_family_pin>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_registry_activity_pin>);
+	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_registry_activity_pin>);
+	static_assert(!std::is_default_constructible_v<sqlite_shm_registry_activity_seal>);
+	static_assert(std::is_nothrow_copy_constructible_v<sqlite_shm_registry_activity_seal>);
+	static_assert(std::is_nothrow_destructible_v<sqlite_shm_registry_activity_seal>);
 	static_assert(!std::is_default_constructible_v<sqlite_shm_verified_alias_registration_receipt>);
 	static_assert(
 		!std::is_default_constructible_v<sqlite_shm_verified_alias_unregistration_receipt>);
@@ -627,6 +642,371 @@ namespace
 		require(fixture.owner.expired(), "exact detach releases runtime owner");
 		require(fixture.owner_destruction_count->load(std::memory_order_relaxed) == 1,
 				"runtime owner released exactly once");
+	}
+
+	void verify_activity_seal_is_one_shot_weak_and_exactly_bound()
+	{
+		auto fixture = make_fixture(30U, true);
+		auto sealed = fixture.activity->seal_for_audit();
+		require(sealed.has_value(), "mint exact registry activity audit seal");
+		auto seal = std::move(sealed.value());
+		auto copied = seal; // NOLINT(performance-unnecessary-copy-initialization)
+		const sqlite_shm_lease_family_binding wrong_family{
+			fixture.process_instance,
+			fixture.cohort,
+			identity("test.registry.wrong-file-family", 30U),
+		};
+		require(
+			seal.valid() && copied.valid() &&
+				sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					seal,
+					fixture.process_instance,
+					fixture.family,
+					fixture.alias_lifetime) &&
+				!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					seal,
+					identity("test.registry.wrong-process", 30U),
+					fixture.family,
+					fixture.alias_lifetime) &&
+				!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					seal,
+					fixture.process_instance,
+					wrong_family,
+					fixture.alias_lifetime) &&
+				!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					seal,
+					fixture.process_instance,
+					fixture.family,
+					identity("test.registry.wrong-alias", 30U)),
+			"weak seal binds exact process, alias, family, family-pin, and activity coordinates");
+
+		const auto duplicate_seal = fixture.activity->seal_for_audit();
+		require(!duplicate_seal.has_value() &&
+					duplicate_seal.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+				"activity audit seal is one-shot");
+		require(fixture.registry->release_activity(*fixture.activity).has_value(),
+				"clean release consumes exact activity owner");
+		const auto after_release = fixture.registry->snapshot();
+		const auto family_after_release = fixture.registry->family_snapshot(fixture.family);
+		const bool matcher_rejects_released =
+			!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+				*fixture.registry,
+				seal,
+				fixture.process_instance,
+				fixture.family,
+				fixture.alias_lifetime);
+		require(!fixture.activity->valid() && !seal.valid() && !copied.valid() &&
+					after_release.active_activity_pin_count == 0U &&
+					family_after_release.activity_pin_count == 0U && matcher_rejects_released,
+				"clean release invalidates every weak seal and drains exact counts once");
+		const auto duplicate_release = fixture.registry->release_activity(*fixture.activity);
+		require(!duplicate_release.has_value() &&
+					duplicate_release.error().reason ==
+						sqlite_shm_lease_rejection_reason::stale_token &&
+					fixture.registry->snapshot().active_activity_pin_count == 0U,
+				"duplicate release cannot consume registry counts twice");
+		fixture.activity.reset();
+		clean_fixture(fixture);
+	}
+
+	void verify_activity_owner_destruction_never_takes_registry_mutex()
+	{
+		auto fixture = make_fixture(31U, true);
+		auto acquired_sibling = fixture.registry->acquire_activity(*fixture.family_pin);
+		require(acquired_sibling.has_value(), "acquire lock-held sibling activity");
+		std::optional<sqlite_shm_registry_activity_pin> sibling;
+		sibling.emplace(std::move(acquired_sibling.value()));
+		auto acquired_unsealed_sibling = fixture.registry->acquire_activity(*fixture.family_pin);
+		require(acquired_unsealed_sibling.has_value(), "acquire unsealed lock-held sibling");
+		std::optional<sqlite_shm_registry_activity_pin> unsealed_sibling;
+		unsealed_sibling.emplace(std::move(acquired_unsealed_sibling.value()));
+		auto sealed = fixture.activity->seal_for_audit();
+		require(sealed.has_value(), "mint lock-held destruction audit seal");
+		auto sibling_sealed = sibling->seal_for_audit();
+		require(sibling_sealed.has_value(), "mint lock-held sibling audit seal");
+
+		const sqlite_shm_lease_family_binding same_alias_family{
+			fixture.process_instance,
+			fixture.cohort,
+			identity("test.registry.same-alias-file-family", 31U),
+		};
+		auto installed_same_alias_family =
+			fixture.registry->install_or_join_family(*fixture.alias, same_alias_family);
+		require(installed_same_alias_family.has_value(), "install same-alias distinct family");
+		std::optional<sqlite_shm_registry_family_pin> same_alias_family_pin;
+		same_alias_family_pin.emplace(std::move(installed_same_alias_family.value()));
+		auto acquired_same_alias = fixture.registry->acquire_activity(*same_alias_family_pin);
+		require(acquired_same_alias.has_value(), "acquire same-alias distinct-family activity");
+		std::optional<sqlite_shm_registry_activity_pin> same_alias_activity;
+		same_alias_activity.emplace(std::move(acquired_same_alias.value()));
+		auto same_alias_sealed = same_alias_activity->seal_for_audit();
+		require(same_alias_sealed.has_value(), "mint same-alias distinct-family audit seal");
+
+		auto same_family_count = std::make_shared<std::atomic_int>(0);
+		auto same_family_runtime_owner = std::make_shared<runtime_owner_probe>(same_family_count);
+		auto same_family_member = register_alias(*fixture.registry,
+												 fixture.process_instance,
+												 fixture.cohort,
+												 82U,
+												 same_family_runtime_owner,
+												 &fixture.family);
+		same_family_runtime_owner.reset();
+		auto acquired_same_family =
+			fixture.registry->acquire_activity(*same_family_member.family_pin);
+		require(acquired_same_family.has_value(), "acquire distinct-alias same-family activity");
+		std::optional<sqlite_shm_registry_activity_pin> same_family_activity;
+		same_family_activity.emplace(std::move(acquired_same_family.value()));
+		auto same_family_sealed = same_family_activity->seal_for_audit();
+		require(same_family_sealed.has_value(), "mint distinct-alias same-family audit seal");
+
+		auto unrelated_count = std::make_shared<std::atomic_int>(0);
+		auto unrelated_runtime_owner = std::make_shared<runtime_owner_probe>(unrelated_count);
+		auto unrelated = register_alias(*fixture.registry,
+										fixture.process_instance,
+										fixture.cohort,
+										81U,
+										unrelated_runtime_owner);
+		unrelated_runtime_owner.reset();
+		const sqlite_shm_lease_family_binding unrelated_family{
+			fixture.process_instance,
+			fixture.cohort,
+			identity("test.registry.unrelated-file-family", 31U),
+		};
+		auto unrelated_family_pin =
+			fixture.registry->install_or_join_family(*unrelated.alias, unrelated_family);
+		require(unrelated_family_pin.has_value(), "install unrelated lock-held family");
+		unrelated.family_pin.emplace(std::move(unrelated_family_pin.value()));
+		auto acquired_unrelated = fixture.registry->acquire_activity(*unrelated.family_pin);
+		require(acquired_unrelated.has_value(), "acquire unrelated lock-held activity");
+		std::optional<sqlite_shm_registry_activity_pin> unrelated_activity;
+		unrelated_activity.emplace(std::move(acquired_unrelated.value()));
+		auto unrelated_sealed = unrelated_activity->seal_for_audit();
+		require(unrelated_sealed.has_value(), "mint unrelated lock-held audit seal");
+
+		const auto child = ::fork();
+		require(child >= 0, "fork lock-held activity destruction");
+		if (child == 0)
+		{
+			::alarm(5U);
+			const auto& seal = sealed.value();
+			sqlite_same_process_shm_registry_test_peer::lock_registry_mutex(*fixture.registry);
+			fixture.activity.reset();
+			const auto rejected_late_seal = unsealed_sibling->seal_for_audit();
+			const bool invalid_without_lock = !seal.valid() && !sibling->valid() &&
+				!sibling_sealed->valid() && !unsealed_sibling->valid() &&
+				!rejected_late_seal.has_value() &&
+				rejected_late_seal.error().reason ==
+					sqlite_shm_lease_rejection_reason::stale_token &&
+				!same_alias_activity->valid() && !same_alias_sealed->valid() &&
+				!same_family_activity->valid() && !same_family_sealed->valid() &&
+				unrelated_activity->valid() && unrelated_sealed->valid();
+			sqlite_same_process_shm_registry_test_peer::unlock_registry_mutex(*fixture.registry);
+			const auto synchronized = fixture.registry->snapshot();
+			const bool closed_matchers =
+				!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					seal,
+					fixture.process_instance,
+					fixture.family,
+					fixture.alias_lifetime) &&
+				!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					sibling_sealed.value(),
+					fixture.process_instance,
+					fixture.family,
+					fixture.alias_lifetime) &&
+				!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					same_alias_sealed.value(),
+					fixture.process_instance,
+					same_alias_family,
+					fixture.alias_lifetime) &&
+				!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					same_family_sealed.value(),
+					fixture.process_instance,
+					fixture.family,
+					same_family_member.alias_lifetime) &&
+				sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					unrelated_sealed.value(),
+					fixture.process_instance,
+					unrelated_family,
+					unrelated.alias_lifetime) &&
+				unrelated_activity->valid() && unrelated_sealed->valid();
+			const auto sibling_release = fixture.registry->release_activity(*sibling);
+			const auto unsealed_sibling_release =
+				fixture.registry->release_activity(*unsealed_sibling);
+			const auto same_alias_release =
+				fixture.registry->release_activity(*same_alias_activity);
+			const auto same_family_release =
+				fixture.registry->release_activity(*same_family_activity);
+			const auto unrelated_release = fixture.registry->release_activity(*unrelated_activity);
+			const auto drained = fixture.registry->snapshot();
+			const bool exact_local_quarantine = invalid_without_lock && closed_matchers &&
+				synchronized.active_activity_pin_count == 5U && sibling_release.has_value() &&
+				unsealed_sibling_release.has_value() && same_alias_release.has_value() &&
+				same_family_release.has_value() && unrelated_release.has_value() &&
+				drained.active_activity_pin_count == 0U &&
+				synchronized.quarantined_alias_count == 2U &&
+				synchronized.quarantined_family_count == 2U && !synchronized.registry_quarantined &&
+				!drained.registry_quarantined;
+			::_exit(exact_local_quarantine ? 0 : 1);
+		}
+		int status{};
+		require(::waitpid(child, &status, 0) == child, "wait lock-held activity destruction");
+		require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+				"activity owner destructor is atomic-only and next entry drains exact counts");
+		require(fixture.registry->release_activity(*sibling).has_value(),
+				"release parent lock-held sibling activity");
+		sibling.reset();
+		require(fixture.registry->release_activity(*unsealed_sibling).has_value(),
+				"release parent unsealed lock-held sibling activity");
+		unsealed_sibling.reset();
+		require(fixture.registry->release_activity(*same_alias_activity).has_value(),
+				"release parent same-alias distinct-family activity");
+		same_alias_activity.reset();
+		require(fixture.registry->release_activity(*same_family_activity).has_value(),
+				"release parent distinct-alias same-family activity");
+		same_family_activity.reset();
+		require(fixture.registry->release_activity(*unrelated_activity).has_value(),
+				"release parent unrelated lock-held activity");
+		unrelated_activity.reset();
+		require(fixture.registry->release_family(*same_alias_family_pin).has_value(),
+				"release parent same-alias distinct family");
+		same_alias_family_pin.reset();
+		unregister_alias(
+			*fixture.registry, fixture.process_instance, fixture.cohort, same_family_member);
+		unregister_alias(*fixture.registry, fixture.process_instance, fixture.cohort, unrelated);
+		clean_fixture(fixture);
+	}
+
+	void verify_activity_abandonment_races_registry_visibility()
+	{
+		auto fixture = make_fixture(34U, true);
+		auto acquired_sibling = fixture.registry->acquire_activity(*fixture.family_pin);
+		require(acquired_sibling.has_value(), "acquire race sibling activity");
+		std::optional<sqlite_shm_registry_activity_pin> sibling;
+		sibling.emplace(std::move(acquired_sibling.value()));
+		auto sibling_sealed = sibling->seal_for_audit();
+		require(sibling_sealed.has_value(), "mint race sibling audit seal");
+
+		const auto child = ::fork();
+		require(child >= 0, "fork activity visibility race");
+		if (child == 0)
+		{
+			::alarm(5U);
+			std::barrier start{3};
+			std::optional<sqlite_shm_registry_activity_pin> raced_activity;
+			std::thread abandoner{
+				[&]()
+				{
+					start.arrive_and_wait();
+					fixture.activity.reset();
+				},
+			};
+			std::thread observer{
+				[&]()
+				{
+					start.arrive_and_wait();
+					auto acquired = fixture.registry->acquire_activity(*fixture.family_pin);
+					if (acquired)
+						raced_activity.emplace(std::move(acquired.value()));
+					(void)fixture.registry->snapshot();
+				},
+			};
+			start.arrive_and_wait();
+			abandoner.join();
+			observer.join();
+
+			const auto synchronized = fixture.registry->snapshot();
+			const auto fresh = fixture.registry->acquire_activity(*fixture.family_pin);
+			const bool authority_closed = !sibling->valid() && !sibling_sealed->valid() &&
+				(!raced_activity || !raced_activity->valid()) && !fresh.has_value() &&
+				synchronized.quarantined_alias_count == 1U &&
+				synchronized.quarantined_family_count == 1U && !synchronized.registry_quarantined;
+			const auto sibling_release = fixture.registry->release_activity(*sibling);
+			bool raced_release_ok = true;
+			if (raced_activity)
+				raced_release_ok = fixture.registry->release_activity(*raced_activity).has_value();
+			const auto drained = fixture.registry->snapshot();
+			::_exit(authority_closed && sibling_release.has_value() && raced_release_ok &&
+							drained.active_activity_pin_count == 0U
+						? 0
+						: 1);
+		}
+		int status{};
+		require(::waitpid(child, &status, 0) == child, "wait activity visibility race");
+		require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+				"thread race closes sibling authority and drains every published count once");
+
+		require(fixture.registry->release_activity(*sibling).has_value(),
+				"release parent race sibling activity");
+		sibling.reset();
+		clean_fixture(fixture);
+	}
+
+	void verify_quarantined_activity_owner_remains_exactly_releasable()
+	{
+		auto fixture = make_fixture(32U, true);
+		auto sealed = fixture.activity->seal_for_audit();
+		require(sealed.has_value(), "mint quarantine-release audit seal");
+		const auto child = ::fork();
+		require(child >= 0, "fork quarantined activity release");
+		if (child == 0)
+		{
+			fixture.family_pin.reset();
+			const bool authority_invalid = !fixture.activity->valid() && !sealed->valid();
+			const auto release = fixture.registry->release_activity(*fixture.activity);
+			const auto snapshot = fixture.registry->snapshot();
+			const bool released = authority_invalid && release.has_value() &&
+				snapshot.active_activity_pin_count == 0U &&
+				snapshot.active_family_pin_count == 0U && snapshot.quarantined_alias_count == 1U &&
+				snapshot.quarantined_family_count == 1U && !snapshot.registry_quarantined;
+			::_exit(released ? 0 : 1);
+		}
+		int status{};
+		require(::waitpid(child, &status, 0) == child, "wait quarantined activity release");
+		require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+				"local quarantine invalidates authority without blocking exact count release");
+		clean_fixture(fixture);
+	}
+
+	void verify_activity_owner_and_seal_do_not_retain_registry_state()
+	{
+		auto fixture = make_fixture(33U, true);
+		auto sealed = fixture.activity->seal_for_audit();
+		require(sealed.has_value(), "mint registry-lifetime audit seal");
+		const auto state_destruction_before =
+			sqlite_same_process_shm_registry_test_peer::state_destruction_count();
+		const auto child = ::fork();
+		require(child >= 0, "fork registry activity cycle probe");
+		if (child == 0)
+		{
+			std::optional<sqlite_shm_registry_activity_pin> retained_owner;
+			retained_owner.emplace(std::move(*fixture.activity));
+			fixture.activity.reset();
+			const auto& retained_seal = sealed.value();
+			fixture.registry.reset();
+			fixture.family_pin.reset();
+			fixture.alias.reset();
+			const bool state_released =
+				sqlite_same_process_shm_registry_test_peer::state_destruction_count() ==
+				state_destruction_before + 1U;
+			const bool weak_seal_invalid = !retained_owner->valid() && !retained_seal.valid();
+			retained_owner.reset();
+			const bool seal_does_not_retain_control = !retained_seal.valid();
+			::_exit(state_released && weak_seal_invalid && seal_does_not_retain_control ? 0 : 1);
+		}
+		int status{};
+		require(::waitpid(child, &status, 0) == child, "wait registry activity cycle probe");
+		require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+				"activity owner and weak seal create no registry/coordinator lifetime cycle");
+		clean_fixture(fixture);
 	}
 
 	void verify_process_owner_is_one_shot()
@@ -1613,6 +1993,21 @@ namespace
 	{
 		auto first = make_fixture(7U, true);
 		auto second = make_fixture(8U, true);
+		auto second_sealed = second.activity->seal_for_audit();
+		require(second_sealed.has_value(), "mint foreign-release preservation seal");
+		require(!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*first.registry,
+					second_sealed.value(),
+					second.process_instance,
+					second.family,
+					second.alias_lifetime) &&
+					sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+						*second.registry,
+						second_sealed.value(),
+						second.process_instance,
+						second.family,
+						second.alias_lifetime),
+				"closed matcher rejects another registry while exact registry still accepts");
 		const auto child = ::fork();
 		require(child >= 0, "fork foreign-pin counterexample");
 		if (child == 0)
@@ -1628,7 +2023,7 @@ namespace
 				!family_rejection.has_value() &&
 				family_rejection.error().reason ==
 					sqlite_shm_lease_rejection_reason::receipt_mismatch &&
-				second.activity->valid() && second.family_pin->valid() &&
+				second.activity->valid() && second_sealed->valid() && second.family_pin->valid() &&
 				second_snapshot.active_activity_pin_count == 1U &&
 				second_snapshot.active_family_pin_count == 1U;
 			::_exit(preserved ? 0 : 1);
@@ -2319,6 +2714,8 @@ namespace
 	void verify_fork_stale_destructors_never_touch_inherited_mutex()
 	{
 		auto fixture = make_fixture(4U, true);
+		auto sealed = fixture.activity->seal_for_audit();
+		require(sealed.has_value() && sealed->valid(), "mint fork-stale activity seal");
 		const auto state_destruction_before =
 			sqlite_same_process_shm_registry_test_peer::state_destruction_count();
 		sqlite_same_process_shm_registry_test_peer::lock_registry_mutex(*fixture.registry);
@@ -2334,9 +2731,19 @@ namespace
 			sqlite_same_process_shm_registry_test_peer::invalidate_process_instance(
 				*fixture.registry);
 			const auto stale_snapshot = fixture.registry->snapshot();
+			const auto stale_release = fixture.registry->release_activity(*fixture.activity);
+			const bool stale_matcher =
+				!sqlite_same_process_shm_registry_test_peer::activity_seal_matches(
+					*fixture.registry,
+					sealed.value(),
+					fixture.process_instance,
+					fixture.family,
+					fixture.alias_lifetime);
 			const bool stale_before_destruction = !fixture.alias->valid() &&
-				!fixture.family_pin->valid() && !fixture.activity->valid() &&
-				!stale_snapshot.process_live &&
+				!fixture.family_pin->valid() && !fixture.activity->valid() && !sealed->valid() &&
+				!stale_snapshot.process_live && !stale_release.has_value() &&
+				stale_release.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+				stale_matcher &&
 				sqlite_same_process_shm_registry_test_peer::generation_source_identity(
 					*fixture.registry) == nullptr;
 			fixture.activity.reset();
@@ -2362,6 +2769,11 @@ int main()
 {
 	try
 	{
+		verify_activity_seal_is_one_shot_weak_and_exactly_bound();
+		verify_activity_owner_destruction_never_takes_registry_mutex();
+		verify_activity_abandonment_races_registry_visibility();
+		verify_quarantined_activity_owner_remains_exactly_releasable();
+		verify_activity_owner_and_seal_do_not_retain_registry_state();
 		verify_process_owner_is_one_shot();
 		verify_registration_arm_and_exact_receipt_binding();
 		verify_reserved_alias_teardown_releases_runtime_owner_once();

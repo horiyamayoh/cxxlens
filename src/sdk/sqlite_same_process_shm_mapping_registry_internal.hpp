@@ -12,6 +12,7 @@ namespace cxxlens::sdk
 	{
 		struct sqlite_shm_registry_process_owner_seal;
 		struct sqlite_shm_registry_runtime_owner_box;
+		struct sqlite_shm_registry_activity_control;
 		class sqlite_shm_mapping_registry_state;
 		enum class sqlite_shm_registry_counter_for_testing : std::uint8_t
 		{
@@ -23,6 +24,42 @@ namespace cxxlens::sdk
 	} // namespace detail
 
 	class sqlite_same_process_shm_registry_test_peer;
+	class sqlite_shm_registry_activity_pin;
+
+	/**
+	 * Copyable, weak, audit-only view of one exact registry activity.
+	 *
+	 * The seal never retains the activity owner or registry state and grants no release,
+	 * coordinator, mapping, cleanup, or pending authority. It remains valid only while the exact
+	 * move-only activity owner is active in the same live process and registry epoch and every
+	 * bound alias/family authority remains unquarantined. `valid()` and this value alone must never
+	 * be accepted as an authority input. Any later validator must re-enter the exact locked
+	 * registry boundary, synchronize transitive quarantine, and recheck the live record/control.
+	 */
+	class sqlite_shm_registry_activity_seal
+	{
+	  public:
+		~sqlite_shm_registry_activity_seal() noexcept = default;
+		sqlite_shm_registry_activity_seal(const sqlite_shm_registry_activity_seal&) noexcept =
+			default;
+		sqlite_shm_registry_activity_seal&
+		operator=(const sqlite_shm_registry_activity_seal&) noexcept = default;
+		sqlite_shm_registry_activity_seal(sqlite_shm_registry_activity_seal&&) noexcept = default;
+		sqlite_shm_registry_activity_seal&
+		operator=(sqlite_shm_registry_activity_seal&&) noexcept = default;
+
+		[[nodiscard]] bool valid() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_registry_state;
+		friend class sqlite_same_process_shm_registry_test_peer;
+		friend class sqlite_shm_registry_activity_pin;
+
+		explicit sqlite_shm_registry_activity_seal(
+			std::weak_ptr<detail::sqlite_shm_registry_activity_control> control) noexcept;
+
+		std::weak_ptr<detail::sqlite_shm_registry_activity_control> control_;
+	};
 
 	/**
 	 * One non-replayable, exact-epoch ownership receipt for the process-global registry and
@@ -354,6 +391,16 @@ namespace cxxlens::sdk
 		std::uint64_t pin_token_{};
 	};
 
+	/**
+	 * Move-only sole owner of one exact registry activity.
+	 *
+	 * Destruction is atomic-only and never acquires the registry or lease mutex. Abandonment first
+	 * invalidates the alias latch, then uses the family-latch store as its no-lock scope
+	 * linearization point; the next locked registry entry drains the exact count once and applies
+	 * local quarantine. Only an exact explicit registry release performs clean count drain. The
+	 * owner retains standalone control, not registry state, and therefore cannot create a
+	 * registry/coordinator/lease lifetime cycle.
+	 */
 	class sqlite_shm_registry_activity_pin
 	{
 	  public:
@@ -365,31 +412,26 @@ namespace cxxlens::sdk
 		operator=(const sqlite_shm_registry_activity_pin&) = delete;
 
 		[[nodiscard]] bool valid() const noexcept;
+		/**
+		 * Mints the sole weak audit seal for this exact active owner.
+		 *
+		 * A second call fails closed. The returned seal does not retain this owner or the registry.
+		 */
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_activity_seal>
+		seal_for_audit() noexcept;
 
 	  private:
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_mapping_registry;
-
-		struct coordinates
-		{
-			std::uint64_t process_epoch{};
-			std::uint64_t alias_token{};
-			std::uint64_t family_epoch{};
-			std::uint64_t family_pin_token{};
-			std::uint64_t activity_token{};
-		};
+		friend class sqlite_same_process_shm_registry_test_peer;
 
 		sqlite_shm_registry_activity_pin(
-			std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state,
-			coordinates value) noexcept;
+			std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state,
+			std::shared_ptr<detail::sqlite_shm_registry_activity_control> control) noexcept;
 		void disarm() noexcept;
 
-		std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state_;
-		std::uint64_t process_epoch_{};
-		std::uint64_t alias_token_{};
-		std::uint64_t family_epoch_{};
-		std::uint64_t family_pin_token_{};
-		std::uint64_t activity_token_{};
+		std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state_;
+		std::shared_ptr<detail::sqlite_shm_registry_activity_control> control_;
 	};
 
 	/**
@@ -483,6 +525,11 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_same_process_shm_mapping_lease_coordinator*
 		coordinator_for_activity_for_testing(
 			const sqlite_shm_registry_activity_pin& activity) const noexcept;
+		[[nodiscard]] bool activity_seal_matches_for_testing(
+			const sqlite_shm_registry_activity_seal& seal,
+			const sqlite_backend_opaque_identity& process_instance,
+			const sqlite_shm_lease_family_binding& family,
+			const sqlite_backend_opaque_identity& alias_lifetime) noexcept;
 		[[nodiscard]] const void* generation_source_identity_for_testing() const noexcept;
 		void lock_state_mutex_for_testing();
 		void unlock_state_mutex_for_testing();
