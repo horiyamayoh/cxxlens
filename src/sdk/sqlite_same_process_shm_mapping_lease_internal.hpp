@@ -43,6 +43,62 @@ namespace cxxlens::sdk
 	};
 
 	/**
+	 * Source-private checked identity of one native SQLite SHM attachment.
+	 *
+	 * The attachment epoch is sealed as non-reusable within one process/runtime/VFS/file-family
+	 * coordinator. Pointer, connection, path, or open epoch equality alone is not attachment
+	 * identity. Construction fails unless every authority component is present. The value grants
+	 * neither writer nor reader authority by itself; writer-only transitions consume it in this
+	 * slice, and DF-0207 separately governs future reader grouping. This internal value is not an
+	 * installed public SDK surface.
+	 */
+	class sqlite_shm_native_attachment_identity
+	{
+	  public:
+		[[nodiscard]] static std::optional<sqlite_shm_native_attachment_identity>
+		bind(sqlite_shm_lease_family_binding family,
+			 sqlite_backend_opaque_identity alias_lifetime,
+			 sqlite_backend_opaque_identity connection_token,
+			 sqlite_backend_opaque_identity main_native_file_receipt,
+			 sqlite_backend_opaque_identity main_xopen_receipt,
+			 sqlite_backend_opaque_identity open_epoch,
+			 sqlite_backend_opaque_identity callback_cohort,
+			 sqlite_backend_opaque_identity attachment_epoch);
+
+		[[nodiscard]] const sqlite_shm_lease_family_binding& family() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& alias_lifetime() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& connection_token() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		main_native_file_receipt() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& main_xopen_receipt() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& open_epoch() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& callback_cohort() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& attachment_epoch() const noexcept;
+
+		[[nodiscard]] bool operator==(const sqlite_shm_native_attachment_identity&) const = default;
+
+	  private:
+		sqlite_shm_native_attachment_identity(
+			sqlite_shm_lease_family_binding family,
+			sqlite_backend_opaque_identity alias_lifetime,
+			sqlite_backend_opaque_identity connection_token,
+			sqlite_backend_opaque_identity main_native_file_receipt,
+			sqlite_backend_opaque_identity main_xopen_receipt,
+			sqlite_backend_opaque_identity open_epoch,
+			sqlite_backend_opaque_identity callback_cohort,
+			sqlite_backend_opaque_identity attachment_epoch);
+
+		sqlite_shm_lease_family_binding family_;
+		sqlite_backend_opaque_identity alias_lifetime_;
+		sqlite_backend_opaque_identity connection_token_;
+		sqlite_backend_opaque_identity main_native_file_receipt_;
+		sqlite_backend_opaque_identity main_xopen_receipt_;
+		sqlite_backend_opaque_identity open_epoch_;
+		sqlite_backend_opaque_identity callback_cohort_;
+		sqlite_backend_opaque_identity attachment_epoch_;
+	};
+
+	/**
 	 * One callback invocation identity retained across a native callback boundary.
 	 *
 	 * The future process-global registry must seal `invocation_token` as non-reusable for the
@@ -91,6 +147,7 @@ namespace cxxlens::sdk
 		sqlite_shm_lease_family_binding family;
 		sqlite_backend_opaque_identity alias_lifetime;
 		sqlite_backend_opaque_identity connection_token;
+		sqlite_shm_native_attachment_identity attachment;
 		sqlite_shm_callback_execution_receipt callback;
 		int page_number{};
 		int page_size{};
@@ -374,6 +431,16 @@ namespace cxxlens::sdk
 		std::size_t writer_inflight_count{};
 		std::size_t writer_cleanup_count{};
 		std::size_t writer_holder_count{};
+		/** Retained attachment/member identities include non-reuse tombstones. */
+		std::size_t writer_attachment_identity_count{};
+		std::size_t writer_attachment_member_count{};
+		/**
+		 * Unresolved-lifecycle counts include predelegate, pending, live, cleanup, and
+		 * terminal-quarantined mandatory-drain tokens. They are census groundwork only and
+		 * never imply live mapping or reader authority.
+		 */
+		std::size_t writer_attachment_unresolved_count{};
+		std::size_t writer_attachment_unresolved_member_count{};
 		std::size_t reader_inflight_count{};
 		std::size_t reader_cleanup_count{};
 		std::size_t reader_handoff_count{};

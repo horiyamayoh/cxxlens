@@ -75,6 +75,8 @@ namespace
 	using namespace cxxlens::sdk;
 
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_eligibility>);
+	static_assert(!std::is_default_constructible_v<sqlite_shm_native_attachment_identity>);
+	static_assert(std::is_copy_constructible_v<sqlite_shm_native_attachment_identity>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_map_inflight>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_post_native_mapping>);
 	static_assert(!std::is_default_constructible_v<sqlite_shm_verified_writer_native_map_receipt>);
@@ -142,6 +144,28 @@ namespace
 				false};
 	}
 
+	[[nodiscard]] sqlite_shm_native_attachment_identity
+	writer_attachment(const sqlite_shm_lease_family_binding& binding,
+					  const sqlite_backend_opaque_identity& alias_lifetime,
+					  const sqlite_backend_opaque_identity& connection,
+					  const sqlite_backend_opaque_identity& open_epoch,
+					  const std::uint8_t marker,
+					  std::optional<sqlite_backend_opaque_identity> attachment_epoch = std::nullopt)
+	{
+		auto bound = sqlite_shm_native_attachment_identity::bind(
+			binding,
+			alias_lifetime,
+			connection,
+			identity("test.main-native-file-receipt", marker),
+			identity("test.main-xopen-receipt", marker),
+			open_epoch,
+			identity("test.native-shm-callback-cohort", marker),
+			attachment_epoch ? std::move(*attachment_epoch)
+							 : identity("test.writer-attachment-epoch", marker));
+		require(bound.has_value(), "bind checked writer native attachment");
+		return std::move(*bound);
+	}
+
 	[[nodiscard]] sqlite_shm_writer_map_request
 	writer_request(const sqlite_shm_lease_family_binding& binding,
 				   const sqlite_backend_opaque_identity& connection,
@@ -151,9 +175,17 @@ namespace
 				   const int page,
 				   const int extend)
 	{
+		auto alias_lifetime = identity("test.alias-lifetime", alias);
+		auto open_epoch = identity("test.open-epoch", alias);
 		return {binding,
-				identity("test.alias-lifetime", alias),
+				alias_lifetime,
 				connection,
+				writer_attachment(binding,
+								  alias_lifetime,
+								  connection,
+								  open_epoch,
+								  alias,
+								  identity("test.writer-attachment-epoch", invocation)),
 				callback(thread, invocation),
 				page,
 				4096,
@@ -356,6 +388,333 @@ namespace
 			 {std::pair{1, 0}, std::pair{0, 1}, std::pair{-1, 0}, std::pair{2, 1}})
 			require(!classify_sqlite_shm_writer_extend_pair(caller, delegated),
 					"reject invalid extend pair");
+	}
+
+	void verify_native_attachment_identity_and_census_groundwork()
+	{
+		{
+			constexpr std::uint8_t marker = 90;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto alias_a = identity("test.alias-lifetime", marker);
+			const auto alias_b = identity("test.alias-lifetime", marker + 1U);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto shared_attachment_epoch = identity("test.writer-attachment-epoch", marker);
+
+			auto invalid = sqlite_shm_native_attachment_identity::bind(
+				binding,
+				alias_a,
+				connection,
+				identity("test.main-native-file-receipt", marker),
+				identity("test.main-xopen-receipt", marker),
+				open_epoch,
+				identity("test.native-shm-callback-cohort", marker),
+				{});
+			require(!invalid, "attachment binding rejects an absent nonreusable epoch");
+
+			const auto attachment_a = writer_attachment(
+				binding, alias_a, connection, open_epoch, marker, shared_attachment_epoch);
+			require(attachment_a.family() == binding && attachment_a.alias_lifetime() == alias_a &&
+						attachment_a.connection_token() == connection &&
+						attachment_a.open_epoch() == open_epoch &&
+						attachment_a.attachment_epoch() == shared_attachment_epoch,
+					"valid exact attachment bind retains every checked binding");
+			const auto colliding_attachment = writer_attachment(
+				binding, alias_b, connection, open_epoch, marker + 1U, shared_attachment_epoch);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+
+			auto request_a = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			request_a.attachment = attachment_a;
+			auto begun_a = coordinator.begin_writer_map(request_a);
+			require(begun_a.has_value(), "first checked attachment member is admitted");
+			auto member_a = std::move(*begun_a);
+
+			auto collision = writer_request(binding, connection, marker + 1U, 2, marker + 1U, 0, 1);
+			collision.attachment = colliding_attachment;
+			auto rejected_collision = coordinator.begin_writer_map(collision);
+			require(!rejected_collision &&
+						rejected_collision.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch,
+					"one attachment epoch cannot alias a different attachment binding");
+			require(coordinator.snapshot().writer_attachment_identity_count == 1U &&
+						coordinator.snapshot().writer_attachment_member_count == 1U,
+					"cross-attachment epoch collision never enters the attachment census");
+
+			auto request_b = writer_request(binding, connection, marker + 1U, 2, marker + 2U, 0, 1);
+			const auto attachment_b =
+				writer_attachment(binding,
+								  request_b.alias_lifetime,
+								  connection,
+								  identity("test.open-epoch", marker + 1U),
+								  marker + 1U,
+								  identity("test.writer-attachment-epoch", marker + 1U));
+			request_b.attachment = attachment_b;
+			auto begun_b = coordinator.begin_writer_map(request_b);
+			require(begun_b.has_value(), "a distinct valid attachment remains admissible");
+			auto member_b = std::move(*begun_b);
+			const auto two_live = coordinator.snapshot();
+			require(two_live.writer_attachment_identity_count == 2U &&
+						two_live.writer_attachment_member_count == 2U &&
+						two_live.writer_attachment_unresolved_count == 2U &&
+						two_live.writer_attachment_unresolved_member_count == 2U,
+					"distinct attachments retain separate central census records");
+
+			require(coordinator.resolve_writer_map_failure(member_a).has_value() &&
+						coordinator.resolve_writer_map_failure(member_b).has_value(),
+					"native no-map resolves only the two member attempts");
+			const auto resolved_no_map = coordinator.snapshot();
+			require(resolved_no_map.writer_attachment_identity_count == 2U &&
+						resolved_no_map.writer_attachment_member_count == 0U &&
+						resolved_no_map.writer_attachment_unresolved_count == 0U &&
+						resolved_no_map.writer_attachment_unresolved_member_count == 0U,
+					"resolved no-map attempts retain epoch binding without unbounded members");
+			auto exact_retry = writer_request(binding, connection, marker, 3, marker + 3U, 0, 1);
+			exact_retry.attachment = attachment_a;
+			auto retried = coordinator.begin_writer_map(exact_retry);
+			require(retried.has_value(),
+					"a no-map attempt does not retire the still-open exact attachment epoch");
+			require(coordinator.resolve_writer_map_failure(*retried).has_value(),
+					"resolve exact attachment retry");
+		}
+
+		{
+			constexpr std::uint8_t marker = 80;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			request.attachment = attachment;
+			auto begun = coordinator.begin_writer_map(request);
+			require(begun.has_value(), "begin attachment open-epoch mismatch fixture");
+			auto inflight = std::move(*begun);
+			auto post_native = record_native_mapping(coordinator, inflight, &page);
+			auto mismatch =
+				coordinator.install_pending(post_native,
+											writer_receipt(request,
+														   identity("test.open-epoch", marker + 1U),
+														   mapping(0, &page, 4096U),
+														   sqlite_shm_writer_extend_pair::one_one,
+														   marker));
+			require(!mismatch &&
+						mismatch.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						mismatch.error().action ==
+							sqlite_shm_lease_recovery_action::
+								attempt_nonremoving_unmap_then_outer_ioerr &&
+						post_native.valid(),
+					"post-map open epoch must equal the checked attachment binding");
+			cleanup_rejected_writer(coordinator, post_native, request.callback);
+		}
+
+		{
+			constexpr std::uint8_t marker = 81;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			request.attachment = attachment;
+			auto pending = install_pending(coordinator,
+										   request,
+										   open_epoch,
+										   mapping(0, &page, 4096U),
+										   sqlite_shm_writer_extend_pair::one_one,
+										   marker);
+			const auto cleanup_callback = callback(2, marker + 1U);
+			auto cleanup_result = coordinator.begin_writer_cleanup(pending, cleanup_callback);
+			require(cleanup_result.has_value() && !pending.valid(),
+					"single-member attachment admits its one cleanup");
+			auto cleanup = std::move(*cleanup_result);
+
+			auto later = writer_request(binding, connection, marker, 3, marker + 2U, 0, 1);
+			later.attachment = attachment;
+			auto unmap_won = coordinator.begin_writer_map(later);
+			require(!unmap_won &&
+						unmap_won.error().reason == sqlite_shm_lease_rejection_reason::retiring,
+					"cleanup-admitted attachment rejects later same-epoch predelegation");
+			require(
+				coordinator
+					.complete_writer_cleanup(cleanup,
+											 cleanup_callback,
+											 sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"complete unmap-winning attachment cleanup");
+		}
+
+		{
+			constexpr std::uint8_t marker = 82;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto first_request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			first_request.attachment = attachment;
+			auto pending = install_pending(coordinator,
+										   first_request,
+										   open_epoch,
+										   mapping(0, &page, 4096U),
+										   sqlite_shm_writer_extend_pair::one_one,
+										   marker);
+			auto second_request = writer_request(binding, connection, marker, 2, marker + 1U, 1, 1);
+			second_request.attachment = attachment;
+			auto second = coordinator.begin_writer_map(second_request);
+			require(second.has_value(), "pending partial-cleanup fixture has a second member");
+
+			auto partial = coordinator.begin_writer_cleanup(pending, callback(3, marker + 2U));
+			require(!partial && !pending.valid() && coordinator.snapshot().quarantined,
+					"multi-member pending cleanup quarantines without an unmap obligation");
+			require(second->valid(),
+					"pending partial-cleanup rejection does not fabricate second-member cleanup");
+		}
+
+		{
+			constexpr std::uint8_t marker = 83;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto first_request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			first_request.attachment = attachment;
+			auto begun = coordinator.begin_writer_map(first_request);
+			require(begun.has_value(), "post-native partial-cleanup fixture begins first member");
+			auto first = std::move(*begun);
+			auto post_native = record_native_mapping(coordinator, first, &page);
+			auto second_request = writer_request(binding, connection, marker, 2, marker + 1U, 1, 1);
+			second_request.attachment = attachment;
+			auto second = coordinator.begin_writer_map(second_request);
+			require(second.has_value(), "post-native partial-cleanup fixture has second member");
+
+			auto partial = coordinator.begin_writer_cleanup(post_native, callback(3, marker + 2U));
+			require(!partial && !post_native.valid() && coordinator.snapshot().quarantined,
+					"multi-member post-native cleanup quarantines without an unmap obligation");
+			require(second->valid(),
+					"post-native partial-cleanup rejection retains the second-member tombstone");
+		}
+
+		{
+			constexpr std::uint8_t marker = 93;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page_zero{};
+			int page_one{};
+			auto gate = install_eligibility(coordinator, binding, connection, open_epoch, marker);
+
+			auto request_zero = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			request_zero.attachment = attachment;
+			auto pending_zero = install_pending(coordinator,
+												request_zero,
+												open_epoch,
+												mapping(0, &page_zero, 4096U),
+												sqlite_shm_writer_extend_pair::one_one,
+												marker);
+			auto holder_zero = promote(coordinator, pending_zero, gate);
+
+			auto request_one = writer_request(binding, connection, marker, 2, marker + 1U, 1, 1);
+			request_one.attachment = attachment;
+			auto pending_one = install_pending(coordinator,
+											   request_one,
+											   open_epoch,
+											   mapping(1, &page_one, 8192U),
+											   sqlite_shm_writer_extend_pair::one_one,
+											   marker + 1U);
+			auto holder_one = promote(coordinator, pending_one, gate);
+			const auto grouped = coordinator.snapshot();
+			require(grouped.writer_attachment_identity_count == 1U &&
+						grouped.writer_attachment_member_count == 2U &&
+						grouped.writer_attachment_unresolved_count == 1U &&
+						grouped.writer_attachment_unresolved_member_count == 2U &&
+						grouped.writer_holder_count == 2U,
+					"same attachment accumulates two members without cross-attachment grouping");
+
+			auto partial = coordinator.release_writer_holder(holder_zero, callback(3, marker + 2U));
+			require(!partial && !holder_zero.valid() && coordinator.snapshot().quarantined,
+					"groundwork slice rejects old per-map unmap for a multi-member attachment");
+			require(holder_one.valid(),
+					"fail-closed partial-unmap guard does not fabricate group cleanup");
+			// Full one-unmap aggregation and cleanup replace this temporary quarantine in the
+			// next DF-0206 slice; this test intentionally does not claim implementation complete.
+		}
+
+		{
+			constexpr std::uint8_t marker = 96;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto gate = install_eligibility(coordinator, binding, connection, open_epoch, marker);
+			auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			request.attachment = attachment;
+			auto pending = install_pending(coordinator,
+										   request,
+										   open_epoch,
+										   mapping(0, &page, 4096U),
+										   sqlite_shm_writer_extend_pair::one_one,
+										   marker);
+			auto holder = promote(coordinator, pending, gate);
+			retire_last(coordinator, holder, callback(2, marker + 1U));
+			const auto retired = coordinator.snapshot();
+			require(retired.writer_attachment_identity_count == 1U &&
+						retired.writer_attachment_member_count == 1U &&
+						retired.writer_attachment_unresolved_count == 0U &&
+						retired.writer_attachment_unresolved_member_count == 0U,
+					"confirmed cleanup retains a non-reuse attachment tombstone");
+
+			auto reused = writer_request(binding, connection, marker, 3, marker + 2U, 0, 1);
+			reused.attachment = attachment;
+			auto rejected_reuse = coordinator.begin_writer_map(reused);
+			require(!rejected_reuse &&
+						rejected_reuse.error().reason ==
+							sqlite_shm_lease_rejection_reason::stale_token,
+					"confirmed-unmap attachment epoch cannot be reused");
+			auto fresh = writer_request(binding, connection, marker, 4, marker + 3U, 0, 1);
+			fresh.attachment =
+				writer_attachment(binding,
+								  alias,
+								  connection,
+								  open_epoch,
+								  marker,
+								  identity("test.writer-attachment-epoch", marker + 1U));
+			auto fresh_epoch = coordinator.begin_writer_map(fresh);
+			require(fresh_epoch.has_value(),
+					"same native binding may remap only with a fresh attachment epoch");
+			require(coordinator.resolve_writer_map_failure(*fresh_epoch).has_value(),
+					"resolve fresh-epoch no-map fixture");
+			require(coordinator.revoke_writer_eligibility(gate).has_value(),
+					"revoke retired attachment gate");
+		}
 	}
 
 	void verify_post_native_writer_receipt_requires_exact_cleanup()
@@ -1288,7 +1647,9 @@ namespace
 				static_cast<std::uint8_t>(marker + 20U));
 			auto second_holder = promote(coordinator, second_pending, second_gate);
 			require(first_holder.generation() == second_holder.generation() &&
-						coordinator.snapshot().writer_holder_count == 2U,
+						coordinator.snapshot().writer_holder_count == 2U &&
+						coordinator.snapshot().writer_attachment_identity_count == 2U &&
+						coordinator.snapshot().writer_attachment_unresolved_count == 2U,
 					"distinct aliases and mixed holder receipts join one generation");
 
 			auto first_release = coordinator.release_writer_holder(first_holder, callback(8, 100));
@@ -2434,6 +2795,7 @@ int main()
 	try
 	{
 		verify_extend_pair_classifier();
+		verify_native_attachment_identity_and_census_groundwork();
 		verify_post_native_writer_receipt_requires_exact_cleanup();
 		verify_native_writer_receipt_binding_and_replay();
 		verify_cleanup_completion_requires_exact_callback();
