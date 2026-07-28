@@ -4,6 +4,7 @@
 #include <atomic>
 #include <limits>
 #include <mutex>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -514,10 +515,10 @@ namespace cxxlens::sdk
 							return sqlite_shm_unexpected(rejection(
 								sqlite_shm_lease_rejection_reason::receipt_mismatch,
 								sqlite_shm_lease_recovery_action::deny_before_native_map));
-						if (attachment->retired)
+						if (attachment->phase == writer_attachment_phase::retired)
 							return sqlite_shm_unexpected(stale_token(
 								sqlite_shm_lease_recovery_action::deny_before_native_map));
-						if (attachment_cleanup_admitted_locked(*attachment))
+						if (attachment->phase != writer_attachment_phase::collecting)
 							return sqlite_shm_unexpected(rejection(
 								sqlite_shm_lease_rejection_reason::retiring,
 								sqlite_shm_lease_recovery_action::deny_before_native_map));
@@ -543,12 +544,8 @@ namespace cxxlens::sdk
 					const auto token = allocate_token_locked();
 					if (!token)
 						return sqlite_shm_unexpected(ambiguous());
-					writers_.push_back({*token,
-										writer_phase::inflight,
-										request,
-										nullptr,
-										std::nullopt,
-										std::nullopt});
+					writers_.push_back(
+						{*token, writer_phase::inflight, request, nullptr, std::nullopt});
 					try
 					{
 						register_attachment_member_locked(request.attachment, *token);
@@ -680,6 +677,28 @@ namespace cxxlens::sdk
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::
 											remove_pending_then_confirm_native_cleanup));
+					const auto attachment = find_attachment_token_locked(pending.token_);
+					if (attachment == writer_attachments_.end() ||
+						attachment->phase != writer_attachment_phase::collecting)
+					{
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+					const auto has_writer_sibling = std::ranges::any_of(
+						writers_,
+						[&attachment, &writer](const writer_record& candidate)
+						{
+							return candidate.token != writer->token &&
+								candidate.request.attachment == attachment->identity &&
+								(candidate.phase == writer_phase::inflight ||
+								 candidate.phase == writer_phase::post_native_mapping ||
+								 candidate.phase == writer_phase::pending);
+						});
+					if (has_writer_sibling)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+							sqlite_shm_lease_recovery_action::
+								await_complete_attachment_gate_boundary));
 					const auto& map = *writer->receipt;
 					if (gate->receipt.family() != family_ ||
 						gate->receipt.connection_token() != map.request().connection_token ||
@@ -688,6 +707,16 @@ namespace cxxlens::sdk
 							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
 									  sqlite_shm_lease_recovery_action::
 										  remove_pending_then_confirm_native_cleanup));
+					if (attachment->promotion_gate_receipt &&
+						!same_eligibility_receipt(*attachment->promotion_gate_receipt,
+												  gate->receipt))
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									  sqlite_shm_lease_recovery_action::
+										  remove_pending_then_confirm_native_cleanup));
+					std::optional<sqlite_shm_verified_writer_eligibility_receipt> first_gate_copy;
+					if (!attachment->promotion_gate_receipt)
+						first_gate_copy.emplace(gate->receipt);
 					if (generation_ &&
 						generation_->phase != sqlite_shm_mapping_generation_phase::live)
 						return sqlite_shm_unexpected(rejection(
@@ -727,7 +756,7 @@ namespace cxxlens::sdk
 						installed.phase = sqlite_shm_mapping_generation_phase::live;
 						installed.sealed_shm_size = map.mapping().sealed_shm_size;
 						installed.pages.push_back(map.mapping());
-						installed.authorities.push_back({map, gate->receipt});
+						installed.authorities.push_back({map, gate->receipt, true});
 						generation_ = std::move(installed);
 					}
 					else
@@ -738,20 +767,22 @@ namespace cxxlens::sdk
 								rejection(sqlite_shm_lease_rejection_reason::mapping_mismatch,
 										  sqlite_shm_lease_recovery_action::
 											  remove_pending_then_confirm_native_cleanup));
-						generation_->authorities.push_back({map, gate->receipt});
+						generation_->authorities.push_back({map, gate->receipt, true});
 					}
 
-					holders_.push_back({*holder_token,
-										generation,
-										holder_phase::active,
-										map,
-										gate->receipt,
-										std::nullopt});
+					holders_.push_back(
+						{*holder_token, generation, holder_phase::active, map, gate->receipt});
 					if (!retoken_attachment_member_locked(pending.token_, *holder_token))
 					{
 						holders_.back().phase = holder_phase::terminal_quarantined;
 						quarantine_locked();
 						return sqlite_shm_unexpected(ambiguous());
+					}
+					if (first_gate_copy)
+					{
+						static_assert(std::is_nothrow_move_constructible_v<
+									  sqlite_shm_verified_writer_eligibility_receipt>);
+						attachment->promotion_gate_receipt.emplace(std::move(*first_gate_copy));
 					}
 					writers_.erase(writer);
 					pending.disarm();
@@ -800,7 +831,7 @@ namespace cxxlens::sdk
 				}
 			}
 
-			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>
 			begin_writer_cleanup(sqlite_shm_writer_post_native_mapping& post_native,
 								 const sqlite_shm_callback_execution_receipt& callback) noexcept
 			{
@@ -818,33 +849,31 @@ namespace cxxlens::sdk
 						found->native_mapping == nullptr)
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
-					if (live_attachment_member_count_for_token_locked(post_native.token_) > 1U)
-					{
-						found->phase = writer_phase::terminal_quarantined;
-						post_native.disarm();
-						quarantine_locked();
-						return sqlite_shm_unexpected(ambiguous());
-					}
 					if (!admit_cleanup_callback_locked(found->request.callback, callback))
 					{
 						found->phase = writer_phase::terminal_quarantined;
+						const auto attachment = find_attachment_token_locked(post_native.token_);
+						if (attachment != writer_attachments_.end())
+							attachment->phase = writer_attachment_phase::terminal_quarantined;
 						post_native.disarm();
 						quarantine_locked();
 						return sqlite_shm_unexpected(ambiguous());
 					}
-					const auto token = post_native.token_;
-					const auto generation = generation_ ? generation_->value : 0U;
+					const auto sealed =
+						seal_attachment_cleanup_locked(post_native.token_, callback, false);
+					if (sealed.status != attachment_seal_status::sealed)
+					{
+						found->phase = writer_phase::terminal_quarantined;
+						post_native.disarm();
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
 					auto state = post_native.state_;
-					// The transient terminal phase consumes the only cleanup-admission attempt.
-					// If receipt storage throws, no later call can reissue native cleanup.
-					found->phase = writer_phase::terminal_quarantined;
 					post_native.disarm();
-					found->cleanup_callback = callback;
-					found->phase = writer_phase::cleanup_obligation;
-					return sqlite_shm_writer_cleanup_obligation{
+					return sqlite_shm_writer_attachment_cleanup{
 						std::move(state),
-						sqlite_shm_lease_token_identity{token},
-						sqlite_shm_mapping_generation_identity{generation}};
+						sqlite_shm_lease_token_identity{sealed.cleanup_token},
+						sqlite_shm_mapping_generation_identity{sealed.generation}};
 				}
 				catch (...)
 				{
@@ -853,7 +882,7 @@ namespace cxxlens::sdk
 				}
 			}
 
-			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>
 			begin_writer_cleanup(sqlite_shm_pending_mapping& pending,
 								 const sqlite_shm_callback_execution_receipt& callback) noexcept
 			{
@@ -870,31 +899,31 @@ namespace cxxlens::sdk
 					if (found->phase != writer_phase::pending)
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
-					if (live_attachment_member_count_for_token_locked(pending.token_) > 1U)
-					{
-						found->phase = writer_phase::terminal_quarantined;
-						pending.disarm();
-						quarantine_locked();
-						return sqlite_shm_unexpected(ambiguous());
-					}
 					if (!admit_cleanup_callback_locked(found->request.callback, callback))
 					{
 						found->phase = writer_phase::terminal_quarantined;
+						const auto attachment = find_attachment_token_locked(pending.token_);
+						if (attachment != writer_attachments_.end())
+							attachment->phase = writer_attachment_phase::terminal_quarantined;
 						pending.disarm();
 						quarantine_locked();
 						return sqlite_shm_unexpected(ambiguous());
 					}
-					const auto token = pending.token_;
-					const auto generation = generation_ ? generation_->value : 0U;
+					const auto sealed =
+						seal_attachment_cleanup_locked(pending.token_, callback, false);
+					if (sealed.status != attachment_seal_status::sealed)
+					{
+						found->phase = writer_phase::terminal_quarantined;
+						pending.disarm();
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
 					auto state = shared_from_this();
-					found->phase = writer_phase::terminal_quarantined;
 					pending.disarm();
-					found->cleanup_callback = callback;
-					found->phase = writer_phase::cleanup_obligation;
-					return sqlite_shm_writer_cleanup_obligation{
+					return sqlite_shm_writer_attachment_cleanup{
 						std::move(state),
-						sqlite_shm_lease_token_identity{token},
-						sqlite_shm_mapping_generation_identity{generation}};
+						sqlite_shm_lease_token_identity{sealed.cleanup_token},
+						sqlite_shm_mapping_generation_identity{sealed.generation}};
 				}
 				catch (...)
 				{
@@ -904,7 +933,7 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] sqlite_shm_lease_result<void>
-			complete_writer_cleanup(sqlite_shm_writer_cleanup_obligation& cleanup,
+			complete_writer_cleanup(sqlite_shm_writer_attachment_cleanup& cleanup,
 									const sqlite_shm_callback_execution_receipt& callback,
 									const sqlite_shm_native_cleanup_outcome outcome) noexcept
 			{
@@ -914,33 +943,135 @@ namespace cxxlens::sdk
 					if (!owns(cleanup.state_, cleanup.token_))
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
-					const auto writer = find_by_token(writers_, cleanup.token_);
-					if (writer != writers_.end() &&
-						writer->phase == writer_phase::cleanup_obligation)
+					const auto attachment = find_attachment_cleanup_locked(cleanup.token_);
+					if (attachment == writer_attachments_.end() ||
+						attachment->cleanup_generation != cleanup.generation_)
+						return sqlite_shm_unexpected(
+							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
+					const auto ready_nonlast = attachment->phase ==
+						writer_attachment_phase::nonlast_native_cleanup_admitted;
+					const auto ready_last =
+						attachment->phase == writer_attachment_phase::last_native_cleanup_admitted;
+					const auto callback_matches =
+						attachment->cleanup_callback && *attachment->cleanup_callback == callback;
+					const auto complete_prefix_matches =
+						attachment->sealed_complete_prefix.size() == attachment->members.size() &&
+						attachment->sealed_member_audit.size() == attachment->members.size() &&
+						std::ranges::all_of(
+							attachment->members,
+							[this, &attachment](const writer_attachment_member_record& member)
+							{
+								if (member.live_token == 0U ||
+									!prefix_contains_token(attachment->sealed_complete_prefix,
+														   member.live_token))
+									return false;
+								const auto audit = std::find_if(
+									attachment->sealed_member_audit.begin(),
+									attachment->sealed_member_audit.end(),
+									[&member](const writer_attachment_member_audit_record& value)
+									{
+										return value.original_token == member.original_token &&
+											value.sealed_live_token == member.live_token;
+									});
+								if (audit == attachment->sealed_member_audit.end() ||
+									audit->request.attachment != attachment->identity)
+									return false;
+								const auto writer = find_by_token(writers_, member.live_token);
+								const auto holder = find_by_token(holders_, member.live_token);
+								return (writer != writers_.end()) != (holder != holders_.end()) &&
+									(writer != writers_.end() ? writer->phase ==
+												 writer_phase::attachment_cleanup_sealed &&
+											 writer_matches_attachment_locked(*writer, *attachment)
+															  : holder->phase ==
+												 holder_phase::attachment_cleanup_sealed &&
+											 holder_matches_attachment_locked(*holder,
+																			  *attachment));
+							});
+					const auto target_authorities_inactive = !generation_ ||
+						std::ranges::none_of(
+							generation_->authorities,
+							[&attachment](const generation_authority_record& authority)
+							{
+								return authority.active &&
+									authority.map_receipt.request().attachment ==
+									attachment->identity;
+							});
+					if ((!ready_nonlast && !ready_last) || !callback_matches ||
+						!complete_prefix_matches || !target_authorities_inactive ||
+						outcome != sqlite_shm_native_cleanup_outcome::confirmed_success ||
+						is_quarantined_locked())
 					{
-						const auto callback_matches =
-							writer->cleanup_callback && *writer->cleanup_callback == callback;
-						if (!callback_matches ||
-							outcome != sqlite_shm_native_cleanup_outcome::confirmed_success ||
-							is_quarantined_locked())
-						{
-							writer->phase = writer_phase::terminal_quarantined;
-							cleanup.disarm();
-							quarantine_locked();
-							return sqlite_shm_unexpected(ambiguous());
-						}
-						if (!release_attachment_member_locked(cleanup.token_, true))
-						{
-							writer->phase = writer_phase::terminal_quarantined;
-							cleanup.disarm();
-							quarantine_locked();
-							return sqlite_shm_unexpected(ambiguous());
-						}
-						writers_.erase(writer);
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
 						cleanup.disarm();
-						return {};
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
 					}
-					return complete_holder_cleanup_locked(cleanup, callback, outcome);
+					if (ready_last &&
+						(!generation_ || generation_->value != cleanup.generation_ ||
+						 generation_->phase != sqlite_shm_mapping_generation_phase::retiring ||
+						 std::ranges::any_of(writers_,
+											 [](const writer_record& writer)
+											 {
+												 return writer.phase !=
+													 writer_phase::attachment_cleanup_sealed;
+											 }) ||
+						 !readers_.empty() ||
+						 std::ranges::any_of(holders_,
+											 [](const holder_record& holder)
+											 {
+												 return holder.phase !=
+													 holder_phase::attachment_cleanup_sealed;
+											 })))
+					{
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
+						cleanup.disarm();
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					static_assert(std::is_nothrow_move_assignable_v<writer_record>);
+					static_assert(std::is_nothrow_move_assignable_v<holder_record>);
+					static_assert(
+						std::is_nothrow_destructible_v<sqlite_shm_callback_execution_receipt>);
+					static_assert(std::is_nothrow_destructible_v<generation_record>);
+
+					// The native outcome is now consumed. Enter a terminal transient and disarm
+					// the only owner before the allocation-free/no-throw state commit.
+					attachment->phase = writer_attachment_phase::completion_committing;
+					cleanup.disarm();
+					if (std::exchange(fail_next_writer_completion_transition_for_testing_, false))
+					{
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+					for (auto& member : attachment->members)
+					{
+						member.live_token = 0U;
+						member.confirmed_native_cleanup = true;
+					}
+					std::erase_if(writers_,
+								  [this, &attachment](const writer_record& writer) noexcept
+								  {
+									  return prefix_contains_token(
+										  attachment->sealed_complete_prefix, writer.token);
+								  });
+					std::erase_if(holders_,
+								  [this, &attachment](const holder_record& holder) noexcept
+								  {
+									  return prefix_contains_token(
+										  attachment->sealed_complete_prefix, holder.token);
+								  });
+					attachment->phase = writer_attachment_phase::retired;
+					attachment->cleanup_token = 0U;
+					attachment->cleanup_callback.reset();
+					if (ready_last)
+					{
+						generation_->phase = sqlite_shm_mapping_generation_phase::retired;
+						if (generation_->handoff_count == 0U)
+							generation_.reset();
+					}
+					return {};
 				}
 				catch (...)
 				{
@@ -1294,19 +1425,12 @@ namespace cxxlens::sdk
 						 generation_->phase != sqlite_shm_mapping_generation_phase::quarantined))
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::outer_ioerr_no_retry));
-					if (live_attachment_member_count_for_token_locked(holder.token_) > 1U)
-					{
-						// Full one-unmap attachment cleanup is introduced by the next DF-0206
-						// slice. Until then, never expose the old per-map cleanup path for a
-						// multi-member attachment.
-						found->phase = holder_phase::terminal_quarantined;
-						holder.disarm();
-						quarantine_locked();
-						return sqlite_shm_unexpected(ambiguous());
-					}
 					if (!valid_callback(callback))
 					{
 						found->phase = holder_phase::terminal_quarantined;
+						const auto attachment = find_attachment_token_locked(holder.token_);
+						if (attachment != writer_attachments_.end())
+							attachment->phase = writer_attachment_phase::terminal_quarantined;
 						holder.disarm();
 						quarantine_locked();
 						return sqlite_shm_unexpected(ambiguous());
@@ -1314,41 +1438,31 @@ namespace cxxlens::sdk
 					if (!callback_can_start_locked(callback))
 					{
 						found->phase = holder_phase::terminal_quarantined;
+						const auto attachment = find_attachment_token_locked(holder.token_);
+						if (attachment != writer_attachments_.end())
+							attachment->phase = writer_attachment_phase::terminal_quarantined;
 						holder.disarm();
 						quarantine_locked();
 						return sqlite_shm_unexpected(ambiguous());
 					}
-					const auto quarantined_drain = is_quarantined_locked();
 					const auto generation = holder.generation_;
-					const auto token = holder.token_;
-					const auto remaining_holders = active_holder_count_locked() - 1U;
-					auto state = shared_from_this();
-					found->phase = holder_phase::terminal_quarantined;
-					holder.disarm();
-					found->release_callback = callback;
-					found->phase = remaining_holders == 0U
-						? holder_phase::last_waiting
-						: holder_phase::nonlast_native_cleanup_admitted;
-					auto cleanup = sqlite_shm_writer_cleanup_obligation{
-						std::move(state),
-						sqlite_shm_lease_token_identity{token},
-						sqlite_shm_mapping_generation_identity{generation}};
-					if (remaining_holders != 0U)
-						return sqlite_shm_writer_release{
-							sqlite_shm_writer_retirement_decision::not_last_holder,
-							generation,
-							std::move(cleanup)};
-					if (quarantined_drain)
-						quarantine_locked();
-					else
-						generation_->phase = sqlite_shm_mapping_generation_phase::retiring;
-					const auto decision = retirement_decision_locked(callback, token);
-					if (decision == sqlite_shm_writer_retirement_decision::ready)
-						found->phase = holder_phase::last_native_cleanup_admitted;
-					else if (decision ==
-							 sqlite_shm_writer_retirement_decision::quarantine_same_thread)
+					const auto sealed =
+						seal_attachment_cleanup_locked(holder.token_, callback, true);
+					if (sealed.status != attachment_seal_status::sealed)
+					{
 						found->phase = holder_phase::terminal_quarantined;
-					return sqlite_shm_writer_release{decision, generation, std::move(cleanup)};
+						holder.disarm();
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+					auto state = shared_from_this();
+					holder.disarm();
+					auto cleanup = sqlite_shm_writer_attachment_cleanup{
+						std::move(state),
+						sqlite_shm_lease_token_identity{sealed.cleanup_token},
+						sqlite_shm_mapping_generation_identity{generation}};
+					return sqlite_shm_writer_release{
+						sealed.decision, generation, std::move(cleanup)};
 				}
 				catch (...)
 				{
@@ -1358,7 +1472,7 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_retirement_result>
-			poll_retirement(const sqlite_shm_writer_cleanup_obligation& cleanup,
+			poll_retirement(const sqlite_shm_writer_attachment_cleanup& cleanup,
 							const sqlite_shm_callback_execution_receipt& callback) noexcept
 			{
 				try
@@ -1367,28 +1481,29 @@ namespace cxxlens::sdk
 					if (!owns(cleanup.state_, cleanup.token_) || cleanup.generation_ == 0U)
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::outer_ioerr_no_retry));
-					const auto holder = find_by_token(holders_, cleanup.token_);
-					if (holder == holders_.end() || holder->generation != cleanup.generation_ ||
-						!holder->release_callback || *holder->release_callback != callback)
+					const auto attachment = find_attachment_cleanup_locked(cleanup.token_);
+					if (attachment == writer_attachments_.end() ||
+						attachment->cleanup_generation != cleanup.generation_ ||
+						!attachment->cleanup_callback || *attachment->cleanup_callback != callback)
 					{
-						if (holder != holders_.end())
-							holder->phase = holder_phase::terminal_quarantined;
+						if (attachment != writer_attachments_.end())
+							attachment->phase = writer_attachment_phase::terminal_quarantined;
 						quarantine_locked();
 						return sqlite_shm_unexpected(ambiguous());
 					}
 					const auto generation = cleanup.generation_;
-					if (holder->phase == holder_phase::terminal_quarantined)
+					if (attachment->phase == writer_attachment_phase::terminal_quarantined)
 						return sqlite_shm_writer_retirement_result{
 							sqlite_shm_writer_retirement_decision::quarantined, generation};
-					if (holder->phase != holder_phase::last_waiting)
+					if (attachment->phase != writer_attachment_phase::last_waiting)
 					{
-						holder->phase = holder_phase::terminal_quarantined;
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
 						quarantine_locked();
 						return sqlite_shm_unexpected(ambiguous());
 					}
 					if (!generation_ || generation_->value != generation)
 					{
-						holder->phase = holder_phase::terminal_quarantined;
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
 						quarantine_locked();
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::outer_ioerr_no_retry));
@@ -1396,18 +1511,19 @@ namespace cxxlens::sdk
 					if (generation_->phase != sqlite_shm_mapping_generation_phase::retiring &&
 						generation_->phase != sqlite_shm_mapping_generation_phase::quarantined)
 					{
-						holder->phase = holder_phase::terminal_quarantined;
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
 						quarantine_locked();
 						return sqlite_shm_unexpected(
 							rejection(sqlite_shm_lease_rejection_reason::stale_generation,
 									  sqlite_shm_lease_recovery_action::outer_ioerr_no_retry));
 					}
-					const auto decision = retirement_decision_locked(callback, cleanup.token_);
+					const auto decision = retirement_decision_for_prefix_locked(
+						callback, attachment->sealed_complete_prefix);
 					if (decision == sqlite_shm_writer_retirement_decision::ready)
-						holder->phase = holder_phase::last_native_cleanup_admitted;
+						attachment->phase = writer_attachment_phase::last_native_cleanup_admitted;
 					else if (decision ==
 							 sqlite_shm_writer_retirement_decision::quarantine_same_thread)
-						holder->phase = holder_phase::terminal_quarantined;
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
 					return sqlite_shm_writer_retirement_result{decision, generation};
 				}
 				catch (...)
@@ -1418,7 +1534,7 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] sqlite_shm_lease_result<void>
-			fail_retirement_wait(const sqlite_shm_writer_cleanup_obligation& cleanup,
+			fail_retirement_wait(const sqlite_shm_writer_attachment_cleanup& cleanup,
 								 const sqlite_shm_callback_execution_receipt& callback,
 								 const sqlite_shm_retirement_wait_failure failure) noexcept
 			{
@@ -1428,23 +1544,25 @@ namespace cxxlens::sdk
 					if (!owns(cleanup.state_, cleanup.token_) || cleanup.generation_ == 0U)
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
-					const auto holder = find_by_token(holders_, cleanup.token_);
-					if (holder == holders_.end() || holder->generation != cleanup.generation_ ||
-						holder->phase != holder_phase::last_waiting || !holder->release_callback ||
-						*holder->release_callback != callback ||
+					const auto attachment = find_attachment_cleanup_locked(cleanup.token_);
+					if (attachment == writer_attachments_.end() ||
+						attachment->cleanup_generation != cleanup.generation_ ||
+						attachment->phase != writer_attachment_phase::last_waiting ||
+						!attachment->cleanup_callback ||
+						*attachment->cleanup_callback != callback ||
 						(failure != sqlite_shm_retirement_wait_failure::timeout &&
 						 failure != sqlite_shm_retirement_wait_failure::unknown) ||
 						!generation_ || generation_->value != cleanup.generation_ ||
 						(generation_->phase != sqlite_shm_mapping_generation_phase::retiring &&
 						 generation_->phase != sqlite_shm_mapping_generation_phase::quarantined))
 					{
-						if (holder != holders_.end())
-							holder->phase = holder_phase::terminal_quarantined;
+						if (attachment != writer_attachments_.end())
+							attachment->phase = writer_attachment_phase::terminal_quarantined;
 						quarantine_locked();
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
 					}
-					holder->phase = holder_phase::terminal_quarantined;
+					attachment->phase = writer_attachment_phase::terminal_quarantined;
 					quarantine_locked();
 					return sqlite_shm_unexpected(ambiguous());
 				}
@@ -1471,35 +1589,60 @@ namespace cxxlens::sdk
 						output.generation = generation_->value;
 						output.sealed_shm_size = generation_->sealed_shm_size;
 						output.mapping_page_count = generation_->pages.size();
-						output.generation_authority_count = generation_->authorities.size();
+						output.generation_authority_count = static_cast<std::size_t>(
+							std::ranges::count_if(generation_->authorities,
+												  [](const generation_authority_record& authority)
+												  {
+													  return authority.active;
+												  }));
 					}
 					output.eligibility_count = eligibilities_.size();
 					output.writer_inflight_count = static_cast<std::size_t>(std::ranges::count_if(
 						writers_,
 						[](const writer_record& writer)
 						{
-							return writer.phase != writer_phase::cleanup_obligation &&
+							return writer.phase != writer_phase::attachment_cleanup_sealed &&
 								writer.phase != writer_phase::terminal_quarantined;
 						}));
-					output.writer_cleanup_count = static_cast<std::size_t>(
-						std::ranges::count_if(writers_,
-											  [](const writer_record& writer)
-											  {
-												  return writer.phase ==
-													  writer_phase::cleanup_obligation ||
-													  writer.phase ==
-													  writer_phase::terminal_quarantined;
-											  }) +
-						std::ranges::count_if(holders_,
-											  [](const holder_record& holder)
-											  {
-												  return holder.phase != holder_phase::active;
-											  }));
+					output.writer_cleanup_count = static_cast<std::size_t>(std::ranges::count_if(
+						writer_attachments_,
+						[](const writer_attachment_record& attachment)
+						{
+							return attachment.phase ==
+								writer_attachment_phase::nonlast_native_cleanup_admitted ||
+								attachment.phase == writer_attachment_phase::last_waiting ||
+								attachment.phase ==
+								writer_attachment_phase::last_native_cleanup_admitted ||
+								attachment.phase == writer_attachment_phase::terminal_quarantined;
+						}));
 					output.writer_holder_count = active_holder_count_locked();
 					output.writer_attachment_identity_count = writer_attachments_.size();
 					for (const auto& attachment : writer_attachments_)
 					{
 						output.writer_attachment_member_count += attachment.members.size();
+						output.writer_attachment_audit_member_count +=
+							attachment.sealed_member_audit.size();
+						output.writer_attachment_audit_native_mapping_count +=
+							static_cast<std::size_t>(std::ranges::count_if(
+								attachment.sealed_member_audit,
+								[](const writer_attachment_member_audit_record& member)
+								{
+									return member.native_mapping != nullptr;
+								}));
+						output.writer_attachment_audit_post_map_count +=
+							static_cast<std::size_t>(std::ranges::count_if(
+								attachment.sealed_member_audit,
+								[](const writer_attachment_member_audit_record& member)
+								{
+									return member.post_map_receipt.has_value();
+								}));
+						output.writer_attachment_audit_promotion_count +=
+							static_cast<std::size_t>(std::ranges::count_if(
+								attachment.sealed_member_audit,
+								[](const writer_attachment_member_audit_record& member)
+								{
+									return member.promotion_receipt.has_value();
+								}));
 						const auto live_members = static_cast<std::size_t>(
 							std::ranges::count_if(attachment.members,
 												  [](const writer_attachment_member_record& member)
@@ -1558,6 +1701,32 @@ namespace cxxlens::sdk
 				}
 			}
 
+			void inject_writer_completion_transition_failure_for_testing() noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					fail_next_writer_completion_transition_for_testing_ = true;
+				}
+				catch (...)
+				{
+					emergency_quarantine_.store(true, std::memory_order_release);
+				}
+			}
+
+			void inject_writer_attachment_seal_failure_for_testing() noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					fail_next_writer_attachment_seal_for_testing_ = true;
+				}
+				catch (...)
+				{
+					emergency_quarantine_.store(true, std::memory_order_release);
+				}
+			}
+
 			void abandon(const lease_token_kind kind, const std::uint64_t token) noexcept
 			{
 				if (token == 0U)
@@ -1581,24 +1750,40 @@ namespace cxxlens::sdk
 							case lease_token_kind::writer_inflight:
 							case lease_token_kind::writer_post_native:
 							case lease_token_kind::pending:
-							case lease_token_kind::writer_cleanup:
 							{
 								const auto writer = find_by_token(writers_, token);
 								if (writer != writers_.end())
-									writer->phase = writer_phase::terminal_quarantined;
-								else
 								{
-									const auto holder = find_by_token(holders_, token);
-									if (holder != holders_.end())
-										holder->phase = holder_phase::terminal_quarantined;
+									writer->phase = writer_phase::terminal_quarantined;
+									if (kind != lease_token_kind::writer_inflight)
+									{
+										const auto attachment = find_attachment_token_locked(token);
+										if (attachment != writer_attachments_.end())
+											attachment->phase =
+												writer_attachment_phase::terminal_quarantined;
+									}
 								}
+								break;
+							}
+							case lease_token_kind::writer_cleanup:
+							{
+								const auto attachment = find_attachment_cleanup_locked(token);
+								if (attachment != writer_attachments_.end())
+									attachment->phase =
+										writer_attachment_phase::terminal_quarantined;
 								break;
 							}
 							case lease_token_kind::holder:
 							{
 								const auto holder = find_by_token(holders_, token);
 								if (holder != holders_.end())
+								{
 									holder->phase = holder_phase::terminal_quarantined;
+									const auto attachment = find_attachment_token_locked(token);
+									if (attachment != writer_attachments_.end())
+										attachment->phase =
+											writer_attachment_phase::terminal_quarantined;
+								}
 								break;
 							}
 							case lease_token_kind::reader_inflight:
@@ -1651,11 +1836,15 @@ namespace cxxlens::sdk
 				inflight,
 				post_native_mapping,
 				pending,
-				cleanup_obligation,
+				attachment_cleanup_sealed,
 				terminal_quarantined,
 			};
 
 			struct writer_native_transition_injected_failure
+			{
+			};
+
+			struct writer_attachment_seal_injected_failure
 			{
 			};
 
@@ -1670,9 +1859,18 @@ namespace cxxlens::sdk
 			enum class holder_phase : std::uint8_t
 			{
 				active,
+				attachment_cleanup_sealed,
+				terminal_quarantined,
+			};
+
+			enum class writer_attachment_phase : std::uint8_t
+			{
+				collecting,
 				nonlast_native_cleanup_admitted,
 				last_waiting,
 				last_native_cleanup_admitted,
+				completion_committing,
+				retired,
 				terminal_quarantined,
 			};
 
@@ -1689,7 +1887,6 @@ namespace cxxlens::sdk
 				sqlite_shm_writer_map_request request;
 				const volatile void* native_mapping{};
 				std::optional<sqlite_shm_verified_writer_post_map_receipt> receipt;
-				std::optional<sqlite_shm_callback_execution_receipt> cleanup_callback;
 			};
 
 			struct holder_record
@@ -1699,7 +1896,6 @@ namespace cxxlens::sdk
 				holder_phase phase{holder_phase::active};
 				sqlite_shm_verified_writer_post_map_receipt map_receipt;
 				sqlite_shm_verified_writer_eligibility_receipt eligibility_receipt;
-				std::optional<sqlite_shm_callback_execution_receipt> release_callback;
 			};
 
 			struct writer_attachment_member_record
@@ -1709,11 +1905,28 @@ namespace cxxlens::sdk
 				bool confirmed_native_cleanup{};
 			};
 
+			struct writer_attachment_member_audit_record
+			{
+				std::uint64_t original_token{};
+				std::uint64_t sealed_live_token{};
+				sqlite_shm_writer_map_request request;
+				const volatile void* native_mapping{};
+				std::optional<sqlite_shm_verified_writer_post_map_receipt> post_map_receipt;
+				std::optional<sqlite_shm_verified_writer_eligibility_receipt> promotion_receipt;
+			};
+
 			struct writer_attachment_record
 			{
 				sqlite_shm_native_attachment_identity identity;
 				std::vector<writer_attachment_member_record> members;
-				bool retired{};
+				writer_attachment_phase phase{writer_attachment_phase::collecting};
+				std::uint64_t cleanup_token{};
+				std::uint64_t cleanup_generation{};
+				std::optional<sqlite_shm_callback_execution_receipt> cleanup_callback;
+				std::vector<std::uint64_t> sealed_complete_prefix;
+				std::vector<writer_attachment_member_audit_record> sealed_member_audit;
+				std::optional<sqlite_shm_verified_writer_eligibility_receipt>
+					promotion_gate_receipt;
 			};
 
 			struct reader_record
@@ -1748,6 +1961,7 @@ namespace cxxlens::sdk
 			{
 				sqlite_shm_verified_writer_post_map_receipt map_receipt;
 				sqlite_shm_verified_writer_eligibility_receipt eligibility_receipt;
+				bool active{true};
 			};
 
 			struct generation_record
@@ -1824,7 +2038,15 @@ namespace cxxlens::sdk
 				auto attachment = find_attachment_epoch_locked(identity);
 				if (attachment == writer_attachments_.end())
 				{
-					writer_attachment_record record{identity, {}, false};
+					writer_attachment_record record{identity,
+													{},
+													writer_attachment_phase::collecting,
+													0U,
+													0U,
+													std::nullopt,
+													{},
+													{},
+													std::nullopt};
 					record.members.push_back({token, token, false});
 					writer_attachments_.push_back(std::move(record));
 					return;
@@ -1854,28 +2076,48 @@ namespace cxxlens::sdk
 				return false;
 			}
 
-			[[nodiscard]] std::size_t
-			live_attachment_member_count_for_token_locked(const std::uint64_t token) const noexcept
+			[[nodiscard]] std::vector<writer_attachment_record>::iterator
+			find_attachment_token_locked(const std::uint64_t token) noexcept
 			{
-				for (const auto& attachment : writer_attachments_)
-				{
-					if (std::ranges::none_of(attachment.members,
-											 [token](const writer_attachment_member_record& value)
-											 {
-												 return value.live_token == token;
-											 }))
-						continue;
-					return static_cast<std::size_t>(
-						std::ranges::count_if(attachment.members,
-											  [](const writer_attachment_member_record& value)
-											  {
-												  return value.live_token != 0U;
-											  }));
-				}
-				return 0U;
+				return std::find_if(writer_attachments_.begin(),
+									writer_attachments_.end(),
+									[token](const writer_attachment_record& attachment)
+									{
+										return std::ranges::any_of(
+											attachment.members,
+											[token](const writer_attachment_member_record& member)
+											{
+												return member.live_token == token;
+											});
+									});
 			}
 
-			[[nodiscard]] bool attachment_cleanup_admitted_locked(
+			[[nodiscard]] std::vector<writer_attachment_record>::iterator
+			find_attachment_cleanup_locked(const std::uint64_t cleanup_token) noexcept
+			{
+				return std::find_if(writer_attachments_.begin(),
+									writer_attachments_.end(),
+									[cleanup_token](const writer_attachment_record& attachment)
+									{
+										return attachment.cleanup_token == cleanup_token;
+									});
+			}
+
+			[[nodiscard]] bool writer_matches_attachment_locked(
+				const writer_record& writer,
+				const writer_attachment_record& attachment) const noexcept
+			{
+				return writer.request.attachment == attachment.identity;
+			}
+
+			[[nodiscard]] bool holder_matches_attachment_locked(
+				const holder_record& holder,
+				const writer_attachment_record& attachment) const noexcept
+			{
+				return holder.map_receipt.request().attachment == attachment.identity;
+			}
+
+			[[nodiscard]] bool attachment_has_native_mapping_locked(
 				const writer_attachment_record& attachment) const noexcept
 			{
 				for (const auto& member : attachment.members)
@@ -1884,16 +2126,456 @@ namespace cxxlens::sdk
 						continue;
 					const auto writer = find_by_token(writers_, member.live_token);
 					if (writer != writers_.end() &&
-						writer->phase == writer_phase::cleanup_obligation)
+						(writer->phase == writer_phase::post_native_mapping ||
+						 writer->phase == writer_phase::pending))
 						return true;
 					const auto holder = find_by_token(holders_, member.live_token);
-					if (holder != holders_.end() &&
-						(holder->phase == holder_phase::nonlast_native_cleanup_admitted ||
-						 holder->phase == holder_phase::last_waiting ||
-						 holder->phase == holder_phase::last_native_cleanup_admitted))
+					if (holder != holders_.end() && holder->phase == holder_phase::active)
 						return true;
 				}
 				return false;
+			}
+
+			[[nodiscard]] bool attachment_has_active_holder_locked(
+				const writer_attachment_record& attachment) const noexcept
+			{
+				return std::ranges::any_of(
+					attachment.members,
+					[this, &attachment](const writer_attachment_member_record& member)
+					{
+						if (member.live_token == 0U)
+							return false;
+						const auto holder = find_by_token(holders_, member.live_token);
+						return holder != holders_.end() && holder->phase == holder_phase::active &&
+							holder_matches_attachment_locked(*holder, attachment);
+					});
+			}
+
+			[[nodiscard]] std::size_t live_attachment_group_count_locked(
+				const writer_attachment_record* excluded) const noexcept
+			{
+				return static_cast<std::size_t>(std::ranges::count_if(
+					writer_attachments_,
+					[this, excluded](const writer_attachment_record& attachment)
+					{
+						if (&attachment == excluded)
+							return false;
+						if (attachment.phase == writer_attachment_phase::collecting)
+							return attachment_has_active_holder_locked(attachment);
+						return attachment.phase == writer_attachment_phase::last_waiting ||
+							attachment.phase ==
+							writer_attachment_phase::last_native_cleanup_admitted;
+					}));
+			}
+
+			struct attachment_complete_prefix
+			{
+				std::vector<std::uint64_t> tokens;
+				std::vector<writer_attachment_member_audit_record> audit;
+				bool has_inflight{};
+				bool has_active_holder{};
+				bool has_writer_native_member{};
+			};
+
+			[[nodiscard]] std::optional<attachment_complete_prefix>
+			derive_complete_attachment_prefix_locked(
+				const writer_attachment_record& attachment) const
+			{
+				if (attachment.phase != writer_attachment_phase::collecting ||
+					attachment.members.empty())
+					return std::nullopt;
+
+				attachment_complete_prefix output;
+				output.tokens.reserve(attachment.members.size());
+				output.audit.reserve(attachment.members.size());
+				for (const auto& member : attachment.members)
+				{
+					if (member.original_token == 0U || member.live_token == 0U ||
+						std::ranges::find(output.tokens, member.live_token) !=
+							output.tokens.end() ||
+						std::ranges::any_of(
+							output.audit,
+							[&member](const writer_attachment_member_audit_record& audit)
+							{
+								return audit.original_token == member.original_token;
+							}))
+						return std::nullopt;
+					const auto writer = find_by_token(writers_, member.live_token);
+					const auto holder = find_by_token(holders_, member.live_token);
+					if ((writer != writers_.end()) == (holder != holders_.end()))
+						return std::nullopt;
+					if (writer != writers_.end())
+					{
+						if (!writer_matches_attachment_locked(*writer, attachment) ||
+							(writer->phase != writer_phase::inflight &&
+							 writer->phase != writer_phase::post_native_mapping &&
+							 writer->phase != writer_phase::pending))
+							return std::nullopt;
+						if ((writer->phase == writer_phase::inflight &&
+							 writer->native_mapping != nullptr) ||
+							((writer->phase == writer_phase::post_native_mapping ||
+							  writer->phase == writer_phase::pending) &&
+							 writer->native_mapping == nullptr) ||
+							(writer->phase == writer_phase::post_native_mapping &&
+							 writer->receipt.has_value()) ||
+							(writer->phase == writer_phase::pending &&
+							 !writer->receipt.has_value()))
+							return std::nullopt;
+						output.has_inflight =
+							output.has_inflight || writer->phase == writer_phase::inflight;
+						output.has_writer_native_member = output.has_writer_native_member ||
+							writer->phase == writer_phase::post_native_mapping ||
+							writer->phase == writer_phase::pending;
+						output.audit.push_back({member.original_token,
+												member.live_token,
+												writer->request,
+												writer->native_mapping,
+												writer->receipt,
+												std::nullopt});
+					}
+					else if (!holder_matches_attachment_locked(*holder, attachment) ||
+							 holder->phase != holder_phase::active)
+						return std::nullopt;
+					else
+					{
+						output.has_active_holder = true;
+						output.audit.push_back({member.original_token,
+												member.live_token,
+												holder->map_receipt.request(),
+												holder->map_receipt.mapping().native_mapping,
+												holder->map_receipt,
+												holder->eligibility_receipt});
+					}
+					output.tokens.push_back(member.live_token);
+				}
+
+				const auto represented = [&output](const std::uint64_t token)
+				{
+					return std::ranges::find(output.tokens, token) != output.tokens.end();
+				};
+				if (std::ranges::any_of(writers_,
+										[&attachment, &represented](const writer_record& writer)
+										{
+											return writer.request.attachment ==
+												attachment.identity &&
+												writer.phase !=
+												writer_phase::terminal_quarantined &&
+												!represented(writer.token);
+										}) ||
+					std::ranges::any_of(holders_,
+										[&attachment, &represented](const holder_record& holder)
+										{
+											return holder.map_receipt.request().attachment ==
+												attachment.identity &&
+												holder.phase !=
+												holder_phase::terminal_quarantined &&
+												!represented(holder.token);
+										}))
+					return std::nullopt;
+				return output;
+			}
+
+			enum class attachment_seal_status : std::uint8_t
+			{
+				sealed,
+				fail_closed,
+				invalid,
+			};
+
+			struct attachment_seal_result
+			{
+				attachment_seal_status status{attachment_seal_status::invalid};
+				sqlite_shm_writer_retirement_decision decision{
+					sqlite_shm_writer_retirement_decision::quarantined};
+				std::uint64_t cleanup_token{};
+				std::uint64_t generation{};
+			};
+
+			[[nodiscard]] bool prefix_contains_token(const std::vector<std::uint64_t>& prefix,
+													 const std::uint64_t token) const noexcept
+			{
+				return std::ranges::find(prefix, token) != prefix.end();
+			}
+
+			[[nodiscard]] static bool same_writer_post_map_receipt(
+				const sqlite_shm_verified_writer_post_map_receipt& left,
+				const sqlite_shm_verified_writer_post_map_receipt& right) noexcept
+			{
+				return left.request() == right.request() &&
+					left.open_epoch() == right.open_epoch() && left.mapping() == right.mapping() &&
+					left.extend_pair() == right.extend_pair() &&
+					left.holder_specific_effect_receipt() == right.holder_specific_effect_receipt();
+			}
+
+			[[nodiscard]] bool target_pages_have_exact_redundant_support_locked(
+				const writer_attachment_record& target,
+				const attachment_complete_prefix& complete) const noexcept
+			{
+				return std::ranges::all_of(
+					complete.audit,
+					[this, &target](const writer_attachment_member_audit_record& target_member)
+					{
+						if (!target_member.promotion_receipt || !target_member.post_map_receipt)
+							return true;
+						return std::ranges::any_of(
+							holders_,
+							[this, &target, &target_member](const holder_record& candidate)
+							{
+								if (candidate.phase != holder_phase::active ||
+									candidate.map_receipt.request().attachment == target.identity ||
+									// sealed_shm_size is generation high-water, not page support
+									// identity; exact support is page/range/native-pointer based.
+									!same_mapping_page(candidate.map_receipt.mapping(),
+													   target_member.post_map_receipt->mapping()))
+									return false;
+								const auto other_attachment = find_attachment_epoch_locked(
+									candidate.map_receipt.request().attachment);
+								return generation_ &&
+									other_attachment != writer_attachments_.end() &&
+									other_attachment->phase ==
+									writer_attachment_phase::collecting &&
+									std::ranges::any_of(
+										   generation_->authorities,
+										   [&candidate](
+											   const generation_authority_record& authority)
+										   {
+											   return authority.active &&
+												   same_writer_post_map_receipt(
+														  authority.map_receipt,
+														  candidate.map_receipt) &&
+												   same_eligibility_receipt(
+														  authority.eligibility_receipt,
+														  candidate.eligibility_receipt);
+										   });
+							});
+					});
+			}
+
+			[[nodiscard]] std::optional<std::vector<std::size_t>>
+			derive_target_generation_authorities_locked(
+				const writer_attachment_record& target,
+				const attachment_complete_prefix& complete) const
+			{
+				std::vector<std::size_t> output;
+				const auto promoted_count = static_cast<std::size_t>(
+					std::ranges::count_if(complete.audit,
+										  [](const writer_attachment_member_audit_record& member)
+										  {
+											  return member.promotion_receipt.has_value();
+										  }));
+				output.reserve(promoted_count);
+				if (promoted_count == 0U)
+					return output;
+				if (!generation_)
+					return std::nullopt;
+
+				for (const auto& member : complete.audit)
+				{
+					if (!member.promotion_receipt || !member.post_map_receipt)
+						continue;
+					std::optional<std::size_t> exact_index;
+					for (std::size_t index = 0U; index < generation_->authorities.size(); ++index)
+					{
+						const auto& authority = generation_->authorities[index];
+						if (!authority.active || std::ranges::find(output, index) != output.end() ||
+							authority.map_receipt.request().attachment != target.identity ||
+							!same_writer_post_map_receipt(authority.map_receipt,
+														  *member.post_map_receipt) ||
+							!same_eligibility_receipt(authority.eligibility_receipt,
+													  *member.promotion_receipt))
+							continue;
+						exact_index = index;
+						break;
+					}
+					if (!exact_index)
+						return std::nullopt;
+					output.push_back(*exact_index);
+				}
+				const auto active_target_authorities = static_cast<std::size_t>(
+					std::ranges::count_if(generation_->authorities,
+										  [&target](const generation_authority_record& authority)
+										  {
+											  return authority.active &&
+												  authority.map_receipt.request().attachment ==
+												  target.identity;
+										  }));
+				if (output.size() != promoted_count || active_target_authorities != promoted_count)
+					return std::nullopt;
+				return output;
+			}
+
+			[[nodiscard]] sqlite_shm_writer_retirement_decision
+			retirement_decision_for_prefix_locked(
+				const sqlite_shm_callback_execution_receipt& callback,
+				const std::vector<std::uint64_t>& excluded_prefix) noexcept
+			{
+				bool has_blocker = false;
+				bool has_same_thread_blocker = false;
+				const auto observe = [&callback, &has_blocker, &has_same_thread_blocker](
+										 const sqlite_shm_callback_execution_receipt& active)
+				{
+					has_blocker = true;
+					if (active.thread_identity == callback.thread_identity)
+						has_same_thread_blocker = true;
+				};
+
+				for (const auto& writer : writers_)
+				{
+					if (prefix_contains_token(excluded_prefix, writer.token) ||
+						writer.phase == writer_phase::attachment_cleanup_sealed ||
+						writer.phase == writer_phase::terminal_quarantined)
+						continue;
+					observe(writer.request.callback);
+				}
+				for (const auto& attachment : writer_attachments_)
+				{
+					if (attachment.phase == writer_attachment_phase::collecting ||
+						attachment.phase == writer_attachment_phase::retired ||
+						attachment.phase == writer_attachment_phase::terminal_quarantined ||
+						!attachment.cleanup_callback ||
+						attachment.sealed_complete_prefix == excluded_prefix)
+						continue;
+					observe(*attachment.cleanup_callback);
+				}
+				for (const auto& reader : readers_)
+				{
+					if (reader.phase == reader_phase::terminal_quarantined)
+						continue;
+					observe(reader.cleanup_callback ? *reader.cleanup_callback
+													: reader.request.callback);
+				}
+				if (has_same_thread_blocker)
+					return sqlite_shm_writer_retirement_decision::quarantine_same_thread;
+				if (has_blocker)
+					return sqlite_shm_writer_retirement_decision::wait_for_inflight;
+				return sqlite_shm_writer_retirement_decision::ready;
+			}
+
+			[[nodiscard]] attachment_seal_result
+			seal_attachment_cleanup_locked(const std::uint64_t anchor_token,
+										   const sqlite_shm_callback_execution_receipt& callback,
+										   const bool retain_wait_owner) noexcept
+			{
+				auto attachment = find_attachment_token_locked(anchor_token);
+				if (attachment == writer_attachments_.end() ||
+					attachment->phase != writer_attachment_phase::collecting)
+					return {};
+				const auto fail_closed = [this, &attachment]() noexcept
+				{
+					attachment->phase = writer_attachment_phase::terminal_quarantined;
+					quarantine_locked();
+					return attachment_seal_result{
+						attachment_seal_status::fail_closed,
+						sqlite_shm_writer_retirement_decision::quarantined};
+				};
+
+				try
+				{
+					if (std::exchange(fail_next_writer_attachment_seal_for_testing_, false))
+						throw writer_attachment_seal_injected_failure{};
+					if (!attachment_has_native_mapping_locked(*attachment))
+						return fail_closed();
+
+					auto complete = derive_complete_attachment_prefix_locked(*attachment);
+					if (!complete)
+						return fail_closed();
+					if (complete->has_inflight ||
+						(complete->has_active_holder && complete->has_writer_native_member))
+					{
+						// Production-inert bounded fence: a same-attachment inflight boundary, or a
+						// post-native failure mixed with live holder authority, is not yet a
+						// complete attachment cleanup proof. Do not expose a retryable/partial
+						// owner.
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
+						quarantine_locked();
+						return {attachment_seal_status::fail_closed,
+								sqlite_shm_writer_retirement_decision::quarantined};
+					}
+
+					auto target_authorities =
+						derive_target_generation_authorities_locked(*attachment, *complete);
+					if (!target_authorities)
+						return fail_closed();
+
+					const auto remaining_groups = live_attachment_group_count_locked(&*attachment);
+					const auto generation = generation_ ? generation_->value : 0U;
+					auto decision = remaining_groups != 0U || generation == 0U
+						? sqlite_shm_writer_retirement_decision::not_last_attachment
+						: retirement_decision_for_prefix_locked(callback, complete->tokens);
+					if (decision == sqlite_shm_writer_retirement_decision::not_last_attachment &&
+						generation != 0U &&
+						!target_pages_have_exact_redundant_support_locked(*attachment, *complete))
+					{
+						// Production-inert bounded fence: retiring the only support for any live
+						// generation page needs reader-predelegate ordering that belongs to the
+						// next slice. Quarantine before a native-ready owner exists.
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
+						quarantine_locked();
+						return {attachment_seal_status::fail_closed,
+								sqlite_shm_writer_retirement_decision::quarantined};
+					}
+					if (decision == sqlite_shm_writer_retirement_decision::quarantined)
+						return fail_closed();
+					if (decision == sqlite_shm_writer_retirement_decision::wait_for_inflight &&
+						!retain_wait_owner)
+					{
+						// This API cannot return a valid sealed wait owner. Consume the exact
+						// pending/post-native boundary instead of allowing a later retry.
+						return fail_closed();
+					}
+
+					auto callback_copy = callback;
+					auto sealed_prefix = complete->tokens;
+					auto sealed_audit = complete->audit;
+					const auto cleanup_token = allocate_token_locked();
+					if (!cleanup_token)
+						return fail_closed();
+
+					// All potentially allocating copies are complete before phase/token ownership
+					// is sealed. Moving these standard-library values is noexcept for their
+					// allocators.
+					static_assert(std::is_nothrow_move_constructible_v<
+								  sqlite_shm_callback_execution_receipt>);
+					static_assert(std::is_nothrow_move_assignable_v<std::vector<std::uint64_t>>);
+					static_assert(std::is_nothrow_move_assignable_v<
+								  std::vector<writer_attachment_member_audit_record>>);
+					attachment->cleanup_callback.emplace(std::move(callback_copy));
+					attachment->sealed_complete_prefix = std::move(sealed_prefix);
+					attachment->sealed_member_audit = std::move(sealed_audit);
+					attachment->cleanup_token = *cleanup_token;
+					attachment->cleanup_generation = generation;
+					for (const auto authority_index : *target_authorities)
+						generation_->authorities[authority_index].active = false;
+					for (const auto token : attachment->sealed_complete_prefix)
+					{
+						const auto writer = find_by_token(writers_, token);
+						if (writer != writers_.end())
+							writer->phase = writer_phase::attachment_cleanup_sealed;
+						else
+							find_by_token(holders_, token)->phase =
+								holder_phase::attachment_cleanup_sealed;
+					}
+					if (decision == sqlite_shm_writer_retirement_decision::quarantine_same_thread)
+					{
+						attachment->phase = writer_attachment_phase::terminal_quarantined;
+						quarantine_locked();
+					}
+					else if (decision == sqlite_shm_writer_retirement_decision::wait_for_inflight)
+						attachment->phase = writer_attachment_phase::last_waiting;
+					else if (remaining_groups != 0U || generation == 0U)
+						attachment->phase =
+							writer_attachment_phase::nonlast_native_cleanup_admitted;
+					else
+						attachment->phase = writer_attachment_phase::last_native_cleanup_admitted;
+					if (generation != 0U && remaining_groups == 0U &&
+						decision != sqlite_shm_writer_retirement_decision::quarantine_same_thread)
+						generation_->phase = sqlite_shm_mapping_generation_phase::retiring;
+					return {attachment_seal_status::sealed, decision, *cleanup_token, generation};
+				}
+				catch (...)
+				{
+					return fail_closed();
+				}
 			}
 
 			[[nodiscard]] bool
@@ -1923,7 +2605,7 @@ namespace cxxlens::sdk
 											 {
 												 return value.live_token != 0U;
 											 }))
-						attachment.retired = true;
+						attachment.phase = writer_attachment_phase::retired;
 					return true;
 				}
 				return false;
@@ -1953,15 +2635,24 @@ namespace cxxlens::sdk
 						(active.thread_identity != callback.thread_identity ||
 						 callback.reentrancy_depth > active.reentrancy_depth);
 				};
+				if (std::ranges::any_of(writers_,
+										[&ordered_after](const writer_record& writer)
+										{
+											return (writer.phase == writer_phase::inflight ||
+													writer.phase ==
+														writer_phase::post_native_mapping) &&
+												!ordered_after(writer.request.callback);
+										}))
+					return false;
 				if (std::ranges::any_of(
-						writers_,
-						[&ordered_after](const writer_record& writer)
+						writer_attachments_,
+						[&ordered_after](const writer_attachment_record& attachment)
 						{
-							return (writer.phase == writer_phase::inflight ||
-									writer.phase == writer_phase::post_native_mapping ||
-									writer.phase == writer_phase::cleanup_obligation) &&
-								!ordered_after(writer.cleanup_callback ? *writer.cleanup_callback
-																	   : writer.request.callback);
+							return attachment.phase != writer_attachment_phase::collecting &&
+								attachment.phase != writer_attachment_phase::retired &&
+								attachment.phase != writer_attachment_phase::terminal_quarantined &&
+								attachment.cleanup_callback &&
+								!ordered_after(*attachment.cleanup_callback);
 						}))
 					return false;
 				if (std::ranges::any_of(readers_,
@@ -1972,16 +2663,6 @@ namespace cxxlens::sdk
 												!ordered_after(reader.cleanup_callback
 																   ? *reader.cleanup_callback
 																   : reader.request.callback);
-										}))
-					return false;
-				if (std::ranges::any_of(holders_,
-										[&ordered_after](const holder_record& holder)
-										{
-											return holder.phase != holder_phase::active &&
-												holder.phase !=
-												holder_phase::terminal_quarantined &&
-												holder.release_callback &&
-												!ordered_after(*holder.release_callback);
 										}))
 					return false;
 				return std::ranges::none_of(handoffs_,
@@ -2048,6 +2729,32 @@ namespace cxxlens::sdk
 			{
 				return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
 								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+			}
+
+			[[nodiscard]] static bool
+			same_effect_gate_receipt(const sqlite_backend_effect_arm_receipt& left,
+									 const sqlite_backend_effect_arm_receipt& right) noexcept
+			{
+				return left.profile == right.profile &&
+					left.capability_token == right.capability_token &&
+					left.connection_token == right.connection_token &&
+					left.canonical_vfs_locator == right.canonical_vfs_locator &&
+					left.prerequisite_receipt == right.prerequisite_receipt &&
+					left.validation_receipt == right.validation_receipt &&
+					left.stage == right.stage && left.sequence == right.sequence &&
+					left.armed_after_underlying_exclusive_lock ==
+					right.armed_after_underlying_exclusive_lock;
+			}
+
+			[[nodiscard]] static bool same_eligibility_receipt(
+				const sqlite_shm_verified_writer_eligibility_receipt& left,
+				const sqlite_shm_verified_writer_eligibility_receipt& right) noexcept
+			{
+				return left.family() == right.family() &&
+					left.connection_token() == right.connection_token() &&
+					left.open_epoch() == right.open_epoch() &&
+					same_effect_gate_receipt(left.effect_gate(), right.effect_gate()) &&
+					left.complete_current_v3_gate() == right.complete_current_v3_gate();
 			}
 
 			[[nodiscard]] bool valid_eligibility(
@@ -2136,141 +2843,6 @@ namespace cxxlens::sdk
 										  }));
 			}
 
-			[[nodiscard]] sqlite_shm_writer_retirement_decision
-			retirement_decision_locked(const sqlite_shm_callback_execution_receipt& callback,
-									   const std::uint64_t last_holder_token) noexcept
-			{
-				bool has_blocker = false;
-				bool has_same_thread_blocker = false;
-				const auto observe = [&callback, &has_blocker, &has_same_thread_blocker](
-										 const sqlite_shm_callback_execution_receipt& active)
-				{
-					has_blocker = true;
-					if (active.thread_identity == callback.thread_identity)
-					{
-						// A same-thread blocker cannot make progress while this callback waits.
-						// Depth and invocation are retained here so a reordered or duplicate
-						// callback cannot be mistaken for a cross-thread wait.
-						const auto ordered_nested =
-							callback.reentrancy_depth > active.reentrancy_depth &&
-							callback.invocation_token != active.invocation_token;
-						(void)ordered_nested;
-						has_same_thread_blocker = true;
-					}
-				};
-
-				for (const auto& writer : writers_)
-				{
-					if (writer.phase == writer_phase::terminal_quarantined)
-						continue;
-					observe(writer.cleanup_callback ? *writer.cleanup_callback
-													: writer.request.callback);
-				}
-				for (const auto& reader : readers_)
-				{
-					if (reader.phase == reader_phase::terminal_quarantined)
-						continue;
-					observe(reader.cleanup_callback ? *reader.cleanup_callback
-													: reader.request.callback);
-				}
-				for (const auto& holder : holders_)
-				{
-					if (holder.token == last_holder_token || holder.phase == holder_phase::active ||
-						holder.phase == holder_phase::terminal_quarantined ||
-						!holder.release_callback)
-						continue;
-					observe(*holder.release_callback);
-				}
-
-				if (has_same_thread_blocker)
-				{
-					quarantine_locked();
-					return sqlite_shm_writer_retirement_decision::quarantine_same_thread;
-				}
-				if (has_blocker)
-					return sqlite_shm_writer_retirement_decision::wait_for_inflight;
-				return sqlite_shm_writer_retirement_decision::ready;
-			}
-
-			[[nodiscard]] sqlite_shm_lease_result<void>
-			complete_holder_cleanup_locked(sqlite_shm_writer_cleanup_obligation& cleanup,
-										   const sqlite_shm_callback_execution_receipt& callback,
-										   const sqlite_shm_native_cleanup_outcome outcome) noexcept
-			{
-				const auto holder = find_by_token(holders_, cleanup.token_);
-				if (holder == holders_.end() || holder->generation != cleanup.generation_ ||
-					holder->phase == holder_phase::active)
-					return sqlite_shm_unexpected(
-						stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
-
-				const auto phase = holder->phase;
-				const auto generation = holder->generation;
-				const auto callback_matches =
-					holder->release_callback && *holder->release_callback == callback;
-				if (phase == holder_phase::last_waiting)
-				{
-					// Completion proves native cleanup was delegated before admission.
-					holder->phase = holder_phase::terminal_quarantined;
-					cleanup.disarm();
-					quarantine_locked();
-					return sqlite_shm_unexpected(ambiguous());
-				}
-
-				if (!callback_matches ||
-					outcome != sqlite_shm_native_cleanup_outcome::confirmed_success ||
-					is_quarantined_locked())
-				{
-					holder->phase = holder_phase::terminal_quarantined;
-					cleanup.disarm();
-					quarantine_locked();
-					return sqlite_shm_unexpected(ambiguous());
-				}
-
-				if (phase == holder_phase::nonlast_native_cleanup_admitted)
-				{
-					if (!release_attachment_member_locked(cleanup.token_, true))
-					{
-						holder->phase = holder_phase::terminal_quarantined;
-						cleanup.disarm();
-						quarantine_locked();
-						return sqlite_shm_unexpected(ambiguous());
-					}
-					holders_.erase(holder);
-					cleanup.disarm();
-					return {};
-				}
-
-				if (phase != holder_phase::last_native_cleanup_admitted || !generation_ ||
-					generation_->value != generation ||
-					generation_->phase != sqlite_shm_mapping_generation_phase::retiring ||
-					!writers_.empty() || !readers_.empty() ||
-					std::ranges::any_of(holders_,
-										[&cleanup](const holder_record& value)
-										{
-											return value.token != cleanup.token_;
-										}))
-				{
-					holder->phase = holder_phase::terminal_quarantined;
-					cleanup.disarm();
-					quarantine_locked();
-					return sqlite_shm_unexpected(ambiguous());
-				}
-
-				if (!release_attachment_member_locked(cleanup.token_, true))
-				{
-					holder->phase = holder_phase::terminal_quarantined;
-					cleanup.disarm();
-					quarantine_locked();
-					return sqlite_shm_unexpected(ambiguous());
-				}
-				holders_.erase(holder);
-				cleanup.disarm();
-				generation_->phase = sqlite_shm_mapping_generation_phase::retired;
-				if (generation_->handoff_count == 0U)
-					generation_.reset();
-				return {};
-			}
-
 			[[nodiscard]] bool token_exists_locked(const lease_token_kind kind,
 												   const std::uint64_t token) const
 			{
@@ -2296,14 +2868,16 @@ namespace cxxlens::sdk
 					}
 					case lease_token_kind::writer_cleanup:
 					{
-						const auto writer = find_by_token(writers_, token);
-						if (writer != writers_.end())
-							return writer->phase == writer_phase::cleanup_obligation;
-						const auto holder = find_by_token(holders_, token);
-						return holder != holders_.end() &&
-							(holder->phase == holder_phase::nonlast_native_cleanup_admitted ||
-							 holder->phase == holder_phase::last_waiting ||
-							 holder->phase == holder_phase::last_native_cleanup_admitted);
+						const auto attachment =
+							std::find_if(writer_attachments_.begin(),
+										 writer_attachments_.end(),
+										 [token](const writer_attachment_record& value)
+										 {
+											 return value.cleanup_token == token;
+										 });
+						return attachment != writer_attachments_.end() &&
+							attachment->phase != writer_attachment_phase::retired &&
+							attachment->phase != writer_attachment_phase::terminal_quarantined;
 					}
 					case lease_token_kind::holder:
 					{
@@ -2354,6 +2928,8 @@ namespace cxxlens::sdk
 			bool alive_{true};
 			bool quarantined_{};
 			bool fail_next_writer_native_transition_for_testing_{};
+			bool fail_next_writer_attachment_seal_for_testing_{};
+			bool fail_next_writer_completion_transition_for_testing_{};
 			std::atomic_bool emergency_quarantine_{false};
 		};
 	} // namespace detail
@@ -2480,7 +3056,7 @@ namespace cxxlens::sdk
 		state_.reset();
 	}
 
-	sqlite_shm_writer_cleanup_obligation::sqlite_shm_writer_cleanup_obligation(
+	sqlite_shm_writer_attachment_cleanup::sqlite_shm_writer_attachment_cleanup(
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 		const detail::sqlite_shm_lease_token_identity token,
 		const detail::sqlite_shm_mapping_generation_identity generation) noexcept
@@ -2488,30 +3064,30 @@ namespace cxxlens::sdk
 	{
 	}
 
-	sqlite_shm_writer_cleanup_obligation::~sqlite_shm_writer_cleanup_obligation() noexcept
+	sqlite_shm_writer_attachment_cleanup::~sqlite_shm_writer_attachment_cleanup() noexcept
 	{
 		if (state_)
 			state_->abandon(lease_token_kind::writer_cleanup, token_);
 	}
 
-	sqlite_shm_writer_cleanup_obligation::sqlite_shm_writer_cleanup_obligation(
-		sqlite_shm_writer_cleanup_obligation&& other) noexcept
+	sqlite_shm_writer_attachment_cleanup::sqlite_shm_writer_attachment_cleanup(
+		sqlite_shm_writer_attachment_cleanup&& other) noexcept
 		: state_{std::move(other.state_)}, token_{std::exchange(other.token_, 0U)},
 		  generation_{std::exchange(other.generation_, 0U)}
 	{
 	}
 
-	bool sqlite_shm_writer_cleanup_obligation::valid() const noexcept
+	bool sqlite_shm_writer_attachment_cleanup::valid() const noexcept
 	{
 		return state_ != nullptr && token_ != 0U;
 	}
 
-	std::uint64_t sqlite_shm_writer_cleanup_obligation::generation() const noexcept
+	std::uint64_t sqlite_shm_writer_attachment_cleanup::generation() const noexcept
 	{
 		return generation_;
 	}
 
-	void sqlite_shm_writer_cleanup_obligation::disarm() noexcept
+	void sqlite_shm_writer_attachment_cleanup::disarm() noexcept
 	{
 		token_ = 0U;
 		generation_ = 0U;
@@ -2709,7 +3285,7 @@ namespace cxxlens::sdk
 	sqlite_shm_writer_release::sqlite_shm_writer_release(
 		const sqlite_shm_writer_retirement_decision decision,
 		const std::uint64_t generation,
-		sqlite_shm_writer_cleanup_obligation cleanup) noexcept
+		sqlite_shm_writer_attachment_cleanup cleanup) noexcept
 		: decision_{decision}, generation_{generation}, cleanup_{std::move(cleanup)}
 	{
 	}
@@ -2733,7 +3309,7 @@ namespace cxxlens::sdk
 		return generation_;
 	}
 
-	sqlite_shm_writer_cleanup_obligation& sqlite_shm_writer_release::cleanup() noexcept
+	sqlite_shm_writer_attachment_cleanup& sqlite_shm_writer_release::cleanup() noexcept
 	{
 		return cleanup_;
 	}
@@ -2805,7 +3381,7 @@ namespace cxxlens::sdk
 		return state_->resolve_writer_failure(inflight);
 	}
 
-	sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
+	sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>
 	sqlite_same_process_shm_mapping_lease_coordinator::begin_writer_cleanup(
 		sqlite_shm_writer_post_native_mapping& rejected_mapping,
 		const sqlite_shm_callback_execution_receipt& callback) noexcept
@@ -2813,7 +3389,7 @@ namespace cxxlens::sdk
 		return state_->begin_writer_cleanup(rejected_mapping, callback);
 	}
 
-	sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
+	sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>
 	sqlite_same_process_shm_mapping_lease_coordinator::begin_writer_cleanup(
 		sqlite_shm_pending_mapping& pending,
 		const sqlite_shm_callback_execution_receipt& callback) noexcept
@@ -2823,7 +3399,7 @@ namespace cxxlens::sdk
 
 	sqlite_shm_lease_result<void>
 	sqlite_same_process_shm_mapping_lease_coordinator::complete_writer_cleanup(
-		sqlite_shm_writer_cleanup_obligation& cleanup,
+		sqlite_shm_writer_attachment_cleanup& cleanup,
 		const sqlite_shm_callback_execution_receipt& callback,
 		const sqlite_shm_native_cleanup_outcome outcome) noexcept
 	{
@@ -2896,7 +3472,7 @@ namespace cxxlens::sdk
 
 	sqlite_shm_lease_result<sqlite_shm_writer_retirement_result>
 	sqlite_same_process_shm_mapping_lease_coordinator::poll_writer_retirement(
-		const sqlite_shm_writer_cleanup_obligation& cleanup,
+		const sqlite_shm_writer_attachment_cleanup& cleanup,
 		const sqlite_shm_callback_execution_receipt& callback) noexcept
 	{
 		return state_->poll_retirement(cleanup, callback);
@@ -2904,7 +3480,7 @@ namespace cxxlens::sdk
 
 	sqlite_shm_lease_result<void>
 	sqlite_same_process_shm_mapping_lease_coordinator::fail_writer_retirement_wait(
-		const sqlite_shm_writer_cleanup_obligation& cleanup,
+		const sqlite_shm_writer_attachment_cleanup& cleanup,
 		const sqlite_shm_callback_execution_receipt& callback,
 		const sqlite_shm_retirement_wait_failure failure) noexcept
 	{
@@ -2921,5 +3497,17 @@ namespace cxxlens::sdk
 		inject_writer_native_transition_failure_for_testing() noexcept
 	{
 		state_->inject_writer_native_transition_failure_for_testing();
+	}
+
+	void sqlite_same_process_shm_mapping_lease_coordinator::
+		inject_writer_completion_transition_failure_for_testing() noexcept
+	{
+		state_->inject_writer_completion_transition_failure_for_testing();
+	}
+
+	void sqlite_same_process_shm_mapping_lease_coordinator::
+		inject_writer_attachment_seal_failure_for_testing() noexcept
+	{
+		state_->inject_writer_attachment_seal_failure_for_testing();
 	}
 } // namespace cxxlens::sdk

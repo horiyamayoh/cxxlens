@@ -35,6 +35,18 @@ namespace cxxlens::sdk
 			coordinator.inject_writer_native_transition_failure_for_testing();
 		}
 
+		static void fail_next_writer_completion_transition(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_writer_completion_transition_failure_for_testing();
+		}
+
+		static void fail_next_writer_attachment_seal_transition(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_writer_attachment_seal_failure_for_testing();
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_writer_post_map_receipt
 		writer_map(sqlite_shm_writer_map_request request,
 				   sqlite_backend_opaque_identity open_epoch,
@@ -81,7 +93,7 @@ namespace
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_post_native_mapping>);
 	static_assert(!std::is_default_constructible_v<sqlite_shm_verified_writer_native_map_receipt>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_pending_mapping>);
-	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_cleanup_obligation>);
+	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_attachment_cleanup>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_holder>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_map_inflight>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_cleanup_obligation>);
@@ -92,7 +104,7 @@ namespace
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_map_inflight>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_post_native_mapping>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_pending_mapping>);
-	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_cleanup_obligation>);
+	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_attachment_cleanup>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_holder>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_map_inflight>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_cleanup_obligation>);
@@ -578,10 +590,20 @@ namespace
 			require(second.has_value(), "pending partial-cleanup fixture has a second member");
 
 			auto partial = coordinator.begin_writer_cleanup(pending, callback(3, marker + 2U));
-			require(!partial && !pending.valid() && coordinator.snapshot().quarantined,
-					"multi-member pending cleanup quarantines without an unmap obligation");
-			require(second->valid(),
-					"pending partial-cleanup rejection does not fabricate second-member cleanup");
+			require(!partial && !pending.valid() && second->valid() &&
+						coordinator.snapshot().quarantined &&
+						coordinator.snapshot().writer_cleanup_count == 1U,
+					"same-attachment inflight cleanup fails closed without an owner");
+			require(coordinator.resolve_writer_map_failure(*second).has_value(),
+					"resolve the already-started second-page native no-map under quarantine");
+			auto retry = coordinator.begin_writer_cleanup(pending, callback(3, marker + 2U));
+			require(!retry &&
+						retry.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+					"draining the inflight blocker cannot revive the consumed pending source");
+			auto blocked = coordinator.begin_writer_map(first_request);
+			require(!blocked &&
+						blocked.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+					"the inflight cleanup fence blocks all later attachment admission");
 		}
 
 		{
@@ -607,10 +629,15 @@ namespace
 			require(second.has_value(), "post-native partial-cleanup fixture has second member");
 
 			auto partial = coordinator.begin_writer_cleanup(post_native, callback(3, marker + 2U));
-			require(!partial && !post_native.valid() && coordinator.snapshot().quarantined,
-					"multi-member post-native cleanup quarantines without an unmap obligation");
-			require(second->valid(),
-					"post-native partial-cleanup rejection retains the second-member tombstone");
+			require(!partial && !post_native.valid() && second->valid() &&
+						coordinator.snapshot().quarantined,
+					"post-native anchor plus inflight sibling fails closed without an owner");
+			require(coordinator.resolve_writer_map_failure(*second).has_value(),
+					"resolve fenced post-native fixture sibling without native mapping");
+			auto retry = coordinator.begin_writer_cleanup(post_native, callback(3, marker + 2U));
+			require(!retry &&
+						retry.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+					"draining the blocker cannot revive the consumed post-native source");
 		}
 
 		{
@@ -654,13 +681,33 @@ namespace
 						grouped.writer_holder_count == 2U,
 					"same attachment accumulates two members without cross-attachment grouping");
 
-			auto partial = coordinator.release_writer_holder(holder_zero, callback(3, marker + 2U));
-			require(!partial && !holder_zero.valid() && coordinator.snapshot().quarantined,
-					"groundwork slice rejects old per-map unmap for a multi-member attachment");
-			require(holder_one.valid(),
-					"fail-closed partial-unmap guard does not fabricate group cleanup");
-			// Full one-unmap aggregation and cleanup replace this temporary quarantine in the
-			// next DF-0206 slice; this test intentionally does not claim implementation complete.
+			auto grouped_release =
+				coordinator.release_writer_holder(holder_zero, callback(3, marker + 2U));
+			require(grouped_release &&
+						grouped_release->decision() ==
+							sqlite_shm_writer_retirement_decision::ready &&
+						!holder_zero.valid() && holder_one.valid() &&
+						grouped_release->cleanup().valid() &&
+						coordinator.snapshot().writer_cleanup_count == 1U,
+					"any one holder anchor seals one cleanup owner for the complete attachment");
+			auto duplicate =
+				coordinator.release_writer_holder(holder_one, callback(4, marker + 3U));
+			require(!duplicate && holder_one.valid() && !coordinator.snapshot().quarantined,
+					"a sibling wrapper cannot mint a duplicate attachment cleanup owner");
+			require(coordinator
+							.complete_writer_cleanup(
+								grouped_release->cleanup(),
+								callback(3, marker + 2U),
+								sqlite_shm_native_cleanup_outcome::confirmed_success)
+							.has_value() &&
+						!grouped_release->cleanup().valid() && !coordinator.snapshot().quarantined,
+					"page zero and page one complete through exactly one native unmap outcome");
+			const auto grouped_retired = coordinator.snapshot();
+			require(grouped_retired.writer_attachment_audit_member_count == 2U &&
+						grouped_retired.writer_attachment_audit_native_mapping_count == 2U &&
+						grouped_retired.writer_attachment_audit_post_map_count == 2U &&
+						grouped_retired.writer_attachment_audit_promotion_count == 2U,
+					"page zero and page one retain exact per-map tombstone evidence");
 		}
 
 		{
@@ -689,7 +736,11 @@ namespace
 			require(retired.writer_attachment_identity_count == 1U &&
 						retired.writer_attachment_member_count == 1U &&
 						retired.writer_attachment_unresolved_count == 0U &&
-						retired.writer_attachment_unresolved_member_count == 0U,
+						retired.writer_attachment_unresolved_member_count == 0U &&
+						retired.writer_attachment_audit_member_count == 1U &&
+						retired.writer_attachment_audit_native_mapping_count == 1U &&
+						retired.writer_attachment_audit_post_map_count == 1U &&
+						retired.writer_attachment_audit_promotion_count == 1U,
 					"confirmed cleanup retains a non-reuse attachment tombstone");
 
 			auto reused = writer_request(binding, connection, marker, 3, marker + 2U, 0, 1);
@@ -715,6 +766,803 @@ namespace
 			require(coordinator.revoke_writer_eligibility(gate).has_value(),
 					"revoke retired attachment gate");
 		}
+	}
+
+	void verify_writer_attachment_group_cleanup_is_exact_and_one_shot()
+	{
+		{
+			constexpr std::uint8_t marker = 97;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto gate = install_eligibility(coordinator, binding, connection, open_epoch, marker);
+
+			auto first_request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			first_request.attachment = attachment;
+			auto first_pending = install_pending(coordinator,
+												 first_request,
+												 open_epoch,
+												 mapping(0, &page, 4096U),
+												 sqlite_shm_writer_extend_pair::one_one,
+												 marker);
+			auto first = promote(coordinator, first_pending, gate);
+
+			auto repeat_request = writer_request(binding, connection, marker, 2, marker + 1U, 0, 0);
+			repeat_request.attachment = attachment;
+			auto repeat_pending = install_pending(coordinator,
+												  repeat_request,
+												  open_epoch,
+												  mapping(0, &page, 4096U),
+												  sqlite_shm_writer_extend_pair::zero_zero,
+												  marker + 1U);
+			auto repeated = promote(coordinator, repeat_pending, gate);
+
+			const auto cleanup_callback = callback(3, marker + 2U);
+			auto release = coordinator.release_writer_holder(repeated, cleanup_callback);
+			require(release &&
+						release->decision() == sqlite_shm_writer_retirement_decision::ready &&
+						release->cleanup().valid() && first.valid() && !repeated.valid() &&
+						coordinator.snapshot().writer_cleanup_count == 1U &&
+						coordinator.snapshot().writer_holder_count == 0U,
+					"repeated same-page receipts produce one attachment cleanup owner");
+			require(
+				coordinator
+					.complete_writer_cleanup(release->cleanup(),
+											 cleanup_callback,
+											 sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"repeated same-page attachment completes one native outcome");
+			auto duplicate = coordinator.complete_writer_cleanup(
+				release->cleanup(),
+				cleanup_callback,
+				sqlite_shm_native_cleanup_outcome::confirmed_success);
+			require(!duplicate &&
+						duplicate.error().reason ==
+							sqlite_shm_lease_rejection_reason::stale_token &&
+						!coordinator.snapshot().quarantined,
+					"completed attachment owner cannot complete twice");
+			require(coordinator.revoke_writer_eligibility(gate).has_value(),
+					"revoke repeated-page attachment gate");
+		}
+
+		{
+			constexpr std::uint8_t marker = 98;
+			const auto binding = family(marker);
+			const auto connection_a = identity("test.connection", marker);
+			const auto connection_b = identity("test.connection", marker + 1U);
+			const auto open_epoch_a = identity("test.open-epoch", marker);
+			const auto open_epoch_b = identity("test.open-epoch", marker + 1U);
+			const auto alias_a = identity("test.alias-lifetime", marker);
+			const auto alias_b = identity("test.alias-lifetime", marker + 1U);
+			const auto attachment_a =
+				writer_attachment(binding, alias_a, connection_a, open_epoch_a, marker);
+			const auto attachment_b =
+				writer_attachment(binding, alias_b, connection_b, open_epoch_b, marker + 1U);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto gate_a =
+				install_eligibility(coordinator, binding, connection_a, open_epoch_a, marker);
+			auto gate_b =
+				install_eligibility(coordinator, binding, connection_b, open_epoch_b, marker + 1U);
+
+			auto install_member = [&](const sqlite_shm_native_attachment_identity& attachment,
+									  const sqlite_backend_opaque_identity& connection,
+									  const sqlite_backend_opaque_identity& open_epoch,
+									  const std::uint8_t alias,
+									  const std::uint8_t invocation,
+									  const int extend,
+									  const std::uint8_t receipt_marker,
+									  const sqlite_shm_writer_eligibility& gate)
+			{
+				auto request =
+					writer_request(binding, connection, alias, invocation, invocation, 0, extend);
+				request.attachment = attachment;
+				auto pending =
+					install_pending(coordinator,
+									request,
+									open_epoch,
+									mapping(0, &page, 4096U),
+									extend == 1 ? sqlite_shm_writer_extend_pair::one_one
+												: sqlite_shm_writer_extend_pair::zero_zero,
+									receipt_marker);
+				return promote(coordinator, pending, gate);
+			};
+
+			auto a0 = install_member(
+				attachment_a, connection_a, open_epoch_a, marker, 1, 1, marker, gate_a);
+			auto a1 = install_member(
+				attachment_a, connection_a, open_epoch_a, marker, 2, 0, marker + 1U, gate_a);
+			auto b0 = install_member(
+				attachment_b, connection_b, open_epoch_b, marker + 1U, 3, 0, marker + 2U, gate_b);
+			auto b1 = install_member(
+				attachment_b, connection_b, open_epoch_b, marker + 1U, 4, 0, marker + 3U, gate_b);
+
+			const auto callback_a = callback(5, marker + 4U);
+			auto release_a = coordinator.release_writer_holder(a1, callback_a);
+			const auto a_sealed = coordinator.snapshot();
+			require(release_a &&
+						release_a->decision() ==
+							sqlite_shm_writer_retirement_decision::not_last_attachment &&
+						a_sealed.generation_authority_count == 2U &&
+						a_sealed.writer_attachment_audit_member_count == 2U &&
+						a_sealed.writer_attachment_audit_native_mapping_count == 2U &&
+						a_sealed.writer_attachment_audit_post_map_count == 2U &&
+						a_sealed.writer_attachment_audit_promotion_count == 2U &&
+						coordinator
+							.complete_writer_cleanup(
+								release_a->cleanup(),
+								callback_a,
+								sqlite_shm_native_cleanup_outcome::confirmed_success)
+							.has_value() &&
+						coordinator.snapshot().writer_holder_count == 2U,
+					"first multi-member attachment completes independently in one outcome");
+
+			const auto callback_b = callback(6, marker + 5U);
+			auto release_b = coordinator.release_writer_holder(b0, callback_b);
+			require(release_b &&
+						release_b->decision() == sqlite_shm_writer_retirement_decision::ready &&
+						coordinator
+							.complete_writer_cleanup(
+								release_b->cleanup(),
+								callback_b,
+								sqlite_shm_native_cleanup_outcome::confirmed_success)
+							.has_value() &&
+						coordinator.snapshot().phase == sqlite_shm_mapping_generation_phase::empty,
+					"second multi-member attachment owns the second and final outcome");
+			require(a0.valid() && b1.valid() &&
+						coordinator.snapshot().writer_attachment_audit_member_count == 4U &&
+						!coordinator.snapshot().quarantined,
+					"sibling wrappers survive locally without fabricating extra cleanup");
+			require(coordinator.revoke_writer_eligibility(gate_a).has_value() &&
+						coordinator.revoke_writer_eligibility(gate_b).has_value(),
+					"revoke two-attachment gates");
+		}
+
+		{
+			constexpr std::uint8_t marker = 107;
+			const auto binding = family(marker);
+			const auto connection_a = identity("test.connection", marker);
+			const auto connection_high = identity("test.connection", marker + 1U);
+			const auto connection_b = identity("test.connection", marker + 2U);
+			const auto open_epoch_a = identity("test.open-epoch", marker);
+			const auto open_epoch_high = identity("test.open-epoch", marker + 1U);
+			const auto open_epoch_b = identity("test.open-epoch", marker + 2U);
+			const auto alias_a = identity("test.alias-lifetime", marker);
+			const auto alias_high = identity("test.alias-lifetime", marker + 1U);
+			const auto alias_b = identity("test.alias-lifetime", marker + 2U);
+			const auto attachment_a =
+				writer_attachment(binding, alias_a, connection_a, open_epoch_a, marker);
+			const auto attachment_high = writer_attachment(
+				binding, alias_high, connection_high, open_epoch_high, marker + 1U);
+			const auto attachment_b =
+				writer_attachment(binding, alias_b, connection_b, open_epoch_b, marker + 2U);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page_zero{};
+			int page_one{};
+			auto gate_a =
+				install_eligibility(coordinator, binding, connection_a, open_epoch_a, marker);
+			auto gate_high = install_eligibility(
+				coordinator, binding, connection_high, open_epoch_high, marker + 1U);
+			auto gate_b =
+				install_eligibility(coordinator, binding, connection_b, open_epoch_b, marker + 2U);
+
+			auto request_a = writer_request(binding, connection_a, marker, 1, marker, 0, 1);
+			request_a.attachment = attachment_a;
+			auto pending_a = install_pending(coordinator,
+											 request_a,
+											 open_epoch_a,
+											 mapping(0, &page_zero, 4096U),
+											 sqlite_shm_writer_extend_pair::one_one,
+											 marker);
+			auto holder_a = promote(coordinator, pending_a, gate_a);
+
+			auto high_request =
+				writer_request(binding, connection_high, marker + 1U, 2, marker + 1U, 1, 1);
+			high_request.attachment = attachment_high;
+			auto high_pending = install_pending(coordinator,
+												high_request,
+												open_epoch_high,
+												mapping(1, &page_one, 8192U),
+												sqlite_shm_writer_extend_pair::one_one,
+												marker + 1U);
+			auto high_holder = promote(coordinator, high_pending, gate_high);
+
+			auto request_b =
+				writer_request(binding, connection_b, marker + 2U, 3, marker + 2U, 0, 0);
+			request_b.attachment = attachment_b;
+			auto pending_b = install_pending(coordinator,
+											 request_b,
+											 open_epoch_b,
+											 mapping(0, &page_zero, 8192U),
+											 sqlite_shm_writer_extend_pair::zero_zero,
+											 marker + 2U);
+			auto holder_b = promote(coordinator, pending_b, gate_b);
+
+			const auto cleanup_a = callback(4, marker + 3U);
+			auto release_a = coordinator.release_writer_holder(holder_a, cleanup_a);
+			require(release_a &&
+						release_a->decision() ==
+							sqlite_shm_writer_retirement_decision::not_last_attachment &&
+						coordinator.snapshot().sealed_shm_size == 8192U &&
+						coordinator.snapshot().generation_authority_count == 2U,
+					"redundant page identity ignores attachment-local sealed high-water");
+			require(
+				coordinator
+					.complete_writer_cleanup(release_a->cleanup(),
+											 cleanup_a,
+											 sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"page-zero attachment retires while exact page-zero support remains");
+
+			auto reader = coordinator.begin_reader_map(
+				reader_request(binding, connection_b, marker + 3U, 5, marker + 4U, 0));
+			require(reader && coordinator.snapshot().reader_admission_visible,
+					"remaining high-water support admits a fresh page-zero reader");
+			require(coordinator.resolve_reader_map_failure(*reader).has_value(),
+					"resolve fresh high-water reader as native no-map");
+
+			auto retired_a_cannot_support_b =
+				coordinator.release_writer_holder(holder_b, callback(6, marker + 5U));
+			require(!retired_a_cannot_support_b && !holder_b.valid() && high_holder.valid() &&
+						coordinator.snapshot().quarantined,
+					"retired inactive page-zero evidence cannot support later nonlast cleanup");
+			require(coordinator.revoke_writer_eligibility(gate_a).has_value() &&
+						coordinator.revoke_writer_eligibility(gate_high).has_value() &&
+						coordinator.revoke_writer_eligibility(gate_b).has_value(),
+					"revoke high-water support gates");
+		}
+
+		{
+			constexpr std::uint8_t marker = 101;
+			const auto binding = family(marker);
+			const auto connection_a = identity("test.connection", marker);
+			const auto connection_b = identity("test.connection", marker + 1U);
+			const auto open_epoch_a = identity("test.open-epoch", marker);
+			const auto open_epoch_b = identity("test.open-epoch", marker + 1U);
+			const auto alias_a = identity("test.alias-lifetime", marker);
+			const auto alias_b = identity("test.alias-lifetime", marker + 1U);
+			const auto attachment_a =
+				writer_attachment(binding, alias_a, connection_a, open_epoch_a, marker);
+			const auto attachment_b =
+				writer_attachment(binding, alias_b, connection_b, open_epoch_b, marker + 1U);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page_zero{};
+			int page_one{};
+			auto gate_a =
+				install_eligibility(coordinator, binding, connection_a, open_epoch_a, marker);
+			auto gate_b =
+				install_eligibility(coordinator, binding, connection_b, open_epoch_b, marker + 1U);
+
+			auto request_a = writer_request(binding, connection_a, marker, 1, marker, 0, 1);
+			request_a.attachment = attachment_a;
+			auto pending_a = install_pending(coordinator,
+											 request_a,
+											 open_epoch_a,
+											 mapping(0, &page_zero, 4096U),
+											 sqlite_shm_writer_extend_pair::one_one,
+											 marker);
+			auto holder_a = promote(coordinator, pending_a, gate_a);
+
+			auto request_b =
+				writer_request(binding, connection_b, marker + 1U, 2, marker + 1U, 1, 1);
+			request_b.attachment = attachment_b;
+			auto pending_b = install_pending(coordinator,
+											 request_b,
+											 open_epoch_b,
+											 mapping(1, &page_one, 8192U),
+											 sqlite_shm_writer_extend_pair::one_one,
+											 marker + 1U);
+			auto holder_b = promote(coordinator, pending_b, gate_b);
+
+			auto fenced = coordinator.release_writer_holder(holder_a, callback(3, marker + 2U));
+			require(!fenced && !holder_a.valid() && holder_b.valid() &&
+						coordinator.snapshot().quarantined &&
+						coordinator.snapshot().generation_authority_count == 2U &&
+						coordinator.snapshot().writer_attachment_audit_member_count == 0U,
+					"nonlast cleanup cannot retire sole support for a different generation page");
+			auto blocked = coordinator.begin_writer_map(request_a);
+			require(!blocked &&
+						blocked.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+					"sole-page support fence blocks later admission without an owner");
+			auto fresh_request =
+				writer_request(binding, connection_a, marker, 4, marker + 3U, 0, 1);
+			fresh_request.attachment =
+				writer_attachment(binding,
+								  alias_a,
+								  connection_a,
+								  open_epoch_a,
+								  marker,
+								  identity("test.writer-attachment-epoch", marker + 3U));
+			auto fresh = coordinator.begin_writer_map(fresh_request);
+			require(!fresh &&
+						fresh.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+					"sole-page support fence also blocks a fresh attachment epoch");
+			require(coordinator.revoke_writer_eligibility(gate_a).has_value() &&
+						coordinator.revoke_writer_eligibility(gate_b).has_value(),
+					"revoke sole-page fence gates");
+		}
+
+		{
+			constexpr std::uint8_t marker = 99;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page_zero{};
+			int page_one{};
+			auto gate = install_eligibility(coordinator, binding, connection, open_epoch, marker);
+
+			auto first_request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			first_request.attachment = attachment;
+			auto first_pending = install_pending(coordinator,
+												 first_request,
+												 open_epoch,
+												 mapping(0, &page_zero, 4096U),
+												 sqlite_shm_writer_extend_pair::one_one,
+												 marker);
+			auto first = promote(coordinator, first_pending, gate);
+
+			auto second_request = writer_request(binding, connection, marker, 2, marker + 1U, 1, 1);
+			second_request.attachment = attachment;
+			auto second_begun = coordinator.begin_writer_map(second_request);
+			require(second_begun.has_value(), "begin second-page validation-failure member");
+			auto second_inflight = std::move(*second_begun);
+			auto second_post = record_native_mapping(coordinator, second_inflight, &page_one);
+			auto invalid =
+				coordinator.install_pending(second_post,
+											writer_receipt(second_request,
+														   open_epoch,
+														   mapping(2, &page_one, 12288U),
+														   sqlite_shm_writer_extend_pair::one_one,
+														   marker + 1U));
+			require(!invalid && second_post.valid(),
+					"second-page post-native validation failure retains its exact anchor");
+
+			const auto cleanup_callback = second_request.callback;
+			auto cleanup = coordinator.begin_writer_cleanup(second_post, cleanup_callback);
+			require(!cleanup && !second_post.valid() && first.valid() &&
+						coordinator.snapshot().writer_holder_count == 1U &&
+						coordinator.snapshot().writer_cleanup_count == 1U &&
+						coordinator.snapshot().quarantined,
+					"post-native failure mixed with a live member is fenced without an owner");
+			auto same_epoch = coordinator.begin_writer_map(first_request);
+			require(!same_epoch &&
+						same_epoch.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+					"post-native/live fence blocks same-epoch admission");
+
+			auto fresh_request = writer_request(binding, connection, marker, 4, marker + 3U, 0, 1);
+			fresh_request.attachment =
+				writer_attachment(binding,
+								  alias,
+								  connection,
+								  open_epoch,
+								  marker,
+								  identity("test.writer-attachment-epoch", marker + 1U));
+			auto fresh = coordinator.begin_writer_map(fresh_request);
+			require(!fresh &&
+						fresh.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+					"post-native/live fence also blocks a fresh attachment epoch");
+			require(coordinator.revoke_writer_eligibility(gate).has_value(),
+					"revoke post-native grouped-cleanup gate");
+		}
+
+		{
+			constexpr std::uint8_t marker = 100;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto gate = install_eligibility(coordinator, binding, connection, open_epoch, marker);
+
+			auto first_request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			first_request.attachment = attachment;
+			auto pending = install_pending(coordinator,
+										   first_request,
+										   open_epoch,
+										   mapping(0, &page, 4096U),
+										   sqlite_shm_writer_extend_pair::one_one,
+										   marker);
+			auto holder = promote(coordinator, pending, gate);
+
+			auto sibling_request =
+				writer_request(binding, connection, marker, 2, marker + 1U, 1, 1);
+			sibling_request.attachment = attachment;
+			auto sibling = coordinator.begin_writer_map(sibling_request);
+			require(sibling.has_value(), "begin same-attachment inflight release blocker");
+			const auto cleanup_callback = callback(3, marker + 2U);
+			auto fenced = coordinator.release_writer_holder(holder, cleanup_callback);
+			require(!fenced && !holder.valid() && sibling->valid() &&
+						coordinator.snapshot().quarantined,
+					"same-attachment inflight release fails closed without a cleanup owner");
+			require(coordinator.resolve_writer_map_failure(*sibling).has_value(),
+					"resolve already-started same-attachment inflight under quarantine");
+			auto blocked = coordinator.begin_writer_map(first_request);
+			require(!blocked &&
+						blocked.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+					"same-attachment inflight fence remains terminal after resolution");
+			require(coordinator.revoke_writer_eligibility(gate).has_value(),
+					"revoke retained-holder attachment gate");
+		}
+	}
+
+	void verify_writer_attachment_gate_boundary_is_exact()
+	{
+		{
+			constexpr std::uint8_t marker = 102;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page_zero{};
+			int page_one{};
+			auto gate = install_eligibility(coordinator, binding, connection, open_epoch, marker);
+
+			auto request_zero = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			request_zero.attachment = attachment;
+			auto pending_zero = install_pending(coordinator,
+												request_zero,
+												open_epoch,
+												mapping(0, &page_zero, 4096U),
+												sqlite_shm_writer_extend_pair::one_one,
+												marker);
+			auto request_one = writer_request(binding, connection, marker, 2, marker + 1U, 1, 1);
+			request_one.attachment = attachment;
+			auto pending_one = install_pending(coordinator,
+											   request_one,
+											   open_epoch,
+											   mapping(1, &page_one, 8192U),
+											   sqlite_shm_writer_extend_pair::one_one,
+											   marker + 1U);
+
+			auto partial_zero = coordinator.promote_writer(pending_zero, gate);
+			auto partial_one = coordinator.promote_writer(pending_one, gate);
+			require(
+				!partial_zero && !partial_one && pending_zero.valid() && pending_one.valid() &&
+					partial_zero.error().reason ==
+						sqlite_shm_lease_rejection_reason::pending_or_eligibility_only &&
+					partial_zero.error().action ==
+						sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary &&
+					partial_one.error().reason ==
+						sqlite_shm_lease_rejection_reason::pending_or_eligibility_only &&
+					partial_one.error().action ==
+						sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary &&
+					coordinator.snapshot().writer_holder_count == 0U,
+				"multiple pre-gate members cannot create partial holder authority");
+
+			const auto cleanup_callback = callback(3, marker + 2U);
+			auto cleanup = coordinator.begin_writer_cleanup(pending_zero, cleanup_callback);
+			require(cleanup && !pending_zero.valid() && pending_one.valid() &&
+						coordinator.snapshot().writer_attachment_audit_promotion_count == 0U,
+					"ungated complete attachment retains no promotion evidence");
+			require(
+				coordinator
+					.complete_writer_cleanup(*cleanup,
+											 cleanup_callback,
+											 sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"ungated multi-pending attachment cleans through one complete owner");
+			require(coordinator.revoke_writer_eligibility(gate).has_value(),
+					"revoke multi-pending gate fence");
+		}
+
+		{
+			constexpr std::uint8_t marker = 103;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto first_gate =
+				install_eligibility(coordinator, binding, connection, open_epoch, marker);
+			auto exact_gate_copy =
+				install_eligibility(coordinator, binding, connection, open_epoch, marker);
+
+			auto first_request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			first_request.attachment = attachment;
+			auto first_pending = install_pending(coordinator,
+												 first_request,
+												 open_epoch,
+												 mapping(0, &page, 4096U),
+												 sqlite_shm_writer_extend_pair::one_one,
+												 marker);
+			auto first = promote(coordinator, first_pending, first_gate);
+
+			auto second_request = writer_request(binding, connection, marker, 2, marker + 1U, 0, 0);
+			second_request.attachment = attachment;
+			auto second_pending = install_pending(coordinator,
+												  second_request,
+												  open_epoch,
+												  mapping(0, &page, 4096U),
+												  sqlite_shm_writer_extend_pair::zero_zero,
+												  marker + 1U);
+			auto second = coordinator.promote_writer(second_pending, exact_gate_copy);
+			require(second && !second_pending.valid() &&
+						coordinator.snapshot().writer_holder_count == 2U,
+					"field-exact first gate receipt may be reused by a later member");
+			auto second_holder = std::move(*second);
+
+			auto mismatched_gate =
+				install_eligibility(coordinator, binding, connection, open_epoch, marker + 1U);
+			auto third_request = writer_request(binding, connection, marker, 3, marker + 2U, 0, 0);
+			third_request.attachment = attachment;
+			auto third_pending = install_pending(coordinator,
+												 third_request,
+												 open_epoch,
+												 mapping(0, &page, 4096U),
+												 sqlite_shm_writer_extend_pair::zero_zero,
+												 marker + 2U);
+			auto mismatched = coordinator.promote_writer(third_pending, mismatched_gate);
+			require(!mismatched && third_pending.valid() &&
+						mismatched.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						coordinator.snapshot().writer_holder_count == 2U &&
+						!coordinator.snapshot().quarantined,
+					"a different later gate receipt cannot mutate attachment authority");
+			require(first.valid() && second_holder.valid(),
+					"gate mismatch preserves only the two exact-gate holders");
+			require(coordinator.revoke_writer_eligibility(first_gate).has_value() &&
+						coordinator.revoke_writer_eligibility(exact_gate_copy).has_value() &&
+						coordinator.revoke_writer_eligibility(mismatched_gate).has_value(),
+					"revoke exact and mismatched attachment gates");
+		}
+
+		{
+			constexpr std::uint8_t marker = 105;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			const auto open_epoch = identity("test.open-epoch", marker);
+			const auto alias = identity("test.alias-lifetime", marker);
+			const auto attachment =
+				writer_attachment(binding, alias, connection, open_epoch, marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto gate = install_eligibility(coordinator, binding, connection, open_epoch, marker);
+
+			auto complete_request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			complete_request.attachment = attachment;
+			auto complete_pending = install_pending(coordinator,
+													complete_request,
+													open_epoch,
+													mapping(0, &page, 4096U),
+													sqlite_shm_writer_extend_pair::one_one,
+													marker);
+			auto inflight_request =
+				writer_request(binding, connection, marker, 2, marker + 1U, 1, 1);
+			inflight_request.attachment = attachment;
+			auto inflight = coordinator.begin_writer_map(inflight_request);
+			require(inflight.has_value(), "begin visible inflight gate-boundary sibling");
+
+			auto awaiting = coordinator.promote_writer(complete_pending, gate);
+			require(
+				!awaiting && complete_pending.valid() && inflight->valid() &&
+					awaiting.error().action ==
+						sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary &&
+					coordinator.snapshot().writer_holder_count == 0U &&
+					!coordinator.snapshot().quarantined,
+				"visible inflight sibling returns the dedicated nonterminal gate action");
+			require(coordinator.resolve_writer_map_failure(*inflight).has_value(),
+					"resolve visible gate sibling as native no-map");
+			auto promoted = coordinator.promote_writer(complete_pending, gate);
+			require(promoted && !complete_pending.valid() &&
+						coordinator.snapshot().writer_holder_count == 1U,
+					"remaining complete member may promote after exact sibling resolution");
+			auto holder = std::move(*promoted);
+			retire_last(coordinator, holder, callback(3, marker + 2U));
+			require(coordinator.revoke_writer_eligibility(gate).has_value(),
+					"revoke resolved gate-boundary fixture");
+		}
+	}
+
+	void verify_writer_attachment_pre_owner_failure_is_terminal()
+	{
+		constexpr std::uint8_t marker = 106;
+		const auto binding = family(marker);
+		const auto connection = identity("test.connection", marker);
+		const auto open_epoch = identity("test.open-epoch", marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int page{};
+		const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+		auto pending = install_pending(coordinator,
+									   request,
+									   open_epoch,
+									   mapping(0, &page, 4096U),
+									   sqlite_shm_writer_extend_pair::one_one,
+									   marker);
+		const auto cleanup_callback = callback(2, marker + 1U);
+		sqlite_same_process_shm_lease_test_peer::fail_next_writer_attachment_seal_transition(
+			coordinator);
+		auto failed = coordinator.begin_writer_cleanup(pending, cleanup_callback);
+		require(!failed && !pending.valid() && coordinator.snapshot().quarantined &&
+					coordinator.snapshot().writer_cleanup_count == 1U &&
+					coordinator.snapshot().writer_attachment_audit_member_count == 0U,
+				"pre-owner seal failure consumes the exact source into a terminal fence");
+		auto retry = coordinator.begin_writer_cleanup(pending, cleanup_callback);
+		require(!retry && retry.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+				"pre-owner seal failure cannot mint a cleanup owner on retry");
+		auto later = coordinator.begin_writer_map(request);
+		require(!later && later.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+				"pre-owner failure blocks later mapping without a native cleanup outcome");
+	}
+
+	void verify_nonowner_attachment_wait_is_terminal_without_retry()
+	{
+		const auto exercise = [](const std::uint8_t marker, const bool post_native_anchor)
+		{
+			const auto binding = family(marker);
+			const auto connection_a = identity("test.connection", marker);
+			const auto connection_b = identity("test.connection", marker + 1U);
+			const auto connection_target = identity("test.connection", marker + 2U);
+			const auto open_epoch_a = identity("test.open-epoch", marker);
+			const auto open_epoch_b = identity("test.open-epoch", marker + 1U);
+			const auto open_epoch_target = identity("test.open-epoch", marker + 2U);
+			const auto alias_a = identity("test.alias-lifetime", marker);
+			const auto alias_b = identity("test.alias-lifetime", marker + 1U);
+			const auto alias_target = identity("test.alias-lifetime", marker + 2U);
+			const auto attachment_a =
+				writer_attachment(binding, alias_a, connection_a, open_epoch_a, marker);
+			const auto attachment_b =
+				writer_attachment(binding, alias_b, connection_b, open_epoch_b, marker + 1U);
+			const auto attachment_target = writer_attachment(
+				binding, alias_target, connection_target, open_epoch_target, marker + 2U);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto gate_a =
+				install_eligibility(coordinator, binding, connection_a, open_epoch_a, marker);
+			auto gate_b =
+				install_eligibility(coordinator, binding, connection_b, open_epoch_b, marker + 1U);
+
+			auto request_a = writer_request(binding, connection_a, marker, 1, marker, 0, 1);
+			request_a.attachment = attachment_a;
+			auto pending_a = install_pending(coordinator,
+											 request_a,
+											 open_epoch_a,
+											 mapping(0, &page, 4096U),
+											 sqlite_shm_writer_extend_pair::one_one,
+											 marker);
+			auto holder_a = promote(coordinator, pending_a, gate_a);
+
+			auto request_b =
+				writer_request(binding, connection_b, marker + 1U, 2, marker + 1U, 0, 0);
+			request_b.attachment = attachment_b;
+			auto pending_b = install_pending(coordinator,
+											 request_b,
+											 open_epoch_b,
+											 mapping(0, &page, 4096U),
+											 sqlite_shm_writer_extend_pair::zero_zero,
+											 marker + 1U);
+			auto holder_b = promote(coordinator, pending_b, gate_b);
+
+			auto target_request =
+				writer_request(binding, connection_target, marker + 2U, 3, marker + 2U, 0, 0);
+			target_request.attachment = attachment_target;
+			auto target_inflight = coordinator.begin_writer_map(target_request);
+			require(target_inflight.has_value(), "begin non-owner wait target attachment");
+
+			const auto cleanup_a = callback(4, marker + 3U);
+			const auto consume_target = [&](auto& source)
+			{
+				auto release_a = coordinator.release_writer_holder(holder_a, cleanup_a);
+				require(release_a &&
+							release_a->decision() ==
+								sqlite_shm_writer_retirement_decision::not_last_attachment &&
+							release_a->cleanup().valid(),
+						"seal a nonlast cleanup as the external wait blocker");
+				auto terminal_b = coordinator.release_writer_holder(
+					holder_b, sqlite_shm_callback_execution_receipt{});
+				require(!terminal_b && !holder_b.valid() && coordinator.snapshot().quarantined,
+						"remove the redundant live group while preserving the sealed blocker");
+				// A is a nonlast sealed cleanup (not a live attachment group), B is terminal,
+				// and this target is excluded from its own census. A's callback is therefore
+				// the sole retirement blocker and yields wait_for_inflight.
+				auto failed = coordinator.begin_writer_cleanup(source, target_request.callback);
+				require(!failed && !source.valid() && release_a->cleanup().valid(),
+						"non-owner wait consumes its exact source without minting an owner");
+				auto drained = coordinator.complete_writer_cleanup(
+					release_a->cleanup(),
+					cleanup_a,
+					sqlite_shm_native_cleanup_outcome::confirmed_success);
+				require(!drained && !release_a->cleanup().valid(),
+						"terminal family drain consumes the external cleanup blocker");
+				auto retry = coordinator.begin_writer_cleanup(source, target_request.callback);
+				require(!retry &&
+							retry.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+						"draining an external blocker cannot revive a consumed non-owner source");
+			};
+
+			if (post_native_anchor)
+			{
+				auto source = record_native_mapping(coordinator, *target_inflight, &page);
+				consume_target(source);
+			}
+			else
+			{
+				auto post_native = record_native_mapping(coordinator, *target_inflight, &page);
+				auto installed = coordinator.install_pending(
+					post_native,
+					writer_receipt(target_request,
+								   open_epoch_target,
+								   mapping(0, &page, 4096U),
+								   sqlite_shm_writer_extend_pair::zero_zero,
+								   marker + 2U));
+				require(installed.has_value() && !post_native.valid(),
+						"install pending non-owner wait target");
+				auto source = std::move(*installed);
+				consume_target(source);
+			}
+			require(coordinator.revoke_writer_eligibility(gate_a).has_value() &&
+						coordinator.revoke_writer_eligibility(gate_b).has_value(),
+					"revoke non-owner wait fixture gates");
+		};
+
+		exercise(108, false);
+		exercise(109, true);
+	}
+
+	void verify_writer_attachment_completion_failure_is_one_shot()
+	{
+		constexpr std::uint8_t marker = 104;
+		const auto binding = family(marker);
+		const auto connection = identity("test.connection", marker);
+		const auto open_epoch = identity("test.open-epoch", marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int page{};
+		auto live =
+			install_live_writer(coordinator, binding, connection, open_epoch, marker, &page);
+		const auto cleanup_callback = callback(2, marker + 1U);
+		auto release = coordinator.release_writer_holder(live.holder, cleanup_callback);
+		require(release && release->decision() == sqlite_shm_writer_retirement_decision::ready &&
+					release->cleanup().valid() &&
+					coordinator.snapshot().writer_attachment_audit_member_count == 1U &&
+					coordinator.snapshot().generation_authority_count == 0U,
+				"completion-failure fixture seals audit and retires live authority");
+
+		sqlite_same_process_shm_lease_test_peer::fail_next_writer_completion_transition(
+			coordinator);
+		auto failed = coordinator.complete_writer_cleanup(
+			release->cleanup(),
+			cleanup_callback,
+			sqlite_shm_native_cleanup_outcome::confirmed_success);
+		require(!failed && !release->cleanup().valid() && coordinator.snapshot().quarantined &&
+					coordinator.snapshot().writer_attachment_audit_member_count == 1U,
+				"post-outcome internal failure consumes the sole owner into a terminal tombstone");
+		auto replay = coordinator.complete_writer_cleanup(
+			release->cleanup(),
+			cleanup_callback,
+			sqlite_shm_native_cleanup_outcome::confirmed_success);
+		require(!replay && replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+				"post-outcome internal failure cannot replay native cleanup");
+		require(coordinator.revoke_writer_eligibility(live.eligibility).has_value(),
+				"revoke completion-failure gate");
 	}
 
 	void verify_post_native_writer_receipt_requires_exact_cleanup()
@@ -1371,7 +2219,7 @@ namespace
 				coordinator.release_writer_holder(first.holder, first_release_callback);
 			require(first_release &&
 						first_release->decision() ==
-							sqlite_shm_writer_retirement_decision::not_last_holder,
+							sqlite_shm_writer_retirement_decision::not_last_attachment,
 					"first of two holders admits native cleanup");
 			auto failed_first_cleanup =
 				coordinator.complete_writer_cleanup(first_release->cleanup(),
@@ -1655,7 +2503,7 @@ namespace
 			auto first_release = coordinator.release_writer_holder(first_holder, callback(8, 100));
 			require(first_release.has_value() &&
 						first_release->decision() ==
-							sqlite_shm_writer_retirement_decision::not_last_holder,
+							sqlite_shm_writer_retirement_decision::not_last_attachment,
 					"first mixed holder is not last");
 			require(
 				coordinator
@@ -1745,7 +2593,7 @@ namespace
 		auto released_a = coordinator.release_writer_holder(*holder_a, callback(9, 100));
 		require(released_a &&
 					released_a->decision() ==
-						sqlite_shm_writer_retirement_decision::not_last_holder,
+						sqlite_shm_writer_retirement_decision::not_last_attachment,
 				"simultaneous first holder retains the joined generation");
 		require(coordinator
 					.complete_writer_cleanup(released_a->cleanup(),
@@ -1962,7 +2810,7 @@ namespace
 				"both concurrent holder releases retain cleanup obligations");
 
 		auto* nonlast =
-			release_a->decision() == sqlite_shm_writer_retirement_decision::not_last_holder
+			release_a->decision() == sqlite_shm_writer_retirement_decision::not_last_attachment
 			? &*release_a
 			: &*release_b;
 		auto* last = nonlast == &*release_a ? &*release_b : &*release_a;
@@ -2297,8 +3145,10 @@ namespace
 				"writer retires while reader native attachment survives");
 		const auto retired = coordinator.snapshot();
 		require(retired.phase == sqlite_shm_mapping_generation_phase::retired &&
-					retired.reader_handoff_count == 1U && retired.generation_authority_count == 1U,
-				"retired generation retains reader handoff and writer mapping authority");
+					retired.reader_handoff_count == 1U &&
+					retired.generation_authority_count == 0U &&
+					retired.writer_attachment_audit_promotion_count == 1U,
+				"retired generation retains the reader handoff but only tombstone writer evidence");
 
 		for (const auto request_page : {0, 1})
 		{
@@ -2796,6 +3646,11 @@ int main()
 	{
 		verify_extend_pair_classifier();
 		verify_native_attachment_identity_and_census_groundwork();
+		verify_writer_attachment_group_cleanup_is_exact_and_one_shot();
+		verify_writer_attachment_gate_boundary_is_exact();
+		verify_writer_attachment_pre_owner_failure_is_terminal();
+		verify_nonowner_attachment_wait_is_terminal_without_retry();
+		verify_writer_attachment_completion_failure_is_one_shot();
 		verify_post_native_writer_receipt_requires_exact_cleanup();
 		verify_native_writer_receipt_binding_and_replay();
 		verify_cleanup_completion_requires_exact_callback();

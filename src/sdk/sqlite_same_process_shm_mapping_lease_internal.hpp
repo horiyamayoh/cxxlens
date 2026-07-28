@@ -288,6 +288,7 @@ namespace cxxlens::sdk
 	enum class sqlite_shm_lease_recovery_action : std::uint8_t
 	{
 		deny_before_native_map,
+		await_complete_attachment_gate_boundary,
 		remove_pending_then_confirm_native_cleanup,
 		attempt_nonremoving_unmap_then_outer_ioerr,
 		outer_ioerr_no_retry,
@@ -400,7 +401,7 @@ namespace cxxlens::sdk
 
 	enum class sqlite_shm_writer_retirement_decision : std::uint8_t
 	{
-		not_last_holder,
+		not_last_attachment,
 		ready,
 		wait_for_inflight,
 		quarantine_same_thread,
@@ -416,7 +417,7 @@ namespace cxxlens::sdk
 	struct sqlite_shm_writer_retirement_result
 	{
 		sqlite_shm_writer_retirement_decision decision{
-			sqlite_shm_writer_retirement_decision::not_last_holder};
+			sqlite_shm_writer_retirement_decision::not_last_attachment};
 		std::uint64_t generation{};
 	};
 
@@ -434,6 +435,11 @@ namespace cxxlens::sdk
 		/** Retained attachment/member identities include non-reuse tombstones. */
 		std::size_t writer_attachment_identity_count{};
 		std::size_t writer_attachment_member_count{};
+		/** Immutable per-map audit evidence retained by sealed attachment tombstones. */
+		std::size_t writer_attachment_audit_member_count{};
+		std::size_t writer_attachment_audit_native_mapping_count{};
+		std::size_t writer_attachment_audit_post_map_count{};
+		std::size_t writer_attachment_audit_promotion_count{};
 		/**
 		 * Unresolved-lifecycle counts include predelegate, pending, live, cleanup, and
 		 * terminal-quarantined mandatory-drain tokens. They are census groundwork only and
@@ -593,23 +599,29 @@ namespace cxxlens::sdk
 		std::uint64_t token_{};
 	};
 
-	class sqlite_shm_writer_cleanup_obligation
+	/**
+	 * The sole move-only native cleanup owner for one exact writer attachment.
+	 *
+	 * Although a map wrapper is used as the lookup anchor, successful admission seals the
+	 * coordinator-derived complete attachment member prefix. No per-map wrapper owns cleanup.
+	 */
+	class sqlite_shm_writer_attachment_cleanup
 	{
 	  public:
-		~sqlite_shm_writer_cleanup_obligation() noexcept;
-		sqlite_shm_writer_cleanup_obligation(sqlite_shm_writer_cleanup_obligation&&) noexcept;
-		sqlite_shm_writer_cleanup_obligation&
-		operator=(sqlite_shm_writer_cleanup_obligation&&) = delete;
-		sqlite_shm_writer_cleanup_obligation(const sqlite_shm_writer_cleanup_obligation&) = delete;
-		sqlite_shm_writer_cleanup_obligation&
-		operator=(const sqlite_shm_writer_cleanup_obligation&) = delete;
+		~sqlite_shm_writer_attachment_cleanup() noexcept;
+		sqlite_shm_writer_attachment_cleanup(sqlite_shm_writer_attachment_cleanup&&) noexcept;
+		sqlite_shm_writer_attachment_cleanup&
+		operator=(sqlite_shm_writer_attachment_cleanup&&) = delete;
+		sqlite_shm_writer_attachment_cleanup(const sqlite_shm_writer_attachment_cleanup&) = delete;
+		sqlite_shm_writer_attachment_cleanup&
+		operator=(const sqlite_shm_writer_attachment_cleanup&) = delete;
 
 		[[nodiscard]] bool valid() const noexcept;
 		[[nodiscard]] std::uint64_t generation() const noexcept;
 
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
-		explicit sqlite_shm_writer_cleanup_obligation(
+		explicit sqlite_shm_writer_attachment_cleanup(
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			detail::sqlite_shm_lease_token_identity token,
 			detail::sqlite_shm_mapping_generation_identity generation) noexcept;
@@ -760,18 +772,18 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] sqlite_shm_writer_retirement_decision decision() const noexcept;
 		[[nodiscard]] std::uint64_t generation() const noexcept;
-		[[nodiscard]] sqlite_shm_writer_cleanup_obligation& cleanup() noexcept;
+		[[nodiscard]] sqlite_shm_writer_attachment_cleanup& cleanup() noexcept;
 
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
 		sqlite_shm_writer_release(sqlite_shm_writer_retirement_decision decision,
 								  std::uint64_t generation,
-								  sqlite_shm_writer_cleanup_obligation cleanup) noexcept;
+								  sqlite_shm_writer_attachment_cleanup cleanup) noexcept;
 
 		sqlite_shm_writer_retirement_decision decision_{
-			sqlite_shm_writer_retirement_decision::not_last_holder};
+			sqlite_shm_writer_retirement_decision::not_last_attachment};
 		std::uint64_t generation_{};
-		sqlite_shm_writer_cleanup_obligation cleanup_;
+		sqlite_shm_writer_attachment_cleanup cleanup_;
 	};
 
 	/**
@@ -783,6 +795,11 @@ namespace cxxlens::sdk
 	 * Quarantine rejects new mapping authority. A distinct pre-existing native effect or
 	 * attachment still retains exactly one mandatory cleanup-admission attempt; that source token
 	 * is consumed before receipt storage, and any admission or storage failure is terminal.
+	 *
+	 * This production-inert checkpoint deliberately fails closed before exposing cleanup when a
+	 * nonlast attachment is sole support for any generation page, when its boundary still has an
+	 * inflight member, or when post-native/pending failure state is mixed with a live holder.
+	 * Reader-predelegate ordering and those quarantined drain paths remain later-slice work.
 	 */
 	class sqlite_same_process_shm_mapping_lease_coordinator
 	{
@@ -820,14 +837,14 @@ namespace cxxlens::sdk
 					   const sqlite_shm_writer_eligibility& eligibility);
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		resolve_writer_map_failure(sqlite_shm_writer_map_inflight& inflight) noexcept;
-		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>
 		begin_writer_cleanup(sqlite_shm_writer_post_native_mapping& rejected_mapping,
 							 const sqlite_shm_callback_execution_receipt& callback) noexcept;
-		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>
 		begin_writer_cleanup(sqlite_shm_pending_mapping& pending,
 							 const sqlite_shm_callback_execution_receipt& callback) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
-		complete_writer_cleanup(sqlite_shm_writer_cleanup_obligation& cleanup,
+		complete_writer_cleanup(sqlite_shm_writer_attachment_cleanup& cleanup,
 								const sqlite_shm_callback_execution_receipt& callback,
 								sqlite_shm_native_cleanup_outcome outcome) noexcept;
 
@@ -857,10 +874,10 @@ namespace cxxlens::sdk
 		release_writer_holder(sqlite_shm_writer_holder& holder,
 							  const sqlite_shm_callback_execution_receipt& callback) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_retirement_result>
-		poll_writer_retirement(const sqlite_shm_writer_cleanup_obligation& cleanup,
+		poll_writer_retirement(const sqlite_shm_writer_attachment_cleanup& cleanup,
 							   const sqlite_shm_callback_execution_receipt& callback) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
-		fail_writer_retirement_wait(const sqlite_shm_writer_cleanup_obligation& cleanup,
+		fail_writer_retirement_wait(const sqlite_shm_writer_attachment_cleanup& cleanup,
 									const sqlite_shm_callback_execution_receipt& callback,
 									sqlite_shm_retirement_wait_failure failure) noexcept;
 
@@ -869,6 +886,8 @@ namespace cxxlens::sdk
 	  private:
 		friend class sqlite_same_process_shm_lease_test_peer;
 		void inject_writer_native_transition_failure_for_testing() noexcept;
+		void inject_writer_attachment_seal_failure_for_testing() noexcept;
+		void inject_writer_completion_transition_failure_for_testing() noexcept;
 
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 	};
