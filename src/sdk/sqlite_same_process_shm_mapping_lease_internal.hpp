@@ -14,6 +14,7 @@ namespace cxxlens::sdk
 	namespace detail
 	{
 		class sqlite_shm_mapping_lease_state;
+		class sqlite_shm_mapping_registry_state;
 
 		struct sqlite_shm_lease_token_identity
 		{
@@ -25,6 +26,8 @@ namespace cxxlens::sdk
 			std::uint64_t value{};
 		};
 	} // namespace detail
+
+	class sqlite_shm_writer_member_authority;
 
 	/**
 	 * Exact process/runtime/file-family binding consumed by the pure lease coordinator.
@@ -432,6 +435,9 @@ namespace cxxlens::sdk
 		std::size_t writer_inflight_count{};
 		std::size_t writer_cleanup_count{};
 		std::size_t writer_holder_count{};
+		/** Exact registry activity + weak audit seal + strong mapping-epoch arm bundles. */
+		std::size_t writer_member_authority_count{};
+		std::size_t writer_member_liveness_lost_count{};
 		/** Retained attachment/member identities include non-reuse tombstones. */
 		std::size_t writer_attachment_identity_count{};
 		std::size_t writer_attachment_member_count{};
@@ -908,10 +914,16 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_mapping_lease_snapshot snapshot() const noexcept;
 
 	  private:
+		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_lease_test_peer;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_map_inflight>
+		begin_registry_writer_map(const sqlite_shm_writer_map_request& request,
+								  sqlite_shm_writer_member_authority& authority);
 		void inject_writer_native_transition_failure_for_testing() noexcept;
 		void inject_writer_attachment_seal_failure_for_testing() noexcept;
 		void inject_writer_completion_transition_failure_for_testing() noexcept;
+		void inject_registry_writer_incoming_liveness_loss_for_testing() noexcept;
+		void inject_registry_writer_existing_liveness_loss_for_testing() noexcept;
 
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 	};

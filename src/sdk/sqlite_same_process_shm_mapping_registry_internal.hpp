@@ -14,6 +14,7 @@ namespace cxxlens::sdk
 		struct sqlite_shm_registry_runtime_owner_box;
 		struct sqlite_shm_registry_activity_control;
 		class sqlite_shm_mapping_registry_state;
+		struct sqlite_shm_writer_member_authority_state;
 		enum class sqlite_shm_registry_counter_for_testing : std::uint8_t
 		{
 			alias_token,
@@ -25,6 +26,7 @@ namespace cxxlens::sdk
 
 	class sqlite_same_process_shm_registry_test_peer;
 	class sqlite_shm_registry_activity_pin;
+	class sqlite_writer_shm_mapping_epoch_arm;
 
 	/**
 	 * Copyable, weak, audit-only view of one exact registry activity.
@@ -424,6 +426,7 @@ namespace cxxlens::sdk
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_mapping_registry;
 		friend class sqlite_same_process_shm_registry_test_peer;
+		friend class sqlite_shm_writer_member_authority;
 
 		sqlite_shm_registry_activity_pin(
 			std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state,
@@ -432,6 +435,45 @@ namespace cxxlens::sdk
 
 		std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state_;
 		std::shared_ptr<detail::sqlite_shm_registry_activity_control> control_;
+	};
+
+	/**
+	 * Source-private exact-member authority retained by the lease coordinator.
+	 *
+	 * The bundle is useful only as the inseparable conjunction of its move-only registry activity
+	 * owner, one-shot weak audit seal, and strong exact-request writer mapping-epoch arm. Neither a
+	 * copied seal nor any semantic receipt can recreate it. Clean release is performed only after
+	 * the lease mutex is left; ambiguous destruction uses the activity owner's atomic quarantine
+	 * path and never re-enters either mutex.
+	 */
+	class sqlite_shm_writer_member_authority
+	{
+	  public:
+		~sqlite_shm_writer_member_authority() noexcept;
+		sqlite_shm_writer_member_authority(sqlite_shm_writer_member_authority&&) noexcept;
+		sqlite_shm_writer_member_authority&
+		operator=(sqlite_shm_writer_member_authority&&) = delete;
+		sqlite_shm_writer_member_authority(const sqlite_shm_writer_member_authority&) = delete;
+		sqlite_shm_writer_member_authority&
+		operator=(const sqlite_shm_writer_member_authority&) = delete;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
+		friend class sqlite_same_process_shm_registry_test_peer;
+
+		explicit sqlite_shm_writer_member_authority(
+			std::unique_ptr<detail::sqlite_shm_writer_member_authority_state> state) noexcept;
+		[[nodiscard]] bool
+		valid_for_predelegation(const sqlite_shm_writer_map_request& request) const noexcept;
+		[[nodiscard]] bool
+		retains_exact_lifetimes(const sqlite_shm_writer_map_request& request) const noexcept;
+		[[nodiscard]] bool attachment_cohort_compatible_with(
+			const sqlite_shm_writer_member_authority& other) const noexcept;
+		void invalidate_epoch_for_testing() noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
+
+		std::unique_ptr<detail::sqlite_shm_writer_member_authority_state> state_;
 	};
 
 	/**
@@ -483,6 +525,17 @@ namespace cxxlens::sdk
 							const sqlite_shm_lease_family_binding& family);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_activity_pin>
 		acquire_activity(sqlite_shm_registry_family_pin& family);
+		/**
+		 * Atomically predelegates one exact registry member into its family coordinator.
+		 *
+		 * This source-private checkpoint has no production caller. The strong mapping-epoch arm
+		 * is consumed on every outcome, and the registry lock remains held through the lease begin
+		 * visibility point in registry-to-lease lock order.
+		 */
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_map_inflight>
+		begin_writer_map(sqlite_shm_registry_family_pin& family,
+						 sqlite_writer_shm_mapping_epoch_arm arm,
+						 const sqlite_shm_writer_map_request& request);
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		release_activity(sqlite_shm_registry_activity_pin& activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
@@ -525,6 +578,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_same_process_shm_mapping_lease_coordinator*
 		coordinator_for_activity_for_testing(
 			const sqlite_shm_registry_activity_pin& activity) const noexcept;
+		[[nodiscard]] sqlite_same_process_shm_mapping_lease_coordinator*
+		coordinator_for_family_for_testing(
+			const sqlite_shm_lease_family_binding& family) const noexcept;
 		[[nodiscard]] bool activity_seal_matches_for_testing(
 			const sqlite_shm_registry_activity_seal& seal,
 			const sqlite_backend_opaque_identity& process_instance,

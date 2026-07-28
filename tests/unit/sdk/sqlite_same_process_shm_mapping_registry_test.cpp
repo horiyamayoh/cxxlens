@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "sdk/sqlite_same_process_shm_mapping_registry_internal.hpp"
+#include "sdk/sqlite_writer_shm_mapping_epoch_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -59,6 +60,22 @@ namespace cxxlens::sdk
 		{
 			return registry.adopt_runtime_lifetime_for_testing(
 				std::move(identity), std::move(pin_identity), std::move(owner));
+		}
+
+		[[nodiscard]] static std::pair<sqlite_writer_shm_native_lifetime_revoker,
+									   sqlite_writer_shm_native_lifetime_source>
+		native_lifetime_source(const sqlite_writer_shm_native_lifetime_role role,
+							   sqlite_backend_opaque_identity native_lifetime_identity,
+							   sqlite_backend_opaque_identity semantic_receipt,
+							   std::optional<sqlite_backend_opaque_identity> native_xopen_receipt,
+							   const std::shared_ptr<void>& retained_owner)
+		{
+			return sqlite_writer_shm_native_lifetime_test_factory::create_source(
+				role,
+				std::move(native_lifetime_identity),
+				std::move(semantic_receipt),
+				std::move(native_xopen_receipt),
+				retained_owner);
 		}
 
 		[[nodiscard]] static sqlite_shm_registry_alias_binding
@@ -156,6 +173,13 @@ namespace cxxlens::sdk
 			return registry.coordinator_for_activity_for_testing(activity);
 		}
 
+		[[nodiscard]] static sqlite_same_process_shm_mapping_lease_coordinator*
+		coordinator(sqlite_same_process_shm_mapping_registry& registry,
+					const sqlite_shm_lease_family_binding& family) noexcept
+		{
+			return registry.coordinator_for_family_for_testing(family);
+		}
+
 		[[nodiscard]] static bool
 		activity_seal_matches(sqlite_same_process_shm_mapping_registry& registry,
 							  const sqlite_shm_registry_activity_seal& seal,
@@ -219,6 +243,18 @@ namespace cxxlens::sdk
 		{
 			coordinator.inject_writer_attachment_seal_failure_for_testing();
 		}
+
+		static void fail_next_registry_incoming_liveness(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_registry_writer_incoming_liveness_loss_for_testing();
+		}
+
+		static void fail_next_registry_existing_liveness(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_registry_writer_existing_liveness_loss_for_testing();
+		}
 	};
 } // namespace cxxlens::sdk
 
@@ -235,6 +271,9 @@ namespace
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_registry_family_pin>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_registry_activity_pin>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_registry_activity_pin>);
+	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_member_authority>);
+	static_assert(!std::is_move_assignable_v<sqlite_shm_writer_member_authority>);
+	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_member_authority>);
 	static_assert(!std::is_default_constructible_v<sqlite_shm_registry_activity_seal>);
 	static_assert(std::is_nothrow_copy_constructible_v<sqlite_shm_registry_activity_seal>);
 	static_assert(std::is_nothrow_destructible_v<sqlite_shm_registry_activity_seal>);
@@ -443,6 +482,161 @@ namespace
 		return {0, 4096, 0U, 4096U, page, 4096U};
 	}
 
+	class inert_bridge_observation_port final
+		: public sqlite_writer_shm_mapping_epoch_observation_port
+	{
+	  public:
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_mapping_epoch_post_observation>
+		observe_after_native_map(const sqlite_writer_shm_mapping_epoch_binding&,
+								 const sqlite_writer_shm_stat_census&,
+								 const volatile void*) override
+		{
+			return sqlite_shm_lease_rejection{
+				sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+				sqlite_shm_lease_recovery_action::quarantine_no_retry};
+		}
+	};
+
+	class bridge_epoch_port final : public sqlite_writer_shm_mapping_epoch_port
+	{
+	  public:
+		explicit bridge_epoch_port(const std::uint8_t marker)
+			: marker_{marker}, observation_{std::make_shared<inert_bridge_observation_port>()}
+		{
+		}
+
+	  protected:
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_mapping_epoch_preparation>
+		arm_watch_before_pre_stat(const sqlite_writer_shm_mapping_epoch_request&) override
+		{
+			return sqlite_writer_shm_mapping_epoch_preparation{
+				identity("test.registry.bridge-epoch", marker_),
+				identity("test.registry.bridge-watch", marker_),
+				sqlite_writer_shm_stat_census{sqlite_writer_shm_entry_state::absent,
+											  identity("test.registry.bridge-parent", marker_),
+											  identity("test.registry.bridge-filesystem", marker_),
+											  identity("test.registry.bridge-mount", marker_),
+											  std::nullopt,
+											  std::nullopt,
+											  0U},
+				observation_};
+		}
+
+	  private:
+		std::uint8_t marker_{};
+		std::shared_ptr<inert_bridge_observation_port> observation_;
+	};
+
+	struct bridge_native_source
+	{
+		sqlite_writer_shm_native_lifetime_revoker revoker;
+		sqlite_writer_shm_native_lifetime_source source;
+		std::shared_ptr<int> owner;
+	};
+
+	struct bridge_epoch_sources
+	{
+		sqlite_backend_opaque_identity retained_parent_receipt;
+		sqlite_backend_opaque_identity wal_file_receipt;
+		sqlite_backend_opaque_identity wal_xopen_receipt;
+		sqlite_backend_opaque_identity shm_attachment_receipt;
+		sqlite_backend_opaque_identity expected_shm_leaf;
+		bridge_native_source parent;
+		bridge_native_source main;
+		bridge_native_source wal;
+		bridge_native_source shm;
+
+		[[nodiscard]] sqlite_writer_shm_mapping_epoch_activation
+		arm(const sqlite_shm_writer_map_request& request, const std::uint8_t marker)
+		{
+			auto parent_pin = parent.source.mint_pin();
+			auto main_pin = main.source.mint_pin();
+			auto wal_pin = wal.source.mint_pin();
+			auto shm_pin = shm.source.mint_pin();
+			require(parent_pin && main_pin && wal_pin && shm_pin,
+					"mint exact bridge native lifetime pins");
+			bridge_epoch_port port{marker};
+			auto activation = port.arm(sqlite_writer_shm_mapping_epoch_request{
+				sqlite_writer_shm_mapping_epoch_binding{request,
+														request.caller_extend,
+														expected_shm_leaf,
+														retained_parent_receipt,
+														wal_file_receipt,
+														wal_xopen_receipt,
+														shm_attachment_receipt},
+				std::move(*parent_pin),
+				std::move(*main_pin),
+				std::move(*wal_pin),
+				std::move(*shm_pin)});
+			require(activation.has_value(), "arm exact registry bridge epoch");
+			return std::move(*activation);
+		}
+	};
+
+	[[nodiscard]] bridge_native_source
+	make_bridge_native_source(const sqlite_writer_shm_native_lifetime_role role,
+							  const sqlite_backend_opaque_identity& lifetime_identity,
+							  const sqlite_backend_opaque_identity& semantic_receipt,
+							  std::optional<sqlite_backend_opaque_identity> xopen,
+							  const int owner_marker)
+	{
+		auto owner = std::make_shared<int>(owner_marker);
+		auto source = sqlite_same_process_shm_registry_test_peer::native_lifetime_source(
+			role, lifetime_identity, semantic_receipt, std::move(xopen), owner);
+		return {std::move(source.first), std::move(source.second), std::move(owner)};
+	}
+
+	[[nodiscard]] std::shared_ptr<bridge_epoch_sources>
+	make_bridge_epoch_sources(const sqlite_shm_writer_map_request& request,
+							  const std::uint8_t marker)
+	{
+		const auto retained_parent = identity("test.registry.bridge-retained-parent", marker);
+		const auto wal_file = identity("test.registry.bridge-wal-file", marker);
+		const auto wal_xopen = identity("test.registry.bridge-wal-xopen", marker);
+		const auto shm_attachment = identity("test.registry.bridge-shm-attachment", marker);
+		return std::make_shared<bridge_epoch_sources>(bridge_epoch_sources{
+			retained_parent,
+			wal_file,
+			wal_xopen,
+			shm_attachment,
+			identity("test.registry.bridge-shm-leaf", marker),
+			make_bridge_native_source(sqlite_writer_shm_native_lifetime_role::retained_parent,
+									  identity("test.registry.bridge-parent-lifetime", marker),
+									  retained_parent,
+									  std::nullopt,
+									  1),
+			make_bridge_native_source(sqlite_writer_shm_native_lifetime_role::main_database,
+									  identity("test.registry.bridge-main-lifetime", marker),
+									  request.attachment.main_native_file_receipt(),
+									  request.attachment.main_xopen_receipt(),
+									  2),
+			make_bridge_native_source(sqlite_writer_shm_native_lifetime_role::write_ahead_log,
+									  identity("test.registry.bridge-wal-lifetime", marker),
+									  wal_file,
+									  wal_xopen,
+									  3),
+			make_bridge_native_source(
+				sqlite_writer_shm_native_lifetime_role::shared_memory_attachment,
+				identity("test.registry.bridge-shm-lifetime", marker),
+				shm_attachment,
+				std::nullopt,
+				4)});
+	}
+
+	struct bridge_epoch
+	{
+		sqlite_writer_shm_mapping_epoch_activation activation;
+		std::shared_ptr<bridge_epoch_sources> sources;
+	};
+
+	[[nodiscard]] bridge_epoch make_bridge_epoch(const sqlite_shm_writer_map_request& request,
+												 const std::uint8_t marker)
+	{
+		auto sources = make_bridge_epoch_sources(request, marker);
+		auto activation = sources->arm(request, marker);
+		return {std::move(activation), std::move(sources)};
+	}
+
 	[[nodiscard]] sqlite_shm_writer_eligibility
 	install_eligibility(sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
 						const sqlite_shm_lease_family_binding& family,
@@ -642,6 +836,543 @@ namespace
 		require(fixture.owner.expired(), "exact detach releases runtime owner");
 		require(fixture.owner_destruction_count->load(std::memory_order_relaxed) == 1,
 				"runtime owner released exactly once");
+	}
+
+	void verify_registry_writer_member_is_exact_and_cleanup_only()
+	{
+		auto fixture = make_fixture(20U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve exact family coordinator for bridge test");
+		const auto request = writer_request(fixture.family,
+											fixture.alias_lifetime,
+											identity("test.registry.bridge-connection", 20U),
+											identity("test.registry.bridge-open", 20U),
+											20U);
+		auto epoch = make_bridge_epoch(request, 20U);
+		auto observer = epoch.activation.take_observer();
+		auto arm = epoch.activation.take_arm();
+		auto begun =
+			fixture.registry->begin_writer_map(*fixture.family_pin, std::move(arm), request);
+		require(begun.has_value(), "predelegate exact registry writer member");
+		auto inflight = std::move(*begun);
+		auto registry_snapshot = fixture.registry->snapshot();
+		auto lease_snapshot = coordinator->snapshot();
+		require(registry_snapshot.active_activity_pin_count == 1U &&
+					lease_snapshot.writer_member_authority_count == 1U &&
+					lease_snapshot.writer_inflight_count == 1U && !lease_snapshot.quarantined,
+				"exact member bundle was not atomically visible in both registries");
+
+		int native_page{};
+		auto native_receipt =
+			sqlite_writer_shm_native_map_receipt_validator::validate(inflight, 0, &native_page);
+		require(native_receipt.has_value(), "validate bridge native mapping");
+		auto post_native = coordinator->record_writer_native_mapping(inflight, *native_receipt);
+		require(post_native.has_value() && !inflight.valid(), "record exact bound native mapping");
+		const auto synthetic = sqlite_same_process_shm_lease_test_peer::writer_map(
+			request,
+			request.attachment.open_epoch(),
+			mapping(&native_page),
+			sqlite_shm_writer_extend_pair::one_one,
+			identity("test.registry.synthetic-post-map", 20U));
+		auto pending = coordinator->install_pending(*post_native, synthetic);
+		require(
+			!pending &&
+				pending.error().reason ==
+					sqlite_shm_lease_rejection_reason::pending_or_eligibility_only &&
+				pending.error().action ==
+					sqlite_shm_lease_recovery_action::attempt_nonremoving_unmap_then_outer_ioerr &&
+				post_native->valid(),
+			"synthetic post-map receipt advanced registry-bound member");
+
+		auto cleanup = coordinator->begin_writer_cleanup(*post_native, request.callback);
+		require(cleanup.has_value() && !post_native->valid(),
+				"bound post-native member did not retain cleanup-only admission");
+		require(coordinator
+					->complete_writer_cleanup(*cleanup,
+											  request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"confirmed bound cleanup did not complete");
+		registry_snapshot = fixture.registry->snapshot();
+		lease_snapshot = coordinator->snapshot();
+		require(registry_snapshot.active_activity_pin_count == 0U &&
+					lease_snapshot.writer_member_authority_count == 0U &&
+					lease_snapshot.writer_inflight_count == 0U &&
+					lease_snapshot.writer_attachment_unresolved_count == 0U &&
+					!lease_snapshot.quarantined,
+				"confirmed cleanup did not release exact member outside coordinator lock");
+		clean_fixture(fixture);
+	}
+
+	void verify_exact_attachment_cleanup_drains_all_bound_members()
+	{
+		auto fixture = make_fixture(19U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve grouped bridge cleanup coordinator");
+		const auto first_request = writer_request(fixture.family,
+												  fixture.alias_lifetime,
+												  identity("test.registry.bridge-connection", 19U),
+												  identity("test.registry.bridge-open", 19U),
+												  19U);
+		auto sources = make_bridge_epoch_sources(first_request, 19U);
+		auto first_activation = sources->arm(first_request, 19U);
+		auto first_arm = first_activation.take_arm();
+		auto first = fixture.registry->begin_writer_map(
+			*fixture.family_pin, std::move(first_arm), first_request);
+		require(first.has_value(), "begin first grouped bound member");
+		auto first_inflight = std::move(*first);
+
+		auto second_request = first_request;
+		second_request.callback = {first_request.callback.thread_identity,
+								   1U,
+								   identity("test.registry.grouped-nested-callback", 18U)};
+		second_request.caller_extend = 0;
+		auto second_activation = sources->arm(second_request, 18U);
+		auto second_arm = second_activation.take_arm();
+		auto second = fixture.registry->begin_writer_map(
+			*fixture.family_pin, std::move(second_arm), second_request);
+		require(second.has_value(), "begin second grouped bound member");
+		auto second_inflight = std::move(*second);
+		auto before_native = coordinator->snapshot();
+		require(fixture.registry->snapshot().active_activity_pin_count == 2U &&
+					before_native.writer_member_authority_count == 2U &&
+					before_native.writer_attachment_unresolved_member_count == 2U,
+				"grouped bound members did not retain two exact owners and arms");
+
+		int native_page{};
+		auto first_native = sqlite_writer_shm_native_map_receipt_validator::validate(
+			first_inflight, 0, &native_page);
+		auto second_native = sqlite_writer_shm_native_map_receipt_validator::validate(
+			second_inflight, 0, &native_page);
+		require(first_native && second_native, "validate both grouped bound native mappings");
+		auto first_post = coordinator->record_writer_native_mapping(first_inflight, *first_native);
+		auto second_post =
+			coordinator->record_writer_native_mapping(second_inflight, *second_native);
+		require(first_post && second_post, "record both grouped bound native mappings");
+
+		auto cleanup = coordinator->begin_writer_cleanup(*second_post, second_request.callback);
+		require(cleanup.has_value(),
+				"one exact attachment cleanup owner did not seal grouped members");
+		require(!second_post->valid(), "grouped cleanup did not consume nested anchor member");
+		const auto sealed = coordinator->snapshot();
+		require(sealed.writer_member_authority_count == 2U &&
+					sealed.writer_attachment_audit_member_count == 2U &&
+					sealed.writer_attachment_audit_native_mapping_count == 2U &&
+					sealed.writer_cleanup_count == 1U,
+				"grouped cleanup lost exact member audit or authority ownership");
+		require(coordinator
+					->complete_writer_cleanup(*cleanup,
+											  second_request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"one confirmed attachment cleanup did not drain both bound members");
+		const auto complete = coordinator->snapshot();
+		require(fixture.registry->snapshot().active_activity_pin_count == 0U &&
+					complete.writer_member_authority_count == 0U &&
+					complete.writer_attachment_unresolved_member_count == 0U &&
+					complete.writer_attachment_audit_member_count == 2U && !complete.quarantined,
+				"grouped confirmed cleanup did not release both activities and arms exactly once");
+		clean_fixture(fixture);
+	}
+
+	void verify_shallower_anchor_cannot_bypass_nested_writer_callback()
+	{
+		auto fixture = make_fixture(18U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve grouped callback-order coordinator");
+		const auto first_request = writer_request(fixture.family,
+												  fixture.alias_lifetime,
+												  identity("test.registry.bridge-connection", 18U),
+												  identity("test.registry.bridge-open", 18U),
+												  18U);
+		auto sources = make_bridge_epoch_sources(first_request, 18U);
+		auto first_activation = sources->arm(first_request, 18U);
+		auto first_arm = first_activation.take_arm();
+		auto first = fixture.registry->begin_writer_map(
+			*fixture.family_pin, std::move(first_arm), first_request);
+		require(first.has_value(), "begin shallow grouped bound member");
+		auto first_inflight = std::move(*first);
+
+		auto nested_request = first_request;
+		nested_request.callback = {first_request.callback.thread_identity,
+								   1U,
+								   identity("test.registry.grouped-nested-callback", 17U)};
+		auto nested_activation = sources->arm(nested_request, 17U);
+		auto nested_arm = nested_activation.take_arm();
+		auto nested = fixture.registry->begin_writer_map(
+			*fixture.family_pin, std::move(nested_arm), nested_request);
+		require(nested.has_value(), "begin nested grouped bound member");
+		auto nested_inflight = std::move(*nested);
+
+		int native_page{};
+		auto first_native = sqlite_writer_shm_native_map_receipt_validator::validate(
+			first_inflight, 0, &native_page);
+		auto nested_native = sqlite_writer_shm_native_map_receipt_validator::validate(
+			nested_inflight, 0, &native_page);
+		require(first_native && nested_native,
+				"validate shallow and nested grouped native mappings");
+		auto first_post = coordinator->record_writer_native_mapping(first_inflight, *first_native);
+		auto nested_post =
+			coordinator->record_writer_native_mapping(nested_inflight, *nested_native);
+		require(first_post && nested_post, "record shallow and nested grouped native mappings");
+
+		auto rejected = coordinator->begin_writer_cleanup(*first_post, first_request.callback);
+		const auto terminal = coordinator->snapshot();
+		require(!rejected && !first_post->valid() && terminal.quarantined &&
+					terminal.writer_member_authority_count == 2U &&
+					terminal.writer_attachment_audit_member_count == 0U &&
+					fixture.registry->snapshot().active_activity_pin_count == 2U,
+				"shallow anchor equality bypassed nested sibling callback ordering");
+		auto retry = coordinator->begin_writer_cleanup(*nested_post, nested_request.callback);
+		require(!retry && !nested_post->valid() &&
+					coordinator->snapshot().writer_attachment_audit_member_count == 0U,
+				"terminal callback-order failure exposed a retry cleanup owner");
+	}
+
+	void verify_registry_writer_begin_rejects_used_or_mismatched_epoch()
+	{
+		auto fixture = make_fixture(21U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve coordinator for bridge negatives");
+		const auto request = writer_request(fixture.family,
+											fixture.alias_lifetime,
+											identity("test.registry.bridge-connection", 21U),
+											identity("test.registry.bridge-open", 21U),
+											21U);
+
+		auto used_epoch = make_bridge_epoch(request, 21U);
+		auto used_observer = used_epoch.activation.take_observer();
+		auto used_arm = used_epoch.activation.take_arm();
+		auto consumed = seal_sqlite_writer_shm_mapping_epoch(used_observer, nullptr);
+		require(!consumed, "null post-map unexpectedly produced an epoch receipt");
+		auto used =
+			fixture.registry->begin_writer_map(*fixture.family_pin, std::move(used_arm), request);
+		require(!used && fixture.registry->snapshot().active_activity_pin_count == 0U &&
+					coordinator->snapshot().writer_member_authority_count == 0U,
+				"already-sealed epoch arm entered registry predelegation");
+
+		auto mismatched_epoch = make_bridge_epoch(request, 22U);
+		auto mismatched_arm = mismatched_epoch.activation.take_arm();
+		auto mismatched_request = request;
+		mismatched_request.page_number = 1;
+		auto mismatched = fixture.registry->begin_writer_map(
+			*fixture.family_pin, std::move(mismatched_arm), mismatched_request);
+		const auto after_mismatch = coordinator->snapshot();
+		require(!mismatched && fixture.registry->snapshot().active_activity_pin_count == 0U &&
+					after_mismatch.writer_member_authority_count == 0U &&
+					after_mismatch.writer_inflight_count == 0U &&
+					after_mismatch.writer_attachment_member_count == 0U,
+				"wrong exact map request consumed or published epoch authority");
+		clean_fixture(fixture);
+	}
+
+	void verify_registry_writer_attachment_origin_never_mixes()
+	{
+		{
+			auto fixture = make_fixture(22U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve bound-first origin coordinator");
+			const auto request = writer_request(fixture.family,
+												fixture.alias_lifetime,
+												identity("test.registry.bridge-connection", 22U),
+												identity("test.registry.bridge-open", 22U),
+												22U);
+			auto epoch = make_bridge_epoch(request, 23U);
+			auto arm = epoch.activation.take_arm();
+			auto bound =
+				fixture.registry->begin_writer_map(*fixture.family_pin, std::move(arm), request);
+			require(bound.has_value(), "install bound-first attachment member");
+			auto inflight = std::move(*bound);
+			auto shared_request = request;
+			shared_request.callback = callback(23U);
+			shared_request.caller_extend = 0;
+			auto shared_activation = epoch.sources->arm(shared_request, 25U);
+			auto shared_arm = shared_activation.take_arm();
+			auto shared_bound = fixture.registry->begin_writer_map(
+				*fixture.family_pin, std::move(shared_arm), shared_request);
+			require(shared_bound.has_value(),
+					"same exact lifetime sources with distinct pins and {0,0} extend did not "
+					"share {1,1} attachment");
+			auto shared_inflight = std::move(*shared_bound);
+
+			auto duplicate_source_request = request;
+			duplicate_source_request.callback = callback(25U);
+			auto duplicate_sources = make_bridge_epoch(duplicate_source_request, 23U);
+			auto duplicate_arm = duplicate_sources.activation.take_arm();
+			auto duplicate_source_bound = fixture.registry->begin_writer_map(
+				*fixture.family_pin, std::move(duplicate_arm), duplicate_source_request);
+			require(!duplicate_source_bound &&
+						duplicate_source_bound.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch,
+					"duplicate opaque lifetime identities from distinct controls joined one "
+					"attachment");
+			auto legacy_request = request;
+			legacy_request.callback = callback(26U);
+			auto legacy = coordinator->begin_writer_map(legacy_request);
+			require(!legacy &&
+						legacy.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch,
+					"legacy member joined registry-bound attachment");
+			require(coordinator->resolve_writer_map_failure(inflight).has_value(),
+					"resolve bound-first no-map member");
+			require(coordinator->resolve_writer_map_failure(shared_inflight).has_value(),
+					"resolve same-source bound sibling");
+			clean_fixture(fixture);
+		}
+
+		{
+			auto fixture = make_fixture(23U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve legacy-first origin coordinator");
+			const auto request = writer_request(fixture.family,
+												fixture.alias_lifetime,
+												identity("test.registry.bridge-connection", 23U),
+												identity("test.registry.bridge-open", 23U),
+												23U);
+			auto legacy = coordinator->begin_writer_map(request);
+			require(legacy.has_value(), "install legacy-first attachment member");
+			auto legacy_inflight = std::move(*legacy);
+			auto bound_request = request;
+			bound_request.callback = callback(24U);
+			auto epoch = make_bridge_epoch(bound_request, 24U);
+			auto arm = epoch.activation.take_arm();
+			auto bound = fixture.registry->begin_writer_map(
+				*fixture.family_pin, std::move(arm), bound_request);
+			require(!bound &&
+						bound.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						fixture.registry->snapshot().active_activity_pin_count == 0U,
+					"registry-bound member joined legacy attachment");
+			require(coordinator->resolve_writer_map_failure(legacy_inflight).has_value(),
+					"resolve legacy-first no-map member");
+			clean_fixture(fixture);
+		}
+	}
+
+	void verify_registry_writer_liveness_loss_blocks_admission_but_keeps_cleanup()
+	{
+		auto fixture = make_fixture(24U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve liveness-loss coordinator");
+		const auto request = writer_request(fixture.family,
+											fixture.alias_lifetime,
+											identity("test.registry.bridge-connection", 24U),
+											identity("test.registry.bridge-open", 24U),
+											24U);
+		auto epoch = make_bridge_epoch(request, 25U);
+		auto arm = epoch.activation.take_arm();
+		auto begun =
+			fixture.registry->begin_writer_map(*fixture.family_pin, std::move(arm), request);
+		require(begun.has_value(), "begin liveness-loss bound member");
+		auto inflight = std::move(*begun);
+		int native_page{};
+		auto native_receipt =
+			sqlite_writer_shm_native_map_receipt_validator::validate(inflight, 0, &native_page);
+		require(native_receipt.has_value() && epoch.sources->shm.revoker.revoke(),
+				"revoke bound SHM lifetime after native success");
+		auto post_native = coordinator->record_writer_native_mapping(inflight, *native_receipt);
+		require(post_native.has_value(),
+				"liveness loss made observed native mapping cleanup unreachable");
+		const auto lost = coordinator->snapshot();
+		require(lost.quarantined && lost.writer_member_authority_count == 1U &&
+					lost.writer_member_liveness_lost_count == 1U,
+				"bound liveness loss remained admission-visible");
+
+		auto sibling_request = writer_request(fixture.family,
+											  fixture.alias_lifetime,
+											  identity("test.registry.bridge-connection", 25U),
+											  identity("test.registry.bridge-open", 25U),
+											  25U);
+		auto sibling_epoch = make_bridge_epoch(sibling_request, 26U);
+		auto sibling_arm = sibling_epoch.activation.take_arm();
+		auto sibling = fixture.registry->begin_writer_map(
+			*fixture.family_pin, std::move(sibling_arm), sibling_request);
+		require(!sibling &&
+					sibling.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+				"revoked bound member admitted a sibling");
+
+		auto cleanup = coordinator->begin_writer_cleanup(*post_native, request.callback);
+		require(cleanup.has_value(), "revoked bound member lost cleanup admission");
+		require(coordinator
+					->complete_writer_cleanup(*cleanup,
+											  request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"confirmed cleanup could not drain revoked bound member");
+		require(coordinator->snapshot().writer_member_authority_count == 0U &&
+					fixture.registry->snapshot().active_activity_pin_count == 0U,
+				"revoked bound member retained authority after confirmed cleanup");
+	}
+
+	void verify_registry_writer_no_map_liveness_boundary_is_sticky()
+	{
+		auto fixture = make_fixture(25U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve no-map liveness coordinator");
+		const auto request = writer_request(fixture.family,
+											fixture.alias_lifetime,
+											identity("test.registry.bridge-connection", 27U),
+											identity("test.registry.bridge-open", 27U),
+											27U);
+		auto epoch = make_bridge_epoch(request, 27U);
+		auto arm = epoch.activation.take_arm();
+		auto begun =
+			fixture.registry->begin_writer_map(*fixture.family_pin, std::move(arm), request);
+		require(begun.has_value(), "begin revoked no-map member");
+		auto inflight = std::move(*begun);
+		require(epoch.sources->main.revoker.revoke(), "revoke live predelegated main lifetime");
+		require(coordinator->resolve_writer_map_failure(inflight).has_value(),
+				"revoked no-map member did not drain exact activity");
+		const auto drained = coordinator->snapshot();
+		require(drained.quarantined && drained.writer_member_authority_count == 0U &&
+					fixture.registry->snapshot().active_activity_pin_count == 0U,
+				"revoked no-map resolution erased sticky quarantine evidence");
+
+		auto fresh_request = writer_request(fixture.family,
+											fixture.alias_lifetime,
+											identity("test.registry.bridge-connection", 28U),
+											identity("test.registry.bridge-open", 28U),
+											28U);
+		auto fresh = coordinator->begin_writer_map(fresh_request);
+		require(!fresh && fresh.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+				"revoked no-map drain revived same-family admission");
+	}
+
+	void verify_confirmed_cleanup_terminalizes_liveness_loss()
+	{
+		auto fixture = make_fixture(26U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve clean terminal coordinator");
+		const auto request = writer_request(fixture.family,
+											fixture.alias_lifetime,
+											identity("test.registry.bridge-connection", 29U),
+											identity("test.registry.bridge-open", 29U),
+											29U);
+		auto epoch = make_bridge_epoch(request, 29U);
+		auto arm = epoch.activation.take_arm();
+		auto begun =
+			fixture.registry->begin_writer_map(*fixture.family_pin, std::move(arm), request);
+		require(begun.has_value(), "begin clean terminal member");
+		auto inflight = std::move(*begun);
+		int native_page{};
+		auto native_receipt =
+			sqlite_writer_shm_native_map_receipt_validator::validate(inflight, 0, &native_page);
+		require(native_receipt.has_value() && epoch.sources->shm.revoker.revoke(),
+				"revoke cleanup-terminal SHM lifetime");
+		auto post_native = coordinator->record_writer_native_mapping(inflight, *native_receipt);
+		require(post_native.has_value(), "record cleanup-terminal native mapping");
+		auto cleanup = coordinator->begin_writer_cleanup(*post_native, request.callback);
+		require(cleanup.has_value(), "admit cleanup-terminal unmap");
+		require(coordinator
+					->complete_writer_cleanup(*cleanup,
+											  request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"confirmed native cleanup did not terminalize lifetime loss");
+		const auto terminal = coordinator->snapshot();
+		require(!terminal.quarantined && terminal.writer_member_authority_count == 0U &&
+					fixture.registry->snapshot().active_activity_pin_count == 0U,
+				"confirmed cleanup left transient liveness quarantine active");
+
+		const auto fresh_request = writer_request(fixture.family,
+												  fixture.alias_lifetime,
+												  identity("test.registry.bridge-connection", 30U),
+												  identity("test.registry.bridge-open", 30U),
+												  30U);
+		auto fresh_epoch = make_bridge_epoch(fresh_request, 30U);
+		auto fresh_arm = fresh_epoch.activation.take_arm();
+		auto fresh = fixture.registry->begin_writer_map(
+			*fixture.family_pin, std::move(fresh_arm), fresh_request);
+		require(fresh.has_value(), "confirmed cleanup did not restore fresh admission");
+		auto fresh_inflight = std::move(*fresh);
+		require(coordinator->resolve_writer_map_failure(fresh_inflight).has_value(),
+				"resolve fresh no-map member after confirmed cleanup");
+		clean_fixture(fixture);
+	}
+
+	void verify_registry_writer_final_publish_liveness_losers_roll_back()
+	{
+		{
+			auto fixture = make_fixture(27U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve incoming-loser coordinator");
+			const auto request = writer_request(fixture.family,
+												fixture.alias_lifetime,
+												identity("test.registry.bridge-connection", 31U),
+												identity("test.registry.bridge-open", 31U),
+												31U);
+			auto epoch = make_bridge_epoch(request, 31U);
+			auto arm = epoch.activation.take_arm();
+			sqlite_same_process_shm_lease_test_peer::fail_next_registry_incoming_liveness(
+				*coordinator);
+			::alarm(5U);
+			auto rejected =
+				fixture.registry->begin_writer_map(*fixture.family_pin, std::move(arm), request);
+			::alarm(0U);
+			const auto lease = coordinator->snapshot();
+			require(!rejected && fixture.registry->snapshot().active_activity_pin_count == 0U &&
+						lease.writer_member_authority_count == 0U &&
+						lease.writer_inflight_count == 0U &&
+						lease.writer_attachment_member_count == 0U && !lease.quarantined,
+					"incoming final-liveness loser consumed authority or retained placeholder");
+			clean_fixture(fixture);
+		}
+
+		{
+			auto fixture = make_fixture(28U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve existing-loser coordinator");
+			const auto first_request =
+				writer_request(fixture.family,
+							   fixture.alias_lifetime,
+							   identity("test.registry.bridge-connection", 32U),
+							   identity("test.registry.bridge-open", 32U),
+							   32U);
+			auto first_epoch = make_bridge_epoch(first_request, 32U);
+			auto first_arm = first_epoch.activation.take_arm();
+			auto first = fixture.registry->begin_writer_map(
+				*fixture.family_pin, std::move(first_arm), first_request);
+			require(first.has_value(), "begin existing-loser anchor");
+			auto first_inflight = std::move(*first);
+
+			const auto second_request =
+				writer_request(fixture.family,
+							   fixture.alias_lifetime,
+							   identity("test.registry.bridge-connection", 33U),
+							   identity("test.registry.bridge-open", 33U),
+							   33U);
+			auto second_epoch = make_bridge_epoch(second_request, 33U);
+			auto second_arm = second_epoch.activation.take_arm();
+			sqlite_same_process_shm_lease_test_peer::fail_next_registry_existing_liveness(
+				*coordinator);
+			::alarm(5U);
+			auto second = fixture.registry->begin_writer_map(
+				*fixture.family_pin, std::move(second_arm), second_request);
+			::alarm(0U);
+			const auto rejected = coordinator->snapshot();
+			require(!second && rejected.quarantined &&
+						rejected.writer_member_authority_count == 1U &&
+						rejected.writer_inflight_count == 1U &&
+						rejected.writer_attachment_unresolved_member_count == 1U &&
+						fixture.registry->snapshot().active_activity_pin_count == 1U,
+					"existing final-liveness loser published sibling or consumed anchor");
+			require(coordinator->resolve_writer_map_failure(first_inflight).has_value(),
+					"drain existing-loser anchor");
+			require(coordinator->snapshot().quarantined &&
+						fixture.registry->snapshot().active_activity_pin_count == 0U,
+					"existing-loser drain revived quarantined coordinator");
+		}
 	}
 
 	void verify_activity_seal_is_one_shot_weak_and_exactly_bound()
@@ -2769,6 +3500,15 @@ int main()
 {
 	try
 	{
+		verify_registry_writer_member_is_exact_and_cleanup_only();
+		verify_exact_attachment_cleanup_drains_all_bound_members();
+		verify_shallower_anchor_cannot_bypass_nested_writer_callback();
+		verify_registry_writer_begin_rejects_used_or_mismatched_epoch();
+		verify_registry_writer_attachment_origin_never_mixes();
+		verify_registry_writer_liveness_loss_blocks_admission_but_keeps_cleanup();
+		verify_registry_writer_no_map_liveness_boundary_is_sticky();
+		verify_confirmed_cleanup_terminalizes_liveness_loss();
+		verify_registry_writer_final_publish_liveness_losers_roll_back();
 		verify_activity_seal_is_one_shot_weak_and_exactly_bound();
 		verify_activity_owner_destruction_never_takes_registry_mutex();
 		verify_activity_abandonment_races_registry_visibility();

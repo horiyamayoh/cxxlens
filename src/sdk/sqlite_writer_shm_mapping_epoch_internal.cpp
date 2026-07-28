@@ -238,6 +238,53 @@ namespace cxxlens::sdk
 					request_.wal_native_file.valid() && request_.shm_native_attachment.valid();
 			}
 
+			[[nodiscard]] bool
+			valid_for_predelegation(const sqlite_shm_writer_map_request& request) const noexcept
+			{
+				return observation_available() && request_.binding.map_request == request;
+			}
+
+			[[nodiscard]] bool
+			retains_exact_lifetimes(const sqlite_shm_writer_map_request& request) const noexcept
+			{
+				return lifetimes_valid() && request_.binding.map_request == request;
+			}
+
+			[[nodiscard]] bool attachment_cohort_compatible_with(
+				const sqlite_writer_shm_mapping_epoch_state& other) const noexcept
+			{
+				const auto& left = request_.binding;
+				const auto& right = other.request_.binding;
+				return left.map_request.attachment == right.map_request.attachment &&
+					left.expected_shm_leaf == right.expected_shm_leaf &&
+					left.retained_parent_receipt == right.retained_parent_receipt &&
+					left.wal_native_file_receipt == right.wal_native_file_receipt &&
+					left.wal_xopen_receipt == right.wal_xopen_receipt &&
+					left.shm_native_attachment_receipt == right.shm_native_attachment_receipt &&
+					request_.retained_parent.native_lifetime_identity() ==
+					other.request_.retained_parent.native_lifetime_identity() &&
+					request_.main_native_file.native_lifetime_identity() ==
+					other.request_.main_native_file.native_lifetime_identity() &&
+					request_.wal_native_file.native_lifetime_identity() ==
+					other.request_.wal_native_file.native_lifetime_identity() &&
+					request_.shm_native_attachment.native_lifetime_identity() ==
+					other.request_.shm_native_attachment.native_lifetime_identity() &&
+					request_.retained_parent.control_.get() ==
+					other.request_.retained_parent.control_.get() &&
+					request_.main_native_file.control_.get() ==
+					other.request_.main_native_file.control_.get() &&
+					request_.wal_native_file.control_.get() ==
+					other.request_.wal_native_file.control_.get() &&
+					request_.shm_native_attachment.control_.get() ==
+					other.request_.shm_native_attachment.control_.get();
+			}
+
+			void invalidate_for_testing() noexcept
+			{
+				if (liveness_)
+					liveness_->live.store(false, std::memory_order_release);
+			}
+
 			[[nodiscard]] bool observation_available() const noexcept
 			{
 				return lifetimes_valid() && !sealed_.load(std::memory_order_acquire);
@@ -515,6 +562,30 @@ namespace cxxlens::sdk
 	bool sqlite_writer_shm_mapping_epoch_arm::valid() const noexcept
 	{
 		return state_ && state_->lifetimes_valid();
+	}
+
+	bool sqlite_writer_shm_mapping_epoch_arm::valid_for_predelegation(
+		const sqlite_shm_writer_map_request& request) const noexcept
+	{
+		return state_ && state_->valid_for_predelegation(request);
+	}
+
+	bool sqlite_writer_shm_mapping_epoch_arm::retains_exact_lifetimes(
+		const sqlite_shm_writer_map_request& request) const noexcept
+	{
+		return state_ && state_->retains_exact_lifetimes(request);
+	}
+
+	bool sqlite_writer_shm_mapping_epoch_arm::attachment_cohort_compatible_with(
+		const sqlite_writer_shm_mapping_epoch_arm& other) const noexcept
+	{
+		return state_ && other.state_ && state_->attachment_cohort_compatible_with(*other.state_);
+	}
+
+	void sqlite_writer_shm_mapping_epoch_arm::invalidate_for_testing() noexcept
+	{
+		if (state_)
+			state_->invalidate_for_testing();
 	}
 
 	sqlite_writer_shm_mapping_epoch_observer::sqlite_writer_shm_mapping_epoch_observer(

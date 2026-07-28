@@ -17,9 +17,11 @@ namespace cxxlens::sdk
 	} // namespace detail
 
 	class sqlite_writer_shm_mapping_epoch_test_peer;
+	class sqlite_same_process_shm_registry_test_peer;
 	class sqlite_writer_shm_native_lifetime_test_factory;
 	class sqlite_writer_shm_mapping_receipt_validator;
 	class sqlite_writer_shm_mapping_epoch_receipt;
+	class sqlite_shm_writer_member_authority;
 
 	/**
 	 * Closed role of one native lifetime retained across a writer mapping epoch.
@@ -163,6 +165,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_writer_shm_mapping_epoch_test_peer;
+		friend class sqlite_same_process_shm_registry_test_peer;
 
 		[[nodiscard]] static std::pair<sqlite_writer_shm_native_lifetime_revoker,
 									   sqlite_writer_shm_native_lifetime_source>
@@ -354,11 +357,19 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool valid() const noexcept;
 
 	  private:
+		friend class sqlite_shm_writer_member_authority;
 		friend class sqlite_writer_shm_mapping_epoch_port;
 		friend class sqlite_writer_shm_mapping_receipt_validator;
 
 		explicit sqlite_writer_shm_mapping_epoch_arm(
 			std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state) noexcept;
+		[[nodiscard]] bool
+		valid_for_predelegation(const sqlite_shm_writer_map_request& request) const noexcept;
+		[[nodiscard]] bool
+		retains_exact_lifetimes(const sqlite_shm_writer_map_request& request) const noexcept;
+		[[nodiscard]] bool attachment_cohort_compatible_with(
+			const sqlite_writer_shm_mapping_epoch_arm& other) const noexcept;
+		void invalidate_for_testing() noexcept;
 
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state_;
 	};
