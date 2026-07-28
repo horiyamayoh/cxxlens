@@ -785,8 +785,11 @@ add_dependencies(
   cxxlens-unit-sdk-query-runtime
   cxxlens-unit-sdk-sqlite-connection-lifecycle
   cxxlens-unit-sdk-sqlite-default-forwarding-vfs
+  cxxlens-unit-sdk-sqlite-disposable-qualification
   cxxlens-unit-sdk-sqlite-limit-length-precedence
   cxxlens-unit-sdk-sqlite-payload-streaming
+  cxxlens-unit-sdk-sqlite-shm-mapping-lease
+  cxxlens-unit-sdk-sqlite-source-shm-readonly-preflight
   cxxlens-unit-sdk-sqlite-store-fault-injection
   cxxlens-unit-sdk-sqlite-store-terminal
   cxxlens-unit-sdk-sqlite-terminal-reclassifier
