@@ -302,8 +302,8 @@ enclosing lease digestは
 である。四mirrorは同一であり、このrevised exact proposalを
 `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` として
 <https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> の独立 semantic/structural
-reviewが `P0=0 / P1=0 / P2=0` で accept した。review receiptとaccepted statusを加えたcurrent
-enclosing lease digestは
+reviewが `P0=0 / P1=0 / P2=0` で accept した。review receiptとaccepted statusを加えたDF-0206
+accepted checkpointのenclosing lease digestは
 `sha256:e522cbbe3c6bb9bf2ed645816941f1921f5884eacc36360e8dc546b779bded29` である。
 internal writer grouping/testsだけを実装可能とし、reader grouping と production activation は引き続き
 blockする。
@@ -313,6 +313,214 @@ native `xShmUnmap`はreader attachment全体を一回で解放するcardinality 
 writer-only proposal/reviewはreader groupをtransitively認可しない。accepted reader attachment
 authorityとdistinct exact implementation/matrix reviewが完了するまで、reader grouping、production
 reader exception、VFS activation、qualificationをblockし、per-map handoffへ一native outcomeを複製しない。
+
+##### DF-0208 review-pending authority proposal: writer gate outcome evidence
+
+Issue #208 / DF-0208 の `cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、accepted DF-0206 が
+要求するmap-before-gate cleanupに、exact current-v3 writer gateのnegative evidenceとsole cleanup
+authorityを与えるreview-pending proposalである。四つのSQLite/Snapshot contract/schema mirrorの
+`writer_gate_outcome_evidence_amendment_proposal`は
+`proposed-unqualified-non-authorizing`であり、acceptance review receiptを持たない。fresh independent
+exact-commit semantic/structural reviewが完了するまで、authority編集、read-only audit、temporary
+reproductionだけを許し、gate outcome mutation、native cleanup、production/VFS binding、public API、
+native `SQLITE_OK` projectionを認可しない。accepted DF-0206 fieldsとreader-predelegation ordering fenceは
+変更しない。
+
+gate outcome evidence と registry cut execution は直交する二軸とする。validator issuer は process、
+runtime image/load generation/lifetime、VFS registration/callback cohort、file family、alias、
+connection、main `native_file_node`/`xOpen` receipt、open epoch、expected native-attachment epoch
+reservation、gate profile、issuer control epoch、attempt tokenへbindした一つのmove-only ownerに、
+success、typed determinate failure、terminal indeterminateのexactly-one kindをregistryへ渡す前にsealする。
+sealed kindはimmutableであり、cut executionのtimeout、drift、continuation abandonment、internal failureから
+再sealまたは再分類しない。owner lifecycleは
+`open -> issuer_sealed_kind -> transferred_to_registry`、registry側は別のone-shot continuation ownerとする。
+unaccepted ownerのdropはownerだけをconsumeし、open dropからoutcomeをmintせず、既存DF-0206
+pending/post-native/member ownerとcleanup obligationをcancel、merge、transfer、dischargeしない。
+`validator-sealed-attempt-abandonment` はlive issuerが明示的にsealするterminal indeterminateだけであり、
+destructorから推測しない。post-cut continuation abandonmentはsealed kindを維持したまま
+`cut_execution_indeterminate` にしてcomplete cut universeをquarantineする。ただし後述の
+live-positive lifecycle contradictionだけは、既存accepted DF-0206 live groupとcleanup ownerを対象外にする。
+
+profile `cxxlens.sqlite.current-v3-writer-gate.v1` は同名のcanonical domainと
+`cxxlens-canonical-tuple-v1-length-framed` encodingで、ordered six-stage policy bytesと各stageの
+authority path、expected/observed value bytes、typed receipt、allowed/observed effect bytes、closed resultを
+保持する。stageは writer read-write mode、runtime version/locator、runtime/VFS/file-family/open epoch、
+synchronous FULL/WAL、current-v3 format/schema/head/counter authority、Store writer-open
+before-publication effectのexact orderである。最後のstageはnonforgeable Store-factory-success control-edge
+receipt、`post_format_prewrite` の `no-candidate-yet`、schema/metadata/payload/head/counter write、
+commit、allocation、process-visible publication effectがzeroであるreceiptを要求する。
+
+各stage bundleのresultは `passed` / `typed_determinate_failure` / `terminal_indeterminate` のclosed
+enumであり、ordered six stagesとsix failure enumは順序を含むexact bijectionである。overall positiveは
+six passed/no failure/no terminal locus、determinate failureはpassed strict prefix+immediate
+`typed_determinate_failure`+そのstageに対応するfailure enum、terminalはclosed reasonと
+`before-first-stage` / `at-immediate-next-stage`+closed phase /
+`after-sixth-stage-before-outcome-seal` locusがprefix/resultとexact一致する場合だけである。unknown/
+omitted result、wrong-stage failure enum、terminal locus/stage/phase、prefix、overall outcomeの不一致を
+non-authorizing invalid evidenceとして拒否する。missing/extra/unclassified effectはterminal
+indeterminateとする。passed/failure stageはobserved value/receipt/effect full bundleを持つ。at-stage
+terminalはvalue `not_observed|exact_present`、receipt `not_issued|exact_present`、effect
+`not_executed|started_outcome_unresolved|exact_present`をphase-tagする。closed phaseは
+`before-value-read | after-value-before-effect | after-effect-start-before-effect-result |
+after-effect-before-stage-result`である。`observation_commit`、`effect_start_commit`、
+`effect_result_commit`がvalue/receipt、delegation permit、terminal effect transcriptを順にatomic publishし、
+value present/receipt not-issuedはunreachableである。
+expected policy/allowed effectは常に必須、negative tagはpayloadなし、present/started tagは各exact payload
+必須で、tag/payloadをcanonical evidenceへbindする。canonical bytesがequality/authorityであり、SHA-256はacceleration keyだけである。
+opaque digest、enum、boolean、SQLite code、prose、eligibility absence/revocation、caller snapshotから
+negative authorityを作らない。
+
+native attachmentは、cut前にconnection/open epochとauthorized next map/unmap callback cohortへbindした
+one-shot expected attachment epoch reservationと、`absent` / `present` のobserved stateを分け、
+reservation lifecycleを `[reserved, claimed_inflight, consumed_to_present, revoked, quarantined]` と
+`reserved -> claimed_inflight | revoked`、`claimed_inflight -> consumed_to_present | revoked |
+quarantined` のclosed graphにする。map-before-gateのpresent stateは既にconsume済みreceiptを持ち、
+gateは再consumeしない。empty positiveはstill-reserved reservationとexact live close ownerをeligibilityへ
+transferする。
+
+最初のpost-cut mapはregistry mutex下の`claim_and_form_dual`でreservation、completed positive cut、
+connection/open epoch、callback token/thread、eligibility revocation epochへbindしたshared owner/control
+epoch、member sequence、native/member prestart projections、ordinary routes、一unused delegation permitを
+一つの`atomically_dual_bound` formationとしてatomic publishする。claim-only/partial peer formationは通常
+routeへ入らずzero-effect invalid-partial sinkへ進む。`start_existing_dual`だけがcomplete formationをnative
+delegationへ進め、`claimed_inflight`中のsecond claim/native delegationは禁止する。exact present
+matchは`consumed_to_present`、known no-mapは`revoked`、native mapped identity mismatchは`revoked`+
+accepted DF-0206 promotion-failure cleanup、throw/unknown/abandonmentは`quarantined`+eligibility revoke+
+consumed tombstone+sole unfired late-resolution lineageとする。same-thread/reentrant contenderはwaitせず
+pre-native reject、other-threadは一回bounded wait/recheckし、timeoutはwaiting attemptだけをrejectして
+original claim ownerを変えない。revocation中のmapped resultはpromotionせずDF-0206 cleanupへrouteする。
+late exact mappingはsole lineageへjoinしsecond ownerやeligibilityを作らない。
+
+member admissionとcutは一つのprocess registry epochが所有するchecked monotonic non-reusable sequence
+domainを共有し、同じmutex下でsequence allocationとvisibilityをatomicにする。first acceptanceは既に
+issuer-sealed ownerだけをtransferし、一つのunique `cut_sequence`と、
+`member_admission_sequence < cut_sequence` のsame-attachment inflight/post-native/pending token全件からなる
+cut universeをfreezeする。sequence equality/reuse/wrapは不可能とし、exhaustionはowner transfer/cut
+publication前にfuture admissionをblockしてregistry epochをquarantineし、既存member ownerを保ったまま
+native/close callをゼロにする。caller spanはownership/equality validationだけである。
+
+各cut-universe memberはterminal時に
+`exact_no_native_mapping` / `exact_native_mapping` / `terminal_native_outcome_unresolved` のnative state
+だけを持ち、cleanup/close authorityを埋め込まない。move-only wait ownerがmutex外のbounded resolution後に
+identity/open epoch/cut membershipをmutex下で再検査し、authoritative registry stateからcomplete final
+writer groupを再導出する。cut universe対no-map/final mapped/terminal unresolvedのone-to-one coverageを
+証明し、missing/extra/duplicate/cross-attachmentを拒否する。
+
+complete member censusをattachment-wideのexclusive `all_no_map` / `mapped` / `unresolved`へnormalizeする。
+その後、attachment全体のcleanup authorityを
+`not_applicable_no_mapping` / `exact_live_attachment_owner` / `absent` / `ambiguous`、connection/open epoch
+close authorityを `exact_live_connection_open_epoch_owner` / `absent` / `ambiguous`として直交に一回導出する。
+conflicting evidenceはambiguousにしかならず、member receipt、caller anchor、token/pointer/path equalityから
+ownerをmint、split、replicate、substituteしない。attachment owner absent/ambiguousはzero guessed call+
+whole attachment quarantineである。
+
+coverage accountingはunresolved memberを含んでも完了できるがeffect readinessではない。`effect_ready` は
+exact coverage+final group、unresolved count zero、選択dispatch cellに必要なvalid reservation/
+attachment owner/close ownerがすべて成立する場合だけである。一件でもunresolvedならsealed completionを
+禁止して `cut_execution_indeterminate` とし、live-positive carve-outを除くwhole cutをhide/quarantineして
+one unfired precut late-resolution lineageを設置する。missing/extra/duplicate/cross-bound/inconsistent
+coverage/censusは21 rowsの外でwhole scopeをzero-call quarantineし、一つのinvalid-coverage tombstoneを
+consumeしてfallthroughしない。cut executionは
+`cut_open -> resolving_cut_universe -> effect_ready -> completed` と各nonterminalから
+`cut_execution_indeterminate` へのclosed graphで、complete publication/whole owner transfer時にterminalを
+一回consumeする。後続cleanupはcut terminalを変更しない。
+
+late-resolution lineageはexact expected attachment reservationとtagged
+`absent | present_exact | unresolved` observationへbindし、field equalityからpresentを推測しない。
+`absent`はexpected reservation/callback cohortへbindしたexact terminal no-map receiptまたはvalid
+pre-start cancellation receiptを必須とする。全bound
+precut/postcut claim callbackがexact terminalになるか、同じcallback owner/control epochがnative開始前かつ
+future native effect impossibleをsealしたexact cancellation receiptを持つまでinvocation permitはゼロである。
+postcut claimのexact cancellationはregistry mutex下で`claimed_inflight -> revoked`をatomicにconsumeする。
+callback開始後/unknownのcaller cancellationやtimeoutはcancel receiptではない。永久unresolvedはzero call。
+
+precut kindはcomplete cut/final group/censuses/shared dispatchへbindし、exact coverage+zero unresolved+
+closed cell後だけoperational rowへsubmitする。postcut kindはcompleted-positive receipt、exact claim/control
+epoch、DF0205 pending-install/post-map-seal receipts、complete DF0206 member censusへ別にbindし、original cut
+census/close/dispatchをauthorityにしない。claim ownerをdistinct decision lineageへ変換し、no-map/cancelは
+zero effectでconsumeする。exact mappedはrequired receiptsとzero-live-memberを証明するcomplete censusが
+揃い、cleanup instanceの全lifecycle/tombstone authoritative countがzeroの
+場合だけ同じownerをnew sealed DF0206 `post_native_failure_without_live_member` instanceへtransformする。
+既存instanceがどのstateにも一つでもある、またはauthority欠落/曖昧ならjoinせずzero-call quarantineする。first exact
+postcut receiptはoriginal completed terminal後も有効で、own tombstone後のduplicate/cross-boundだけを拒否する。
+DF0208 row authorityとpostcut claim-derived DF0206 transferはdisjointで、postcut close/new owner/cut再利用は
+禁止する。
+
+native dispatchは
+permanent-unresolved fence → live-positive scope rewrite → mapping-identity-integrity fence →
+coverage-integrity fence → unresolved fence → `cut_execution_indeterminate` operational matrix →
+sealed outcome matrixのprecedenceとする。domainは
+`waiting_no_effect | decision_unfired | terminal_or_consumed_reentry` のclosed partitionである。cut-open、
+coverage未完resolving、unresolved cut-indeterminateはzero row/zero permit。complete final rederivation+
+exact coverage+zero unresolved+closed consistent cellを持つresolvingはzero effect/consumeでeffect-readyへ
+入り、effect-ready+unfiredは15 sealed rowの一つ、同条件のcut-indeterminateは6 operational rowの一つを
+選ぶ。valid sealedはeffect-ready→completed、invalid 7 sealedは同じtokenでcut-indeterminate+named actionを
+完了しoperational rowを再選択しない。zero-callを含む全rowは`unfired -> consumed_tombstone`をatomic
+consumeし、reentryはzero row/replay rejectである。
+cut-indeterminate operational rowsはall-no-mapでstill-reserved
+reservationをrevokeし、exact closeならone close、close absent/ambiguousならzero callとする。mappedで
+exact live attachment ownerならexactly one attachment-wide drain/no close、owner absent/ambiguousなら
+zero guessed call+quarantineである。sealed gate kindは変えない。
+
+positive completedはall-no-map+valid reserved reservation+exact close ownerのempty eligibility、
+またはmapped+`consumed_to_present`+exact attachment/close ownerのwhole-group promotionだけで、いずれも
+cleanup zeroかつownerを保持する。required authority欠落/曖昧はcut-indeterminateへ進む。determinate
+failureはall-no-map+exact closeのclose-only、またはmapped+両exact ownerのunmap→confirmed success後close
+だけをcompletedにする。mappedでattachment ownerはexactだがcloseが欠ける場合はoperational one drain/
+no close、attachment owner absent/ambiguousはzero callである。terminalはall-no-map+exact closeなら
+one close、close absentならcompleted zero、ambiguousならcut-indeterminate、mapped+exact attachment owner
+ならone drain/no close、owner absentならcompleted zero、ambiguousならcut-indeterminateとする。all-no-map
+failure/terminal/operational/late rowsはreservationをatomic revokeする。
+
+live positive memberとsame-attempt failureのcontradictionは最優先でsealed outcomeの適用だけを拒否し、
+`cut_execution_indeterminate` とする。既存accepted DF-0206 live group/lifetimes/attachment/close/cleanup
+ownerをtargetとauthority censusから除外する。frozen cut universe/tokenは変更せず、全tokenを既存live
+groupまたはresidualへexact total disjoint projectionし、両側をone-to-one accountしてresidualを再導出する。
+residual unresolvedはwait、invalid
+coverageはzero-effect tombstone、complete residualは一つのoperational rowをconsumeし、既存live ownerへ
+fallthroughしない。new gate attempt、issuer control epoch、fresh admissionだけをquarantineする。DF-0208は既存groupをhide、revoke、unmap、close、dischargeしない。既存live mutationは
+accepted DF-0206 `post_native_failure_with_live_member` routeだけが所有する。
+
+composite ownerは `no_mapping_close_only` / `mapped_unmap_then_close` のexactly-one closed unionをsealし、
+native invocation permitをcallback前にconsumeする。mapped variantだけがconfirmed unmapをallocation-freeに
+group-retiredへcommitしてからsole close ownerを露出する。close/drain/unmap resultとcleanup internal commitは
+sealed gate kindとcut terminalを変更しない。non-OK/throw/unknown/abandonment/mismatchからunmap mint、
+second unmap/close、retry、revival、owner再構成を行わず、internal commit failureもconsumed tombstoneを
+保持する。
+writer-derived
+groupはreader handoffを含まず、reader-predelegation fenceを必要箇所で維持する。established handoffは
+自身のsealed lifetimeだけを保持し、DF-0207 reader grouping、fresh support、transfer、successor、
+cleanup authorityを推移的に得ない。
+
+normal admissionはdurable prior-cut state、active slot phase、work kindと、reservation-bearing workの
+`claim_and_form_dual | start_existing_dual` exactly-one substepを同時に検査する。cutでfreeze済みのtokenは
+immutable fresh/dual originに従う
+`fresh_member_start | fresh_terminal_resolution | dual_shared_start | dual_terminal_resolution`
+exactly-one stepだけを許し、cross-origin step、再claim、late formationを拒否する。
+
+mapped terminalはmapping identity tagとexact actualまたはopaque observed lifetime pinを一つのterminal
+commitでbindする。fresh unsafe tokenは`live_origin_tombstone | retired_identity_tombstone`だけを持ち、
+registry mutex下のsole retirement transitionはstate/pins/retirement receiptだけを変える。fence-firstは
+既設typed reason/member tag/quarantine reference/terminal-route bindingをbyte-identicalに保持し、
+retirement-firstはretired formへの後続fenceがそれらをexactly once bindしてpinを再構成しない。dual
+nonpromotionは一つのcomposite pin custody cellを共有し、fence-first/cleanup-firstの双方、ownerlessまたは
+independent DF-0206 retirement、zero-live-pin terminal proofをclosed transitionで扱う。
+
+各cut terminalはchecked nonreusable generation付きdurable latest recordをslot release/wakeup前にinstallまたは
+replaceし、後続dispatchは同じgenerationだけをconsume/updateする。fresh/dual custodyとpostcut continuationの
+complete transfer前、またはstale generationではslotをreleaseせず、record update、release、waiter wakeupを
+registry mutex下でatomicに順序付ける。
+
+fresh independent reviewは、closed stage result/bijection/overall outcome式、outcome/cut二軸、
+owner drop retention、shared sequence exhaustion、five-state reservation claim/race/revocation、
+native-only member censusとorthogonal attachment/close authority、coverage対effect readiness、
+unresolved fenceとexact cancellation/late-resolution lineage、21-row dispatch totality/precedence、
+empty-positive first exact claim、close-only/unmap-then-close、live-positive carve-outを含むDF-0206
+cleanup-only lifetime、reader transitivity、production self-authorizationをpositive/negative双方で
+直接反証しなければならない。
+このreview-pending siblingを含むcurrent enclosing lease canonical digestは
+`sha256:79f31929806955fceeb373739b5f67b8395525bb77d57f8886f6f0c559bcd89f` であり、
+proposal acceptanceを意味しない。
 
 lease は二段階で構築する。owned current-v3 writer の native `xShmMap` delegation前に保持できるのは
 callback-localなnon-authoritative attempt/pre-map receipt、generationまたはfirst-writer cohortの

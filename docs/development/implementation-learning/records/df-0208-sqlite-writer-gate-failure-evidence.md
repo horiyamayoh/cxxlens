@@ -159,3 +159,185 @@ Determinate writer-gate failure mutation and any production binding are blocked 
 negative evidence authority is accepted. Positive-only DF-0206 attachment-group promotion,
 gate/later-map success ordering, and focused internal tests may continue under the existing
 accepted authority without treating this record as authority.
+
+2026-07-28: The four SQLite/Snapshot contract/schema mirrors now carry the exact review-pending
+proposal `cxxlens.sqlite.writer-gate-outcome-evidence.v1` as
+`writer_gate_outcome_evidence_amendment_proposal` with status
+`proposed-unqualified-non-authorizing`. It binds one move-only gate-attempt owner, the closed
+success/determinate-failure/terminal-indeterminate outcome union, the registry cut and later-map
+order, native-state-specific drain/cleanup, composite unmap-then-close ownership, and the DF-0207
+reader carve-out. The proposal changes no accepted DF-0206 field, adds no acceptance receipt, and
+does not authorize implementation or production binding.
+
+Fresh independent semantic/structural review of the exact proposal commit is still pending. The
+completed review recorded above applies only to the accuracy and materiality of this observation;
+it is not acceptance of the proposal and must not be cited as proposal authority.
+
+2026-07-28: Independent semantic review of the prior review-pending proposal draft returned
+`P0=0 / P1=7 / P2=0` and `NO-GO`. It found that the draft did not close: the six-stage exact
+value/effect/canonical evidence grammar; immutable issuer-sealed outcome versus registry-owned cut
+execution; one shared checked non-reusable admission/cut sequence domain and exhaustion; mandatory
+exactly-one drain for known-mapped indeterminate state; attachment-wide reduction of mixed no-map
+and mapped members; empty-indeterminate exact-close-owner totality; and preservation of the
+accepted DF-0206 live cleanup-only lifetime during a same-attempt lifecycle contradiction.
+
+A separate DF-0206 predecessor-semantics audit added four blocking checks: registry execution must
+not reseal the issuer outcome; the final complete group and one-to-one coverage must be rederived
+after blocker resolution; gate-before-map must bind an expected attachment reservation separately
+from observed present state; and pre-acceptance owner drop or post-cut continuation abandonment
+must not discharge existing DF-0206 member cleanup obligations. The revised four mirrors now make
+those eleven axes explicit. They also close the reservation lifecycle
+`reserved -> consumed_to_present | revoked`, failure/terminal first-nonpass evidence locus, cut
+transition graph and cleanup-lineage boundary, close-only versus mapped unmap-then-close owner
+union, and the live-positive carve-out from generic cut quarantine.
+
+This revision remains `proposed-unqualified-non-authorizing`, carries no acceptance receipt, and
+does not resolve this record's `blocked` implementation disposition. A fresh independent review
+must evaluate the exact committed mirrors and positive/negative mutation matrix before any gate
+outcome mutation, native cleanup route, or production binding is authorized.
+
+2026-07-28: Frozen structural review of that revision returned `GO`, while independent semantic
+review returned `NO-GO`. The semantic review found that the proposal still did not define a
+closed stage-result algebra with an exact stage/failure bijection and outcome-consistency
+equations; an exclusive `claimed_inflight` reservation state and move-only callback claim owner;
+native-state-only member classification separated from attachment cleanup and connection-close
+authority censuses; coverage accounting separated from effect readiness; or a total, disjoint
+native dispatch matrix selected from the current cut-execution state. It also found the late
+resolution lineage under-specified: its exact expected-reservation binding, tagged observed
+attachment state, valid pre-native cancellation boundary, permanent-unresolved zero-call outcome,
+and exactly-one late mapped cleanup owner were not closed. Direct positive assertions for the
+empty-positive first exact map and preservation of pre-acceptance member ownership were also
+missing.
+
+The second revision makes those axes explicit. It closes every stage result to
+`passed | typed_determinate_failure | terminal_indeterminate`, binds each ordered stage
+bijectively to one typed failure, and rejects unknown results, wrong-stage failures, and
+result/prefix/outcome/locus disagreement. The expected reservation now has the five-state
+`reserved | claimed_inflight | consumed_to_present | revoked | quarantined` graph. Exactly one
+callback claim owner is moved under the registry mutex before native delegation; same-thread,
+other-thread, timeout, revocation, exact no-map, exact map, mismatch, and uncertain-result races
+are individually closed without allowing a contender to steal or reconstruct the original owner.
+
+The revision also limits terminal member classification to native state, derives one
+attachment-wide cleanup-authority census and one orthogonal connection-close census, and forbids
+member receipts from minting either owner. Complete coverage no longer implies effect readiness:
+any unresolved member forces `cut_execution_indeterminate` and installs one unfired late lineage.
+That lineage binds the exact expected reservation, retains
+`absent | present_exact | unresolved`, accepts cancellation only from the same callback
+owner/control epoch before native callback start with proof that a future effect is impossible,
+waits for every bound callback to become terminal or exactly cancelled, and otherwise keeps
+permanent zero-call quarantine. A late exact mapping joins the existing sole owner rather than
+minting another.
+
+Finally, the revision defines a precedence-ordered, total, disjoint dispatch matrix:
+live-positive carve-out, unresolved fence, current cut-indeterminate operational rows, then sealed
+outcome rows. It distinguishes positive eligibility/promotion, determinate close-only or
+unmap-then-close, terminal close/drain/zero-call, and operational indeterminate close/drain/zero-
+call cells across normalized native census and exact/absent/ambiguous authority. Every applicable
+no-map row atomically revokes a still-reserved expected attachment, while positive mapped
+completion requires and retains both exact attachment and close owners. The quality contract now
+includes direct positives for the empty-positive first exact claim/map and pre-acceptance owner
+retention, plus mutations for the new closed axes.
+
+This second revision is still `proposed-unqualified-non-authorizing`, has no acceptance receipt,
+and does not authorize implementation, native cleanup, VFS binding, public projection, or
+production activation. Fresh independent structural and semantic review must evaluate the exact
+committed mirrors and mutation matrix; neither the prior observation review nor either rejected
+proposal review can be cited as acceptance authority.
+
+2026-07-28: A read-only closure audit of the in-progress second revision identified two remaining
+ambiguities before qualification. First, a completed cut or an already consumed operational
+lineage could appear to re-enter the 21 effect rows despite exactly-once dispatch. The mirrors now
+partition `unfired` pending dispatch from `consumed_tombstone` or completed re-entry; the latter
+selects no effect row, performs zero native or authority effect, and rejects replay. Second, an
+exact same-owner/control-epoch cancellation before native callback start normalized to no-map
+without explicitly consuming the post-cut claim reservation. It now atomically transitions the
+exact `claimed_inflight` reservation owner to `revoked` under the registry mutex. These
+clarifications remain part of the same non-authorizing second revision and require fresh exact-
+commit review with the rest of the proposal.
+
+The same audit then tightened four dependent boundaries. Pending dispatch now begins only from
+`effect_ready` after final rederivation, exact coverage, zero unresolved, and the required
+authority cell, or from a zero-unresolved cut-indeterminate terminal with an unfired operational
+lineage; `cut_open` and `resolving_cut_universe` cannot select a row. Dispatch consumption is the
+one-way `unfired -> consumed_tombstone` graph, and every row, including a zero-call quarantine
+row, consumes it atomically with the decision. Late resolution owns no independent native or
+close permit: after the last exact resolution it submits once to the matching existing
+cut-indeterminate operational row and shares that consumption. Finally, tagged `absent` requires
+an exact expected-reservation/callback-cohort terminal no-map receipt or valid same-owner
+pre-start cancellation receipt; it cannot be inferred from an unknown identity. These additions
+also remain non-authorizing pending fresh exact-commit review.
+
+Further counterexample review closed dependent P1s before qualification. The dispatch domain is
+now the three-way `waiting_no_effect | decision_unfired |
+terminal_or_consumed_reentry` partition. A complete, exactly covered, zero-unresolved,
+closed-census resolving cut enters `effect_ready` with no effect or consumption; only
+`effect_ready + unfired` selects one of fifteen sealed rows, while an equivalently complete
+cut-indeterminate terminal selects one of six operational rows. Valid sealed rows complete;
+invalid sealed rows perform their named safe operational action and enter cut-indeterminate with
+the same token, without selecting a second row. Coverage-integrity failure is outside all 21 rows
+and consumes one zero-effect quarantine tombstone. Live-positive handling first removes the
+accepted live group and all of its owners from both target and census, rederives the residual, and
+then waits, applies the coverage fence, or consumes one residual row without fallthrough.
+
+Terminal stage evidence is also phase-total. Passed and determinate-failure stages retain full
+observed-value, typed-receipt, and observed-effect bundles. An at-stage terminal uses canonical
+tags for `not_observed | exact_present`, `not_issued | exact_present`, and
+`not_executed | started_outcome_unresolved | exact_present`: before-value is wholly negative,
+after-value has exact value and receipt but no executed effect, after-effect-start has exact
+value/receipt and the exact start-permit-consumption/partial-transcript payload with unresolved
+outcome, and after-effect has all exact payloads. Negative tags carry no payload; present and
+started tags require their exact payload; every tag and payload is length-framed into the evidence.
+
+Late resolution now has disjoint installation kinds. A precut unresolved cut shares the unfired
+cut-indeterminate dispatch and can submit only after complete rederivation, exact coverage, zero
+unresolved, and closed censuses. A postcut uncertain claim exists after a completed positive cut
+and therefore owns a distinct claim-derived decision lineage; the original cut census, close
+owner, dispatch token, and completed terminal are immutable non-authorizing context. Exact no-map
+or valid cancellation consumes that lineage with zero effect. Exact mapped resolution may
+transform the same owner into one new sealed accepted DF-0206
+`post_native_failure_without_live_member` cleanup instance only with complete DF-0205
+`pending_install` and `post_map_seal` receipts, a complete attachment-member census, and zero
+existing live cleanup instances. Any existing instance or missing/ambiguous authority forbids a
+join and yields zero-call quarantine. The first exact bound postcut receipt after the original
+completed terminal is valid; only cross-bound, duplicate, or own-tombstone-late receipts are
+rejected. DF-0208 row authority and the postcut claim-derived DF-0206 transfer form a closed,
+disjoint source union and never authorize postcut close or cut reuse.
+
+2026-07-29: The exact review-pending proposal was revised to close the remaining callback-origin,
+cut-admission, mapping-integrity, custody, and durable-release products. Callback claim acquisition
+now atomically forms one `atomically_dual_bound` native/member prestart pair; a claim-only or partial
+peer formation is unreachable as an ordinary origin and selects only the zero-effect invalid-partial
+guard or defensive sink. Normal reservation-bearing work selects exactly one of
+`claim_and_form_dual | start_existing_dual`; a cut-frozen fresh or already formed dual origin selects
+exactly one of the four origin-specific start/terminal continuation steps and cannot claim, form, or
+cross origins while frozen.
+
+Mapped terminal publication now binds the mapping-identity subtype and its exact actual or opaque
+observed lifetime pins in the same commit. Fresh unsafe custody has only
+`live_origin_tombstone | retired_identity_tombstone`; its sole registry-mutex retirement transition
+changes only state, pins, and the exact retirement receipt. Fence-first retirement preserves any
+installed typed reason, offending-member tag, quarantine reference, and terminal-route binding
+byte-identically. Retirement-first allows the later fence to bind that complete metadata exactly
+once while treating preexisting components byte-identically and never reconstructing a pin. Dual
+nonpromotion uses one composite pin-custody cell with a closed cleanup/fence race, ownerless versus
+independent DF-0206 retirement, and an exact zero-live-pin terminal proof.
+
+Every cut terminal also installs or replaces one checked-generation durable latest record before
+slot release or waiter wakeup. Later dispatch consumption may update only that exact generation, and
+release is forbidden until every fresh or dual custody and postcut continuation has transferred
+completely. The counterexample matrix directly covers atomic dual formation, invalid partial
+formation, normal and frozen substeps, fresh/dual mapping fences, both fresh retirement orders,
+composite pin lifecycle races, and durable record/release ordering.
+
+The frozen canonical SQLite YAML has file SHA-256
+`8ef6fd952df321cada2f083d9368d28108d67fb95c7cc2101d243319a7fafc46`,
+DF-0208 semantic digest
+`sha256:30fd6d29224e9707bbdf0f72b585d75c726f361e97ce6ed730dd608f985fa728`,
+and enclosing lease digest
+`sha256:79f31929806955fceeb373739b5f67b8395525bb77d57f8886f6f0c559bcd89f`.
+Two independent frozen read-only semantic/product audits each returned
+`P0=0 / P1=0 / P2=0` and `GO`. Those results qualify this exact non-authorizing proposal revision for
+mirror, document, and quality-contract synchronization only. They do not accept the proposal, add an
+acceptance or resolution receipt, authorize implementation or production activation, or change this
+record's blocked implementation disposition.

@@ -116,6 +116,683 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             "blocked-until-attachment-amendment-acceptance-and-the-distinct-exact-"
             "implementation-and-complete-counterexample-matrix-review",
         )
+        gate_outcome = lease[
+            "writer_gate_outcome_evidence_amendment_proposal"
+        ]
+        self.assertEqual(
+            gate_outcome["id"],
+            "cxxlens.sqlite.writer-gate-outcome-evidence.v1",
+        )
+        self.assertEqual(
+            gate_outcome["status"], "proposed-unqualified-non-authorizing"
+        )
+        self.assertEqual(
+            gate_outcome["tracking"], {"issue": "#208", "feedback": "DF-0208"}
+        )
+        self.assertNotIn("acceptance_review_receipt", gate_outcome)
+        self.assertEqual(
+            gate_outcome["gate_attempt_owner"]["lifecycle"],
+            ["open", "issuer_sealed_kind", "transferred_to_registry"],
+        )
+        gate_profile = gate_outcome["gate_profile"]
+        self.assertEqual(
+            gate_profile["canonical_domain"],
+            "cxxlens.sqlite.current-v3-writer-gate.v1",
+        )
+        self.assertEqual(
+            gate_profile["canonical_encoding"],
+            "cxxlens-canonical-tuple-v1-length-framed",
+        )
+        expected_stages = [
+            "writer-readwrite-mode",
+            "runtime-version-and-locator",
+            "runtime-vfs-file-family-and-open-epoch",
+            "synchronous-full-and-wal-mode",
+            "current-v3-format-schema-head-counter-authority",
+            "store-writer-open-before-publication-effect",
+        ]
+        self.assertEqual(gate_profile["ordered_stage_enum"], expected_stages)
+        expected_stage_results = [
+            "passed",
+            "typed_determinate_failure",
+            "terminal_indeterminate",
+        ]
+        expected_failures = [
+            "writer-mode-rejected",
+            "runtime-or-locator-rejected",
+            "runtime-vfs-or-file-family-rejected",
+            "synchronous-or-wal-mode-rejected",
+            "current-v3-authority-rejected",
+            "store-writer-open-rejected",
+        ]
+        self.assertEqual(
+            gate_profile["closed_stage_result_enum"], expected_stage_results
+        )
+        self.assertEqual(
+            list(gate_profile["ordered_stage_failure_bijection"]),
+            expected_stages,
+        )
+        self.assertEqual(
+            list(gate_profile["ordered_stage_failure_bijection"].values()),
+            expected_failures,
+        )
+        self.assertIn(
+            "no-key-or-value-is-missing-extra-duplicated-or-reused",
+            gate_profile["ordered_stage_failure_bijection_rule"],
+        )
+        consistency = gate_profile["stage_result_outcome_consistency"]
+        self.assertEqual(
+            set(consistency),
+            {
+                "positive_success_equation",
+                "typed_determinate_failure_equation",
+                "terminal_indeterminate_equation",
+                "rejection",
+            },
+        )
+        self.assertIn(
+            "exactly-six-ordered-stage-bundles",
+            consistency["positive_success_equation"],
+        )
+        self.assertIn(
+            "failure-enum-exactly-equals-the-bijection-value-for-that-stage",
+            consistency["typed_determinate_failure_equation"],
+        )
+        self.assertIn(
+            "exactly-matching-locus",
+            consistency["terminal_indeterminate_equation"],
+        )
+        self.assertIn(
+            "unknown-or-omitted-stage-result",
+            consistency["rejection"],
+        )
+        for stage in expected_stages:
+            stage_projection = gate_profile["stage_value_projections"][stage]
+            self.assertEqual(
+                set(stage_projection),
+                {
+                    "authority_paths",
+                    "exact_value_projection",
+                    "exact_effect_projection",
+                    "success",
+                },
+            )
+            for authority_path in stage_projection["authority_paths"]:
+                authority: Any = contract
+                for component in authority_path.split("."):
+                    self.assertIsInstance(authority, dict)
+                    self.assertIn(component, authority)
+                    authority = authority[component]
+        self.assertEqual(
+            gate_profile["terminal_evidence_locus"]["closed_kind_enum"],
+            [
+                "before-first-stage",
+                "at-immediate-next-stage",
+                "after-sixth-stage-before-outcome-seal",
+            ],
+        )
+        self.assertIn(
+            "failure-or-terminal-stage-is-the-immediate-next-enum-member",
+            gate_profile["first_nonpass_adjacency"],
+        )
+        native_attachment = gate_outcome["native_attachment_binding"]
+        self.assertEqual(
+            native_attachment["reservation_lifecycle"],
+            [
+                "reserved",
+                "claimed_inflight",
+                "consumed_to_present",
+                "revoked",
+                "quarantined",
+            ],
+        )
+        self.assertEqual(
+            native_attachment["reservation_transition_graph"],
+            {
+                "reserved": ["claimed_inflight", "revoked"],
+                "claimed_inflight": [
+                    "consumed_to_present",
+                    "revoked",
+                    "quarantined",
+                ],
+                "consumed_to_present": [],
+                "revoked": [],
+                "quarantined": [],
+            },
+        )
+        self.assertEqual(native_attachment["observed_state"], ["absent", "present"])
+        self.assertIn(
+            "consumed-reservation-receipt",
+            native_attachment["map_before_gate_present"],
+        )
+        self.assertIn(
+            "still-reserved-expected-reservation-and-exact-live-connection-open-"
+            "epoch-close-owner",
+            native_attachment["empty_positive"],
+        )
+        claim_owner = native_attachment["callback_claim_owner"]
+        self.assertIn(
+            "substep-claim_and_form_dual",
+            claim_owner["acquisition"],
+        )
+        self.assertEqual(
+            claim_owner["reachable_formation_kind_enum"],
+            ["atomically_dual_bound"],
+        )
+        self.assertIn(
+            "rejects-every-second-claim-and-native-delegation-before-native",
+            claim_owner["exclusivity"],
+        )
+        self.assertIn(
+            "reject-before-native-without-waiting",
+            native_attachment["claimed_later_map_same_thread_or_reentrant"],
+        )
+        self.assertIn(
+            "bounded-wait-outside-the-registry-mutex",
+            native_attachment["claimed_later_map_other_thread"],
+        )
+        self.assertIn(
+            "leave-the-original-claim-owner-reservation-state-and-late-resolution-"
+            "obligation-unchanged",
+            native_attachment["claimed_later_map_timeout"],
+        )
+        self.assertIn(
+            "postcut-nonpromotion-cleanup-decision-state-machine-for-the-proven-"
+            "native-mapped-effect-never-as-no-map",
+            native_attachment["claim_mapped_identity_mismatch"],
+        )
+        registry_cut = gate_outcome["registry_cut"]
+        self.assertEqual(
+            registry_cut["initial_member_classification"],
+            [
+                "exact_no_native_mapping",
+                "exact_native_mapping",
+                "native_outcome_unresolved",
+            ],
+        )
+        self.assertEqual(
+            registry_cut["terminal_member_classification"],
+            [
+                "exact_no_native_mapping",
+                "exact_native_mapping",
+                "terminal_native_outcome_unresolved",
+            ],
+        )
+        self.assertIn(
+            "records-only-the-exact-native-callback-state-and-never-contains-"
+            "mints-or-implies-attachment-cleanup-or-connection-close-authority",
+            registry_cut["member_classification_scope"],
+        )
+        self.assertEqual(
+            registry_cut["attachment_cleanup_authority_census"][
+                "closed_state_enum"
+            ],
+            [
+                "not_applicable_no_mapping",
+                "exact_live_attachment_owner",
+                "absent",
+                "ambiguous",
+            ],
+        )
+        self.assertEqual(
+            registry_cut["connection_close_authority_census"][
+                "closed_state_enum"
+            ],
+            [
+                "exact_live_connection_open_epoch_owner",
+                "absent",
+                "ambiguous",
+            ],
+        )
+        self.assertIn(
+            "no-member-map-receipt-pending-anchor-callback-result-or-caller-span-"
+            "can-mint",
+            registry_cut["member_receipt_nonownership"],
+        )
+        self.assertIn(
+            "shared-by-every-member-admission-and-gate-cut",
+            registry_cut["sequence_domain"],
+        )
+        self.assertIn(
+            "preserve-existing-member-owners",
+            registry_cut["sequence_exhaustion"],
+        )
+        self.assertIn(
+            "terminal_token_and_tag_rederivation-one_to_one_coverage_proof",
+            registry_cut["final_group_rederivation"],
+        )
+        self.assertIn(
+            "mapped-with-exactly-one-closed-mapping-identity-tag-evidence-slot",
+            registry_cut["one_to_one_coverage_proof"],
+        )
+        self.assertIn(
+            "only-proves-token-accounting-and-never-confers-effect-eligible-final-"
+            "group",
+            registry_cut["coverage_accounting"],
+        )
+        self.assertEqual(
+            set(registry_cut["effect_ready_precondition"]),
+            {
+                "coverage",
+                "native_resolution",
+                "mapping_identity_integrity",
+                "authority_cell",
+                "conjunction",
+                "failure",
+            },
+        )
+        self.assertIn(
+            "terminal_native_outcome_unresolved-count-equals-zero",
+            registry_cut["effect_ready_precondition"]["native_resolution"],
+        )
+        self.assertIn(
+            "one-or-more-terminal_native_outcome_unresolved-members-exist-forbid-"
+            "effect_ready",
+            registry_cut["unresolved_fence"],
+        )
+        self.assertEqual(
+            registry_cut["cut_execution_transition_graph"],
+            {
+                "cut_open": [
+                    "resolving_cut_universe",
+                    "cut_execution_indeterminate",
+                ],
+                "resolving_cut_universe": [
+                    "effect_ready",
+                    "cut_execution_indeterminate",
+                ],
+                "effect_ready": ["completed", "cut_execution_indeterminate"],
+                "completed": [],
+                "cut_execution_indeterminate": [],
+            },
+        )
+        self.assertIn(
+            "selected-independent-cleanup-or-unresolved-lineage-or-the-separate-"
+            "invalid-coverage-terminal-sink-continuation-and-cannot-change-either-"
+            "cut-terminal",
+            registry_cut["cleanup_lineage_boundary"]["later_effects"],
+        )
+        self.assertIn(
+            "every-existing-accepted-live-owner-remains-unchanged",
+            registry_cut["live_positive_lifecycle_contradiction_carveout"],
+        )
+        self.assertEqual(
+            gate_outcome["closed_outcome_union"]["typed_determinate_failure"][
+                "open_epoch_drift"
+            ],
+            "forbidden-in-this-variant-and-always-terminal-indeterminate",
+        )
+        self.assertIn(
+            "every-existing-DF-0206-pending-post-native-or-caller-owned-member-"
+            "owner-and-exact-cleanup-obligation-remains-live-unchanged",
+            gate_outcome["gate_attempt_owner"][
+                "existing_member_ownership_after_preacceptance_drop"
+            ],
+        )
+        self.assertIn(
+            "each-local-member-contributes-exactly-one-of-exact_no_native_mapping-"
+            "exact_native_mapping-or-terminal_native_outcome_unresolved",
+            gate_outcome["native_state_resolution"]["member_native_state_only"],
+        )
+        self.assertIn(
+            "retains-the-exact-live-attachment-owner-and-exact-live-close-owner",
+            gate_outcome["native_state_resolution"][
+                "positive_mapped_owner_retention"
+            ],
+        )
+        self.assertIn(
+            "all-exact-mapped-members-fold-into-the-same-single-attachment-wide-"
+            "lineage",
+            gate_outcome["native_state_resolution"]["mixed_no_map_and_mapped"],
+        )
+        late_lineage = gate_outcome["late_resolution_lineage"]
+        self.assertEqual(
+            late_lineage["observed_attachment_resolution"][
+                "closed_state_enum"
+            ],
+            ["absent", "present_exact", "unresolved"],
+        )
+        self.assertIn(
+            "exact-bound-terminal-native-no-map-receipt-or-the-exact-same-owner-"
+            "control-epoch-prestart-cancellation-receipt",
+            late_lineage["observed_attachment_resolution"]["absent"],
+        )
+        self.assertIn(
+            "same-postcut-callback-owner-and-its-acquisition-bound-control-epoch",
+            late_lineage["exact_cancellation_receipt"],
+        )
+        self.assertIn(
+            "before-native-callback-start-with-proof-that-future-native-effect-"
+            "is-impossible",
+            late_lineage["exact_cancellation_receipt"],
+        )
+        self.assertIn(
+            "atomically-consumes-the-exact-claimed_inflight-reservation-owner-to-"
+            "revoked-and-the-claim-owner-with-zero-effect-under-the-registry-mutex",
+            late_lineage["exact_cancellation_receipt"],
+        )
+        self.assertIn(
+            "callback-started-unknown-caller-cancellation-timeout-abandonment",
+            late_lineage["invalid_cancellation"],
+        )
+        self.assertIn(
+            "issue-zero-native-invocation-permits-until-every-bound-local-precut-"
+            "callback",
+            late_lineage["firing_fence_by_installation_kind"][
+                "precut_unresolved_cut"
+            ],
+        )
+        self.assertIn(
+            "issues-zero-cleanup-permits-until-the-same-bound-callback-has-an-"
+            "exact-terminal-no-map-or-mapped-result",
+            late_lineage["firing_fence_by_installation_kind"][
+                "postcut_claim_derived_nonpromotion_cleanup_decision"
+            ],
+        )
+        self.assertIn(
+            "performs-zero-invocation-cleanup-close-or-public-authority-effect",
+            late_lineage["precut_resolution"]["permanent_unresolved"],
+        )
+        self.assertIn(
+            "never-mints-splits-replicates-fires-or-submits-a-second-owner",
+            late_lineage["late_mapped_join"],
+        )
+        dispatch = gate_outcome["native_effect_dispatch_matrix"]
+        self.assertEqual(
+            dispatch["precedence"],
+            [
+                "permanent_unresolved_fence",
+                "live_positive_lifecycle_contradiction_carveout",
+                "mapping_identity_integrity_fence",
+                "coverage_integrity_fence",
+                "unresolved_fence",
+                "cut_execution_indeterminate_operational_matrix",
+                "sealed_outcome_matrix",
+            ],
+        )
+        self.assertEqual(
+            dispatch["dispatch_consumption_state"],
+            ["unfired", "consumed_tombstone"],
+        )
+        self.assertEqual(
+            dispatch["dispatch_consumption_transition_graph"],
+            {
+                "unfired": ["consumed_tombstone"],
+                "consumed_tombstone": [],
+            },
+        )
+        self.assertIn(
+            "including-zero-native-call-and-zero-authority-effect-rows-"
+            "atomically-transitions-unfired-to-consumed_tombstone",
+            dispatch["row_consumption"],
+        )
+        self.assertEqual(
+            set(dispatch["row_selection_domain"]),
+            {
+                "waiting_no_effect",
+                "decision_unfired",
+                "terminal_or_consumed_reentry",
+                "partition",
+            },
+        )
+        self.assertIn(
+            "selects-zero-rows-performs-zero-native-or-authority-effect-and-rejects-"
+            "replay",
+            dispatch["row_selection_domain"]["terminal_or_consumed_reentry"],
+        )
+        self.assertIn(
+            "effect_ready-and-mapping_identity_integrity_census-"
+            "safe_no_mapped_or_all_exact_match",
+            dispatch["row_selection_domain"]["decision_unfired"],
+        )
+        self.assertIn(
+            "selects-zero-rows-performs-zero-native-or-authority-effect",
+            dispatch["row_selection_domain"]["waiting_no_effect"],
+        )
+        self.assertIn(
+            "current-cut-execution-state-or-terminal",
+            dispatch["row_selection"],
+        )
+        operational_rows = dispatch[
+            "cut_execution_indeterminate_operational_matrix"
+        ]
+        sealed_rows = dispatch["sealed_outcome_matrix"]
+        self.assertEqual(len(operational_rows), 6)
+        self.assertEqual(len(sealed_rows), 15)
+        self.assertIn(
+            "selects-exactly-one-of-permanent_unresolved_fence",
+            dispatch["totality_and_disjointness"],
+        )
+        self.assertIn(
+            "retain-both-exact-live-owners",
+            sealed_rows[
+                "positive_mapped_consumed_exact_attachment_and_close"
+            ],
+        )
+        self.assertIn(
+            "one-drain-and-no-close",
+            sealed_rows[
+                "determinate_failure_mapped_exact_attachment_close_absent_or_"
+                "ambiguous"
+            ],
+        )
+        no_map_rows = [
+            operational_rows["all_no_map_exact_close"],
+            operational_rows["all_no_map_close_absent"],
+            operational_rows["all_no_map_close_ambiguous"],
+            sealed_rows["determinate_failure_all_no_map_exact_close"],
+            sealed_rows[
+                "determinate_failure_all_no_map_close_absent_or_ambiguous"
+            ],
+            sealed_rows["terminal_indeterminate_all_no_map_exact_close"],
+            sealed_rows["terminal_indeterminate_all_no_map_close_absent"],
+            sealed_rows["terminal_indeterminate_all_no_map_close_ambiguous"],
+            late_lineage["precut_resolution"]["all_no_map_exact_close"],
+            late_lineage["precut_resolution"][
+                "all_no_map_close_absent_or_ambiguous"
+            ],
+        ]
+        for row in no_map_rows:
+            self.assertTrue(
+                "revoke-any-still-reserved-expected-attachment" in row
+                or "revokes-any-still-reserved-expected-attachment" in row,
+                row,
+            )
+        empty_group = gate_outcome["empty_and_mixed_group"]
+        self.assertIn(
+            "complete-atomically_dual_bound-prestart-projections",
+            empty_group["positive_success_empty_first_map"],
+        )
+        self.assertIn(
+            "exact_live_connection_open_epoch_owner-once",
+            empty_group["terminal_indeterminate_empty_with_exact_close_owner"],
+        )
+        self.assertIn(
+            "zero-native-unmap-zero-close-and-zero-other-native-calls",
+            empty_group["terminal_indeterminate_empty_without_close_owner"],
+        )
+        self.assertIn(
+            "mark-only-cut_execution_indeterminate",
+            empty_group["live_positive_and_same_attempt_failure"],
+        )
+        self.assertIn(
+            "never-converts-completed-or-cut_execution_indeterminate",
+            empty_group["empty_close_axis_invariance"],
+        )
+        cleanup_lineage = gate_outcome["composite_cleanup_lineage"]
+        self.assertEqual(
+            cleanup_lineage["closed_obligation_union"],
+            ["no_mapping_close_only", "mapped_unmap_then_close"],
+        )
+        self.assertIn(
+            "zero-unmap-authority", cleanup_lineage["no_mapping_close_only"]
+        )
+        terminal_binding = registry_cut[
+            "reservation_bearing_member_terminal_binding"
+        ]
+        self.assertIn(
+            "reserved-to-claimed_inflight-member-sequence-allocation-dual-"
+            "native_not_started-and-prestart-state-initialization",
+            terminal_binding["formation_commit"],
+        )
+        self.assertIn(
+            "reservation_claim_only-record-or-any-claim-record-missing",
+            native_attachment["callback_result_totality"][
+                "invalid_partial_dual_formation_guard"
+            ],
+        )
+        admission = registry_cut["attachment_cut_exclusivity"][
+            "admission_kind_partition"
+        ]
+        self.assertEqual(
+            admission["origin_binding"]["reservation_bearing_claim_or_member_start"][
+                "substep_enum"
+            ],
+            ["claim_and_form_dual", "start_existing_dual"],
+        )
+        self.assertEqual(
+            admission["frozen_continuation_step_enum"],
+            [
+                "fresh_member_start",
+                "fresh_terminal_resolution",
+                "dual_shared_start",
+                "dual_terminal_resolution",
+            ],
+        )
+        self.assertEqual(
+            registry_cut["mapping_identity_integrity_census"][
+                "fresh_unsafe_custody_form_enum"
+            ],
+            ["live_origin_tombstone", "retired_identity_tombstone"],
+        )
+        mapping_fence = dispatch["mapping_identity_integrity_fence"]
+        self.assertIn(
+            "preserving-when-already-installed-the-mapping-integrity-typed-reason",
+            mapping_fence["quarantine_binding"]["fresh_projection"],
+        )
+        self.assertIn(
+            "when-retirement-occurs-first-the-later-fence-transaction",
+            mapping_fence["quarantine_lifetime"],
+        )
+        self.assertIn(
+            "nonpromotion_composite_pin_custody",
+            mapping_fence["quarantine_binding"]["dual_projection"],
+        )
+        pin_custody = terminal_binding["mapped_pin_destination_partition"][
+            "nonpromotion_composite_pin_custody"
+        ]
+        self.assertEqual(
+            pin_custody["closed_state_enum"],
+            [
+                "live_owned",
+                "integrity_quarantined_live",
+                "cleanup_inflight",
+                "cleanup_unknown_quarantined",
+                "retired_tombstone",
+            ],
+        )
+        self.assertEqual(
+            pin_custody["retirement_receipt_kind_enum"],
+            [
+                "DF0206_same_invocation_confirmed",
+                "ownerless_open_epoch_lifetime_retirement",
+            ],
+        )
+        self.assertIn(
+            "zero-live-pin-terminal-proof-binding",
+            pin_custody["fence_ordering"]["totality"],
+        )
+        durable_gate = registry_cut["attachment_cut_exclusivity"][
+            "durable_prior_cut_outcome_gate"
+        ]
+        self.assertIn(
+            "checked-monotonic-nonreusable-terminal-record-generation",
+            durable_gate["terminal_record_generation"],
+        )
+        self.assertIn(
+            "before-any-current-slot-release-or-terminal-waiter-wakeup",
+            durable_gate["terminal_install_or_replace_commit"],
+        )
+        self.assertIn(
+            "later-exact-generation-dispatch-consumption-and-final-release-plus-"
+            "wakeup-publication-are-one-transaction",
+            durable_gate["release_and_wakeup_atomicity"],
+        )
+        second_revision_required = gate_outcome["fail_closed_matrix"][
+            "second_revision_required"
+        ]
+        second_revision_positive = gate_outcome["fail_closed_matrix"][
+            "second_revision_positive"
+        ]
+        for fragment in (
+            "callback-claim-acquisition-publishes-claimed_inflight",
+            "reservation_claim_only-or-a-missing-duplicate-or-inconsistent-dual",
+            "reservation-bearing-normal-call-omits-or-selects-both-substeps",
+            "formed-frozen-dual-continuation-claims-or-forms-again",
+            "fresh-fence-first-retirement",
+            "cleanup-first-reaches-retired_tombstone",
+            "fence-first-moves-consumes-or-retires-the-composite-pins",
+            "newer-negative-cut-releases-its-slot-or-wakes-a-waiter-before",
+        ):
+            self.assertTrue(
+                any(fragment in entry for entry in second_revision_required),
+                fragment,
+            )
+        for fragment in (
+            "callback-claim-acquisition-selects-claim_and_form_dual",
+            "reservation_claim_only-or-any-partial-peer-formation-selects-only",
+            "closed-admission-product-allows-fresh_nonreservation_member",
+            "frozen-fresh-origin-selects-only-fresh-start-or-terminal-resolution",
+            "sole-registry-mutex-ordered-live_origin_tombstone-to-"
+            "retired_identity_tombstone",
+            "nonpromotion-composite-pin-custody-has-one-mutex-linearized-state",
+            "fence-first-retains-the-independent-cleanup-owner",
+            "new-cut-terminal-atomically-installs-or-replaces-the-checked-latest-"
+            "generation-durable-record",
+        ):
+            self.assertTrue(
+                any(fragment in entry for entry in second_revision_positive),
+                fragment,
+            )
+        positive_matrix = set(gate_outcome["fail_closed_matrix"]["positive"])
+        self.assertTrue(
+            {
+                "six-passed-stage-results-bijectively-seal-positive-adjacent-"
+                "stage-specific-failure-or-closed-locus-terminal",
+                "issuer-sealed-outcome-remains-unchanged-through-completed-or-"
+                "indeterminate-cut-execution",
+                "preacceptance-owner-drop-preserves-every-existing-DF-0206-member-"
+                "owner-and-cleanup-obligation",
+                "shared-sequence-exhaustion-produces-no-cut-native-call-or-"
+                "existing-member-mutation",
+                "map-before-gate-present-carries-one-consumed-reservation-and-"
+                "never-reconsumes",
+                "empty-positive-success-transfers-one-reserved-attachment-and-"
+                "exact-close-owner-and-first-map-consumes-one-exact-claim",
+                "complete-member-native-census-and-orthogonal-attachment-and-"
+                "close-owner-census-select-one-cell",
+                "coverage-with-any-unresolved-forces-cut-indeterminate-and-one-"
+                "unfired-late-lineage",
+                "positive-mapped-exact-attachment-and-close-promotes-whole-group-"
+                "with-zero-cleanup-and-retains-owners",
+                "determinate-mapped-exact-attachment-missing-close-routes-cut-"
+                "indeterminate-one-drain-no-close",
+                "live-positive-contradiction-preserves-the-sealed-kind-and-"
+                "DF-0206-cleanup-only-lifetime-while-marking-only-cut-execution-"
+                "indeterminate",
+            }
+            <= positive_matrix
+        )
+        self.assertGreaterEqual(len(second_revision_positive), 65)
+        self.assertIn(
+            "DF-0207-reader-grouping-transitive-authorization",
+            gate_outcome["fail_closed_matrix"]["required"],
+        )
+        self.assertEqual(
+            gate_outcome["authorization"]["before_independent_acceptance"],
+            "authority-edit-readonly-audit-and-temporary-reproduction-only-no-"
+            "gate-outcome-mutation-native-cleanup-or-production-binding",
+        )
         self.assertEqual(
             lease["authorization"]["production_activation"],
             "blocked-until-the-exact-implementation-and-complete-counterexample-"
@@ -178,6 +855,11 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         def writer_native_attachment(value: dict[str, Any]) -> dict[str, Any]:
             return writer_mapping_lease(value)[
                 "writer_native_attachment_amendment_proposal"
+            ]
+
+        def writer_gate_outcome(value: dict[str, Any]) -> dict[str, Any]:
+            return writer_mapping_lease(value)[
+                "writer_gate_outcome_evidence_amendment_proposal"
             ]
 
         mutations: list[tuple[str, Mutation]] = [
@@ -689,6 +1371,418 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ]["positive"].remove(
                     "nonlast-established-reader-handoff-does-not-block-and-"
                     "retains-only-its-sealed-lifetime"
+                ),
+            ),
+            (
+                "writer-gate-outcome-proposal-removed",
+                lambda value: writer_mapping_lease(value).pop(
+                    "writer_gate_outcome_evidence_amendment_proposal"
+                ),
+            ),
+            (
+                "writer-gate-outcome-status-self-accepted",
+                lambda value: writer_gate_outcome(value).__setitem__(
+                    "status", "accepted-authority-implementation-pending"
+                ),
+            ),
+            (
+                "writer-gate-outcome-forged-acceptance-receipt",
+                lambda value: writer_gate_outcome(value).__setitem__(
+                    "acceptance_review_receipt", "self-asserted"
+                ),
+            ),
+            (
+                "writer-gate-outcome-closed-stage-removed",
+                lambda value: writer_gate_outcome(value)["gate_profile"][
+                    "ordered_stage_enum"
+                ].remove("store-writer-open-before-publication-effect"),
+            ),
+            (
+                "writer-gate-outcome-stage-effect-projection-removed",
+                lambda value: writer_gate_outcome(value)["gate_profile"][
+                    "stage_value_projections"
+                ]["store-writer-open-before-publication-effect"].pop(
+                    "exact_effect_projection"
+                ),
+            ),
+            (
+                "writer-gate-outcome-terminal-locus-allows-later-stage",
+                lambda value: writer_gate_outcome(value)["gate_profile"][
+                    "terminal_evidence_locus"
+                ].__setitem__(
+                    "rule",
+                    "terminal-may-omit-its-locus-and-execute-later-stages",
+                ),
+            ),
+            (
+                "writer-gate-outcome-policy-profile-digest-weakened",
+                lambda value: writer_gate_outcome(value)["gate_profile"].__setitem__(
+                    "canonical_policy_profile_digest",
+                    "opaque-untyped-digest",
+                ),
+            ),
+            (
+                "writer-gate-outcome-exclusivity-weakened",
+                lambda value: writer_gate_outcome(value)[
+                    "closed_outcome_union"
+                ].__setitem__(
+                    "exclusivity",
+                    "success-and-failure-may-both-be-issued",
+                ),
+            ),
+            (
+                "writer-gate-outcome-positive-before-cut-completed",
+                lambda value: writer_gate_outcome(value)[
+                    "closed_outcome_union"
+                ]["positive_success"].__setitem__(
+                    "effect",
+                    "promote-before-registry-cut-execution-completes",
+                ),
+            ),
+            (
+                "writer-gate-outcome-reservation-lifecycle-reusable",
+                lambda value: writer_gate_outcome(value)[
+                    "native_attachment_binding"
+                ]["reservation_lifecycle"].append("reserved"),
+            ),
+            (
+                "writer-gate-outcome-map-before-gate-reconsumes",
+                lambda value: writer_gate_outcome(value)[
+                    "native_attachment_binding"
+                ].__setitem__(
+                    "map_before_gate_present",
+                    "consume-the-reservation-again-at-the-gate",
+                ),
+            ),
+            (
+                "writer-gate-outcome-native-mismatch-treated-no-map",
+                lambda value: writer_gate_outcome(value)[
+                    "native_attachment_binding"
+                ].__setitem__(
+                    "claim_mapped_identity_mismatch",
+                    "treat-the-native-mapped-effect-as-no-map",
+                ),
+            ),
+            (
+                "writer-gate-outcome-precut-mismatch-mutates",
+                lambda value: writer_gate_outcome(value)["gate_profile"].__setitem__(
+                    "supplied_mismatch",
+                    "seal-a-determinate-failure-and-hide-the-live-group",
+                ),
+            ),
+            (
+                "writer-gate-outcome-precut-abandonment-mutates",
+                lambda value: writer_gate_outcome(value)["gate_attempt_owner"].__setitem__(
+                    "pre_acceptance_drop",
+                    "derive-and-hide-the-caller-member-snapshot",
+                ),
+            ),
+            (
+                "writer-gate-outcome-postcut-abandonment-determinate",
+                lambda value: writer_gate_outcome(value)["gate_attempt_owner"].__setitem__(
+                    "postcut_continuation_abandonment",
+                    "reclassify-as-typed-determinate-failure",
+                ),
+            ),
+            (
+                "writer-gate-outcome-precut-drop-discharges-member",
+                lambda value: writer_gate_outcome(value)["gate_attempt_owner"].__setitem__(
+                    "existing_member_ownership_after_preacceptance_drop",
+                    "discharge-every-existing-DF-0206-member-owner",
+                ),
+            ),
+            (
+                "writer-gate-outcome-cut-reseals-outcome",
+                lambda value: writer_gate_outcome(value)["registry_cut"].__setitem__(
+                    "outcome_immutability",
+                    "cut-execution-may-reseal-failure-as-indeterminate",
+                ),
+            ),
+            (
+                "writer-gate-outcome-independent-sequence-domains",
+                lambda value: writer_gate_outcome(value)["registry_cut"].__setitem__(
+                    "sequence_domain",
+                    "independent-member-admission-and-gate-cut-counters",
+                ),
+            ),
+            (
+                "writer-gate-outcome-sequence-exhaustion-partial-cut",
+                lambda value: writer_gate_outcome(value)["registry_cut"].__setitem__(
+                    "sequence_exhaustion",
+                    "publish-a-partial-cut-and-discharge-existing-members",
+                ),
+            ),
+            (
+                "writer-gate-outcome-caller-defines-group",
+                lambda value: writer_gate_outcome(value)["registry_cut"].__setitem__(
+                    "caller_member_span",
+                    "caller-subset-defines-the-authoritative-cleanup-group",
+                ),
+            ),
+            (
+                "writer-gate-outcome-cut-snapshot-is-final-group",
+                lambda value: writer_gate_outcome(value)["registry_cut"].__setitem__(
+                    "final_group_rederivation",
+                    "reuse-the-cut-time-caller-snapshot-after-blocker-resolution",
+                ),
+            ),
+            (
+                "writer-gate-outcome-coverage-allows-missing-member",
+                lambda value: writer_gate_outcome(value)["registry_cut"].__setitem__(
+                    "one_to_one_coverage_proof",
+                    "allow-a-missing-or-duplicate-cut-universe-token",
+                ),
+            ),
+            (
+                "writer-gate-outcome-cut-terminal-revives",
+                lambda value: writer_gate_outcome(value)["registry_cut"][
+                    "cut_execution_transition_graph"
+                ].__setitem__("completed", ["cut_open"]),
+            ),
+            (
+                "writer-gate-outcome-cleanup-changes-cut-terminal",
+                lambda value: writer_gate_outcome(value)["registry_cut"].__setitem__(
+                    "cleanup_lineage_boundary",
+                    "close-failure-changes-completed-to-cut_execution_indeterminate",
+                ),
+            ),
+            (
+                "writer-gate-outcome-incomplete-coverage-subset-effect",
+                lambda value: writer_gate_outcome(value)["registry_cut"].__setitem__(
+                    "execution_indeterminate",
+                    "initiate-a-new-subset-determinate-failure-effect",
+                ),
+            ),
+            (
+                "writer-gate-outcome-positive-cleans-up",
+                lambda value: writer_gate_outcome(value)[
+                    "native_state_resolution"
+                ].__setitem__(
+                    "positive_mapped_owner_retention",
+                    "drain-the-native-mapping-before-promotion",
+                ),
+            ),
+            (
+                "writer-gate-outcome-indeterminate-mints-failure",
+                lambda value: writer_gate_outcome(value)[
+                    "native_state_resolution"
+                ].__setitem__(
+                    "drain_semantics",
+                    "drain-success-mints-typed-determinate-failure",
+                ),
+            ),
+            (
+                "writer-gate-outcome-known-no-map-speculative-unmap",
+                lambda value: writer_gate_outcome(value)[
+                    "native_state_resolution"
+                ].__setitem__(
+                    "exact_no_native_mapping",
+                    "attempt-one-speculative-native-unmap",
+                ),
+            ),
+            (
+                "writer-gate-outcome-mixed-group-per-member-unmap",
+                lambda value: writer_gate_outcome(value)[
+                    "native_state_resolution"
+                ].__setitem__(
+                    "mixed_no_map_and_mapped",
+                    "perform-one-native-unmap-per-mapped-member",
+                ),
+            ),
+            (
+                "writer-gate-outcome-known-mapped-drain-optional",
+                lambda value: writer_gate_outcome(value)[
+                    "native_effect_dispatch_matrix"
+                ]["cut_execution_indeterminate_operational_matrix"].__setitem__(
+                    "mapped_exact_live_attachment_owner",
+                    "perform-at-most-one-attachment-wide-drain",
+                ),
+            ),
+            (
+                "writer-gate-outcome-cleanup-reclassifies-cut-terminal",
+                lambda value: writer_gate_outcome(value)[
+                    "native_state_resolution"
+                ].__setitem__(
+                    "cleanup_axis_independence",
+                    "close-failure-converts-completed-to-cut_execution_indeterminate",
+                ),
+            ),
+            (
+                "writer-gate-outcome-empty-exact-owner-skips-close",
+                lambda value: writer_gate_outcome(value)[
+                    "empty_and_mixed_group"
+                ].__setitem__(
+                    "terminal_indeterminate_empty_with_exact_close_owner",
+                    "zero-native-unmap-and-zero-close",
+                ),
+            ),
+            (
+                "writer-gate-outcome-empty-no-owner-speculative-close",
+                lambda value: writer_gate_outcome(value)[
+                    "empty_and_mixed_group"
+                ].__setitem__(
+                    "terminal_indeterminate_empty_without_close_owner",
+                    "guess-a-close-owner-and-call-close",
+                ),
+            ),
+            (
+                "writer-gate-outcome-empty-close-reclassifies-axes",
+                lambda value: writer_gate_outcome(value)[
+                    "empty_and_mixed_group"
+                ].__setitem__(
+                    "empty_close_axis_invariance",
+                    "close-failure-reseals-the-gate-and-cut-terminal",
+                ),
+            ),
+            (
+                "writer-gate-outcome-mixed-live-hidden",
+                lambda value: writer_gate_outcome(value)[
+                    "empty_and_mixed_group"
+                ].__setitem__(
+                    "live_positive_and_same_attempt_failure",
+                    "hide-existing-live-authority-as-clean-gate-failure",
+                ),
+            ),
+            (
+                "writer-gate-outcome-live-carveout-removed",
+                lambda value: writer_gate_outcome(value)["registry_cut"].__setitem__(
+                    "live_positive_lifecycle_contradiction_carveout",
+                    "quarantine-the-existing-accepted-DF-0206-live-group",
+                ),
+            ),
+            (
+                "writer-gate-outcome-composite-union-collapsed",
+                lambda value: writer_gate_outcome(value)[
+                    "composite_cleanup_lineage"
+                ]["closed_obligation_union"].remove("no_mapping_close_only"),
+            ),
+            (
+                "writer-gate-outcome-cleanup-reissues-after-commit-failure",
+                lambda value: writer_gate_outcome(value)[
+                    "composite_cleanup_lineage"
+                ].__setitem__(
+                    "preinvoke_consumption",
+                    "reissue-after-internal-commit-failure",
+                ),
+            ),
+            (
+                "writer-gate-outcome-unmap-failure-closes-and-retries",
+                lambda value: writer_gate_outcome(value)[
+                    "composite_cleanup_lineage"
+                ].__setitem__(
+                    "unmap_failure",
+                    "close-and-retry-after-nonOK-or-unknown",
+                ),
+            ),
+            (
+                "writer-gate-outcome-close-failure-mapped-only",
+                lambda value: writer_gate_outcome(value)[
+                    "composite_cleanup_lineage"
+                ].__setitem__(
+                    "close_failure",
+                    "apply-only-after-mapped-unmap-success",
+                ),
+            ),
+            (
+                "writer-gate-outcome-reader-transitivity",
+                lambda value: writer_gate_outcome(value)["reader_boundary"].__setitem__(
+                    "transitive_authorization",
+                    "authorize-DF-0207-reader-attachment-grouping",
+                ),
+            ),
+            (
+                "writer-gate-outcome-indeterminate-drain-negative-removed",
+                lambda value: writer_gate_outcome(value)["fail_closed_matrix"][
+                    "required"
+                ].remove(
+                    "cut-indeterminate-mapped-exact-attachment-skips-or-duplicates-"
+                    "drain-or-closes"
+                ),
+            ),
+            (
+                "writer-gate-outcome-dual-formation-not-atomic",
+                lambda value: writer_gate_outcome(value)[
+                    "native_attachment_binding"
+                ]["callback_claim_owner"].__setitem__(
+                    "reachable_formation_kind_enum",
+                    ["reservation_claim_only"],
+                ),
+            ),
+            (
+                "writer-gate-outcome-invalid-partial-enters-ordinary-route",
+                lambda value: writer_gate_outcome(value)[
+                    "native_attachment_binding"
+                ]["callback_result_totality"].__setitem__(
+                    "invalid_partial_dual_formation_guard",
+                    "route-partial-claim-through-the-ordinary-product",
+                ),
+            ),
+            (
+                "writer-gate-outcome-normal-substep-partition-weakened",
+                lambda value: writer_gate_outcome(value)["registry_cut"][
+                    "attachment_cut_exclusivity"
+                ]["admission_kind_partition"]["origin_binding"][
+                    "reservation_bearing_claim_or_member_start"
+                ][
+                    "substep_enum"
+                ].remove(
+                    "start_existing_dual"
+                ),
+            ),
+            (
+                "writer-gate-outcome-frozen-step-cross-origin",
+                lambda value: writer_gate_outcome(value)["registry_cut"][
+                    "attachment_cut_exclusivity"
+                ]["admission_kind_partition"][
+                    "frozen_continuation_step_enum"
+                ].remove(
+                    "dual_terminal_resolution"
+                ),
+            ),
+            (
+                "writer-gate-outcome-fresh-dual-custody-collapsed",
+                lambda value: writer_gate_outcome(value)["registry_cut"][
+                    "mapping_identity_integrity_census"
+                ].__setitem__(
+                    "fresh_unsafe_custody_form_enum",
+                    ["nonpromotion_composite_pin_custody"],
+                ),
+            ),
+            (
+                "writer-gate-outcome-fresh-retirement-metadata-rebound",
+                lambda value: writer_gate_outcome(value)[
+                    "native_effect_dispatch_matrix"
+                ]["mapping_identity_integrity_fence"]["quarantine_binding"].__setitem__(
+                    "fresh_projection",
+                    "retire-first-then-reseal-tags-and-reconstruct-pins",
+                ),
+            ),
+            (
+                "writer-gate-outcome-pin-custody-transition-revives",
+                lambda value: writer_gate_outcome(value)["registry_cut"][
+                    "reservation_bearing_member_terminal_binding"
+                ]["mapped_pin_destination_partition"][
+                    "nonpromotion_composite_pin_custody"
+                ][
+                    "transition_graph"
+                ].__setitem__(
+                    "retired_tombstone",
+                    ["live_owned"],
+                ),
+            ),
+            (
+                "writer-gate-outcome-durable-release-before-current-record",
+                lambda value: writer_gate_outcome(value)["registry_cut"][
+                    "attachment_cut_exclusivity"
+                ]["durable_prior_cut_outcome_gate"].__setitem__(
+                    "release_and_wakeup_atomicity",
+                    "release-slot-and-wake-before-installing-the-current-record",
+                ),
+            ),
+            (
+                "writer-gate-outcome-production-self-authorized",
+                lambda value: writer_gate_outcome(value)["authorization"].__setitem__(
+                    "production_activation", "allowed"
                 ),
             ),
             (
