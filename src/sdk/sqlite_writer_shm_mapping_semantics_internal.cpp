@@ -338,12 +338,12 @@ namespace cxxlens::sdk
 		const sqlite_writer_shm_mapping_epoch_receipt& epoch,
 		const sqlite_shm_verified_writer_route_proof& route) noexcept
 	{
-		auto state = epoch.begin_authoritative_validation();
-		if (!state)
-			return state.error();
-
 		try
 		{
+			auto state = epoch.begin_authoritative_validation();
+			if (!state)
+				return state.error();
+
 			auto audit = validate_sqlite_writer_shm_mapping_semantics_for_audit(epoch);
 			if (!audit)
 				return audit.error();

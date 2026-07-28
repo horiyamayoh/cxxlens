@@ -904,6 +904,12 @@ namespace
 			std::move(fields.validation_seal));
 	}
 
+	[[nodiscard]] sqlite_shm_verified_writer_route_proof
+	copy_route_proof_for_replay(const sqlite_shm_verified_writer_route_proof& proof)
+	{
+		return proof;
+	}
+
 	struct bound_route_attempt
 	{
 		sqlite_shm_writer_map_request request;
@@ -1253,13 +1259,14 @@ namespace
 		};
 		for (std::size_t index = 0U; index < routes.size(); ++index)
 		{
+			const auto route = routes.at(index);
 			const auto marker = static_cast<std::uint8_t>(40U + index);
 			auto fixture = make_fixture(marker, false);
 			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
 				*fixture.registry, fixture.family);
 			require(coordinator != nullptr, "resolve four-route pending coordinator");
-			auto attempt = begin_bound_route_attempt(fixture, routes[index], marker);
-			auto receipt = validate_bound_route(attempt, routes[index], marker);
+			auto attempt = begin_bound_route_attempt(fixture, route, marker);
+			auto receipt = validate_bound_route(attempt, route, marker);
 			require(receipt.has_value(), "validate one accepted writer semantic route");
 			auto pending = fixture.registry->install_writer_pending(
 				*fixture.family_pin, attempt.post_native, *receipt);
@@ -1390,7 +1397,7 @@ namespace
 			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
 			62U);
 		auto proof = route_proof(fields);
-		const auto copied_proof = proof;
+		const auto copied_proof = copy_route_proof_for_replay(proof);
 		auto first = sqlite_writer_shm_mapping_receipt_validator::validate(attempt.epoch, proof);
 		auto replay =
 			sqlite_writer_shm_mapping_receipt_validator::validate(copied_epoch, copied_proof);
@@ -1446,11 +1453,11 @@ namespace
 				attempt.post_native.valid(),
 			"request drift consumed or quarantined exact post-native cleanup");
 
+		int pointer_drift_native_page{};
 		const auto pointer_drift_receipt = sqlite_same_process_shm_lease_test_peer::writer_map(
 			attempt.request,
 			attempt.request.attachment.open_epoch(),
-			mapping(reinterpret_cast<const volatile void*>(
-				reinterpret_cast<std::uintptr_t>(attempt.native_page.get()) + 1U)),
+			mapping(&pointer_drift_native_page),
 			sqlite_shm_writer_extend_pair::one_one,
 			identity("test.registry.synthetic-pointer-drift", 63U));
 		auto pointer_rejected = fixture.registry->install_writer_pending(

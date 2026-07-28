@@ -712,10 +712,18 @@ namespace cxxlens::sdk
 		if (!state)
 			return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
 							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
-		auto begun = state->begin_authoritative_validation(seal_sequence_);
-		if (!begun)
-			return begun.error();
-		return state;
+		try
+		{
+			auto begun = state->begin_authoritative_validation(seal_sequence_);
+			if (!begun)
+				return begun.error();
+			return state;
+		}
+		catch (...)
+		{
+			return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+		}
 	}
 
 	bool sqlite_writer_shm_mapping_epoch_receipt::authoritative_validation_still_live(
