@@ -560,15 +560,29 @@ namespace cxxlens::sdk
 							   sqlite_shm_writer_post_native_mapping& post_native,
 							   const sqlite_shm_verified_writer_post_map_receipt& receipt);
 		/**
-		 * Atomically promotes the complete exact pending member set of one registry-bound writer
-		 * attachment. Success seals its promotion gate and returns holders in attachment install
-		 * order. Rejection neither seals nor completes the failure boundary and leaves every
-		 * pending caller-owned; failure-boundary cleanup remains a later checkpoint.
+		 * Records one positive Store-gate cut for an exact registry-bound attachment.
+		 *
+		 * A visible pre-boundary native-map attempt produces `waiting`; once every such attempt is
+		 * pending or has resolved without a native mapping, the same exact token completes the cut.
+		 * An empty exact group activates the gate without minting mapping authority.
 		 */
-		[[nodiscard]] sqlite_shm_lease_result<std::vector<sqlite_shm_writer_holder>>
-		promote_complete_writer_attachment_group(sqlite_shm_registry_family_pin& family,
-												 std::span<sqlite_shm_pending_mapping*> pending,
-												 const sqlite_shm_writer_eligibility& eligibility);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_positive_writer_attachment_gate_result>
+		advance_positive_writer_attachment_gate(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_native_attachment_identity& attachment,
+			std::span<sqlite_shm_pending_mapping*> pending,
+			const sqlite_shm_writer_eligibility& eligibility);
+		/**
+		 * Completes one gate-before-map positive path without publishing a pending owner.
+		 *
+		 * The exact attachment-bound eligibility token and registry member lifetime are rechecked
+		 * under the registry-to-lease lock order before the holder is committed.
+		 */
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_holder>
+		complete_gate_winning_writer_map_before_callback_return(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_writer_post_native_mapping& post_native,
+			const sqlite_shm_verified_writer_post_map_receipt& receipt);
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		release_activity(sqlite_shm_registry_activity_pin& activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>

@@ -179,6 +179,7 @@ namespace cxxlens::sdk
 	};
 
 	class sqlite_shm_writer_map_inflight;
+	class sqlite_shm_writer_holder;
 	class sqlite_shm_verified_writer_native_map_receipt;
 	class sqlite_writer_shm_native_map_receipt_validator;
 	class sqlite_writer_shm_mapping_receipt_validator;
@@ -431,6 +432,19 @@ namespace cxxlens::sdk
 	{
 		timeout,
 		unknown,
+	};
+
+	enum class sqlite_shm_positive_writer_attachment_gate_progress : std::uint8_t
+	{
+		waiting,
+		complete,
+	};
+
+	struct sqlite_shm_positive_writer_attachment_gate_result
+	{
+		sqlite_shm_positive_writer_attachment_gate_progress progress{
+			sqlite_shm_positive_writer_attachment_gate_progress::waiting};
+		std::vector<sqlite_shm_writer_holder> holders;
 	};
 
 	struct sqlite_shm_writer_retirement_result
@@ -943,6 +957,17 @@ namespace cxxlens::sdk
 		promote_registry_writer_attachment_group(sqlite_shm_registry_family_pin& family,
 												 std::span<sqlite_shm_pending_mapping*> pending,
 												 const sqlite_shm_writer_eligibility& eligibility);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_positive_writer_attachment_gate_result>
+		advance_positive_registry_writer_attachment_gate(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_native_attachment_identity& attachment,
+			std::span<sqlite_shm_pending_mapping*> pending,
+			const sqlite_shm_writer_eligibility& eligibility);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_holder>
+		complete_gate_winning_registry_writer_map_before_callback_return(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_writer_post_native_mapping& post_native,
+			const sqlite_shm_verified_writer_post_map_receipt& receipt);
 		void inject_writer_native_transition_failure_for_testing() noexcept;
 		void inject_writer_attachment_seal_failure_for_testing() noexcept;
 		void inject_writer_completion_transition_failure_for_testing() noexcept;

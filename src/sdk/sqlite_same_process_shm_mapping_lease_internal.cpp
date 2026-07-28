@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <iterator>
 #include <limits>
 #include <list>
 #include <mutex>
@@ -593,6 +594,8 @@ namespace cxxlens::sdk
 						return sqlite_shm_unexpected(
 							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
 									  sqlite_shm_lease_recovery_action::deny_before_native_map));
+					auto route = writer_route::map_before_gate;
+					std::uint64_t positive_gate_token{};
 					const auto attachment = find_attachment_epoch_locked(request.attachment);
 					if (attachment != writer_attachments_.end())
 					{
@@ -607,11 +610,36 @@ namespace cxxlens::sdk
 							return sqlite_shm_unexpected(rejection(
 								sqlite_shm_lease_rejection_reason::retiring,
 								sqlite_shm_lease_recovery_action::deny_before_native_map));
+						if (attachment->gate_phase ==
+							writer_attachment_gate_phase::positive_sealing)
+						{
+							const auto action = exact_live_positive_gate_binding_locked(*attachment)
+								? sqlite_shm_lease_recovery_action::
+									  await_complete_attachment_gate_boundary
+								: sqlite_shm_lease_recovery_action::deny_before_native_map;
+							return sqlite_shm_unexpected(rejection(
+								sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+								action));
+						}
 						if (attachment->registry_bound_origin != (authority != nullptr))
 							return sqlite_shm_unexpected(rejection(
 								sqlite_shm_lease_rejection_reason::receipt_mismatch,
 								sqlite_shm_lease_recovery_action::deny_before_native_map));
+						if (attachment->gate_phase == writer_attachment_gate_phase::positive_active)
+						{
+							if (authority == nullptr ||
+								!exact_live_positive_gate_binding_locked(*attachment))
+								return sqlite_shm_unexpected(rejection(
+									sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+									sqlite_shm_lease_recovery_action::deny_before_native_map));
+							route = writer_route::gate_before_map;
+							positive_gate_token = attachment->positive_gate_token;
+						}
 					}
+					else if (has_nonretired_native_attachment_lineage_locked(request.attachment))
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									  sqlite_shm_lease_recovery_action::deny_before_native_map));
 					if (generation_)
 					{
 						if (generation_->phase == sqlite_shm_mapping_generation_phase::retiring)
@@ -639,7 +667,9 @@ namespace cxxlens::sdk
 										nullptr,
 										std::nullopt,
 										authority != nullptr,
-										std::nullopt});
+										std::nullopt,
+										route,
+										positive_gate_token});
 					try
 					{
 						register_attachment_member_locked(
@@ -853,6 +883,10 @@ namespace cxxlens::sdk
 						found->phase != writer_phase::post_native_mapping ||
 						found->native_mapping == nullptr)
 						return sqlite_shm_unexpected(stale_token(cleanup_action));
+					if (found->route == writer_route::gate_before_map)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+							cleanup_action));
 					if (!found->registry_bound || !found->member_authority)
 						return sqlite_shm_unexpected(rejection(
 							sqlite_shm_lease_rejection_reason::receipt_mismatch, cleanup_action));
@@ -905,6 +939,375 @@ namespace cxxlens::sdk
 					auto state = post_native.state_;
 					post_native.disarm();
 					return sqlite_shm_pending_mapping{std::move(state), token};
+				}
+				catch (...)
+				{
+					quarantine_after_native();
+					return sqlite_shm_unexpected(ambiguous());
+				}
+			}
+
+			[[nodiscard]]
+			sqlite_shm_lease_result<sqlite_shm_positive_writer_attachment_gate_result>
+			advance_positive_registry_writer_attachment_gate(
+				sqlite_shm_registry_family_pin& family,
+				const sqlite_shm_native_attachment_identity& identity,
+				const std::span<sqlite_shm_pending_mapping*> pending,
+				const sqlite_shm_writer_eligibility& eligibility)
+			{
+				const auto boundary_action =
+					sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary;
+				if (!valid_native_attachment(identity) || identity.family() != family_)
+					return sqlite_shm_unexpected(rejection(
+						sqlite_shm_lease_rejection_reason::receipt_mismatch, boundary_action));
+				try
+				{
+					{
+						std::scoped_lock lock{mutex_};
+						if (auto blocked = blocked_locked(boundary_action))
+							return sqlite_shm_unexpected(*blocked);
+						if (!owns(eligibility.state_, eligibility.token_))
+							return sqlite_shm_unexpected(stale_token(boundary_action));
+						const auto gate = find_by_token(eligibilities_, eligibility.token_);
+						if (gate == eligibilities_.end())
+							return sqlite_shm_unexpected(stale_token(boundary_action));
+						if (gate->receipt.family() != family_ ||
+							gate->receipt.connection_token() != identity.connection_token() ||
+							gate->receipt.open_epoch() != identity.open_epoch())
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										  boundary_action));
+
+						auto attachment = find_attachment_epoch_locked(identity);
+						const auto creates_attachment = attachment == writer_attachments_.end();
+						if (!creates_attachment &&
+							(attachment->identity != identity ||
+							 attachment->phase != writer_attachment_phase::collecting ||
+							 !attachment->registry_bound_origin))
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										  boundary_action));
+						if (creates_attachment &&
+							has_nonretired_native_attachment_lineage_locked(identity))
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										  boundary_action));
+						const auto token_bound_elsewhere = std::ranges::any_of(
+							writer_attachments_,
+							[&attachment, &eligibility, creates_attachment](
+								const writer_attachment_record& candidate)
+							{
+								return candidate.positive_gate_token == eligibility.token_ &&
+									(creates_attachment || &candidate != &*attachment);
+							});
+						if (token_bound_elsewhere)
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										  boundary_action));
+
+						for (std::size_t index = 0U; index < pending.size(); ++index)
+						{
+							auto* const supplied = pending[index];
+							if (supplied == nullptr || !owns(supplied->state_, supplied->token_))
+								return sqlite_shm_unexpected(stale_token(boundary_action));
+							for (std::size_t previous = 0U; previous < index; ++previous)
+							{
+								if (pending[previous]->token_ == supplied->token_)
+									return sqlite_shm_unexpected(rejection(
+										sqlite_shm_lease_rejection_reason::invalid_request,
+										boundary_action));
+							}
+							const auto writer = find_by_token(writers_, supplied->token_);
+							if (writer == writers_.end())
+								return sqlite_shm_unexpected(stale_token(boundary_action));
+							if (creates_attachment || writer->phase != writer_phase::pending ||
+								!writer->registry_bound ||
+								writer->route != writer_route::map_before_gate ||
+								writer->positive_gate_token != 0U ||
+								writer->request.attachment != identity)
+								return sqlite_shm_unexpected(rejection(
+									sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+									boundary_action));
+							const auto target_member = std::find_if(
+								attachment->members.begin(),
+								attachment->members.end(),
+								[&writer](const writer_attachment_member_record& member)
+								{
+									return member.live_token == writer->token;
+								});
+							const auto target_member_count =
+								static_cast<std::size_t>(std::ranges::count_if(
+									attachment->members,
+									[&writer](const writer_attachment_member_record& member)
+									{
+										return member.live_token == writer->token;
+									}));
+							if (target_member == attachment->members.end() ||
+								target_member_count != 1U ||
+								target_member->original_token != writer->token ||
+								target_member->confirmed_native_cleanup)
+								return sqlite_shm_unexpected(rejection(
+									sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+									boundary_action));
+						}
+
+						const auto binds_gate = creates_attachment ||
+							attachment->gate_phase == writer_attachment_gate_phase::unsealed;
+						if (!creates_attachment &&
+							attachment->gate_phase == writer_attachment_gate_phase::unsealed &&
+							(attachment->promotion_gate_receipt ||
+							 attachment->positive_gate_token != 0U))
+						{
+							quarantine_locked();
+							return sqlite_shm_unexpected(ambiguous());
+						}
+						std::optional<sqlite_shm_verified_writer_eligibility_receipt> prepared_gate;
+						if (binds_gate)
+							prepared_gate.emplace(gate->receipt);
+						if (creates_attachment)
+						{
+							writer_attachments_.push_back({identity,
+														   true,
+														   {},
+														   writer_attachment_phase::collecting,
+														   0U,
+														   0U,
+														   std::nullopt,
+														   {},
+														   {},
+														   std::nullopt});
+							attachment = std::prev(writer_attachments_.end());
+						}
+						if (attachment->gate_phase == writer_attachment_gate_phase::unsealed)
+						{
+							attachment->promotion_gate_receipt.emplace(std::move(*prepared_gate));
+							attachment->positive_gate_token = eligibility.token_;
+							attachment->gate_phase = writer_attachment_gate_phase::positive_sealing;
+						}
+						else if (attachment->gate_phase ==
+									 writer_attachment_gate_phase::positive_active ||
+								 attachment->positive_gate_token != eligibility.token_ ||
+								 !exact_live_positive_gate_binding_locked(*attachment))
+							return sqlite_shm_unexpected(rejection(
+								sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+								boundary_action));
+
+						const auto has_preboundary_native_attempt = std::ranges::any_of(
+							attachment->members,
+							[this](const writer_attachment_member_record& member)
+							{
+								const auto writer = find_by_token(writers_, member.live_token);
+								return writer != writers_.end() &&
+									(writer->phase == writer_phase::inflight ||
+									 writer->phase == writer_phase::post_native_mapping);
+							});
+						if (has_preboundary_native_attempt)
+							return sqlite_shm_positive_writer_attachment_gate_result{
+								sqlite_shm_positive_writer_attachment_gate_progress::waiting, {}};
+						if (attachment->members.empty())
+						{
+							attachment->gate_phase = writer_attachment_gate_phase::positive_active;
+							return sqlite_shm_positive_writer_attachment_gate_result{
+								sqlite_shm_positive_writer_attachment_gate_progress::complete, {}};
+						}
+					}
+
+					auto holders =
+						promote_registry_writer_attachment_group(family, pending, eligibility);
+					if (!holders)
+						return sqlite_shm_unexpected(holders.error());
+					return sqlite_shm_positive_writer_attachment_gate_result{
+						sqlite_shm_positive_writer_attachment_gate_progress::complete,
+						std::move(*holders)};
+				}
+				catch (...)
+				{
+					quarantine_after_native();
+					return sqlite_shm_unexpected(ambiguous());
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_holder>
+			complete_gate_winning_registry_writer_map_before_callback_return(
+				sqlite_shm_registry_family_pin& family,
+				sqlite_shm_writer_post_native_mapping& post_native,
+				const sqlite_shm_verified_writer_post_map_receipt& receipt)
+			{
+				const auto cleanup_action =
+					sqlite_shm_lease_recovery_action::attempt_nonremoving_unmap_then_outer_ioerr;
+				try
+				{
+					auto state = shared_from_this();
+					std::list<holder_record> prepared_holders;
+					std::scoped_lock lock{mutex_};
+					if (!owns(post_native.state_, post_native.token_))
+						return sqlite_shm_unexpected(stale_token(cleanup_action));
+					const auto writer = find_by_token(writers_, post_native.token_);
+					if (writer == writers_.end() ||
+						writer->phase != writer_phase::post_native_mapping ||
+						writer->native_mapping == nullptr)
+						return sqlite_shm_unexpected(stale_token(cleanup_action));
+					if (writer->route != writer_route::gate_before_map ||
+						writer->positive_gate_token == 0U || !writer->registry_bound ||
+						!writer->member_authority)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+							cleanup_action));
+					if (auto blocked = blocked_locked(cleanup_action))
+						return sqlite_shm_unexpected(*blocked);
+					if (!valid_writer_receipt(receipt) || receipt.request() != writer->request ||
+						receipt.mapping().native_mapping != writer->native_mapping)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch, cleanup_action));
+
+					const auto attachment = find_attachment_token_locked(writer->token);
+					if (attachment == writer_attachments_.end() ||
+						attachment->identity != writer->request.attachment ||
+						attachment->phase != writer_attachment_phase::collecting ||
+						!attachment->registry_bound_origin ||
+						attachment->gate_phase != writer_attachment_gate_phase::positive_active ||
+						attachment->positive_gate_token != writer->positive_gate_token ||
+						!attachment->promotion_gate_receipt)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+							cleanup_action));
+					const auto exact_binding_count = static_cast<std::size_t>(std::ranges::count_if(
+						writer_attachments_,
+						[&attachment](const writer_attachment_record& candidate)
+						{
+							return candidate.positive_gate_token == attachment->positive_gate_token;
+						}));
+					const auto gate =
+						find_by_token(eligibilities_, attachment->positive_gate_token);
+					if (exact_binding_count != 1U || gate == eligibilities_.end() ||
+						!same_eligibility_receipt(*attachment->promotion_gate_receipt,
+												  gate->receipt))
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+							cleanup_action));
+					if (gate->receipt.family() != family_ ||
+						gate->receipt.connection_token() != writer->request.connection_token ||
+						gate->receipt.open_epoch() != receipt.open_epoch())
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch, cleanup_action));
+					auto attachment_member =
+						std::find_if(attachment->members.begin(),
+									 attachment->members.end(),
+									 [&writer](const writer_attachment_member_record& member)
+									 {
+										 return member.live_token == writer->token;
+									 });
+					if (attachment_member == attachment->members.end() ||
+						attachment_member->original_token == 0U)
+					{
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					auto authority = writer->member_authority->validate_pending_authority(
+						family, writer->request, receipt);
+					if (authority ==
+						detail::sqlite_shm_writer_pending_authority_status::determinate_mismatch)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch, cleanup_action));
+					if (authority != detail::sqlite_shm_writer_pending_authority_status::exact ||
+						!writer->member_authority->retains_exact_lifetimes(writer->request))
+					{
+						registry_member_admission_blocked_ = true;
+						registry_member_sticky_quarantine_ = true;
+						return sqlite_shm_unexpected(ambiguous());
+					}
+					if (generation_ &&
+						generation_->phase != sqlite_shm_mapping_generation_phase::live)
+						return sqlite_shm_unexpected(rejection(
+							generation_->handoff_count == 0U
+								? sqlite_shm_lease_rejection_reason::retiring
+								: sqlite_shm_lease_rejection_reason::successor_handoff_live,
+							cleanup_action));
+
+					generation_record candidate;
+					if (generation_)
+					{
+						candidate = *generation_;
+						if (!join_mapping(candidate, receipt))
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::mapping_mismatch,
+										  cleanup_action));
+					}
+					else
+					{
+						candidate.phase = sqlite_shm_mapping_generation_phase::live;
+						candidate.sealed_shm_size = receipt.mapping().sealed_shm_size;
+						candidate.pages.push_back(receipt.mapping());
+					}
+					candidate.authorities.push_back({receipt, gate->receipt, true});
+					prepared_holders.push_back(
+						{0U, 0U, holder_phase::active, receipt, gate->receipt, true, std::nullopt});
+					if (!can_allocate_tokens_locked(1U))
+					{
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					std::uint64_t generation = candidate.value;
+					if (!generation_)
+					{
+						auto minted = generations_->state_->mint();
+						if (!minted)
+						{
+							if (minted.error() == generation_failure::unavailable)
+								quarantine_locked();
+							return sqlite_shm_unexpected(rejection(
+								minted.error() == generation_failure::exhausted
+									? sqlite_shm_lease_rejection_reason::generation_exhausted
+									: sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								minted.error() == generation_failure::exhausted
+									? cleanup_action
+									: sqlite_shm_lease_recovery_action::quarantine_no_retry));
+						}
+						generation = *minted;
+						candidate.value = generation;
+					}
+
+					if (std::exchange(fail_next_registry_writer_pending_liveness_for_testing_,
+									  false))
+						writer->member_authority->invalidate_epoch_for_testing();
+					const auto final_gate =
+						find_by_token(eligibilities_, writer->positive_gate_token);
+					authority = writer->member_authority->validate_pending_authority(
+						family, writer->request, receipt);
+					if (attachment->gate_phase != writer_attachment_gate_phase::positive_active ||
+						attachment->positive_gate_token != writer->positive_gate_token ||
+						final_gate == eligibilities_.end() ||
+						!same_eligibility_receipt(*attachment->promotion_gate_receipt,
+												  final_gate->receipt) ||
+						!writer->member_authority->retains_exact_lifetimes(writer->request) ||
+						authority != detail::sqlite_shm_writer_pending_authority_status::exact)
+					{
+						registry_member_admission_blocked_ = true;
+						registry_member_sticky_quarantine_ = true;
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					static_assert(std::is_nothrow_move_constructible_v<generation_record>);
+					static_assert(std::is_nothrow_move_constructible_v<holder_record>);
+					static_assert(
+						std::is_nothrow_move_constructible_v<sqlite_shm_writer_member_authority>);
+					const auto holder_token = allocate_token_unchecked_locked();
+					prepared_holders.front().token = holder_token;
+					prepared_holders.front().generation = generation;
+					prepared_holders.front().member_authority.emplace(
+						std::move(*writer->member_authority));
+					attachment_member->live_token = holder_token;
+					generation_.reset();
+					generation_.emplace(std::move(candidate));
+					holders_.splice(holders_.end(), prepared_holders);
+					writers_.erase(writer);
+					post_native.disarm();
+					return sqlite_shm_writer_holder{
+						std::move(state),
+						sqlite_shm_lease_token_identity{holder_token},
+						sqlite_shm_mapping_generation_identity{generation}};
 				}
 				catch (...)
 				{
@@ -967,11 +1370,28 @@ namespace cxxlens::sdk
 					const auto attachment = find_attachment_token_locked(first_writer->token);
 					if (attachment == writer_attachments_.end() ||
 						attachment->phase != writer_attachment_phase::collecting ||
-						!attachment->registry_bound_origin || attachment->promotion_gate_receipt ||
+						!attachment->registry_bound_origin ||
 						attachment->members.size() != pending.size())
 						return sqlite_shm_unexpected(rejection(
 							sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
 							boundary_action));
+					const auto token_bound_elsewhere = std::ranges::any_of(
+						writer_attachments_,
+						[&attachment, &eligibility](const writer_attachment_record& candidate)
+						{
+							return &candidate != &*attachment &&
+								candidate.positive_gate_token == eligibility.token_;
+						});
+					if (token_bound_elsewhere)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch, boundary_action));
+					if (attachment->gate_phase != writer_attachment_gate_phase::positive_sealing ||
+						attachment->positive_gate_token != eligibility.token_ ||
+						!attachment->promotion_gate_receipt ||
+						!same_eligibility_receipt(*attachment->promotion_gate_receipt,
+												  gate->receipt))
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch, boundary_action));
 					const auto complete = derive_complete_attachment_prefix_locked(*attachment);
 					if (!complete || complete->has_inflight || complete->has_active_holder ||
 						!complete->has_writer_native_member ||
@@ -999,6 +1419,8 @@ namespace cxxlens::sdk
 						if (writer == writers_.end() || writer->phase != writer_phase::pending ||
 							!writer->receipt || !writer->registry_bound ||
 							!writer->member_authority ||
+							writer->route != writer_route::map_before_gate ||
+							writer->positive_gate_token != 0U ||
 							writer->request.attachment != attachment->identity ||
 							writer->native_mapping == nullptr ||
 							!valid_writer_receipt(*writer->receipt) ||
@@ -1078,8 +1500,6 @@ namespace cxxlens::sdk
 						prepared_holders.push_back(
 							{0U, 0U, holder_phase::active, map, gate->receipt, true, std::nullopt});
 					}
-					auto prepared_gate = gate->receipt;
-
 					std::uint64_t generation = candidate.value;
 					if (!generation_)
 					{
@@ -1152,7 +1572,7 @@ namespace cxxlens::sdk
 					holders_.splice(holders_.end(), prepared_holders);
 					for (const auto writer : selected_writers)
 						writers_.erase(writer);
-					attachment->promotion_gate_receipt.emplace(std::move(prepared_gate));
+					attachment->gate_phase = writer_attachment_gate_phase::positive_active;
 					for (auto* const member : pending)
 						member->disarm();
 					return output;
@@ -2554,6 +2974,19 @@ namespace cxxlens::sdk
 				terminal_quarantined,
 			};
 
+			enum class writer_route : std::uint8_t
+			{
+				map_before_gate,
+				gate_before_map,
+			};
+
+			enum class writer_attachment_gate_phase : std::uint8_t
+			{
+				unsealed,
+				positive_sealing,
+				positive_active,
+			};
+
 			struct writer_native_transition_injected_failure
 			{
 			};
@@ -2603,6 +3036,8 @@ namespace cxxlens::sdk
 				std::optional<sqlite_shm_verified_writer_post_map_receipt> receipt;
 				bool registry_bound{};
 				std::optional<sqlite_shm_writer_member_authority> member_authority;
+				writer_route route{writer_route::map_before_gate};
+				std::uint64_t positive_gate_token{};
 			};
 
 			struct holder_record
@@ -2646,6 +3081,8 @@ namespace cxxlens::sdk
 				std::vector<writer_attachment_member_audit_record> sealed_member_audit;
 				std::optional<sqlite_shm_verified_writer_eligibility_receipt>
 					promotion_gate_receipt;
+				writer_attachment_gate_phase gate_phase{writer_attachment_gate_phase::unsealed};
+				std::uint64_t positive_gate_token{};
 			};
 
 			struct reader_record
@@ -2723,6 +3160,50 @@ namespace cxxlens::sdk
 									const std::uint64_t token) const noexcept
 			{
 				return token != 0U && state.get() == this;
+			}
+
+			[[nodiscard]] static bool same_native_attachment_lineage(
+				const sqlite_shm_native_attachment_identity& left,
+				const sqlite_shm_native_attachment_identity& right) noexcept
+			{
+				return left.family() == right.family() &&
+					left.alias_lifetime() == right.alias_lifetime() &&
+					left.connection_token() == right.connection_token() &&
+					left.main_native_file_receipt() == right.main_native_file_receipt() &&
+					left.main_xopen_receipt() == right.main_xopen_receipt() &&
+					left.open_epoch() == right.open_epoch() &&
+					left.callback_cohort() == right.callback_cohort();
+			}
+
+			[[nodiscard]] bool has_nonretired_native_attachment_lineage_locked(
+				const sqlite_shm_native_attachment_identity& identity) const noexcept
+			{
+				return std::ranges::any_of(
+					writer_attachments_,
+					[&identity](const writer_attachment_record& attachment)
+					{
+						return attachment.phase != writer_attachment_phase::retired &&
+							same_native_attachment_lineage(attachment.identity, identity);
+					});
+			}
+
+			[[nodiscard]] bool exact_live_positive_gate_binding_locked(
+				const writer_attachment_record& attachment) const noexcept
+			{
+				if (attachment.positive_gate_token == 0U || !attachment.promotion_gate_receipt)
+					return false;
+				const auto exact_binding_count = static_cast<std::size_t>(std::ranges::count_if(
+					writer_attachments_,
+					[&attachment](const writer_attachment_record& candidate)
+					{
+						return candidate.positive_gate_token == attachment.positive_gate_token;
+					}));
+				const auto gate = find_by_token(eligibilities_, attachment.positive_gate_token);
+				return exact_binding_count == 1U && gate != eligibilities_.end() &&
+					same_eligibility_receipt(*attachment.promotion_gate_receipt, gate->receipt) &&
+					gate->receipt.family() == attachment.identity.family() &&
+					gate->receipt.connection_token() == attachment.identity.connection_token() &&
+					gate->receipt.open_epoch() == attachment.identity.open_epoch();
 			}
 
 			[[nodiscard]] std::vector<writer_attachment_record>::iterator
@@ -4158,6 +4639,29 @@ namespace cxxlens::sdk
 		const sqlite_shm_writer_eligibility& eligibility)
 	{
 		return state_->promote_registry_writer_attachment_group(family, pending, eligibility);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_positive_writer_attachment_gate_result>
+	sqlite_same_process_shm_mapping_lease_coordinator::
+		advance_positive_registry_writer_attachment_gate(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_native_attachment_identity& attachment,
+			const std::span<sqlite_shm_pending_mapping*> pending,
+			const sqlite_shm_writer_eligibility& eligibility)
+	{
+		return state_->advance_positive_registry_writer_attachment_gate(
+			family, attachment, pending, eligibility);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_writer_holder>
+	sqlite_same_process_shm_mapping_lease_coordinator::
+		complete_gate_winning_registry_writer_map_before_callback_return(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_writer_post_native_mapping& post_native,
+			const sqlite_shm_verified_writer_post_map_receipt& receipt)
+	{
+		return state_->complete_gate_winning_registry_writer_map_before_callback_return(
+			family, post_native, receipt);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_writer_holder>

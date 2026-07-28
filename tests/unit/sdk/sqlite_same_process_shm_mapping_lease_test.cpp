@@ -1590,7 +1590,8 @@ namespace
 					!no_mapping->valid() && coordinator.snapshot().writer_inflight_count == 0U,
 				"pre-native token resolves only when no native mapping exists");
 
-		const auto request = writer_request(binding, connection, 30, 1, 30, 0, 1);
+		auto request = writer_request(binding, connection, 30, 1, 30, 0, 1);
+		request.attachment = no_mapping_request.attachment;
 		auto begun = coordinator.begin_writer_map(request);
 		require(begun.has_value(), "begin writer before cleanup-only native receipt");
 		auto inflight = std::move(*begun);
