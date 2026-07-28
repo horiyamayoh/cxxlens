@@ -50,12 +50,10 @@ add_test(NAME unit.sdk-store COMMAND cxxlens-unit-sdk-store)
 set_tests_properties(unit.sdk-store PROPERTIES LABELS
                                                "unit;sdk;store;transaction")
 
-cxxlens_add_test_executable(
-  cxxlens-unit-sdk-sqlite-disposable-qualification
-  unit/sdk/sqlite_disposable_qualification_test.cpp)
-target_link_libraries(
-  cxxlens-unit-sdk-sqlite-disposable-qualification
-  PRIVATE cxxlens-sqlite-disposable-qualification-internal)
+cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-disposable-qualification
+                            unit/sdk/sqlite_disposable_qualification_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-disposable-qualification
+                      PRIVATE cxxlens-sqlite-disposable-qualification-internal)
 target_include_directories(
   cxxlens-unit-sdk-sqlite-disposable-qualification
   PRIVATE "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/src")
@@ -63,8 +61,8 @@ add_test(NAME unit.sdk-sqlite-disposable-qualification
          COMMAND cxxlens-unit-sdk-sqlite-disposable-qualification)
 set_tests_properties(
   unit.sdk-sqlite-disposable-qualification
-  PROPERTIES LABELS
-             "unit;sdk;store;sqlite;qualification;capability;filesystem;security")
+  PROPERTIES
+    LABELS "unit;sdk;store;sqlite;qualification;capability;filesystem;security")
 
 add_library(cxxlens-sqlite-store-v3-scenario-support STATIC
             support/sqlite_store_v3_scenario.cpp)
@@ -216,6 +214,20 @@ add_test(NAME unit.sdk-sqlite-shm-mapping-lease
 set_tests_properties(
   unit.sdk-sqlite-shm-mapping-lease
   PROPERTIES LABELS "unit;sdk;store;sqlite;vfs;shm;lease;lifecycle;security")
+
+cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-shm-mapping-registry
+  unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-shm-mapping-registry
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-sqlite-shm-mapping-registry
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-shm-mapping-registry
+         COMMAND cxxlens-unit-sdk-sqlite-shm-mapping-registry)
+set_tests_properties(
+  unit.sdk-sqlite-shm-mapping-registry
+  PROPERTIES LABELS
+             "unit;sdk;store;sqlite;vfs;shm;registry;lifecycle;fork;security")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-terminal
                             unit/sdk/sqlite_store_terminal_test.cpp)
@@ -508,9 +520,8 @@ add_test(NAME adapter.clang22-materialization-occurrence
          COMMAND cxxlens-clang22-materialization-occurrence)
 set_tests_properties(
   adapter.clang22-materialization-occurrence
-  PROPERTIES
-    LABELS
-    "adapter;provider;clang22;materialization;occurrence;security")
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;occurrence;security")
 
 cxxlens_add_test_executable(cxxlens-clang22-materialization-report
                             adapter/clang22/materialization_report_test.cpp)
@@ -789,6 +800,7 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-limit-length-precedence
   cxxlens-unit-sdk-sqlite-payload-streaming
   cxxlens-unit-sdk-sqlite-shm-mapping-lease
+  cxxlens-unit-sdk-sqlite-shm-mapping-registry
   cxxlens-unit-sdk-sqlite-source-shm-readonly-preflight
   cxxlens-unit-sdk-sqlite-store-fault-injection
   cxxlens-unit-sdk-sqlite-store-terminal

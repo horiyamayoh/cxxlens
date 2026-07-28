@@ -163,6 +163,7 @@ add_library(
   src/sdk/store.cpp
   src/sdk/sqlite_connection_lifecycle_internal.cpp
   src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp
+  src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp
   src/sdk/sqlite_limit_length_control_internal.cpp
   src/sdk/sqlite_payload_streaming_internal.cpp
   src/sdk/sqlite_wal_receipt_internal.cpp
@@ -200,8 +201,7 @@ if(BUILD_TESTING)
                CXX_VISIBILITY_PRESET hidden
                VISIBILITY_INLINES_HIDDEN YES
                POSITION_INDEPENDENT_CODE ON)
-  cxxlens_set_project_warnings(
-    cxxlens-sqlite-disposable-qualification-internal)
+  cxxlens_set_project_warnings(cxxlens-sqlite-disposable-qualification-internal)
   cxxlens_enable_sanitizers(cxxlens-sqlite-disposable-qualification-internal)
 endif()
 
