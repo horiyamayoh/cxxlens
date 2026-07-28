@@ -758,17 +758,22 @@ namespace
 
 	[[nodiscard]] route_epoch_observations
 	route_observations(const sqlite_writer_shm_mapping_semantic_route route,
+					   const sqlite_shm_writer_map_request& request,
 					   const std::uint8_t marker,
 					   const sqlite_backend_opaque_identity& expected_leaf)
 	{
+		const auto requested_range_end = static_cast<std::uint64_t>(request.page_number + 1) *
+			static_cast<std::uint64_t>(request.page_size);
+		const auto grown_size_before = static_cast<std::uint64_t>(request.page_number) *
+			static_cast<std::uint64_t>(request.page_size);
 		auto pre = route == sqlite_writer_shm_mapping_semantic_route::one_one_absent_created
 			? absent_route_stat(marker)
 			: direct_route_stat(
 				  marker,
 				  route == sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown
-					  ? 0U
-					  : 4096U);
-		auto post = direct_route_stat(marker, 4096U);
+					  ? grown_size_before
+					  : requested_range_end);
+		auto post = direct_route_stat(marker, requested_range_end);
 		sqlite_writer_shm_namespace_event_census events{
 			identity("test.registry.validated-watch", marker),
 			expected_leaf,
@@ -782,7 +787,7 @@ namespace
 		effects.effect_receipt = identity("test.registry.map-effect", marker);
 		effects.size_before = pre.byte_count;
 		effects.size_after = post.byte_count;
-		effects.requested_range_end = 4096U;
+		effects.requested_range_end = requested_range_end;
 		effects.complete = true;
 		effects.result_confirmed_success = true;
 
@@ -819,10 +824,12 @@ namespace
 	[[nodiscard]] bridge_epoch
 	make_validated_bridge_epoch(const sqlite_shm_writer_map_request& request,
 								const sqlite_writer_shm_mapping_semantic_route route,
-								const std::uint8_t marker)
+								const std::uint8_t marker,
+								std::shared_ptr<bridge_epoch_sources> sources = {})
 	{
-		auto sources = make_bridge_epoch_sources(request, marker);
-		auto observations = route_observations(route, marker, sources->expected_shm_leaf);
+		if (!sources)
+			sources = make_bridge_epoch_sources(request, marker);
+		auto observations = route_observations(route, request, marker, sources->expected_shm_leaf);
 		auto parent_pin = sources->parent.source.mint_pin();
 		auto main_pin = sources->main.source.mint_pin();
 		auto wal_pin = sources->wal.source.mint_pin();
@@ -920,19 +927,13 @@ namespace
 	};
 
 	[[nodiscard]] bound_route_attempt
-	begin_bound_route_attempt(registry_fixture& fixture,
-							  const sqlite_writer_shm_mapping_semantic_route route,
-							  const std::uint8_t marker)
+	begin_bound_route_attempt_for_request(registry_fixture& fixture,
+										  sqlite_shm_writer_map_request request,
+										  const sqlite_writer_shm_mapping_semantic_route route,
+										  const std::uint8_t marker,
+										  std::shared_ptr<bridge_epoch_sources> sources = {})
 	{
-		auto request = writer_request(fixture.family,
-									  fixture.alias_lifetime,
-									  identity("test.registry.validated-connection", marker),
-									  identity("test.registry.validated-open", marker),
-									  marker);
-		request.caller_extend =
-			route == sqlite_writer_shm_mapping_semantic_route::zero_zero_preexisting_unchanged ? 0
-																							   : 1;
-		auto route_epoch = make_validated_bridge_epoch(request, route, marker);
+		auto route_epoch = make_validated_bridge_epoch(request, route, marker, std::move(sources));
 		auto observer = route_epoch.activation.take_observer();
 		auto arm = route_epoch.activation.take_arm();
 		auto begun =
@@ -958,6 +959,22 @@ namespace
 		};
 	}
 
+	[[nodiscard]] bound_route_attempt
+	begin_bound_route_attempt(registry_fixture& fixture,
+							  const sqlite_writer_shm_mapping_semantic_route route,
+							  const std::uint8_t marker)
+	{
+		auto request = writer_request(fixture.family,
+									  fixture.alias_lifetime,
+									  identity("test.registry.validated-connection", marker),
+									  identity("test.registry.validated-open", marker),
+									  marker);
+		request.caller_extend =
+			route == sqlite_writer_shm_mapping_semantic_route::zero_zero_preexisting_unchanged ? 0
+																							   : 1;
+		return begin_bound_route_attempt_for_request(fixture, std::move(request), route, marker);
+	}
+
 	[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_verified_writer_post_map_receipt>
 	validate_bound_route(bound_route_attempt& attempt,
 						 const sqlite_writer_shm_mapping_semantic_route route,
@@ -965,6 +982,63 @@ namespace
 	{
 		auto proof = route_proof(route_proof_fields_for(attempt.epoch, route, marker));
 		return sqlite_writer_shm_mapping_receipt_validator::validate(attempt.epoch, proof);
+	}
+
+	struct bound_pending_pair
+	{
+		bound_route_attempt first;
+		bound_route_attempt second;
+		sqlite_shm_pending_mapping first_pending;
+		sqlite_shm_pending_mapping second_pending;
+	};
+
+	[[nodiscard]] bound_pending_pair make_bound_pending_pair(registry_fixture& fixture,
+															 const std::uint8_t marker)
+	{
+		const auto nested_marker = static_cast<std::uint8_t>(marker + 1U);
+		auto first_request =
+			writer_request(fixture.family,
+						   fixture.alias_lifetime,
+						   identity("test.registry.complete-pair-connection", marker),
+						   identity("test.registry.complete-pair-open", marker),
+						   marker);
+		auto second_request = first_request;
+		second_request.callback = {
+			first_request.callback.thread_identity,
+			1U,
+			identity("test.registry.complete-pair-nested-callback", nested_marker)};
+		second_request.page_number = 1;
+		auto sources = make_bridge_epoch_sources(first_request, marker);
+		auto first = begin_bound_route_attempt_for_request(
+			fixture,
+			first_request,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+			marker,
+			sources);
+		auto second = begin_bound_route_attempt_for_request(
+			fixture,
+			second_request,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+			nested_marker,
+			sources);
+		auto first_receipt = validate_bound_route(
+			first, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, marker);
+		auto second_receipt = validate_bound_route(
+			second,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+			nested_marker);
+		require(first_receipt && second_receipt, "validate complete bound pending pair receipts");
+		auto first_pending = fixture.registry->install_writer_pending(
+			*fixture.family_pin, first.post_native, *first_receipt);
+		auto second_pending = fixture.registry->install_writer_pending(
+			*fixture.family_pin, second.post_native, *second_receipt);
+		require(first_pending && second_pending, "install complete bound pending pair");
+		return {
+			std::move(first),
+			std::move(second),
+			std::move(*first_pending),
+			std::move(*second_pending),
+		};
 	}
 
 	void cleanup_bound_post_native(sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
@@ -1705,6 +1779,467 @@ namespace
 		require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
 				"revoke fenced bound eligibility");
 		clean_fixture(fixture);
+	}
+
+	void verify_bound_attachment_group_promotion_succeeds_atomically()
+	{
+		auto fixture = make_fixture(73U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve bound attachment group promotion coordinator");
+
+		auto first_request =
+			writer_request(fixture.family,
+						   fixture.alias_lifetime,
+						   identity("test.registry.complete-attachment-connection", 73U),
+						   identity("test.registry.complete-attachment-open", 73U),
+						   73U);
+		auto second_request = first_request;
+		second_request.callback = {
+			first_request.callback.thread_identity,
+			1U,
+			identity("test.registry.complete-attachment-nested-callback", 74U)};
+		second_request.page_number = 1;
+		auto sources = make_bridge_epoch_sources(first_request, 73U);
+		auto first = begin_bound_route_attempt_for_request(
+			fixture,
+			first_request,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+			73U,
+			sources);
+		auto second = begin_bound_route_attempt_for_request(
+			fixture,
+			second_request,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+			74U,
+			sources);
+		auto first_receipt = validate_bound_route(
+			first, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 73U);
+		auto second_receipt = validate_bound_route(
+			second, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 74U);
+		require(first_receipt && second_receipt,
+				"validate exact two-page bound attachment receipts");
+		auto first_installed = fixture.registry->install_writer_pending(
+			*fixture.family_pin, first.post_native, *first_receipt);
+		auto second_installed = fixture.registry->install_writer_pending(
+			*fixture.family_pin, second.post_native, *second_receipt);
+		require(first_installed && second_installed,
+				"install complete two-page bound attachment pending set");
+		auto first_pending = std::move(*first_installed);
+		auto second_pending = std::move(*second_installed);
+		auto eligibility = install_eligibility(*coordinator,
+											   fixture.family,
+											   first.request.connection_token,
+											   first.request.attachment.open_epoch(),
+											   75U);
+
+		std::array<sqlite_shm_pending_mapping*, 2U> caller_permutation{
+			&second_pending,
+			&first_pending,
+		};
+		auto holders = fixture.registry->promote_complete_writer_attachment_group(
+			*fixture.family_pin, caller_permutation, eligibility);
+		require(holders && holders->size() == 2U && !first_pending.valid() &&
+					!second_pending.valid() && holders->at(0).valid() && holders->at(1).valid() &&
+					holders->at(0).generation() == holders->at(1).generation(),
+				"successful attachment group promotion did not atomically consume exact pending "
+				"set");
+		const auto promoted = coordinator->snapshot();
+		require(fixture.registry->snapshot().active_activity_pin_count == 2U &&
+					promoted.generation && promoted.mapping_page_count == 2U &&
+					promoted.generation_authority_count == 2U &&
+					promoted.writer_holder_count == 2U &&
+					promoted.writer_member_authority_count == 2U &&
+					promoted.writer_inflight_count == 0U && !promoted.quarantined,
+				"successful attachment group promotion lost page, generation, or member "
+				"authority");
+
+		const auto cleanup_callback = callback(76U);
+		auto retirement = coordinator->release_writer_holder(holders->at(0), cleanup_callback);
+		require(retirement &&
+					retirement->decision() == sqlite_shm_writer_retirement_decision::ready,
+				"one promoted attachment group holder did not admit group retirement");
+		require(coordinator
+					->complete_writer_cleanup(retirement->cleanup(),
+											  cleanup_callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"one confirmed cleanup did not retire promoted bound attachment group");
+		const auto complete = coordinator->snapshot();
+		require(fixture.registry->snapshot().active_activity_pin_count == 0U &&
+					complete.writer_holder_count == 0U &&
+					complete.writer_member_authority_count == 0U &&
+					complete.generation_authority_count == 0U && !complete.generation &&
+					!complete.quarantined,
+				"complete attachment cleanup retained activity or generation authority");
+		require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
+				"revoke complete attachment eligibility");
+		clean_fixture(fixture);
+	}
+
+	void verify_group_promotion_rejections_are_nonconsuming()
+	{
+		{
+			auto fixture = make_fixture(77U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve group rejection coordinator");
+			auto pair = make_bound_pending_pair(fixture, 77U);
+			auto eligibility = install_eligibility(*coordinator,
+												   fixture.family,
+												   pair.first.request.connection_token,
+												   pair.first.request.attachment.open_epoch(),
+												   79U);
+
+			std::array<sqlite_shm_pending_mapping*, 1U> missing{
+				&pair.first_pending,
+			};
+			auto missing_rejected = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, missing, eligibility);
+			auto unchanged = coordinator->snapshot();
+			require(!missing_rejected && pair.first_pending.valid() &&
+						pair.second_pending.valid() && !unchanged.generation &&
+						unchanged.writer_holder_count == 0U,
+					"missing attachment member partially promoted or consumed pending");
+
+			std::array<sqlite_shm_pending_mapping*, 2U> duplicate{
+				&pair.first_pending,
+				&pair.first_pending,
+			};
+			auto duplicate_rejected = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, duplicate, eligibility);
+			unchanged = coordinator->snapshot();
+			require(!duplicate_rejected && pair.first_pending.valid() &&
+						pair.second_pending.valid() && !unchanged.generation &&
+						unchanged.writer_holder_count == 0U,
+					"duplicate supplied pending partially promoted attachment");
+
+			auto cross = begin_bound_route_attempt(
+				fixture, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 80U);
+			auto cross_receipt = validate_bound_route(
+				cross, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 80U);
+			require(cross_receipt.has_value(), "validate cross-attachment pending receipt");
+			auto cross_installed = fixture.registry->install_writer_pending(
+				*fixture.family_pin, cross.post_native, *cross_receipt);
+			require(cross_installed.has_value(), "install cross-attachment pending");
+			auto cross_pending = std::move(*cross_installed);
+			std::array<sqlite_shm_pending_mapping*, 2U> cross_attachment{
+				&pair.first_pending,
+				&cross_pending,
+			};
+			auto cross_rejected = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, cross_attachment, eligibility);
+			unchanged = coordinator->snapshot();
+			require(!cross_rejected && pair.first_pending.valid() && pair.second_pending.valid() &&
+						cross_pending.valid() && !unchanged.generation &&
+						unchanged.writer_holder_count == 0U,
+					"cross-attachment pending set partially promoted or consumed");
+
+			auto wrong_gate =
+				install_eligibility(*coordinator,
+									fixture.family,
+									identity("test.registry.wrong-group-gate-connection", 81U),
+									pair.first.request.attachment.open_epoch(),
+									81U);
+			std::array<sqlite_shm_pending_mapping*, 2U> exact{
+				&pair.second_pending,
+				&pair.first_pending,
+			};
+			auto wrong_gate_rejected = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, exact, wrong_gate);
+			unchanged = coordinator->snapshot();
+			require(!wrong_gate_rejected && pair.first_pending.valid() &&
+						pair.second_pending.valid() && !unchanged.generation &&
+						unchanged.writer_holder_count == 0U,
+					"wrong attachment gate partially promoted or consumed pending");
+
+			auto holders = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, exact, eligibility);
+			require(holders && holders->size() == 2U && !pair.first_pending.valid() &&
+						!pair.second_pending.valid(),
+					"exact group did not remain promotable after nonconsuming rejections");
+			auto replay = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, exact, eligibility);
+			const auto after_replay = coordinator->snapshot();
+			require(!replay && holders->at(0).valid() && holders->at(1).valid() &&
+						after_replay.writer_holder_count == 2U &&
+						after_replay.generation_authority_count == 2U && !after_replay.quarantined,
+					"post-success replay changed promoted attachment state");
+
+			auto cross_cleanup =
+				coordinator->begin_writer_cleanup(cross_pending, cross.request.callback);
+			require(cross_cleanup.has_value(), "begin cross-attachment pending cleanup");
+			require(
+				coordinator
+					->complete_writer_cleanup(*cross_cleanup,
+											  cross.request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"complete cross-attachment pending cleanup");
+			const auto cleanup_callback = callback(82U);
+			auto retirement = coordinator->release_writer_holder(holders->at(0), cleanup_callback);
+			require(retirement &&
+						retirement->decision() == sqlite_shm_writer_retirement_decision::ready,
+					"begin promoted group cleanup after rejection matrix");
+			require(
+				coordinator
+					->complete_writer_cleanup(retirement->cleanup(),
+											  cleanup_callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"complete promoted group cleanup after rejection matrix");
+			require(coordinator->revoke_writer_eligibility(wrong_gate).has_value() &&
+						coordinator->revoke_writer_eligibility(eligibility).has_value(),
+					"revoke group rejection matrix gates");
+			clean_fixture(fixture);
+		}
+
+		{
+			auto fixture = make_fixture(83U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve mixed-inflight group coordinator");
+			auto first_request =
+				writer_request(fixture.family,
+							   fixture.alias_lifetime,
+							   identity("test.registry.mixed-group-connection", 83U),
+							   identity("test.registry.mixed-group-open", 83U),
+							   83U);
+			auto second_request = first_request;
+			second_request.callback = {first_request.callback.thread_identity,
+									   1U,
+									   identity("test.registry.mixed-group-nested-callback", 84U)};
+			second_request.page_number = 1;
+			auto sources = make_bridge_epoch_sources(first_request, 83U);
+			auto first = begin_bound_route_attempt_for_request(
+				fixture,
+				first_request,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+				83U,
+				sources);
+			auto first_receipt = validate_bound_route(
+				first, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 83U);
+			require(first_receipt.has_value(), "validate mixed-inflight first pending");
+			auto first_installed = fixture.registry->install_writer_pending(
+				*fixture.family_pin, first.post_native, *first_receipt);
+			require(first_installed.has_value(), "install mixed-inflight first pending");
+			auto first_pending = std::move(*first_installed);
+
+			auto second_epoch = make_validated_bridge_epoch(
+				second_request,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+				84U,
+				sources);
+			[[maybe_unused]] auto second_observer = second_epoch.activation.take_observer();
+			auto second_arm = second_epoch.activation.take_arm();
+			auto second_inflight = fixture.registry->begin_writer_map(
+				*fixture.family_pin, std::move(second_arm), second_request);
+			require(second_inflight.has_value(), "begin mixed-inflight sibling");
+			auto inflight = std::move(*second_inflight);
+			auto eligibility = install_eligibility(*coordinator,
+												   fixture.family,
+												   first_request.connection_token,
+												   first_request.attachment.open_epoch(),
+												   85U);
+			std::array<sqlite_shm_pending_mapping*, 1U> incomplete{
+				&first_pending,
+			};
+			auto rejected = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, incomplete, eligibility);
+			const auto mixed = coordinator->snapshot();
+			require(!rejected && first_pending.valid() && inflight.valid() && !mixed.generation &&
+						mixed.writer_holder_count == 0U &&
+						mixed.writer_member_authority_count == 2U &&
+						fixture.registry->snapshot().active_activity_pin_count == 2U,
+					"mixed inflight attachment partially promoted or consumed");
+			require(coordinator->resolve_writer_map_failure(inflight).has_value(),
+					"resolve mixed-inflight sibling");
+			auto cleanup = coordinator->begin_writer_cleanup(first_pending, first_request.callback);
+			require(cleanup.has_value(), "begin remaining mixed-inflight pending cleanup");
+			require(
+				coordinator
+					->complete_writer_cleanup(*cleanup,
+											  first_request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"complete remaining mixed-inflight pending cleanup");
+			require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
+					"revoke mixed-inflight eligibility");
+			clean_fixture(fixture);
+		}
+	}
+
+	void verify_group_promotion_liveness_loss_remains_cleanup_only()
+	{
+		{
+			auto fixture = make_fixture(86U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve pre-promotion liveness coordinator");
+			auto pair = make_bound_pending_pair(fixture, 86U);
+			auto eligibility = install_eligibility(*coordinator,
+												   fixture.family,
+												   pair.first.request.connection_token,
+												   pair.first.request.attachment.open_epoch(),
+												   88U);
+			require(pair.first.sources->main.revoker.revoke(),
+					"revoke complete pending group native lifetime");
+			std::array<sqlite_shm_pending_mapping*, 2U> exact{
+				&pair.first_pending,
+				&pair.second_pending,
+			};
+			auto rejected = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, exact, eligibility);
+			const auto lost = coordinator->snapshot();
+			require(!rejected && pair.first_pending.valid() && pair.second_pending.valid() &&
+						lost.quarantined && !lost.generation && lost.writer_holder_count == 0U &&
+						lost.writer_member_authority_count == 2U &&
+						lost.writer_member_liveness_lost_count == 2U &&
+						fixture.registry->snapshot().active_activity_pin_count == 2U,
+					"pre-promotion liveness loss consumed or partially promoted group");
+			auto blocked_request =
+				writer_request(fixture.family,
+							   fixture.alias_lifetime,
+							   identity("test.registry.pre-promotion-blocked-connection", 89U),
+							   identity("test.registry.pre-promotion-blocked-open", 89U),
+							   89U);
+			auto blocked = coordinator->begin_writer_map(blocked_request);
+			require(!blocked &&
+						blocked.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+					"pre-promotion liveness loss remained admission-visible");
+
+			auto cleanup = coordinator->begin_writer_cleanup(pair.second_pending,
+															 pair.second.request.callback);
+			require(cleanup.has_value(),
+					"pre-promotion liveness loss did not retain cleanup owner");
+			require(
+				coordinator
+					->complete_writer_cleanup(*cleanup,
+											  pair.second.request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"confirmed cleanup did not drain revoked pending group");
+			const auto drained = coordinator->snapshot();
+			require(drained.quarantined && drained.writer_member_authority_count == 0U &&
+						drained.writer_member_liveness_lost_count == 0U &&
+						fixture.registry->snapshot().active_activity_pin_count == 0U,
+					"revoked pending group retained activity after confirmed cleanup");
+			require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
+					"revoke pre-promotion liveness gate");
+		}
+
+		{
+			auto fixture = make_fixture(90U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve post-promotion liveness coordinator");
+			auto pair = make_bound_pending_pair(fixture, 90U);
+			auto eligibility = install_eligibility(*coordinator,
+												   fixture.family,
+												   pair.first.request.connection_token,
+												   pair.first.request.attachment.open_epoch(),
+												   92U);
+			std::array<sqlite_shm_pending_mapping*, 2U> exact{
+				&pair.second_pending,
+				&pair.first_pending,
+			};
+			auto holders = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, exact, eligibility);
+			require(holders && holders->size() == 2U,
+					"promote group before holder liveness revocation");
+			require(pair.first.sources->main.revoker.revoke(),
+					"revoke promoted group native lifetime");
+			const auto lost = coordinator->snapshot();
+			require(lost.quarantined && lost.writer_holder_count == 2U &&
+						lost.writer_member_authority_count == 2U &&
+						lost.writer_member_liveness_lost_count == 2U &&
+						fixture.registry->snapshot().active_activity_pin_count == 2U,
+					"promoted holder liveness loss remained admission-visible");
+			auto blocked_request =
+				writer_request(fixture.family,
+							   fixture.alias_lifetime,
+							   identity("test.registry.post-promotion-blocked-connection", 93U),
+							   identity("test.registry.post-promotion-blocked-open", 93U),
+							   93U);
+			auto blocked = coordinator->begin_writer_map(blocked_request);
+			require(!blocked &&
+						blocked.error().reason == sqlite_shm_lease_rejection_reason::quarantined,
+					"promoted holder liveness loss admitted a new writer");
+
+			const auto cleanup_callback = callback(94U);
+			auto retirement = coordinator->release_writer_holder(holders->at(0), cleanup_callback);
+			require(retirement &&
+						retirement->decision() == sqlite_shm_writer_retirement_decision::ready,
+					"revoked promoted holder did not retain cleanup admission");
+			require(
+				coordinator
+					->complete_writer_cleanup(retirement->cleanup(),
+											  cleanup_callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"confirmed cleanup did not drain revoked promoted group");
+			const auto drained = coordinator->snapshot();
+			require(drained.quarantined && drained.writer_holder_count == 0U &&
+						drained.writer_member_authority_count == 0U &&
+						drained.writer_member_liveness_lost_count == 0U &&
+						fixture.registry->snapshot().active_activity_pin_count == 0U,
+					"revoked promoted group retained activity after confirmed cleanup");
+			require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
+					"revoke post-promotion liveness gate");
+		}
+
+		{
+			auto fixture = make_fixture(95U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve final-edge liveness coordinator");
+			auto pair = make_bound_pending_pair(fixture, 95U);
+			auto eligibility = install_eligibility(*coordinator,
+												   fixture.family,
+												   pair.first.request.connection_token,
+												   pair.first.request.attachment.open_epoch(),
+												   97U);
+			sqlite_same_process_shm_lease_test_peer::fail_next_registry_pending_liveness(
+				*coordinator);
+			std::array<sqlite_shm_pending_mapping*, 2U> exact{
+				&pair.second_pending,
+				&pair.first_pending,
+			};
+			auto rejected = fixture.registry->promote_complete_writer_attachment_group(
+				*fixture.family_pin, exact, eligibility);
+			const auto lost = coordinator->snapshot();
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						pair.first_pending.valid() && pair.second_pending.valid(),
+					"final-edge liveness loss consumed pending ownership");
+			require(lost.quarantined && !lost.generation && lost.writer_holder_count == 0U &&
+						lost.generation_authority_count == 0U &&
+						lost.writer_member_authority_count == 2U &&
+						lost.writer_member_liveness_lost_count == 2U,
+					"final-edge liveness loss published partial group state");
+			require(fixture.registry->snapshot().active_activity_pin_count == 2U,
+					"final-edge liveness loss drained activity before cleanup");
+
+			auto cleanup = coordinator->begin_writer_cleanup(pair.second_pending,
+															 pair.second.request.callback);
+			require(cleanup.has_value(),
+					"final-edge liveness loser did not retain attachment cleanup owner");
+			require(
+				coordinator
+					->complete_writer_cleanup(*cleanup,
+											  pair.second.request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"final-edge liveness cleanup did not drain exact activities");
+			const auto drained = coordinator->snapshot();
+			require(drained.quarantined && drained.writer_member_authority_count == 0U &&
+						drained.writer_member_liveness_lost_count == 0U &&
+						fixture.registry->snapshot().active_activity_pin_count == 0U,
+					"final-edge liveness cleanup retained group activity");
+			require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
+					"revoke final-edge liveness gate");
+		}
 	}
 
 	void verify_exact_attachment_cleanup_drains_all_bound_members()
@@ -4309,6 +4844,9 @@ int main()
 		verify_registry_pending_binds_exact_epoch_family_pin_and_registry();
 		verify_registry_pending_liveness_ambiguity_preserves_cleanup();
 		verify_generic_bound_promotion_waits_without_consuming_or_quarantining();
+		verify_bound_attachment_group_promotion_succeeds_atomically();
+		verify_group_promotion_rejections_are_nonconsuming();
+		verify_group_promotion_liveness_loss_remains_cleanup_only();
 		verify_exact_attachment_cleanup_drains_all_bound_members();
 		verify_shallower_anchor_cannot_bypass_nested_writer_callback();
 		verify_registry_writer_begin_rejects_used_or_mismatched_epoch();

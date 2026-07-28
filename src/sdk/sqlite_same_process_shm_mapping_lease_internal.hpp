@@ -4,8 +4,10 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "sqlite_backend_observation_internal.hpp"
 
@@ -937,6 +939,10 @@ namespace cxxlens::sdk
 		install_registry_writer_pending(sqlite_shm_registry_family_pin& family,
 										sqlite_shm_writer_post_native_mapping& post_native,
 										sqlite_shm_verified_writer_post_map_receipt receipt);
+		[[nodiscard]] sqlite_shm_lease_result<std::vector<sqlite_shm_writer_holder>>
+		promote_registry_writer_attachment_group(sqlite_shm_registry_family_pin& family,
+												 std::span<sqlite_shm_pending_mapping*> pending,
+												 const sqlite_shm_writer_eligibility& eligibility);
 		void inject_writer_native_transition_failure_for_testing() noexcept;
 		void inject_writer_attachment_seal_failure_for_testing() noexcept;
 		void inject_writer_completion_transition_failure_for_testing() noexcept;

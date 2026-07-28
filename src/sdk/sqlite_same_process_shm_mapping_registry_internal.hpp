@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <vector>
 
 #include "sqlite_same_process_shm_mapping_lease_internal.hpp"
 
@@ -557,6 +559,16 @@ namespace cxxlens::sdk
 		install_writer_pending(sqlite_shm_registry_family_pin& family,
 							   sqlite_shm_writer_post_native_mapping& post_native,
 							   const sqlite_shm_verified_writer_post_map_receipt& receipt);
+		/**
+		 * Atomically promotes the complete exact pending member set of one registry-bound writer
+		 * attachment. Success seals its promotion gate and returns holders in attachment install
+		 * order. Rejection neither seals nor completes the failure boundary and leaves every
+		 * pending caller-owned; failure-boundary cleanup remains a later checkpoint.
+		 */
+		[[nodiscard]] sqlite_shm_lease_result<std::vector<sqlite_shm_writer_holder>>
+		promote_complete_writer_attachment_group(sqlite_shm_registry_family_pin& family,
+												 std::span<sqlite_shm_pending_mapping*> pending,
+												 const sqlite_shm_writer_eligibility& eligibility);
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		release_activity(sqlite_shm_registry_activity_pin& activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
