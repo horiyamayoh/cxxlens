@@ -1086,6 +1086,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0205",
                     "DF-0206",
                     "DF-0207",
+                    "DF-0208",
                 ],
             },
         )
@@ -1106,6 +1107,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
         mutations = (
             ("owner", lambda row: row.update({"owner_issue": "#999"})),
             ("feedback", lambda row: row.update({"feedback": ["DF-0174"]})),
+            ("missing_df0208", lambda row: row["feedback"].remove("DF-0208")),
             ("scope", lambda row: row.update({"scope": "unresolved"})),
         )
         for label, mutate in mutations:
@@ -1119,7 +1121,8 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     release.ReleaseQualificationError,
                     "neither the exact "
                     "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
-                    "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207 "
+                    "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207/"
+                    "DF-0208 "
                     "tracked gap",
                 ):
                     release.materialization_assignment_transition(ROOT)
@@ -1150,6 +1153,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0205",
                     "DF-0206",
                     "DF-0207",
+                    "DF-0208",
                 ],
             },
         }
@@ -2138,6 +2142,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0205",
                     "DF-0206",
                     "DF-0207",
+                    "DF-0208",
                 ],
             }
             with mock.patch.object(

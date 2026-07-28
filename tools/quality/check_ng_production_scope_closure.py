@@ -70,6 +70,12 @@ REQUIRED_FEEDBACK_ASSIGNMENT_BINDINGS = {
             "scope.sqlite-store-v3-gap",
         }
     ),
+    "DF-0208": frozenset(
+        {
+            "scope.clang22-installed-adoption-gap",
+            "scope.sqlite-store-v3-gap",
+        }
+    ),
 }
 
 CLANG22_MATERIALIZATION_CONTRACT = "schemas/cxxlens_ng_clang22_materialization_contract.yaml"

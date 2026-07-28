@@ -267,7 +267,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
         )
         self.assertEqual(
             self.model.blocking_feedback,
-            ("DF-0174", "DF-0207"),
+            ("DF-0174", "DF-0207", "DF-0208"),
         )
 
     def test_materialization_authority_is_bound_to_the_typed_census(self) -> None:
@@ -674,7 +674,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
             "scope.clang22-installed-adoption-gap",
             "scope.sqlite-store-v3-gap",
         }
-        for feedback in ("DF-0205", "DF-0206", "DF-0207"):
+        for feedback in ("DF-0205", "DF-0206", "DF-0207", "DF-0208"):
             with self.subTest(feedback=feedback):
                 actual = {
                     assignment["id"]
@@ -683,22 +683,31 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 }
                 self.assertEqual(actual, expected)
 
-                temporary, root = self.clone_contract_root()
-                self.addCleanup(temporary.cleanup)
-                changed = self.read_manifest(root)
-                materialization_gap = next(
-                    row
-                    for row in changed["assignments"]
-                    if row["id"] == "scope.clang22-installed-adoption-gap"
-                )
-                materialization_gap["feedback"].remove(feedback)
-                self.write_manifest(root, changed)
-                with self.assertRaisesRegex(
-                    closure.ContractError,
-                    "required design-feedback assignment binding differs: "
-                    + feedback,
+            assignment_ids = (
+                sorted(expected)
+                if feedback == "DF-0208"
+                else ["scope.clang22-installed-adoption-gap"]
+            )
+            for assignment_id in assignment_ids:
+                with self.subTest(
+                    feedback=feedback, missing_assignment=assignment_id
                 ):
-                    closure.validate_repository(root)
+                    temporary, root = self.clone_contract_root()
+                    self.addCleanup(temporary.cleanup)
+                    changed = self.read_manifest(root)
+                    assignment = next(
+                        row
+                        for row in changed["assignments"]
+                        if row["id"] == assignment_id
+                    )
+                    assignment["feedback"].remove(feedback)
+                    self.write_manifest(root, changed)
+                    with self.assertRaisesRegex(
+                        closure.ContractError,
+                        "required design-feedback assignment binding differs: "
+                        + feedback,
+                    ):
+                        closure.validate_repository(root)
 
     def test_feedback_exclusion_cannot_be_self_authorized(self) -> None:
         temporary, root = self.clone_contract_root()

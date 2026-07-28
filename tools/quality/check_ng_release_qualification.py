@@ -123,6 +123,7 @@ MATERIALIZATION_ASSIGNMENT_FEEDBACK = (
     "DF-0205",
     "DF-0206",
     "DF-0207",
+    "DF-0208",
 )
 MATERIALIZATION_ASSIGNMENT_SURFACES = (
     ("distribution.consumer-configuration", "shared/real-project"),
@@ -468,12 +469,14 @@ def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
                         "measured-occurrence, authenticated-streaming, head-observation, "
                         "and canonical-Base64 authority; implement the accepted DF-0200 bounded "
                         "claim/Store staging and the accepted DF-0205/DF-0206 same-process "
-                        "writer-mapping and writer-native-attachment authorities; resolve the "
-                        "blocking DF-0207 reader-native-attachment authority; qualify the full "
-                        "CAS/race/attachment counterexample matrix and complete a distinct exact "
-                        "implementation review; then complete installed actual-source worker "
-                        "output adoption with exact publication and query evidence; do not claim "
-                        "generic relation-row reference enforcement."
+                        "writer-mapping and writer-native-attachment authorities; resolve and "
+                        "implement the blocking DF-0207 reader-native-attachment authority and "
+                        "define, accept, and implement the blocking DF-0208 typed determinate "
+                        "gate-failure evidence authority before qualifying the full "
+                        "CAS/race/attachment counterexample matrix or activating production; "
+                        "complete a distinct exact implementation review; then complete installed "
+                        "actual-source worker output adoption with exact publication and query "
+                        "evidence; do not claim generic relation-row reference enforcement."
                     ),
                 },
                 "feedback": list(MATERIALIZATION_ASSIGNMENT_FEEDBACK),
@@ -534,7 +537,7 @@ def materialization_assignment_transition(root: pathlib.Path) -> dict[str, Any]:
     fail(
         "Clang 22 materializer assignment is neither the exact "
         "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197/"
-        "DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207 "
+        "DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207/DF-0208 "
         "tracked gap nor the exact included+qualified assignment"
     )
 
@@ -591,7 +594,7 @@ def collect_materialization_evidence(
         if report_paths or request_paths or receipt_paths:
             fail(
                 "the exact #181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
-                "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207 "
+                "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207/DF-0208 "
                 "tracked gap requires zero materialization "
                 f"requests and reports, found {len(request_paths)} requests and "
                 f"{len(report_paths)} reports and {len(receipt_paths)} execution receipts"
