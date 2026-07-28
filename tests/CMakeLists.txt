@@ -244,6 +244,21 @@ set_tests_properties(
     "unit;sdk;store;sqlite;vfs;shm;writer;mapping;epoch;effects;lifecycle;security"
 )
 
+cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-writer-shm-mapping-semantics
+  unit/sdk/sqlite_writer_shm_mapping_semantics_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-writer-shm-mapping-semantics
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-sqlite-writer-shm-mapping-semantics
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-writer-shm-mapping-semantics
+         COMMAND cxxlens-unit-sdk-sqlite-writer-shm-mapping-semantics)
+set_tests_properties(
+  unit.sdk-sqlite-writer-shm-mapping-semantics
+  PROPERTIES
+    LABELS
+    "unit;sdk;store;sqlite;vfs;shm;writer;mapping;semantics;effects;security")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-terminal
                             unit/sdk/sqlite_store_terminal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-store-terminal
@@ -817,6 +832,7 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-shm-mapping-lease
   cxxlens-unit-sdk-sqlite-shm-mapping-registry
   cxxlens-unit-sdk-sqlite-writer-shm-mapping-epoch
+  cxxlens-unit-sdk-sqlite-writer-shm-mapping-semantics
   cxxlens-unit-sdk-sqlite-source-shm-readonly-preflight
   cxxlens-unit-sdk-sqlite-store-fault-injection
   cxxlens-unit-sdk-sqlite-store-terminal
