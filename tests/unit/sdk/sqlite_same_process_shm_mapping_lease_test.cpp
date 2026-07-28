@@ -23,8 +23,8 @@ namespace cxxlens::sdk
 	{
 	  public:
 		[[nodiscard]] static sqlite_shm_verified_writer_native_map_receipt
-		writer_native_map(const sqlite_shm_writer_map_inflight& inflight,
-						  const volatile void* native_mapping)
+		unchecked_writer_native_map(const sqlite_shm_writer_map_inflight& inflight,
+									const volatile void* native_mapping)
 		{
 			return {inflight, native_mapping};
 		}
@@ -86,12 +86,19 @@ namespace
 {
 	using namespace cxxlens::sdk;
 
+	/** Stable SQLite ABI result values used by the closed native-map validator fixture. */
+	constexpr int sqlite_ok_status = 0;
+	constexpr int sqlite_readonly_status = 8;
+
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_eligibility>);
 	static_assert(!std::is_default_constructible_v<sqlite_shm_native_attachment_identity>);
 	static_assert(std::is_copy_constructible_v<sqlite_shm_native_attachment_identity>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_map_inflight>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_post_native_mapping>);
 	static_assert(!std::is_default_constructible_v<sqlite_shm_verified_writer_native_map_receipt>);
+	static_assert(!std::is_default_constructible_v<sqlite_writer_shm_native_map_receipt_validator>);
+	static_assert(noexcept(sqlite_writer_shm_native_map_receipt_validator::validate(
+		std::declval<sqlite_shm_writer_map_inflight&>(), sqlite_ok_status, nullptr)));
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_pending_mapping>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_attachment_cleanup>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_holder>);
@@ -271,9 +278,10 @@ namespace
 						  sqlite_shm_writer_map_inflight& inflight,
 						  const volatile void* native_mapping)
 	{
-		const auto receipt =
-			sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, native_mapping);
-		auto recorded = coordinator.record_writer_native_mapping(inflight, receipt);
+		auto receipt = sqlite_writer_shm_native_map_receipt_validator::validate(
+			inflight, sqlite_ok_status, native_mapping);
+		require(receipt.has_value(), "validate cleanup-only native writer mapping");
+		auto recorded = coordinator.record_writer_native_mapping(inflight, *receipt);
 		require(recorded.has_value() && !inflight.valid(),
 				"record cleanup-only native writer mapping");
 		return std::move(*recorded);
@@ -1666,6 +1674,288 @@ namespace
 				"unknown post-native cleanup permanently quarantines the family");
 	}
 
+	void verify_writer_native_map_receipt_validator_is_closed()
+	{
+		{
+			constexpr std::uint8_t marker = 73;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			auto begun = coordinator.begin_writer_map(request);
+			require(begun.has_value(), "begin exact native-map validator fixture");
+			auto inflight = std::move(*begun);
+			auto validated = sqlite_writer_shm_native_map_receipt_validator::validate(
+				inflight, sqlite_ok_status, &page);
+			require(validated.has_value() && inflight.valid() &&
+						validated->native_mapping() == &page,
+					"exact SQLITE_OK plus non-null mints only a bound cleanup receipt");
+			const auto sealed = coordinator.snapshot();
+			require(sealed.writer_inflight_count == 1U && sealed.generation_authority_count == 0U &&
+						sealed.writer_cleanup_count == 0U && sealed.writer_holder_count == 0U &&
+						sealed.reader_inflight_count == 0U && sealed.reader_cleanup_count == 0U &&
+						sealed.reader_handoff_count == 0U && !sealed.reader_admission_visible,
+					"native-map receipt grants no generation holder or reader authority");
+			auto recorded = coordinator.record_writer_native_mapping(inflight, *validated);
+			require(recorded.has_value() && !inflight.valid(),
+					"validator receipt leaves coordinator as the sole inflight consumer");
+			auto cleanup = coordinator.begin_writer_cleanup(*recorded, request.callback);
+			require(cleanup.has_value() && !recorded->valid(),
+					"validated native mapping retains one cleanup owner");
+			auto completed = coordinator.complete_writer_cleanup(
+				*cleanup, request.callback, sqlite_shm_native_cleanup_outcome::confirmed_success);
+			require(completed.has_value() && !cleanup->valid() &&
+						!coordinator.snapshot().quarantined,
+					"validated cleanup-only receipt grants no generation authority");
+		}
+
+		{
+			constexpr std::uint8_t marker = 74;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			auto begun = coordinator.begin_writer_map(request);
+			require(begun.has_value(), "begin SQLITE_OK-null validator fixture");
+			auto inflight = std::move(*begun);
+			auto rejected = sqlite_writer_shm_native_map_receipt_validator::validate(
+				inflight, sqlite_ok_status, nullptr);
+			require(!rejected && inflight.valid() &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						rejected.error().action ==
+							sqlite_shm_lease_recovery_action::outer_ioerr_no_retry,
+					"SQLITE_OK plus null cannot mint and retains no-map resolution");
+			auto resolved = coordinator.resolve_writer_map_failure(inflight);
+			require(resolved.has_value() && !inflight.valid(),
+					"SQLITE_OK-null resolves only the unobserved inflight");
+			int page{};
+			auto stale = sqlite_writer_shm_native_map_receipt_validator::validate(
+				inflight, sqlite_ok_status, &page);
+			require(
+				!stale && stale.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					stale.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry,
+				"stale inflight plus unbound mapping requires fail-closed quarantine");
+			auto stale_no_map = sqlite_writer_shm_native_map_receipt_validator::validate(
+				inflight, sqlite_readonly_status, nullptr);
+			require(!stale_no_map &&
+						stale_no_map.error().reason ==
+							sqlite_shm_lease_rejection_reason::stale_token &&
+						stale_no_map.error().action ==
+							sqlite_shm_lease_recovery_action::outer_ioerr_no_retry,
+					"stale inflight plus null has no native mapping cleanup to bind");
+		}
+
+		{
+			constexpr std::uint8_t marker = 75;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			auto begun = coordinator.begin_writer_map(request);
+			require(begun.has_value(), "begin native non-OK-null validator fixture");
+			auto inflight = std::move(*begun);
+			auto rejected = sqlite_writer_shm_native_map_receipt_validator::validate(
+				inflight, sqlite_readonly_status, nullptr);
+			require(!rejected && inflight.valid() &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						rejected.error().action ==
+							sqlite_shm_lease_recovery_action::outer_ioerr_no_retry,
+					"native non-OK plus null cannot mint and retains no-map resolution");
+			auto resolved = coordinator.resolve_writer_map_failure(inflight);
+			require(resolved.has_value() && !inflight.valid(),
+					"native non-OK-null resolves only its inflight attempt");
+		}
+
+		{
+			constexpr std::uint8_t marker = 76;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			{
+				const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+				auto begun = coordinator.begin_writer_map(request);
+				require(begun.has_value(), "begin native non-OK-nonnull validator fixture");
+				auto inflight = std::move(*begun);
+				auto rejected = sqlite_writer_shm_native_map_receipt_validator::validate(
+					inflight, sqlite_readonly_status, &page);
+				require(!rejected && inflight.valid() &&
+							rejected.error().reason ==
+								sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+							rejected.error().action ==
+								sqlite_shm_lease_recovery_action::
+									attempt_nonremoving_unmap_then_outer_ioerr,
+						"native non-OK plus non-null requires raw cleanup and never mints");
+				auto unsafe_no_map = coordinator.resolve_writer_map_failure(inflight);
+				require(!unsafe_no_map &&
+							unsafe_no_map.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							unsafe_no_map.error().action ==
+								sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+							coordinator.snapshot().quarantined,
+						"nonnull native result cannot be erased by no-map resolution");
+			}
+			require(coordinator.snapshot().quarantined,
+					"unresolved contradictory native mapping quarantines on token abandonment");
+		}
+
+		{
+			constexpr std::uint8_t marker = 77;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			{
+				const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+				auto begun = coordinator.begin_writer_map(request);
+				require(begun.has_value(), "begin null-to-nonnull replay fixture");
+				auto inflight = std::move(*begun);
+				auto first = sqlite_writer_shm_native_map_receipt_validator::validate(
+					inflight, sqlite_ok_status, nullptr);
+				require(!first &&
+							first.error().reason ==
+								sqlite_shm_lease_rejection_reason::receipt_mismatch,
+						"first SQLITE_OK-null result is classified once");
+				auto replacement = sqlite_writer_shm_native_map_receipt_validator::validate(
+					inflight, sqlite_ok_status, &page);
+				require(!replacement &&
+							replacement.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							replacement.error().action ==
+								sqlite_shm_lease_recovery_action::quarantine_no_retry,
+						"SQLITE_OK-null cannot be replaced by a later nonnull validation");
+				auto unsafe_no_map = coordinator.resolve_writer_map_failure(inflight);
+				require(!unsafe_no_map &&
+							unsafe_no_map.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							unsafe_no_map.error().action ==
+								sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+							coordinator.snapshot().quarantined,
+						"replayed nonnull result cannot be erased by no-map resolution");
+			}
+			require(coordinator.snapshot().quarantined,
+					"null-to-nonnull replay abandons the unresolved token under quarantine");
+		}
+
+		{
+			constexpr std::uint8_t marker = 78;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			{
+				const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+				auto begun = coordinator.begin_writer_map(request);
+				require(begun.has_value(), "begin duplicate null validation fixture");
+				auto inflight = std::move(*begun);
+				auto first = sqlite_writer_shm_native_map_receipt_validator::validate(
+					inflight, sqlite_readonly_status, nullptr);
+				require(!first &&
+							first.error().reason ==
+								sqlite_shm_lease_rejection_reason::receipt_mismatch,
+						"first native non-OK-null result is classified once");
+				auto moved = std::move(inflight);
+				auto duplicate = sqlite_writer_shm_native_map_receipt_validator::validate(
+					moved, sqlite_readonly_status, nullptr);
+				require(!duplicate && moved.valid() &&
+							duplicate.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							duplicate.error().action ==
+								sqlite_shm_lease_recovery_action::quarantine_no_retry,
+						"duplicate null validation is rejected after latch ownership moves");
+				auto unsafe_no_map = coordinator.resolve_writer_map_failure(moved);
+				require(!unsafe_no_map &&
+							unsafe_no_map.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							unsafe_no_map.error().action ==
+								sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+							coordinator.snapshot().quarantined,
+						"duplicate null validation cannot be erased as one no-map result");
+			}
+			require(coordinator.snapshot().quarantined,
+					"duplicate null validation cannot silently resolve or replay");
+		}
+
+		{
+			constexpr std::uint8_t marker = 79;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			{
+				const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+				auto begun = coordinator.begin_writer_map(request);
+				require(begun.has_value(), "begin duplicate nonnull validation fixture");
+				auto inflight = std::move(*begun);
+				auto first = sqlite_writer_shm_native_map_receipt_validator::validate(
+					inflight, sqlite_ok_status, &page);
+				require(first.has_value(), "first exact nonnull validation mints one receipt");
+				auto duplicate = sqlite_writer_shm_native_map_receipt_validator::validate(
+					inflight, sqlite_ok_status, &page);
+				require(!duplicate &&
+							duplicate.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							duplicate.error().action ==
+								sqlite_shm_lease_recovery_action::quarantine_no_retry,
+						"duplicate nonnull validation poisons the exact inflight");
+				auto unsafe_record = coordinator.record_writer_native_mapping(inflight, *first);
+				require(!unsafe_record && inflight.valid() &&
+							unsafe_record.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							unsafe_record.error().action ==
+								sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+							coordinator.snapshot().quarantined,
+						"poisoned validation cannot transition its first receipt to authority");
+			}
+			require(coordinator.snapshot().quarantined,
+					"duplicate nonnull validation retains terminal quarantine");
+		}
+
+		{
+			constexpr std::uint8_t marker = 80;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			{
+				const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+				auto begun = coordinator.begin_writer_map(request);
+				require(begun.has_value(), "begin validated-null record replacement fixture");
+				auto inflight = std::move(*begun);
+				auto first = sqlite_writer_shm_native_map_receipt_validator::validate(
+					inflight, sqlite_ok_status, nullptr);
+				require(!first &&
+							first.error().reason ==
+								sqlite_shm_lease_rejection_reason::receipt_mismatch,
+						"validated null result remains a no-map result only");
+				const auto forged_replacement =
+					sqlite_same_process_shm_lease_test_peer::unchecked_writer_native_map(inflight,
+																						 &page);
+				auto replaced =
+					coordinator.record_writer_native_mapping(inflight, forged_replacement);
+				require(!replaced && inflight.valid() &&
+							replaced.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							replaced.error().action ==
+								sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+							coordinator.snapshot().quarantined,
+						"record transition cannot replace a validated null result");
+			}
+			require(coordinator.snapshot().quarantined,
+					"validated-null record replacement remains terminal");
+		}
+	}
+
 	void verify_native_writer_receipt_binding_and_replay()
 	{
 		{
@@ -1680,7 +1970,8 @@ namespace
 			require(begun.has_value(), "begin writer before invalid native-map receipt");
 			auto inflight = std::move(*begun);
 			const auto invalid =
-				sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, nullptr);
+				sqlite_same_process_shm_lease_test_peer::unchecked_writer_native_map(inflight,
+																					 nullptr);
 			auto rejected = coordinator.record_writer_native_mapping(inflight, invalid);
 			require(!rejected && inflight.valid() && coordinator.snapshot().quarantined &&
 						rejected.error().reason ==
@@ -1688,8 +1979,8 @@ namespace
 					"null native-map receipt creates no authority but retains the source attempt");
 			require(!coordinator.resolve_writer_map_failure(inflight),
 					"invalid post-native receipt cannot restore the no-map transition");
-			const auto exact =
-				sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, &page);
+			const auto exact = sqlite_same_process_shm_lease_test_peer::unchecked_writer_native_map(
+				inflight, &page);
 			auto recovered = coordinator.record_writer_native_mapping(inflight, exact);
 			require(recovered.has_value() && !inflight.valid(),
 					"exact native receipt recovers cleanup after a malformed seal");
@@ -1714,13 +2005,16 @@ namespace
 			auto begun = coordinator.begin_writer_map(request);
 			require(begun.has_value(), "begin writer before duplicate native-map receipt");
 			auto inflight = std::move(*begun);
-			const auto receipt =
-				sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, &page);
-			auto recorded = coordinator.record_writer_native_mapping(inflight, receipt);
+			auto receipt = sqlite_writer_shm_native_map_receipt_validator::validate(
+				inflight, sqlite_ok_status, &page);
+			require(receipt.has_value() && inflight.valid(),
+					"production validator seals exact native-map receipt");
+			const auto replay_receipt = *receipt;
+			auto recorded = coordinator.record_writer_native_mapping(inflight, *receipt);
 			require(recorded.has_value() && !inflight.valid(),
 					"exact native-map receipt creates one cleanup-only token");
 			auto post_native = std::move(*recorded);
-			auto duplicate = coordinator.record_writer_native_mapping(inflight, receipt);
+			auto duplicate = coordinator.record_writer_native_mapping(inflight, replay_receipt);
 			require(!duplicate && post_native.valid() && coordinator.snapshot().quarantined,
 					"duplicate native-map transition quarantines without consuming cleanup duty");
 			auto cleanup = coordinator.begin_writer_cleanup(post_native, request.callback);
@@ -1753,10 +2047,12 @@ namespace
 			require(source_begun && target_begun, "begin cross-coordinator receipt fixture");
 			auto source_inflight = std::move(*source_begun);
 			auto target_inflight = std::move(*target_begun);
-			const auto source_receipt = sqlite_same_process_shm_lease_test_peer::writer_native_map(
-				source_inflight, &source_page);
-			const auto target_receipt = sqlite_same_process_shm_lease_test_peer::writer_native_map(
-				target_inflight, &target_page);
+			const auto source_receipt =
+				sqlite_same_process_shm_lease_test_peer::unchecked_writer_native_map(
+					source_inflight, &source_page);
+			const auto target_receipt =
+				sqlite_same_process_shm_lease_test_peer::unchecked_writer_native_map(
+					target_inflight, &target_page);
 			auto cross_bound = target.record_writer_native_mapping(target_inflight, source_receipt);
 			auto reverse_cross_bound =
 				source.record_writer_native_mapping(source_inflight, target_receipt);
@@ -1804,11 +2100,12 @@ namespace
 			auto begun = coordinator.begin_writer_map(request);
 			require(begun.has_value(), "begin writer transition-failure fixture");
 			auto inflight = std::move(*begun);
-			const auto receipt =
-				sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, &page);
+			auto receipt = sqlite_writer_shm_native_map_receipt_validator::validate(
+				inflight, sqlite_ok_status, &page);
+			require(receipt.has_value(), "validate native mapping before injected transition");
 			sqlite_same_process_shm_lease_test_peer::fail_next_writer_native_transition(
 				coordinator);
-			auto failed = coordinator.record_writer_native_mapping(inflight, receipt);
+			auto failed = coordinator.record_writer_native_mapping(inflight, *receipt);
 			require(!failed && inflight.valid() && coordinator.snapshot().quarantined,
 					"injected native transition failure retains the exact source token");
 			auto unsafe_resolution = coordinator.resolve_writer_map_failure(inflight);
@@ -1816,7 +2113,7 @@ namespace
 						unsafe_resolution.error().action ==
 							sqlite_shm_lease_recovery_action::quarantine_no_retry,
 					"transition failure cannot erase a native mapping as a no-map result");
-			auto recovered = coordinator.record_writer_native_mapping(inflight, receipt);
+			auto recovered = coordinator.record_writer_native_mapping(inflight, *receipt);
 			require(recovered.has_value() && !inflight.valid(),
 					"exact retry recovers the cleanup-only post-native token");
 			auto cleanup = coordinator.begin_writer_cleanup(*recovered, request.callback);
@@ -3652,6 +3949,7 @@ int main()
 		verify_nonowner_attachment_wait_is_terminal_without_retry();
 		verify_writer_attachment_completion_failure_is_one_shot();
 		verify_post_native_writer_receipt_requires_exact_cleanup();
+		verify_writer_native_map_receipt_validator_is_closed();
 		verify_native_writer_receipt_binding_and_replay();
 		verify_cleanup_completion_requires_exact_callback();
 		verify_failed_cleanup_admission_is_terminal_without_retry();

@@ -516,6 +516,7 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
 		friend class sqlite_shm_verified_writer_native_map_receipt;
+		friend class sqlite_writer_shm_native_map_receipt_validator;
 		explicit sqlite_shm_writer_map_inflight(
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			std::uint64_t token) noexcept;
@@ -523,7 +524,9 @@ namespace cxxlens::sdk
 
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 		std::uint64_t token_{};
+		bool native_result_validated_{};
 		bool native_result_observed_{};
+		bool native_result_validation_ambiguous_{};
 	};
 
 	/**
@@ -550,6 +553,27 @@ namespace cxxlens::sdk
 		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 		std::uint64_t token_{};
 		const volatile void* native_mapping_{};
+	};
+
+	/**
+	 * Closed validator for one writer native-map callback result.
+	 *
+	 * Exact native SQLITE_OK/non-null is the only shape which can mint a cleanup-only receipt.
+	 * Validation is one-shot for an exact in-flight token. A non-null input records that a native
+	 * mapping was observed, but validation does not consume the token; the coordinator transition
+	 * remains the sole consumer. A first null result leaves the separate no-map resolution
+	 * available but cannot be replaced by a later validation. This internal validator grants no
+	 * mapping, generation, holder, or reader authority by itself.
+	 */
+	class sqlite_writer_shm_native_map_receipt_validator final
+	{
+	  public:
+		sqlite_writer_shm_native_map_receipt_validator() = delete;
+
+		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_verified_writer_native_map_receipt>
+		validate(sqlite_shm_writer_map_inflight& inflight,
+				 int native_status,
+				 const volatile void* native_mapping) noexcept;
 	};
 
 	class sqlite_shm_writer_post_native_mapping

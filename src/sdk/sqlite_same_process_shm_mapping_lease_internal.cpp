@@ -12,6 +12,12 @@ namespace cxxlens::sdk
 {
 	namespace
 	{
+		/** Stable SQLite ABI value of SQLITE_OK; this unit intentionally has no SQLite header. */
+		enum class sqlite_native_map_status : int
+		{
+			ok = 0,
+		};
+
 		[[nodiscard]] bool valid_identity(const sqlite_backend_opaque_identity& identity) noexcept
 		{
 			return !identity.profile.empty() && !identity.bytes.empty();
@@ -257,6 +263,45 @@ namespace cxxlens::sdk
 	sqlite_shm_verified_writer_native_map_receipt::native_mapping() const noexcept
 	{
 		return native_mapping_;
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_verified_writer_native_map_receipt>
+	sqlite_writer_shm_native_map_receipt_validator::validate(
+		sqlite_shm_writer_map_inflight& inflight,
+		const int native_status,
+		const volatile void* native_mapping) noexcept
+	{
+		if (!inflight.valid())
+			return sqlite_shm_unexpected(rejection(
+				sqlite_shm_lease_rejection_reason::stale_token,
+				native_mapping == nullptr ? sqlite_shm_lease_recovery_action::outer_ioerr_no_retry
+										  : sqlite_shm_lease_recovery_action::quarantine_no_retry));
+
+		// Validation is one-shot even for a null result. A later non-null replay must additionally
+		// latch mapping observation so it can never be erased through the no-map transition.
+		const auto already_validated = std::exchange(inflight.native_result_validated_, true);
+		if (native_mapping != nullptr)
+			inflight.native_result_observed_ = true;
+		if (already_validated)
+		{
+			inflight.native_result_validation_ambiguous_ = true;
+			return sqlite_shm_unexpected(
+				rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+						  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+		}
+
+		const auto native_ok = native_status == static_cast<int>(sqlite_native_map_status::ok);
+		if (native_mapping == nullptr)
+			return sqlite_shm_unexpected(
+				rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+						  sqlite_shm_lease_recovery_action::outer_ioerr_no_retry));
+
+		if (!native_ok)
+			return sqlite_shm_unexpected(rejection(
+				sqlite_shm_lease_rejection_reason::receipt_mismatch,
+				sqlite_shm_lease_recovery_action::attempt_nonremoving_unmap_then_outer_ioerr));
+
+		return sqlite_shm_verified_writer_native_map_receipt{inflight, native_mapping};
 	}
 
 	sqlite_shm_verified_writer_post_map_receipt::sqlite_shm_verified_writer_post_map_receipt(
@@ -573,10 +618,19 @@ namespace cxxlens::sdk
 				// Calling this transition asserts that the native callback has already produced a
 				// mapping. Set the token-local latch before any operation which can throw so even
 				// an internal transition failure can never be resolved as a pre-native no-map.
+				const auto replaces_validated_no_map =
+					inflight.native_result_validated_ && !inflight.native_result_observed_;
+				const auto validation_ambiguous = inflight.native_result_validation_ambiguous_;
+				inflight.native_result_validated_ = true;
 				inflight.native_result_observed_ = true;
 				try
 				{
 					std::scoped_lock lock{mutex_};
+					if (replaces_validated_no_map || validation_ambiguous)
+					{
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
 					if (std::exchange(fail_next_writer_native_transition_for_testing_, false))
 						throw writer_native_transition_injected_failure{};
 					const auto receipt_state = receipt.state_.lock();
@@ -807,8 +861,12 @@ namespace cxxlens::sdk
 					if (!owns(inflight.state_, inflight.token_))
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::outer_ioerr_no_retry));
-					if (inflight.native_result_observed_)
+					if (inflight.native_result_observed_ ||
+						inflight.native_result_validation_ambiguous_)
+					{
+						quarantine_locked();
 						return sqlite_shm_unexpected(ambiguous());
+					}
 					const auto found = find_by_token(writers_, inflight.token_);
 					if (found == writers_.end() || found->phase != writer_phase::inflight)
 						return sqlite_shm_unexpected(
@@ -2980,7 +3038,10 @@ namespace cxxlens::sdk
 	sqlite_shm_writer_map_inflight::sqlite_shm_writer_map_inflight(
 		sqlite_shm_writer_map_inflight&& other) noexcept
 		: state_{std::move(other.state_)}, token_{std::exchange(other.token_, 0U)},
-		  native_result_observed_{std::exchange(other.native_result_observed_, false)}
+		  native_result_validated_{std::exchange(other.native_result_validated_, false)},
+		  native_result_observed_{std::exchange(other.native_result_observed_, false)},
+		  native_result_validation_ambiguous_{
+			  std::exchange(other.native_result_validation_ambiguous_, false)}
 	{
 	}
 
@@ -2992,7 +3053,9 @@ namespace cxxlens::sdk
 	void sqlite_shm_writer_map_inflight::disarm() noexcept
 	{
 		token_ = 0U;
+		native_result_validated_ = false;
 		native_result_observed_ = false;
+		native_result_validation_ambiguous_ = false;
 		state_.reset();
 	}
 
