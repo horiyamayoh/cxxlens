@@ -39,6 +39,58 @@ namespace cxxlens::sdk
 	};
 
 	/**
+	 * Test-minted typed proof for one authenticated owned-forwarding writer route.
+	 *
+	 * The private constructor is the authority boundary: this production-inert checkpoint has no
+	 * production minter. Every duplicated field is intentional cross-binding evidence rather than
+	 * an independently trusted claim. In particular, this type does not infer raw SQLite flags or
+	 * effect-stage semantics from opaque identities.
+	 */
+	class sqlite_shm_verified_writer_route_proof
+	{
+	  public:
+		~sqlite_shm_verified_writer_route_proof() noexcept = default;
+		sqlite_shm_verified_writer_route_proof(const sqlite_shm_verified_writer_route_proof&) =
+			default;
+		sqlite_shm_verified_writer_route_proof&
+		operator=(const sqlite_shm_verified_writer_route_proof&) = delete;
+		sqlite_shm_verified_writer_route_proof(sqlite_shm_verified_writer_route_proof&&) noexcept =
+			default;
+		sqlite_shm_verified_writer_route_proof&
+		operator=(sqlite_shm_verified_writer_route_proof&&) = delete;
+
+	  private:
+		friend class sqlite_writer_shm_mapping_receipt_validator;
+		friend class sqlite_same_process_shm_registry_test_peer;
+
+		sqlite_shm_verified_writer_route_proof(
+			sqlite_writer_shm_mapping_semantic_route route,
+			sqlite_shm_writer_map_request request,
+			int delegated_extend,
+			sqlite_backend_opaque_identity authenticated_owned_forwarding_rw_main_route_seal,
+			sqlite_backend_opaque_identity main_native_file_receipt,
+			sqlite_backend_opaque_identity main_xopen_receipt,
+			sqlite_backend_opaque_identity sqlite_source_id,
+			sqlite_backend_opaque_identity callback_transcript,
+			sqlite_backend_opaque_identity wal_write_lock_receipt,
+			sqlite_backend_opaque_identity effect_gate_receipt,
+			sqlite_backend_opaque_identity route_validation_seal);
+
+		sqlite_writer_shm_mapping_semantic_route route_{
+			sqlite_writer_shm_mapping_semantic_route::zero_zero_preexisting_unchanged};
+		sqlite_shm_writer_map_request request_;
+		int delegated_extend_{};
+		sqlite_backend_opaque_identity authenticated_owned_forwarding_rw_main_route_seal_;
+		sqlite_backend_opaque_identity main_native_file_receipt_;
+		sqlite_backend_opaque_identity main_xopen_receipt_;
+		sqlite_backend_opaque_identity sqlite_source_id_;
+		sqlite_backend_opaque_identity callback_transcript_;
+		sqlite_backend_opaque_identity wal_write_lock_receipt_;
+		sqlite_backend_opaque_identity effect_gate_receipt_;
+		sqlite_backend_opaque_identity route_validation_seal_;
+	};
+
+	/**
 	 * Validate and classify the closed four-route writer mapping semantic matrix.
 	 *
 	 * This function takes only immutable audit evidence. It derives the checked mapping range,
@@ -57,4 +109,21 @@ namespace cxxlens::sdk
 	[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_mapping_semantic_audit>
 	validate_sqlite_writer_shm_mapping_semantics_for_audit(
 		const sqlite_writer_shm_mapping_epoch_receipt& receipt) noexcept;
+
+	/**
+	 * One-shot authoritative writer post-map validator.
+	 *
+	 * The reusable semantic audit is rederived after consuming the exact epoch validation attempt.
+	 * A successful receipt remains non-authoritative until the process registry cross-checks its
+	 * hidden weak epoch binding against the strongly retained exact member authority.
+	 */
+	class sqlite_writer_shm_mapping_receipt_validator final
+	{
+	  public:
+		sqlite_writer_shm_mapping_receipt_validator() = delete;
+
+		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_verified_writer_post_map_receipt>
+		validate(const sqlite_writer_shm_mapping_epoch_receipt& epoch,
+				 const sqlite_shm_verified_writer_route_proof& route) noexcept;
+	};
 } // namespace cxxlens::sdk

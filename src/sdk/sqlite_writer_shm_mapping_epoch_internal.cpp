@@ -290,6 +290,32 @@ namespace cxxlens::sdk
 				return lifetimes_valid() && !sealed_.load(std::memory_order_acquire);
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<void>
+			begin_authoritative_validation(const std::uint64_t seal_sequence) noexcept
+			{
+				if (authoritative_validation_attempted_.exchange(true, std::memory_order_acq_rel))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				if (seal_sequence == 0U || seal_sequence != seal_sequence_ ||
+					!sealed_.load(std::memory_order_acquire))
+					return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									 sqlite_shm_lease_recovery_action::
+										 attempt_nonremoving_unmap_then_outer_ioerr);
+				if (!lifetimes_valid())
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				return {};
+			}
+
+			[[nodiscard]] bool
+			authoritative_validation_still_live(const std::uint64_t seal_sequence) const noexcept
+			{
+				return seal_sequence != 0U && seal_sequence == seal_sequence_ &&
+					sealed_.load(std::memory_order_acquire) &&
+					authoritative_validation_attempted_.load(std::memory_order_acquire) &&
+					lifetimes_valid();
+			}
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_mapping_epoch_receipt>
 			seal(const volatile void* native_mapping) noexcept
 			{
@@ -332,7 +358,7 @@ namespace cxxlens::sdk
 											 attempt_nonremoving_unmap_then_outer_ioerr);
 
 					return sqlite_writer_shm_mapping_epoch_receipt{weak_from_this(),
-																   1U,
+																   seal_sequence_,
 																   preparation_.epoch_identity,
 																   preparation_.watch_arm_receipt,
 																   request_.binding,
@@ -351,7 +377,9 @@ namespace cxxlens::sdk
 			sqlite_writer_shm_mapping_epoch_request request_;
 			sqlite_writer_shm_mapping_epoch_preparation preparation_;
 			std::shared_ptr<sqlite_writer_shm_mapping_epoch_liveness> liveness_;
+			const std::uint64_t seal_sequence_{1U};
 			std::atomic_bool sealed_{false};
+			std::atomic_bool authoritative_validation_attempted_{false};
 		};
 	} // namespace detail
 
@@ -576,6 +604,21 @@ namespace cxxlens::sdk
 		return state_ && state_->retains_exact_lifetimes(request);
 	}
 
+	bool sqlite_writer_shm_mapping_epoch_arm::retains_exact_validated_receipt(
+		const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept
+	{
+		return matches_validated_receipt(receipt) &&
+			state_->retains_exact_lifetimes(receipt.request()) &&
+			state_->authoritative_validation_still_live(receipt.epoch_seal_sequence_);
+	}
+
+	bool sqlite_writer_shm_mapping_epoch_arm::matches_validated_receipt(
+		const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept
+	{
+		const auto receipt_state = receipt.epoch_state_.lock();
+		return state_ && receipt_state.get() == state_.get() && receipt.epoch_seal_sequence_ != 0U;
+	}
+
 	bool sqlite_writer_shm_mapping_epoch_arm::attachment_cohort_compatible_with(
 		const sqlite_writer_shm_mapping_epoch_arm& other) const noexcept
 	{
@@ -660,6 +703,27 @@ namespace cxxlens::sdk
 	const volatile void* sqlite_writer_shm_mapping_epoch_receipt::native_mapping() const noexcept
 	{
 		return native_mapping_;
+	}
+
+	sqlite_shm_lease_result<std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state>>
+	sqlite_writer_shm_mapping_epoch_receipt::begin_authoritative_validation() const noexcept
+	{
+		const auto state = state_.lock();
+		if (!state)
+			return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+		auto begun = state->begin_authoritative_validation(seal_sequence_);
+		if (!begun)
+			return begun.error();
+		return state;
+	}
+
+	bool sqlite_writer_shm_mapping_epoch_receipt::authoritative_validation_still_live(
+		const std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state>& state) const noexcept
+	{
+		const auto current = state_.lock();
+		return state && current.get() == state.get() &&
+			state->authoritative_validation_still_live(seal_sequence_);
 	}
 
 	sqlite_writer_shm_mapping_epoch_activation::sqlite_writer_shm_mapping_epoch_activation(

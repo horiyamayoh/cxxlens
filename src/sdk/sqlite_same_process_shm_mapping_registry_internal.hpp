@@ -15,6 +15,12 @@ namespace cxxlens::sdk
 		struct sqlite_shm_registry_activity_control;
 		class sqlite_shm_mapping_registry_state;
 		struct sqlite_shm_writer_member_authority_state;
+		enum class sqlite_shm_writer_pending_authority_status : std::uint8_t
+		{
+			exact,
+			determinate_mismatch,
+			lifecycle_ambiguous,
+		};
 		enum class sqlite_shm_registry_counter_for_testing : std::uint8_t
 		{
 			alias_token,
@@ -56,6 +62,7 @@ namespace cxxlens::sdk
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_registry_test_peer;
 		friend class sqlite_shm_registry_activity_pin;
+		friend class sqlite_shm_writer_member_authority;
 
 		explicit sqlite_shm_registry_activity_seal(
 			std::weak_ptr<detail::sqlite_shm_registry_activity_control> control) noexcept;
@@ -370,8 +377,10 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool valid() const noexcept;
 
 	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_mapping_registry;
+		friend class sqlite_shm_writer_member_authority;
 
 		struct coordinates
 		{
@@ -470,6 +479,10 @@ namespace cxxlens::sdk
 		retains_exact_lifetimes(const sqlite_shm_writer_map_request& request) const noexcept;
 		[[nodiscard]] bool attachment_cohort_compatible_with(
 			const sqlite_shm_writer_member_authority& other) const noexcept;
+		[[nodiscard]] detail::sqlite_shm_writer_pending_authority_status validate_pending_authority(
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_writer_map_request& request,
+			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
 		void invalidate_epoch_for_testing() noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
 
@@ -536,6 +549,14 @@ namespace cxxlens::sdk
 		begin_writer_map(sqlite_shm_registry_family_pin& family,
 						 sqlite_writer_shm_mapping_epoch_arm arm,
 						 const sqlite_shm_writer_map_request& request);
+		/**
+		 * Installs one validator-sealed registry-bound writer pending at the exact original
+		 * family/activity boundary. The registry mutex remains held through the lease transition.
+		 */
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_pending_mapping>
+		install_writer_pending(sqlite_shm_registry_family_pin& family,
+							   sqlite_shm_writer_post_native_mapping& post_native,
+							   const sqlite_shm_verified_writer_post_map_receipt& receipt);
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		release_activity(sqlite_shm_registry_activity_pin& activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>

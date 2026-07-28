@@ -319,6 +319,21 @@ namespace cxxlens::sdk
 	{
 	}
 
+	sqlite_shm_verified_writer_post_map_receipt::sqlite_shm_verified_writer_post_map_receipt(
+		sqlite_shm_writer_map_request request,
+		sqlite_backend_opaque_identity open_epoch,
+		sqlite_shm_mapping_tuple mapping,
+		const sqlite_shm_writer_extend_pair extend_pair,
+		sqlite_backend_opaque_identity holder_specific_effect_receipt,
+		std::weak_ptr<detail::sqlite_writer_shm_mapping_epoch_state> epoch_state,
+		const std::uint64_t epoch_seal_sequence)
+		: request_{std::move(request)}, open_epoch_{std::move(open_epoch)}, mapping_{mapping},
+		  extend_pair_{extend_pair},
+		  holder_specific_effect_receipt_{std::move(holder_specific_effect_receipt)},
+		  epoch_state_{std::move(epoch_state)}, epoch_seal_sequence_{epoch_seal_sequence}
+	{
+	}
+
 	const sqlite_shm_writer_map_request&
 	sqlite_shm_verified_writer_post_map_receipt::request() const noexcept
 	{
@@ -821,6 +836,83 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_pending_mapping>
+			install_registry_pending(sqlite_shm_registry_family_pin& family,
+									 sqlite_shm_writer_post_native_mapping& post_native,
+									 sqlite_shm_verified_writer_post_map_receipt receipt) noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					const auto cleanup_action = sqlite_shm_lease_recovery_action::
+						attempt_nonremoving_unmap_then_outer_ioerr;
+					if (!owns(post_native.state_, post_native.token_))
+						return sqlite_shm_unexpected(stale_token(cleanup_action));
+					const auto found = find_by_token(writers_, post_native.token_);
+					if (found == writers_.end() ||
+						found->phase != writer_phase::post_native_mapping ||
+						found->native_mapping == nullptr)
+						return sqlite_shm_unexpected(stale_token(cleanup_action));
+					if (!found->registry_bound || !found->member_authority)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch, cleanup_action));
+					if (!valid_writer_receipt(receipt) || receipt.request() != found->request ||
+						receipt.mapping().native_mapping != found->native_mapping)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch, cleanup_action));
+					if (is_quarantined_locked() || !alive_ || !generations_ ||
+						!generations_->state_)
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::quarantined,
+									  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+
+					auto authority = found->member_authority->validate_pending_authority(
+						family, found->request, receipt);
+					if (authority ==
+						detail::sqlite_shm_writer_pending_authority_status::determinate_mismatch)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch, cleanup_action));
+					if (authority != detail::sqlite_shm_writer_pending_authority_status::exact)
+					{
+						registry_member_admission_blocked_ = true;
+						registry_member_sticky_quarantine_ = true;
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					if (std::exchange(fail_next_registry_writer_pending_liveness_for_testing_,
+									  false))
+						found->member_authority->invalidate_epoch_for_testing();
+					authority = found->member_authority->validate_pending_authority(
+						family, found->request, receipt);
+					if (authority != detail::sqlite_shm_writer_pending_authority_status::exact)
+					{
+						if (authority ==
+							detail::sqlite_shm_writer_pending_authority_status::lifecycle_ambiguous)
+						{
+							registry_member_admission_blocked_ = true;
+							registry_member_sticky_quarantine_ = true;
+							return sqlite_shm_unexpected(ambiguous());
+						}
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch, cleanup_action));
+					}
+
+					static_assert(std::is_nothrow_move_constructible_v<
+								  sqlite_shm_verified_writer_post_map_receipt>);
+					found->receipt.emplace(std::move(receipt));
+					found->phase = writer_phase::pending;
+					const auto token = post_native.token_;
+					auto state = post_native.state_;
+					post_native.disarm();
+					return sqlite_shm_pending_mapping{std::move(state), token};
+				}
+				catch (...)
+				{
+					quarantine_after_native();
+					return sqlite_shm_unexpected(ambiguous());
+				}
+			}
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_holder>
 			promote(sqlite_shm_pending_mapping& pending,
 					const sqlite_shm_writer_eligibility& eligibility)
@@ -844,6 +936,11 @@ namespace cxxlens::sdk
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::
 											remove_pending_then_confirm_native_cleanup));
+					if (writer->registry_bound && writer->member_authority)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
+							sqlite_shm_lease_recovery_action::
+								await_complete_attachment_gate_boundary));
 					if (writer->registry_bound || writer->member_authority)
 					{
 						quarantine_locked();
@@ -2008,6 +2105,19 @@ namespace cxxlens::sdk
 				{
 					std::scoped_lock lock{mutex_};
 					fail_next_registry_writer_existing_liveness_for_testing_ = true;
+				}
+				catch (...)
+				{
+					emergency_quarantine_.store(true, std::memory_order_release);
+				}
+			}
+
+			void inject_registry_writer_pending_liveness_loss_for_testing() noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					fail_next_registry_writer_pending_liveness_for_testing_ = true;
 				}
 				catch (...)
 				{
@@ -3254,6 +3364,7 @@ namespace cxxlens::sdk
 			bool registry_member_sticky_quarantine_{};
 			bool fail_next_registry_writer_incoming_liveness_for_testing_{};
 			bool fail_next_registry_writer_existing_liveness_for_testing_{};
+			bool fail_next_registry_writer_pending_liveness_for_testing_{};
 			std::atomic_bool emergency_quarantine_{false};
 		};
 	} // namespace detail
@@ -3703,6 +3814,15 @@ namespace cxxlens::sdk
 		return state_->install_pending(post_native, receipt);
 	}
 
+	sqlite_shm_lease_result<sqlite_shm_pending_mapping>
+	sqlite_same_process_shm_mapping_lease_coordinator::install_registry_writer_pending(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_writer_post_native_mapping& post_native,
+		sqlite_shm_verified_writer_post_map_receipt receipt)
+	{
+		return state_->install_registry_pending(family, post_native, std::move(receipt));
+	}
+
 	sqlite_shm_lease_result<sqlite_shm_writer_holder>
 	sqlite_same_process_shm_mapping_lease_coordinator::promote_writer(
 		sqlite_shm_pending_mapping& pending, const sqlite_shm_writer_eligibility& eligibility)
@@ -3857,5 +3977,11 @@ namespace cxxlens::sdk
 		inject_registry_writer_existing_liveness_loss_for_testing() noexcept
 	{
 		state_->inject_registry_writer_existing_liveness_loss_for_testing();
+	}
+
+	void sqlite_same_process_shm_mapping_lease_coordinator::
+		inject_registry_writer_pending_liveness_loss_for_testing() noexcept
+	{
+		state_->inject_registry_writer_pending_liveness_loss_for_testing();
 	}
 } // namespace cxxlens::sdk

@@ -21,6 +21,7 @@
 
 #include "sdk/sqlite_same_process_shm_mapping_registry_internal.hpp"
 #include "sdk/sqlite_writer_shm_mapping_epoch_internal.hpp"
+#include "sdk/sqlite_writer_shm_mapping_semantics_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -201,6 +202,34 @@ namespace cxxlens::sdk
 		{
 			return registry.generation_source_identity_for_testing();
 		}
+
+		[[nodiscard]] static sqlite_shm_verified_writer_route_proof
+		writer_route_proof(const sqlite_writer_shm_mapping_semantic_route route,
+						   sqlite_shm_writer_map_request request,
+						   const int delegated_extend,
+						   sqlite_backend_opaque_identity authenticated_route_seal,
+						   sqlite_backend_opaque_identity main_native_file_receipt,
+						   sqlite_backend_opaque_identity main_xopen_receipt,
+						   sqlite_backend_opaque_identity sqlite_source_id,
+						   sqlite_backend_opaque_identity callback_transcript,
+						   sqlite_backend_opaque_identity wal_write_lock_receipt,
+						   sqlite_backend_opaque_identity effect_gate_receipt,
+						   sqlite_backend_opaque_identity validation_seal)
+		{
+			return {
+				route,
+				std::move(request),
+				delegated_extend,
+				std::move(authenticated_route_seal),
+				std::move(main_native_file_receipt),
+				std::move(main_xopen_receipt),
+				std::move(sqlite_source_id),
+				std::move(callback_transcript),
+				std::move(wal_write_lock_receipt),
+				std::move(effect_gate_receipt),
+				std::move(validation_seal),
+			};
+		}
 	};
 
 	class sqlite_same_process_shm_lease_test_peer
@@ -254,6 +283,12 @@ namespace cxxlens::sdk
 			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
 		{
 			coordinator.inject_registry_writer_existing_liveness_loss_for_testing();
+		}
+
+		static void fail_next_registry_pending_liveness(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_registry_writer_pending_liveness_loss_for_testing();
 		}
 	};
 } // namespace cxxlens::sdk
@@ -637,6 +672,309 @@ namespace
 		return {std::move(activation), std::move(sources)};
 	}
 
+	class sealed_bridge_observation_port final
+		: public sqlite_writer_shm_mapping_epoch_observation_port
+	{
+	  public:
+		explicit sealed_bridge_observation_port(
+			sqlite_writer_shm_mapping_epoch_post_observation observation)
+			: observation_{std::move(observation)}
+		{
+		}
+
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_mapping_epoch_post_observation>
+		observe_after_native_map(const sqlite_writer_shm_mapping_epoch_binding&,
+								 const sqlite_writer_shm_stat_census&,
+								 const volatile void*) override
+		{
+			return observation_;
+		}
+
+	  private:
+		sqlite_writer_shm_mapping_epoch_post_observation observation_;
+	};
+
+	class sealed_bridge_epoch_port final : public sqlite_writer_shm_mapping_epoch_port
+	{
+	  public:
+		sealed_bridge_epoch_port(const std::uint8_t marker,
+								 sqlite_writer_shm_stat_census pre_stat,
+								 sqlite_writer_shm_mapping_epoch_post_observation post)
+			: marker_{marker}, pre_stat_{std::move(pre_stat)},
+			  observation_{std::make_shared<sealed_bridge_observation_port>(std::move(post))}
+		{
+		}
+
+	  protected:
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_mapping_epoch_preparation>
+		arm_watch_before_pre_stat(const sqlite_writer_shm_mapping_epoch_request&) override
+		{
+			return sqlite_writer_shm_mapping_epoch_preparation{
+				identity("test.registry.validated-epoch", marker_),
+				identity("test.registry.validated-watch", marker_),
+				pre_stat_,
+				observation_,
+			};
+		}
+
+	  private:
+		std::uint8_t marker_{};
+		sqlite_writer_shm_stat_census pre_stat_;
+		std::shared_ptr<sealed_bridge_observation_port> observation_;
+	};
+
+	[[nodiscard]] sqlite_writer_shm_stat_census direct_route_stat(const std::uint8_t marker,
+																  const std::uint64_t byte_count)
+	{
+		return {
+			sqlite_writer_shm_entry_state::direct_regular,
+			identity("test.registry.validated-parent", marker),
+			identity("test.registry.validated-filesystem", marker),
+			identity("test.registry.validated-mount", marker),
+			identity("test.registry.validated-object", marker),
+			identity("test.registry.validated-entry", marker),
+			byte_count,
+		};
+	}
+
+	[[nodiscard]] sqlite_writer_shm_stat_census absent_route_stat(const std::uint8_t marker)
+	{
+		return {
+			sqlite_writer_shm_entry_state::absent,
+			identity("test.registry.validated-parent", marker),
+			identity("test.registry.validated-filesystem", marker),
+			identity("test.registry.validated-mount", marker),
+			std::nullopt,
+			std::nullopt,
+			0U,
+		};
+	}
+
+	struct route_epoch_observations
+	{
+		sqlite_writer_shm_stat_census pre;
+		sqlite_writer_shm_mapping_epoch_post_observation post;
+	};
+
+	[[nodiscard]] route_epoch_observations
+	route_observations(const sqlite_writer_shm_mapping_semantic_route route,
+					   const std::uint8_t marker,
+					   const sqlite_backend_opaque_identity& expected_leaf)
+	{
+		auto pre = route == sqlite_writer_shm_mapping_semantic_route::one_one_absent_created
+			? absent_route_stat(marker)
+			: direct_route_stat(
+				  marker,
+				  route == sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown
+					  ? 0U
+					  : 4096U);
+		auto post = direct_route_stat(marker, 4096U);
+		sqlite_writer_shm_namespace_event_census events{
+			identity("test.registry.validated-watch", marker),
+			expected_leaf,
+		};
+		events.trusted_stat_watch_profile = true;
+		sqlite_writer_shm_effect_census effects;
+		effects.sqlite_source_id = identity("test.registry.sqlite-source", marker);
+		effects.callback_transcript = identity("test.registry.callback-transcript", marker);
+		effects.wal_write_lock_receipt = identity("test.registry.wal-write-lock", marker);
+		effects.effect_gate_receipt = identity("test.registry.map-effect-gate", marker);
+		effects.effect_receipt = identity("test.registry.map-effect", marker);
+		effects.size_before = pre.byte_count;
+		effects.size_after = post.byte_count;
+		effects.requested_range_end = 4096U;
+		effects.complete = true;
+		effects.result_confirmed_success = true;
+
+		sqlite_writer_shm_observed_transition transition{};
+		switch (route)
+		{
+			case sqlite_writer_shm_mapping_semantic_route::zero_zero_preexisting_unchanged:
+				transition = sqlite_writer_shm_observed_transition::preexisting_unchanged;
+				break;
+			case sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated:
+				transition = sqlite_writer_shm_observed_transition::preexisting_preallocated;
+				break;
+			case sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown:
+				transition = sqlite_writer_shm_observed_transition::preexisting_grown;
+				effects.extend_count = sqlite_writer_shm_bounded_count::one;
+				break;
+			case sqlite_writer_shm_mapping_semantic_route::one_one_absent_created:
+				transition = sqlite_writer_shm_observed_transition::absent_created;
+				events.expected_leaf_create = sqlite_writer_shm_bounded_count::one;
+				effects.create_count = sqlite_writer_shm_bounded_count::one;
+				break;
+		}
+		return {
+			std::move(pre),
+			{
+				std::move(post),
+				std::move(events),
+				std::move(effects),
+				transition,
+			},
+		};
+	}
+
+	[[nodiscard]] bridge_epoch
+	make_validated_bridge_epoch(const sqlite_shm_writer_map_request& request,
+								const sqlite_writer_shm_mapping_semantic_route route,
+								const std::uint8_t marker)
+	{
+		auto sources = make_bridge_epoch_sources(request, marker);
+		auto observations = route_observations(route, marker, sources->expected_shm_leaf);
+		auto parent_pin = sources->parent.source.mint_pin();
+		auto main_pin = sources->main.source.mint_pin();
+		auto wal_pin = sources->wal.source.mint_pin();
+		auto shm_pin = sources->shm.source.mint_pin();
+		require(parent_pin && main_pin && wal_pin && shm_pin,
+				"mint validated route native lifetime pins");
+		sealed_bridge_epoch_port port{
+			marker, std::move(observations.pre), std::move(observations.post)};
+		auto activation = port.arm(sqlite_writer_shm_mapping_epoch_request{
+			sqlite_writer_shm_mapping_epoch_binding{
+				request,
+				request.caller_extend,
+				sources->expected_shm_leaf,
+				sources->retained_parent_receipt,
+				sources->wal_file_receipt,
+				sources->wal_xopen_receipt,
+				sources->shm_attachment_receipt,
+			},
+			std::move(*parent_pin),
+			std::move(*main_pin),
+			std::move(*wal_pin),
+			std::move(*shm_pin),
+		});
+		require(activation.has_value(), "arm validated registry route epoch");
+		return {std::move(*activation), std::move(sources)};
+	}
+
+	struct route_proof_fields
+	{
+		sqlite_writer_shm_mapping_semantic_route route{
+			sqlite_writer_shm_mapping_semantic_route::zero_zero_preexisting_unchanged};
+		sqlite_shm_writer_map_request request;
+		int delegated_extend{};
+		sqlite_backend_opaque_identity authenticated_route_seal;
+		sqlite_backend_opaque_identity main_native_file_receipt;
+		sqlite_backend_opaque_identity main_xopen_receipt;
+		sqlite_backend_opaque_identity sqlite_source_id;
+		sqlite_backend_opaque_identity callback_transcript;
+		sqlite_backend_opaque_identity wal_write_lock_receipt;
+		sqlite_backend_opaque_identity effect_gate_receipt;
+		sqlite_backend_opaque_identity validation_seal;
+	};
+
+	[[nodiscard]] route_proof_fields
+	route_proof_fields_for(const sqlite_writer_shm_mapping_epoch_receipt& epoch,
+						   const sqlite_writer_shm_mapping_semantic_route route,
+						   const std::uint8_t marker)
+	{
+		const auto& binding = epoch.binding();
+		const auto& effects = epoch.post_observation().effects;
+		return {
+			route,
+			binding.map_request,
+			binding.delegated_extend,
+			identity("test.registry.authenticated-rw-main-route", marker),
+			binding.map_request.attachment.main_native_file_receipt(),
+			binding.map_request.attachment.main_xopen_receipt(),
+			effects.sqlite_source_id,
+			effects.callback_transcript,
+			effects.wal_write_lock_receipt,
+			effects.effect_gate_receipt,
+			identity("test.registry.route-validation", marker),
+		};
+	}
+
+	[[nodiscard]] sqlite_shm_verified_writer_route_proof route_proof(route_proof_fields fields)
+	{
+		return sqlite_same_process_shm_registry_test_peer::writer_route_proof(
+			fields.route,
+			std::move(fields.request),
+			fields.delegated_extend,
+			std::move(fields.authenticated_route_seal),
+			std::move(fields.main_native_file_receipt),
+			std::move(fields.main_xopen_receipt),
+			std::move(fields.sqlite_source_id),
+			std::move(fields.callback_transcript),
+			std::move(fields.wal_write_lock_receipt),
+			std::move(fields.effect_gate_receipt),
+			std::move(fields.validation_seal));
+	}
+
+	struct bound_route_attempt
+	{
+		sqlite_shm_writer_map_request request;
+		std::shared_ptr<int> native_page;
+		sqlite_writer_shm_mapping_epoch_receipt epoch;
+		sqlite_shm_writer_post_native_mapping post_native;
+		std::shared_ptr<bridge_epoch_sources> sources;
+	};
+
+	[[nodiscard]] bound_route_attempt
+	begin_bound_route_attempt(registry_fixture& fixture,
+							  const sqlite_writer_shm_mapping_semantic_route route,
+							  const std::uint8_t marker)
+	{
+		auto request = writer_request(fixture.family,
+									  fixture.alias_lifetime,
+									  identity("test.registry.validated-connection", marker),
+									  identity("test.registry.validated-open", marker),
+									  marker);
+		request.caller_extend =
+			route == sqlite_writer_shm_mapping_semantic_route::zero_zero_preexisting_unchanged ? 0
+																							   : 1;
+		auto route_epoch = make_validated_bridge_epoch(request, route, marker);
+		auto observer = route_epoch.activation.take_observer();
+		auto arm = route_epoch.activation.take_arm();
+		auto begun =
+			fixture.registry->begin_writer_map(*fixture.family_pin, std::move(arm), request);
+		require(begun.has_value(), "begin bound validated writer route");
+		auto inflight = std::move(*begun);
+		auto native_page = std::make_shared<int>();
+		auto native = sqlite_writer_shm_native_map_receipt_validator::validate(
+			inflight, 0, native_page.get());
+		require(native.has_value(), "validate bound route native result");
+		auto epoch = seal_sqlite_writer_shm_mapping_epoch(observer, native_page.get());
+		require(epoch.has_value(), "seal bound route epoch observation");
+		auto post_native = sqlite_same_process_shm_registry_test_peer::coordinator(
+							   *fixture.registry, fixture.family)
+							   ->record_writer_native_mapping(inflight, *native);
+		require(post_native.has_value(), "record bound route native mapping");
+		return {
+			std::move(request),
+			std::move(native_page),
+			std::move(*epoch),
+			std::move(*post_native),
+			std::move(route_epoch.sources),
+		};
+	}
+
+	[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_verified_writer_post_map_receipt>
+	validate_bound_route(bound_route_attempt& attempt,
+						 const sqlite_writer_shm_mapping_semantic_route route,
+						 const std::uint8_t marker)
+	{
+		auto proof = route_proof(route_proof_fields_for(attempt.epoch, route, marker));
+		return sqlite_writer_shm_mapping_receipt_validator::validate(attempt.epoch, proof);
+	}
+
+	void cleanup_bound_post_native(sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
+								   bound_route_attempt& attempt)
+	{
+		auto cleanup =
+			coordinator.begin_writer_cleanup(attempt.post_native, attempt.request.callback);
+		require(cleanup.has_value(), "begin exact bound route cleanup");
+		require(coordinator
+					.complete_writer_cleanup(*cleanup,
+											 attempt.request.callback,
+											 sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"complete exact bound route cleanup");
+	}
+
 	[[nodiscard]] sqlite_shm_writer_eligibility
 	install_eligibility(sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
 						const sqlite_shm_lease_family_binding& family,
@@ -902,6 +1240,463 @@ namespace
 					lease_snapshot.writer_attachment_unresolved_count == 0U &&
 					!lease_snapshot.quarantined,
 				"confirmed cleanup did not release exact member outside coordinator lock");
+		clean_fixture(fixture);
+	}
+
+	void verify_registry_pending_accepts_all_four_authoritative_routes()
+	{
+		constexpr std::array routes{
+			sqlite_writer_shm_mapping_semantic_route::zero_zero_preexisting_unchanged,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+			sqlite_writer_shm_mapping_semantic_route::one_one_absent_created,
+		};
+		for (std::size_t index = 0U; index < routes.size(); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(40U + index);
+			auto fixture = make_fixture(marker, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve four-route pending coordinator");
+			auto attempt = begin_bound_route_attempt(fixture, routes[index], marker);
+			auto receipt = validate_bound_route(attempt, routes[index], marker);
+			require(receipt.has_value(), "validate one accepted writer semantic route");
+			auto pending = fixture.registry->install_writer_pending(
+				*fixture.family_pin, attempt.post_native, *receipt);
+			require(pending.has_value() && !attempt.post_native.valid(),
+					"install exact registry-bound pending route");
+			const auto installed = coordinator->snapshot();
+			require(installed.writer_inflight_count == 1U &&
+						installed.writer_member_authority_count == 1U &&
+						installed.writer_attachment_audit_post_map_count == 0U &&
+						!installed.generation && !installed.quarantined,
+					"pending route acquired generation or lost exact member authority");
+
+			auto cleanup = coordinator->begin_writer_cleanup(*pending, attempt.request.callback);
+			require(cleanup.has_value() && !pending->valid(),
+					"begin exact installed pending cleanup");
+			require(
+				coordinator
+					->complete_writer_cleanup(*cleanup,
+											  attempt.request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"complete exact installed pending cleanup");
+			const auto drained = coordinator->snapshot();
+			require(fixture.registry->snapshot().active_activity_pin_count == 0U &&
+						drained.writer_member_authority_count == 0U &&
+						drained.writer_attachment_unresolved_count == 0U && !drained.quarantined,
+					"pending cleanup did not drain exact registry activity and epoch arm");
+			clean_fixture(fixture);
+		}
+	}
+
+	void verify_authoritative_route_proof_is_exact_and_one_shot()
+	{
+		constexpr std::size_t drift_count = 11U;
+		for (std::size_t drift = 0U; drift < drift_count; ++drift)
+		{
+			const auto marker = static_cast<std::uint8_t>(50U + drift);
+			auto fixture = make_fixture(marker, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve proof-drift coordinator");
+			auto attempt = begin_bound_route_attempt(
+				fixture,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+				marker);
+			auto fields = route_proof_fields_for(
+				attempt.epoch,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+				marker);
+			switch (drift)
+			{
+				case 0U:
+					fields.route =
+						sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated;
+					break;
+				case 1U:
+					++fields.request.page_number;
+					break;
+				case 2U:
+					fields.delegated_extend = 0;
+					break;
+				case 3U:
+					fields.authenticated_route_seal = {};
+					break;
+				case 4U:
+					fields.main_native_file_receipt =
+						identity("test.registry.drift-main-native", marker);
+					break;
+				case 5U:
+					fields.main_xopen_receipt = identity("test.registry.drift-main-xopen", marker);
+					break;
+				case 6U:
+					fields.sqlite_source_id = identity("test.registry.drift-source", marker);
+					break;
+				case 7U:
+					fields.callback_transcript = identity("test.registry.drift-callback", marker);
+					break;
+				case 8U:
+					fields.wal_write_lock_receipt =
+						identity("test.registry.drift-wal-lock", marker);
+					break;
+				case 9U:
+					fields.effect_gate_receipt =
+						identity("test.registry.drift-effect-gate", marker);
+					break;
+				case 10U:
+					fields.validation_seal = fields.authenticated_route_seal;
+					break;
+				default:
+					require(false, "unreachable proof drift");
+			}
+			auto proof = route_proof(std::move(fields));
+			auto rejected =
+				sqlite_writer_shm_mapping_receipt_validator::validate(attempt.epoch, proof);
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						rejected.error().action ==
+							sqlite_shm_lease_recovery_action::
+								attempt_nonremoving_unmap_then_outer_ioerr &&
+						attempt.post_native.valid(),
+					"typed route field drift minted a post-map receipt or erased cleanup");
+			auto exact_retry_proof = route_proof(route_proof_fields_for(
+				attempt.epoch,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
+				marker));
+			auto retry = sqlite_writer_shm_mapping_receipt_validator::validate(attempt.epoch,
+																			   exact_retry_proof);
+			require(
+				!retry && retry.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					retry.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry,
+				"failed first authoritative validation attempt remained retryable");
+			cleanup_bound_post_native(*coordinator, attempt);
+			clean_fixture(fixture);
+		}
+
+		auto fixture = make_fixture(62U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve route replay coordinator");
+		auto attempt = begin_bound_route_attempt(
+			fixture,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+			62U);
+		const auto copied_epoch = attempt.epoch;
+		auto fields = route_proof_fields_for(
+			attempt.epoch,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+			62U);
+		auto proof = route_proof(fields);
+		const auto copied_proof = proof;
+		auto first = sqlite_writer_shm_mapping_receipt_validator::validate(attempt.epoch, proof);
+		auto replay =
+			sqlite_writer_shm_mapping_receipt_validator::validate(copied_epoch, copied_proof);
+		require(first.has_value() && !replay &&
+					replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					replay.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry,
+				"copied epoch/proof replay minted a second verified post-map receipt");
+		auto pending = fixture.registry->install_writer_pending(
+			*fixture.family_pin, attempt.post_native, *first);
+		require(pending.has_value(), "first one-shot verified receipt did not remain usable");
+		auto cleanup = coordinator->begin_writer_cleanup(*pending, attempt.request.callback);
+		require(cleanup.has_value(), "begin replay-case pending cleanup");
+		require(coordinator
+					->complete_writer_cleanup(*cleanup,
+											  attempt.request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"complete replay-case pending cleanup");
+		clean_fixture(fixture);
+	}
+
+	void verify_registry_pending_rejects_determinate_cross_binding_without_consumption()
+	{
+		auto fixture = make_fixture(63U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve pending mismatch coordinator");
+		auto attempt = begin_bound_route_attempt(
+			fixture,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+			63U);
+		auto receipt = validate_bound_route(
+			attempt,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+			63U);
+		require(receipt.has_value(), "validate pending mismatch source receipt");
+
+		auto request_drift = attempt.request;
+		++request_drift.page_number;
+		const auto request_drift_receipt = sqlite_same_process_shm_lease_test_peer::writer_map(
+			request_drift,
+			request_drift.attachment.open_epoch(),
+			{1, 4096, 4096U, 4096U, attempt.native_page.get(), 8192U},
+			sqlite_shm_writer_extend_pair::one_one,
+			identity("test.registry.synthetic-request-drift", 63U));
+		auto rejected = fixture.registry->install_writer_pending(
+			*fixture.family_pin, attempt.post_native, request_drift_receipt);
+		require(
+			!rejected &&
+				rejected.error().reason == sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				rejected.error().action ==
+					sqlite_shm_lease_recovery_action::attempt_nonremoving_unmap_then_outer_ioerr &&
+				attempt.post_native.valid(),
+			"request drift consumed or quarantined exact post-native cleanup");
+
+		const auto pointer_drift_receipt = sqlite_same_process_shm_lease_test_peer::writer_map(
+			attempt.request,
+			attempt.request.attachment.open_epoch(),
+			mapping(reinterpret_cast<const volatile void*>(
+				reinterpret_cast<std::uintptr_t>(attempt.native_page.get()) + 1U)),
+			sqlite_shm_writer_extend_pair::one_one,
+			identity("test.registry.synthetic-pointer-drift", 63U));
+		auto pointer_rejected = fixture.registry->install_writer_pending(
+			*fixture.family_pin, attempt.post_native, pointer_drift_receipt);
+		require(!pointer_rejected &&
+					pointer_rejected.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					attempt.post_native.valid(),
+				"native pointer drift consumed exact post-native cleanup");
+
+		const auto exact_synthetic = sqlite_same_process_shm_lease_test_peer::writer_map(
+			attempt.request,
+			attempt.request.attachment.open_epoch(),
+			mapping(attempt.native_page.get()),
+			sqlite_shm_writer_extend_pair::one_one,
+			identity("test.registry.synthetic-exact", 63U));
+		auto synthetic_rejected = fixture.registry->install_writer_pending(
+			*fixture.family_pin, attempt.post_native, exact_synthetic);
+		require(!synthetic_rejected &&
+					synthetic_rejected.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					attempt.post_native.valid(),
+				"synthetic legacy receipt crossed registry authoritative pending boundary");
+
+		auto pending = fixture.registry->install_writer_pending(
+			*fixture.family_pin, attempt.post_native, *receipt);
+		require(pending.has_value(), "determinate mismatch damaged later exact pending install");
+		auto cleanup = coordinator->begin_writer_cleanup(*pending, attempt.request.callback);
+		require(cleanup.has_value(), "begin exact pending cleanup after mismatches");
+		require(coordinator
+					->complete_writer_cleanup(*cleanup,
+											  attempt.request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"complete exact pending cleanup after mismatches");
+		clean_fixture(fixture);
+	}
+
+	void verify_registry_pending_binds_exact_epoch_family_pin_and_registry()
+	{
+		{
+			auto fixture = make_fixture(64U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve sibling epoch coordinator");
+			auto attempt = begin_bound_route_attempt(
+				fixture,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+				64U);
+
+			auto sibling = make_validated_bridge_epoch(
+				attempt.request,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+				65U);
+			auto sibling_observer = sibling.activation.take_observer();
+			[[maybe_unused]] auto sibling_arm = sibling.activation.take_arm();
+			auto sibling_epoch =
+				seal_sqlite_writer_shm_mapping_epoch(sibling_observer, attempt.native_page.get());
+			require(sibling_epoch.has_value(), "seal sibling writer epoch");
+			auto sibling_proof = route_proof(route_proof_fields_for(
+				*sibling_epoch,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+				65U));
+			auto sibling_receipt = sqlite_writer_shm_mapping_receipt_validator::validate(
+				*sibling_epoch, sibling_proof);
+			require(sibling_receipt.has_value(), "validate sibling epoch receipt");
+			auto rejected = fixture.registry->install_writer_pending(
+				*fixture.family_pin, attempt.post_native, *sibling_receipt);
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						rejected.error().action ==
+							sqlite_shm_lease_recovery_action::
+								attempt_nonremoving_unmap_then_outer_ioerr &&
+						attempt.post_native.valid() && !coordinator->snapshot().quarantined,
+					"sibling epoch receipt crossed exact strong-arm binding");
+			cleanup_bound_post_native(*coordinator, attempt);
+			clean_fixture(fixture);
+		}
+
+		{
+			auto fixture = make_fixture(66U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve family-pin mismatch coordinator");
+			auto attempt = begin_bound_route_attempt(
+				fixture,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+				66U);
+			auto receipt = validate_bound_route(
+				attempt,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+				66U);
+			require(receipt.has_value(), "validate family-pin mismatch receipt");
+
+			auto other_owner_count = std::make_shared<std::atomic_int>(0);
+			auto other_owner = std::make_shared<runtime_owner_probe>(other_owner_count);
+			auto other = register_alias(*fixture.registry,
+										fixture.process_instance,
+										fixture.cohort,
+										67U,
+										other_owner,
+										&fixture.family);
+			other_owner.reset();
+			auto rejected = fixture.registry->install_writer_pending(
+				*other.family_pin, attempt.post_native, *receipt);
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						attempt.post_native.valid() && !coordinator->snapshot().quarantined,
+					"sibling family pin crossed original activity coordinates");
+			cleanup_bound_post_native(*coordinator, attempt);
+			unregister_alias(*fixture.registry, fixture.process_instance, fixture.cohort, other);
+			require(other_owner_count->load(std::memory_order_relaxed) == 1,
+					"sibling pin runtime owner did not release");
+			clean_fixture(fixture);
+		}
+
+		{
+			auto fixture = make_fixture(68U, false);
+			auto foreign = make_fixture(69U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve foreign registry mismatch coordinator");
+			auto attempt = begin_bound_route_attempt(
+				fixture,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+				68U);
+			auto receipt = validate_bound_route(
+				attempt,
+				sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+				68U);
+			require(receipt.has_value(), "validate foreign registry mismatch receipt");
+			auto rejected = foreign.registry->install_writer_pending(
+				*foreign.family_pin, attempt.post_native, *receipt);
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						attempt.post_native.valid() && !coordinator->snapshot().quarantined,
+					"foreign registry consumed or quarantined exact post-native token");
+			cleanup_bound_post_native(*coordinator, attempt);
+			clean_fixture(fixture);
+			clean_fixture(foreign);
+		}
+	}
+
+	void verify_registry_pending_liveness_ambiguity_preserves_cleanup()
+	{
+		{
+			auto fixture = make_fixture(70U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve pre-install liveness coordinator");
+			auto attempt = begin_bound_route_attempt(
+				fixture, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 70U);
+			auto receipt = validate_bound_route(
+				attempt, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 70U);
+			require(receipt.has_value(), "validate pre-install liveness receipt");
+			require(attempt.sources->main.revoker.revoke(),
+					"revoke validated MAIN native lifetime");
+			auto rejected = fixture.registry->install_writer_pending(
+				*fixture.family_pin, attempt.post_native, *receipt);
+			require(
+				!rejected &&
+					(rejected.error().reason == sqlite_shm_lease_rejection_reason::quarantined ||
+					 rejected.error().reason ==
+						 sqlite_shm_lease_rejection_reason::lifecycle_ambiguous) &&
+					rejected.error().action ==
+						sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+					attempt.post_native.valid() && coordinator->snapshot().quarantined,
+				"pre-install lifetime loss erased cleanup or remained admissible");
+			cleanup_bound_post_native(*coordinator, attempt);
+			require(coordinator->snapshot().writer_member_authority_count == 0U,
+					"ambiguous pre-install cleanup retained registry member authority");
+		}
+
+		{
+			auto fixture = make_fixture(71U, false);
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			require(coordinator != nullptr, "resolve final-edge liveness coordinator");
+			auto attempt = begin_bound_route_attempt(
+				fixture, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 71U);
+			auto receipt = validate_bound_route(
+				attempt, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 71U);
+			require(receipt.has_value(), "validate final-edge liveness receipt");
+			sqlite_same_process_shm_lease_test_peer::fail_next_registry_pending_liveness(
+				*coordinator);
+			auto rejected = fixture.registry->install_writer_pending(
+				*fixture.family_pin, attempt.post_native, *receipt);
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						rejected.error().action ==
+							sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+						attempt.post_native.valid() && coordinator->snapshot().quarantined,
+					"final pending publish liveness loser became visible or lost cleanup");
+			cleanup_bound_post_native(*coordinator, attempt);
+			require(coordinator->snapshot().writer_member_authority_count == 0U,
+					"final-edge cleanup retained registry member authority");
+		}
+	}
+
+	void verify_generic_bound_promotion_waits_without_consuming_or_quarantining()
+	{
+		auto fixture = make_fixture(72U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve bound promotion fence coordinator");
+		auto attempt = begin_bound_route_attempt(
+			fixture,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+			72U);
+		auto receipt = validate_bound_route(
+			attempt,
+			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_preallocated,
+			72U);
+		require(receipt.has_value(), "validate bound promotion fence receipt");
+		auto pending = fixture.registry->install_writer_pending(
+			*fixture.family_pin, attempt.post_native, *receipt);
+		require(pending.has_value(), "install bound promotion fence pending");
+		auto eligibility = install_eligibility(*coordinator,
+											   fixture.family,
+											   attempt.request.connection_token,
+											   attempt.request.attachment.open_epoch(),
+											   72U);
+		auto promoted = coordinator->promote_writer(*pending, eligibility);
+		const auto fenced = coordinator->snapshot();
+		require(!promoted &&
+					promoted.error().reason ==
+						sqlite_shm_lease_rejection_reason::pending_or_eligibility_only &&
+					promoted.error().action ==
+						sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary &&
+					pending->valid() && eligibility.valid() && !fenced.generation &&
+					fenced.writer_holder_count == 0U && !fenced.quarantined,
+				"generic bound promotion consumed pending or minted generation authority");
+		auto cleanup = coordinator->begin_writer_cleanup(*pending, attempt.request.callback);
+		require(cleanup.has_value(), "begin fenced bound pending cleanup");
+		require(coordinator
+					->complete_writer_cleanup(*cleanup,
+											  attempt.request.callback,
+											  sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+				"complete fenced bound pending cleanup");
+		require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
+				"revoke fenced bound eligibility");
 		clean_fixture(fixture);
 	}
 
@@ -3501,6 +4296,12 @@ int main()
 	try
 	{
 		verify_registry_writer_member_is_exact_and_cleanup_only();
+		verify_registry_pending_accepts_all_four_authoritative_routes();
+		verify_authoritative_route_proof_is_exact_and_one_shot();
+		verify_registry_pending_rejects_determinate_cross_binding_without_consumption();
+		verify_registry_pending_binds_exact_epoch_family_pin_and_registry();
+		verify_registry_pending_liveness_ambiguity_preserves_cleanup();
+		verify_generic_bound_promotion_waits_without_consuming_or_quarantining();
 		verify_exact_attachment_cleanup_drains_all_bound_members();
 		verify_shallower_anchor_cannot_bypass_nested_writer_callback();
 		verify_registry_writer_begin_rejects_used_or_mismatched_epoch();

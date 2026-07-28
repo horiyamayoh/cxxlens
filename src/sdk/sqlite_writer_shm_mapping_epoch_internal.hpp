@@ -367,6 +367,10 @@ namespace cxxlens::sdk
 		valid_for_predelegation(const sqlite_shm_writer_map_request& request) const noexcept;
 		[[nodiscard]] bool
 		retains_exact_lifetimes(const sqlite_shm_writer_map_request& request) const noexcept;
+		[[nodiscard]] bool matches_validated_receipt(
+			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
+		[[nodiscard]] bool retains_exact_validated_receipt(
+			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
 		[[nodiscard]] bool attachment_cohort_compatible_with(
 			const sqlite_writer_shm_mapping_epoch_arm& other) const noexcept;
 		void invalidate_for_testing() noexcept;
@@ -423,6 +427,7 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_writer_shm_mapping_epoch_state;
 		friend class sqlite_writer_shm_mapping_receipt_validator;
+		friend class sqlite_writer_shm_mapping_epoch_arm;
 
 		sqlite_writer_shm_mapping_epoch_receipt(
 			std::weak_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state,
@@ -433,6 +438,12 @@ namespace cxxlens::sdk
 			sqlite_writer_shm_stat_census pre_stat,
 			sqlite_writer_shm_mapping_epoch_post_observation post_observation,
 			const volatile void* native_mapping);
+		[[nodiscard]] sqlite_shm_lease_result<
+			std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state>>
+		begin_authoritative_validation() const noexcept;
+		[[nodiscard]] bool authoritative_validation_still_live(
+			const std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state>& state)
+			const noexcept;
 
 		std::weak_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state_;
 		std::uint64_t seal_sequence_{};

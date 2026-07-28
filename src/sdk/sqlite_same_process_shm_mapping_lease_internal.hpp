@@ -15,6 +15,7 @@ namespace cxxlens::sdk
 	{
 		class sqlite_shm_mapping_lease_state;
 		class sqlite_shm_mapping_registry_state;
+		class sqlite_writer_shm_mapping_epoch_state;
 
 		struct sqlite_shm_lease_token_identity
 		{
@@ -28,6 +29,8 @@ namespace cxxlens::sdk
 	} // namespace detail
 
 	class sqlite_shm_writer_member_authority;
+	class sqlite_shm_registry_family_pin;
+	class sqlite_writer_shm_mapping_epoch_arm;
 
 	/**
 	 * Exact process/runtime/file-family binding consumed by the pure lease coordinator.
@@ -197,6 +200,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_writer_shm_mapping_receipt_validator;
+		friend class sqlite_writer_shm_mapping_epoch_arm;
 		friend class sqlite_same_process_shm_lease_test_peer;
 
 		sqlite_shm_verified_writer_post_map_receipt(
@@ -205,12 +209,22 @@ namespace cxxlens::sdk
 			sqlite_shm_mapping_tuple mapping,
 			sqlite_shm_writer_extend_pair extend_pair,
 			sqlite_backend_opaque_identity holder_specific_effect_receipt);
+		sqlite_shm_verified_writer_post_map_receipt(
+			sqlite_shm_writer_map_request request,
+			sqlite_backend_opaque_identity open_epoch,
+			sqlite_shm_mapping_tuple mapping,
+			sqlite_shm_writer_extend_pair extend_pair,
+			sqlite_backend_opaque_identity holder_specific_effect_receipt,
+			std::weak_ptr<detail::sqlite_writer_shm_mapping_epoch_state> epoch_state,
+			std::uint64_t epoch_seal_sequence);
 
 		sqlite_shm_writer_map_request request_;
 		sqlite_backend_opaque_identity open_epoch_;
 		sqlite_shm_mapping_tuple mapping_;
 		sqlite_shm_writer_extend_pair extend_pair_{sqlite_shm_writer_extend_pair::zero_zero};
 		sqlite_backend_opaque_identity holder_specific_effect_receipt_;
+		std::weak_ptr<detail::sqlite_writer_shm_mapping_epoch_state> epoch_state_;
+		std::uint64_t epoch_seal_sequence_{};
 	};
 
 	/**
@@ -919,11 +933,16 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_map_inflight>
 		begin_registry_writer_map(const sqlite_shm_writer_map_request& request,
 								  sqlite_shm_writer_member_authority& authority);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_pending_mapping>
+		install_registry_writer_pending(sqlite_shm_registry_family_pin& family,
+										sqlite_shm_writer_post_native_mapping& post_native,
+										sqlite_shm_verified_writer_post_map_receipt receipt);
 		void inject_writer_native_transition_failure_for_testing() noexcept;
 		void inject_writer_attachment_seal_failure_for_testing() noexcept;
 		void inject_writer_completion_transition_failure_for_testing() noexcept;
 		void inject_registry_writer_incoming_liveness_loss_for_testing() noexcept;
 		void inject_registry_writer_existing_liveness_loss_for_testing() noexcept;
+		void inject_registry_writer_pending_liveness_loss_for_testing() noexcept;
 
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 	};

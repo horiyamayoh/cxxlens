@@ -2,6 +2,7 @@
 
 #include <limits>
 #include <optional>
+#include <utility>
 
 namespace cxxlens::sdk
 {
@@ -213,6 +214,31 @@ namespace cxxlens::sdk
 		}
 	} // namespace
 
+	sqlite_shm_verified_writer_route_proof::sqlite_shm_verified_writer_route_proof(
+		const sqlite_writer_shm_mapping_semantic_route route,
+		sqlite_shm_writer_map_request request,
+		const int delegated_extend,
+		sqlite_backend_opaque_identity authenticated_owned_forwarding_rw_main_route_seal,
+		sqlite_backend_opaque_identity main_native_file_receipt,
+		sqlite_backend_opaque_identity main_xopen_receipt,
+		sqlite_backend_opaque_identity sqlite_source_id,
+		sqlite_backend_opaque_identity callback_transcript,
+		sqlite_backend_opaque_identity wal_write_lock_receipt,
+		sqlite_backend_opaque_identity effect_gate_receipt,
+		sqlite_backend_opaque_identity route_validation_seal)
+		: route_{route}, request_{std::move(request)}, delegated_extend_{delegated_extend},
+		  authenticated_owned_forwarding_rw_main_route_seal_{
+			  std::move(authenticated_owned_forwarding_rw_main_route_seal)},
+		  main_native_file_receipt_{std::move(main_native_file_receipt)},
+		  main_xopen_receipt_{std::move(main_xopen_receipt)},
+		  sqlite_source_id_{std::move(sqlite_source_id)},
+		  callback_transcript_{std::move(callback_transcript)},
+		  wal_write_lock_receipt_{std::move(wal_write_lock_receipt)},
+		  effect_gate_receipt_{std::move(effect_gate_receipt)},
+		  route_validation_seal_{std::move(route_validation_seal)}
+	{
+	}
+
 	sqlite_shm_lease_result<sqlite_writer_shm_mapping_semantic_audit>
 	validate_sqlite_writer_shm_mapping_semantics_for_audit(
 		const sqlite_writer_shm_mapping_epoch_receipt& receipt) noexcept
@@ -300,6 +326,59 @@ namespace cxxlens::sdk
 				},
 				effects.effect_receipt,
 			};
+		}
+		catch (...)
+		{
+			return ambiguous_post_native_state();
+		}
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_verified_writer_post_map_receipt>
+	sqlite_writer_shm_mapping_receipt_validator::validate(
+		const sqlite_writer_shm_mapping_epoch_receipt& epoch,
+		const sqlite_shm_verified_writer_route_proof& route) noexcept
+	{
+		auto state = epoch.begin_authoritative_validation();
+		if (!state)
+			return state.error();
+
+		try
+		{
+			auto audit = validate_sqlite_writer_shm_mapping_semantics_for_audit(epoch);
+			if (!audit)
+				return audit.error();
+
+			const auto& binding = epoch.binding();
+			const auto& effects = epoch.post_observation().effects;
+			const auto determinate_mismatch = route.route_ != audit->route ||
+				route.request_ != binding.map_request ||
+				route.delegated_extend_ != binding.delegated_extend ||
+				!valid_identity(route.authenticated_owned_forwarding_rw_main_route_seal_) ||
+				!valid_identity(route.route_validation_seal_) ||
+				route.authenticated_owned_forwarding_rw_main_route_seal_ ==
+					route.route_validation_seal_ ||
+				route.main_native_file_receipt_ !=
+					binding.map_request.attachment.main_native_file_receipt() ||
+				route.main_xopen_receipt_ != binding.map_request.attachment.main_xopen_receipt() ||
+				route.sqlite_source_id_ != effects.sqlite_source_id ||
+				route.callback_transcript_ != effects.callback_transcript ||
+				route.wal_write_lock_receipt_ != effects.wal_write_lock_receipt ||
+				route.effect_gate_receipt_ != effects.effect_gate_receipt;
+			if (determinate_mismatch)
+				return determinate_post_native_mismatch(epoch.native_mapping());
+
+			auto output = sqlite_shm_verified_writer_post_map_receipt{
+				binding.map_request,
+				binding.map_request.attachment.open_epoch(),
+				audit->mapping,
+				audit->extend_pair,
+				audit->holder_specific_effect_receipt,
+				*state,
+				epoch.seal_sequence_,
+			};
+			if (!epoch.authoritative_validation_still_live(*state))
+				return ambiguous_post_native_state();
+			return output;
 		}
 		catch (...)
 		{
