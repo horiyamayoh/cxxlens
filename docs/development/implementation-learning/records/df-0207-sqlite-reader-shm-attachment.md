@@ -1,11 +1,11 @@
 ---
 id: DF-0207
 title: Bind SQLite reader SHM handoffs to native attachments
-status: observed
+status: accepted
 kind: contract-contradiction
 impact: invariant
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - store.sqlite-same-process-shm-mapping
   - store.sqlite-reader-native-attachment-lifetime
@@ -22,13 +22,26 @@ authority_refs:
 tracking_issue: '#207'
 implementation_issues:
   - '#181'
-resolution_refs: []
+resolution_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0013-ng-sqlite-physical-store.md
+  - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+  - schemas/cxxlens_ng_sqlite_store_contract.yaml
+  - schemas/cxxlens_ng_sqlite_store_contract.schema.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.schema.yaml
+  - tools/quality/check_ng_sqlite_store_contract.py
+  - tools/quality/check_ng_snapshot_store_contract.py
+  - tests/quality/test_ng_sqlite_store_contract.py
+  - tests/quality/test_ng_snapshot_store_contract.py
 review:
   mode: independent
-  status: pending
+  status: complete
   author: codex-agent-sqlite-reader-attachment-observation
-  reviewer: null
-  refs: []
+  reviewer: codex-agent-fresh-independent-df0207-exact-commit-acceptance-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/207#issuecomment-5125773426
+    - https://github.com/horiyamayoh/cxxlens/issues/207#issuecomment-5125815049
 created: '2026-07-28'
 ---
 
@@ -183,3 +196,19 @@ READONLY/null normalization, protocol-invalid status/pointer terminal rows, opaq
 successor exclusion, and a closed custody enum covering session reservations, cleanup, ack,
 close/cut, waiter/reporter, and lifetime pins. These refinements remain proposal-only until the
 exact committed revision receives the required independent acceptance.
+
+2026-07-30: Fresh independent semantic and structural review accepted exact proposal commit
+`636ef43803665e9999b38b9c33bd3afdbb6b4460` with `P0=0 / P1=0 / P2=0`; the canonical receipt is
+<https://github.com/horiyamayoh/cxxlens/issues/207#issuecomment-5125815049>. The reviewed proposal
+digest is `sha256:a342d01379b7d6e3c9a162dc02cf260942c4dc96783e941333c1aa2a1eeef8f0`.
+Adding only the accepted status and exact review receipt produces current DF-0207 semantic digest
+`sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6` and enclosing lease
+digest `sha256:f42cb94b284b2af1683d7fe573ef0a9b9d6d6706d111bf0f97d8d22a554edab5`.
+
+DF-0207 is therefore `accepted` with `implementation_disposition: may-proceed`, authorizing only
+the internal reader attachment group/map/member/revalidation/session-lifetime/unmap/close state
+machine, registry/callback gates, and focused tests. Production VFS binding, native-OK
+projection, public API change, qualification, and production activation remain blocked until
+the exact implementation, complete counterexample matrix, two-live-Store CAS/materialization
+race, cross-process and CANTINIT/READONLY regressions, and a distinct independent implementation
+review are complete.

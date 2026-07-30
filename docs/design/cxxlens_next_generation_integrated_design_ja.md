@@ -2327,7 +2327,16 @@ production reader exception、VFS activation、qualificationをblockし、一nat
 四つのSQLite/Snapshot contract/schema mirrorに置く
 `reader_native_attachment_amendment_proposal` /
 `cxxlens.sqlite.reader-shm-native-attachment.v1` は Issue #207 / DF-0207 の
-`proposed-unqualified-non-authorizing` reader-only proposalである。acceptance receiptはまだなく、
+`accepted-authority-implementation-pending` reader-only amendmentである。exact proposal commit
+`636ef43803665e9999b38b9c33bd3afdbb6b4460` とsemantic digest
+`sha256:a342d01379b7d6e3c9a162dc02cf260942c4dc96783e941333c1aa2a1eeef8f0` は
+Issue #207 のfresh independent exact-commit review
+<https://github.com/horiyamayoh/cxxlens/issues/207#issuecomment-5125815049> で
+`P0=0 / P1=0 / P2=0` としてacceptされた。receiptを加えたcurrent amendment digestは
+`sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6`、
+enclosing lease digestは
+`sha256:f42cb94b284b2af1683d7fe573ef0a9b9d6d6706d111bf0f97d8d22a554edab5`
+である。
 accepted DF-0205/DF-0206/DF-0208 subtree、current blanket native `SQLITE_OK` rejection、production
 VFS、public C++ APIを変更しない。checked reader attachment identityはprocess/runtime/VFS/file
 family、reader aliasとdistinct lifetime pin、connection、main `native_file_node` / `xOpen`、
@@ -2387,9 +2396,9 @@ proposal group形成後のREADONLY/non-nullは二つ目のcleanup ownerを作ら
 zero-effectならreservationを閉じ、mappedなら一つのcleanup lineage、不明ならquarantineへ全域化する。
 将来production reviewを通過したadmitted `SQLITE_OK`+nonnullだけが`SQLITE_READONLY`+same pointerへ
 project可能で、denial、validation failure、ambiguity、`SQLITE_OK`+null、unleased `SQLITE_OK`は
-`SQLITE_IOERR`+nullである。このproposalのfresh independent exact-commit acceptance前はauthority
-document/checker/test編集とread-only audit/reproductionだけを許し、accept後もinternal reader group/
-callback/eager lifetime/focused testsだけを認可する。production/VFS/native-OK activationはexact
+`SQLITE_IOERR`+nullである。このacceptanceはinternal reader group/map/member/revalidation、
+callback/session lifetime、unmap/close state machine、registry gate、focused testsだけを認可する。
+production/VFS/native-OK activationはexact
 implementationとcomplete counterexample matrixのdistinct independent reviewまでblockする。
 
 Issue #208 / DF-0208 の

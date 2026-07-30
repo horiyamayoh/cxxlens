@@ -136,13 +136,20 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(
             reader_attachment["status"],
-            "proposed-unqualified-non-authorizing",
+            "accepted-authority-implementation-pending",
         )
         self.assertEqual(
             reader_attachment["tracking"],
             {"issue": "#207", "feedback": "DF-0207"},
         )
-        self.assertNotIn("acceptance_review_receipt", reader_attachment)
+        self.assertEqual(
+            reader_attachment["acceptance_review_receipt"],
+            "exact-commit-636ef43803665e9999b38b9c33bd3afdbb6b4460-"
+            "issue-207-comment-5125815049-fresh-independent-semantic-and-"
+            "structural-P0-0-P1-0-P2-0-authorizes-internal-reader-attachment-"
+            "group-map-session-lifetime-unmap-close-state-machine-and-focused-"
+            "tests-only-production-VFS-public-native-OK-remain-blocked",
+        )
         self.assertEqual(
             reader_attachment["map_attempt"]["result_enum"],
             [
@@ -1563,15 +1570,15 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "reader-native-attachment-status-self-authorized",
+                "reader-native-attachment-status-regressed",
                 lambda value: reader_native_attachment(value).__setitem__(
-                    "status", "accepted-authority-implementation-pending"
+                    "status", "proposed-unqualified-non-authorizing"
                 ),
             ),
             (
-                "reader-native-attachment-review-receipt-forged",
-                lambda value: reader_native_attachment(value).__setitem__(
-                    "acceptance_review_receipt", "unreviewed-self-acceptance"
+                "reader-native-attachment-review-receipt-removed",
+                lambda value: reader_native_attachment(value).pop(
+                    "acceptance_review_receipt"
                 ),
             ),
             (

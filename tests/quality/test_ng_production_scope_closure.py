@@ -267,7 +267,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
         )
         self.assertEqual(
             self.model.blocking_feedback,
-            ("DF-0174", "DF-0207"),
+            ("DF-0174",),
         )
 
     def test_materialization_authority_is_bound_to_the_typed_census(self) -> None:

@@ -933,8 +933,9 @@ format_compatibility:
             production_activation: blocked-until-attachment-amendment-acceptance-and-the-distinct-exact-implementation-and-complete-counterexample-matrix-review
         reader_native_attachment_amendment_proposal:
           id: cxxlens.sqlite.reader-shm-native-attachment.v1
-          status: proposed-unqualified-non-authorizing
+          status: accepted-authority-implementation-pending
           tracking: {issue: '#207', feedback: DF-0207}
+          acceptance_review_receipt: exact-commit-636ef43803665e9999b38b9c33bd3afdbb6b4460-issue-207-comment-5125815049-fresh-independent-semantic-and-structural-P0-0-P1-0-P2-0-authorizes-internal-reader-attachment-group-map-session-lifetime-unmap-close-state-machine-and-focused-tests-only-production-VFS-public-native-OK-remain-blocked
           scope: reader-only-internal-authority-proposal-no-production-vfs-public-api-native-OK-projection-or-writer-authority-change
           observation: one-reader-sqlite3_file-may-complete-multiple-xShmMap-callbacks-but-one-xShmUnmap-releases-the-complete-native-reader-SHM-attachment
           attachment_identity:

@@ -835,15 +835,18 @@ digests を必須とし、それらがない evaluation は `not-qualified` と�
 元の installed boundary と observation v2 authority は Issue #182 の authority-only unit である。Issue #181 の preflight で見つかった
 DF-0191/DF-0192 に対する machine v2、SDK registry conformance、Store projection、DF-0195〜DF-0199 に対する sealed report leaf、
 installed occurrence/effect、Protocol 1.1 chunked task transfer、failed-head observation、canonical Base64、DF-0200 の bounded
-claim/Store staging、DF-0205/DF-0206 の same-process Store race/writer attachment authorityと、
-DF-0207 の未解決reader attachment blockerおよびaccepted DF-0208 typed determinate writer
+claim/Store staging、DF-0205/DF-0206 の same-process Store race/writer attachment authority、
+accepted DF-0207 reader attachment authority、およびaccepted DF-0208 typed determinate writer
 gate-failure evidence authorityに対するrelease/checker amendmentは Issue #181 の独立した
 authority-first checkpoint とする。DF-0208 exact proposal
 `bd2505f26d0d45b7bfa785a533c308ab957b11aa` は独立反証reviewでaccepted / may-proceedとなり、internal
-writer-only implementationを認可する。DF-0207 のexact bindingがaccepted / may-proceedになるまでは
-reader groupingとproduction runtime/tool activationを再開しない。受理後、runtime と
-四件の installed detailed report evidence を同じ Issue #181 が完成させる。それまでは production scope の tracked gap と Clang 22
-production-support prohibition を維持する。
+writer-only implementationを認可する。DF-0207 exact proposal
+`636ef43803665e9999b38b9c33bd3afdbb6b4460` も独立反証reviewでaccepted / may-proceedとなり、internal
+reader attachment group/map/member/revalidation/session-lifetime/unmap/close state machine と focused
+testsだけを認可する。production VFS binding、public API、native `SQLITE_OK` projection、qualificationは、
+exact implementation/counterexample matrix と distinct exact implementation review が完了するまで認可しない。
+runtime と四件の installed detailed report evidence は同じ Issue #181 が完成させる。それまでは production scope の tracked gap と
+Clang 22 production-support prohibition を維持する。
 
 ## Rejected alternatives
 

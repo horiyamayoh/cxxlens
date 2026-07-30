@@ -318,12 +318,21 @@ writer-only proposal/reviewはreader groupをtransitively認可しない。accep
 authorityとdistinct exact implementation/matrix reviewが完了するまで、reader grouping、production
 reader exception、VFS activation、qualificationをblockし、per-map handoffへ一native outcomeを複製しない。
 
-##### DF-0207 review-pending proposal: reader native attachment
+##### DF-0207 accepted authority amendment: reader native attachment
 
 四つのSQLite/Snapshot contract/schema mirrorの
 `reader_native_attachment_amendment_proposal` /
 `cxxlens.sqlite.reader-shm-native-attachment.v1` は
-`proposed-unqualified-non-authorizing` であり、acceptance receiptを持たない。checked identityは
+`accepted-authority-implementation-pending` である。exact proposal commit
+`636ef43803665e9999b38b9c33bd3afdbb6b4460` / semantic digest
+`sha256:a342d01379b7d6e3c9a162dc02cf260942c4dc96783e941333c1aa2a1eeef8f0` は
+Issue #207 のfresh independent exact-commit review
+<https://github.com/horiyamayoh/cxxlens/issues/207#issuecomment-5125815049> で
+`P0=0 / P1=0 / P2=0` としてacceptされた。receipt追加後のcurrent amendment digestは
+`sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6`、
+enclosing lease digestは
+`sha256:f42cb94b284b2af1683d7fe573ef0a9b9d6d6706d111bf0f97d8d22a554edab5`
+である。checked identityは
 process/runtime/VFS/file family、reader alias/lifetime、connection、main native node+`xOpen`、
 open epoch、writer mapping generation、observed SHM object/direct-entry/device/mount、map/unmap/close
 callback cohort、non-reusable attachment epochを含む。成功callbackのreceiptはcallbackごとに残すが、
@@ -368,9 +377,9 @@ proposal group後のREADONLY/non-nullは別ownerへtransferせずIOERR/nullとso
 いずれかへ必ずterminalにする。これら以外の既存rowは不変であり、
 将来review済みのadmitted OK/non-nullだけがREADONLY/same pointerへprojectできる。
 
-fresh independent exact-commit acceptance前はauthority edit、audit、reproductionだけを許す。acceptance
-後もinternal reader group/member/revalidation/eager lifetime/unmap/close state machineとfocused testsだけを
-認可し、production/VFS/native-OK projection、public API、qualificationはexact implementationとfull
+このacceptanceはinternal reader group/member/revalidation/session lifetime/unmap/close state machine、
+registry/callback gate、focused testsだけを認可し、production/VFS/native-OK projection、public API、
+qualificationはexact implementationとfull
 counterexample matrixのdistinct independent reviewまでblockする。accepted DF-0205/DF-0206/DF-0208
 subtreeを変更しない。
 

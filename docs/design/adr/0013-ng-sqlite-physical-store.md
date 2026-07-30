@@ -120,7 +120,14 @@ enclosing lease digestは
 Issue #207 / DF-0207 の四mirror
 `reader_native_attachment_amendment_proposal` /
 `cxxlens.sqlite.reader-shm-native-attachment.v1` は
-`proposed-unqualified-non-authorizing` であり、acceptance receiptを持たない。reader attachmentは
+`accepted-authority-implementation-pending` である。exact proposal commit
+`636ef43803665e9999b38b9c33bd3afdbb6b4460` は Issue #207 のfresh independent review
+<https://github.com/horiyamayoh/cxxlens/issues/207#issuecomment-5125815049> で
+`P0=0 / P1=0 / P2=0` としてacceptされた。reviewed proposal digestは
+`sha256:a342d01379b7d6e3c9a162dc02cf260942c4dc96783e941333c1aa2a1eeef8f0`、
+current accepted digestは
+`sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6`
+である。reader attachmentは
 process/runtime/VFS/file-family/alias/connection/main native node+`xOpen`/open epoch、writer mapping
 generation、observed SHM object/entry/mount、callback cohort、non-reusable attachment epochへbindする。
 successful map callbackのexact receiptは全て保持するが、same-page revalidationはauditだけ、unique
@@ -139,9 +146,9 @@ zero-native-effect acknowledgementを作り、closeはそれをatomicにconsume�
 non-OK、throw、unknownはfresh family admissionを止め、already-owned peer cleanupだけを許すpermanent
 quarantineとする。ordinary existing CANTINIT/READONLY rowとbase READONLY/null normalizationは変更せず、
 proposal group後のmixed READONLY/non-nullとinvalid status/pointer pairは単一cleanup/terminal routeへ
-fail closedする。proposal acceptanceまではreader
-implementationを、distinct exact implementation/matrix reviewまではproduction/VFS/native-OK
-projectionを認可しない。accepted DF-0205/DF-0206/DF-0208 fieldsとpublic APIは不変である。
+fail closedする。acceptanceはinternal reader attachment state machineとfocused testsを認可するが、
+distinct exact implementation/matrix reviewまではproduction/VFS/native-OK projectionを認可しない。
+accepted DF-0205/DF-0206/DF-0208 fieldsとpublic APIは不変である。
 
 Issue #208 / DF-0208 の
 `cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、accepted DF-0206 のgate failure transitionに
