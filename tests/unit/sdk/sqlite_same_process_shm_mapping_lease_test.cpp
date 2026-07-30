@@ -111,6 +111,24 @@ namespace cxxlens::sdk
 					std::move(zero_resize_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_zero_effect_receipt
+		reader_attachment_zero_effect(const sqlite_shm_reader_attachment_map_inflight& inflight,
+									  const sqlite_shm_reader_attachment_zero_effect_kind kind,
+									  sqlite_shm_reader_attachment_map_request request,
+									  const int native_status,
+									  const volatile void* native_mapping,
+									  sqlite_backend_opaque_identity zero_attachment_effect,
+									  const int delegated_extend = 0)
+		{
+			return {inflight,
+					kind,
+					std::move(request),
+					native_status,
+					native_mapping,
+					delegated_extend,
+					std::move(zero_attachment_effect)};
+		}
+
 		[[nodiscard]] static std::optional<sqlite_shm_reader_attachment_reservation_identity>
 		reader_attachment_reservation(sqlite_shm_lease_family_binding family,
 									  sqlite_backend_opaque_identity runtime_lifetime_pin,
@@ -158,7 +176,14 @@ namespace
 
 	/** Stable SQLite ABI result values used by the closed native-map validator fixture. */
 	constexpr int sqlite_ok_status = 0;
+	constexpr int sqlite_busy_status = 5;
+	constexpr int sqlite_ioerr_status = 10;
+	constexpr int sqlite_ioerr_read_status = sqlite_ioerr_status | (1 << 8);
 	constexpr int sqlite_readonly_status = 8;
+	constexpr int sqlite_readonly_cantinit_status = sqlite_readonly_status | (5 << 8);
+	constexpr int sqlite_readonly_unsupported_extended_status = sqlite_readonly_status | (7 << 8);
+	constexpr int sqlite_invalid_extended_ok_status = 1 << 8;
+	constexpr int sqlite_undefined_primary_status = 29;
 
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_eligibility>);
 	static_assert(!std::is_default_constructible_v<sqlite_shm_native_attachment_identity>);
@@ -174,6 +199,8 @@ namespace
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_holder>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_map_inflight>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_attachment_map_inflight>);
+	static_assert(!std::is_default_constructible_v<
+				  sqlite_shm_verified_reader_attachment_zero_effect_receipt>);
 	static_assert(
 		!std::is_default_constructible_v<sqlite_shm_reader_attachment_reservation_identity>);
 	static_assert(!std::is_default_constructible_v<sqlite_shm_reader_native_attachment_identity>);
@@ -3611,6 +3638,626 @@ namespace
 				"unknown terminal kind consumes no terminal tombstone and quarantines");
 	}
 
+	void verify_reader_zero_attachment_status_partition()
+	{
+		struct accepted_row
+		{
+			sqlite_shm_reader_attachment_zero_effect_kind kind;
+			int native_status;
+			bool native_mapping;
+			int projected_status;
+		};
+		const accepted_row accepted_rows[]{
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			 sqlite_busy_status,
+			 false,
+			 sqlite_busy_status},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			 sqlite_ioerr_read_status,
+			 false,
+			 sqlite_ioerr_read_status},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_ok_status,
+			 false,
+			 sqlite_ioerr_status},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_readonly_unsupported_extended_status,
+			 false,
+			 sqlite_ioerr_status},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_readonly_cantinit_status,
+			 true,
+			 sqlite_ioerr_status},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_busy_status,
+			 true,
+			 sqlite_ioerr_status},
+		};
+
+		for (std::size_t index = 0; index < std::size(accepted_rows); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(130U + index * 2U);
+			const auto binding = family(marker);
+			const auto writer_connection = identity("test.connection", marker);
+			const auto reader_connection = identity("test.connection", marker + 1U);
+			const auto writer_epoch = identity("test.open-epoch", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto writer = install_live_writer(
+				coordinator, binding, writer_connection, writer_epoch, marker, &page);
+			const auto map_request = reader_attachment_request(binding,
+															   reader_connection,
+															   marker + 1U,
+															   2,
+															   marker + 1U,
+															   0,
+															   writer.holder.generation());
+			const auto session_request = reader_session_request(map_request, marker + 1U);
+			auto session_result = coordinator.begin_reader_session(session_request);
+			require(session_result.has_value(),
+					"zero-attachment accepted row reserves a first session");
+			auto session = std::move(*session_result);
+			auto map_result = coordinator.begin_reader_map(session, map_request);
+			require(map_result.has_value(),
+					"zero-attachment accepted row begins its exact native attempt");
+			auto inflight = std::move(*map_result);
+			const auto& row = accepted_rows[index];
+			const auto receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					inflight,
+					row.kind,
+					map_request,
+					row.native_status,
+					row.native_mapping ? &page : nullptr,
+					identity("test.reader-zero-attachment-effect", marker));
+			auto completed =
+				coordinator.complete_reader_zero_attachment_map(inflight, receipt, session);
+			const auto terminal = coordinator.snapshot();
+			require(completed && completed->kind() == row.kind &&
+						completed->native_status() == row.projected_status &&
+						completed->native_mapping() == nullptr && !inflight.valid() &&
+						!session.valid() && terminal.reader_inflight_count == 0U &&
+						terminal.reader_attachment_group_count == 0U &&
+						terminal.reader_attachment_live_member_count == 0U &&
+						terminal.reader_attachment_audit_count == 0U &&
+						terminal.reader_session_reservation_count == 0U &&
+						terminal.reader_session_owner_count == 0U &&
+						terminal.reader_handoff_count == 0U &&
+						terminal.reader_attachment_zero_effect_terminal_count == 1U &&
+						terminal.reader_attachment_revoked_no_map_count == 1U &&
+						!terminal.quarantined,
+					"each accepted complete-proof row publishes one revoked no-map terminal");
+
+			if (index == 0U)
+			{
+				auto replay =
+					coordinator.complete_reader_zero_attachment_map(inflight, receipt, session);
+				require(
+					!replay &&
+						replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+						coordinator.snapshot().reader_attachment_zero_effect_terminal_count == 1U &&
+						!coordinator.snapshot().quarantined,
+					"zero-attachment completion and its receipt cannot replay");
+				auto same_epoch = coordinator.begin_reader_session(session_request);
+				require(!same_epoch &&
+							same_epoch.error().reason ==
+								sqlite_shm_lease_rejection_reason::stale_token &&
+							!coordinator.snapshot().quarantined,
+						"revoked no-map tombstone rejects the consumed attachment epoch");
+
+				auto fresh_map_request = reader_attachment_request(
+					binding,
+					reader_connection,
+					marker + 1U,
+					2,
+					marker + 2U,
+					0,
+					writer.holder.generation(),
+					identity("test.reader-attachment-epoch", marker + 2U));
+				const auto fresh_session_request =
+					reader_session_request(fresh_map_request, marker + 2U);
+				auto fresh_session_result = coordinator.begin_reader_session(fresh_session_request);
+				require(fresh_session_result.has_value(),
+						"a fresh attachment epoch remains admissible after no-map revocation");
+				auto fresh_session = std::move(*fresh_session_result);
+				const auto fresh_terminal =
+					sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+						fresh_session_request,
+						sqlite_shm_reader_session_terminal_kind::failure,
+						identity("test.reader-session-terminal", marker + 2U));
+				require(coordinator.complete_reader_session(fresh_session, fresh_terminal) &&
+							!fresh_session.valid(),
+						"fresh-epoch proof fixture closes without leaking a reservation");
+			}
+
+			retire_last(coordinator, writer.holder, callback(3, marker + 3U));
+			require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
+					"revoke accepted zero-attachment fixture writer gate");
+		}
+
+		struct rejected_row
+		{
+			sqlite_shm_reader_attachment_zero_effect_kind kind;
+			int native_status;
+			bool native_mapping;
+		};
+		const rejected_row rejected_rows[]{
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_readonly_status,
+			 false},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_readonly_status,
+			 true},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_readonly_cantinit_status,
+			 false},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_readonly_unsupported_extended_status,
+			 true},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_ok_status,
+			 true},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_busy_status,
+			 false},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			 sqlite_ok_status,
+			 false},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			 sqlite_invalid_extended_ok_status,
+			 false},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			 sqlite_undefined_primary_status,
+			 false},
+			{sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			 sqlite_invalid_extended_ok_status,
+			 true},
+		};
+
+		for (std::size_t index = 0; index < std::size(rejected_rows); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(150U + index * 2U);
+			const auto binding = family(marker);
+			const auto writer_connection = identity("test.connection", marker);
+			const auto reader_connection = identity("test.connection", marker + 1U);
+			const auto writer_epoch = identity("test.open-epoch", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto writer = install_live_writer(
+				coordinator, binding, writer_connection, writer_epoch, marker, &page);
+			const auto map_request = reader_attachment_request(binding,
+															   reader_connection,
+															   marker + 1U,
+															   2,
+															   marker + 1U,
+															   0,
+															   writer.holder.generation());
+			const auto session_request = reader_session_request(map_request, marker + 1U);
+			auto session_result = coordinator.begin_reader_session(session_request);
+			require(session_result.has_value(),
+					"zero-attachment rejected row reserves a first session");
+			auto session = std::move(*session_result);
+			auto map_result = coordinator.begin_reader_map(session, map_request);
+			require(map_result.has_value(),
+					"zero-attachment rejected row begins its exact native attempt");
+			auto inflight = std::move(*map_result);
+			const auto& row = rejected_rows[index];
+			const auto receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					inflight,
+					row.kind,
+					map_request,
+					row.native_status,
+					row.native_mapping ? &page : nullptr,
+					identity("test.reader-zero-attachment-effect", marker));
+			auto rejected =
+				coordinator.complete_reader_zero_attachment_map(inflight, receipt, session);
+			const auto terminal = coordinator.snapshot();
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						!inflight.valid() && !session.valid() && terminal.quarantined &&
+						terminal.reader_inflight_count == 0U &&
+						terminal.reader_attachment_group_count == 0U &&
+						terminal.reader_attachment_zero_effect_terminal_count == 0U &&
+						terminal.reader_attachment_revoked_no_map_count == 0U,
+					"excluded status/pointer row fails closed without publishing a terminal");
+		}
+	}
+
+	void verify_reader_zero_attachment_receipt_binding_and_effect_proof()
+	{
+		const auto verify_invalid_receipt = [](const std::uint8_t marker,
+											   const bool omit_effect,
+											   const bool mismatch_request,
+											   const int delegated_extend)
+		{
+			const auto binding = family(marker);
+			const auto writer_connection = identity("test.connection", marker);
+			const auto reader_connection = identity("test.connection", marker + 1U);
+			const auto writer_epoch = identity("test.open-epoch", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto writer = install_live_writer(
+				coordinator, binding, writer_connection, writer_epoch, marker, &page);
+			const auto map_request = reader_attachment_request(binding,
+															   reader_connection,
+															   marker + 1U,
+															   2,
+															   marker + 1U,
+															   0,
+															   writer.holder.generation());
+			const auto session_request = reader_session_request(map_request, marker + 1U);
+			auto session_result = coordinator.begin_reader_session(session_request);
+			require(session_result.has_value(), "invalid zero-effect fixture reserves a session");
+			auto session = std::move(*session_result);
+			auto map_result = coordinator.begin_reader_map(session, map_request);
+			require(map_result.has_value(), "invalid zero-effect fixture begins native map");
+			auto inflight = std::move(*map_result);
+			auto receipt_request = map_request;
+			if (mismatch_request)
+				receipt_request.callback = callback(9, marker + 2U);
+			const auto receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					inflight,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					std::move(receipt_request),
+					sqlite_busy_status,
+					nullptr,
+					omit_effect ? sqlite_backend_opaque_identity{}
+								: identity("test.reader-zero-attachment-effect", marker),
+					delegated_extend);
+			auto rejected =
+				coordinator.complete_reader_zero_attachment_map(inflight, receipt, session);
+			const auto snapshot = coordinator.snapshot();
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						!inflight.valid() && !session.valid() && snapshot.quarantined &&
+						snapshot.reader_attachment_zero_effect_terminal_count == 0U &&
+						snapshot.reader_attachment_revoked_no_map_count == 0U,
+					"missing effect, mismatched request, or nonzero delegation cannot "
+					"self-authorize no-map");
+		};
+		verify_invalid_receipt(170, true, false, 0);
+		verify_invalid_receipt(172, false, true, 0);
+		verify_invalid_receipt(174, false, false, 1);
+
+		{
+			constexpr std::uint8_t marker = 176;
+			const auto binding = family(marker);
+			const auto writer_connection = identity("test.connection", marker);
+			const auto reader_connection_a = identity("test.connection", marker + 1U);
+			const auto reader_connection_b = identity("test.connection", marker + 2U);
+			const auto writer_epoch = identity("test.open-epoch", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto writer = install_live_writer(
+				coordinator, binding, writer_connection, writer_epoch, marker, &page);
+			const auto request_a = reader_attachment_request(binding,
+															 reader_connection_a,
+															 marker + 1U,
+															 2,
+															 marker + 1U,
+															 0,
+															 writer.holder.generation());
+			const auto request_b = reader_attachment_request(binding,
+															 reader_connection_b,
+															 marker + 2U,
+															 3,
+															 marker + 2U,
+															 0,
+															 writer.holder.generation());
+			auto session_a_result =
+				coordinator.begin_reader_session(reader_session_request(request_a, marker + 1U));
+			auto session_b_result =
+				coordinator.begin_reader_session(reader_session_request(request_b, marker + 2U));
+			require(session_a_result && session_b_result,
+					"duplicate-effect fixture reserves two distinct attachment sessions");
+			auto session_a = std::move(*session_a_result);
+			auto session_b = std::move(*session_b_result);
+			auto map_a_result = coordinator.begin_reader_map(session_a, request_a);
+			auto map_b_result = coordinator.begin_reader_map(session_b, request_b);
+			require(map_a_result && map_b_result,
+					"duplicate-effect fixture begins two distinct native attempts");
+			auto map_a = std::move(*map_a_result);
+			auto map_b = std::move(*map_b_result);
+			const auto effect = identity("test.reader-zero-attachment-effect", marker);
+			const auto receipt_a =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					map_a,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					request_a,
+					sqlite_busy_status,
+					nullptr,
+					effect);
+			auto completed_a =
+				coordinator.complete_reader_zero_attachment_map(map_a, receipt_a, session_a);
+			require(completed_a && !map_a.valid() && !session_a.valid() &&
+						coordinator.snapshot().reader_attachment_zero_effect_terminal_count == 1U,
+					"first exact effect identity publishes one no-map terminal");
+
+			const auto receipt_b =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					map_b,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					request_b,
+					sqlite_busy_status,
+					nullptr,
+					effect);
+			auto duplicate =
+				coordinator.complete_reader_zero_attachment_map(map_b, receipt_b, session_b);
+			const auto snapshot = coordinator.snapshot();
+			require(!duplicate &&
+						duplicate.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						!map_b.valid() && !session_b.valid() && snapshot.quarantined &&
+						snapshot.reader_attachment_zero_effect_terminal_count == 1U &&
+						snapshot.reader_attachment_revoked_no_map_count == 1U,
+					"one zero-effect identity cannot authorize a distinct terminal attempt");
+		}
+
+		constexpr std::uint8_t marker = 174;
+		const auto binding = family(marker);
+		const auto writer_connection = identity("test.connection", marker);
+		const auto reader_connection_a = identity("test.connection", marker + 1U);
+		const auto reader_connection_b = identity("test.connection", marker + 2U);
+		const auto writer_epoch = identity("test.open-epoch", marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int page{};
+		auto writer = install_live_writer(
+			coordinator, binding, writer_connection, writer_epoch, marker, &page);
+		const auto request_a = reader_attachment_request(binding,
+														 reader_connection_a,
+														 marker + 1U,
+														 2,
+														 marker + 1U,
+														 0,
+														 writer.holder.generation());
+		const auto request_b = reader_attachment_request(binding,
+														 reader_connection_b,
+														 marker + 2U,
+														 3,
+														 marker + 2U,
+														 0,
+														 writer.holder.generation());
+		auto session_a_result =
+			coordinator.begin_reader_session(reader_session_request(request_a, marker + 1U));
+		auto session_b_result =
+			coordinator.begin_reader_session(reader_session_request(request_b, marker + 2U));
+		require(session_a_result && session_b_result,
+				"attempt-binding fixture reserves two distinct attachment sessions");
+		auto session_a = std::move(*session_a_result);
+		auto session_b = std::move(*session_b_result);
+		auto map_a_result = coordinator.begin_reader_map(session_a, request_a);
+		auto map_b_result = coordinator.begin_reader_map(session_b, request_b);
+		require(map_a_result && map_b_result,
+				"attempt-binding fixture begins two distinct native attempts");
+		auto map_a = std::move(*map_a_result);
+		auto map_b = std::move(*map_b_result);
+		const auto wrong_attempt_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+				map_a,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+				request_b,
+				sqlite_busy_status,
+				nullptr,
+				identity("test.reader-zero-attachment-effect", marker));
+		auto wrong_attempt = coordinator.complete_reader_zero_attachment_map(
+			map_b, wrong_attempt_receipt, session_b);
+		const auto quarantined = coordinator.snapshot();
+		require(!wrong_attempt &&
+					wrong_attempt.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!map_b.valid() && !session_b.valid() && map_a.valid() && session_a.valid() &&
+					quarantined.quarantined &&
+					quarantined.reader_attachment_zero_effect_terminal_count == 0U &&
+					quarantined.reader_attachment_revoked_no_map_count == 0U,
+				"a complete proof sealed for another attempt fails closed without publication");
+	}
+
+	void verify_reader_zero_attachment_later_group_preserves_authority()
+	{
+		constexpr std::uint8_t marker = 180;
+		const auto binding = family(marker);
+		const auto writer_connection = identity("test.connection", marker);
+		const auto reader_connection = identity("test.connection", marker + 1U);
+		const auto writer_epoch = identity("test.open-epoch", marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int page{};
+		auto writer = install_live_writer(
+			coordinator, binding, writer_connection, writer_epoch, marker, &page);
+		auto map_request = reader_attachment_request(
+			binding, reader_connection, marker + 1U, 2, marker + 1U, 0, writer.holder.generation());
+		const auto session_request = reader_session_request(map_request, marker + 1U);
+		auto session_result = coordinator.begin_reader_session(session_request);
+		require(session_result.has_value(), "later no-map fixture reserves a reader session");
+		auto session = std::move(*session_result);
+		auto first_map_result = coordinator.begin_reader_map(session, map_request);
+		require(first_map_result.has_value(), "later no-map fixture begins its first map");
+		auto first_map = std::move(*first_map_result);
+		auto first_commit_result = coordinator.commit_reader_map(
+			first_map,
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+				map_request,
+				writer.holder.generation(),
+				mapping(0, &page, 4096U),
+				identity("test.zero-reader-resize", marker)),
+			session);
+		require(first_commit_result.has_value(), "later no-map fixture forms its exact group");
+		auto first_commit = std::move(*first_commit_result);
+		auto handoff_result = first_commit.take_handoff();
+		require(handoff_result.has_value(), "later no-map fixture owns its group handoff");
+		auto handoff = std::move(*handoff_result);
+		const auto before = coordinator.snapshot();
+
+		map_request.callback = callback(2, marker + 2U);
+		auto later_map_result = coordinator.begin_reader_map(session, map_request);
+		require(later_map_result.has_value(), "active group admits a later native map attempt");
+		auto later_map = std::move(*later_map_result);
+		const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+			later_map,
+			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			map_request,
+			sqlite_busy_status,
+			nullptr,
+			identity("test.reader-zero-attachment-effect", marker));
+		auto completed =
+			coordinator.complete_reader_zero_attachment_map(later_map, receipt, session);
+		const auto after = coordinator.snapshot();
+		require(
+			completed &&
+				completed->kind() ==
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change &&
+				completed->native_status() == sqlite_busy_status &&
+				completed->native_mapping() == nullptr && !later_map.valid() && session.valid() &&
+				session.phase() == sqlite_shm_reader_session_phase::active_group_owner &&
+				handoff.valid() && !after.quarantined &&
+				after.reader_inflight_count == before.reader_inflight_count &&
+				after.reader_attachment_group_count == before.reader_attachment_group_count &&
+				after.reader_attachment_live_member_count ==
+					before.reader_attachment_live_member_count &&
+				after.reader_attachment_audit_count == before.reader_attachment_audit_count &&
+				after.reader_session_reservation_count == before.reader_session_reservation_count &&
+				after.reader_session_owner_count == before.reader_session_owner_count &&
+				after.reader_handoff_count == before.reader_handoff_count &&
+				after.reader_attachment_revoked_no_map_count ==
+					before.reader_attachment_revoked_no_map_count &&
+				after.reader_attachment_zero_effect_terminal_count ==
+					before.reader_attachment_zero_effect_terminal_count + 1U,
+			"later determinate no-map adds only its terminal audit and preserves the group");
+
+		auto protocol_request = map_request;
+		protocol_request.callback = callback(2, marker + 3U);
+		auto protocol_map_result = coordinator.begin_reader_map(session, protocol_request);
+		require(protocol_map_result.has_value(),
+				"active group admits a later protocol-invalid no-map attempt");
+		auto protocol_map = std::move(*protocol_map_result);
+		const auto protocol_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+				protocol_map,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+				protocol_request,
+				sqlite_ok_status,
+				nullptr,
+				identity("test.reader-zero-attachment-effect", marker + 1U));
+		auto protocol_completed = coordinator.complete_reader_zero_attachment_map(
+			protocol_map, protocol_receipt, session);
+		const auto after_protocol = coordinator.snapshot();
+		require(protocol_completed &&
+					protocol_completed->kind() ==
+						sqlite_shm_reader_attachment_zero_effect_kind::
+							exact_protocol_invalid_no_attachment &&
+					protocol_completed->native_status() == sqlite_ioerr_status &&
+					protocol_completed->native_mapping() == nullptr && !protocol_map.valid() &&
+					session.valid() && handoff.valid() && !after_protocol.quarantined &&
+					after_protocol.reader_inflight_count == after.reader_inflight_count &&
+					after_protocol.reader_attachment_group_count ==
+						after.reader_attachment_group_count &&
+					after_protocol.reader_attachment_live_member_count ==
+						after.reader_attachment_live_member_count &&
+					after_protocol.reader_attachment_audit_count ==
+						after.reader_attachment_audit_count &&
+					after_protocol.reader_session_reservation_count ==
+						after.reader_session_reservation_count &&
+					after_protocol.reader_session_owner_count == after.reader_session_owner_count &&
+					after_protocol.reader_handoff_count == after.reader_handoff_count &&
+					after_protocol.reader_attachment_revoked_no_map_count ==
+						after.reader_attachment_revoked_no_map_count &&
+					after_protocol.reader_attachment_zero_effect_terminal_count ==
+						after.reader_attachment_zero_effect_terminal_count + 1U,
+				"later protocol-invalid no-map projects IOERR without changing group authority");
+
+		auto replay = coordinator.complete_reader_zero_attachment_map(later_map, receipt, session);
+		auto callback_replay = coordinator.begin_reader_map(session, map_request);
+		require(
+			!replay && replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+				!callback_replay &&
+				callback_replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+				session.valid() && handoff.valid() &&
+				coordinator.snapshot().reader_attachment_zero_effect_terminal_count ==
+					after_protocol.reader_attachment_zero_effect_terminal_count &&
+				!coordinator.snapshot().quarantined,
+			"later no-map attempt and callback invocation cannot replay");
+
+		const auto terminal_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				session_request,
+				sqlite_shm_reader_session_terminal_kind::failure,
+				identity("test.reader-session-terminal", marker));
+		require(coordinator.complete_reader_session(session, terminal_receipt) && !session.valid(),
+				"later no-map fixture closes its unchanged session owner");
+		const auto unmap_callback = callback(3, marker + 4U);
+		auto unmap = coordinator.begin_reader_unmap(handoff, unmap_callback);
+		require(unmap.has_value() && !handoff.valid(),
+				"later no-map fixture transfers its unchanged group handoff");
+		require(coordinator
+						.complete_reader_unmap(*unmap,
+											   unmap_callback,
+											   sqlite_shm_native_cleanup_outcome::confirmed_success)
+						.has_value() &&
+					!unmap->valid(),
+				"later no-map fixture closes its original group");
+		retire_last(coordinator, writer.holder, callback(4, marker + 5U));
+		require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
+				"revoke later zero-attachment fixture writer gate");
+	}
+
+	void verify_reader_zero_attachment_terminal_commit_exception_has_no_half_publish()
+	{
+		constexpr std::uint8_t marker = 190;
+		const auto binding = family(marker);
+		const auto writer_connection = identity("test.connection", marker);
+		const auto reader_connection = identity("test.connection", marker + 1U);
+		const auto writer_epoch = identity("test.open-epoch", marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int page{};
+		auto writer = install_live_writer(
+			coordinator, binding, writer_connection, writer_epoch, marker, &page);
+		const auto map_request = reader_attachment_request(
+			binding, reader_connection, marker + 1U, 2, marker + 1U, 0, writer.holder.generation());
+		const auto session_request = reader_session_request(map_request, marker + 1U);
+		auto session_result = coordinator.begin_reader_session(session_request);
+		require(session_result.has_value(), "injected no-map fixture reserves a session");
+		auto session = std::move(*session_result);
+		auto map_result = coordinator.begin_reader_map(session, map_request);
+		require(map_result.has_value(), "injected no-map fixture begins native map");
+		auto inflight = std::move(*map_result);
+		const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+			inflight,
+			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			map_request,
+			sqlite_busy_status,
+			nullptr,
+			identity("test.reader-zero-attachment-effect", marker));
+		sqlite_same_process_shm_lease_test_peer::fail_next_reader_map_terminal_commit(coordinator);
+		auto failed = coordinator.complete_reader_zero_attachment_map(inflight, receipt, session);
+		const auto quarantined = coordinator.snapshot();
+		require(!failed &&
+					failed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!inflight.valid() && !session.valid() && quarantined.quarantined &&
+					quarantined.reader_inflight_count == 0U &&
+					quarantined.reader_attachment_group_count == 0U &&
+					quarantined.reader_session_reservation_count == 0U &&
+					quarantined.reader_session_owner_count == 0U &&
+					quarantined.reader_attachment_zero_effect_terminal_count == 0U &&
+					quarantined.reader_attachment_revoked_no_map_count == 0U,
+				"terminal-commit injection quarantines without half-published no-map evidence");
+		auto replay = coordinator.complete_reader_zero_attachment_map(inflight, receipt, session);
+		require(!replay &&
+					replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					coordinator.snapshot().reader_attachment_zero_effect_terminal_count == 0U,
+				"injected no-map terminal cannot replay into a later publication");
+	}
+
 	void verify_reader_map_terminal_commit_exception_is_exact_and_one_shot()
 	{
 		constexpr std::uint8_t marker = 120;
@@ -4567,6 +5214,10 @@ int main()
 		verify_quarantined_retirement_drains_without_revival();
 		verify_reader_reservation_terminal_requires_fresh_attachment_epoch();
 		verify_reader_terminal_kind_is_closed_and_fail_closed();
+		verify_reader_zero_attachment_status_partition();
+		verify_reader_zero_attachment_receipt_binding_and_effect_proof();
+		verify_reader_zero_attachment_later_group_preserves_authority();
+		verify_reader_zero_attachment_terminal_commit_exception_has_no_half_publish();
 		verify_reader_map_terminal_commit_exception_is_exact_and_one_shot();
 		verify_reader_session_terminal_commit_exception_is_exact_and_one_shot();
 		verify_reader_native_attachment_group_and_session_core();

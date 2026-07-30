@@ -360,11 +360,13 @@ namespace cxxlens::sdk
 	class sqlite_shm_writer_holder;
 	class sqlite_shm_reader_session;
 	class sqlite_shm_reader_attachment_map_inflight;
+	class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
 	class sqlite_shm_verified_writer_native_map_receipt;
 	class sqlite_writer_shm_native_map_receipt_validator;
 	class sqlite_writer_shm_mapping_receipt_validator;
 	class sqlite_same_process_shm_writer_gate_receipt_validator;
 	class sqlite_same_process_shm_reader_receipt_validator;
+	class sqlite_same_process_shm_reader_zero_effect_receipt_validator;
 	class sqlite_same_process_shm_reader_session_terminal_receipt_validator;
 	class sqlite_same_process_shm_lease_test_peer;
 
@@ -397,6 +399,80 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity terminal_receipt_;
 		bool authority_read_closed_{};
 		bool no_live_shm_lock_{};
+	};
+
+	enum class sqlite_shm_reader_attachment_zero_effect_kind : std::uint8_t
+	{
+		exact_no_attachment_change,
+		exact_protocol_invalid_no_attachment,
+	};
+
+	/**
+	 * Issuer-sealed determinate reader-map result with complete zero-attachment-effect proof.
+	 *
+	 * This receipt is bound to one exact proposal attachment-map attempt. It can describe only
+	 * the two zero-attachment Step 5a routes; mapped, predecessor, incomplete-effect, and
+	 * ambiguous results cannot be represented by this type. The production validator remains
+	 * deliberately absent until the source-private VFS issuer is implemented and reviewed.
+	 */
+	class sqlite_shm_verified_reader_attachment_zero_effect_receipt
+	{
+	  public:
+		[[nodiscard]] sqlite_shm_reader_attachment_zero_effect_kind kind() const noexcept;
+		[[nodiscard]] const sqlite_shm_reader_attachment_map_request& request() const noexcept;
+		[[nodiscard]] int native_status() const noexcept;
+		[[nodiscard]] const volatile void* native_mapping() const noexcept;
+		[[nodiscard]] int delegated_extend() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		zero_attachment_effect_receipt() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_same_process_shm_reader_zero_effect_receipt_validator;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_verified_reader_attachment_zero_effect_receipt(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_attachment_zero_effect_kind kind,
+			sqlite_shm_reader_attachment_map_request request,
+			int native_status,
+			const volatile void* native_mapping,
+			int delegated_extend,
+			sqlite_backend_opaque_identity zero_attachment_effect_receipt);
+
+		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		sqlite_shm_reader_attachment_zero_effect_kind kind_{
+			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change};
+		sqlite_shm_reader_attachment_map_request request_;
+		int native_status_{};
+		const volatile void* native_mapping_{};
+		int delegated_extend_{};
+		sqlite_backend_opaque_identity zero_attachment_effect_receipt_;
+	};
+
+	/**
+	 * Closed outward projection after one zero-attachment terminal commit.
+	 *
+	 * `native_mapping()` is always null. Exact no-change preserves its determinate native status;
+	 * protocol-invalid no-attachment projects the stable SQLite IOERR status.
+	 */
+	class sqlite_shm_reader_attachment_zero_effect_result
+	{
+	  public:
+		[[nodiscard]] sqlite_shm_reader_attachment_zero_effect_kind kind() const noexcept;
+		[[nodiscard]] int native_status() const noexcept;
+		[[nodiscard]] const volatile void* native_mapping() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		sqlite_shm_reader_attachment_zero_effect_result(
+			sqlite_shm_reader_attachment_zero_effect_kind kind, int native_status) noexcept;
+
+		sqlite_shm_reader_attachment_zero_effect_kind kind_{
+			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change};
+		int native_status_{};
 	};
 
 	/**
@@ -736,6 +812,8 @@ namespace cxxlens::sdk
 		std::size_t reader_session_reservation_count{};
 		std::size_t reader_session_owner_count{};
 		std::size_t reader_session_terminal_count{};
+		std::size_t reader_attachment_zero_effect_terminal_count{};
+		std::size_t reader_attachment_revoked_no_map_count{};
 		std::size_t reader_registry_bound_group_count{};
 		std::size_t reader_registry_bound_session_count{};
 		std::size_t reader_registry_open_count{};
@@ -1015,6 +1093,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
 		explicit sqlite_shm_reader_attachment_map_inflight(
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			detail::sqlite_shm_lease_token_identity token,
@@ -1287,6 +1366,11 @@ namespace cxxlens::sdk
 		commit_reader_map(sqlite_shm_reader_attachment_map_inflight& inflight,
 						  const sqlite_shm_verified_reader_attachment_post_map_receipt& receipt,
 						  sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_zero_effect_result>
+		complete_reader_zero_attachment_map(
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
+			sqlite_shm_reader_session& session);
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		complete_reader_session(sqlite_shm_reader_session& session,
 								const sqlite_shm_reader_session_terminal_receipt& receipt) noexcept;
@@ -1369,6 +1453,14 @@ namespace cxxlens::sdk
 			const sqlite_shm_verified_reader_attachment_post_map_receipt& receipt,
 			sqlite_shm_reader_session& session,
 			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_zero_effect_result>
+		complete_registry_reader_zero_attachment_map(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
+			sqlite_shm_reader_session& session,
+			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate,
+			std::optional<sqlite_shm_reader_attachment_authority>& completed_candidate);
 		void inject_writer_native_transition_failure_for_testing() noexcept;
 		void inject_writer_attachment_seal_failure_for_testing() noexcept;
 		void inject_writer_completion_transition_failure_for_testing() noexcept;

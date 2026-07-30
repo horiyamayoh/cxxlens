@@ -816,6 +816,12 @@ namespace cxxlens::sdk
 						  sqlite_shm_reader_attachment_map_inflight& inflight,
 						  const sqlite_shm_verified_reader_attachment_post_map_receipt& receipt,
 						  sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_zero_effect_result>
+		complete_reader_zero_attachment_map(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
+			sqlite_shm_reader_session& session);
 		/**
 		 * Installs one validator-sealed registry-bound writer pending at the exact original
 		 * family/activity boundary. The registry mutex remains held through the lease transition.

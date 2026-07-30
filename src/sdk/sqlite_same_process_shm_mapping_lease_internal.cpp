@@ -22,6 +22,13 @@ namespace cxxlens::sdk
 			ok = 0,
 		};
 
+		constexpr int sqlite_ioerr_status = 10;
+		constexpr int sqlite_readonly_status = 8;
+		constexpr int sqlite_readonly_cantinit_status = sqlite_readonly_status | (5 << 8);
+		constexpr int sqlite_primary_status_mask = 0xff;
+		constexpr int sqlite_error_primary_status_first = 1;
+		constexpr int sqlite_error_primary_status_last = 26;
+
 		[[nodiscard]] bool valid_identity(const sqlite_backend_opaque_identity& identity) noexcept
 		{
 			return !identity.profile.empty() && !identity.bytes.empty();
@@ -135,6 +142,40 @@ namespace cxxlens::sdk
 				request.expected_attachment.connection_token() == request.connection_token &&
 				valid_callback(request.callback) && request.page_number >= 0 &&
 				request.page_size > 0 && request.caller_extend == 0;
+		}
+
+		[[nodiscard]] bool valid_reader_zero_attachment_receipt(
+			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt) noexcept
+		{
+			if (!valid_reader_attachment_map_request(receipt.request()) ||
+				receipt.delegated_extend() != 0 ||
+				!valid_identity(receipt.zero_attachment_effect_receipt()) ||
+				receipt.native_status() < 0)
+				return false;
+
+			const auto native_status = receipt.native_status();
+			const auto primary_status = native_status & sqlite_primary_status_mask;
+			const auto closed_error_status = primary_status >= sqlite_error_primary_status_first &&
+				primary_status <= sqlite_error_primary_status_last;
+			switch (receipt.kind())
+			{
+				case sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change:
+					return closed_error_status && primary_status != sqlite_readonly_status &&
+						receipt.native_mapping() == nullptr;
+				case sqlite_shm_reader_attachment_zero_effect_kind::
+					exact_protocol_invalid_no_attachment:
+					return (native_status == static_cast<int>(sqlite_native_map_status::ok) &&
+							receipt.native_mapping() == nullptr) ||
+						(primary_status == sqlite_readonly_status &&
+						 native_status != sqlite_readonly_status &&
+						 native_status != sqlite_readonly_cantinit_status &&
+						 receipt.native_mapping() == nullptr) ||
+						(native_status == sqlite_readonly_cantinit_status &&
+						 receipt.native_mapping() != nullptr) ||
+						(closed_error_status && primary_status != sqlite_readonly_status &&
+						 receipt.native_mapping() != nullptr);
+			}
+			return false;
 		}
 
 		[[nodiscard]] bool
@@ -534,6 +575,82 @@ namespace cxxlens::sdk
 	bool sqlite_shm_reader_session_terminal_receipt::no_live_shm_lock() const noexcept
 	{
 		return no_live_shm_lock_;
+	}
+
+	sqlite_shm_verified_reader_attachment_zero_effect_receipt::
+		sqlite_shm_verified_reader_attachment_zero_effect_receipt(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_reader_attachment_zero_effect_kind kind,
+			sqlite_shm_reader_attachment_map_request request,
+			const int native_status,
+			const volatile void* native_mapping,
+			const int delegated_extend,
+			sqlite_backend_opaque_identity zero_attachment_effect_receipt)
+		: state_{inflight.state_}, token_{inflight.token_}, kind_{kind},
+		  request_{std::move(request)}, native_status_{native_status},
+		  native_mapping_{native_mapping}, delegated_extend_{delegated_extend},
+		  zero_attachment_effect_receipt_{std::move(zero_attachment_effect_receipt)}
+	{
+	}
+
+	sqlite_shm_reader_attachment_zero_effect_kind
+	sqlite_shm_verified_reader_attachment_zero_effect_receipt::kind() const noexcept
+	{
+		return kind_;
+	}
+
+	const sqlite_shm_reader_attachment_map_request&
+	sqlite_shm_verified_reader_attachment_zero_effect_receipt::request() const noexcept
+	{
+		return request_;
+	}
+
+	int sqlite_shm_verified_reader_attachment_zero_effect_receipt::native_status() const noexcept
+	{
+		return native_status_;
+	}
+
+	const volatile void*
+	sqlite_shm_verified_reader_attachment_zero_effect_receipt::native_mapping() const noexcept
+	{
+		return native_mapping_;
+	}
+
+	int sqlite_shm_verified_reader_attachment_zero_effect_receipt::delegated_extend() const noexcept
+	{
+		return delegated_extend_;
+	}
+
+	const sqlite_backend_opaque_identity&
+	sqlite_shm_verified_reader_attachment_zero_effect_receipt::zero_attachment_effect_receipt()
+		const noexcept
+	{
+		return zero_attachment_effect_receipt_;
+	}
+
+	sqlite_shm_reader_attachment_zero_effect_result::
+		sqlite_shm_reader_attachment_zero_effect_result(
+			const sqlite_shm_reader_attachment_zero_effect_kind kind,
+			const int native_status) noexcept
+		: kind_{kind}, native_status_{native_status}
+	{
+	}
+
+	sqlite_shm_reader_attachment_zero_effect_kind
+	sqlite_shm_reader_attachment_zero_effect_result::kind() const noexcept
+	{
+		return kind_;
+	}
+
+	int sqlite_shm_reader_attachment_zero_effect_result::native_status() const noexcept
+	{
+		return native_status_;
+	}
+
+	const volatile void*
+	sqlite_shm_reader_attachment_zero_effect_result::native_mapping() const noexcept
+	{
+		return nullptr;
 	}
 
 	std::optional<sqlite_shm_writer_extend_pair>
@@ -2890,6 +3007,13 @@ namespace cxxlens::sdk
 								return epoch_collides(terminal.receipt.request().attachment);
 							}) ||
 						std::ranges::any_of(
+							reader_attachment_zero_effect_terminals_,
+							[&epoch_collides](
+								const reader_attachment_zero_effect_terminal_record& terminal)
+							{
+								return epoch_collides(terminal.session_request.attachment);
+							}) ||
+						std::ranges::any_of(
 							reader_attachment_groups_,
 							[&epoch_collides](const reader_attachment_group_record& group)
 							{
@@ -2963,6 +3087,17 @@ namespace cxxlens::sdk
 									return terminal.origin_phase ==
 										reader_session_record_phase::reserved_for_first_map &&
 										terminal.receipt.request().attachment == request.attachment;
+								}))
+							return sqlite_shm_unexpected(rejection(
+								sqlite_shm_lease_rejection_reason::stale_token,
+								sqlite_shm_lease_recovery_action::deny_before_native_map));
+						if (std::ranges::any_of(
+								reader_attachment_zero_effect_terminals_,
+								[&request](
+									const reader_attachment_zero_effect_terminal_record& terminal)
+								{
+									return terminal.revoked_first_reservation &&
+										terminal.session_request.attachment == request.attachment;
 								}))
 							return sqlite_shm_unexpected(rejection(
 								sqlite_shm_lease_rejection_reason::stale_token,
@@ -3483,6 +3618,233 @@ namespace cxxlens::sdk
 							shared_from_this(),
 							sqlite_shm_lease_token_identity{*group_token},
 							sqlite_shm_mapping_generation_identity{generation}}};
+				}
+				catch (...)
+				{
+					quarantine_reader_map_terminal_commit(inflight, session);
+					return sqlite_shm_unexpected(ambiguous());
+				}
+			}
+
+			[[nodiscard]]
+			sqlite_shm_lease_result<sqlite_shm_reader_attachment_zero_effect_result>
+			complete_reader_zero_attachment(
+				sqlite_shm_reader_attachment_map_inflight& inflight,
+				const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
+				sqlite_shm_reader_session& session,
+				sqlite_shm_registry_family_pin* registry_family = nullptr,
+				std::optional<sqlite_shm_reader_map_predelegate_authority>* completed_predelegate =
+					nullptr,
+				std::optional<sqlite_shm_reader_attachment_authority>* completed_candidate =
+					nullptr)
+			{
+				try
+				{
+					// Copy every fallible receipt field before the terminal mutation begins.
+					auto prepared_receipt = receipt;
+					std::scoped_lock lock{mutex_};
+					if (!owns(inflight.state_, inflight.token_) ||
+						!owns(session.state_, session.token_))
+						return sqlite_shm_unexpected(
+							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
+
+					const auto map_attempt =
+						find_by_token(reader_attachment_maps_, inflight.token_);
+					const auto owner = find_by_token(reader_sessions_, session.token_);
+					if (map_attempt == reader_attachment_maps_.end() ||
+						map_attempt->phase != reader_phase::inflight ||
+						map_attempt->session_token != session.token_ ||
+						owner == reader_sessions_.end() ||
+						owner->phase == reader_session_record_phase::terminal_quarantined ||
+						owner->generation != inflight.generation_ ||
+						owner->generation != session.generation_ ||
+						owner->request.attachment != map_attempt->request.expected_attachment)
+						return sqlite_shm_unexpected(
+							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
+
+					const auto registry_route = registry_family != nullptr &&
+						completed_predelegate != nullptr && completed_candidate != nullptr;
+					if (map_attempt->registry_bound != registry_route ||
+						owner->registry_bound != registry_route ||
+						(registry_route &&
+						 (completed_predelegate->has_value() || completed_candidate->has_value())))
+					{
+						quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																	 owner->token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					const auto receipt_state = prepared_receipt.state_.lock();
+					if (!receipt_state || receipt_state.get() != this ||
+						prepared_receipt.token_ != map_attempt->token ||
+						prepared_receipt.request() != map_attempt->request ||
+						!valid_reader_zero_attachment_receipt(prepared_receipt) || !generation_ ||
+						generation_->value != map_attempt->generation ||
+						generation_->sealed_shm_size !=
+							map_attempt->expected_mapping.sealed_shm_size ||
+						generation_->pages.size() != map_attempt->mapping_page_count ||
+						std::ranges::any_of(
+							reader_attachment_zero_effect_terminals_,
+							[&prepared_receipt](
+								const reader_attachment_zero_effect_terminal_record& terminal)
+							{
+								return terminal.receipt.zero_attachment_effect_receipt() ==
+									prepared_receipt.zero_attachment_effect_receipt();
+							}))
+					{
+						quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																	 owner->token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					const auto first_reservation =
+						owner->phase == reader_session_record_phase::reserved_for_first_map;
+					auto group = reader_attachment_groups_.end();
+					if (first_reservation)
+					{
+						if (map_attempt->group_token != 0U ||
+							std::ranges::any_of(
+								reader_attachment_groups_,
+								[&owner](const reader_attachment_group_record& candidate)
+								{
+									return candidate.phase ==
+										reader_attachment_group_phase::active &&
+										candidate.identity.expected() == owner->request.attachment;
+								}) ||
+							(generation_->phase != sqlite_shm_mapping_generation_phase::live &&
+							 generation_->phase != sqlite_shm_mapping_generation_phase::retiring))
+						{
+							quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																		 owner->token);
+							inflight.disarm();
+							session.disarm();
+							return sqlite_shm_unexpected(ambiguous());
+						}
+					}
+					else
+					{
+						if (owner->phase != reader_session_record_phase::active_group_owner)
+						{
+							quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																		 owner->token);
+							inflight.disarm();
+							session.disarm();
+							return sqlite_shm_unexpected(ambiguous());
+						}
+						group = find_by_token(reader_attachment_groups_, owner->group_token);
+						if (group == reader_attachment_groups_.end() ||
+							group->phase != reader_attachment_group_phase::active ||
+							group->generation != owner->generation ||
+							group->identity.expected() != owner->request.attachment ||
+							map_attempt->group_token != group->token)
+						{
+							quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																		 owner->token);
+							inflight.disarm();
+							session.disarm();
+							return sqlite_shm_unexpected(ambiguous());
+						}
+					}
+
+					const auto expected_candidate_authority = registry_route && first_reservation;
+					const auto expected_predelegate_authority =
+						registry_route && map_attempt->retirement_blocker;
+					if (owner->registry_activity_authority.has_value() !=
+							expected_candidate_authority ||
+						map_attempt->registry_predelegate_authority.has_value() !=
+							expected_predelegate_authority ||
+						(!first_reservation &&
+						 (group->registry_bound != registry_route ||
+						  group->registry_activity_authority.has_value() != registry_route)))
+					{
+						quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																	 owner->token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					if (registry_route)
+					{
+						if ((map_attempt->registry_predelegate_authority &&
+							 (!map_attempt->registry_predelegate_authority->valid_for_predelegation(
+								  map_attempt->request) ||
+							  !map_attempt->registry_predelegate_authority
+								   ->validate_active_authority(*registry_family,
+															   map_attempt->request))) ||
+							(first_reservation &&
+							 (!owner->registry_activity_authority ||
+							  !owner->registry_activity_authority->validate_active_authority(
+								  *registry_family, owner->request.attachment))) ||
+							(!first_reservation &&
+							 (!group->registry_bound || !group->registry_activity_authority ||
+							  !group->registry_activity_authority->validate_active_authority(
+								  *registry_family, group->identity.expected()))))
+						{
+							quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																		 owner->token);
+							inflight.disarm();
+							session.disarm();
+							return sqlite_shm_unexpected(ambiguous());
+						}
+					}
+
+					if (std::exchange(fail_next_reader_map_terminal_commit_for_testing_, false))
+						throw reader_map_terminal_commit_injected_failure{};
+
+					const auto attempt_token = map_attempt->token;
+					const auto generation = map_attempt->generation;
+					const auto owner_token = owner->token;
+					auto terminal_session_request = owner->request;
+					const auto result_kind = prepared_receipt.kind();
+					const auto result_status = result_kind ==
+							sqlite_shm_reader_attachment_zero_effect_kind::
+								exact_no_attachment_change
+						? prepared_receipt.native_status()
+						: sqlite_ioerr_status;
+
+					static_assert(std::is_nothrow_move_constructible_v<
+								  sqlite_shm_verified_reader_attachment_zero_effect_receipt>);
+					static_assert(
+						std::is_nothrow_move_constructible_v<sqlite_shm_reader_session_request>);
+					reader_attachment_zero_effect_terminals_.push_back(
+						{attempt_token,
+						 generation,
+						 owner_token,
+						 first_reservation,
+						 std::move(terminal_session_request),
+						 std::move(prepared_receipt)});
+
+					if (map_attempt->registry_predelegate_authority)
+					{
+						static_assert(std::is_nothrow_move_constructible_v<
+									  sqlite_shm_reader_map_predelegate_authority>);
+						completed_predelegate->emplace(
+							std::move(*map_attempt->registry_predelegate_authority));
+						map_attempt->registry_predelegate_authority.reset();
+					}
+					if (first_reservation && owner->registry_activity_authority)
+					{
+						static_assert(std::is_nothrow_move_constructible_v<
+									  sqlite_shm_reader_attachment_authority>);
+						completed_candidate->emplace(
+							std::move(*owner->registry_activity_authority));
+						owner->registry_activity_authority.reset();
+					}
+
+					reader_attachment_maps_.erase(map_attempt);
+					inflight.disarm();
+					if (first_reservation)
+					{
+						reader_sessions_.erase(owner);
+						session.disarm();
+					}
+					return sqlite_shm_reader_attachment_zero_effect_result{result_kind,
+																		   result_status};
 				}
 				catch (...)
 				{
@@ -4423,6 +4785,15 @@ namespace cxxlens::sdk
 									reader_session_record_phase::active_group_owner;
 							}));
 					output.reader_session_terminal_count = reader_session_terminals_.size();
+					output.reader_attachment_zero_effect_terminal_count =
+						reader_attachment_zero_effect_terminals_.size();
+					output.reader_attachment_revoked_no_map_count =
+						static_cast<std::size_t>(std::ranges::count_if(
+							reader_attachment_zero_effect_terminals_,
+							[](const reader_attachment_zero_effect_terminal_record& terminal)
+							{
+								return terminal.revoked_first_reservation;
+							}));
 					output.reader_registry_bound_group_count =
 						static_cast<std::size_t>(std::ranges::count_if(
 							reader_attachment_groups_,
@@ -4949,6 +5320,16 @@ namespace cxxlens::sdk
 				bool registry_bound{};
 				std::optional<sqlite_shm_reader_map_predelegate_authority>
 					registry_predelegate_authority;
+			};
+
+			struct reader_attachment_zero_effect_terminal_record
+			{
+				std::uint64_t token{};
+				std::uint64_t generation{};
+				std::uint64_t session_token{};
+				bool revoked_first_reservation{};
+				sqlite_shm_reader_session_request session_request;
+				sqlite_shm_verified_reader_attachment_zero_effect_receipt receipt;
 			};
 
 			enum class handoff_phase : std::uint8_t
@@ -5771,6 +6152,14 @@ namespace cxxlens::sdk
 									   return audit.receipt.request().callback.invocation_token ==
 										   callback.invocation_token;
 								   });
+						   }) ||
+					std::ranges::any_of(
+						   reader_attachment_zero_effect_terminals_,
+						   [&callback](
+							   const reader_attachment_zero_effect_terminal_record& terminal)
+						   {
+							   return terminal.receipt.request().callback.invocation_token ==
+								   callback.invocation_token;
 						   });
 			}
 
@@ -6021,6 +6410,12 @@ namespace cxxlens::sdk
 						expected_attachment = &session->request.attachment;
 				}
 
+				std::erase_if(
+					reader_attachment_zero_effect_terminals_,
+					[map_token](const reader_attachment_zero_effect_terminal_record& terminal)
+					{
+						return terminal.token == map_token;
+					});
 				for (auto& group : reader_attachment_groups_)
 				{
 					const auto has_attempt_audit = std::ranges::any_of(
@@ -6413,6 +6808,8 @@ namespace cxxlens::sdk
 			std::list<reader_attachment_group_record> reader_attachment_groups_;
 			std::list<reader_attachment_map_record> reader_attachment_maps_;
 			std::vector<reader_session_terminal_record> reader_session_terminals_;
+			std::list<reader_attachment_zero_effect_terminal_record>
+				reader_attachment_zero_effect_terminals_;
 			std::optional<generation_record> generation_;
 			std::uint64_t next_token_{1U};
 			bool token_exhausted_{};
@@ -7174,6 +7571,28 @@ namespace cxxlens::sdk
 		std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate)
 	{
 		return state_->commit_reader(inflight, receipt, session, &family, &completed_predelegate);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_attachment_zero_effect_result>
+	sqlite_same_process_shm_mapping_lease_coordinator::complete_reader_zero_attachment_map(
+		sqlite_shm_reader_attachment_map_inflight& inflight,
+		const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
+		sqlite_shm_reader_session& session)
+	{
+		return state_->complete_reader_zero_attachment(inflight, receipt, session);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_attachment_zero_effect_result>
+	sqlite_same_process_shm_mapping_lease_coordinator::complete_registry_reader_zero_attachment_map(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_attachment_map_inflight& inflight,
+		const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
+		sqlite_shm_reader_session& session,
+		std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate,
+		std::optional<sqlite_shm_reader_attachment_authority>& completed_candidate)
+	{
+		return state_->complete_reader_zero_attachment(
+			inflight, receipt, session, &family, &completed_predelegate, &completed_candidate);
 	}
 
 	sqlite_shm_lease_result<void>

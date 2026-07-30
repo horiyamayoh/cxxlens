@@ -326,6 +326,24 @@ namespace cxxlens::sdk
 					std::move(zero_resize_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_zero_effect_receipt
+		reader_attachment_zero_effect(const sqlite_shm_reader_attachment_map_inflight& inflight,
+									  const sqlite_shm_reader_attachment_zero_effect_kind kind,
+									  sqlite_shm_reader_attachment_map_request request,
+									  const int native_status,
+									  const volatile void* native_mapping,
+									  const int delegated_extend,
+									  sqlite_backend_opaque_identity zero_attachment_effect)
+		{
+			return {inflight,
+					kind,
+					std::move(request),
+					native_status,
+					native_mapping,
+					delegated_extend,
+					std::move(zero_attachment_effect)};
+		}
+
 		[[nodiscard]] static sqlite_shm_reader_session_terminal_receipt
 		reader_session_terminal(sqlite_shm_reader_session_request request,
 								const sqlite_shm_reader_session_terminal_kind kind,
@@ -394,6 +412,11 @@ namespace
 {
 	using namespace cxxlens::sdk;
 
+	constexpr int sqlite_ok_status = 0;
+	constexpr int sqlite_busy_status = 5;
+	constexpr int sqlite_readonly_status = 8;
+	constexpr int sqlite_ioerr_status = 10;
+
 	static_assert(!std::is_default_constructible_v<sqlite_shm_registry_process_owner>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_registry_process_owner>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_registry_process_owner>);
@@ -419,6 +442,8 @@ namespace
 	static_assert(!std::is_default_constructible_v<sqlite_shm_verified_alias_registration_receipt>);
 	static_assert(
 		!std::is_default_constructible_v<sqlite_shm_verified_alias_unregistration_receipt>);
+	static_assert(!std::is_default_constructible_v<
+				  sqlite_shm_verified_reader_attachment_zero_effect_receipt>);
 
 	void require(const bool condition, const std::string_view message)
 	{
@@ -1572,6 +1597,351 @@ namespace
 		auto handoff = committed->take_handoff();
 		require(handoff && handoff->valid(), "take focused reader group handoff");
 		return std::move(*handoff);
+	}
+
+	void verify_first_registry_reader_zero_attachment_route(
+		const sqlite_shm_reader_attachment_zero_effect_kind kind,
+		const int native_status,
+		const int projected_status,
+		const std::uint8_t marker)
+	{
+		auto setup = make_reader_candidate_setup(marker);
+		const auto map_request = reader_attachment_map_request(
+			setup.session_request, static_cast<std::uint8_t>(marker + 1U));
+		const auto before_map = setup.coordinator->snapshot();
+		require(setup.fixture.registry->snapshot().active_activity_pin_count == 2U &&
+					before_map.reader_session_reservation_count == 1U &&
+					before_map.reader_registry_activity_authority_count == 1U,
+				"first zero-attachment fixture lacks writer/candidate baseline");
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid() &&
+					setup.fixture.registry->snapshot().active_activity_pin_count == 3U &&
+					setup.coordinator->snapshot().reader_registry_activity_authority_count == 2U,
+				"first zero-attachment map did not retain its candidate and predelegate pins");
+		const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+			*inflight,
+			kind,
+			map_request,
+			native_status,
+			nullptr,
+			0,
+			identity("test.registry.reader-first-zero-effect",
+					 static_cast<std::uint8_t>(marker + 1U)));
+		auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
+			*setup.fixture.family_pin, *inflight, receipt, setup.session);
+		const auto lease = setup.coordinator->snapshot();
+		const auto registry = setup.fixture.registry->snapshot();
+		require(completed && completed->kind() == kind &&
+					completed->native_status() == projected_status &&
+					completed->native_mapping() == nullptr && !inflight->valid() &&
+					!setup.session.valid() && lease.reader_inflight_count == 0U &&
+					lease.reader_cleanup_count == 0U && lease.reader_attachment_group_count == 0U &&
+					lease.reader_attachment_live_member_count == 0U &&
+					lease.reader_attachment_audit_count == 0U &&
+					lease.reader_session_reservation_count == 0U &&
+					lease.reader_session_owner_count == 0U &&
+					lease.reader_session_terminal_count == 0U &&
+					lease.reader_attachment_zero_effect_terminal_count == 1U &&
+					lease.reader_attachment_revoked_no_map_count == 1U &&
+					lease.reader_registry_bound_group_count == 0U &&
+					lease.reader_registry_bound_session_count == 0U &&
+					lease.reader_registry_activity_authority_count == 0U && !lease.quarantined &&
+					registry.active_activity_pin_count == 1U &&
+					registry.active_reader_open_count == 1U &&
+					registry.quarantined_family_count == 0U,
+				"first zero-attachment terminal did not publish before releasing candidate and "
+				"predelegate pins");
+
+		auto replay = setup.fixture.registry->complete_reader_zero_attachment_map(
+			*setup.fixture.family_pin, *inflight, receipt, setup.session);
+		auto session_replay = setup.coordinator->begin_reader_session(setup.session_request);
+		require(
+			!replay && replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+				!session_replay &&
+				session_replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+				setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count == 1U &&
+				setup.fixture.registry->snapshot().active_activity_pin_count == 1U,
+			"first zero-attachment tombstone admitted a receipt or attachment-epoch replay");
+
+		require(setup.fixture.registry->release_reader_open(setup.open).has_value(),
+				"release first zero-attachment reader open");
+		retire_writer(*setup.coordinator, setup.holder, static_cast<std::uint8_t>(marker + 2U));
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke first zero-attachment writer eligibility");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_later_registry_reader_zero_attachment_route(
+		const sqlite_shm_reader_attachment_zero_effect_kind kind,
+		const int native_status,
+		const int projected_status,
+		const std::uint8_t marker)
+	{
+		auto fixture = make_fixture(marker, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve later zero-attachment coordinator");
+		auto pair = make_bound_pending_pair(fixture, marker);
+		auto eligibility = install_eligibility(*coordinator,
+											   fixture.family,
+											   pair.first.request.connection_token,
+											   pair.first.request.attachment.open_epoch(),
+											   static_cast<std::uint8_t>(marker + 2U));
+		std::array<sqlite_shm_pending_mapping*, 2U> pending{
+			&pair.second_pending,
+			&pair.first_pending,
+		};
+		auto gate = fixture.registry->advance_positive_writer_attachment_gate(
+			*fixture.family_pin, pair.first.request.attachment, pending, eligibility);
+		require(gate && gate->holders.size() == 2U,
+				"publish later zero-attachment two-page writer generation");
+		auto holders = std::move(gate->holders);
+		const auto generation = holders.front().generation();
+
+		auto pre_sqlite = reader_pre_sqlite_request(
+			fixture,
+			identity("test.registry.reader-later-zero-connection", marker),
+			identity("test.registry.reader-later-zero-main-native", marker),
+			identity("test.registry.reader-later-zero-main-xopen", marker),
+			identity("test.registry.reader-later-zero-open", marker),
+			identity("test.registry.reader-later-zero-cohort", marker),
+			marker);
+		auto open = acquire_reader_open(fixture, pre_sqlite);
+		auto admitted = fixture.registry->admit_reader_session_before_sqlite(
+			*fixture.family_pin, open, pre_sqlite);
+		require(admitted && admitted->proposal_request(),
+				"reserve later zero-attachment reader candidate");
+		const auto session_request = *admitted->proposal_request();
+		auto session = admitted->take_session();
+		require(session && session->valid(), "take later zero-attachment reader session");
+		const auto page_zero = reader_attachment_map_request(
+			session_request, static_cast<std::uint8_t>(marker + 3U), 0);
+		auto first_map =
+			fixture.registry->begin_reader_map(*fixture.family_pin, *session, page_zero);
+		require(first_map && first_map->valid(), "begin later zero-attachment group-forming map");
+		auto first_commit = fixture.registry->commit_reader_map(
+			*fixture.family_pin,
+			*first_map,
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+				page_zero,
+				generation,
+				mapping(0, pair.first.native_page.get(), 8192U),
+				identity("test.registry.reader-later-zero-first-effect",
+						 static_cast<std::uint8_t>(marker + 3U))),
+			*session);
+		require(first_commit && first_commit->formed_group(),
+				"form later zero-attachment active group");
+		auto handoff = first_commit->take_handoff();
+		require(handoff && handoff->valid(), "take later zero-attachment group handoff");
+
+		const auto baseline = coordinator->snapshot();
+		const auto baseline_registry = fixture.registry->snapshot();
+		require(baseline.reader_attachment_group_count == 1U &&
+					baseline.reader_attachment_live_member_count == 1U &&
+					baseline.reader_attachment_audit_count == 1U &&
+					baseline.reader_session_owner_count == 1U &&
+					baseline.reader_handoff_count == 1U &&
+					baseline.reader_registry_bound_group_count == 1U &&
+					baseline.reader_registry_bound_session_count == 1U &&
+					baseline.reader_registry_activity_authority_count == 1U &&
+					baseline.reader_attachment_zero_effect_terminal_count == 0U &&
+					baseline_registry.active_activity_pin_count == 3U,
+				"later zero-attachment fixture lacks exact active-group baseline");
+		const auto page_one = reader_attachment_map_request(
+			session_request, static_cast<std::uint8_t>(marker + 4U), 1);
+		auto later_map =
+			fixture.registry->begin_reader_map(*fixture.family_pin, *session, page_one);
+		require(later_map && later_map->valid() &&
+					fixture.registry->snapshot().active_activity_pin_count == 4U &&
+					coordinator->snapshot().reader_registry_activity_authority_count == 2U,
+				"unseen later page did not retain one separate predelegate");
+		const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+			*later_map,
+			kind,
+			page_one,
+			native_status,
+			nullptr,
+			0,
+			identity("test.registry.reader-later-zero-effect",
+					 static_cast<std::uint8_t>(marker + 4U)));
+		auto completed = fixture.registry->complete_reader_zero_attachment_map(
+			*fixture.family_pin, *later_map, receipt, *session);
+		const auto after = coordinator->snapshot();
+		const auto after_registry = fixture.registry->snapshot();
+		require(completed && completed->kind() == kind &&
+					completed->native_status() == projected_status &&
+					completed->native_mapping() == nullptr && !later_map->valid() &&
+					session->valid() && handoff->valid() &&
+					after.reader_attachment_group_count == baseline.reader_attachment_group_count &&
+					after.reader_attachment_live_member_count ==
+						baseline.reader_attachment_live_member_count &&
+					after.reader_attachment_audit_count == baseline.reader_attachment_audit_count &&
+					after.reader_session_owner_count == baseline.reader_session_owner_count &&
+					after.reader_handoff_count == baseline.reader_handoff_count &&
+					after.reader_registry_bound_group_count ==
+						baseline.reader_registry_bound_group_count &&
+					after.reader_registry_bound_session_count ==
+						baseline.reader_registry_bound_session_count &&
+					after.reader_registry_activity_authority_count ==
+						baseline.reader_registry_activity_authority_count &&
+					after.reader_attachment_zero_effect_terminal_count == 1U &&
+					after.reader_attachment_revoked_no_map_count == 0U && !after.quarantined &&
+					after_registry.active_activity_pin_count ==
+						baseline_registry.active_activity_pin_count &&
+					after_registry.active_reader_open_count == 1U &&
+					after_registry.quarantined_family_count == 0U,
+				"later zero-attachment terminal changed group/session/handoff state or retained "
+				"its predelegate");
+
+		auto replay = fixture.registry->complete_reader_zero_attachment_map(
+			*fixture.family_pin, *later_map, receipt, *session);
+		require(!replay &&
+					replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					coordinator->snapshot().reader_attachment_zero_effect_terminal_count == 1U,
+				"later zero-attachment attempt accepted a terminal receipt replay");
+
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			session_request,
+			sqlite_shm_reader_session_terminal_kind::success,
+			identity("test.registry.reader-later-zero-terminal",
+					 static_cast<std::uint8_t>(marker + 5U)));
+		require(coordinator->complete_reader_session(*session, terminal).has_value(),
+				"close later zero-attachment active-group session");
+		const auto unmap_callback = callback(static_cast<std::uint8_t>(marker + 6U));
+		auto unmap = coordinator->begin_reader_unmap(*handoff, unmap_callback);
+		require(
+			unmap &&
+				coordinator
+					->complete_reader_unmap(*unmap,
+											unmap_callback,
+											sqlite_shm_native_cleanup_outcome::confirmed_success)
+					.has_value(),
+			"confirm later zero-attachment group unmap");
+		require(fixture.registry->release_reader_open(open).has_value(),
+				"release later zero-attachment reader open");
+		retire_writer(*coordinator, holders.front(), static_cast<std::uint8_t>(marker + 7U));
+		require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
+				"revoke later zero-attachment writer eligibility");
+		clean_fixture(fixture);
+	}
+
+	void verify_registry_reader_zero_attachment_success_routes()
+	{
+		verify_first_registry_reader_zero_attachment_route(
+			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			sqlite_busy_status,
+			sqlite_busy_status,
+			12U);
+		verify_first_registry_reader_zero_attachment_route(
+			sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			sqlite_ok_status,
+			sqlite_ioerr_status,
+			24U);
+		verify_later_registry_reader_zero_attachment_route(
+			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			sqlite_busy_status,
+			sqlite_busy_status,
+			36U);
+		verify_later_registry_reader_zero_attachment_route(
+			sqlite_shm_reader_attachment_zero_effect_kind::exact_protocol_invalid_no_attachment,
+			sqlite_ok_status,
+			sqlite_ioerr_status,
+			48U);
+	}
+
+	void verify_registry_reader_zero_attachment_invalid_proofs_are_all_or_none()
+	{
+		enum class invalid_proof_case : std::uint8_t
+		{
+			missing_effect,
+			mismatched_request,
+			predecessor_shape,
+		};
+		const auto run_invalid = [](const invalid_proof_case proof_case, const std::uint8_t marker)
+		{
+			auto setup = make_reader_candidate_setup(marker);
+			const auto map_request = reader_attachment_map_request(
+				setup.session_request, static_cast<std::uint8_t>(marker + 1U));
+			auto inflight = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(inflight && inflight->valid() &&
+						setup.fixture.registry->snapshot().active_activity_pin_count == 3U,
+					"begin invalid zero-attachment proof fixture");
+			auto receipt_request = map_request;
+			if (proof_case == invalid_proof_case::mismatched_request)
+				receipt_request.callback = callback(static_cast<std::uint8_t>(marker + 2U));
+			const auto effect = proof_case == invalid_proof_case::missing_effect
+				? sqlite_backend_opaque_identity{}
+				: identity("test.registry.reader-invalid-zero-effect",
+						   static_cast<std::uint8_t>(marker + 1U));
+			const auto native_status = proof_case == invalid_proof_case::predecessor_shape
+				? sqlite_readonly_status
+				: sqlite_busy_status;
+			const auto receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					*inflight,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					std::move(receipt_request),
+					native_status,
+					nullptr,
+					0,
+					effect);
+			auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, *inflight, receipt, setup.session);
+			const auto lease = setup.coordinator->snapshot();
+			const auto registry = setup.fixture.registry->snapshot();
+			require(!completed &&
+						completed.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						!inflight->valid() && !setup.session.valid() && lease.quarantined &&
+						lease.reader_attachment_group_count == 0U &&
+						lease.reader_attachment_audit_count == 0U &&
+						lease.reader_attachment_zero_effect_terminal_count == 0U &&
+						lease.reader_attachment_revoked_no_map_count == 0U &&
+						lease.reader_registry_activity_authority_count == 2U &&
+						registry.active_activity_pin_count == 3U &&
+						registry.active_reader_open_count == 1U &&
+						registry.quarantined_family_count == 1U,
+					"invalid zero-attachment proof published a terminal or released authority");
+		};
+
+		run_invalid(invalid_proof_case::missing_effect, 60U);
+		run_invalid(invalid_proof_case::mismatched_request, 64U);
+		run_invalid(invalid_proof_case::predecessor_shape, 68U);
+
+		auto setup = make_reader_candidate_setup(72U);
+		const auto map_request = reader_attachment_map_request(setup.session_request, 73U);
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin injected zero-attachment terminal fixture");
+		const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+			*inflight,
+			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+			map_request,
+			sqlite_busy_status,
+			nullptr,
+			0,
+			identity("test.registry.reader-injected-zero-effect", 73U));
+		sqlite_same_process_shm_lease_test_peer::fail_next_reader_map_terminal_transition(
+			*setup.coordinator);
+		auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
+			*setup.fixture.family_pin, *inflight, receipt, setup.session);
+		const auto lease = setup.coordinator->snapshot();
+		const auto registry = setup.fixture.registry->snapshot();
+		require(!completed &&
+					completed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!inflight->valid() && !setup.session.valid() && lease.quarantined &&
+					lease.reader_attachment_group_count == 0U &&
+					lease.reader_attachment_audit_count == 0U &&
+					lease.reader_attachment_zero_effect_terminal_count == 0U &&
+					lease.reader_attachment_revoked_no_map_count == 0U &&
+					lease.reader_registry_activity_authority_count == 2U &&
+					registry.active_activity_pin_count == 3U &&
+					registry.active_reader_open_count == 1U &&
+					registry.quarantined_family_count == 1U,
+				"injected zero-attachment terminal published half a tombstone or released pins");
 	}
 
 	[[nodiscard]] sqlite_shm_reader_session_request
@@ -7595,6 +7965,8 @@ int main()
 {
 	try
 	{
+		verify_registry_reader_zero_attachment_success_routes();
+		verify_registry_reader_zero_attachment_invalid_proofs_are_all_or_none();
 		verify_reader_ordinary_route_has_zero_proposal_custody();
 		verify_registry_reader_and_direct_routes_cannot_mix();
 		verify_registry_reader_group_retains_one_activity_until_confirmed_unmap();
