@@ -1,6 +1,7 @@
 #include "sqlite_same_process_shm_mapping_registry_internal.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <limits>
 #include <mutex>
@@ -48,7 +49,65 @@ namespace cxxlens::sdk
 				snapshot.writer_attachment_unresolved_count == 0U &&
 				snapshot.writer_attachment_unresolved_member_count == 0U &&
 				snapshot.reader_inflight_count == 0U && snapshot.reader_cleanup_count == 0U &&
-				snapshot.reader_handoff_count == 0U && !snapshot.reader_admission_visible;
+				snapshot.reader_handoff_count == 0U &&
+				snapshot.reader_attachment_group_count == 0U &&
+				snapshot.reader_attachment_live_member_count == 0U &&
+				snapshot.reader_session_reservation_count == 0U &&
+				snapshot.reader_session_owner_count == 0U &&
+				snapshot.reader_registry_bound_group_count == 0U &&
+				snapshot.reader_registry_bound_session_count == 0U &&
+				snapshot.reader_registry_open_count == 0U &&
+				snapshot.reader_registry_activity_authority_count == 0U &&
+				!snapshot.reader_admission_visible;
+		}
+
+		[[nodiscard]] bool valid_reader_pre_sqlite_request(
+			const sqlite_shm_reader_pre_sqlite_session_request& request) noexcept
+		{
+			return valid_family(request.family) && valid_identity(request.alias_lifetime) &&
+				valid_identity(request.connection_token) &&
+				valid_identity(request.main_native_file_receipt) &&
+				valid_identity(request.main_xopen_receipt) && valid_identity(request.open_epoch) &&
+				valid_identity(request.callback_cohort) &&
+				valid_identity(request.read_transaction_epoch) &&
+				valid_identity(request.decode_attempt) &&
+				valid_identity(request.authority_read_receipt);
+		}
+
+		[[nodiscard]] bool
+		valid_reader_open_binding(const sqlite_shm_reader_open_binding& binding) noexcept
+		{
+			return valid_family(binding.family) && valid_identity(binding.alias_lifetime) &&
+				valid_identity(binding.connection_token) &&
+				valid_identity(binding.main_native_file_receipt) &&
+				valid_identity(binding.main_xopen_receipt) && valid_identity(binding.open_epoch) &&
+				valid_identity(binding.callback_cohort);
+		}
+
+		[[nodiscard]] bool reader_open_binding_matches_request(
+			const sqlite_shm_reader_open_binding& binding,
+			const sqlite_shm_reader_pre_sqlite_session_request& request) noexcept
+		{
+			return binding.family == request.family &&
+				binding.alias_lifetime == request.alias_lifetime &&
+				binding.connection_token == request.connection_token &&
+				binding.main_native_file_receipt == request.main_native_file_receipt &&
+				binding.main_xopen_receipt == request.main_xopen_receipt &&
+				binding.open_epoch == request.open_epoch &&
+				binding.callback_cohort == request.callback_cohort;
+		}
+
+		[[nodiscard]] sqlite_backend_opaque_identity
+		reader_attachment_epoch_identity(const std::uint64_t value)
+		{
+			std::array<std::byte, sizeof(value)> bytes{};
+			for (std::size_t index = 0; index < bytes.size(); ++index)
+				bytes[index] =
+					static_cast<std::byte>((value >> static_cast<unsigned>(index * 8U)) & 0xffU);
+			return {
+				"cxxlens.sqlite.reader-attachment-epoch.registry-v1",
+				{bytes.begin(), bytes.end()},
+			};
 		}
 
 		std::atomic<std::uint64_t> registry_state_destruction_count{0U};
@@ -147,6 +206,101 @@ namespace cxxlens::sdk
 			std::atomic_bool audit_seal_minted{false};
 		};
 
+		enum class sqlite_shm_reader_open_phase : std::uint8_t
+		{
+			active,
+			clean_released,
+			abandoned,
+		};
+
+		struct sqlite_shm_reader_open_control
+		{
+			struct coordinates
+			{
+				std::uint64_t process_epoch{};
+				std::uint64_t alias_token{};
+				std::uint64_t family_epoch{};
+				std::uint64_t family_pin_token{};
+				std::uint64_t open_token{};
+			};
+
+			sqlite_shm_reader_open_control(
+				std::weak_ptr<sqlite_shm_mapping_registry_state> registry_state_value,
+				std::weak_ptr<sqlite_shm_registry_process_owner_seal> process_seal_value,
+				std::shared_ptr<std::atomic_bool> emergency_latch_value,
+				std::shared_ptr<std::atomic_bool> alias_authority_latch_value,
+				std::shared_ptr<std::atomic_bool> family_authority_latch_value,
+				std::shared_ptr<sqlite_shm_reader_open_lineage_seal> lineage_seal_value,
+				sqlite_shm_reader_open_binding binding_value,
+				const coordinates value)
+				: registry_state{std::move(registry_state_value)},
+				  process_seal{std::move(process_seal_value)},
+				  emergency_latch{std::move(emergency_latch_value)},
+				  alias_authority_latch{std::move(alias_authority_latch_value)},
+				  family_authority_latch{std::move(family_authority_latch_value)},
+				  lineage_seal{std::move(lineage_seal_value)}, binding{std::move(binding_value)},
+				  process_epoch{value.process_epoch}, alias_token{value.alias_token},
+				  family_epoch{value.family_epoch}, family_pin_token{value.family_pin_token},
+				  open_token{value.open_token}
+			{
+			}
+
+			[[nodiscard]] bool authority_valid_now() const noexcept
+			{
+				const auto state = registry_state.lock();
+				const auto owner = process_seal.lock();
+				return phase.load(std::memory_order_acquire) ==
+					sqlite_shm_reader_open_phase::active &&
+					authority_valid.load(std::memory_order_acquire) && emergency_latch &&
+					!emergency_latch->load(std::memory_order_acquire) && alias_authority_latch &&
+					alias_authority_latch->load(std::memory_order_acquire) &&
+					family_authority_latch &&
+					family_authority_latch->load(std::memory_order_acquire) && lineage_seal &&
+					lineage_seal->authority_valid.load(std::memory_order_acquire) && state &&
+					owner && owner->process_epoch.load(std::memory_order_acquire) == process_epoch;
+			}
+
+			[[nodiscard]] bool retain_descendant() noexcept
+			{
+				auto current = descendant_authority_count.load(std::memory_order_acquire);
+				while (current != std::numeric_limits<std::size_t>::max())
+					if (descendant_authority_count.compare_exchange_weak(current,
+																		 current + 1U,
+																		 std::memory_order_acq_rel,
+																		 std::memory_order_acquire))
+						return true;
+				return false;
+			}
+
+			[[nodiscard]] bool release_descendant() noexcept
+			{
+				auto current = descendant_authority_count.load(std::memory_order_acquire);
+				while (current != 0U)
+					if (descendant_authority_count.compare_exchange_weak(current,
+																		 current - 1U,
+																		 std::memory_order_acq_rel,
+																		 std::memory_order_acquire))
+						return true;
+				return false;
+			}
+
+			const std::weak_ptr<sqlite_shm_mapping_registry_state> registry_state;
+			const std::weak_ptr<sqlite_shm_registry_process_owner_seal> process_seal;
+			const std::shared_ptr<std::atomic_bool> emergency_latch;
+			const std::shared_ptr<std::atomic_bool> alias_authority_latch;
+			const std::shared_ptr<std::atomic_bool> family_authority_latch;
+			const std::shared_ptr<sqlite_shm_reader_open_lineage_seal> lineage_seal;
+			const sqlite_shm_reader_open_binding binding;
+			const std::uint64_t process_epoch{};
+			const std::uint64_t alias_token{};
+			const std::uint64_t family_epoch{};
+			const std::uint64_t family_pin_token{};
+			const std::uint64_t open_token{};
+			std::atomic<sqlite_shm_reader_open_phase> phase{sqlite_shm_reader_open_phase::active};
+			std::atomic_bool authority_valid{true};
+			std::atomic_size_t descendant_authority_count{};
+		};
+
 		struct sqlite_shm_writer_member_authority_state
 		{
 			std::optional<sqlite_writer_shm_mapping_epoch_arm> epoch_arm;
@@ -156,9 +310,32 @@ namespace cxxlens::sdk
 			std::optional<sqlite_shm_registry_activity_pin> activity;
 		};
 
+		struct sqlite_shm_reader_attachment_authority_state
+		{
+			std::optional<sqlite_shm_reader_attachment_reservation_identity> attachment;
+			std::shared_ptr<sqlite_shm_reader_open_control> open;
+			std::optional<sqlite_shm_registry_activity_seal> audit_seal;
+			// Declared last so ambiguous destruction invalidates registry activity while the
+			// exact reservation identity and weak audit binding remain retained.
+			std::optional<sqlite_shm_registry_activity_pin> activity;
+		};
+
+		struct sqlite_shm_reader_map_predelegate_authority_state
+		{
+			std::optional<sqlite_shm_reader_attachment_map_request> request;
+			std::shared_ptr<sqlite_shm_reader_open_control> open;
+			std::optional<sqlite_shm_registry_activity_seal> audit_seal;
+			std::optional<sqlite_shm_registry_activity_pin> activity;
+		};
+
 		class sqlite_shm_mapping_registry_state final
 			: public std::enable_shared_from_this<sqlite_shm_mapping_registry_state>
 		{
+			friend class ::cxxlens::sdk::sqlite_shm_reader_attachment_authority;
+			friend class ::cxxlens::sdk::sqlite_shm_reader_candidate_authority_minter;
+			friend class ::cxxlens::sdk::sqlite_shm_reader_map_predelegate_authority;
+			friend class ::cxxlens::sdk::sqlite_shm_reader_map_predelegate_minter;
+			friend class ::cxxlens::sdk::sqlite_shm_reader_open_authority;
 			friend class ::cxxlens::sdk::sqlite_shm_writer_member_authority;
 
 		  private:
@@ -191,6 +368,7 @@ namespace cxxlens::sdk
 				sqlite_shm_registry_alias_phase phase{sqlite_shm_registry_alias_phase::reserved};
 				std::size_t active_family_pins{};
 				std::size_t active_activities{};
+				std::size_t active_reader_opens{};
 				std::shared_ptr<std::atomic_bool> activity_authority_latch;
 			};
 
@@ -212,6 +390,7 @@ namespace cxxlens::sdk
 				sqlite_shm_registry_family_phase phase{sqlite_shm_registry_family_phase::active};
 				std::size_t active_family_pins{};
 				std::size_t active_activities{};
+				std::size_t active_reader_opens{};
 				std::shared_ptr<std::atomic_bool> activity_authority_latch;
 			};
 
@@ -221,6 +400,7 @@ namespace cxxlens::sdk
 				std::uint64_t alias_token{};
 				std::uint64_t family_epoch{};
 				std::size_t active_activities{};
+				std::size_t active_reader_opens{};
 				bool active{};
 				bool abandoned{};
 			};
@@ -233,6 +413,16 @@ namespace cxxlens::sdk
 				std::uint64_t family_pin_token{};
 				bool active{};
 				std::shared_ptr<sqlite_shm_registry_activity_control> control;
+			};
+
+			struct reader_open_record
+			{
+				std::uint64_t token{};
+				std::uint64_t alias_token{};
+				std::uint64_t family_epoch{};
+				std::uint64_t family_pin_token{};
+				bool active{};
+				std::shared_ptr<sqlite_shm_reader_open_control> control;
 			};
 
 			struct initialization
@@ -560,6 +750,110 @@ namespace cxxlens::sdk
 				return sqlite_shm_registry_activity_pin{weak_from_this(), std::move(control)};
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
+			acquire_reader_open(sqlite_shm_registry_family_pin& pin,
+								const sqlite_shm_reader_open_binding& binding)
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+				if (!valid_reader_open_binding(binding))
+					return rejection(sqlite_shm_lease_rejection_reason::invalid_request);
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (admission_quarantined_locked())
+						return rejection(sqlite_shm_lease_rejection_reason::quarantined,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* alias = find_alias_locked(pin.alias_token_);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || alias == nullptr || family == nullptr)
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+					if (alias->phase != sqlite_shm_registry_alias_phase::registered ||
+						family->phase != sqlite_shm_registry_family_phase::active)
+						return rejection(sqlite_shm_lease_rejection_reason::retiring);
+					if (binding.family != family->binding ||
+						binding.alias_lifetime != alias->alias_lifetime)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+					if (!alias->runtime_lifetime.valid() || !alias->activity_authority_latch ||
+						!alias->activity_authority_latch->load(std::memory_order_acquire) ||
+						!exact_family_admission_visible_locked(*family))
+						return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					if (std::ranges::any_of(reader_opens_,
+											[&binding](const reader_open_record& open)
+											{
+												return open.control &&
+													open.control->binding == binding;
+											}))
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+
+					std::uint64_t token{};
+					if (!allocate_counter_locked(next_reader_open_token_, token))
+						return counter_exhaustion_rejection();
+					const sqlite_shm_reader_open_control::coordinates coordinates{
+						process_epoch_,
+						alias->token,
+						family->entry_epoch,
+						family_pin->token,
+						token,
+					};
+					auto lineage_seal = std::make_shared<sqlite_shm_reader_open_lineage_seal>();
+					auto control = std::make_shared<sqlite_shm_reader_open_control>(
+						weak_from_this(),
+						seal_,
+						activity_emergency_latch_,
+						alias->activity_authority_latch,
+						family->activity_authority_latch,
+						lineage_seal,
+						binding,
+						coordinates);
+					reader_opens_.push_back({token,
+											 alias->token,
+											 family->entry_epoch,
+											 family_pin->token,
+											 true,
+											 control});
+					++family_pin->active_reader_opens;
+					++alias->active_reader_opens;
+					++family->active_reader_opens;
+					if (!control->authority_valid_now())
+					{
+						control->authority_valid.store(false, std::memory_order_release);
+						control->phase.store(sqlite_shm_reader_open_phase::clean_released,
+											 std::memory_order_release);
+						synchronize_reader_open_controls_locked();
+						return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					}
+					auto registered =
+						family->coordinator->register_registry_reader_open(token, lineage_seal);
+					if (!registered)
+					{
+						control->authority_valid.store(false, std::memory_order_release);
+						control->phase.store(sqlite_shm_reader_open_phase::clean_released,
+											 std::memory_order_release);
+						synchronize_reader_open_controls_locked();
+						if (registered.error().reason ==
+								sqlite_shm_lease_rejection_reason::quarantined ||
+							registered.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous)
+							quarantine_family_locked(*family);
+						return registered.error();
+					}
+					return sqlite_shm_reader_open_authority{weak_from_this(), std::move(control)};
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_map_inflight>
 			begin_writer_map(sqlite_shm_registry_family_pin& pin,
 							 sqlite_writer_shm_mapping_epoch_arm arm,
@@ -689,6 +983,221 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_session_admission>
+			admit_reader_session_before_sqlite(
+				sqlite_shm_registry_family_pin& pin,
+				const sqlite_shm_reader_open_authority& open,
+				const sqlite_shm_reader_pre_sqlite_session_request& request)
+			{
+				const auto rejected = [](const sqlite_shm_lease_rejection failure)
+				{
+					return sqlite_shm_reader_session_admission{
+						sqlite_shm_reader_session_admission_kind::rejected_before_sqlite,
+						std::nullopt,
+						std::nullopt,
+						failure,
+					};
+				};
+				if (!current(pin.process_epoch_))
+					return rejected(rejection(sqlite_shm_lease_rejection_reason::stale_token));
+				if (!valid_reader_pre_sqlite_request(request))
+					return rejected(rejection(sqlite_shm_lease_rejection_reason::invalid_request));
+
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (pin.state_.get() != this)
+						return rejected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch));
+					if (admission_quarantined_locked())
+						return rejected(
+							rejection(sqlite_shm_lease_rejection_reason::quarantined,
+									  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* alias = find_alias_locked(pin.alias_token_);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || alias == nullptr || family == nullptr)
+						return rejected(rejection(sqlite_shm_lease_rejection_reason::stale_token));
+					if (alias->phase == sqlite_shm_registry_alias_phase::quarantined ||
+						family->phase == sqlite_shm_registry_family_phase::quarantined)
+						return rejected(
+							rejection(sqlite_shm_lease_rejection_reason::quarantined,
+									  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+					auto* reader_open = current_reader_open_locked(open);
+					if (reader_open == nullptr)
+						return rejected(rejection(sqlite_shm_lease_rejection_reason::stale_token));
+					if (alias->phase != sqlite_shm_registry_alias_phase::registered ||
+						family->phase != sqlite_shm_registry_family_phase::active ||
+						!family->coordinator)
+						return rejected(rejection(sqlite_shm_lease_rejection_reason::retiring));
+					if (request.family != family->binding ||
+						request.alias_lifetime != alias->alias_lifetime)
+						return rejected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch));
+					if (reader_open->alias_token != alias->token ||
+						reader_open->family_epoch != family->entry_epoch ||
+						reader_open->family_pin_token != family_pin->token ||
+						!reader_open_binding_matches_request(reader_open->control->binding,
+															 request))
+						return rejected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch));
+					if (!alias->runtime_lifetime.valid() || !alias->activity_authority_latch ||
+						!alias->activity_authority_latch->load(std::memory_order_acquire) ||
+						!exact_family_admission_visible_locked(*family))
+						return rejected(
+							rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+
+					sqlite_shm_reader_candidate_authority_minter minter{*this, pin, open, request};
+					auto admitted = family->coordinator->admit_registry_reader_session(
+						pin, reader_open->token, request, minter);
+					if (!admitted &&
+						(admitted.error().reason ==
+							 sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
+						 admitted.error().reason == sqlite_shm_lease_rejection_reason::quarantined))
+						synchronize_coordinator_quarantines_locked();
+					return admitted;
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejected(
+						rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+				}
+			}
+
+			[[nodiscard]]
+			sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
+			begin_reader_map(sqlite_shm_registry_family_pin& pin,
+							 sqlite_shm_reader_session& session,
+							 const sqlite_shm_reader_attachment_map_request& request)
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (pin.state_.get() != this)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+					if (admission_quarantined_locked())
+						return rejection(sqlite_shm_lease_rejection_reason::quarantined,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* alias = find_alias_locked(pin.alias_token_);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || alias == nullptr || family == nullptr)
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+					if (alias->phase != sqlite_shm_registry_alias_phase::registered ||
+						family->phase != sqlite_shm_registry_family_phase::active ||
+						!family->coordinator)
+						return rejection(sqlite_shm_lease_rejection_reason::retiring);
+					if (request.family != family->binding ||
+						request.alias_lifetime != alias->alias_lifetime ||
+						request.expected_attachment.runtime_lifetime_pin() !=
+							alias->runtime_lifetime.pin_identity())
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+					if (!alias->activity_authority_latch ||
+						!alias->activity_authority_latch->load(std::memory_order_acquire) ||
+						!exact_family_admission_visible_locked(*family))
+						return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+					sqlite_shm_reader_map_predelegate_minter minter{*this, pin};
+					auto begun = family->coordinator->begin_registry_reader_map(
+						pin, session, request, minter);
+					if (!begun &&
+						(begun.error().reason ==
+							 sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
+						 begun.error().reason == sqlite_shm_lease_rejection_reason::quarantined))
+						synchronize_coordinator_quarantines_locked();
+					return begun;
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_map_commit>
+			commit_reader_map(sqlite_shm_registry_family_pin& pin,
+							  sqlite_shm_reader_attachment_map_inflight& inflight,
+							  const sqlite_shm_verified_reader_attachment_post_map_receipt& receipt,
+							  sqlite_shm_reader_session& session)
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+									 sqlite_shm_lease_recovery_action::
+										 attempt_nonremoving_unmap_then_outer_ioerr);
+				try
+				{
+					std::optional<sqlite_shm_reader_map_predelegate_authority>
+						completed_predelegate;
+					std::optional<sqlite_shm_lease_result<sqlite_shm_reader_map_commit>> result;
+					{
+						std::scoped_lock lock{mutex_};
+						synchronize_activity_controls_locked();
+						synchronize_coordinator_quarantines_locked();
+						if (pin.state_.get() != this)
+							return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+											 sqlite_shm_lease_recovery_action::
+												 attempt_nonremoving_unmap_then_outer_ioerr);
+						auto* family_pin = current_family_pin_locked(pin);
+						auto* alias = find_alias_locked(pin.alias_token_);
+						auto* family = find_family_epoch_locked(pin.family_epoch_);
+						if (family_pin == nullptr || alias == nullptr || family == nullptr ||
+							!family->coordinator)
+							return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+											 sqlite_shm_lease_recovery_action::
+												 attempt_nonremoving_unmap_then_outer_ioerr);
+						if (receipt.request().family != family->binding ||
+							receipt.request().alias_lifetime != alias->alias_lifetime ||
+							receipt.request().expected_attachment.runtime_lifetime_pin() !=
+								alias->runtime_lifetime.pin_identity())
+							return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+											 sqlite_shm_lease_recovery_action::
+												 attempt_nonremoving_unmap_then_outer_ioerr);
+						result.emplace(family->coordinator->commit_registry_reader_map(
+							pin, inflight, receipt, session, completed_predelegate));
+						if (!*result &&
+							(result->error().reason ==
+								 sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
+							 result->error().reason ==
+								 sqlite_shm_lease_rejection_reason::quarantined))
+							synchronize_coordinator_quarantines_locked();
+					}
+					if (!result)
+						return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					if (!*result)
+						return result->error();
+					if (completed_predelegate)
+					{
+						auto released = completed_predelegate->release_activity();
+						if (!released)
+						{
+							emergency_quarantine();
+							return released.error();
+						}
+					}
+					return std::move(**result);
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_pending_mapping>
 			install_writer_pending(sqlite_shm_registry_family_pin& pin,
 								   sqlite_shm_writer_post_native_mapping& post_native,
@@ -706,6 +1215,7 @@ namespace cxxlens::sdk
 					auto prepared = receipt;
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					synchronize_coordinator_quarantines_locked();
 					if (pin.state_.get() != this)
 						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
@@ -776,6 +1286,7 @@ namespace cxxlens::sdk
 				{
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					synchronize_coordinator_quarantines_locked();
 					if (pin.state_.get() != this)
 						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
@@ -955,6 +1466,80 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] sqlite_shm_lease_result<void>
+			release_reader_open(sqlite_shm_reader_open_authority& open) noexcept
+			{
+				try
+				{
+					if (!open.control_)
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+					const auto owner_state = open.state_.lock();
+					if (!owner_state)
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+					if (owner_state.get() != this)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+					if (!current(open.control_->process_epoch))
+					{
+						open.disarm();
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+					}
+					{
+						std::scoped_lock lock{mutex_};
+						synchronize_activity_controls_locked();
+						synchronize_reader_open_controls_locked();
+						synchronize_coordinator_quarantines_locked();
+						auto* record = current_reader_open_locked(open);
+						if (record == nullptr)
+							return current_pin_rejection(open.control_->process_epoch);
+						if (open.control_->descendant_authority_count.load(
+								std::memory_order_acquire) != 0U)
+							return rejection(sqlite_shm_lease_rejection_reason::retiring,
+											 sqlite_shm_lease_recovery_action::
+												 await_complete_attachment_gate_boundary);
+						auto* family = find_family_epoch_locked(record->family_epoch);
+						if (family == nullptr || !family->coordinator)
+							return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+											 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+						auto expected = sqlite_shm_reader_open_phase::active;
+						if (!open.control_->phase.compare_exchange_strong(
+								expected,
+								sqlite_shm_reader_open_phase::clean_released,
+								std::memory_order_acq_rel,
+								std::memory_order_acquire))
+							return current_pin_rejection(open.control_->process_epoch);
+						auto lineage_released = family->coordinator->release_registry_reader_open(
+							record->token, open.control_->lineage_seal);
+						if (!lineage_released)
+						{
+							open.control_->phase.store(sqlite_shm_reader_open_phase::active,
+													   std::memory_order_release);
+							if (lineage_released.error().reason ==
+									sqlite_shm_lease_rejection_reason::quarantined ||
+								lineage_released.error().reason ==
+									sqlite_shm_lease_rejection_reason::lifecycle_ambiguous)
+								quarantine_family_locked(*family);
+							return lineage_released.error();
+						}
+						open.control_->authority_valid.store(false, std::memory_order_release);
+						synchronize_reader_open_controls_locked();
+						if (record->active)
+						{
+							emergency_quarantine();
+							return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+											 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+						}
+					}
+					open.disarm();
+					return {};
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<void>
 			release_family(sqlite_shm_registry_family_pin& pin) noexcept
 			{
 				try
@@ -970,11 +1555,13 @@ namespace cxxlens::sdk
 					}
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					synchronize_coordinator_quarantines_locked();
 					auto* family_pin = current_family_pin_locked(pin);
 					if (family_pin == nullptr)
 						return current_pin_rejection(pin.process_epoch_);
-					if (family_pin->active_activities != 0U)
+					if (family_pin->active_activities != 0U ||
+						family_pin->active_reader_opens != 0U)
 						return rejection(sqlite_shm_lease_rejection_reason::retiring,
 										 sqlite_shm_lease_recovery_action::
 											 await_complete_attachment_gate_boundary);
@@ -1015,6 +1602,7 @@ namespace cxxlens::sdk
 				{
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					auto* alias = current_alias_pin_locked(pin);
 					if (alias == nullptr)
 						return alias_pin_rejection_locked(pin);
@@ -1040,12 +1628,14 @@ namespace cxxlens::sdk
 				{
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					auto* alias = current_alias_pin_locked(pin);
 					if (alias == nullptr)
 						return alias_pin_rejection_locked(pin);
 					if (alias->phase != sqlite_shm_registry_alias_phase::unregistering)
 						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
-					if (alias->active_family_pins != 0U || alias->active_activities != 0U)
+					if (alias->active_family_pins != 0U || alias->active_activities != 0U ||
+						alias->active_reader_opens != 0U)
 						return rejection(sqlite_shm_lease_rejection_reason::retiring,
 										 sqlite_shm_lease_recovery_action::
 											 await_complete_attachment_gate_boundary);
@@ -1074,12 +1664,14 @@ namespace cxxlens::sdk
 				{
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					auto* alias = current_alias_pin_locked(pin);
 					if (alias == nullptr)
 						return alias_pin_rejection_locked(pin);
 					if (alias->phase != sqlite_shm_registry_alias_phase::unregistering)
 						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
-					if (alias->active_family_pins != 0U || alias->active_activities != 0U)
+					if (alias->active_family_pins != 0U || alias->active_activities != 0U ||
+						alias->active_reader_opens != 0U)
 						return rejection(sqlite_shm_lease_rejection_reason::retiring,
 										 sqlite_shm_lease_recovery_action::
 											 await_complete_attachment_gate_boundary);
@@ -1119,6 +1711,7 @@ namespace cxxlens::sdk
 				{
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					synchronize_coordinator_quarantines_locked();
 					output.registry_quarantined = registry_quarantined_ ||
 						emergency_quarantined_.load(std::memory_order_acquire);
@@ -1171,6 +1764,8 @@ namespace cxxlens::sdk
 						output.active_family_pin_count += pin.active ? 1U : 0U;
 					for (const auto& activity : activities_)
 						output.active_activity_pin_count += activity.active ? 1U : 0U;
+					for (const auto& open : reader_opens_)
+						output.active_reader_open_count += open.active ? 1U : 0U;
 
 					for (std::size_t index = 0; index < aliases_.size(); ++index)
 					{
@@ -1213,6 +1808,7 @@ namespace cxxlens::sdk
 				{
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					synchronize_coordinator_quarantines_locked();
 					family_record* singleton = nullptr;
 					for (auto& family : families_)
@@ -1251,6 +1847,7 @@ namespace cxxlens::sdk
 					output.entry_epoch = singleton->entry_epoch;
 					output.alias_pin_count = singleton->active_family_pins;
 					output.activity_pin_count = singleton->active_activities;
+					output.reader_open_count = singleton->active_reader_opens;
 					output.phase = singleton->phase;
 					output.lookup_visible = true;
 					output.coordinator = singleton->coordinator->snapshot();
@@ -1315,11 +1912,13 @@ namespace cxxlens::sdk
 				{
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					auto* alias = find_alias_locked(pin.token_);
 					if (alias == nullptr)
 						return;
 					if (alias->phase == sqlite_shm_registry_alias_phase::reserved &&
-						alias->active_family_pins == 0U && alias->active_activities == 0U)
+						alias->active_family_pins == 0U && alias->active_activities == 0U &&
+						alias->active_reader_opens == 0U)
 					{
 						owner_to_release = detach_alias_locked(*alias);
 						return;
@@ -1341,12 +1940,13 @@ namespace cxxlens::sdk
 				{
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
 					auto* pin = find_family_pin_locked(family_pin.pin_token_);
 					if (pin == nullptr || !pin->active ||
 						pin->alias_token != family_pin.alias_token_ ||
 						pin->family_epoch != family_pin.family_epoch_)
 						return;
-					if (pin->active_activities != 0U)
+					if (pin->active_activities != 0U || pin->active_reader_opens != 0U)
 					{
 						pin->abandoned = true;
 						auto* alias = find_alias_locked(family_pin.alias_token_);
@@ -1439,6 +2039,8 @@ namespace cxxlens::sdk
 					next_family_epoch_ = std::numeric_limits<std::uint64_t>::max();
 					next_family_pin_token_ = std::numeric_limits<std::uint64_t>::max();
 					next_activity_token_ = std::numeric_limits<std::uint64_t>::max();
+					next_reader_open_token_ = std::numeric_limits<std::uint64_t>::max();
+					next_reader_attachment_epoch_ = std::numeric_limits<std::uint64_t>::max();
 				}
 				catch (...)
 				{
@@ -1467,6 +2069,13 @@ namespace cxxlens::sdk
 							break;
 						case sqlite_shm_registry_counter_for_testing::activity_token:
 							next_activity_token_ = std::numeric_limits<std::uint64_t>::max();
+							break;
+						case sqlite_shm_registry_counter_for_testing::reader_open_token:
+							next_reader_open_token_ = std::numeric_limits<std::uint64_t>::max();
+							break;
+						case sqlite_shm_registry_counter_for_testing::reader_attachment_epoch:
+							next_reader_attachment_epoch_ =
+								std::numeric_limits<std::uint64_t>::max();
 							break;
 					}
 				}
@@ -1579,6 +2188,223 @@ namespace cxxlens::sdk
 				mutex_.unlock();
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<
+				sqlite_shm_reader_candidate_authority_minter::candidate>
+			mint_reader_candidate_locked(
+				const sqlite_shm_registry_family_pin& pin,
+				const sqlite_shm_reader_open_authority& open,
+				const sqlite_shm_reader_pre_sqlite_session_request& request,
+				const std::uint64_t writer_generation)
+			{
+				auto* family_pin = current_family_pin_locked(pin);
+				auto* alias = find_alias_locked(pin.alias_token_);
+				auto* family = find_family_epoch_locked(pin.family_epoch_);
+				auto* reader_open = current_reader_open_locked(open);
+				if (family_pin == nullptr || alias == nullptr || family == nullptr ||
+					reader_open == nullptr || writer_generation == 0U)
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+				if (request.family != family->binding ||
+					request.alias_lifetime != alias->alias_lifetime ||
+					reader_open->alias_token != alias->token ||
+					reader_open->family_epoch != family->entry_epoch ||
+					reader_open->family_pin_token != family_pin->token ||
+					!reader_open_binding_matches_request(reader_open->control->binding, request) ||
+					!alias->runtime_lifetime.valid())
+					return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+
+				std::uint64_t epoch_value{};
+				if (!allocate_counter_locked(next_reader_attachment_epoch_, epoch_value))
+					return counter_exhaustion_rejection();
+				auto attachment = sqlite_shm_reader_attachment_reservation_identity::bind(
+					family->binding,
+					alias->runtime_lifetime.pin_identity(),
+					alias->alias_lifetime,
+					request.connection_token,
+					request.main_native_file_receipt,
+					request.main_xopen_receipt,
+					request.open_epoch,
+					writer_generation,
+					request.callback_cohort,
+					reader_attachment_epoch_identity(epoch_value),
+					reader_open->token);
+				if (!attachment)
+					return rejection(sqlite_shm_lease_rejection_reason::invalid_identity);
+
+				auto proposal_request = sqlite_shm_reader_session_request{
+					*attachment,
+					request.read_transaction_epoch,
+					request.decode_attempt,
+					request.authority_read_receipt,
+				};
+				auto storage = std::make_unique<sqlite_shm_reader_attachment_authority_state>();
+				storage->attachment.emplace(*attachment);
+
+				std::uint64_t activity_token{};
+				if (!allocate_counter_locked(next_activity_token_, activity_token))
+					return counter_exhaustion_rejection();
+				const sqlite_shm_registry_activity_control::coordinates coordinates{
+					process_epoch_,
+					alias->token,
+					family->entry_epoch,
+					family_pin->token,
+					activity_token,
+				};
+				auto control = std::make_shared<sqlite_shm_registry_activity_control>(
+					weak_from_this(),
+					seal_,
+					activity_emergency_latch_,
+					alias->activity_authority_latch,
+					family->activity_authority_latch,
+					process_instance_,
+					family->binding,
+					alias->alias_lifetime,
+					coordinates);
+				activities_.push_back({activity_token,
+									   alias->token,
+									   family->entry_epoch,
+									   family_pin->token,
+									   true,
+									   control});
+				++family_pin->active_activities;
+				++alias->active_activities;
+				++family->active_activities;
+				storage->activity.emplace(
+					sqlite_shm_registry_activity_pin{weak_from_this(), control});
+				auto audit = storage->activity->seal_for_audit();
+				if (!audit)
+				{
+					sqlite_shm_reader_attachment_authority partial{std::move(storage)};
+					cancel_reader_candidate_locked(partial);
+					return audit.error();
+				}
+				storage->audit_seal.emplace(std::move(*audit));
+				if (!reader_open->control->retain_descendant())
+				{
+					sqlite_shm_reader_attachment_authority partial{std::move(storage)};
+					cancel_reader_candidate_locked(partial);
+					return counter_exhaustion_rejection();
+				}
+				storage->open = reader_open->control;
+				return sqlite_shm_reader_candidate_authority_minter::candidate{
+					std::move(proposal_request),
+					sqlite_shm_reader_attachment_authority{std::move(storage)},
+				};
+			}
+
+			[[nodiscard]]
+			sqlite_shm_lease_result<sqlite_shm_reader_map_predelegate_authority>
+			mint_reader_map_predelegate_locked(
+				const sqlite_shm_registry_family_pin& pin,
+				const sqlite_shm_reader_attachment_map_request& request)
+			{
+				auto* family_pin = current_family_pin_locked(pin);
+				auto* alias = find_alias_locked(pin.alias_token_);
+				auto* family = find_family_epoch_locked(pin.family_epoch_);
+				if (family_pin == nullptr || alias == nullptr || family == nullptr)
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+				if (request.family != family->binding ||
+					request.alias_lifetime != alias->alias_lifetime ||
+					request.expected_attachment.runtime_lifetime_pin() !=
+						alias->runtime_lifetime.pin_identity())
+					return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+				auto* reader_open =
+					find_reader_open_locked(request.expected_attachment.registry_open_token());
+				if (reader_open == nullptr || !reader_open->active || !reader_open->control ||
+					!reader_open_control_matches_record_locked(*reader_open) ||
+					!reader_open->control->authority_valid_now() ||
+					reader_open->alias_token != alias->token ||
+					reader_open->family_epoch != family->entry_epoch ||
+					reader_open->family_pin_token != family_pin->token ||
+					reader_open->control->binding.family != request.family ||
+					reader_open->control->binding.alias_lifetime != request.alias_lifetime ||
+					reader_open->control->binding.connection_token !=
+						request.expected_attachment.connection_token() ||
+					reader_open->control->binding.main_native_file_receipt !=
+						request.expected_attachment.main_native_file_receipt() ||
+					reader_open->control->binding.main_xopen_receipt !=
+						request.expected_attachment.main_xopen_receipt() ||
+					reader_open->control->binding.open_epoch !=
+						request.expected_attachment.open_epoch() ||
+					reader_open->control->binding.callback_cohort !=
+						request.expected_attachment.callback_cohort())
+					return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+
+				auto storage =
+					std::make_unique<sqlite_shm_reader_map_predelegate_authority_state>();
+				storage->request.emplace(request);
+				std::uint64_t activity_token{};
+				if (!allocate_counter_locked(next_activity_token_, activity_token))
+					return counter_exhaustion_rejection();
+				const sqlite_shm_registry_activity_control::coordinates coordinates{
+					process_epoch_,
+					alias->token,
+					family->entry_epoch,
+					family_pin->token,
+					activity_token,
+				};
+				auto control = std::make_shared<sqlite_shm_registry_activity_control>(
+					weak_from_this(),
+					seal_,
+					activity_emergency_latch_,
+					alias->activity_authority_latch,
+					family->activity_authority_latch,
+					process_instance_,
+					family->binding,
+					alias->alias_lifetime,
+					coordinates);
+				activities_.push_back({activity_token,
+									   alias->token,
+									   family->entry_epoch,
+									   family_pin->token,
+									   true,
+									   control});
+				++family_pin->active_activities;
+				++alias->active_activities;
+				++family->active_activities;
+				storage->activity.emplace(
+					sqlite_shm_registry_activity_pin{weak_from_this(), control});
+				auto audit = storage->activity->seal_for_audit();
+				if (!audit)
+				{
+					sqlite_shm_reader_map_predelegate_authority partial{std::move(storage)};
+					cancel_reader_map_predelegate_locked(partial);
+					return audit.error();
+				}
+				storage->audit_seal.emplace(std::move(*audit));
+				if (!reader_open->control->retain_descendant())
+				{
+					sqlite_shm_reader_map_predelegate_authority partial{std::move(storage)};
+					cancel_reader_map_predelegate_locked(partial);
+					return counter_exhaustion_rejection();
+				}
+				storage->open = reader_open->control;
+				return sqlite_shm_reader_map_predelegate_authority{std::move(storage)};
+			}
+
+			void cancel_reader_candidate_locked(
+				sqlite_shm_reader_attachment_authority& authority) noexcept
+			{
+				if (!authority.state_ || !authority.state_->activity)
+					return;
+				if (authority.state_->open && !authority.state_->open->release_descendant())
+					emergency_quarantine();
+				authority.state_->open.reset();
+				cancel_reader_activity_locked(*authority.state_->activity);
+				authority.state_.reset();
+			}
+
+			void cancel_reader_map_predelegate_locked(
+				sqlite_shm_reader_map_predelegate_authority& authority) noexcept
+			{
+				if (!authority.state_ || !authority.state_->activity)
+					return;
+				if (authority.state_->open && !authority.state_->open->release_descendant())
+					emergency_quarantine();
+				authority.state_->open.reset();
+				cancel_reader_activity_locked(*authority.state_->activity);
+				authority.state_.reset();
+			}
+
 		  private:
 			sqlite_shm_mapping_registry_state(
 				sqlite_backend_opaque_identity process_instance,
@@ -1595,6 +2421,25 @@ namespace cxxlens::sdk
 			{
 				return registry_quarantined_ ||
 					emergency_quarantined_.load(std::memory_order_acquire);
+			}
+
+			void cancel_reader_activity_locked(sqlite_shm_registry_activity_pin& activity) noexcept
+			{
+				if (!activity.control_)
+					return;
+				auto expected = sqlite_shm_registry_activity_phase::active;
+				if (!activity.control_->phase.compare_exchange_strong(
+						expected,
+						sqlite_shm_registry_activity_phase::clean_released,
+						std::memory_order_acq_rel,
+						std::memory_order_acquire))
+				{
+					emergency_quarantine();
+					return;
+				}
+				activity.control_->authority_valid.store(false, std::memory_order_release);
+				synchronize_activity_controls_locked();
+				activity.disarm();
 			}
 
 			[[nodiscard]] bool
@@ -1721,6 +2566,95 @@ namespace cxxlens::sdk
 					family_pin->family_epoch == activity.family_epoch;
 			}
 
+			[[nodiscard]] bool
+			reader_open_control_matches_record_locked(const reader_open_record& open) noexcept
+			{
+				if (!open.control || open.token != open.control->open_token ||
+					open.alias_token != open.control->alias_token ||
+					open.family_epoch != open.control->family_epoch ||
+					open.family_pin_token != open.control->family_pin_token ||
+					open.control->process_epoch != process_epoch_ || !open.control->lineage_seal ||
+					open.control->emergency_latch.get() != activity_emergency_latch_.get())
+					return false;
+				const auto owner_state = open.control->registry_state.lock();
+				const auto owner_seal = open.control->process_seal.lock();
+				const auto* alias = find_alias_locked(open.alias_token);
+				const auto* family = find_family_epoch_locked(open.family_epoch);
+				const auto* family_pin = find_family_pin_locked(open.family_pin_token);
+				return owner_state.get() == this && owner_seal.get() == seal_.get() &&
+					alias != nullptr && family != nullptr && family_pin != nullptr &&
+					open.control->alias_authority_latch.get() ==
+					alias->activity_authority_latch.get() &&
+					open.control->family_authority_latch.get() ==
+					family->activity_authority_latch.get() &&
+					open.control->binding.family == family->binding &&
+					open.control->binding.alias_lifetime == alias->alias_lifetime &&
+					family_pin->alias_token == open.alias_token &&
+					family_pin->family_epoch == open.family_epoch;
+			}
+
+			void release_reader_open_record_locked(reader_open_record& open) noexcept
+			{
+				if (!open.active)
+					return;
+				auto* alias = find_alias_locked(open.alias_token);
+				auto* family = find_family_epoch_locked(open.family_epoch);
+				auto* family_pin = find_family_pin_locked(open.family_pin_token);
+				if (alias == nullptr || family == nullptr || family_pin == nullptr ||
+					alias->active_reader_opens == 0U || family->active_reader_opens == 0U ||
+					family_pin->active_reader_opens == 0U)
+				{
+					quarantine_registry_locked();
+					return;
+				}
+				open.active = false;
+				--alias->active_reader_opens;
+				--family->active_reader_opens;
+				--family_pin->active_reader_opens;
+				if (family_pin->active_reader_opens == 0U && family_pin->active_activities == 0U &&
+					family_pin->abandoned)
+					(void)release_family_locked(*family_pin);
+			}
+
+			void synchronize_reader_open_controls_locked() noexcept
+			{
+				for (auto& open : reader_opens_)
+				{
+					if (!open.active)
+						continue;
+					if (!reader_open_control_matches_record_locked(open))
+					{
+						if (open.control)
+							open.control->authority_valid.store(false, std::memory_order_release);
+						quarantine_registry_locked();
+						continue;
+					}
+					const auto phase = open.control->phase.load(std::memory_order_acquire);
+					if (phase == sqlite_shm_reader_open_phase::active)
+						continue;
+					open.control->authority_valid.store(false, std::memory_order_release);
+					if (phase == sqlite_shm_reader_open_phase::clean_released &&
+						open.control->descendant_authority_count.load(std::memory_order_acquire) ==
+							0U)
+					{
+						release_reader_open_record_locked(open);
+						continue;
+					}
+					auto* alias = find_alias_locked(open.alias_token);
+					auto* family = find_family_epoch_locked(open.family_epoch);
+					if (alias == nullptr || family == nullptr)
+						quarantine_registry_locked();
+					else
+					{
+						alias->phase = sqlite_shm_registry_alias_phase::quarantined;
+						family->phase = sqlite_shm_registry_family_phase::quarantined;
+						invalidate_activity_authority_for_alias_locked(alias->token);
+						invalidate_activity_authority_for_family_locked(family->entry_epoch);
+						propagate_local_quarantine_locked();
+					}
+				}
+			}
+
 			void
 			invalidate_activity_authority_for_alias_locked(const std::uint64_t alias_token) noexcept
 			{
@@ -1797,6 +2731,9 @@ namespace cxxlens::sdk
 				for (auto& activity : activities_)
 					if (activity.control)
 						activity.control->authority_valid.store(false, std::memory_order_release);
+				for (auto& open : reader_opens_)
+					if (open.control)
+						open.control->authority_valid.store(false, std::memory_order_release);
 				for (auto& alias : aliases_)
 					if (alias.phase != sqlite_shm_registry_alias_phase::detached)
 						alias.phase = sqlite_shm_registry_alias_phase::quarantined;
@@ -1924,6 +2861,18 @@ namespace cxxlens::sdk
 				return found == activities_.end() ? nullptr : &*found;
 			}
 
+			[[nodiscard]] reader_open_record*
+			find_reader_open_locked(const std::uint64_t token) noexcept
+			{
+				const auto found = std::find_if(reader_opens_.begin(),
+												reader_opens_.end(),
+												[token](const auto& value)
+												{
+													return value.token == token;
+												});
+				return found == reader_opens_.end() ? nullptr : &*found;
+			}
+
 			[[nodiscard]] alias_record*
 			current_alias_pin_locked(const sqlite_shm_registry_alias_pin& pin) noexcept
 			{
@@ -1970,6 +2919,26 @@ namespace cxxlens::sdk
 						found->family_epoch == pin.control_->family_epoch &&
 						found->family_pin_token == pin.control_->family_pin_token &&
 						activity_control_matches_record_locked(*found)
+					? found
+					: nullptr;
+			}
+
+			[[nodiscard]] reader_open_record*
+			current_reader_open_locked(const sqlite_shm_reader_open_authority& open) noexcept
+			{
+				if (!open.control_ || !current(open.control_->process_epoch))
+					return nullptr;
+				const auto owner_state = open.state_.lock();
+				if (!owner_state || owner_state.get() != this)
+					return nullptr;
+				auto* found = find_reader_open_locked(open.control_->open_token);
+				return found != nullptr && found->active &&
+						found->control.get() == open.control_.get() &&
+						found->alias_token == open.control_->alias_token &&
+						found->family_epoch == open.control_->family_epoch &&
+						found->family_pin_token == open.control_->family_pin_token &&
+						reader_open_control_matches_record_locked(*found) &&
+						open.control_->authority_valid_now()
 					? found
 					: nullptr;
 			}
@@ -2128,7 +3097,7 @@ namespace cxxlens::sdk
 				try
 				{
 					family_pins_.push_back(
-						{pin_token, alias->token, active->entry_epoch, 0U, true, false});
+						{pin_token, alias->token, active->entry_epoch, 0U, 0U, true, false});
 				}
 				catch (...)
 				{
@@ -2178,7 +3147,7 @@ namespace cxxlens::sdk
 
 			[[nodiscard]] bool release_family_locked(family_pin_record& pin) noexcept
 			{
-				if (!pin.active)
+				if (!pin.active || pin.active_activities != 0U || pin.active_reader_opens != 0U)
 					return false;
 				pin.active = false;
 				auto* alias = find_alias_locked(pin.alias_token);
@@ -2193,7 +3162,7 @@ namespace cxxlens::sdk
 				--family->active_family_pins;
 				if (family->active_family_pins != 0U)
 					return family->phase == sqlite_shm_registry_family_phase::active;
-				if (family->active_activities != 0U)
+				if (family->active_activities != 0U || family->active_reader_opens != 0U)
 				{
 					quarantine_registry_locked();
 					return false;
@@ -2222,10 +3191,13 @@ namespace cxxlens::sdk
 			std::vector<family_record> families_;
 			std::vector<family_pin_record> family_pins_;
 			std::vector<activity_record> activities_;
+			std::vector<reader_open_record> reader_opens_;
 			std::uint64_t next_alias_token_{1U};
 			std::uint64_t next_family_epoch_{1U};
 			std::uint64_t next_family_pin_token_{1U};
 			std::uint64_t next_activity_token_{1U};
+			std::uint64_t next_reader_open_token_{1U};
+			std::uint64_t next_reader_attachment_epoch_{1U};
 			std::size_t duplicate_rejection_count_{};
 			std::size_t cross_binding_rejection_count_{};
 			std::size_t ambiguous_lookup_count_{};
@@ -2233,6 +3205,100 @@ namespace cxxlens::sdk
 			std::atomic_bool emergency_quarantined_{false};
 		};
 	} // namespace detail
+
+	sqlite_shm_reader_open_authority::sqlite_shm_reader_open_authority(
+		std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state,
+		std::shared_ptr<detail::sqlite_shm_reader_open_control> control) noexcept
+		: state_{std::move(state)}, control_{std::move(control)}
+	{
+	}
+
+	sqlite_shm_reader_open_authority::~sqlite_shm_reader_open_authority() noexcept
+	{
+		if (!control_)
+			return;
+		// The coordinator-visible seal is the no-lock abandonment linearization point.
+		// Once false, no direct/native admission may pass even before registry synchronization.
+		if (control_->lineage_seal)
+			control_->lineage_seal->authority_valid.store(false, std::memory_order_release);
+		auto expected = detail::sqlite_shm_reader_open_phase::active;
+		if (control_->phase.compare_exchange_strong(expected,
+													detail::sqlite_shm_reader_open_phase::abandoned,
+													std::memory_order_acq_rel,
+													std::memory_order_acquire))
+		{
+			control_->authority_valid.store(false, std::memory_order_release);
+			if (control_->alias_authority_latch)
+				control_->alias_authority_latch->store(false, std::memory_order_release);
+			if (control_->family_authority_latch)
+				control_->family_authority_latch->store(false, std::memory_order_release);
+		}
+	}
+
+	sqlite_shm_reader_open_authority::sqlite_shm_reader_open_authority(
+		sqlite_shm_reader_open_authority&& other) noexcept
+		: state_{std::move(other.state_)}, control_{std::move(other.control_)}
+	{
+	}
+
+	bool sqlite_shm_reader_open_authority::valid() const noexcept
+	{
+		return control_ && control_->authority_valid_now();
+	}
+
+	void sqlite_shm_reader_open_authority::publish_abandonment_lineage_for_testing() noexcept
+	{
+		if (control_ && control_->lineage_seal)
+			control_->lineage_seal->authority_valid.store(false, std::memory_order_release);
+	}
+
+	void sqlite_shm_reader_open_authority::disarm() noexcept
+	{
+		state_.reset();
+		control_.reset();
+	}
+
+	sqlite_shm_reader_candidate_authority_minter::sqlite_shm_reader_candidate_authority_minter(
+		detail::sqlite_shm_mapping_registry_state& registry,
+		const sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_reader_open_authority& open,
+		const sqlite_shm_reader_pre_sqlite_session_request& request) noexcept
+		: registry_{&registry}, family_{&family}, open_{&open}, request_{&request}
+	{
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_candidate_authority_minter::candidate>
+	sqlite_shm_reader_candidate_authority_minter::mint(const std::uint64_t writer_generation)
+	{
+		return registry_->mint_reader_candidate_locked(
+			*family_, *open_, *request_, writer_generation);
+	}
+
+	void sqlite_shm_reader_candidate_authority_minter::cancel(
+		sqlite_shm_reader_attachment_authority& authority) noexcept
+	{
+		registry_->cancel_reader_candidate_locked(authority);
+	}
+
+	sqlite_shm_reader_map_predelegate_minter::sqlite_shm_reader_map_predelegate_minter(
+		detail::sqlite_shm_mapping_registry_state& registry,
+		const sqlite_shm_registry_family_pin& family) noexcept
+		: registry_{&registry}, family_{&family}
+	{
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_map_predelegate_authority>
+	sqlite_shm_reader_map_predelegate_minter::mint(
+		const sqlite_shm_reader_attachment_map_request& request)
+	{
+		return registry_->mint_reader_map_predelegate_locked(*family_, request);
+	}
+
+	void sqlite_shm_reader_map_predelegate_minter::cancel(
+		sqlite_shm_reader_map_predelegate_authority& authority) noexcept
+	{
+		registry_->cancel_reader_map_predelegate_locked(authority);
+	}
 
 	sqlite_shm_writer_member_authority::sqlite_shm_writer_member_authority(
 		std::unique_ptr<detail::sqlite_shm_writer_member_authority_state> state) noexcept
@@ -2338,6 +3404,293 @@ namespace cxxlens::sdk
 			state_.reset();
 		}
 		return released;
+	}
+
+	sqlite_shm_reader_attachment_authority::sqlite_shm_reader_attachment_authority(
+		std::unique_ptr<detail::sqlite_shm_reader_attachment_authority_state> state) noexcept
+		: state_{std::move(state)}
+	{
+	}
+
+	sqlite_shm_reader_attachment_authority::~sqlite_shm_reader_attachment_authority() noexcept
+	{
+		if (state_ && state_->activity && state_->activity->control_)
+		{
+			auto& control = *state_->activity->control_;
+			auto expected = detail::sqlite_shm_registry_activity_phase::active;
+			if (control.phase.compare_exchange_strong(
+					expected,
+					detail::sqlite_shm_registry_activity_phase::abandoned,
+					std::memory_order_acq_rel,
+					std::memory_order_acquire))
+			{
+				control.authority_valid.store(false, std::memory_order_release);
+				if (control.alias_authority_latch)
+					control.alias_authority_latch->store(false, std::memory_order_release);
+				if (control.family_authority_latch)
+					control.family_authority_latch->store(false, std::memory_order_release);
+			}
+		}
+		if (state_ && state_->open && !state_->open->release_descendant())
+			state_->open->emergency_latch->store(true, std::memory_order_release);
+	}
+
+	sqlite_shm_reader_attachment_authority::sqlite_shm_reader_attachment_authority(
+		sqlite_shm_reader_attachment_authority&& other) noexcept
+		: state_{std::move(other.state_)}
+	{
+	}
+
+	bool sqlite_shm_reader_attachment_authority::valid_for_predelegation(
+		const sqlite_shm_reader_session_request& request) const noexcept
+	{
+		return state_ && state_->attachment && state_->open && state_->audit_seal &&
+			state_->activity && *state_->attachment == request.attachment &&
+			state_->activity->valid() && state_->audit_seal->valid() &&
+			state_->open->authority_valid_now() &&
+			state_->open->open_token == request.attachment.registry_open_token();
+	}
+
+	bool sqlite_shm_reader_attachment_authority::retains_exact_lifetimes(
+		const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept
+	{
+		return state_ && state_->attachment && state_->open && state_->audit_seal &&
+			state_->activity && *state_->attachment == attachment && state_->activity->valid() &&
+			state_->audit_seal->valid() && state_->open->authority_valid_now() &&
+			state_->open->open_token == attachment.registry_open_token();
+	}
+
+	bool sqlite_shm_reader_attachment_authority::validate_active_authority(
+		const sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept
+	{
+		if (!retains_exact_lifetimes(attachment))
+			return false;
+		const auto& activity = *state_->activity;
+		const auto control = activity.control_;
+		const auto registry = activity.state_.lock();
+		const auto audit_control = state_->audit_seal->control_.lock();
+		if (!control || !registry || !family.state_)
+			return false;
+		if (registry.get() != family.state_.get() ||
+			control->registry_state.lock().get() != registry.get() ||
+			control->process_epoch != family.process_epoch_ ||
+			control->alias_token != family.alias_token_ ||
+			control->family_epoch != family.family_epoch_ ||
+			control->family_pin_token != family.pin_token_ ||
+			control->process_instance != attachment.family().process_instance ||
+			control->family != attachment.family() ||
+			control->alias_lifetime != attachment.alias_lifetime())
+			return false;
+		const auto* family_pin = registry->current_family_pin_locked(family);
+		const auto* alias = registry->find_alias_locked(family.alias_token_);
+		const auto* family_record = registry->find_family_epoch_locked(family.family_epoch_);
+		const auto* activity_record = registry->current_activity_locked(activity);
+		const auto* open_record =
+			registry->find_reader_open_locked(attachment.registry_open_token());
+		return family_pin != nullptr && alias != nullptr && family_record != nullptr &&
+			activity_record != nullptr && open_record != nullptr && open_record->active &&
+			open_record->control.get() == state_->open.get() &&
+			registry->reader_open_control_matches_record_locked(*open_record) &&
+			audit_control.get() == control.get() &&
+			alias->runtime_lifetime.pin_identity() == attachment.runtime_lifetime_pin() &&
+			alias->phase == sqlite_shm_registry_alias_phase::registered &&
+			family_record->phase == sqlite_shm_registry_family_phase::active && activity.valid() &&
+			state_->audit_seal->valid();
+	}
+
+	void sqlite_shm_reader_attachment_authority::invalidate_activity_for_testing() noexcept
+	{
+		if (state_ && state_->activity && state_->activity->control_)
+			state_->activity->control_->authority_valid.store(false, std::memory_order_release);
+	}
+
+	sqlite_shm_lease_result<void>
+	sqlite_shm_reader_attachment_authority::release_activity() noexcept
+	{
+		if (!state_ || !state_->activity)
+			return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto registry = state_->activity->state_.lock();
+		if (!registry)
+			return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+		auto released = registry->release_activity(*state_->activity);
+		if (released)
+		{
+			if (state_->open && !state_->open->release_descendant())
+			{
+				state_->open->emergency_latch->store(true, std::memory_order_release);
+				state_.reset();
+				return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+			}
+			state_->open.reset();
+			state_.reset();
+		}
+		return released;
+	}
+
+	sqlite_shm_reader_map_predelegate_authority::sqlite_shm_reader_map_predelegate_authority(
+		std::unique_ptr<detail::sqlite_shm_reader_map_predelegate_authority_state> state) noexcept
+		: state_{std::move(state)}
+	{
+	}
+
+	sqlite_shm_reader_map_predelegate_authority::
+		~sqlite_shm_reader_map_predelegate_authority() noexcept
+	{
+		if (state_ && state_->activity && state_->activity->control_)
+		{
+			auto& control = *state_->activity->control_;
+			auto expected = detail::sqlite_shm_registry_activity_phase::active;
+			if (control.phase.compare_exchange_strong(
+					expected,
+					detail::sqlite_shm_registry_activity_phase::abandoned,
+					std::memory_order_acq_rel,
+					std::memory_order_acquire))
+			{
+				control.authority_valid.store(false, std::memory_order_release);
+				if (control.alias_authority_latch)
+					control.alias_authority_latch->store(false, std::memory_order_release);
+				if (control.family_authority_latch)
+					control.family_authority_latch->store(false, std::memory_order_release);
+			}
+		}
+		if (state_ && state_->open && !state_->open->release_descendant())
+			state_->open->emergency_latch->store(true, std::memory_order_release);
+	}
+
+	sqlite_shm_reader_map_predelegate_authority::sqlite_shm_reader_map_predelegate_authority(
+		sqlite_shm_reader_map_predelegate_authority&& other) noexcept
+		: state_{std::move(other.state_)}
+	{
+	}
+
+	bool sqlite_shm_reader_map_predelegate_authority::valid_for_predelegation(
+		const sqlite_shm_reader_attachment_map_request& request) const noexcept
+	{
+		return state_ && state_->request && state_->open && state_->audit_seal &&
+			state_->activity && *state_->request == request && state_->activity->valid() &&
+			state_->audit_seal->valid() && state_->open->authority_valid_now() &&
+			state_->open->open_token == request.expected_attachment.registry_open_token();
+	}
+
+	bool sqlite_shm_reader_map_predelegate_authority::validate_active_authority(
+		const sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_reader_attachment_map_request& request) const noexcept
+	{
+		if (!valid_for_predelegation(request))
+			return false;
+		const auto& activity = *state_->activity;
+		const auto control = activity.control_;
+		const auto registry = activity.state_.lock();
+		const auto audit_control = state_->audit_seal->control_.lock();
+		if (!control || !registry || !family.state_)
+			return false;
+		if (registry.get() != family.state_.get() ||
+			control->registry_state.lock().get() != registry.get() ||
+			control->process_epoch != family.process_epoch_ ||
+			control->alias_token != family.alias_token_ ||
+			control->family_epoch != family.family_epoch_ ||
+			control->family_pin_token != family.pin_token_ ||
+			control->process_instance != request.family.process_instance ||
+			control->family != request.family || control->alias_lifetime != request.alias_lifetime)
+			return false;
+		const auto* family_pin = registry->current_family_pin_locked(family);
+		const auto* alias = registry->find_alias_locked(family.alias_token_);
+		const auto* family_record = registry->find_family_epoch_locked(family.family_epoch_);
+		const auto* activity_record = registry->current_activity_locked(activity);
+		const auto* open_record =
+			registry->find_reader_open_locked(request.expected_attachment.registry_open_token());
+		return family_pin != nullptr && alias != nullptr && family_record != nullptr &&
+			activity_record != nullptr && open_record != nullptr && open_record->active &&
+			open_record->control.get() == state_->open.get() &&
+			registry->reader_open_control_matches_record_locked(*open_record) &&
+			audit_control.get() == control.get() &&
+			alias->runtime_lifetime.pin_identity() ==
+			request.expected_attachment.runtime_lifetime_pin() &&
+			alias->phase == sqlite_shm_registry_alias_phase::registered &&
+			family_record->phase == sqlite_shm_registry_family_phase::active && activity.valid() &&
+			state_->audit_seal->valid();
+	}
+
+	void sqlite_shm_reader_map_predelegate_authority::invalidate_activity_for_testing() noexcept
+	{
+		if (state_ && state_->activity && state_->activity->control_)
+			state_->activity->control_->authority_valid.store(false, std::memory_order_release);
+	}
+
+	sqlite_shm_lease_result<void>
+	sqlite_shm_reader_map_predelegate_authority::release_activity() noexcept
+	{
+		if (!state_ || !state_->activity)
+			return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto registry = state_->activity->state_.lock();
+		if (!registry)
+			return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+		auto released = registry->release_activity(*state_->activity);
+		if (released)
+		{
+			if (state_->open && !state_->open->release_descendant())
+			{
+				state_->open->emergency_latch->store(true, std::memory_order_release);
+				state_.reset();
+				return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+			}
+			state_->open.reset();
+			state_.reset();
+		}
+		return released;
+	}
+
+	sqlite_shm_reader_session_admission::sqlite_shm_reader_session_admission(
+		const sqlite_shm_reader_session_admission_kind kind,
+		std::optional<sqlite_shm_reader_session_request> proposal_request,
+		std::optional<sqlite_shm_reader_session> session,
+		std::optional<sqlite_shm_lease_rejection> rejection_value) noexcept
+		: kind_{kind}, proposal_request_{std::move(proposal_request)}, session_{std::move(session)},
+		  rejection_{std::move(rejection_value)}
+	{
+	}
+
+	sqlite_shm_reader_session_admission::sqlite_shm_reader_session_admission(
+		sqlite_shm_reader_session_admission&& other) noexcept
+		: kind_{other.kind_}, proposal_request_{std::move(other.proposal_request_)},
+		  session_{std::move(other.session_)}, rejection_{std::move(other.rejection_)}
+	{
+	}
+
+	sqlite_shm_reader_session_admission_kind
+	sqlite_shm_reader_session_admission::kind() const noexcept
+	{
+		return kind_;
+	}
+
+	bool sqlite_shm_reader_session_admission::has_proposal_custody() const noexcept
+	{
+		return (kind_ == sqlite_shm_reader_session_admission_kind::active_group_owner_admitted ||
+				kind_ ==
+					sqlite_shm_reader_session_admission_kind::
+						reserved_for_local_proposal_candidate) &&
+			proposal_request_.has_value() && session_.has_value();
+	}
+
+	const std::optional<sqlite_shm_reader_session_request>&
+	sqlite_shm_reader_session_admission::proposal_request() const noexcept
+	{
+		return proposal_request_;
+	}
+
+	const std::optional<sqlite_shm_lease_rejection>&
+	sqlite_shm_reader_session_admission::rejection() const noexcept
+	{
+		return rejection_;
+	}
+
+	std::optional<sqlite_shm_reader_session>
+	sqlite_shm_reader_session_admission::take_session() noexcept
+	{
+		return std::exchange(session_, std::nullopt);
 	}
 
 	sqlite_shm_registry_process_owner::sqlite_shm_registry_process_owner(
@@ -2825,6 +4178,34 @@ namespace cxxlens::sdk
 		return state_->begin_writer_map(family, std::move(arm), request);
 	}
 
+	sqlite_shm_lease_result<sqlite_shm_reader_session_admission>
+	sqlite_same_process_shm_mapping_registry::admit_reader_session_before_sqlite(
+		sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_reader_open_authority& open,
+		const sqlite_shm_reader_pre_sqlite_session_request& request)
+	{
+		return state_->admit_reader_session_before_sqlite(family, open, request);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
+	sqlite_same_process_shm_mapping_registry::begin_reader_map(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_session& session,
+		const sqlite_shm_reader_attachment_map_request& request)
+	{
+		return state_->begin_reader_map(family, session, request);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_map_commit>
+	sqlite_same_process_shm_mapping_registry::commit_reader_map(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_attachment_map_inflight& inflight,
+		const sqlite_shm_verified_reader_attachment_post_map_receipt& receipt,
+		sqlite_shm_reader_session& session)
+	{
+		return state_->commit_reader_map(family, inflight, receipt, session);
+	}
+
 	sqlite_shm_lease_result<sqlite_shm_pending_mapping>
 	sqlite_same_process_shm_mapping_registry::install_writer_pending(
 		sqlite_shm_registry_family_pin& family,
@@ -2859,6 +4240,12 @@ namespace cxxlens::sdk
 		sqlite_shm_registry_activity_pin& activity) noexcept
 	{
 		return state_->release_activity(activity);
+	}
+
+	sqlite_shm_lease_result<void> sqlite_same_process_shm_mapping_registry::release_reader_open(
+		sqlite_shm_reader_open_authority& open) noexcept
+	{
+		return state_->release_reader_open(open);
 	}
 
 	sqlite_shm_lease_result<void> sqlite_same_process_shm_mapping_registry::release_family(
@@ -2906,6 +4293,13 @@ namespace cxxlens::sdk
 	{
 		if (state_)
 			state_->invalidate_process_instance();
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
+	sqlite_same_process_shm_mapping_registry::acquire_reader_open_for_testing(
+		sqlite_shm_registry_family_pin& family, const sqlite_shm_reader_open_binding& binding)
+	{
+		return state_->acquire_reader_open(family, binding);
 	}
 
 	void sqlite_same_process_shm_mapping_registry::lock_registry_mutex_for_fork_testing()

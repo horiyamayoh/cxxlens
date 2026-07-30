@@ -111,6 +111,31 @@ namespace cxxlens::sdk
 					std::move(zero_resize_effect)};
 		}
 
+		[[nodiscard]] static std::optional<sqlite_shm_reader_attachment_reservation_identity>
+		reader_attachment_reservation(sqlite_shm_lease_family_binding family,
+									  sqlite_backend_opaque_identity runtime_lifetime_pin,
+									  sqlite_backend_opaque_identity alias_lifetime,
+									  sqlite_backend_opaque_identity connection_token,
+									  sqlite_backend_opaque_identity main_native_file_receipt,
+									  sqlite_backend_opaque_identity main_xopen_receipt,
+									  sqlite_backend_opaque_identity open_epoch,
+									  const std::uint64_t writer_mapping_generation,
+									  sqlite_backend_opaque_identity callback_cohort,
+									  sqlite_backend_opaque_identity attachment_epoch)
+		{
+			return sqlite_shm_reader_attachment_reservation_identity::bind(
+				std::move(family),
+				std::move(runtime_lifetime_pin),
+				std::move(alias_lifetime),
+				std::move(connection_token),
+				std::move(main_native_file_receipt),
+				std::move(main_xopen_receipt),
+				std::move(open_epoch),
+				writer_mapping_generation,
+				std::move(callback_cohort),
+				std::move(attachment_epoch));
+		}
+
 		[[nodiscard]] static sqlite_shm_reader_session_terminal_receipt
 		reader_session_terminal(sqlite_shm_reader_session_request request,
 								const sqlite_shm_reader_session_terminal_kind kind,
@@ -294,7 +319,7 @@ namespace
 		std::optional<sqlite_backend_opaque_identity> attachment_epoch = std::nullopt)
 	{
 		auto alias_lifetime = identity("test.alias-lifetime", alias);
-		auto expected = sqlite_shm_reader_attachment_reservation_identity::bind(
+		auto expected = sqlite_same_process_shm_lease_test_peer::reader_attachment_reservation(
 			binding,
 			identity("test.reader-runtime-lifetime-pin", alias),
 			alias_lifetime,

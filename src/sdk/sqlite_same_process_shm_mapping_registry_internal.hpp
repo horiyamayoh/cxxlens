@@ -15,7 +15,10 @@ namespace cxxlens::sdk
 		struct sqlite_shm_registry_process_owner_seal;
 		struct sqlite_shm_registry_runtime_owner_box;
 		struct sqlite_shm_registry_activity_control;
+		struct sqlite_shm_reader_open_control;
 		class sqlite_shm_mapping_registry_state;
+		struct sqlite_shm_reader_attachment_authority_state;
+		struct sqlite_shm_reader_map_predelegate_authority_state;
 		struct sqlite_shm_writer_member_authority_state;
 		enum class sqlite_shm_writer_pending_authority_status : std::uint8_t
 		{
@@ -29,11 +32,16 @@ namespace cxxlens::sdk
 			family_epoch,
 			family_pin_token,
 			activity_token,
+			reader_open_token,
+			reader_attachment_epoch,
 		};
 	} // namespace detail
 
 	class sqlite_same_process_shm_registry_test_peer;
 	class sqlite_shm_registry_activity_pin;
+	class sqlite_shm_reader_open_authority;
+	class sqlite_shm_reader_attachment_authority;
+	class sqlite_shm_reader_map_predelegate_authority;
 	class sqlite_writer_shm_mapping_epoch_arm;
 
 	/**
@@ -61,10 +69,13 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool valid() const noexcept;
 
 	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_registry_test_peer;
 		friend class sqlite_shm_registry_activity_pin;
 		friend class sqlite_shm_writer_member_authority;
+		friend class sqlite_shm_reader_attachment_authority;
+		friend class sqlite_shm_reader_map_predelegate_authority;
 
 		explicit sqlite_shm_registry_activity_seal(
 			std::weak_ptr<detail::sqlite_shm_registry_activity_control> control) noexcept;
@@ -307,6 +318,7 @@ namespace cxxlens::sdk
 		std::size_t quarantined_family_count{};
 		std::size_t active_family_pin_count{};
 		std::size_t active_activity_pin_count{};
+		std::size_t active_reader_open_count{};
 		std::size_t duplicate_rejection_count{};
 		std::size_t cross_binding_rejection_count{};
 		std::size_t ambiguous_lookup_count{};
@@ -330,10 +342,130 @@ namespace cxxlens::sdk
 		std::uint64_t entry_epoch{};
 		std::size_t alias_pin_count{};
 		std::size_t activity_pin_count{};
+		std::size_t reader_open_count{};
 		sqlite_shm_registry_family_phase phase{sqlite_shm_registry_family_phase::retired};
 		sqlite_shm_mapping_lease_snapshot coordinator;
 		bool coordinator_present{};
 		bool lookup_visible{};
+	};
+
+	/**
+	 * Registry-owned input captured before any SQLite API can start or reuse WAL access.
+	 *
+	 * The request deliberately has no writer generation, runtime pin, or attachment epoch.
+	 * Those values may only be selected by the exact locked registry/lease partition.
+	 */
+	struct sqlite_shm_reader_pre_sqlite_session_request
+	{
+		sqlite_shm_lease_family_binding family;
+		sqlite_backend_opaque_identity alias_lifetime;
+		sqlite_backend_opaque_identity connection_token;
+		sqlite_backend_opaque_identity main_native_file_receipt;
+		sqlite_backend_opaque_identity main_xopen_receipt;
+		sqlite_backend_opaque_identity open_epoch;
+		sqlite_backend_opaque_identity callback_cohort;
+		sqlite_backend_opaque_identity read_transaction_epoch;
+		sqlite_backend_opaque_identity decode_attempt;
+		sqlite_backend_opaque_identity authority_read_receipt;
+
+		[[nodiscard]] bool
+		operator==(const sqlite_shm_reader_pre_sqlite_session_request&) const = default;
+	};
+
+	/** Registry-owned forwarding-file/open binding captured before SQLite entry. */
+	struct sqlite_shm_reader_open_binding
+	{
+		sqlite_shm_lease_family_binding family;
+		sqlite_backend_opaque_identity alias_lifetime;
+		sqlite_backend_opaque_identity connection_token;
+		sqlite_backend_opaque_identity main_native_file_receipt;
+		sqlite_backend_opaque_identity main_xopen_receipt;
+		sqlite_backend_opaque_identity open_epoch;
+		sqlite_backend_opaque_identity callback_cohort;
+
+		[[nodiscard]] bool operator==(const sqlite_shm_reader_open_binding&) const = default;
+	};
+
+	/**
+	 * Move-only issuer authority for one exact forwarding file/open.
+	 *
+	 * Plain copied connection/open fields cannot replace this owner. The registry retains the
+	 * exact source record and every proposal reservation/group stores its non-reusable token.
+	 */
+	class sqlite_shm_reader_open_authority
+	{
+	  public:
+		~sqlite_shm_reader_open_authority() noexcept;
+		sqlite_shm_reader_open_authority(sqlite_shm_reader_open_authority&&) noexcept;
+		sqlite_shm_reader_open_authority& operator=(sqlite_shm_reader_open_authority&&) = delete;
+		sqlite_shm_reader_open_authority(const sqlite_shm_reader_open_authority&) = delete;
+		sqlite_shm_reader_open_authority&
+		operator=(const sqlite_shm_reader_open_authority&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_registry_state;
+		friend class sqlite_same_process_shm_mapping_registry;
+		friend class sqlite_same_process_shm_registry_test_peer;
+
+		explicit sqlite_shm_reader_open_authority(
+			std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state,
+			std::shared_ptr<detail::sqlite_shm_reader_open_control> control) noexcept;
+		void publish_abandonment_lineage_for_testing() noexcept;
+		void disarm() noexcept;
+
+		std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state_;
+		std::shared_ptr<detail::sqlite_shm_reader_open_control> control_;
+	};
+
+	enum class sqlite_shm_reader_session_admission_kind : std::uint8_t
+	{
+		active_group_owner_admitted,
+		reserved_for_local_proposal_candidate,
+		existing_or_ordinary_predecessor_zero_proposal_custody,
+		rejected_before_sqlite,
+	};
+
+	/**
+	 * Closed four-way pre-SQLite reader admission result.
+	 *
+	 * Only the first two kinds carry a proposal request and move-only session owner. The ordinary
+	 * predecessor route carries zero proposal identity, epoch, reservation, map attempt, or owner.
+	 * A rejected result carries one typed rejection and likewise has zero proposal custody.
+	 */
+	class sqlite_shm_reader_session_admission
+	{
+	  public:
+		sqlite_shm_reader_session_admission(sqlite_shm_reader_session_admission&&) noexcept;
+		sqlite_shm_reader_session_admission&
+		operator=(sqlite_shm_reader_session_admission&&) = delete;
+		sqlite_shm_reader_session_admission(const sqlite_shm_reader_session_admission&) = delete;
+		sqlite_shm_reader_session_admission&
+		operator=(const sqlite_shm_reader_session_admission&) = delete;
+
+		[[nodiscard]] sqlite_shm_reader_session_admission_kind kind() const noexcept;
+		[[nodiscard]] bool has_proposal_custody() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_shm_reader_session_request>&
+		proposal_request() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_shm_lease_rejection>& rejection() const noexcept;
+		[[nodiscard]] std::optional<sqlite_shm_reader_session> take_session() noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
+
+		sqlite_shm_reader_session_admission(
+			sqlite_shm_reader_session_admission_kind kind,
+			std::optional<sqlite_shm_reader_session_request> proposal_request,
+			std::optional<sqlite_shm_reader_session> session,
+			std::optional<sqlite_shm_lease_rejection> rejection) noexcept;
+
+		sqlite_shm_reader_session_admission_kind kind_{
+			sqlite_shm_reader_session_admission_kind::rejected_before_sqlite};
+		std::optional<sqlite_shm_reader_session_request> proposal_request_;
+		std::optional<sqlite_shm_reader_session> session_;
+		std::optional<sqlite_shm_lease_rejection> rejection_;
 	};
 
 	class sqlite_shm_registry_alias_pin
@@ -383,6 +515,8 @@ namespace cxxlens::sdk
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_mapping_registry;
 		friend class sqlite_shm_writer_member_authority;
+		friend class sqlite_shm_reader_attachment_authority;
+		friend class sqlite_shm_reader_map_predelegate_authority;
 
 		struct coordinates
 		{
@@ -438,6 +572,8 @@ namespace cxxlens::sdk
 		friend class sqlite_same_process_shm_mapping_registry;
 		friend class sqlite_same_process_shm_registry_test_peer;
 		friend class sqlite_shm_writer_member_authority;
+		friend class sqlite_shm_reader_attachment_authority;
+		friend class sqlite_shm_reader_map_predelegate_authority;
 
 		sqlite_shm_registry_activity_pin(
 			std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state,
@@ -489,6 +625,121 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
 
 		std::unique_ptr<detail::sqlite_shm_writer_member_authority_state> state_;
+	};
+
+	/**
+	 * Move-only registry activity retained by one reader candidate reservation and then its group.
+	 *
+	 * A successful first-member publication transfers this exact owner from the session
+	 * reservation into the live attachment group. Clean release is permitted only for a
+	 * determinate no-pointer reservation terminal or after confirmed group unmap. Ambiguous
+	 * destruction invalidates the registry activity and preserves quarantine.
+	 */
+	class sqlite_shm_reader_attachment_authority
+	{
+	  public:
+		~sqlite_shm_reader_attachment_authority() noexcept;
+		sqlite_shm_reader_attachment_authority(sqlite_shm_reader_attachment_authority&&) noexcept;
+		sqlite_shm_reader_attachment_authority&
+		operator=(sqlite_shm_reader_attachment_authority&&) = delete;
+		sqlite_shm_reader_attachment_authority(const sqlite_shm_reader_attachment_authority&) =
+			delete;
+		sqlite_shm_reader_attachment_authority&
+		operator=(const sqlite_shm_reader_attachment_authority&) = delete;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
+		friend class sqlite_same_process_shm_registry_test_peer;
+
+		explicit sqlite_shm_reader_attachment_authority(
+			std::unique_ptr<detail::sqlite_shm_reader_attachment_authority_state> state) noexcept;
+		[[nodiscard]] bool
+		valid_for_predelegation(const sqlite_shm_reader_session_request& request) const noexcept;
+		[[nodiscard]] bool retains_exact_lifetimes(
+			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept;
+		[[nodiscard]] bool validate_active_authority(
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept;
+		void invalidate_activity_for_testing() noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
+
+		std::unique_ptr<detail::sqlite_shm_reader_attachment_authority_state> state_;
+	};
+
+	class sqlite_shm_reader_candidate_authority_minter
+	{
+	  public:
+		struct candidate
+		{
+			sqlite_shm_reader_session_request request;
+			sqlite_shm_reader_attachment_authority authority;
+		};
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
+
+		sqlite_shm_reader_candidate_authority_minter(
+			detail::sqlite_shm_mapping_registry_state& registry,
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_open_authority& open,
+			const sqlite_shm_reader_pre_sqlite_session_request& request) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<candidate> mint(std::uint64_t writer_generation);
+		void cancel(sqlite_shm_reader_attachment_authority& authority) noexcept;
+
+		detail::sqlite_shm_mapping_registry_state* registry_{};
+		const sqlite_shm_registry_family_pin* family_{};
+		const sqlite_shm_reader_open_authority* open_{};
+		const sqlite_shm_reader_pre_sqlite_session_request* request_{};
+	};
+
+	class sqlite_shm_reader_map_predelegate_authority
+	{
+	  public:
+		~sqlite_shm_reader_map_predelegate_authority() noexcept;
+		sqlite_shm_reader_map_predelegate_authority(
+			sqlite_shm_reader_map_predelegate_authority&&) noexcept;
+		sqlite_shm_reader_map_predelegate_authority&
+		operator=(sqlite_shm_reader_map_predelegate_authority&&) = delete;
+		sqlite_shm_reader_map_predelegate_authority(
+			const sqlite_shm_reader_map_predelegate_authority&) = delete;
+		sqlite_shm_reader_map_predelegate_authority&
+		operator=(const sqlite_shm_reader_map_predelegate_authority&) = delete;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
+
+		explicit sqlite_shm_reader_map_predelegate_authority(
+			std::unique_ptr<detail::sqlite_shm_reader_map_predelegate_authority_state>
+				state) noexcept;
+		[[nodiscard]] bool valid_for_predelegation(
+			const sqlite_shm_reader_attachment_map_request& request) const noexcept;
+		[[nodiscard]] bool validate_active_authority(
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_attachment_map_request& request) const noexcept;
+		void invalidate_activity_for_testing() noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
+
+		std::unique_ptr<detail::sqlite_shm_reader_map_predelegate_authority_state> state_;
+	};
+
+	class sqlite_shm_reader_map_predelegate_minter
+	{
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
+
+		sqlite_shm_reader_map_predelegate_minter(
+			detail::sqlite_shm_mapping_registry_state& registry,
+			const sqlite_shm_registry_family_pin& family) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_map_predelegate_authority>
+		mint(const sqlite_shm_reader_attachment_map_request& request);
+		void cancel(sqlite_shm_reader_map_predelegate_authority& authority) noexcept;
+
+		detail::sqlite_shm_mapping_registry_state* registry_{};
+		const sqlite_shm_registry_family_pin* family_{};
 	};
 
 	/**
@@ -551,6 +802,20 @@ namespace cxxlens::sdk
 		begin_writer_map(sqlite_shm_registry_family_pin& family,
 						 sqlite_writer_shm_mapping_epoch_arm arm,
 						 const sqlite_shm_writer_map_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_session_admission>
+		admit_reader_session_before_sqlite(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_open_authority& open,
+			const sqlite_shm_reader_pre_sqlite_session_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
+		begin_reader_map(sqlite_shm_registry_family_pin& family,
+						 sqlite_shm_reader_session& session,
+						 const sqlite_shm_reader_attachment_map_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_map_commit>
+		commit_reader_map(sqlite_shm_registry_family_pin& family,
+						  sqlite_shm_reader_attachment_map_inflight& inflight,
+						  const sqlite_shm_verified_reader_attachment_post_map_receipt& receipt,
+						  sqlite_shm_reader_session& session);
 		/**
 		 * Installs one validator-sealed registry-bound writer pending at the exact original
 		 * family/activity boundary. The registry mutex remains held through the lease transition.
@@ -586,6 +851,8 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		release_activity(sqlite_shm_registry_activity_pin& activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
+		release_reader_open(sqlite_shm_reader_open_authority& open) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void>
 		release_family(sqlite_shm_registry_family_pin& family) noexcept;
 
 		[[nodiscard]] sqlite_shm_lease_result<void>
@@ -609,6 +876,9 @@ namespace cxxlens::sdk
 			std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
 		create_with_generation_for_testing(sqlite_shm_registry_process_owner owner,
 										   std::uint64_t first_mapping_generation);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
+		acquire_reader_open_for_testing(sqlite_shm_registry_family_pin& family,
+										const sqlite_shm_reader_open_binding& binding);
 		void invalidate_process_instance_for_testing() noexcept;
 		void lock_registry_mutex_for_fork_testing();
 		void unlock_registry_mutex_for_fork_testing() noexcept;
