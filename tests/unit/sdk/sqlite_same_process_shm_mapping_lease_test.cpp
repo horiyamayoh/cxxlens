@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -232,6 +234,171 @@ namespace
 	{
 		if (!condition)
 			throw std::runtime_error{std::string{message}};
+	}
+
+	template <class Enum, std::size_t ValueCount>
+	void verify_dense_unique_enum_values(const std::array<Enum, ValueCount>& values,
+										 const std::string_view message)
+	{
+		for (std::size_t index = 0; index < values.size(); ++index)
+		{
+			require(static_cast<std::size_t>(values[index]) == index, message);
+			require(std::ranges::count(values, values[index]) == 1, message);
+		}
+	}
+
+	template <class Enum, std::size_t ValueCount, std::size_t EdgeCount, class Predicate>
+	void verify_closed_transition_graph(
+		const std::array<Enum, ValueCount>& values,
+		const std::array<std::pair<Enum, Enum>, EdgeCount>& expected_edges,
+		Predicate&& predicate,
+		const std::string_view message)
+	{
+		verify_dense_unique_enum_values(values, message);
+		for (const auto origin : values)
+			for (const auto destination : values)
+			{
+				const auto edge = std::pair{origin, destination};
+				const auto expected =
+					std::ranges::find(expected_edges, edge) != expected_edges.end();
+				require(std::invoke(predicate, origin, destination) == expected, message);
+			}
+	}
+
+	void verify_reader_lifecycle_vocabulary_is_closed()
+	{
+		using namespace cxxlens::sdk::detail;
+		using reservation = sqlite_shm_reader_attachment_reservation_phase;
+		using session = sqlite_shm_reader_session_reservation_phase;
+		using custody_kind = sqlite_shm_reader_custody_kind;
+		using custody_state = sqlite_shm_reader_custody_state;
+		using group = sqlite_shm_reader_attachment_group_phase;
+		using ack = sqlite_shm_reader_logical_ack_phase;
+		using close = sqlite_shm_reader_connection_close_phase;
+		using cut = sqlite_shm_reader_cut_phase;
+
+		static_assert(sqlite_shm_reader_attachment_reservation_phases.size() == 9U);
+		static_assert(sqlite_shm_reader_session_reservation_phases.size() == 5U);
+		static_assert(sqlite_shm_reader_custody_kinds.size() == 16U);
+		static_assert(sqlite_shm_reader_custody_states.size() == 4U);
+		static_assert(sqlite_shm_reader_attachment_group_phases.size() == 5U);
+		static_assert(sqlite_shm_reader_logical_ack_phases.size() == 4U);
+		static_assert(sqlite_shm_reader_connection_close_phases.size() == 4U);
+		static_assert(sqlite_shm_reader_lifecycle_event_kinds.size() == 8U);
+		static_assert(sqlite_shm_reader_cut_kinds.size() == 4U);
+		static_assert(sqlite_shm_reader_cut_phases.size() == 5U);
+
+		verify_dense_unique_enum_values(sqlite_shm_reader_custody_states,
+										"reader custody state vocabulary is dense and unique");
+		verify_dense_unique_enum_values(sqlite_shm_reader_lifecycle_event_kinds,
+										"reader lifecycle event vocabulary is dense and unique");
+		verify_dense_unique_enum_values(sqlite_shm_reader_cut_kinds,
+										"reader cut kind vocabulary is dense and unique");
+
+		constexpr std::array reservation_edges{
+			std::pair{reservation::reserved, reservation::predecessor_route_active},
+			std::pair{reservation::reserved, reservation::observed_present},
+			std::pair{reservation::reserved, reservation::revoked_no_map},
+			std::pair{reservation::reserved, reservation::unpublished_cleanup_admitted},
+			std::pair{reservation::reserved, reservation::terminal_quarantined},
+			std::pair{reservation::predecessor_route_active,
+					  reservation::predecessor_route_retired_confirmed},
+			std::pair{reservation::predecessor_route_active, reservation::terminal_quarantined},
+			std::pair{reservation::observed_present, reservation::retired_confirmed},
+			std::pair{reservation::observed_present, reservation::terminal_quarantined},
+			std::pair{reservation::unpublished_cleanup_admitted,
+					  reservation::unpublished_cleanup_confirmed},
+			std::pair{reservation::unpublished_cleanup_admitted, reservation::terminal_quarantined},
+		};
+		verify_closed_transition_graph(sqlite_shm_reader_attachment_reservation_phases,
+									   reservation_edges,
+									   is_sqlite_shm_reader_attachment_reservation_transition,
+									   "reader attachment reservation graph is exact and closed");
+
+		constexpr std::array session_edges{
+			std::pair{session::reserved_before_sqlite, session::promoted_to_group_owner},
+			std::pair{session::reserved_before_sqlite,
+					  session::transferred_to_existing_predecessor},
+			std::pair{session::reserved_before_sqlite, session::consumed_no_pointer},
+			std::pair{session::reserved_before_sqlite, session::terminal_quarantined},
+		};
+		verify_closed_transition_graph(sqlite_shm_reader_session_reservation_phases,
+									   session_edges,
+									   is_sqlite_shm_reader_session_reservation_transition,
+									   "reader session reservation graph is exact and closed");
+
+		verify_dense_unique_enum_values(sqlite_shm_reader_custody_kinds,
+										"reader custody kind vocabulary is dense and unique");
+		for (const auto kind : sqlite_shm_reader_custody_kinds)
+		{
+			for (const auto origin : sqlite_shm_reader_custody_states)
+				for (const auto destination : sqlite_shm_reader_custody_states)
+				{
+					auto expected =
+						origin == custody_state::live && destination != custody_state::live;
+					if (kind == custody_kind::bounded_waiter_or_continuation ||
+						kind == custody_kind::terminal_reporter)
+						expected = origin == custody_state::live &&
+							(destination == custody_state::consumed_with_exact_terminal_receipt ||
+							 destination == custody_state::transferred_to_durable_tombstone);
+					if (kind == custody_kind::opaque_attachment_uncertainty ||
+						kind ==
+							custody_kind::
+								runtime_vfs_namespace_generation_native_mapping_lifetime_pin)
+						expected = origin == custody_state::live &&
+							destination == custody_state::transferred_to_durable_tombstone;
+					require(is_sqlite_shm_reader_custody_transition(kind, origin, destination) ==
+								expected,
+							"reader custody transition table is exact and closed");
+				}
+		}
+
+		constexpr std::array group_edges{
+			std::pair{group::active, group::unmap_cut_sealing},
+			std::pair{group::active, group::terminal_quarantined},
+			std::pair{group::unmap_cut_sealing, group::native_unmap_admitted},
+			std::pair{group::unmap_cut_sealing, group::terminal_quarantined},
+			std::pair{group::native_unmap_admitted, group::native_unmap_confirmed},
+			std::pair{group::native_unmap_admitted, group::terminal_quarantined},
+		};
+		verify_closed_transition_graph(sqlite_shm_reader_attachment_group_phases,
+									   group_edges,
+									   is_sqlite_shm_reader_attachment_group_transition,
+									   "reader attachment group graph is exact and closed");
+
+		constexpr std::array ack_edges{
+			std::pair{ack::not_applicable, ack::awaiting_sqlite_ack},
+			std::pair{ack::awaiting_sqlite_ack, ack::consumed_by_exact_unmap},
+			std::pair{ack::awaiting_sqlite_ack, ack::consumed_by_close},
+		};
+		verify_closed_transition_graph(sqlite_shm_reader_logical_ack_phases,
+									   ack_edges,
+									   is_sqlite_shm_reader_logical_ack_transition,
+									   "reader logical acknowledgement graph is exact and closed");
+
+		constexpr std::array close_edges{
+			std::pair{close::open, close::close_admitted},
+			std::pair{close::open, close::terminal_quarantined},
+			std::pair{close::close_admitted, close::closed},
+			std::pair{close::close_admitted, close::terminal_quarantined},
+		};
+		verify_closed_transition_graph(sqlite_shm_reader_connection_close_phases,
+									   close_edges,
+									   is_sqlite_shm_reader_connection_close_transition,
+									   "reader connection close graph is exact and closed");
+
+		constexpr std::array cut_edges{
+			std::pair{cut::sealed_waiting, cut::ready},
+			std::pair{cut::sealed_waiting, cut::terminal_quarantined},
+			std::pair{cut::ready, cut::native_effect_admitted},
+			std::pair{cut::ready, cut::terminal_quarantined},
+			std::pair{cut::native_effect_admitted, cut::terminal_confirmed},
+			std::pair{cut::native_effect_admitted, cut::terminal_quarantined},
+		};
+		verify_closed_transition_graph(sqlite_shm_reader_cut_phases,
+									   cut_edges,
+									   is_sqlite_shm_reader_cut_transition,
+									   "reader cut graph is exact and closed");
 	}
 
 	[[nodiscard]] sqlite_backend_opaque_identity identity(const std::string_view profile,
@@ -5187,6 +5354,7 @@ int main()
 {
 	try
 	{
+		verify_reader_lifecycle_vocabulary_is_closed();
 		verify_extend_pair_classifier();
 		verify_native_attachment_identity_and_census_groundwork();
 		verify_writer_attachment_group_cleanup_is_exact_and_one_shot();

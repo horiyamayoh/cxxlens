@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "sqlite_backend_observation_internal.hpp"
+#include "sqlite_same_process_shm_reader_lifecycle_internal.hpp"
 
 namespace cxxlens::sdk
 {
