@@ -2347,6 +2347,94 @@ namespace
 		}
 	}
 
+	void verify_peer_quarantine_preserves_established_registry_group_drain()
+	{
+		auto setup = make_reader_candidate_setup(221U);
+		auto handoff = form_reader_group(setup, 222U);
+		const auto group_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				setup.session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.registry.reader-peer-drain-group-terminal", 223U));
+		require(setup.coordinator->complete_reader_session(setup.session, group_terminal) &&
+					handoff.valid(),
+				"close established group session before peer quarantine");
+
+		auto peer_request =
+			reader_pre_sqlite_request(setup.fixture,
+									  identity("test.registry.reader-peer-drain-connection", 224U),
+									  identity("test.registry.reader-peer-drain-main-native", 224U),
+									  identity("test.registry.reader-peer-drain-main-xopen", 224U),
+									  identity("test.registry.reader-peer-drain-open", 224U),
+									  identity("test.registry.reader-peer-drain-cohort", 224U),
+									  224U);
+		auto peer_open = acquire_reader_open(setup.fixture, peer_request);
+		auto peer_admission = setup.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.fixture.family_pin, peer_open, peer_request);
+		require(peer_admission &&
+					peer_admission->kind() ==
+						sqlite_shm_reader_session_admission_kind::
+							reserved_for_local_proposal_candidate &&
+					peer_admission->proposal_request(),
+				"reserve distinct peer candidate beside established group");
+		const auto peer_session_request = *peer_admission->proposal_request();
+		auto peer_session = peer_admission->take_session();
+		require(peer_session && peer_session->valid(),
+				"take distinct peer candidate before terminal failure");
+		const auto peer_terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			peer_session_request,
+			sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
+			identity("test.registry.reader-peer-drain-terminal", 225U));
+		sqlite_same_process_shm_lease_test_peer::fail_next_reader_session_terminal_transition(
+			*setup.coordinator);
+		auto failed_peer = setup.coordinator->complete_reader_session(*peer_session, peer_terminal);
+		require(!failed_peer &&
+					failed_peer.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!peer_session->valid() && handoff.valid() &&
+					setup.coordinator->snapshot().quarantined,
+				"peer terminal ambiguity quarantines the family without consuming group drain");
+
+		const auto propagated = setup.fixture.registry->snapshot();
+		auto fresh_request = setup.pre_sqlite;
+		fresh_request.read_transaction_epoch =
+			identity("test.registry.reader-peer-drain-fresh-transaction", 226U);
+		fresh_request.decode_attempt =
+			identity("test.registry.reader-peer-drain-fresh-decode", 226U);
+		fresh_request.authority_read_receipt =
+			identity("test.registry.reader-peer-drain-fresh-authority", 226U);
+		auto fresh = setup.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.fixture.family_pin, setup.open, fresh_request);
+		require(propagated.quarantined_family_count == 1U && fresh &&
+					fresh->kind() ==
+						sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
+					fresh->rejection() &&
+					fresh->rejection()->reason == sqlite_shm_lease_rejection_reason::quarantined,
+				"peer quarantine failed to revoke every fresh reader admission");
+
+		const auto unmap_callback = callback(227U);
+		auto unmap = setup.coordinator->begin_reader_unmap(handoff, unmap_callback);
+		require(unmap && unmap->valid() && !handoff.valid(),
+				"deterministic peer quarantine disallowed established group owned drain");
+		auto completed = setup.coordinator->complete_reader_unmap(
+			*unmap, unmap_callback, sqlite_shm_native_cleanup_outcome::confirmed_success);
+		auto replay = setup.coordinator->begin_reader_unmap(handoff, callback(228U));
+		const auto lease = setup.coordinator->snapshot();
+		const auto registry = setup.fixture.registry->snapshot();
+		require(!completed &&
+					completed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!unmap->valid() && !replay &&
+					replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					lease.quarantined && lease.reader_attachment_group_count == 1U &&
+					lease.reader_handoff_count == 1U && lease.reader_cleanup_count == 1U &&
+					lease.reader_registry_activity_authority_count == 2U &&
+					registry.active_activity_pin_count == 3U &&
+					registry.active_reader_open_count == 2U &&
+					registry.quarantined_family_count == 1U,
+				"peer-owned drain did not consume one outcome into retained no-retry custody");
+	}
+
 	void verify_non_ok_reader_unmap_retains_group_authority()
 	{
 		auto setup = make_reader_candidate_setup(191U);
@@ -7514,6 +7602,7 @@ int main()
 		verify_live_reader_group_new_page_mints_fresh_predelegate();
 		verify_registry_reader_liveness_loss_is_sticky_and_retains_authority();
 		verify_registry_reader_terminal_failures_are_all_or_none();
+		verify_peer_quarantine_preserves_established_registry_group_drain();
 		verify_non_ok_reader_unmap_retains_group_authority();
 		verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity();
 		verify_reader_open_token_exhaustion_has_no_partial_open();

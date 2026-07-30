@@ -3871,7 +3871,10 @@ namespace cxxlens::sdk
 					const auto group = find_by_token(reader_attachment_groups_, handoff.token_);
 					if (group != reader_attachment_groups_.end())
 					{
-						if (is_quarantined_locked())
+						// A deterministic peer quarantine revokes fresh family admission but
+						// does not consume another established group's already-owned drain.
+						// Emergency/unknown state cannot safely delegate a new native call.
+						if (emergency_quarantine_.load(std::memory_order_acquire))
 							return sqlite_shm_unexpected(
 								rejection(sqlite_shm_lease_rejection_reason::quarantined,
 										  sqlite_shm_lease_recovery_action::quarantine_no_retry));
