@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -326,6 +327,7 @@ namespace cxxlens::sdk
 		std::size_t generation_source_count{};
 		std::size_t reader_lifecycle_sequence_source_count{};
 		std::size_t retired_reader_lifecycle_tombstone_count{};
+		std::size_t retired_reader_open_epoch_close_tombstone_count{};
 		std::uint64_t reader_lifecycle_last_issued_sequence{};
 		bool process_live{};
 		bool registry_quarantined{};
@@ -350,6 +352,7 @@ namespace cxxlens::sdk
 		sqlite_shm_registry_family_phase phase{sqlite_shm_registry_family_phase::retired};
 		sqlite_shm_mapping_lease_snapshot coordinator;
 		std::size_t reader_lifecycle_compact_tombstone_count{};
+		std::size_t reader_open_epoch_close_tombstone_count{};
 		bool coordinator_present{};
 		bool lookup_visible{};
 	};
@@ -389,6 +392,25 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity callback_cohort;
 
 		[[nodiscard]] bool operator==(const sqlite_shm_reader_open_binding&) const = default;
+	};
+
+	/**
+	 * Read-only test projection of one exact registry-authenticated reader open route.
+	 *
+	 * The copied binding and token are audit data only. They do not retain the registry record,
+	 * close owner, runtime pin, or callback authority and cannot be supplied to a lifecycle
+	 * operation. `lookup_visible` is true only for the exact live move-only open authority after
+	 * the registry has synchronized abandonment and transitive quarantine.
+	 */
+	struct sqlite_shm_registry_reader_open_epoch_test_view
+	{
+		std::size_t exact_record_match_count{};
+		std::uint64_t registry_open_token{};
+		sqlite_shm_reader_open_binding binding;
+		std::optional<sqlite_shm_reader_open_epoch_test_view> lease_open_epoch;
+		bool record_active{};
+		bool lease_binding_matches{};
+		bool lookup_visible{};
 	};
 
 	/**
@@ -850,6 +872,16 @@ namespace cxxlens::sdk
 			sqlite_shm_registry_family_pin& family,
 			sqlite_shm_reader_unmap_obligation& unmap,
 			const sqlite_shm_verified_reader_unmap_terminal_receipt& receipt) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_obligation>
+		begin_reader_close(sqlite_shm_registry_family_pin& family,
+						   const sqlite_shm_reader_open_authority& open,
+						   const sqlite_shm_reader_close_request& request) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_terminal_result>
+		complete_reader_close(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_open_authority& open,
+			sqlite_shm_reader_close_obligation& close,
+			const sqlite_shm_verified_reader_close_terminal_receipt& receipt) noexcept;
 		/**
 		 * Installs one validator-sealed registry-bound writer pending at the exact original
 		 * family/activity boundary. The registry mutex remains held through the lease transition.
@@ -922,6 +954,9 @@ namespace cxxlens::sdk
 		void exhaust_registry_counter_for_testing(
 			detail::sqlite_shm_registry_counter_for_testing counter) noexcept;
 		[[nodiscard]] static std::uint64_t state_destruction_count_for_testing() noexcept;
+		[[nodiscard]] sqlite_shm_registry_reader_open_epoch_test_view
+		reader_open_epoch_view_for_testing(
+			const sqlite_shm_reader_open_authority& open) const noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
 		adopt_runtime_lifetime_for_testing(sqlite_backend_opaque_identity identity,
 										   sqlite_backend_opaque_identity pin_identity,
@@ -947,6 +982,11 @@ namespace cxxlens::sdk
 		retired_reader_lifecycle_tombstone_count_for_testing() const noexcept;
 		[[nodiscard]] bool retired_reader_lifecycle_tombstone_matches_for_testing(
 			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept;
+		[[nodiscard]] std::size_t
+		retired_reader_open_epoch_close_tombstone_count_for_testing() const noexcept;
+		[[nodiscard]] bool retired_reader_open_epoch_close_tombstone_matches_for_testing(
+			std::uint64_t registry_open_token,
+			const sqlite_shm_reader_open_epoch_binding& binding) const noexcept;
 		void lock_state_mutex_for_testing();
 		void unlock_state_mutex_for_testing();
 

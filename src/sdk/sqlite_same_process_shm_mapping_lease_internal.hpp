@@ -37,6 +37,31 @@ namespace cxxlens::sdk
 		{
 			std::atomic_bool authority_valid{true};
 		};
+
+		/**
+		 * Registry-owned admission cut shared with no-lock peer-abandonment invalidation.
+		 *
+		 * A guarded xOpen registration linearizes only while all three latches retain authority.
+		 * The lease coordinator never stores these latches as post-admission cleanup gates.
+		 */
+		struct sqlite_shm_reader_open_admission_guard
+		{
+			std::shared_ptr<std::atomic_bool> emergency_latch;
+			std::shared_ptr<std::atomic_bool> alias_authority_latch;
+			std::shared_ptr<std::atomic_bool> family_authority_latch;
+
+			[[nodiscard]] bool valid() const noexcept
+			{
+				return emergency_latch && alias_authority_latch && family_authority_latch;
+			}
+
+			[[nodiscard]] bool admission_visible_now() const noexcept
+			{
+				return valid() && !emergency_latch->load(std::memory_order_acquire) &&
+					alias_authority_latch->load(std::memory_order_acquire) &&
+					family_authority_latch->load(std::memory_order_acquire);
+			}
+		};
 	} // namespace detail
 
 	class sqlite_shm_writer_member_authority;
@@ -63,6 +88,28 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity exact_file_family;
 
 		[[nodiscard]] bool operator==(const sqlite_shm_lease_family_binding&) const = default;
+	};
+
+	/**
+	 * Exact source-private binding of one authenticated reader xOpen epoch.
+	 *
+	 * This value deliberately predates any writer generation, reader attachment reservation, or
+	 * map member. It is the immutable binding for the one orthogonal connection-close owner minted
+	 * at xOpen registration. The registry must construct it from its locked reader-open record;
+	 * copied connection, path, pointer, or open-epoch equality is not authority.
+	 */
+	struct sqlite_shm_reader_open_epoch_binding
+	{
+		sqlite_shm_lease_family_binding family;
+		sqlite_backend_opaque_identity runtime_lifetime_pin;
+		sqlite_backend_opaque_identity alias_lifetime;
+		sqlite_backend_opaque_identity connection_token;
+		sqlite_backend_opaque_identity main_native_file_receipt;
+		sqlite_backend_opaque_identity main_xopen_receipt;
+		sqlite_backend_opaque_identity open_epoch;
+		sqlite_backend_opaque_identity callback_cohort;
+
+		[[nodiscard]] bool operator==(const sqlite_shm_reader_open_epoch_binding&) const = default;
 	};
 
 	/**
@@ -256,9 +303,10 @@ namespace cxxlens::sdk
 	 * One callback invocation identity retained across a native callback boundary.
 	 *
 	 * The future process-global registry must seal `invocation_token` as non-reusable for the
-	 * complete process/runtime/VFS cohort. This pure coordinator rejects duplicates among active
-	 * callbacks and binds every multi-phase transition to exact receipt equality; it does not keep
-	 * an unbounded history of completed invocations.
+	 * complete process/runtime/VFS cohort. This family coordinator rejects duplicates among active
+	 * callbacks, binds every multi-phase transition to exact receipt equality, and retains compact
+	 * same-family completed identities across coordinator replacement. Cross-family process-global
+	 * nonreuse remains the production issuer's responsibility.
 	 */
 	struct sqlite_shm_callback_execution_receipt
 	{
@@ -363,8 +411,10 @@ namespace cxxlens::sdk
 	class sqlite_shm_reader_session;
 	class sqlite_shm_reader_attachment_map_inflight;
 	class sqlite_shm_reader_unmap_obligation;
+	class sqlite_shm_reader_close_obligation;
 	class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
 	class sqlite_shm_verified_reader_unmap_terminal_receipt;
+	class sqlite_shm_verified_reader_close_terminal_receipt;
 	class sqlite_shm_verified_writer_native_map_receipt;
 	class sqlite_writer_shm_native_map_receipt_validator;
 	class sqlite_writer_shm_mapping_receipt_validator;
@@ -598,10 +648,123 @@ namespace cxxlens::sdk
 		std::optional<sqlite_backend_opaque_identity> latch_reset_receipt_;
 	};
 
+	/** Phase-1 close rows which delegate xClose directly and never invent xShmUnmap authority. */
+	enum class sqlite_shm_reader_close_route : std::uint8_t
+	{
+		close_without_group,
+		close_after_confirmed_unmap,
+	};
+
+	enum class sqlite_shm_reader_close_evidence_kind : std::uint8_t
+	{
+		exact_native_result,
+		throw_or_unknown,
+	};
+
+	struct sqlite_shm_reader_close_request
+	{
+		sqlite_shm_callback_execution_receipt callback;
+
+		[[nodiscard]] bool operator==(const sqlite_shm_reader_close_request&) const = default;
+	};
+
+	/**
+	 * Issuer-sealed exact xClose terminal evidence for one open-epoch close obligation.
+	 *
+	 * Phase 1 accepts either a determinate native result with one exact effect identity, or an
+	 * explicit throw/unknown row with neither status nor effect identity. The production issuer is
+	 * intentionally absent until the reader VFS integration is separately reviewed.
+	 */
+	class sqlite_shm_verified_reader_close_terminal_receipt
+	{
+	  public:
+		[[nodiscard]] const sqlite_shm_callback_execution_receipt& callback() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_close_evidence_kind evidence_kind() const noexcept;
+		[[nodiscard]] std::optional<int> native_status() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		native_effect_receipt() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_verified_reader_close_terminal_receipt(
+			const sqlite_shm_reader_close_obligation& close,
+			sqlite_shm_callback_execution_receipt callback,
+			sqlite_shm_reader_close_evidence_kind evidence_kind,
+			std::optional<int> native_status,
+			std::optional<sqlite_backend_opaque_identity> native_effect_receipt);
+
+		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t owner_token_{};
+		std::uint64_t registry_open_token_{};
+		sqlite_shm_callback_execution_receipt callback_;
+		sqlite_shm_reader_close_evidence_kind evidence_kind_{
+			sqlite_shm_reader_close_evidence_kind::throw_or_unknown};
+		std::optional<int> native_status_;
+		std::optional<sqlite_backend_opaque_identity> native_effect_receipt_;
+	};
+
+	enum class sqlite_shm_reader_close_terminal_kind : std::uint8_t
+	{
+		closed,
+		terminal_quarantined,
+	};
+
+	/** Closed projection of one committed Phase-1 reader xClose terminal. */
+	class sqlite_shm_reader_close_terminal_result
+	{
+	  public:
+		[[nodiscard]] sqlite_shm_reader_close_terminal_kind kind() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_close_route route() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_close_evidence_kind evidence_kind() const noexcept;
+		[[nodiscard]] std::optional<int> native_status() const noexcept;
+		[[nodiscard]] int outward_status() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		native_effect_receipt() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		sqlite_shm_reader_close_terminal_result(
+			sqlite_shm_reader_close_terminal_kind kind,
+			sqlite_shm_reader_close_route route,
+			sqlite_shm_reader_close_evidence_kind evidence_kind,
+			std::optional<int> native_status,
+			std::optional<sqlite_backend_opaque_identity> native_effect_receipt) noexcept;
+
+		sqlite_shm_reader_close_terminal_kind kind_{
+			sqlite_shm_reader_close_terminal_kind::terminal_quarantined};
+		sqlite_shm_reader_close_route route_{sqlite_shm_reader_close_route::close_without_group};
+		sqlite_shm_reader_close_evidence_kind evidence_kind_{
+			sqlite_shm_reader_close_evidence_kind::throw_or_unknown};
+		std::optional<int> native_status_;
+		int outward_status_{};
+		std::optional<sqlite_backend_opaque_identity> native_effect_receipt_;
+	};
+
+	/**
+	 * Process-lifetime one-shot identities retained by a compact reader lifecycle tombstone.
+	 *
+	 * Callback invocation identities and native-effect identities remain separate semantic
+	 * domains, but every identity is unique inside its domain and survives family coordinator
+	 * replacement.
+	 */
+	struct sqlite_shm_reader_replay_identity_tombstone
+	{
+		std::vector<sqlite_backend_opaque_identity> callback_invocation_tokens;
+		std::vector<sqlite_backend_opaque_identity> effect_receipts;
+		bool callback_free_terminal{};
+
+		[[nodiscard]] bool
+		operator==(const sqlite_shm_reader_replay_identity_tombstone&) const = default;
+	};
+
 	/**
 	 * Registry-retained stale-reservation evidence after a family coordinator retires.
 	 *
-	 * Group payload, sessions, callbacks, and native observations are intentionally excluded.
+	 * Group payload, sessions, and native observations are intentionally excluded. Exact
+	 * callback/effect one-shot identities remain as replay-only evidence.
 	 */
 	struct sqlite_shm_reader_lifecycle_compact_tombstone
 	{
@@ -610,9 +773,30 @@ namespace cxxlens::sdk
 			detail::sqlite_shm_reader_attachment_reservation_phase::revoked_no_map};
 		std::uint64_t origin_sequence{};
 		std::uint64_t destination_sequence{};
+		sqlite_shm_reader_replay_identity_tombstone replay_identities;
 
 		[[nodiscard]] bool
 		operator==(const sqlite_shm_reader_lifecycle_compact_tombstone&) const = default;
+	};
+
+	/**
+	 * Process-lifetime stale-token tombstone for one successfully closed reader open epoch.
+	 *
+	 * Unlike an attachment tombstone, this remains representable when the handle never mapped and
+	 * therefore has no writer generation or attachment epoch.
+	 */
+	struct sqlite_shm_reader_open_epoch_close_tombstone
+	{
+		std::uint64_t registry_open_token{};
+		std::uint64_t close_owner_token{};
+		sqlite_shm_reader_open_epoch_binding binding;
+		sqlite_shm_reader_replay_identity_tombstone replay_identities;
+		std::uint64_t origin_sequence{};
+		std::uint64_t close_cut_sequence{};
+		std::uint64_t terminal_sequence{};
+
+		[[nodiscard]] bool
+		operator==(const sqlite_shm_reader_open_epoch_close_tombstone&) const = default;
 	};
 
 	/**
@@ -970,10 +1154,51 @@ namespace cxxlens::sdk
 		std::size_t reader_registry_bound_group_count{};
 		std::size_t reader_registry_bound_session_count{};
 		std::size_t reader_registry_open_count{};
+		std::size_t reader_open_close_owner_count{};
+		std::size_t reader_close_admitted_count{};
+		std::size_t reader_close_terminal_count{};
+		std::size_t reader_open_close_tombstone_count{};
 		std::size_t reader_registry_activity_authority_count{};
 		std::size_t reader_registry_activity_liveness_lost_count{};
 		bool reader_admission_visible{};
 		bool quarantined{};
+	};
+
+	struct sqlite_shm_reader_open_epoch_test_view
+	{
+		std::uint64_t registry_open_token{};
+		sqlite_shm_reader_open_epoch_binding binding;
+		std::uint64_t close_owner_token{};
+		detail::sqlite_shm_reader_connection_close_phase phase{
+			detail::sqlite_shm_reader_connection_close_phase::open};
+		std::uint64_t origin_sequence{};
+		std::uint64_t close_cut_permit_slot{};
+		std::uint64_t close_terminal_permit_slot{};
+		std::uint64_t initial_close_cut_permit_slot{};
+		std::uint64_t initial_close_terminal_permit_slot{};
+		std::optional<sqlite_shm_reader_close_route> route;
+		std::uint64_t close_cut_sequence{};
+		std::uint64_t destination_sequence{};
+	};
+
+	struct sqlite_shm_reader_close_terminal_test_view
+	{
+		std::uint64_t registry_open_token{};
+		sqlite_shm_reader_open_epoch_binding binding;
+		std::uint64_t close_owner_token{};
+		sqlite_shm_reader_close_route route{sqlite_shm_reader_close_route::close_without_group};
+		sqlite_shm_reader_close_terminal_kind kind{
+			sqlite_shm_reader_close_terminal_kind::terminal_quarantined};
+		sqlite_shm_reader_close_evidence_kind evidence_kind{
+			sqlite_shm_reader_close_evidence_kind::throw_or_unknown};
+		std::optional<int> native_status;
+		int outward_status{};
+		std::optional<sqlite_backend_opaque_identity> native_effect_receipt;
+		sqlite_shm_callback_execution_receipt callback;
+		bool exact_terminal_receipt_retained{};
+		detail::sqlite_shm_reader_terminal_quarantine_reason reason{
+			detail::sqlite_shm_reader_terminal_quarantine_reason::none};
+		std::uint64_t terminal_sequence{};
 	};
 
 	struct sqlite_shm_reader_attachment_reservation_test_view
@@ -1073,10 +1298,13 @@ namespace cxxlens::sdk
 		std::array<std::size_t, detail::sqlite_shm_reader_custody_states.size()>
 			custody_state_counts{};
 		std::size_t compact_tombstone_count{};
+		std::size_t open_epoch_close_compact_tombstone_count{};
 		std::vector<sqlite_shm_reader_attachment_reservation_test_view> attachment_reservations;
 		std::vector<sqlite_shm_reader_session_reservation_test_view> session_reservations;
 		std::vector<sqlite_shm_reader_attachment_group_test_view> attachment_groups;
 		std::vector<sqlite_shm_reader_map_attempt_test_view> map_attempts;
+		std::vector<sqlite_shm_reader_open_epoch_test_view> open_epochs;
+		std::vector<sqlite_shm_reader_close_terminal_test_view> close_terminals;
 		std::vector<sqlite_shm_reader_terminal_quarantine_test_view> terminal_quarantines;
 		std::vector<sqlite_shm_reader_zero_effect_terminal_test_view> zero_effect_terminals;
 		std::vector<sqlite_shm_reader_lifecycle_event_test_view> events;
@@ -1391,11 +1619,13 @@ namespace cxxlens::sdk
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			detail::sqlite_shm_lease_token_identity token,
 			detail::sqlite_shm_mapping_generation_identity generation) noexcept;
+		void disable_terminal_presentation() noexcept;
 		void disarm() noexcept;
 
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 		std::uint64_t token_{};
 		std::uint64_t generation_{};
+		bool terminal_presentation_disabled_{};
 	};
 
 	enum class sqlite_shm_reader_session_phase : std::uint8_t
@@ -1431,6 +1661,7 @@ namespace cxxlens::sdk
 			detail::sqlite_shm_lease_token_identity token,
 			detail::sqlite_shm_mapping_generation_identity generation,
 			sqlite_shm_reader_session_phase phase) noexcept;
+		void disable_terminal_presentation() noexcept;
 		void promote_to_active() noexcept;
 		void disarm() noexcept;
 
@@ -1439,6 +1670,7 @@ namespace cxxlens::sdk
 		std::uint64_t generation_{};
 		sqlite_shm_reader_session_phase phase_{
 			sqlite_shm_reader_session_phase::reserved_for_first_map};
+		bool terminal_presentation_disabled_{};
 	};
 
 	class sqlite_shm_reader_cleanup_obligation
@@ -1553,11 +1785,54 @@ namespace cxxlens::sdk
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			detail::sqlite_shm_lease_token_identity token,
 			detail::sqlite_shm_mapping_generation_identity generation) noexcept;
+		void disable_terminal_presentation() noexcept;
 		void disarm() noexcept;
 
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 		std::uint64_t token_{};
 		std::uint64_t generation_{};
+		bool terminal_presentation_disabled_{};
+	};
+
+	/**
+	 * Move-only Phase-1 xClose authority for one exact authenticated reader open epoch.
+	 *
+	 * It is minted only by consuming the orthogonal xOpen close owner through one sequenced close
+	 * cut. Active attachment, logical-ack, opaque, predecessor, and composite routes cannot be
+	 * represented by this checkpoint type.
+	 */
+	class sqlite_shm_reader_close_obligation
+	{
+	  public:
+		~sqlite_shm_reader_close_obligation() noexcept;
+		sqlite_shm_reader_close_obligation(sqlite_shm_reader_close_obligation&&) noexcept;
+		sqlite_shm_reader_close_obligation&
+		operator=(sqlite_shm_reader_close_obligation&&) = delete;
+		sqlite_shm_reader_close_obligation(const sqlite_shm_reader_close_obligation&) = delete;
+		sqlite_shm_reader_close_obligation&
+		operator=(const sqlite_shm_reader_close_obligation&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_close_route route() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_shm_verified_reader_close_terminal_receipt;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_reader_close_obligation(
+			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
+			detail::sqlite_shm_lease_token_identity owner_token,
+			std::uint64_t registry_open_token,
+			sqlite_shm_reader_close_route route) noexcept;
+		void disable_terminal_presentation() noexcept;
+		void disarm() noexcept;
+
+		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t owner_token_{};
+		std::uint64_t registry_open_token_{};
+		sqlite_shm_reader_close_route route_{sqlite_shm_reader_close_route::close_without_group};
+		bool terminal_presentation_disabled_{};
 	};
 
 	class sqlite_shm_writer_release
@@ -1744,7 +2019,26 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_candidate_authority_minter& candidate_minter);
 		[[nodiscard]] sqlite_shm_lease_result<void> register_registry_reader_open(
 			std::uint64_t registry_open_token,
-			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal);
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding);
+		[[nodiscard]] sqlite_shm_lease_result<void> register_registry_reader_open(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			const detail::sqlite_shm_reader_open_admission_guard& admission_guard);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_obligation>
+		begin_registry_reader_close(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			const sqlite_shm_reader_close_request& request) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_terminal_result>
+		complete_registry_reader_close(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			sqlite_shm_reader_close_obligation& close,
+			const sqlite_shm_verified_reader_close_terminal_receipt& receipt) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> release_registry_reader_open(
 			std::uint64_t registry_open_token,
 			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal) noexcept;
@@ -1787,10 +2081,28 @@ namespace cxxlens::sdk
 			std::span<const sqlite_shm_reader_lifecycle_compact_tombstone> tombstones);
 		[[nodiscard]] sqlite_shm_lease_result<void> check_registry_reader_lifecycle_tombstone(
 			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<
+			std::vector<sqlite_shm_reader_open_epoch_close_tombstone>>
+		export_registry_reader_open_epoch_close_tombstones() const;
+		[[nodiscard]] sqlite_shm_lease_result<void>
+		import_registry_reader_open_epoch_close_tombstones(
+			std::span<const sqlite_shm_reader_open_epoch_close_tombstone> tombstones);
+		[[nodiscard]] sqlite_shm_lease_result<void>
+		check_registry_reader_open_epoch_close_tombstone(
+			std::uint64_t registry_open_token,
+			const sqlite_shm_reader_open_epoch_binding& binding) const noexcept;
 		[[nodiscard]] sqlite_shm_reader_lifecycle_test_view
 		reader_lifecycle_view_for_testing() const;
+		[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_test_view>
+		reader_open_epoch_view_for_testing(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal)
+			const noexcept;
 		void exhaust_reader_lifecycle_sequence_source_for_testing() noexcept;
 		void make_reader_lifecycle_sequence_source_unavailable_for_testing() noexcept;
+		void inject_reader_close_terminal_commit_failure_for_testing() noexcept;
+		void inject_reader_close_post_receipt_state_failure_for_testing() noexcept;
+		void inject_reader_close_begin_preparation_failure_for_testing() noexcept;
 		void inject_reader_unmap_terminal_commit_failure_for_testing() noexcept;
 		void inject_reader_unmap_post_receipt_state_failure_for_testing() noexcept;
 		void inject_reader_unmap_begin_preparation_failure_for_testing() noexcept;
