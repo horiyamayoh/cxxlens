@@ -933,8 +933,9 @@ format_compatibility:
             production_activation: blocked-until-attachment-amendment-acceptance-and-the-distinct-exact-implementation-and-complete-counterexample-matrix-review
         writer_gate_outcome_evidence_amendment_proposal:
           id: cxxlens.sqlite.writer-gate-outcome-evidence.v1
-          status: proposed-unqualified-non-authorizing
+          status: accepted-authority-implementation-pending
           tracking: {issue: '#208', feedback: DF-0208}
+          acceptance_review_receipt: exact-commit-bd2505f26d0d45b7bfa785a533c308ab957b11aa-issue-208-comment-5119882571-fresh-independent-semantic-and-structural-P0-0-P1-0-P2-0-authorizes-internal-writer-gate-outcome-evidence-state-machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-production-VFS-public-native-OK-remain-blocked
           scope: writer-only-internal-authority-proposal-no-reader-grouping-production-vfs-public-api-or-native-OK-projection
           authority_axes:
             gate_outcome: issuer-sealed-immutable-evidence-kind-and-value-bundle

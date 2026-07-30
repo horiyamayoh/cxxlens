@@ -119,12 +119,14 @@ enclosing lease digestは
 
 Issue #208 / DF-0208 の
 `cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、accepted DF-0206 のgate failure transitionに
-exact typed negative evidenceとsole cleanup authorityを与えるreview-pending writer-only proposalである。
-四つのSQLite/Snapshot contract/schema mirrorで `proposed-unqualified-non-authorizing` とし、
-acceptance review receiptを追加しない。fresh independent exact-commit review完了前は、gate outcome
-mutation、native cleanup、production/VFS binding、public API、native OK projectionを認可しない。
-accepted DF-0206 fieldsとreader-predelegation ordering fenceは維持し、DF-0207 reader groupingへ推移
-認可しない。
+exact typed negative evidenceとsole cleanup authorityを与えるaccepted writer-only amendmentである。
+exact proposal `bd2505f26d0d45b7bfa785a533c308ab957b11aa` は Issue #208 のfresh independent
+semantic/structural review
+<https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571> に
+`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) としてacceptされた。
+このacceptanceはinternal gate outcome evidence/state machine、registry cut/callback cleanupとfocused
+testsだけを認可する。accepted DF-0206 fieldsとreader-predelegation ordering fenceは維持し、DF-0207
+reader grouping、production/VFS binding、public API、native OK projectionへ推移認可しない。
 
 proposalはgate outcome evidenceとregistry cut executionを二軸に分ける。issuerはprocess/runtime/VFS/
 file-family/alias/connection/open epoch、one-shot expected attachment epoch reservation、closed profile、
@@ -242,9 +244,14 @@ replaceする。後続dispatch consumptionは同じgenerationだけをupdateし�
 continuationのcomplete transfer後にだけslot releaseとwaiter wakeupをatomicにpublishする。stale generation、
 incomplete custody、terminal record未installではreleaseしない。
 
-このreview-pending siblingを含むcurrent enclosing lease canonical digestは
-`sha256:79f31929806955fceeb373739b5f67b8395525bb77d57f8886f6f0c559bcd89f` であり、
-proposal acceptanceを意味しない。
+reviewed proposal semantic digestは
+`sha256:30fd6d29224e9707bbdf0f72b585d75c726f361e97ce6ed730dd608f985fa728`、review時の
+enclosing lease canonical digestは
+`sha256:79f31929806955fceeb373739b5f67b8395525bb77d57f8886f6f0c559bcd89f` である。
+accepted statusとexact review receiptだけを加えたcurrent DF-0208 semantic digestは
+`sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb`、current enclosing lease
+canonical digestは
+`sha256:a3cbda5086921c6e804cc6bd054a5f638900ee7d177ee35dbac79ae1c83abca5` である。
 
 ADR 0097 はこの hybrid と logical payload policy を維持しつつ、current physical layout を
 `cxxlens.sqlite-semantic-store.v3` / `3.0.0` の bounded chunk table に置き換える。本 ADR の v2.6.0 schema は

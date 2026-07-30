@@ -17,6 +17,10 @@
 - Exact accepted writer attachment proposal: `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899`
 - Writer attachment independent review: <https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062>
   (`P0=0 / P1=0 / P2=0`)
+- Accepted writer gate-outcome evidence amendment: #208 / DF-0208
+- Exact accepted writer gate proposal: `bd2505f26d0d45b7bfa785a533c308ab957b11aa`
+- Writer gate independent review: <https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571>
+  (`P0=0 / P1=0 / P2=0`)
 
 ## Context
 
@@ -314,17 +318,18 @@ writer-only proposal/reviewはreader groupをtransitively認可しない。accep
 authorityとdistinct exact implementation/matrix reviewが完了するまで、reader grouping、production
 reader exception、VFS activation、qualificationをblockし、per-map handoffへ一native outcomeを複製しない。
 
-##### DF-0208 review-pending authority proposal: writer gate outcome evidence
+##### DF-0208 accepted authority amendment: writer gate outcome evidence
 
 Issue #208 / DF-0208 の `cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、accepted DF-0206 が
 要求するmap-before-gate cleanupに、exact current-v3 writer gateのnegative evidenceとsole cleanup
-authorityを与えるreview-pending proposalである。四つのSQLite/Snapshot contract/schema mirrorの
-`writer_gate_outcome_evidence_amendment_proposal`は
-`proposed-unqualified-non-authorizing`であり、acceptance review receiptを持たない。fresh independent
-exact-commit semantic/structural reviewが完了するまで、authority編集、read-only audit、temporary
-reproductionだけを許し、gate outcome mutation、native cleanup、production/VFS binding、public API、
-native `SQLITE_OK` projectionを認可しない。accepted DF-0206 fieldsとreader-predelegation ordering fenceは
-変更しない。
+authorityを与えるaccepted writer-only amendmentである。四つのSQLite/Snapshot contract/schema mirrorの
+`writer_gate_outcome_evidence_amendment_proposal`は、exact proposal
+`bd2505f26d0d45b7bfa785a533c308ab957b11aa` を Issue #208 のfresh independent semantic/structural
+review <https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571> が
+`P0=0 / P1=0 / P2=0` でacceptしたことをexact receiptへbindする。このacceptanceはinternal gate outcome
+evidence/state machine、registry cut/callback cleanupとfocused testsだけを認可する。accepted DF-0206
+fieldsとreader-predelegation ordering fenceは変更せず、DF-0207 reader grouping、production/VFS binding、
+public API、native `SQLITE_OK` projection、qualification promotionを認可しない。
 
 gate outcome evidence と registry cut execution は直交する二軸とする。validator issuer は process、
 runtime image/load generation/lifetime、VFS registration/callback cohort、file family、alias、
@@ -517,10 +522,16 @@ native-only member censusとorthogonal attachment/close authority、coverage対e
 unresolved fenceとexact cancellation/late-resolution lineage、21-row dispatch totality/precedence、
 empty-positive first exact claim、close-only/unmap-then-close、live-positive carve-outを含むDF-0206
 cleanup-only lifetime、reader transitivity、production self-authorizationをpositive/negative双方で
-直接反証しなければならない。
-このreview-pending siblingを含むcurrent enclosing lease canonical digestは
-`sha256:79f31929806955fceeb373739b5f67b8395525bb77d57f8886f6f0c559bcd89f` であり、
-proposal acceptanceを意味しない。
+直接反証し、exact proposal
+`bd2505f26d0d45b7bfa785a533c308ab957b11aa` を
+<https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571> で
+`P0=0 / P1=0 / P2=0` としてacceptした。reviewed proposal semantic digestは
+`sha256:30fd6d29224e9707bbdf0f72b585d75c726f361e97ce6ed730dd608f985fa728`、review時の
+enclosing lease digestは
+`sha256:79f31929806955fceeb373739b5f67b8395525bb77d57f8886f6f0c559bcd89f` である。
+accepted statusとreceiptを加えたcurrent semantic digestは
+`sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb`、current enclosing lease
+digestは `sha256:a3cbda5086921c6e804cc6bd054a5f638900ee7d177ee35dbac79ae1c83abca5` である。
 
 lease は二段階で構築する。owned current-v3 writer の native `xShmMap` delegation前に保持できるのは
 callback-localなnon-authoritative attempt/pre-map receipt、generationまたはfirst-writer cohortの

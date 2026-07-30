@@ -1,11 +1,11 @@
 ---
 id: DF-0208
 title: Bind SQLite writer gate failure to exact evidence
-status: observed
+status: accepted
 kind: contract-contradiction
 impact: invariant
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - store.sqlite-same-process-shm-mapping
   - store.sqlite-multi-instance-cas
@@ -21,14 +21,30 @@ authority_refs:
 tracking_issue: '#208'
 implementation_issues:
   - '#181'
-resolution_refs: []
+resolution_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0013-ng-sqlite-physical-store.md
+  - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+  - docs/design/catalogs/README.md
+  - schemas/cxxlens_ng_sqlite_store_contract.yaml
+  - schemas/cxxlens_ng_sqlite_store_contract.schema.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.schema.yaml
+  - schemas/cxxlens_ng_production_scope_closure.yaml
+  - tools/quality/check_ng_sqlite_store_contract.py
+  - tools/quality/check_ng_snapshot_store_contract.py
+  - tools/quality/check_ng_release_qualification.py
+  - tests/quality/test_ng_sqlite_store_contract.py
+  - tests/quality/test_ng_snapshot_store_contract.py
 review:
   mode: independent
   status: complete
   author: codex-agent-sqlite-writer-gate-failure-observation
-  reviewer: codex-agent-df0208-record-reviewer
+  reviewer: codex-agent-fresh-independent-df0208-exact-commit-acceptance-review
   refs:
     - https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5103551866
+    - https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571
 created: '2026-07-28'
 ---
 
@@ -341,3 +357,17 @@ Two independent frozen read-only semantic/product audits each returned
 mirror, document, and quality-contract synchronization only. They do not accept the proposal, add an
 acceptance or resolution receipt, authorize implementation or production activation, or change this
 record's blocked implementation disposition.
+
+2026-07-30: A fresh independent semantic and structural review accepted exact proposal commit
+`bd2505f26d0d45b7bfa785a533c308ab957b11aa` with `P0=0 / P1=0 / P2=0`; the canonical receipt is
+<https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571>. The reviewed proposal
+digest remains `sha256:30fd6d29224e9707bbdf0f72b585d75c726f361e97ce6ed730dd608f985fa728`.
+Adding only the accepted status and exact review receipt produces current DF-0208 semantic digest
+`sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb` and current enclosing
+lease digest `sha256:a3cbda5086921c6e804cc6bd054a5f638900ee7d177ee35dbac79ae1c83abca5`.
+
+DF-0208 is therefore `accepted` with `implementation_disposition: may-proceed`, authorizing only
+the internal writer gate-outcome evidence/state machine, registry cut/callback cleanup machinery,
+and focused tests. DF-0207 reader grouping, production/VFS binding, public API changes, native
+`SQLITE_OK` projection, qualification promotion, and production activation remain blocked until
+their own authority and a distinct exact implementation/counterexample-matrix review are complete.

@@ -123,12 +123,19 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             "cxxlens.sqlite.writer-gate-outcome-evidence.v1",
         )
         self.assertEqual(
-            gate_outcome["status"], "proposed-unqualified-non-authorizing"
+            gate_outcome["status"], "accepted-authority-implementation-pending"
         )
         self.assertEqual(
             gate_outcome["tracking"], {"issue": "#208", "feedback": "DF-0208"}
         )
-        self.assertNotIn("acceptance_review_receipt", gate_outcome)
+        self.assertEqual(
+            gate_outcome["acceptance_review_receipt"],
+            "exact-commit-bd2505f26d0d45b7bfa785a533c308ab957b11aa-"
+            "issue-208-comment-5119882571-fresh-independent-semantic-and-structural-"
+            "P0-0-P1-0-P2-0-authorizes-internal-writer-gate-outcome-evidence-state-"
+            "machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-"
+            "production-VFS-public-native-OK-remain-blocked",
+        )
         self.assertEqual(
             gate_outcome["gate_profile"]["ordered_stage_enum"],
             [
@@ -552,15 +559,15 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "gate-outcome-status-self-accepted",
+                "gate-outcome-status-regressed",
                 lambda value: writer_gate_outcome(value).__setitem__(
-                    "status", "accepted-authority-implementation-pending"
+                    "status", "proposed-unqualified-non-authorizing"
                 ),
             ),
             (
-                "gate-outcome-forged-acceptance-receipt",
-                lambda value: writer_gate_outcome(value).__setitem__(
-                    "acceptance_review_receipt", "self-asserted"
+                "gate-outcome-review-receipt-removed",
+                lambda value: writer_gate_outcome(value).pop(
+                    "acceptance_review_receipt"
                 ),
             ),
             (
