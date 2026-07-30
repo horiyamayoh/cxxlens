@@ -4128,6 +4128,9 @@ namespace cxxlens::sdk
 			{
 				try
 				{
+					if (fail_next_reader_operation_mutex_acquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_operation_mutex_acquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
 					if (!owns(inflight.state_, inflight.token_) ||
 						!owns(session.state_, session.token_))
@@ -4577,6 +4580,9 @@ namespace cxxlens::sdk
 			{
 				try
 				{
+					if (fail_next_reader_operation_mutex_acquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_operation_mutex_acquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
 					if (!owns(inflight.state_, inflight.token_) ||
 						!owns(session.state_, session.token_))
@@ -4963,6 +4969,9 @@ namespace cxxlens::sdk
 				std::uint64_t exact_group_token{};
 				try
 				{
+					if (fail_next_reader_operation_mutex_acquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_operation_mutex_acquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
 					if (!owns(session.state_, session.token_))
 						return sqlite_shm_unexpected(
@@ -5466,6 +5475,9 @@ namespace cxxlens::sdk
 			{
 				try
 				{
+					if (fail_next_reader_operation_mutex_acquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_operation_mutex_acquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
 					if (!owns(handoff.state_, handoff.token_))
 						return sqlite_shm_unexpected(
@@ -5658,6 +5670,9 @@ namespace cxxlens::sdk
 			{
 				try
 				{
+					if (fail_next_reader_operation_mutex_acquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_operation_mutex_acquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
 					if (!owns(unmap.state_, unmap.token_))
 						return sqlite_shm_unexpected(
@@ -5894,6 +5909,9 @@ namespace cxxlens::sdk
 			{
 				try
 				{
+					if (fail_next_reader_operation_mutex_acquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_operation_mutex_acquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
 					if (!owns(unmap.state_, unmap.token_))
 						return sqlite_shm_unexpected(
@@ -6927,6 +6945,18 @@ namespace cxxlens::sdk
 				}
 			}
 
+			void inject_reader_recovery_mutex_reacquire_failure_for_testing() noexcept
+			{
+				fail_next_reader_recovery_mutex_reacquire_for_testing_.store(
+					true, std::memory_order_release);
+			}
+
+			void inject_reader_operation_mutex_acquire_failure_for_testing() noexcept
+			{
+				fail_next_reader_operation_mutex_acquire_for_testing_.store(
+					true, std::memory_order_release);
+			}
+
 			void inject_writer_native_transition_failure_for_testing() noexcept
 			{
 				try
@@ -7325,6 +7355,14 @@ namespace cxxlens::sdk
 			};
 
 			struct reader_coarse_unmap_terminal_injected_failure
+			{
+			};
+
+			struct reader_recovery_mutex_reacquire_injected_failure
+			{
+			};
+
+			struct reader_operation_mutex_acquire_injected_failure
 			{
 			};
 
@@ -8928,26 +8966,42 @@ namespace cxxlens::sdk
 			void
 			quarantine_reader_unmap_terminal(sqlite_shm_reader_unmap_obligation& unmap) noexcept
 			{
+				bool transitioned{};
 				try
 				{
+					if (fail_next_reader_recovery_mutex_reacquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_recovery_mutex_reacquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
-					const auto group = find_by_token(reader_attachment_groups_, unmap.token_);
-					if (group != reader_attachment_groups_.end())
-						quarantine_reader_unmap_locked(
-							*group,
-							unmap,
-							sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
-					else
+					if (owns(unmap.state_, unmap.token_))
 					{
-						unmap.disarm();
-						quarantine_locked();
+						const auto group = find_by_token(reader_attachment_groups_, unmap.token_);
+						if (group != reader_attachment_groups_.end())
+						{
+							quarantine_reader_group_locked(
+								*group,
+								0U,
+								sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
+							transitioned = true;
+						}
+						else
+						{
+							const auto legacy_handoff = find_by_token(handoffs_, unmap.token_);
+							if (legacy_handoff != handoffs_.end())
+							{
+								legacy_handoff->phase = handoff_phase::terminal_quarantined;
+								transitioned = true;
+							}
+						}
 					}
+					quarantine_locked();
 				}
 				catch (...)
 				{
-					unmap.disarm();
 					emergency_quarantine_.store(true, std::memory_order_release);
 				}
+				if (transitioned)
+					unmap.disarm();
 			}
 
 			void quarantine_reader_unmap_begin(sqlite_shm_reader_handoff& handoff) noexcept
@@ -8955,23 +9009,29 @@ namespace cxxlens::sdk
 				bool transitioned{};
 				try
 				{
+					if (fail_next_reader_recovery_mutex_reacquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_recovery_mutex_reacquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
-					const auto group = find_by_token(reader_attachment_groups_, handoff.token_);
-					if (group != reader_attachment_groups_.end())
+					if (owns(handoff.state_, handoff.token_))
 					{
-						quarantine_reader_group_locked(
-							*group,
-							0U,
-							sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
-						transitioned = true;
-					}
-					else
-					{
-						const auto legacy_handoff = find_by_token(handoffs_, handoff.token_);
-						if (legacy_handoff != handoffs_.end())
+						const auto group = find_by_token(reader_attachment_groups_, handoff.token_);
+						if (group != reader_attachment_groups_.end())
 						{
-							legacy_handoff->phase = handoff_phase::terminal_quarantined;
+							quarantine_reader_group_locked(
+								*group,
+								0U,
+								sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
 							transitioned = true;
+						}
+						else
+						{
+							const auto legacy_handoff = find_by_token(handoffs_, handoff.token_);
+							if (legacy_handoff != handoffs_.end())
+							{
+								legacy_handoff->phase = handoff_phase::terminal_quarantined;
+								transitioned = true;
+							}
 						}
 					}
 					quarantine_locked();
@@ -9242,17 +9302,32 @@ namespace cxxlens::sdk
 			{
 				const auto map_token = inflight.token_;
 				const auto session_token = session.token_;
+				bool inflight_transitioned{};
+				bool session_transitioned{};
 				try
 				{
+					if (fail_next_reader_recovery_mutex_reacquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_recovery_mutex_reacquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
-					quarantine_reader_map_terminal_commit_locked(map_token, session_token);
+					if (owns(inflight.state_, map_token) && owns(session.state_, session_token))
+					{
+						inflight_transitioned = find_by_token(reader_attachment_maps_, map_token) !=
+							reader_attachment_maps_.end();
+						session_transitioned = find_by_token(reader_sessions_, session_token) !=
+							reader_sessions_.end();
+						quarantine_reader_map_terminal_commit_locked(map_token, session_token);
+					}
+					quarantine_locked();
 				}
 				catch (...)
 				{
 					emergency_quarantine_.store(true, std::memory_order_release);
 				}
-				inflight.disarm();
-				session.disarm();
+				if (inflight_transitioned)
+					inflight.disarm();
+				if (session_transitioned)
+					session.disarm();
 			}
 
 			void quarantine_reader_session_terminal_commit(sqlite_shm_reader_session& session,
@@ -9260,46 +9335,57 @@ namespace cxxlens::sdk
 			{
 				static_assert(std::is_nothrow_move_assignable_v<reader_session_terminal_record>);
 				const auto session_token = session.token_;
+				bool transitioned{};
 				try
 				{
+					if (fail_next_reader_recovery_mutex_reacquire_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw reader_recovery_mutex_reacquire_injected_failure{};
 					std::scoped_lock lock{mutex_};
-					const auto owner = find_by_token(reader_sessions_, session_token);
-					if (owner != reader_sessions_.end())
+					if (owns(session.state_, session_token))
 					{
-						if (exact_group_token == 0U)
-							exact_group_token = owner->group_token;
-						const auto reason = owner->quarantine_reason !=
-								sqlite_shm_reader_terminal_quarantine_reason::none
-							? owner->quarantine_reason
-							: sqlite_shm_reader_terminal_quarantine_reason::internal_failure;
-						quarantine_reader_session_locked(*owner, reason);
-					}
-					if (exact_group_token != 0U)
-					{
-						const auto group =
-							find_by_token(reader_attachment_groups_, exact_group_token);
-						if (group != reader_attachment_groups_.end())
+						const auto owner = find_by_token(reader_sessions_, session_token);
+						if (owner != reader_sessions_.end())
 						{
-							const auto reason = owner != reader_sessions_.end() &&
-									owner->quarantine_reason !=
-										sqlite_shm_reader_terminal_quarantine_reason::none
+							if (exact_group_token == 0U)
+								exact_group_token = owner->group_token;
+							const auto reason = owner->quarantine_reason !=
+									sqlite_shm_reader_terminal_quarantine_reason::none
 								? owner->quarantine_reason
 								: sqlite_shm_reader_terminal_quarantine_reason::internal_failure;
-							quarantine_reader_group_locked(*group, 0U, reason);
+							quarantine_reader_session_locked(*owner, reason);
+							transitioned = true;
 						}
+						if (exact_group_token != 0U)
+						{
+							const auto group =
+								find_by_token(reader_attachment_groups_, exact_group_token);
+							if (group != reader_attachment_groups_.end())
+							{
+								const auto reason = owner != reader_sessions_.end() &&
+										owner->quarantine_reason !=
+											sqlite_shm_reader_terminal_quarantine_reason::none
+									? owner->quarantine_reason
+									: sqlite_shm_reader_terminal_quarantine_reason::
+										  internal_failure;
+								quarantine_reader_group_locked(*group, 0U, reason);
+							}
+						}
+						std::erase_if(
+							reader_session_terminals_,
+							[session_token](const reader_session_terminal_record& terminal)
+							{
+								return terminal.session_token == session_token;
+							});
 					}
-					std::erase_if(reader_session_terminals_,
-								  [session_token](const reader_session_terminal_record& terminal)
-								  {
-									  return terminal.session_token == session_token;
-								  });
 					quarantine_locked();
 				}
 				catch (...)
 				{
 					emergency_quarantine_.store(true, std::memory_order_release);
 				}
-				session.disarm();
+				if (transitioned)
+					session.disarm();
 			}
 
 			void quarantine_after_native() noexcept
@@ -9693,6 +9779,8 @@ namespace cxxlens::sdk
 			bool fail_next_reader_unmap_post_receipt_state_for_testing_{};
 			bool fail_next_reader_unmap_begin_preparation_for_testing_{};
 			bool fail_next_reader_coarse_unmap_terminal_for_testing_{};
+			std::atomic_bool fail_next_reader_operation_mutex_acquire_for_testing_{false};
+			std::atomic_bool fail_next_reader_recovery_mutex_reacquire_for_testing_{false};
 			bool registry_member_admission_blocked_{};
 			bool registry_member_sticky_quarantine_{};
 			bool fail_next_registry_writer_incoming_liveness_for_testing_{};
@@ -10704,6 +10792,18 @@ namespace cxxlens::sdk
 		inject_reader_coarse_unmap_terminal_exception_for_testing() noexcept
 	{
 		state_->inject_reader_coarse_unmap_terminal_exception_for_testing();
+	}
+
+	void sqlite_same_process_shm_mapping_lease_coordinator::
+		inject_reader_recovery_mutex_reacquire_failure_for_testing() noexcept
+	{
+		state_->inject_reader_recovery_mutex_reacquire_failure_for_testing();
+	}
+
+	void sqlite_same_process_shm_mapping_lease_coordinator::
+		inject_reader_operation_mutex_acquire_failure_for_testing() noexcept
+	{
+		state_->inject_reader_operation_mutex_acquire_failure_for_testing();
 	}
 
 	void sqlite_same_process_shm_mapping_lease_coordinator::

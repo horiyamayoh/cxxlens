@@ -1482,6 +1482,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_same_process_shm_lease_test_peer;
 		explicit sqlite_shm_reader_handoff(
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			detail::sqlite_shm_lease_token_identity token,
@@ -1794,6 +1795,8 @@ namespace cxxlens::sdk
 		void inject_reader_unmap_post_receipt_state_failure_for_testing() noexcept;
 		void inject_reader_unmap_begin_preparation_failure_for_testing() noexcept;
 		void inject_reader_coarse_unmap_terminal_exception_for_testing() noexcept;
+		void inject_reader_operation_mutex_acquire_failure_for_testing() noexcept;
+		void inject_reader_recovery_mutex_reacquire_failure_for_testing() noexcept;
 		void inject_writer_native_transition_failure_for_testing() noexcept;
 		void inject_writer_attachment_seal_failure_for_testing() noexcept;
 		void inject_writer_completion_transition_failure_for_testing() noexcept;
