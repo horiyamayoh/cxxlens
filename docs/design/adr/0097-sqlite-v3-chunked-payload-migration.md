@@ -318,6 +318,62 @@ writer-only proposal/reviewはreader groupをtransitively認可しない。accep
 authorityとdistinct exact implementation/matrix reviewが完了するまで、reader grouping、production
 reader exception、VFS activation、qualificationをblockし、per-map handoffへ一native outcomeを複製しない。
 
+##### DF-0207 review-pending proposal: reader native attachment
+
+四つのSQLite/Snapshot contract/schema mirrorの
+`reader_native_attachment_amendment_proposal` /
+`cxxlens.sqlite.reader-shm-native-attachment.v1` は
+`proposed-unqualified-non-authorizing` であり、acceptance receiptを持たない。checked identityは
+process/runtime/VFS/file family、reader alias/lifetime、connection、main native node+`xOpen`、
+open epoch、writer mapping generation、observed SHM object/direct-entry/device/mount、map/unmap/close
+callback cohort、non-reusable attachment epochを含む。成功callbackのreceiptはcallbackごとに残すが、
+same-page exact revalidationはauditだけを追加し、同一transaction/sessionでは同じuse ownerを再利用し、
+別sessionだけが別ownerを持つ。different-pageはactive writer lease由来のfresh
+predelegationからunique memberだけを追加する。attachment handoff、generation lifetime count、
+native-unmap ownerはgroupごとにexactly oneであり、field equality、caller member subset、DF-0206/0208
+ownerから再構成しない。proposal identityはactive groupまたはsame-process live local generation候補に
+限る。SQLite entry前にactive group、local candidate、ordinary/existing predecessor、rejectを分類し、
+cross-processまたはlocal generationなしの通常routeにはproposal custodyをmintしない。
+
+map admission、unmap/close cut、terminal commitを一つのchecked sequenceでtotal-orderする。cut-firstは
+後続mapをnative前にrejectし、map-firstは全precut attemptのterminalをboundedに待ってcomplete
+member/effect censusをregistry stateから再導出する。same-thread/reentrantは待たずcallせずquarantine、
+other-threadだけがmutex外でbounded wait後にexact recheckする。local proposal candidateのdeterminate
+native mapped return時はmember validation前にcleanup-only observation ownerをsealし、成功時だけlive
+identityへpromoteする。predecessor rowとexisting groupは別ownerをmintしない。
+member/audit、exact session ownerのmint/reuse、pointer coverage/outward eligibility、map terminalは
+一つのregistry commitで全てpublishするか何もpublishしない。reader pointerをpublishする各eager
+sessionはgroupごとに一つのmove-only use ownerを持つ。SQLiteの`Wal.apWiData`は後続sessionで
+`xShmMap`なしに再利用されるため、authority-read entryでSQLite APIより先にreservation/ownerをadmitし、
+cached pointerもcoverする。`xShmLock`へowner生成を遅延しない。normal unmapと全close routeはsession
+reservation/owner setがemptyになるまでadmitしない。unpublished first-map mapped validation failureだけはzero member/useを再確認してproactive
+unmapでき、confirmed cleanup後だけone-shot logical ackを作る。already-live groupのlater-map failureは
+groupをhideしsole cleanup ownerをdeferして`SQLITE_IOERR`+nullを返し、all use owners terminal後の
+SQLite unmap/closeが一度だけnative cleanupする。ambiguous first-mapはgroupを捏造せず
+open-epoch/reservation scoped opaque custodyへ閉じ、別のfamily exclusion countでsuccessorをblockする。
+同じhandleの後続unmap/closeはzero-call `SQLITE_IOERR`で、peerはpre-native reject、native-started
+cleanup/quarantine、established owned-drainの全域routeを持つ。
+
+confirmed unmapは全memberをatomically retireしgroup count/readonly latchを一回だけ更新する。
+proactive cleanup後のexact later SQLite `xShmUnmap(0)` はack ownerをconsumeしてstored `SQLITE_OK`を
+zero native callで返し、closeはpending ackを先にconsumeする。unmap failure/unknownはcloseせず、
+close failure/unknownはretired attachmentをreviveせず、いずれもfresh family admissionをrevokeし
+runtime/VFS pinsを保持しながらalready-owned peer drainだけを許す。success tombstoneをcompactしても
+process-lifetime stale-token rejectionを残す。全map/group/use/cleanup/ack/close/cut/wait/reporter/pin
+custodyはclosed enumに属し、一意なconsume/successor/tombstone destinationまでreleaseしない。
+ordinary predecessorのbase READONLY/null normalization、CANTINIT/null、READONLY/non-null rowは既存
+routeを維持し、local proposal reservationがそこへ移った場合はconfirmed unmap/closeまでretireしない。
+proposal group後のREADONLY/non-nullは別ownerへtransferせずIOERR/nullとsole deferred group cleanupへ
+閉じる。OK/null等のinvalid pairはzero-effect revoke、exact mapped cleanup、ambiguous quarantineの
+いずれかへ必ずterminalにする。これら以外の既存rowは不変であり、
+将来review済みのadmitted OK/non-nullだけがREADONLY/same pointerへprojectできる。
+
+fresh independent exact-commit acceptance前はauthority edit、audit、reproductionだけを許す。acceptance
+後もinternal reader group/member/revalidation/eager lifetime/unmap/close state machineとfocused testsだけを
+認可し、production/VFS/native-OK projection、public API、qualificationはexact implementationとfull
+counterexample matrixのdistinct independent reviewまでblockする。accepted DF-0205/DF-0206/DF-0208
+subtreeを変更しない。
+
 ##### DF-0208 accepted authority amendment: writer gate outcome evidence
 
 Issue #208 / DF-0208 の `cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、accepted DF-0206 が

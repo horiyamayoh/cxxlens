@@ -84,6 +84,10 @@ contract expansion.
 - The SQLite Unix VFS describes `xShmUnmap` as closing a connection to shared memory and clears
   `pDbFd->pShm` in that one call:
   <https://sqlite.org/src/artifact/410185df49?ln=5231-5281>.
+- SQLite `walIndexPage()` returns an already cached `Wal.apWiData[iPage]` directly and invokes
+  the VFS map path only when the cached entry is absent, so a later read session cannot rely on a
+  new `xShmMap` callback for lifetime-owner admission:
+  <https://www3.sqlite.org/matrix/ev/src/wal.html#L796>.
 - Issue #207 records the reproducible observation and keeps this record non-normative.
 
 ## Alternatives and trade-offs
@@ -107,9 +111,12 @@ blocked by this record.
 
 Define a checked, non-reusable reader attachment identity bound to process/runtime/VFS/file family,
 reader alias and lifetime, connection, authenticated main `native_file_node` / `xOpen` receipt,
-open epoch, and exact map/unmap callback cohort. Preserve one authority member for each successful
-map callback, while same-page reuse and different-page mapping on that exact attachment create no
-additional native cleanup obligation.
+open epoch, writer mapping generation, observed SHM object/entry/mount receipt, and exact
+map/unmap/close callback cohort. Retain one exact audit receipt for each successful callback, one
+live member for each unique exact generation page tuple, and no new live member or cleanup
+authority for same-page revalidation. A different-page mapping still requires a fresh active
+writer-lease predelegation, while every member shares exactly one attachment handoff and cleanup
+owner.
 
 Atomically hide and seal the complete exact member set before one unmap callback. Apply its exact
 outcome once to the whole attachment, update generation handoff count and successor exclusion as
@@ -130,3 +137,49 @@ exact DF-0206 proposal review at
 `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899`. Issue #207 and this record block reader attachment
 grouping and production activation. They do not invalidate or broaden the independently reviewed
 DF-0206 writer-only proposal. No reader implementation or normative authority changed.
+
+2026-07-30: The four SQLite/Snapshot contract/schema mirrors now carry the exact review-pending
+`reader_native_attachment_amendment_proposal`,
+`cxxlens.sqlite.reader-shm-native-attachment.v1`, with status
+`proposed-unqualified-non-authorizing` and no acceptance receipt. It binds one checked
+non-reusable attachment epoch and observed identity, callback-specific audit receipts, unique
+page members, one attachment handoff/unmap owner, a shared map/unmap/close sequence cut, an exact
+active eager-use-owner census, close and successor quarantine, durable tombstones, and closed
+outward status rows.
+
+Adversarial review found that an earlier draft could proactively unmap an already-live group when
+a later map failed validation, invalidating pointers still owned by an active eager session. The
+revised proposal permits proactive cleanup only for an unpublished first-map failure after exact
+zero-member/zero-use rederivation. A later-map failure hides the complete group but defers its one
+native unmap until every use owner is terminal and a later exact SQLite unmap or close consumes
+the sole owner. Only confirmed proactive cleanup installs a one-shot zero-native-effect logical
+acknowledgement; close atomically consumes any pending acknowledgement. Ambiguous first-map
+outcomes create only an open-epoch/reservation tombstone and never fabricate a group.
+
+This revision also keeps native CANTINIT/null and READONLY/non-null outside the amendment, maps
+denied, validation-failed, ambiguous, OK/null, and unleased OK results to IOERR/null, preserves
+the accepted DF-0205/DF-0206/DF-0208 subtrees, and changes no source or production route. Fresh
+independent semantic and structural review of an exact committed revision remains required.
+Until that acceptance, this record remains `observed` / `blocked`; no reader grouping, cleanup
+mutation, VFS binding, native-OK projection, public API change, or production activation is
+authorized.
+
+Further counterexample review found that SQLite may reuse `Wal.apWiData` in a later read
+transaction without another `xShmMap` callback. Owner admission therefore cannot be callback-only.
+The proposal now classifies authority before entering any SQLite API, creates a session
+reservation only for an exact same-process live local mapping-generation candidate, and promotes
+it immediately when an active proposal group already exists. This gives a callback-free
+sequential session its own owner before any cached pointer use. A first successful proposal map
+promotes the reservation; no-pointer failure consumes it; predecessor results transfer it to the
+existing route; ambiguous outcomes retain it in the quarantine tombstone. Session admission and
+terminal, map publication, unmap, and close share one sequence cut.
+
+That pre-mint partition is also required to preserve ordinary readers. A cross-process or
+otherwise qualified predecessor read with no live local writer mapping generation creates zero
+proposal identity, reservation, map attempt, or owner and remains under the existing byte
+contract. The proposal never invents or imports a local generation. It separately closes cached
+pointer coverage, mixed proposal-group then READONLY/non-null cleanup ownership, base
+READONLY/null normalization, protocol-invalid status/pointer terminal rows, opaque no-group
+successor exclusion, and a closed custody enum covering session reservations, cleanup, ack,
+close/cut, waiter/reporter, and lifetime pins. These refinements remain proposal-only until the
+exact committed revision receives the required independent acceptance.

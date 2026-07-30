@@ -32,7 +32,16 @@ REPORT_SCHEMA = pathlib.Path(
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:a3cbda5086921c6e804cc6bd054a5f638900ee7d177ee35dbac79ae1c83abca5"
+    "sha256:33cce9b449cecb4f858bf13af9b2d3af735f7f8dde371fa6c0007a68e219dee9"
+)
+EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
+    "sha256:fd2a96157107d3823c03c730606e9f380875a454cb82eaeecf9ba5cda785aa8f"
+)
+EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
+    "sha256:a342d01379b7d6e3c9a162dc02cf260942c4dc96783e941333c1aa2a1eeef8f0"
+)
+EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
+    "sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb"
 )
 
 SELECTOR_FIELDS = (
@@ -1203,6 +1212,36 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
                 f"actual={actual_writer_mapping_lease_digest}"
             ),
         )
+    for label, field, expected in (
+        (
+            "writer-native-attachment",
+            "writer_native_attachment_amendment_proposal",
+            EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
+        ),
+        (
+            "reader-native-attachment",
+            "reader_native_attachment_amendment_proposal",
+            EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
+        ),
+        (
+            "writer-gate-outcome-evidence",
+            "writer_gate_outcome_evidence_amendment_proposal",
+            EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
+        ),
+    ):
+        try:
+            amendment = writer_mapping_lease[field]
+        except (KeyError, TypeError) as error:
+            fail(
+                "store.sqlite-shm-writer-lease-proposal-invalid",
+                f"{label} amendment is missing: {error}",
+            )
+        actual = document_digest(amendment)
+        if actual != expected:
+            fail(
+                "store.sqlite-shm-writer-lease-proposal-invalid",
+                f"{label} amendment differs: expected={expected}, actual={actual}",
+            )
     if (
         contract.get("df_0200_materialization_ingress")
         != EXPECTED_DF_0200_MATERIALIZATION_INGRESS

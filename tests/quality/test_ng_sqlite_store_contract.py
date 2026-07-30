@@ -18,8 +18,11 @@ from check_ng_sqlite_store_contract import (  # noqa: E402
     CONTRACT,
     CONTRACT_SCHEMA,
     EXPECTED_CONTRACT_DIGEST,
+    EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
     EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
     EXPECTED_SCHEMA_DIGEST,
+    EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
+    EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
     SNAPSHOT_CONTRACT,
     SQLITE_OPEN_PROFILE_NAMES,
     SQLiteStoreContractError,
@@ -98,6 +101,10 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         )
         attachment = lease["writer_native_attachment_amendment_proposal"]
         self.assertEqual(
+            document_digest(attachment),
+            EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
+        )
+        self.assertEqual(
             attachment["status"], "accepted-authority-implementation-pending"
         )
         self.assertEqual(
@@ -116,9 +123,173 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             "blocked-until-attachment-amendment-acceptance-and-the-distinct-exact-"
             "implementation-and-complete-counterexample-matrix-review",
         )
+        reader_attachment = lease[
+            "reader_native_attachment_amendment_proposal"
+        ]
+        self.assertEqual(
+            document_digest(reader_attachment),
+            EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
+        )
+        self.assertEqual(
+            reader_attachment["id"],
+            "cxxlens.sqlite.reader-shm-native-attachment.v1",
+        )
+        self.assertEqual(
+            reader_attachment["status"],
+            "proposed-unqualified-non-authorizing",
+        )
+        self.assertEqual(
+            reader_attachment["tracking"],
+            {"issue": "#207", "feedback": "DF-0207"},
+        )
+        self.assertNotIn("acceptance_review_receipt", reader_attachment)
+        self.assertEqual(
+            reader_attachment["map_attempt"]["result_enum"],
+            [
+                "exact_predecessor_no_attachment_route",
+                "exact_predecessor_mapped_route",
+                "exact_no_attachment_change",
+                "exact_protocol_invalid_no_attachment",
+                "exact_protocol_invalid_mapped",
+                "exact_new_member",
+                "exact_existing_member_revalidation",
+                "exact_mapped_validation_failure",
+                "terminal_outcome_ambiguous",
+            ],
+        )
+        self.assertIn(
+            "writer-mapping-generation",
+            reader_attachment["attachment_identity"]["binding"],
+        )
+        self.assertIn(
+            "checked-observed-SHM-native-attachment-object-direct-entry-device-"
+            "and-mount-receipt",
+            reader_attachment["attachment_identity"]["binding"],
+        )
+        self.assertEqual(
+            reader_attachment["group_state"]["reservation_phase_enum"],
+            [
+                "reserved",
+                "predecessor_route_active",
+                "predecessor_route_retired_confirmed",
+                "observed_present",
+                "retired_confirmed",
+                "revoked_no_map",
+                "unpublished_cleanup_admitted",
+                "unpublished_cleanup_confirmed",
+                "terminal_quarantined",
+            ],
+        )
+        self.assertIn(
+            "may-only-promote-once-to-live-group-custody-for-an-exact-valid-OK-"
+            "nonnull-row-or-be-consumed-once",
+            reader_attachment["attachment_identity"][
+                "cleanup_only_observation_owner"
+            ],
+        )
+        self.assertEqual(
+            reader_attachment["ownership"]["custody_state_enum"],
+            [
+                "live",
+                "consumed_with_exact_terminal_receipt",
+                "transferred_to_exact_successor",
+                "transferred_to_durable_tombstone",
+            ],
+        )
+        self.assertIn(
+            "every-proposal_group-pointer-producing-callback-receipt-and-every-"
+            "cached-member-pointer-use-is-covered-by-exactly-one",
+            reader_attachment["eager_transaction_lifetime"][
+                "pointer_coverage_relation"
+            ],
+        )
+        self.assertEqual(
+            reader_attachment["eager_transaction_lifetime"][
+                "session_reservation_state_enum"
+            ],
+            [
+                "reserved_before_sqlite",
+                "promoted_to_group_owner",
+                "transferred_to_existing_predecessor",
+                "consumed_no_pointer",
+                "terminal_quarantined",
+            ],
+        )
+        self.assertIn(
+            "Wal-apWiData-without-xShmMap",
+            reader_attachment["eager_transaction_lifetime"][
+                "cached_pointer_session_admission"
+            ],
+        )
+        self.assertIn(
+            "existing-or-ordinary-predecessor-with-no-local-generation",
+            reader_attachment["eager_transaction_lifetime"][
+                "pre_mint_route_partition"
+            ],
+        )
+        self.assertIn(
+            "map-terminal-first-member-or-revalidation-audit-owner-mint-or-"
+            "exact-owner-reuse-pointer-coverage-edge-and-outward-eligibility-"
+            "publish-atomically",
+            reader_attachment["eager_transaction_lifetime"][
+                "pointer_publication_commit"
+            ],
+        )
+        self.assertIn(
+            "predecessor_route_retired_confirmed",
+            reader_attachment["group_state"]["predecessor_route_boundary"],
+        )
+        self.assertIn(
+            "family-exclusion-custody-count",
+            reader_attachment["writer_generation_boundary"]["successor"],
+        )
+        self.assertEqual(
+            reader_attachment["cleanup_dispatch"]["logical_ack_phase_enum"],
+            [
+                "not_applicable",
+                "awaiting_sqlite_ack",
+                "consumed_by_exact_unmap",
+                "consumed_by_close",
+            ],
+        )
+        self.assertIn(
+            "first-map-attempt-when-no-group-yet-exists",
+            reader_attachment["ordering"]["close_cut"],
+        )
+        self.assertIn(
+            "zero-published-members-and-zero-active-use-owners",
+            reader_attachment["cleanup_dispatch"][
+                "failure_exact_mapped_unpublished_first"
+            ],
+        )
+        self.assertIn(
+            "call-native-zero-times-until-the-active-use-owner-set-is-empty",
+            reader_attachment["cleanup_dispatch"][
+                "failure_exact_mapped_existing_group"
+            ],
+        )
+        self.assertEqual(
+            reader_attachment["authorization"]["before_independent_acceptance"],
+            "authority-edit-readonly-audit-and-temporary-reproduction-only-no-"
+            "reader-group-implementation-native-cleanup-production-binding-or-"
+            "native-OK-projection",
+        )
+        self.assertEqual(
+            reader_attachment["authorization"]["public_api"], "unchanged"
+        )
+        self.assertGreaterEqual(
+            len(reader_attachment["fail_closed_matrix"]["required"]), 40
+        )
+        self.assertGreaterEqual(
+            len(reader_attachment["fail_closed_matrix"]["positive"]), 24
+        )
         gate_outcome = lease[
             "writer_gate_outcome_evidence_amendment_proposal"
         ]
+        self.assertEqual(
+            document_digest(gate_outcome),
+            EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
+        )
         self.assertEqual(
             gate_outcome["id"],
             "cxxlens.sqlite.writer-gate-outcome-evidence.v1",
@@ -864,6 +1035,11 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "writer_native_attachment_amendment_proposal"
             ]
 
+        def reader_native_attachment(value: dict[str, Any]) -> dict[str, Any]:
+            return writer_mapping_lease(value)[
+                "reader_native_attachment_amendment_proposal"
+            ]
+
         def writer_gate_outcome(value: dict[str, Any]) -> dict[str, Any]:
             return writer_mapping_lease(value)[
                 "writer_gate_outcome_evidence_amendment_proposal"
@@ -1377,8 +1553,152 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                     "fail_closed_matrix"
                 ]["positive"].remove(
                     "nonlast-established-reader-handoff-does-not-block-and-"
-                    "retains-only-its-sealed-lifetime"
+                        "retains-only-its-sealed-lifetime"
+                    ),
+            ),
+            (
+                "reader-native-attachment-amendment-removed",
+                lambda value: writer_mapping_lease(value).pop(
+                    "reader_native_attachment_amendment_proposal"
                 ),
+            ),
+            (
+                "reader-native-attachment-status-self-authorized",
+                lambda value: reader_native_attachment(value).__setitem__(
+                    "status", "accepted-authority-implementation-pending"
+                ),
+            ),
+            (
+                "reader-native-attachment-review-receipt-forged",
+                lambda value: reader_native_attachment(value).__setitem__(
+                    "acceptance_review_receipt", "unreviewed-self-acceptance"
+                ),
+            ),
+            (
+                "reader-native-attachment-mapping-generation-identity-removed",
+                lambda value: reader_native_attachment(value)[
+                    "attachment_identity"
+                ]["binding"].remove("writer-mapping-generation"),
+            ),
+            (
+                "reader-native-attachment-cleanup-observation-owner-removed",
+                lambda value: reader_native_attachment(value)[
+                    "attachment_identity"
+                ].pop("cleanup_only_observation_owner"),
+            ),
+            (
+                "reader-native-attachment-predecessor-retirement-removed",
+                lambda value: reader_native_attachment(value)["group_state"][
+                    "reservation_transition_graph"
+                ].pop("predecessor_route_active"),
+            ),
+            (
+                "reader-native-attachment-unpublished-cleanup-state-removed",
+                lambda value: reader_native_attachment(value)["group_state"][
+                    "reservation_phase_enum"
+                ].remove("unpublished_cleanup_confirmed"),
+            ),
+            (
+                "reader-native-attachment-later-failure-proactively-unmaps",
+                lambda value: reader_native_attachment(value)[
+                    "cleanup_dispatch"
+                ].__setitem__(
+                    "failure_exact_mapped_existing_group",
+                    "proactively-unmap-the-live-group-before-use-owners-end",
+                ),
+            ),
+            (
+                "reader-native-attachment-use-owner-set-removed",
+                lambda value: reader_native_attachment(value)[
+                    "eager_transaction_lifetime"
+                ].pop("owner_set"),
+            ),
+            (
+                "reader-native-attachment-pointer-coverage-removed",
+                lambda value: reader_native_attachment(value)[
+                    "eager_transaction_lifetime"
+                ].pop("pointer_coverage_relation"),
+            ),
+            (
+                "reader-native-attachment-pointer-publication-atomicity-removed",
+                lambda value: reader_native_attachment(value)[
+                    "eager_transaction_lifetime"
+                ].pop("pointer_publication_commit"),
+            ),
+            (
+                "reader-native-attachment-session-start-issuer-removed",
+                lambda value: reader_native_attachment(value)[
+                    "eager_transaction_lifetime"
+                ].pop("session_start_issuer"),
+            ),
+            (
+                "reader-native-attachment-pre-mint-route-partition-removed",
+                lambda value: reader_native_attachment(value)[
+                    "eager_transaction_lifetime"
+                ].pop("pre_mint_route_partition"),
+            ),
+            (
+                "reader-native-attachment-cached-pointer-admission-removed",
+                lambda value: reader_native_attachment(value)[
+                    "eager_transaction_lifetime"
+                ].pop("cached_pointer_session_admission"),
+            ),
+            (
+                "reader-native-attachment-protocol-invalid-route-removed",
+                lambda value: reader_native_attachment(value)[
+                    "map_attempt"
+                ].pop("exact_protocol_invalid_no_attachment"),
+            ),
+            (
+                "reader-native-attachment-closed-custody-enum-removed",
+                lambda value: reader_native_attachment(value)["ownership"].pop(
+                    "custody_kind_enum"
+                ),
+            ),
+            (
+                "reader-native-attachment-opaque-successor-blocker-removed",
+                lambda value: reader_native_attachment(value)[
+                    "writer_generation_boundary"
+                ].__setitem__(
+                    "successor",
+                    "only-live-group-count-blocks-successor-admission",
+                ),
+            ),
+            (
+                "reader-native-attachment-terminal-commit-success-leaks",
+                lambda value: reader_native_attachment(value)[
+                    "outward_projection"
+                ].__setitem__(
+                    "unmap_result",
+                    "native-SQLITE-OK-is-always-outward-SQLITE-OK",
+                ),
+            ),
+            (
+                "reader-native-attachment-logical-ack-open-ended",
+                lambda value: reader_native_attachment(value)[
+                    "cleanup_dispatch"
+                ]["logical_ack_phase_enum"].append("replayable"),
+            ),
+            (
+                "reader-native-attachment-close-cut-removed",
+                lambda value: reader_native_attachment(value)["ordering"].pop(
+                    "close_cut"
+                ),
+            ),
+            (
+                "reader-native-attachment-OK-null-preserved",
+                lambda value: reader_native_attachment(value)[
+                    "outward_projection"
+                ].__setitem__(
+                    "exact_determinate_no_change",
+                    "all-native-statuses-including-SQLITE-OK-plus-null-pass-through",
+                ),
+            ),
+            (
+                "reader-native-attachment-production-self-authorized",
+                lambda value: reader_native_attachment(value)[
+                    "authorization"
+                ].__setitem__("production_activation", "allowed"),
             ),
             (
                 "writer-gate-outcome-proposal-removed",

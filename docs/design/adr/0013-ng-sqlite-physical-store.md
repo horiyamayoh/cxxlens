@@ -117,6 +117,32 @@ enclosing lease digestは
 この acceptance は writer-only であり、DF-0207 の reader attachment authority や production activation
 を推移的に認可しない。
 
+Issue #207 / DF-0207 の四mirror
+`reader_native_attachment_amendment_proposal` /
+`cxxlens.sqlite.reader-shm-native-attachment.v1` は
+`proposed-unqualified-non-authorizing` であり、acceptance receiptを持たない。reader attachmentは
+process/runtime/VFS/file-family/alias/connection/main native node+`xOpen`/open epoch、writer mapping
+generation、observed SHM object/entry/mount、callback cohort、non-reusable attachment epochへbindする。
+successful map callbackのexact receiptは全て保持するが、same-page revalidationはauditだけ、unique
+pageはmemberだけを増やし、handoff、generation count、unmap ownerはattachment groupに各一つとする。
+different-pageはfresh active-writer predelegationなしにhandoffからmintできない。proposal custodyの
+mint前にactive group、same-process live local generation候補、ordinary predecessor、rejectを分類し、
+cross-process/no-local-generation routeは既存byte semanticsへ渡す。
+
+map/unmap/closeを一つのsequence cutでtotal-orderし、unmap前にcomplete groupと全active eager-use
+ownerをregistryから再導出する。SQLite cached pointerのcallback-free reuseに備えて、各authority-read
+sessionはSQLite entry前にreservation/ownerをadmitし、cutと同じsequenceで順序づける。
+unpublished first-map failureだけはzero published useを証明して
+proactive cleanupできる。already-live groupのlater-map failureはgroupをhideするが、全use ownerが
+terminalになるまでunmapを延期する。confirmed proactive cleanupだけが後続SQLite unmap用の一回限り
+zero-native-effect acknowledgementを作り、closeはそれをatomicにconsumeする。unmap/closeの
+non-OK、throw、unknownはfresh family admissionを止め、already-owned peer cleanupだけを許すpermanent
+quarantineとする。ordinary existing CANTINIT/READONLY rowとbase READONLY/null normalizationは変更せず、
+proposal group後のmixed READONLY/non-nullとinvalid status/pointer pairは単一cleanup/terminal routeへ
+fail closedする。proposal acceptanceまではreader
+implementationを、distinct exact implementation/matrix reviewまではproduction/VFS/native-OK
+projectionを認可しない。accepted DF-0205/DF-0206/DF-0208 fieldsとpublic APIは不変である。
+
 Issue #208 / DF-0208 の
 `cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、accepted DF-0206 のgate failure transitionに
 exact typed negative evidenceとsole cleanup authorityを与えるaccepted writer-only amendmentである。

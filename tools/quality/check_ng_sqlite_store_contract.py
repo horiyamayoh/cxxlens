@@ -27,18 +27,28 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:62b610fda31475f3a1eea1b2b1734c6e9839e8cf8ae5d38311a4bc29a976ee17"
+    "sha256:e4287e199f74bae892793cd2056f27716b894f04c917ff947a764a684ccffeaf"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:579b45268e4ab41bba8b0d7754b29880512f35b033acd78845208ee7cd735f21"
+    "sha256:9245b24add86fa1045f1762a4f56c53bdbf553ce5ca0a3861717c39f05f34420"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:f4854777dd0c5ab50139e2debe5e2be7a00e25bb4a8588285f228e0cf1f225ac"
+    "sha256:5053537d54a1bde800f4cd4acf2ebb2f497a59513f72c77b992dacc094d5f6d1"
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:a3cbda5086921c6e804cc6bd054a5f638900ee7d177ee35dbac79ae1c83abca5"
+    "sha256:33cce9b449cecb4f858bf13af9b2d3af735f7f8dde371fa6c0007a68e219dee9"
+)
+
+EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
+    "sha256:fd2a96157107d3823c03c730606e9f380875a454cb82eaeecf9ba5cda785aa8f"
+)
+EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
+    "sha256:a342d01379b7d6e3c9a162dc02cf260942c4dc96783e941333c1aa2a1eeef8f0"
+)
+EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
+    "sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb"
 )
 
 SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
@@ -4654,6 +4664,43 @@ def validate_exact_contract(contract: dict[str, Any]) -> None:
         )
 
 
+def validate_mapping_lease_amendments(contract: dict[str, Any]) -> None:
+    try:
+        lease = contract["compatibility"]["predecessor_v2"][
+            "read_path_strategy"
+        ]["active_wal"]["source_shm_readonly_capability"][
+            "shm_map_state_machine"
+        ][
+            "same_process_writer_mapping_lease_proposal"
+        ]
+        amendments = {
+            "writer-native-attachment": (
+                lease["writer_native_attachment_amendment_proposal"],
+                EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
+            ),
+            "reader-native-attachment": (
+                lease["reader_native_attachment_amendment_proposal"],
+                EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
+            ),
+            "writer-gate-outcome-evidence": (
+                lease["writer_gate_outcome_evidence_amendment_proposal"],
+                EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
+            ),
+        }
+    except (KeyError, TypeError) as error:
+        fail(
+            "sqlite.mapping-lease-amendment-drift",
+            f"required same-process mapping lease amendment is missing: {error}",
+        )
+    for label, (amendment, expected) in amendments.items():
+        actual = document_digest(amendment)
+        if actual != expected:
+            fail(
+                "sqlite.mapping-lease-amendment-drift",
+                f"{label}: expected={expected}, actual={actual}",
+            )
+
+
 def snapshot_binding_projection(snapshot: dict[str, Any]) -> dict[str, Any]:
     try:
         ingress = snapshot["df_0200_materialization_ingress"]
@@ -4861,6 +4908,7 @@ def validate_authorities(
     validate_exact_schema(schema)
     schema_validate(contract, schema)
     validate_exact_contract(contract)
+    validate_mapping_lease_amendments(contract)
     validate_snapshot_binding(contract, snapshot)
 
 

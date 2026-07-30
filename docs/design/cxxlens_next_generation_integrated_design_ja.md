@@ -2324,6 +2324,74 @@ gapを記録する。DF-0206のwriter-only proposal/reviewはreader groupをtran
 reader attachment authorityとdistinct exact implementation/matrix reviewが完了するまでreader grouping、
 production reader exception、VFS activation、qualificationをblockし、一native outcomeを複製しない。
 
+四つのSQLite/Snapshot contract/schema mirrorに置く
+`reader_native_attachment_amendment_proposal` /
+`cxxlens.sqlite.reader-shm-native-attachment.v1` は Issue #207 / DF-0207 の
+`proposed-unqualified-non-authorizing` reader-only proposalである。acceptance receiptはまだなく、
+accepted DF-0205/DF-0206/DF-0208 subtree、current blanket native `SQLITE_OK` rejection、production
+VFS、public C++ APIを変更しない。checked reader attachment identityはprocess/runtime/VFS/file
+family、reader aliasとdistinct lifetime pin、connection、main `native_file_node` / `xOpen`、
+open epoch、writer mapping generation、observed SHM object/direct-entry/device/mount、callback cohort、
+non-reusable attachment epochへbindする。path、`sqlite3_file*`、connection、page pointer、generationの
+いずれかのequalityからgroupを再構成しない。このidentityはactive proposal groupまたはexact
+same-process live local writer generation候補だけにmintする。SQLiteへ入る前に、active group、
+local proposal候補、ordinary/existing predecessor、rejectを排他的に分類し、別processまたはlocal
+generationなしの通常readはproposal reservationを一切作らず既存byte-semantic routeへ渡す。
+
+成功callbackごとのexact receiptは保持するが、live memberはgenerationのauthoritative tupleと一致する
+unique pageごと、attachment handoff、generation lifetime count、unmap ownerはgroupごとに一つとする。
+same-page exact revalidationはcallback auditを追加し、同じtransaction/sessionのuse ownerを再利用する。
+別sessionだけが別ownerを持ち、member、page support、handoff、cleanup authorityをmintしない。
+different-pageはactive writer leaseからfresh predelegationを
+得た場合だけjoinでき、retirement開始前にadmit済みのpinだけが開始後に完了できる。map admission、
+unmap cut、close cut、terminal commitは一つのchecked non-reusable sequence domainでtotal-orderし、
+cut-firstはnative map前にreject、map-firstは全precut attemptのterminal後にcomplete member/effect
+censusをregistryから再導出する。same-thread/reentrantは待たずnative effectを起こさずquarantineし、
+other-threadだけがmutex外でbounded wait後にexact recheckする。
+
+local proposal候補のdeterminate mapped returnなら、member eligibilityより先にcallback/open epochと
+observed native objectへbindしたcleanup-only ownerを一つsealする。predecessor rowとexisting groupは
+これをmintしない。これはgroup/member/pointer authorityではなく、validation成功時にだけlive
+identityへpromoteし、unpublished first-map failure時は一度だけcleanupへconsumeする。
+member/revalidation receipt、exact session ownerのmint/reuse、pointer coverageとoutward
+eligibility、map terminalは一つのregistry commitで全てpublishするか何もpublishしない。cutが先なら
+`SQLITE_IOERR`+nullと一つのcleanup lineage、commitが先ならvisible ownerがcutをblockする。
+
+SQLiteは`Wal.apWiData`のcached pointerを後続transactionで`xShmMap`なしに再利用できる。このため
+authority-read entryでSQLite APIを呼ぶ前にsession reservationを作り、active groupならその場で
+distinct session ownerへpromoteして全cached useをcoverする。first mapはreservationをownerへpromoteし、
+predecessorは既存routeへtransferし、no-pointer failureはconsume、ambiguityはtombstoneへ移す。
+`xShmLock`やpointer observationからownerを遅延生成しない。normal unmap/全close routeは全session
+reservationとattachmentへpublishされた全eager use-session ownerがexact transaction
+terminal receiptでdrain済みであることを要求する。unpublished first-mapのexact mapped validation
+failureだけはzero published member/use ownerを再確認してproactive unmapでき、confirmed cleanup時だけ
+one-shot logical teardown acknowledgementをinstallする。既存memberまたはuse ownerがあるlater-map
+failureはgroupをhideして`SQLITE_IOERR`+nullを返すがunmapを延期し、use-owner setがemptyになった後の
+一回のSQLite unmapまたはcloseへsole ownerを渡す。ambiguous first mapはgroupを捏造せず
+open-epoch/reservation-scoped opaque custodyを作り、group countとは別のfamily exclusion countで
+successorをprocess lifetime blockする。そのhandleの後続unmap/closeはzero-call `SQLITE_IOERR`であり、
+pre-native peerをrejectし、native-start済みpeerは既存cleanup/quarantine、established peerはowned
+drainだけへ閉じる。confirmed unmapは全memberを一度にretireしgroup countと
+readonly latchを一度だけ更新する。non-OK/throw/unknown、close ambiguityはexact family/runtime/VFS/
+generationをquarantineしてretryせず、fresh admissionを止めつつ他のalready-owned cleanup/drainだけを
+許す。map/group/use/cleanup/ack/close/cut/wait/terminal/pinをclosed custody enumで管理し、全kindが
+consumed、exact successor、durable tombstoneのいずれかへ一意に移るまでrelease/wakeup/compaction/
+unregister/unloadしない。compact success tombstoneもprocess lifetimeのnon-reusable token/stale
+rejectionを保持する。
+
+ordinary predecessorの`SQLITE_READONLY`+nonnull、base `SQLITE_READONLY`+nullからnormalizeする
+`SQLITE_READONLY_CANTINIT`+null、exact CANTINIT/nullは既存rowを維持する。local proposal reservationが
+これらへ移った後もproposal authorityをblockし、既存routeのconfirmed unmap/closeでだけretireする。
+proposal group形成後のREADONLY/non-nullは二つ目のcleanup ownerを作らずgroupをhideして
+`SQLITE_IOERR`+nullとdeferred sole group cleanupへ閉じる。`SQLITE_OK`+null等のprotocol-invalid pairは
+zero-effectならreservationを閉じ、mappedなら一つのcleanup lineage、不明ならquarantineへ全域化する。
+将来production reviewを通過したadmitted `SQLITE_OK`+nonnullだけが`SQLITE_READONLY`+same pointerへ
+project可能で、denial、validation failure、ambiguity、`SQLITE_OK`+null、unleased `SQLITE_OK`は
+`SQLITE_IOERR`+nullである。このproposalのfresh independent exact-commit acceptance前はauthority
+document/checker/test編集とread-only audit/reproductionだけを許し、accept後もinternal reader group/
+callback/eager lifetime/focused testsだけを認可する。production/VFS/native-OK activationはexact
+implementationとcomplete counterexample matrixのdistinct independent reviewまでblockする。
+
 Issue #208 / DF-0208 の
 `cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、map-before-gate cleanupへexact negative evidenceと
 sole cleanup authorityを与えるaccepted writer-only amendmentである。四つのSQLite/Snapshot
