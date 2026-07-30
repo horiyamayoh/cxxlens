@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -166,6 +167,47 @@ namespace cxxlens::sdk
 						const detail::sqlite_shm_registry_counter_for_testing counter) noexcept
 		{
 			registry.exhaust_registry_counter_for_testing(counter);
+		}
+
+		[[nodiscard]] static const void* reader_lifecycle_sequence_source_identity(
+			const sqlite_same_process_shm_mapping_registry& registry) noexcept
+		{
+			return registry.reader_lifecycle_sequence_source_identity_for_testing();
+		}
+
+		[[nodiscard]] static std::uint64_t reader_lifecycle_last_issued_sequence(
+			const sqlite_same_process_shm_mapping_registry& registry) noexcept
+		{
+			return registry.reader_lifecycle_last_issued_sequence_for_testing();
+		}
+
+		static void exhaust_reader_lifecycle_sequences(
+			sqlite_same_process_shm_mapping_registry& registry) noexcept
+		{
+			registry.exhaust_reader_lifecycle_sequence_source_for_testing();
+		}
+
+		[[nodiscard]] static std::size_t retired_reader_lifecycle_tombstone_count(
+			const sqlite_same_process_shm_mapping_registry& registry) noexcept
+		{
+			return registry.retired_reader_lifecycle_tombstone_count_for_testing();
+		}
+
+		[[nodiscard]] static bool retired_reader_lifecycle_tombstone_matches(
+			const sqlite_same_process_shm_mapping_registry& registry,
+			const sqlite_shm_reader_attachment_reservation_identity& attachment) noexcept
+		{
+			return registry.retired_reader_lifecycle_tombstone_matches_for_testing(attachment);
+		}
+
+		static void lock_state_mutex(sqlite_same_process_shm_mapping_registry& registry)
+		{
+			registry.lock_state_mutex_for_testing();
+		}
+
+		static void unlock_state_mutex(sqlite_same_process_shm_mapping_registry& registry)
+		{
+			registry.unlock_state_mutex_for_testing();
 		}
 
 		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
@@ -358,6 +400,26 @@ namespace cxxlens::sdk
 					no_live_shm_lock};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_unmap_terminal_receipt
+		reader_unmap_terminal(const sqlite_shm_reader_unmap_obligation& unmap,
+							  sqlite_shm_callback_execution_receipt callback,
+							  const sqlite_shm_reader_unmap_evidence_kind evidence_kind,
+							  std::optional<int> native_status,
+							  const int caller_delete_flag,
+							  const int delegated_delete_flag,
+							  std::optional<sqlite_backend_opaque_identity> native_effect_receipt,
+							  std::optional<sqlite_backend_opaque_identity> latch_reset_receipt)
+		{
+			return {unmap,
+					std::move(callback),
+					evidence_kind,
+					native_status,
+					caller_delete_flag,
+					delegated_delete_flag,
+					std::move(native_effect_receipt),
+					std::move(latch_reset_receipt)};
+		}
+
 		static void fail_next_writer_attachment_seal_transition(
 			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
 		{
@@ -374,6 +436,12 @@ namespace cxxlens::sdk
 			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
 		{
 			coordinator.inject_reader_session_terminal_commit_failure_for_testing();
+		}
+
+		[[nodiscard]] static sqlite_shm_reader_lifecycle_test_view
+		reader_lifecycle_view(const sqlite_same_process_shm_mapping_lease_coordinator& coordinator)
+		{
+			return coordinator.reader_lifecycle_view_for_testing();
 		}
 
 		static void lose_registry_reader_attachment_liveness(
@@ -1465,8 +1533,31 @@ namespace
 		}
 		if (fixture.family_pin)
 		{
-			require(fixture.registry->release_family(*fixture.family_pin).has_value(),
-					"release registry family");
+			auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+				*fixture.registry, fixture.family);
+			const auto has_local_reader_rows = coordinator != nullptr &&
+				!sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator)
+					 .attachment_reservations.empty();
+			const auto retained_before =
+				fixture.registry->snapshot().retired_reader_lifecycle_tombstone_count;
+			auto released = fixture.registry->release_family(*fixture.family_pin);
+			if (has_local_reader_rows)
+			{
+				require(
+					!released &&
+						released.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						released.error().action ==
+							sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+						!fixture.family_pin->valid() &&
+						fixture.registry->snapshot().retired_reader_lifecycle_tombstone_count ==
+							retained_before,
+					"local reader rows without issuer-sealed xClose evidence fail family export "
+					"closed");
+				fixture.family_pin.reset();
+				return;
+			}
+			require(released.has_value(), "release registry family");
 			fixture.family_pin.reset();
 		}
 		require(fixture.registry->begin_alias_unregister(*fixture.alias).has_value(),
@@ -1632,6 +1723,8 @@ namespace
 			*setup.fixture.family_pin, *inflight, receipt, setup.session);
 		const auto lease = setup.coordinator->snapshot();
 		const auto registry = setup.fixture.registry->snapshot();
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
 		require(completed && completed->kind() == kind &&
 					completed->native_status() == projected_status &&
 					completed->native_mapping() == nullptr && !inflight->valid() &&
@@ -1806,18 +1899,27 @@ namespace
 			sqlite_shm_reader_session_terminal_kind::success,
 			identity("test.registry.reader-later-zero-terminal",
 					 static_cast<std::uint8_t>(marker + 5U)));
-		require(coordinator->complete_reader_session(*session, terminal).has_value(),
+		require(fixture.registry->complete_reader_session(*fixture.family_pin, *session, terminal)
+					.has_value(),
 				"close later zero-attachment active-group session");
 		const auto unmap_callback = callback(static_cast<std::uint8_t>(marker + 6U));
-		auto unmap = coordinator->begin_reader_unmap(*handoff, unmap_callback);
-		require(
-			unmap &&
-				coordinator
-					->complete_reader_unmap(*unmap,
-											unmap_callback,
-											sqlite_shm_native_cleanup_outcome::confirmed_success)
+		auto unmap =
+			fixture.registry->begin_reader_unmap(*fixture.family_pin, *handoff, unmap_callback);
+		require(unmap.has_value(), "admit later zero-attachment group unmap");
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.reader-later-zero-unmap-effect",
+					 static_cast<std::uint8_t>(marker + 6U)),
+			identity("test.registry.reader-later-zero-latch-reset",
+					 static_cast<std::uint8_t>(marker + 6U)));
+		require(fixture.registry->complete_reader_unmap(*fixture.family_pin, *unmap, unmap_receipt)
 					.has_value(),
-			"confirm later zero-attachment group unmap");
+				"confirm later zero-attachment group unmap");
 		require(fixture.registry->release_reader_open(open).has_value(),
 				"release later zero-attachment reader open");
 		retire_writer(*coordinator, holders.front(), static_cast<std::uint8_t>(marker + 7U));
@@ -2098,10 +2200,41 @@ namespace
 				bound_request,
 				sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
 				identity("test.registry.reader-bound-cancelled", 150U));
-		require(coordinator->complete_reader_session(*bound_session, bound_terminal) &&
-					!bound_session->valid() &&
-					fixture.registry->snapshot().active_activity_pin_count == 1U,
-				"determinate no-pointer bound session did not release only its reader activity");
+		require(sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator)
+						.outstanding_terminal_permit_count == 1U,
+				"registry-bound session retains one terminal permit");
+		auto bound_terminal_direct =
+			coordinator->complete_reader_session(*bound_session, bound_terminal);
+		require(!bound_terminal_direct &&
+					bound_terminal_direct.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					bound_terminal_direct.error().action ==
+						sqlite_shm_lease_recovery_action::resubmit_via_bound_route &&
+					bound_session->valid() &&
+					sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator)
+							.outstanding_terminal_permit_count == 1U,
+				"registry-bound session terminal bypassed its registry wrapper");
+		std::atomic_bool wrapper_started{};
+		std::atomic_bool wrapper_succeeded{};
+		sqlite_same_process_shm_registry_test_peer::lock_state_mutex(*fixture.registry);
+		std::thread terminal_wrapper{[&]
+									 {
+										 wrapper_started.store(true, std::memory_order_release);
+										 auto result = fixture.registry->complete_reader_session(
+											 *fixture.family_pin, *bound_session, bound_terminal);
+										 wrapper_succeeded.store(result.has_value(),
+																 std::memory_order_release);
+									 }};
+		while (!wrapper_started.load(std::memory_order_acquire))
+			std::this_thread::yield();
+		sqlite_same_process_shm_registry_test_peer::unlock_state_mutex(*fixture.registry);
+		terminal_wrapper.join();
+		require(wrapper_succeeded.load(std::memory_order_acquire) && !bound_session->valid() &&
+					fixture.registry->snapshot().active_activity_pin_count == 1U &&
+					sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator)
+							.outstanding_terminal_permit_count == 0U,
+				"registry wrapper terminalized the bound session and released activity outside "
+				"the registry lock");
 		require(fixture.registry->release_reader_open(open).has_value(),
 				"release cancelled bound reader open authority");
 
@@ -2252,6 +2385,17 @@ namespace
 					first_commit->formed_group() &&
 					fixture.registry->snapshot().active_activity_pin_count == 2U,
 				"first reader commit transfers candidate authority to one group");
+		const auto formed_group_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(formed_group_lifecycle.outstanding_terminal_permit_count == 3U &&
+					formed_group_lifecycle.attachment_groups.size() == 1U &&
+					formed_group_lifecycle.attachment_groups.front().unmap_cut_permit_slot != 0U &&
+					formed_group_lifecycle.attachment_groups.front().unmap_terminal_permit_slot !=
+						0U &&
+					formed_group_lifecycle.attachment_groups.front().unmap_cut_permit_slot !=
+						formed_group_lifecycle.attachment_groups.front().unmap_terminal_permit_slot,
+				"first registry map commit retains session plus pre-reserved unmap cut/terminal "
+				"capacity before any unmap request");
 		auto handoff = first_commit->take_handoff();
 		require(handoff && handoff->valid(), "take reader group handoff");
 
@@ -2286,15 +2430,41 @@ namespace
 			*fixture.family_pin, *second_session, revalidation_request);
 		require(revalidation && fixture.registry->snapshot().active_activity_pin_count == 1U,
 				"same-page revalidation minted a new registry activity");
-		auto revalidated = fixture.registry->commit_reader_map(
-			*fixture.family_pin,
-			*revalidation,
+		const auto revalidation_receipt =
 			sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
 				revalidation_request,
 				generation,
 				mapping(writer_attempt.native_page.get()),
-				identity("test.registry.reader-group-zero-resize", 159U)),
-			*second_session);
+				identity("test.registry.reader-group-zero-resize", 159U));
+		const auto before_direct_revalidation =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		auto direct_revalidation =
+			coordinator->commit_reader_map(*revalidation, revalidation_receipt, *second_session);
+		const auto after_direct_revalidation =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(
+			!direct_revalidation &&
+				direct_revalidation.error().reason ==
+					sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				direct_revalidation.error().action ==
+					sqlite_shm_lease_recovery_action::resubmit_via_bound_route &&
+				revalidation->valid() && second_session->valid() &&
+				after_direct_revalidation.last_issued_sequence ==
+					before_direct_revalidation.last_issued_sequence &&
+				after_direct_revalidation.last_committed_sequence ==
+					before_direct_revalidation.last_committed_sequence &&
+				after_direct_revalidation.outstanding_terminal_permit_slots ==
+					before_direct_revalidation.outstanding_terminal_permit_slots &&
+				after_direct_revalidation.live_custody_kind_counts ==
+					before_direct_revalidation.live_custody_kind_counts &&
+				after_direct_revalidation.custody_state_counts ==
+					before_direct_revalidation.custody_state_counts &&
+				after_direct_revalidation.map_attempts.size() ==
+					before_direct_revalidation.map_attempts.size() &&
+				after_direct_revalidation.events.size() == before_direct_revalidation.events.size(),
+			"registry-bound mapped terminal wrong route changed its replayable owner or ledger");
+		auto revalidated = fixture.registry->commit_reader_map(
+			*fixture.family_pin, *revalidation, revalidation_receipt, *second_session);
 		require(revalidated &&
 					revalidated->kind() ==
 						sqlite_shm_reader_map_commit_kind::existing_member_revalidation &&
@@ -2317,16 +2487,73 @@ namespace
 				first_session_request,
 				sqlite_shm_reader_session_terminal_kind::success,
 				identity("test.registry.reader-group-first-terminal", 160U));
-		require(coordinator->complete_reader_session(*second_session, second_terminal) &&
-					coordinator->complete_reader_session(*first_session, first_terminal),
-				"close every retained-group reader session");
+		require(
+			fixture.registry
+					->complete_reader_session(*fixture.family_pin, *second_session, second_terminal)
+					.has_value() &&
+				fixture.registry
+					->complete_reader_session(*fixture.family_pin, *first_session, first_terminal)
+					.has_value(),
+			"close every retained-group reader session");
+		const auto drained_session_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(
+			drained_session_lifecycle.outstanding_terminal_permit_count == 2U &&
+				drained_session_lifecycle.attachment_groups.size() == 1U &&
+				drained_session_lifecycle.attachment_groups.front().unmap_cut_permit_slot != 0U &&
+				drained_session_lifecycle.attachment_groups.front().unmap_terminal_permit_slot !=
+					0U,
+			"session drain preserves the group's pre-reserved cut and terminal capacity");
 		const auto unmap_callback = callback(161U);
-		auto unmap = coordinator->begin_reader_unmap(*handoff, unmap_callback);
+		auto direct_unmap = coordinator->begin_reader_unmap(
+			*handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
+		require(!direct_unmap &&
+					direct_unmap.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					direct_unmap.error().action ==
+						sqlite_shm_lease_recovery_action::resubmit_via_bound_route &&
+					handoff->valid() &&
+					sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator)
+							.outstanding_terminal_permit_count == 2U,
+				"registry-bound group unmap bypassed its registry wrapper");
+		auto unmap =
+			fixture.registry->begin_reader_unmap(*fixture.family_pin, *handoff, unmap_callback);
 		require(unmap && !handoff->valid(), "admit one group-wide reader unmap");
-		auto completed_unmap = coordinator->complete_reader_unmap(
-			*unmap, unmap_callback, sqlite_shm_native_cleanup_outcome::confirmed_success);
-		require(completed_unmap.has_value(),
-				"confirmed group unmap did not complete its lease transition");
+		const auto unmap_admitted_view =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(unmap_admitted_view.outstanding_terminal_permit_count == 1U &&
+					unmap_admitted_view.attachment_groups.size() == 1U &&
+					unmap_admitted_view.attachment_groups.front().unmap_cut_permit_slot == 0U &&
+					unmap_admitted_view.attachment_groups.front().unmap_terminal_permit_slot != 0U,
+				"registry wrapper consumes only the pre-reserved cut and retains the group "
+				"terminal permit");
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.reader-unmap-effect", 161U),
+			identity("test.registry.reader-unmap-latch-reset", 161U));
+		auto direct_completion = coordinator->complete_reader_unmap(*unmap, unmap_receipt);
+		require(!direct_completion &&
+					direct_completion.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					direct_completion.error().action ==
+						sqlite_shm_lease_recovery_action::resubmit_via_bound_route &&
+					unmap->valid() &&
+					sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator)
+							.outstanding_terminal_permit_count == 1U,
+				"registry-bound unmap terminal bypassed its registry wrapper");
+		auto completed_unmap =
+			fixture.registry->complete_reader_unmap(*fixture.family_pin, *unmap, unmap_receipt);
+		require(completed_unmap &&
+					completed_unmap->kind() ==
+						sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+					sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator)
+							.outstanding_terminal_permit_count == 0U,
+				"confirmed group unmap did not complete its exact lease transition");
 		require(!unmap->valid(), "confirmed group unmap retained its obligation");
 		require(fixture.registry->snapshot().active_activity_pin_count == 0U,
 				"confirmed group unmap did not cleanly release its sole activity");
@@ -2420,18 +2647,47 @@ namespace
 				first_request,
 				sqlite_shm_reader_session_terminal_kind::success,
 				identity("test.registry.reader-remap-first-terminal", 168U));
-		require(handoff && coordinator->complete_reader_session(*first_session, first_terminal),
-				"close first fresh-remap session");
-		const auto unmap_callback = callback(169U);
-		auto unmap = coordinator->begin_reader_unmap(*handoff, unmap_callback);
 		require(
-			unmap &&
-				coordinator
-					->complete_reader_unmap(*unmap,
-											unmap_callback,
-											sqlite_shm_native_cleanup_outcome::confirmed_success)
+			handoff &&
+				fixture.registry
+					->complete_reader_session(*fixture.family_pin, *first_session, first_terminal)
 					.has_value(),
-			"confirm first same-open group unmap");
+			"close first fresh-remap session");
+		const auto observed_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(observed_lifecycle.attachment_reservations.size() == 1U &&
+					observed_lifecycle.attachment_reservations.front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::observed_present,
+				"formed group lacks its observed-present lifecycle reservation");
+		const auto unmap_callback = callback(169U);
+		auto unmap =
+			fixture.registry->begin_reader_unmap(*fixture.family_pin, *handoff, unmap_callback);
+		require(unmap.has_value(), "admit first same-open group unmap");
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.reader-remap-unmap-effect", 169U),
+			identity("test.registry.reader-remap-latch-reset", 169U));
+		auto unmap_result =
+			fixture.registry->complete_reader_unmap(*fixture.family_pin, *unmap, unmap_receipt);
+		const auto retired_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(unmap_result &&
+					unmap_result->kind() ==
+						sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+					retired_lifecycle.attachment_reservations.size() == 1U &&
+					retired_lifecycle.attachment_reservations.front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::retired_confirmed &&
+					retired_lifecycle.attachment_reservations.front().origin_sequence ==
+						observed_lifecycle.attachment_reservations.front().origin_sequence &&
+					retired_lifecycle.attachment_reservations.front().destination_sequence >
+						observed_lifecycle.attachment_reservations.front().destination_sequence,
+				"confirmed unmap transitions observed-present to retired-confirmed at one later "
+				"sequence");
 		auto old_replay = coordinator->begin_reader_session(first_request);
 		require(!old_replay &&
 					old_replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
@@ -2462,7 +2718,9 @@ namespace
 			sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
 			identity("test.registry.reader-remap-second-cancel", 170U));
 		require(second_session &&
-					coordinator->complete_reader_session(*second_session, cancelled).has_value(),
+					fixture.registry
+						->complete_reader_session(*fixture.family_pin, *second_session, cancelled)
+						.has_value(),
 				"clean fresh-remap candidate without native authority");
 		require(fixture.registry->release_reader_open(open).has_value(),
 				"release same-open authority after fresh candidate drains");
@@ -2575,19 +2833,30 @@ namespace
 				second_request,
 				sqlite_shm_reader_session_terminal_kind::success,
 				identity("test.registry.reader-new-page-second-terminal", 179U));
-		require(coordinator->complete_reader_session(*second_session, second_terminal) &&
-					coordinator->complete_reader_session(*first_session, first_terminal),
-				"close two-page reader sessions");
-		const auto unmap_callback = callback(180U);
-		auto unmap = coordinator->begin_reader_unmap(*handoff, unmap_callback);
 		require(
-			unmap &&
-				coordinator
-					->complete_reader_unmap(*unmap,
-											unmap_callback,
-											sqlite_shm_native_cleanup_outcome::confirmed_success)
+			fixture.registry
+					->complete_reader_session(*fixture.family_pin, *second_session, second_terminal)
+					.has_value() &&
+				fixture.registry
+					->complete_reader_session(*fixture.family_pin, *first_session, first_terminal)
 					.has_value(),
-			"confirm two-page reader group unmap");
+			"close two-page reader sessions");
+		const auto unmap_callback = callback(180U);
+		auto unmap =
+			fixture.registry->begin_reader_unmap(*fixture.family_pin, *handoff, unmap_callback);
+		require(unmap.has_value(), "admit two-page reader group unmap");
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.reader-new-page-unmap-effect", 180U),
+			identity("test.registry.reader-new-page-latch-reset", 180U));
+		require(fixture.registry->complete_reader_unmap(*fixture.family_pin, *unmap, unmap_receipt)
+					.has_value(),
+				"confirm two-page reader group unmap");
 		require(fixture.registry->release_reader_open(open).has_value(),
 				"release two-page reader open");
 		retire_writer(*coordinator, holders.front(), 181U);
@@ -2632,6 +2901,14 @@ namespace
 			auto inflight = setup.fixture.registry->begin_reader_map(
 				*setup.fixture.family_pin, setup.session, map_request);
 			require(inflight && inflight->valid(), "begin predelegate liveness-loss reader map");
+			const auto before_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before_terminal.map_attempts.size() == 1U &&
+						before_terminal.session_reservations.size() == 1U,
+					"predelegate liveness-loss fixture lacks exact native-started owners");
+			const auto map_token = before_terminal.map_attempts.front().map_token;
+			const auto session_token = before_terminal.session_reservations.front().session_token;
+			const auto native_effect = identity("test.registry.reader-lost-zero-resize", 185U);
 			sqlite_same_process_shm_lease_test_peer::lose_registry_reader_predelegate_liveness(
 				*setup.coordinator);
 			auto committed = setup.fixture.registry->commit_reader_map(
@@ -2641,21 +2918,96 @@ namespace
 					map_request,
 					setup.holder.generation(),
 					mapping(setup.writer_attempt.native_page.get()),
-					identity("test.registry.reader-lost-zero-resize", 185U)),
+					native_effect),
 				setup.session);
 			const auto lease = setup.coordinator->snapshot();
 			const auto registry = setup.fixture.registry->snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto map_quarantine =
+				std::ranges::find(lifecycle.terminal_quarantines,
+								  map_token,
+								  &sqlite_shm_reader_terminal_quarantine_test_view::owner_token);
+			const auto session_quarantine =
+				std::ranges::find(lifecycle.terminal_quarantines,
+								  session_token,
+								  &sqlite_shm_reader_terminal_quarantine_test_view::owner_token);
+			const auto attachment_quarantine = std::ranges::find_if(
+				lifecycle.terminal_quarantines,
+				[map_token,
+				 session_token](const sqlite_shm_reader_terminal_quarantine_test_view& terminal)
+				{
+					return terminal.owner_token != map_token &&
+						terminal.owner_token != session_token;
+				});
 			require(!committed &&
 						committed.error().reason ==
-							sqlite_shm_lease_rejection_reason::quarantined &&
-						inflight->valid() && setup.session.valid() && lease.quarantined &&
-						lease.reader_registry_activity_liveness_lost_count == 2U &&
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						committed.error().action ==
+							sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+						!inflight->valid() && !setup.session.valid() && lease.quarantined &&
+						lease.reader_registry_activity_liveness_lost_count == 3U &&
 						lease.reader_registry_activity_authority_count == 2U &&
 						lease.reader_attachment_group_count == 0U &&
 						registry.active_activity_pin_count == 3U &&
 						registry.active_reader_open_count == 1U &&
 						registry.quarantined_family_count == 1U,
-					"predelegate liveness loss consumed owners or published a partial group");
+					"predelegate liveness loss did not consume both native-started wrappers into "
+					"family quarantine");
+			require(lifecycle.last_issued_sequence == before_terminal.last_issued_sequence + 2U &&
+						lifecycle.last_committed_sequence == lifecycle.last_issued_sequence &&
+						lifecycle.outstanding_terminal_permit_count == 0U &&
+						lifecycle.outstanding_terminal_permit_slots.empty() &&
+						std::ranges::all_of(lifecycle.live_custody_kind_counts,
+											[](const std::size_t count)
+											{
+												return count == 0U;
+											}) &&
+						lifecycle.map_attempts.empty(),
+					"predelegate liveness loss did not consume exact active slots and custody");
+			require(
+				lifecycle.attachment_reservations.size() == 1U &&
+					lifecycle.attachment_reservations.front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::
+							terminal_quarantined &&
+					lifecycle.attachment_reservations.front().destination_sequence ==
+						before_terminal.last_issued_sequence + 2U &&
+					lifecycle.session_reservations.size() == 1U &&
+					lifecycle.session_reservations.front().phase ==
+						detail::sqlite_shm_reader_session_reservation_phase::terminal_quarantined &&
+					lifecycle.session_reservations.front().destination_sequence ==
+						before_terminal.last_issued_sequence + 2U &&
+					lifecycle.terminal_quarantines.size() == 3U,
+				"predelegate liveness loss did not publish exact reservation tombstones");
+			require(
+				map_quarantine != lifecycle.terminal_quarantines.end() &&
+					map_quarantine->reason ==
+						detail::sqlite_shm_reader_terminal_quarantine_reason::internal_failure &&
+					map_quarantine->terminal_sequence ==
+						before_terminal.last_issued_sequence + 1U &&
+					map_quarantine->callback && *map_quarantine->callback == map_request.callback &&
+					map_quarantine->native_effect_receipt &&
+					*map_quarantine->native_effect_receipt == native_effect &&
+					map_quarantine->exact_terminal_receipt_retained,
+				"predelegate liveness loss did not retain the exact native map receipt");
+			require(
+				session_quarantine != lifecycle.terminal_quarantines.end() &&
+					session_quarantine->reason ==
+						detail::sqlite_shm_reader_terminal_quarantine_reason::internal_failure &&
+					session_quarantine->terminal_sequence ==
+						before_terminal.last_issued_sequence + 2U &&
+					!session_quarantine->callback && !session_quarantine->native_effect_receipt &&
+					!session_quarantine->exact_terminal_receipt_retained &&
+					attachment_quarantine != lifecycle.terminal_quarantines.end() &&
+					attachment_quarantine->reason ==
+						detail::sqlite_shm_reader_terminal_quarantine_reason::internal_failure &&
+					attachment_quarantine->terminal_sequence ==
+						before_terminal.last_issued_sequence + 2U &&
+					!attachment_quarantine->callback &&
+					!attachment_quarantine->native_effect_receipt &&
+					!attachment_quarantine->exact_terminal_receipt_retained,
+				"predelegate liveness loss did not publish exact session/attachment quarantine "
+				"evidence");
 		}
 	}
 
@@ -2700,13 +3052,14 @@ namespace
 				identity("test.registry.reader-session-terminal-injected", 190U));
 			sqlite_same_process_shm_lease_test_peer::fail_next_reader_session_terminal_transition(
 				*setup.coordinator);
-			auto completed = setup.coordinator->complete_reader_session(setup.session, terminal);
+			auto completed = setup.fixture.registry->complete_reader_session(
+				*setup.fixture.family_pin, setup.session, terminal);
 			const auto lease = setup.coordinator->snapshot();
 			const auto registry = setup.fixture.registry->snapshot();
 			require(!completed &&
 						completed.error().reason ==
 							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
-						!setup.session.valid() && handoff.valid() && lease.quarantined &&
+						!setup.session.valid() && !handoff.valid() && lease.quarantined &&
 						lease.reader_session_terminal_count == 0U &&
 						lease.reader_attachment_group_count == 1U &&
 						lease.reader_registry_activity_authority_count == 1U &&
@@ -2714,6 +3067,64 @@ namespace
 						registry.active_reader_open_count == 1U,
 					"reader-session terminal failure published a terminal or dropped group "
 					"authority");
+		}
+		{
+			auto setup = make_reader_candidate_setup(191U);
+			auto handoff = form_reader_group(setup, 192U);
+			const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				setup.session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.registry.reader-delete-flag-session-terminal", 192U));
+			require(
+				setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value(),
+				"terminalize registry deleteFlag reader session");
+			const auto unmap_callback = callback(193U);
+			auto unmap = setup.fixture.registry->begin_reader_unmap(
+				*setup.fixture.family_pin, handoff, unmap_callback);
+			require(unmap && !handoff.valid(),
+					"registry wrapper admits only its internally sealed zero/zero unmap request");
+			const auto before =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto invalid_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+					*unmap,
+					unmap_callback,
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					1,
+					0,
+					identity("test.registry.reader-delete-flag-effect", 193U),
+					identity("test.registry.reader-delete-flag-latch", 193U));
+			auto rejected = setup.fixture.registry->complete_reader_unmap(
+				*setup.fixture.family_pin, *unmap, invalid_receipt);
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto lease = setup.coordinator->snapshot();
+			const auto registry = setup.fixture.registry->snapshot();
+			require(
+				!rejected &&
+					rejected.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!unmap->valid() && before.outstanding_terminal_permit_count == 1U &&
+					lifecycle.outstanding_terminal_permit_count == 0U &&
+					lifecycle.outstanding_terminal_permit_slots.empty() &&
+					std::ranges::all_of(lifecycle.live_custody_kind_counts,
+										[](const std::size_t count)
+										{
+											return count == 0U;
+										}) &&
+					lifecycle.attachment_reservations.size() == 1U &&
+					lifecycle.attachment_reservations.front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::
+							terminal_quarantined &&
+					lifecycle.attachment_groups.size() == 1U &&
+					lifecycle.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::terminal_quarantined &&
+					lease.quarantined && registry.quarantined_family_count == 1U,
+				"registry route treats terminal-only deleteFlag mismatch as post-native invalid "
+				"evidence and consumes the exact group obligation into quarantine");
 		}
 	}
 
@@ -2726,18 +3137,62 @@ namespace
 				setup.session_request,
 				sqlite_shm_reader_session_terminal_kind::success,
 				identity("test.registry.reader-peer-drain-group-terminal", 223U));
-		require(setup.coordinator->complete_reader_session(setup.session, group_terminal) &&
+		require(setup.fixture.registry
+						->complete_reader_session(
+							*setup.fixture.family_pin, setup.session, group_terminal)
+						.has_value() &&
 					handoff.valid(),
 				"close established group session before peer quarantine");
 
+		auto active_request = setup.pre_sqlite;
+		active_request.read_transaction_epoch =
+			identity("test.registry.reader-peer-drain-active-transaction", 224U);
+		active_request.decode_attempt =
+			identity("test.registry.reader-peer-drain-active-decode", 224U);
+		active_request.authority_read_receipt =
+			identity("test.registry.reader-peer-drain-active-authority", 224U);
+		auto active_admission = setup.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.fixture.family_pin, setup.open, active_request);
+		require(active_admission &&
+					active_admission->kind() ==
+						sqlite_shm_reader_session_admission_kind::active_group_owner_admitted &&
+					active_admission->proposal_request(),
+				"admit an established active-group session before deterministic peer quarantine");
+		const auto active_session_request = *active_admission->proposal_request();
+		auto active_session = active_admission->take_session();
+		require(active_session && active_session->valid(),
+				"take established active-group session before deterministic peer quarantine");
+
+		auto reserved_request = reader_pre_sqlite_request(
+			setup.fixture,
+			identity("test.registry.reader-peer-drain-reserved-connection", 231U),
+			identity("test.registry.reader-peer-drain-reserved-main-native", 231U),
+			identity("test.registry.reader-peer-drain-reserved-main-xopen", 231U),
+			identity("test.registry.reader-peer-drain-reserved-open", 231U),
+			identity("test.registry.reader-peer-drain-reserved-cohort", 231U),
+			231U);
+		auto reserved_open = acquire_reader_open(setup.fixture, reserved_request);
+		auto reserved_admission = setup.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.fixture.family_pin, reserved_open, reserved_request);
+		require(reserved_admission &&
+					reserved_admission->kind() ==
+						sqlite_shm_reader_session_admission_kind::
+							reserved_for_local_proposal_candidate &&
+					reserved_admission->proposal_request(),
+				"reserve a distinct candidate terminal before deterministic peer quarantine");
+		const auto reserved_session_request = *reserved_admission->proposal_request();
+		auto reserved_session = reserved_admission->take_session();
+		require(reserved_session && reserved_session->valid(),
+				"take distinct reserved candidate before deterministic peer quarantine");
+
 		auto peer_request =
 			reader_pre_sqlite_request(setup.fixture,
-									  identity("test.registry.reader-peer-drain-connection", 224U),
-									  identity("test.registry.reader-peer-drain-main-native", 224U),
-									  identity("test.registry.reader-peer-drain-main-xopen", 224U),
-									  identity("test.registry.reader-peer-drain-open", 224U),
-									  identity("test.registry.reader-peer-drain-cohort", 224U),
-									  224U);
+									  identity("test.registry.reader-peer-drain-connection", 225U),
+									  identity("test.registry.reader-peer-drain-main-native", 225U),
+									  identity("test.registry.reader-peer-drain-main-xopen", 225U),
+									  identity("test.registry.reader-peer-drain-open", 225U),
+									  identity("test.registry.reader-peer-drain-cohort", 225U),
+									  225U);
 		auto peer_open = acquire_reader_open(setup.fixture, peer_request);
 		auto peer_admission = setup.fixture.registry->admit_reader_session_before_sqlite(
 			*setup.fixture.family_pin, peer_open, peer_request);
@@ -2754,25 +3209,32 @@ namespace
 		const auto peer_terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
 			peer_session_request,
 			sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
-			identity("test.registry.reader-peer-drain-terminal", 225U));
+			identity("test.registry.reader-peer-drain-terminal", 226U));
 		sqlite_same_process_shm_lease_test_peer::fail_next_reader_session_terminal_transition(
 			*setup.coordinator);
-		auto failed_peer = setup.coordinator->complete_reader_session(*peer_session, peer_terminal);
+		auto failed_peer = setup.fixture.registry->complete_reader_session(
+			*setup.fixture.family_pin, *peer_session, peer_terminal);
 		require(!failed_peer &&
 					failed_peer.error().reason ==
 						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
-					!peer_session->valid() && handoff.valid() &&
+					!peer_session->valid() && active_session->valid() &&
+					reserved_session->valid() && handoff.valid() &&
 					setup.coordinator->snapshot().quarantined,
 				"peer terminal ambiguity quarantines the family without consuming group drain");
+		const auto after_peer_failure =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(after_peer_failure.outstanding_terminal_permit_count == 4U,
+				"peer quarantine preserves the established group cut, terminal, active session, "
+				"and reserved candidate permits");
 
 		const auto propagated = setup.fixture.registry->snapshot();
 		auto fresh_request = setup.pre_sqlite;
 		fresh_request.read_transaction_epoch =
-			identity("test.registry.reader-peer-drain-fresh-transaction", 226U);
+			identity("test.registry.reader-peer-drain-fresh-transaction", 227U);
 		fresh_request.decode_attempt =
-			identity("test.registry.reader-peer-drain-fresh-decode", 226U);
+			identity("test.registry.reader-peer-drain-fresh-decode", 227U);
 		fresh_request.authority_read_receipt =
-			identity("test.registry.reader-peer-drain-fresh-authority", 226U);
+			identity("test.registry.reader-peer-drain-fresh-authority", 227U);
 		auto fresh = setup.fixture.registry->admit_reader_session_before_sqlite(
 			*setup.fixture.family_pin, setup.open, fresh_request);
 		require(propagated.quarantined_family_count == 1U && fresh &&
@@ -2782,27 +3244,834 @@ namespace
 					fresh->rejection()->reason == sqlite_shm_lease_rejection_reason::quarantined,
 				"peer quarantine failed to revoke every fresh reader admission");
 
-		const auto unmap_callback = callback(227U);
-		auto unmap = setup.coordinator->begin_reader_unmap(handoff, unmap_callback);
+		const auto active_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				active_session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.registry.reader-peer-drain-active-terminal", 228U));
+		require(setup.fixture.registry
+						->complete_reader_session(
+							*setup.fixture.family_pin, *active_session, active_terminal)
+						.has_value() &&
+					!active_session->valid(),
+				"already-owned active-group session terminal drains after peer quarantine");
+		const auto after_active_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(after_active_terminal.outstanding_terminal_permit_count == 3U,
+				"active-group session terminal consumes only its exact owned permit");
+
+		const auto reserved_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				reserved_session_request,
+				sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
+				identity("test.registry.reader-peer-drain-reserved-terminal", 232U));
+		require(setup.fixture.registry
+						->complete_reader_session(
+							*setup.fixture.family_pin, *reserved_session, reserved_terminal)
+						.has_value() &&
+					!reserved_session->valid(),
+				"already-owned reserved candidate terminal drains after peer quarantine");
+		const auto after_reserved_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(after_reserved_terminal.outstanding_terminal_permit_count == 2U,
+				"reserved candidate terminal consumes only its exact owned permit");
+
+		const auto unmap_callback = callback(229U);
+		auto unmap = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
 		require(unmap && unmap->valid() && !handoff.valid(),
 				"deterministic peer quarantine disallowed established group owned drain");
-		auto completed = setup.coordinator->complete_reader_unmap(
-			*unmap, unmap_callback, sqlite_shm_native_cleanup_outcome::confirmed_success);
-		auto replay = setup.coordinator->begin_reader_unmap(handoff, callback(228U));
+		const auto unmap_effect = identity("test.registry.reader-peer-drain-unmap-effect", 229U);
+		const auto latch_reset = identity("test.registry.reader-peer-drain-latch-reset", 229U);
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			unmap_effect,
+			latch_reset);
+		auto completed = setup.fixture.registry->complete_reader_unmap(
+			*setup.fixture.family_pin, *unmap, unmap_receipt);
+		auto replay = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, callback(230U));
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
 		const auto lease = setup.coordinator->snapshot();
 		const auto registry = setup.fixture.registry->snapshot();
-		require(!completed &&
-					completed.error().reason ==
-						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
-					!unmap->valid() && !replay &&
-					replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
-					lease.quarantined && lease.reader_attachment_group_count == 1U &&
-					lease.reader_handoff_count == 1U && lease.reader_cleanup_count == 1U &&
-					lease.reader_registry_activity_authority_count == 2U &&
-					registry.active_activity_pin_count == 3U &&
-					registry.active_reader_open_count == 2U &&
+		const auto established_attachment =
+			std::find_if(lifecycle.attachment_reservations.begin(),
+						 lifecycle.attachment_reservations.end(),
+						 [&setup](const auto& record)
+						 {
+							 return record.attachment == setup.session_request.attachment;
+						 });
+		const auto peer_attachment =
+			std::find_if(lifecycle.attachment_reservations.begin(),
+						 lifecycle.attachment_reservations.end(),
+						 [&peer_session_request](const auto& record)
+						 {
+							 return record.attachment == peer_session_request.attachment;
+						 });
+		const auto reserved_attachment =
+			std::find_if(lifecycle.attachment_reservations.begin(),
+						 lifecycle.attachment_reservations.end(),
+						 [&reserved_session_request](const auto& record)
+						 {
+							 return record.attachment == reserved_session_request.attachment;
+						 });
+		const auto established_session =
+			std::find_if(lifecycle.session_reservations.begin(),
+						 lifecycle.session_reservations.end(),
+						 [&setup](const auto& record)
+						 {
+							 return record.attachment == setup.session_request.attachment;
+						 });
+		const auto established_session_count = std::ranges::count_if(
+			lifecycle.session_reservations,
+			[&setup](const auto& record)
+			{
+				return record.attachment == setup.session_request.attachment &&
+					record.phase ==
+					detail::sqlite_shm_reader_session_reservation_phase::promoted_to_group_owner;
+			});
+		const auto peer_terminal_session =
+			std::find_if(lifecycle.session_reservations.begin(),
+						 lifecycle.session_reservations.end(),
+						 [&peer_session_request](const auto& record)
+						 {
+							 return record.attachment == peer_session_request.attachment;
+						 });
+		const auto reserved_terminal_session =
+			std::find_if(lifecycle.session_reservations.begin(),
+						 lifecycle.session_reservations.end(),
+						 [&reserved_session_request](const auto& record)
+						 {
+							 return record.attachment == reserved_session_request.attachment;
+						 });
+		const auto peer_attachment_quarantine = std::find_if(
+			lifecycle.terminal_quarantines.begin(),
+			lifecycle.terminal_quarantines.end(),
+			[&peer_session_request](const auto& record)
+			{
+				return record.attachment == peer_session_request.attachment &&
+					record.reason ==
+					detail::sqlite_shm_reader_terminal_quarantine_reason::injected_commit_failure &&
+					!record.exact_terminal_receipt_retained;
+			});
+		const auto peer_session_quarantine = std::find_if(
+			lifecycle.terminal_quarantines.begin(),
+			lifecycle.terminal_quarantines.end(),
+			[&peer_session_request](const auto& record)
+			{
+				return record.attachment == peer_session_request.attachment &&
+					record.reason ==
+					detail::sqlite_shm_reader_terminal_quarantine_reason::injected_commit_failure &&
+					record.exact_terminal_receipt_retained;
+			});
+		require(completed &&
+					completed->kind() == sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+					completed->evidence_kind() ==
+						sqlite_shm_reader_unmap_evidence_kind::exact_native_result &&
+					completed->native_status() == sqlite_ok_status &&
+					completed->outward_status() == sqlite_ok_status &&
+					completed->native_effect_receipt() &&
+					*completed->native_effect_receipt() == unmap_effect &&
+					completed->latch_reset_receipt() &&
+					*completed->latch_reset_receipt() == latch_reset,
+				"peer-owned exact OK drain did not retain its complete terminal evidence");
+		require(!unmap->valid() && !replay &&
+					replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+				"peer-owned drain retained a replayable native owner");
+		require(lease.quarantined, "peer-owned drain cleared lease quarantine");
+		require(lease.reader_attachment_group_count == 0U,
+				"peer-owned drain retained an established live group census");
+		require(lease.reader_handoff_count == 0U,
+				"peer-owned drain retained an established handoff census");
+		require(lease.reader_registry_activity_authority_count == 1U,
+				"peer-owned drain failed to release only the established activity authority");
+		require(
+			lifecycle.outstanding_terminal_permit_count == 0U &&
+				lifecycle.outstanding_terminal_permit_slots.empty() &&
+				lifecycle.last_issued_sequence == lifecycle.last_committed_sequence &&
+				std::ranges::all_of(lifecycle.live_custody_kind_counts,
+									[](const std::size_t count)
+									{
+										return count == 0U;
+									}) &&
+				lifecycle.attachment_reservations.size() == 3U &&
+				established_attachment != lifecycle.attachment_reservations.end() &&
+				established_attachment->phase ==
+					detail::sqlite_shm_reader_attachment_reservation_phase::retired_confirmed &&
+				established_attachment->destination_sequence != 0U &&
+				peer_attachment != lifecycle.attachment_reservations.end() &&
+				peer_attachment->phase ==
+					detail::sqlite_shm_reader_attachment_reservation_phase::terminal_quarantined &&
+				peer_attachment->destination_sequence != 0U &&
+				reserved_attachment != lifecycle.attachment_reservations.end() &&
+				reserved_attachment->phase ==
+					detail::sqlite_shm_reader_attachment_reservation_phase::revoked_no_map &&
+				reserved_attachment->destination_sequence != 0U &&
+				lifecycle.attachment_groups.size() == 1U &&
+				lifecycle.attachment_groups.front().phase ==
+					detail::sqlite_shm_reader_attachment_group_phase::native_unmap_confirmed &&
+				lifecycle.attachment_groups.front().destination_sequence ==
+					established_attachment->destination_sequence &&
+				lifecycle.session_reservations.size() == 4U && established_session_count == 2U &&
+				established_session != lifecycle.session_reservations.end() &&
+				established_session->phase ==
+					detail::sqlite_shm_reader_session_reservation_phase::promoted_to_group_owner &&
+				established_session->destination_sequence <
+					established_attachment->destination_sequence &&
+				peer_terminal_session != lifecycle.session_reservations.end() &&
+				peer_terminal_session->phase ==
+					detail::sqlite_shm_reader_session_reservation_phase::terminal_quarantined &&
+				peer_terminal_session->destination_sequence ==
+					peer_attachment->destination_sequence &&
+				peer_terminal_session->destination_sequence <
+					established_attachment->destination_sequence &&
+				reserved_terminal_session != lifecycle.session_reservations.end() &&
+				reserved_terminal_session->phase ==
+					detail::sqlite_shm_reader_session_reservation_phase::consumed_no_pointer &&
+				reserved_terminal_session->destination_sequence ==
+					reserved_attachment->destination_sequence &&
+				lifecycle.terminal_quarantines.size() == 2U &&
+				peer_attachment_quarantine != lifecycle.terminal_quarantines.end() &&
+				peer_attachment_quarantine->terminal_sequence ==
+					peer_attachment->destination_sequence &&
+				!peer_attachment_quarantine->callback &&
+				!peer_attachment_quarantine->native_effect_receipt &&
+				!peer_attachment_quarantine->exact_terminal_receipt_retained &&
+				peer_session_quarantine != lifecycle.terminal_quarantines.end() &&
+				peer_session_quarantine->terminal_sequence ==
+					peer_terminal_session->destination_sequence &&
+				!peer_session_quarantine->callback &&
+				!peer_session_quarantine->native_effect_receipt &&
+				peer_session_quarantine->exact_terminal_receipt_retained,
+			"peer-owned exact drain did not retire the established group while retaining only the "
+			"peer's exact sequenced durable tombstones");
+		require(registry.active_activity_pin_count == 2U &&
+					registry.active_reader_open_count == 3U &&
 					registry.quarantined_family_count == 1U,
-				"peer-owned drain did not consume one outcome into retained no-retry custody");
+				"peer-owned drain did not release only its established registry activity");
+	}
+
+	void verify_native_started_reader_terminals_survive_peer_quarantine()
+	{
+		const auto trigger_peer_quarantine =
+			[](reader_candidate_setup& setup, const std::uint8_t marker)
+		{
+			auto peer_request = reader_pre_sqlite_request(
+				setup.fixture,
+				identity("test.registry.native-started-peer-connection", marker),
+				identity("test.registry.native-started-peer-main-native", marker),
+				identity("test.registry.native-started-peer-main-xopen", marker),
+				identity("test.registry.native-started-peer-open", marker),
+				identity("test.registry.native-started-peer-cohort", marker),
+				marker);
+			auto peer_open = acquire_reader_open(setup.fixture, peer_request);
+			auto peer_admission = setup.fixture.registry->admit_reader_session_before_sqlite(
+				*setup.fixture.family_pin, peer_open, peer_request);
+			require(peer_admission &&
+						peer_admission->kind() ==
+							sqlite_shm_reader_session_admission_kind::
+								reserved_for_local_proposal_candidate &&
+						peer_admission->proposal_request(),
+					"reserve deterministic quarantine peer beside a native-started map");
+			const auto peer_session_request = *peer_admission->proposal_request();
+			auto peer_session = peer_admission->take_session();
+			require(peer_session && peer_session->valid(),
+					"take deterministic quarantine peer beside a native-started map");
+			const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				peer_session_request,
+				sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
+				identity("test.registry.native-started-peer-terminal", marker));
+			sqlite_same_process_shm_lease_test_peer::fail_next_reader_session_terminal_transition(
+				*setup.coordinator);
+			auto failed = setup.fixture.registry->complete_reader_session(
+				*setup.fixture.family_pin, *peer_session, terminal);
+			require(!failed &&
+						failed.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						!peer_session->valid() && setup.coordinator->snapshot().quarantined &&
+						setup.fixture.registry->snapshot().quarantined_family_count == 1U,
+					"deterministic peer terminal did not quarantine the native-started family");
+			return peer_open;
+		};
+
+		const auto require_fresh_admission_blocked =
+			[](reader_candidate_setup& setup, const std::uint8_t marker)
+		{
+			auto fresh = setup.pre_sqlite;
+			fresh.read_transaction_epoch =
+				identity("test.registry.native-started-fresh-transaction", marker);
+			fresh.decode_attempt = identity("test.registry.native-started-fresh-decode", marker);
+			fresh.authority_read_receipt =
+				identity("test.registry.native-started-fresh-authority", marker);
+			auto rejected = setup.fixture.registry->admit_reader_session_before_sqlite(
+				*setup.fixture.family_pin, setup.open, fresh);
+			require(rejected &&
+						rejected->kind() ==
+							sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
+						rejected->rejection() &&
+						rejected->rejection()->reason ==
+							sqlite_shm_lease_rejection_reason::quarantined &&
+						!rejected->proposal_request() && !rejected->take_session(),
+					"peer quarantine admitted a fresh reader beside a native-started terminal");
+		};
+
+		{
+			constexpr std::uint8_t marker = 92U;
+			auto setup = make_reader_candidate_setup(marker);
+			const auto map_request =
+				reader_attachment_map_request(setup.session_request, marker + 1U);
+			auto inflight = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(inflight && inflight->valid(),
+					"begin first mapped native-started peer-quarantine counterexample");
+			const auto before =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before.map_attempts.size() == 1U,
+					"first mapped native-started counterexample lacks its map record");
+			const auto map_token = before.map_attempts.front().map_token;
+			const auto map_terminal_slot = before.map_attempts.front().terminal_permit_slot;
+			require(before.session_reservations.size() == 1U &&
+						before.outstanding_terminal_permit_count == 4U &&
+						before.outstanding_terminal_permit_slots.size() == 4U &&
+						map_terminal_slot != 0U,
+					"first mapped native-started counterexample lacks exact four-slot custody");
+			const auto session_token = before.session_reservations.front().session_token;
+			const auto native_effect =
+				identity("test.registry.native-started-first-map-effect", marker + 1U);
+			const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+				map_request,
+				setup.holder.generation(),
+				mapping(setup.writer_attempt.native_page.get()),
+				native_effect);
+			auto peer_open = trigger_peer_quarantine(setup, marker + 2U);
+			(void)peer_open;
+			require_fresh_admission_blocked(setup, marker + 3U);
+			const auto before_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before_terminal.outstanding_terminal_permit_slots ==
+						before.outstanding_terminal_permit_slots,
+					"peer quarantine changed first mapped native-started active slots");
+			auto failed = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, *inflight, receipt, setup.session);
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto map_quarantine =
+				std::ranges::find(lifecycle.terminal_quarantines,
+								  map_token,
+								  &sqlite_shm_reader_terminal_quarantine_test_view::owner_token);
+			const auto session_quarantine =
+				std::ranges::find(lifecycle.terminal_quarantines,
+								  session_token,
+								  &sqlite_shm_reader_terminal_quarantine_test_view::owner_token);
+			const auto attachment_quarantine = std::ranges::find_if(
+				lifecycle.terminal_quarantines,
+				[&](const sqlite_shm_reader_terminal_quarantine_test_view& terminal)
+				{
+					return terminal.attachment == setup.session_request.attachment &&
+						terminal.owner_token != map_token && terminal.owner_token != session_token;
+				});
+			const auto lease = setup.coordinator->snapshot();
+			require(
+				!failed &&
+					failed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!inflight->valid() && !setup.session.valid() && lease.quarantined &&
+					lease.reader_inflight_count == 0U &&
+					lease.reader_attachment_group_count == 0U &&
+					lease.reader_attachment_live_member_count == 0U &&
+					lease.reader_attachment_audit_count == 0U &&
+					lifecycle.last_issued_sequence == before_terminal.last_issued_sequence + 2U &&
+					lifecycle.last_committed_sequence == lifecycle.last_issued_sequence &&
+					lifecycle.outstanding_terminal_permit_count == 0U &&
+					lifecycle.outstanding_terminal_permit_slots.empty() &&
+					std::ranges::all_of(lifecycle.live_custody_kind_counts,
+										[](const std::size_t count)
+										{
+											return count == 0U;
+										}) &&
+					lifecycle.map_attempts.empty() &&
+					map_quarantine != lifecycle.terminal_quarantines.end() &&
+					map_quarantine->reason ==
+						detail::sqlite_shm_reader_terminal_quarantine_reason::peer_quarantine &&
+					map_quarantine->terminal_sequence ==
+						before_terminal.last_issued_sequence + 1U &&
+					map_quarantine->callback && *map_quarantine->callback == map_request.callback &&
+					map_quarantine->native_effect_receipt &&
+					*map_quarantine->native_effect_receipt == native_effect &&
+					map_quarantine->exact_terminal_receipt_retained &&
+					session_quarantine != lifecycle.terminal_quarantines.end() &&
+					session_quarantine->reason ==
+						detail::sqlite_shm_reader_terminal_quarantine_reason::peer_quarantine &&
+					session_quarantine->terminal_sequence ==
+						before_terminal.last_issued_sequence + 2U &&
+					!session_quarantine->exact_terminal_receipt_retained &&
+					attachment_quarantine != lifecycle.terminal_quarantines.end() &&
+					attachment_quarantine->reason ==
+						detail::sqlite_shm_reader_terminal_quarantine_reason::peer_quarantine &&
+					attachment_quarantine->terminal_sequence ==
+						before_terminal.last_issued_sequence + 2U &&
+					!attachment_quarantine->exact_terminal_receipt_retained,
+				"first mapped native-started terminal published a pointer or lost its exact "
+				"one-shot receipt under peer quarantine");
+			auto replay = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, *inflight, receipt, setup.session);
+			require(!replay &&
+						replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+					"first mapped native-started terminal remained replayable");
+		}
+
+		{
+			constexpr std::uint8_t marker = 102U;
+			auto setup = make_reader_candidate_setup(marker);
+			auto handoff = form_reader_group(setup, marker + 1U);
+			const auto map_request =
+				reader_attachment_map_request(setup.session_request, marker + 2U);
+			auto inflight = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(inflight && inflight->valid(),
+					"begin existing mapped native-started peer-quarantine counterexample");
+			const auto before =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before.map_attempts.size() == 1U && before.session_reservations.size() == 1U &&
+						before.attachment_groups.size() == 1U &&
+						before.outstanding_terminal_permit_count == 4U &&
+						before.outstanding_terminal_permit_slots.size() == 4U,
+					"existing mapped native-started counterexample lacks exact four-slot custody");
+			const auto map_token = before.map_attempts.front().map_token;
+			const auto map_terminal_slot = before.map_attempts.front().terminal_permit_slot;
+			const auto session_before = before.session_reservations.front();
+			const auto group_before = before.attachment_groups.front();
+			const auto native_effect =
+				identity("test.registry.native-started-existing-map-effect", marker + 2U);
+			const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+				map_request,
+				setup.holder.generation(),
+				mapping(setup.writer_attempt.native_page.get()),
+				native_effect);
+			auto peer_open = trigger_peer_quarantine(setup, marker + 3U);
+			(void)peer_open;
+			require_fresh_admission_blocked(setup, marker + 4U);
+			const auto before_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before_terminal.outstanding_terminal_permit_slots ==
+						before.outstanding_terminal_permit_slots,
+					"peer quarantine changed existing mapped native-started active slots");
+			auto preserved_slots = before_terminal.outstanding_terminal_permit_slots;
+			require(std::erase(preserved_slots, map_terminal_slot) == 1U,
+					"existing mapped native-started map slot is not uniquely active");
+			auto failed = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, *inflight, receipt, setup.session);
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto map_quarantine =
+				std::ranges::find(lifecycle.terminal_quarantines,
+								  map_token,
+								  &sqlite_shm_reader_terminal_quarantine_test_view::owner_token);
+			const auto target_session =
+				std::ranges::find(lifecycle.session_reservations,
+								  session_before.session_token,
+								  &sqlite_shm_reader_session_reservation_test_view::session_token);
+			require(
+				!failed &&
+					failed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!inflight->valid() && setup.session.valid() && handoff.valid() &&
+					lifecycle.last_issued_sequence == before_terminal.last_issued_sequence + 1U &&
+					lifecycle.last_committed_sequence == lifecycle.last_issued_sequence &&
+					lifecycle.outstanding_terminal_permit_count == 3U &&
+					lifecycle.outstanding_terminal_permit_slots == preserved_slots &&
+					target_session != lifecycle.session_reservations.end() &&
+					target_session->phase == session_before.phase &&
+					target_session->origin_sequence == session_before.origin_sequence &&
+					target_session->destination_sequence == session_before.destination_sequence &&
+					target_session->terminal_permit_slot == session_before.terminal_permit_slot &&
+					lifecycle.attachment_groups.size() == 1U &&
+					lifecycle.attachment_groups.front().phase == group_before.phase &&
+					lifecycle.attachment_groups.front().origin_sequence ==
+						group_before.origin_sequence &&
+					lifecycle.attachment_groups.front().destination_sequence ==
+						group_before.destination_sequence &&
+					map_quarantine != lifecycle.terminal_quarantines.end() &&
+					map_quarantine->reason ==
+						detail::sqlite_shm_reader_terminal_quarantine_reason::peer_quarantine &&
+					map_quarantine->terminal_sequence ==
+						before_terminal.last_issued_sequence + 1U &&
+					map_quarantine->callback && *map_quarantine->callback == map_request.callback &&
+					map_quarantine->native_effect_receipt &&
+					*map_quarantine->native_effect_receipt == native_effect &&
+					map_quarantine->exact_terminal_receipt_retained,
+				"existing mapped native-started terminal failed to isolate its exact map receipt "
+				"from the established session and group");
+
+			const auto session_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+					setup.session_request,
+					sqlite_shm_reader_session_terminal_kind::success,
+					identity("test.registry.native-started-existing-session-terminal",
+							 marker + 5U));
+			require(setup.fixture.registry
+						->complete_reader_session(
+							*setup.fixture.family_pin, setup.session, session_terminal)
+						.has_value(),
+					"drain existing mapped native-started session after peer quarantine");
+			const auto after_session =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(after_session.outstanding_terminal_permit_count == 2U &&
+						after_session.outstanding_terminal_permit_slots.size() == 2U,
+					"existing mapped native-started session drain did not consume one exact "
+					"active slot");
+			const auto unmap_callback = callback(marker + 6U);
+			auto unmap = setup.fixture.registry->begin_reader_unmap(
+				*setup.fixture.family_pin, handoff, unmap_callback);
+			require(unmap && !handoff.valid(), "admit existing mapped native-started group drain");
+			const auto after_cut =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(after_cut.outstanding_terminal_permit_count == 1U &&
+						after_cut.outstanding_terminal_permit_slots.size() == 1U,
+					"existing mapped native-started unmap cut did not consume one exact active "
+					"slot");
+			const auto unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+					*unmap,
+					unmap_callback,
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					0,
+					0,
+					identity("test.registry.native-started-existing-unmap-effect", marker + 6U),
+					identity("test.registry.native-started-existing-latch", marker + 6U));
+			auto completed = setup.fixture.registry->complete_reader_unmap(
+				*setup.fixture.family_pin, *unmap, unmap_receipt);
+			require(completed &&
+						completed->kind() ==
+							sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+						sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+							*setup.coordinator)
+								.outstanding_terminal_permit_count == 0U,
+					"existing mapped native-started owned drains did not reach zero permits");
+		}
+
+		{
+			constexpr std::uint8_t marker = 112U;
+			auto setup = make_reader_candidate_setup(marker);
+			const auto map_request =
+				reader_attachment_map_request(setup.session_request, marker + 1U);
+			auto inflight = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(inflight && inflight->valid(),
+					"begin first zero native-started peer-quarantine counterexample");
+			const auto zero_effect =
+				identity("test.registry.native-started-first-zero-effect", marker + 1U);
+			const auto receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					*inflight,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					map_request,
+					sqlite_busy_status,
+					nullptr,
+					0,
+					zero_effect);
+			const auto before_bypass =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before_bypass.map_attempts.size() == 1U &&
+						before_bypass.session_reservations.size() == 1U &&
+						before_bypass.outstanding_terminal_permit_count == 4U &&
+						before_bypass.outstanding_terminal_permit_slots.size() == 4U,
+					"first zero native-started counterexample lacks exact four-slot custody");
+			const auto map_token = before_bypass.map_attempts.front().map_token;
+			const auto session_token = before_bypass.session_reservations.front().session_token;
+			auto bypass = setup.coordinator->complete_reader_zero_attachment_map(
+				*inflight, receipt, setup.session);
+			const auto after_bypass =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(
+				!bypass &&
+					bypass.error().reason == sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					bypass.error().action ==
+						sqlite_shm_lease_recovery_action::resubmit_via_bound_route &&
+					inflight->valid() && setup.session.valid() &&
+					after_bypass.last_issued_sequence == before_bypass.last_issued_sequence &&
+					after_bypass.last_committed_sequence == before_bypass.last_committed_sequence &&
+					after_bypass.outstanding_terminal_permit_count ==
+						before_bypass.outstanding_terminal_permit_count &&
+					after_bypass.outstanding_terminal_permit_slots ==
+						before_bypass.outstanding_terminal_permit_slots &&
+					std::ranges::equal(after_bypass.attachment_reservations,
+									   before_bypass.attachment_reservations,
+									   [](const auto& left, const auto& right)
+									   {
+										   return left.attachment == right.attachment &&
+											   left.phase == right.phase &&
+											   left.origin_sequence == right.origin_sequence &&
+											   left.destination_sequence ==
+											   right.destination_sequence &&
+											   left.group_payload_present ==
+											   right.group_payload_present;
+									   }) &&
+					std::ranges::equal(
+						after_bypass.session_reservations,
+						before_bypass.session_reservations,
+						[](const auto& left, const auto& right)
+						{
+							return left.session_token == right.session_token &&
+								left.attachment == right.attachment && left.phase == right.phase &&
+								left.origin_sequence == right.origin_sequence &&
+								left.destination_sequence == right.destination_sequence &&
+								left.terminal_permit_slot == right.terminal_permit_slot;
+						}) &&
+					std::ranges::equal(after_bypass.map_attempts,
+									   before_bypass.map_attempts,
+									   [](const auto& left, const auto& right)
+									   {
+										   return left.map_token == right.map_token &&
+											   left.attachment == right.attachment &&
+											   left.admission_sequence ==
+											   right.admission_sequence &&
+											   left.terminal_permit_slot ==
+											   right.terminal_permit_slot &&
+											   left.potential_group_cut_permit_slot ==
+											   right.potential_group_cut_permit_slot &&
+											   left.potential_group_terminal_permit_slot ==
+											   right.potential_group_terminal_permit_slot;
+									   }) &&
+					std::ranges::equal(after_bypass.events,
+									   before_bypass.events,
+									   [](const auto& left, const auto& right)
+									   {
+										   return left.sequence == right.sequence &&
+											   left.kind == right.kind &&
+											   left.owner_token == right.owner_token;
+									   }) &&
+					after_bypass.terminal_quarantines.size() ==
+						before_bypass.terminal_quarantines.size() &&
+					after_bypass.zero_effect_terminals.size() ==
+						before_bypass.zero_effect_terminals.size() &&
+					after_bypass.live_custody_kind_counts ==
+						before_bypass.live_custody_kind_counts &&
+					after_bypass.custody_state_counts == before_bypass.custody_state_counts,
+				"registry-bound zero terminal bypass changed sequence, permit, custody, records, "
+				"or wrappers before the correct registry submission");
+
+			auto peer_open = trigger_peer_quarantine(setup, marker + 2U);
+			(void)peer_open;
+			require_fresh_admission_blocked(setup, marker + 3U);
+			const auto before_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before_terminal.outstanding_terminal_permit_slots ==
+						before_bypass.outstanding_terminal_permit_slots,
+					"peer quarantine changed first zero native-started active slots");
+			auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, *inflight, receipt, setup.session);
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto target_attachment =
+				std::ranges::find(lifecycle.attachment_reservations,
+								  setup.session_request.attachment,
+								  &sqlite_shm_reader_attachment_reservation_test_view::attachment);
+			const auto zero_terminal =
+				std::ranges::find(lifecycle.zero_effect_terminals,
+								  map_token,
+								  &sqlite_shm_reader_zero_effect_terminal_test_view::owner_token);
+			const auto target_session =
+				std::ranges::find(lifecycle.session_reservations,
+								  session_token,
+								  &sqlite_shm_reader_session_reservation_test_view::session_token);
+			require(
+				completed &&
+					completed->kind() ==
+						sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change &&
+					completed->native_status() == sqlite_busy_status &&
+					completed->native_mapping() == nullptr && !inflight->valid() &&
+					!setup.session.valid() &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						1U &&
+					setup.coordinator->snapshot().reader_attachment_revoked_no_map_count == 1U &&
+					setup.coordinator->snapshot().reader_attachment_group_count == 0U &&
+					setup.coordinator->snapshot().reader_attachment_live_member_count == 0U &&
+					lifecycle.last_issued_sequence == before_terminal.last_issued_sequence + 1U &&
+					lifecycle.last_committed_sequence == lifecycle.last_issued_sequence &&
+					lifecycle.outstanding_terminal_permit_count == 0U &&
+					lifecycle.outstanding_terminal_permit_slots.empty() &&
+					std::ranges::all_of(lifecycle.live_custody_kind_counts,
+										[](const std::size_t count)
+										{
+											return count == 0U;
+										}) &&
+					target_attachment != lifecycle.attachment_reservations.end() &&
+					target_attachment->phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::revoked_no_map &&
+					target_attachment->destination_sequence ==
+						before_terminal.last_issued_sequence + 1U &&
+					target_session != lifecycle.session_reservations.end() &&
+					target_session->phase ==
+						detail::sqlite_shm_reader_session_reservation_phase::consumed_no_pointer &&
+					target_session->destination_sequence ==
+						before_terminal.last_issued_sequence + 1U &&
+					zero_terminal != lifecycle.zero_effect_terminals.end() &&
+					zero_terminal->attachment == setup.session_request.attachment &&
+					zero_terminal->terminal_sequence == before_terminal.last_issued_sequence + 1U &&
+					zero_terminal->kind ==
+						sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change &&
+					zero_terminal->native_status == sqlite_busy_status && zero_terminal->callback &&
+					*zero_terminal->callback == map_request.callback &&
+					zero_terminal->zero_attachment_effect_receipt &&
+					*zero_terminal->zero_attachment_effect_receipt == zero_effect &&
+					zero_terminal->exact_terminal_receipt_retained &&
+					zero_terminal->revoked_first_reservation,
+				"first zero native-started terminal failed to preserve its exact no-pointer "
+				"outcome under peer quarantine");
+			auto replay = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, *inflight, receipt, setup.session);
+			require(!replay &&
+						replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+					"first zero native-started terminal remained replayable");
+		}
+
+		{
+			constexpr std::uint8_t marker = 122U;
+			auto setup = make_reader_candidate_setup(marker);
+			auto handoff = form_reader_group(setup, marker + 1U);
+			const auto map_request =
+				reader_attachment_map_request(setup.session_request, marker + 2U);
+			auto inflight = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(inflight && inflight->valid(),
+					"begin later zero native-started peer-quarantine counterexample");
+			const auto before =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before.map_attempts.size() == 1U && before.session_reservations.size() == 1U &&
+						before.attachment_groups.size() == 1U &&
+						before.outstanding_terminal_permit_count == 4U &&
+						before.outstanding_terminal_permit_slots.size() == 4U,
+					"later zero native-started counterexample lacks exact four-slot custody");
+			const auto map_token = before.map_attempts.front().map_token;
+			const auto map_terminal_slot = before.map_attempts.front().terminal_permit_slot;
+			const auto session_before = before.session_reservations.front();
+			const auto group_before = before.attachment_groups.front();
+			const auto zero_effect =
+				identity("test.registry.native-started-later-zero-effect", marker + 2U);
+			const auto receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					*inflight,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					map_request,
+					sqlite_busy_status,
+					nullptr,
+					0,
+					zero_effect);
+			auto peer_open = trigger_peer_quarantine(setup, marker + 3U);
+			(void)peer_open;
+			require_fresh_admission_blocked(setup, marker + 4U);
+			const auto before_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before_terminal.outstanding_terminal_permit_slots ==
+						before.outstanding_terminal_permit_slots,
+					"peer quarantine changed later zero native-started active slots");
+			auto preserved_slots = before_terminal.outstanding_terminal_permit_slots;
+			require(std::erase(preserved_slots, map_terminal_slot) == 1U,
+					"later zero native-started map slot is not uniquely active");
+			auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, *inflight, receipt, setup.session);
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto target_session =
+				std::ranges::find(lifecycle.session_reservations,
+								  session_before.session_token,
+								  &sqlite_shm_reader_session_reservation_test_view::session_token);
+			const auto zero_terminal =
+				std::ranges::find(lifecycle.zero_effect_terminals,
+								  map_token,
+								  &sqlite_shm_reader_zero_effect_terminal_test_view::owner_token);
+			require(
+				completed &&
+					completed->kind() ==
+						sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change &&
+					completed->native_status() == sqlite_busy_status &&
+					completed->native_mapping() == nullptr && !inflight->valid() &&
+					setup.session.valid() && handoff.valid() &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						1U &&
+					lifecycle.last_issued_sequence == before_terminal.last_issued_sequence + 1U &&
+					lifecycle.last_committed_sequence == lifecycle.last_issued_sequence &&
+					lifecycle.outstanding_terminal_permit_count == 3U &&
+					lifecycle.outstanding_terminal_permit_slots == preserved_slots &&
+					target_session != lifecycle.session_reservations.end() &&
+					target_session->phase == session_before.phase &&
+					target_session->origin_sequence == session_before.origin_sequence &&
+					target_session->destination_sequence == session_before.destination_sequence &&
+					target_session->terminal_permit_slot == session_before.terminal_permit_slot &&
+					lifecycle.attachment_groups.size() == 1U &&
+					lifecycle.attachment_groups.front().phase == group_before.phase &&
+					lifecycle.attachment_groups.front().origin_sequence ==
+						group_before.origin_sequence &&
+					lifecycle.attachment_groups.front().destination_sequence ==
+						group_before.destination_sequence &&
+					zero_terminal != lifecycle.zero_effect_terminals.end() &&
+					zero_terminal->attachment == setup.session_request.attachment &&
+					zero_terminal->terminal_sequence == before_terminal.last_issued_sequence + 1U &&
+					zero_terminal->kind ==
+						sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change &&
+					zero_terminal->native_status == sqlite_busy_status && zero_terminal->callback &&
+					*zero_terminal->callback == map_request.callback &&
+					zero_terminal->zero_attachment_effect_receipt &&
+					*zero_terminal->zero_attachment_effect_receipt == zero_effect &&
+					zero_terminal->exact_terminal_receipt_retained &&
+					!zero_terminal->revoked_first_reservation,
+				"later zero native-started terminal changed the established session or group "
+				"while closing its exact no-pointer attempt");
+
+			const auto session_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+					setup.session_request,
+					sqlite_shm_reader_session_terminal_kind::success,
+					identity("test.registry.native-started-later-zero-session-terminal",
+							 marker + 5U));
+			require(setup.fixture.registry
+						->complete_reader_session(
+							*setup.fixture.family_pin, setup.session, session_terminal)
+						.has_value(),
+					"drain later zero native-started session after peer quarantine");
+			const auto after_session =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(after_session.outstanding_terminal_permit_count == 2U &&
+						after_session.outstanding_terminal_permit_slots.size() == 2U,
+					"later zero native-started session drain did not consume one exact active "
+					"slot");
+			const auto unmap_callback = callback(marker + 6U);
+			auto unmap = setup.fixture.registry->begin_reader_unmap(
+				*setup.fixture.family_pin, handoff, unmap_callback);
+			require(unmap && !handoff.valid(), "admit later zero native-started group drain");
+			const auto after_cut =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(after_cut.outstanding_terminal_permit_count == 1U &&
+						after_cut.outstanding_terminal_permit_slots.size() == 1U,
+					"later zero native-started unmap cut did not consume one exact active slot");
+			const auto unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+					*unmap,
+					unmap_callback,
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					0,
+					0,
+					identity("test.registry.native-started-later-zero-unmap-effect", marker + 6U),
+					identity("test.registry.native-started-later-zero-latch", marker + 6U));
+			auto drained = setup.fixture.registry->complete_reader_unmap(
+				*setup.fixture.family_pin, *unmap, unmap_receipt);
+			require(drained &&
+						drained->kind() ==
+							sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+						sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+							*setup.coordinator)
+								.outstanding_terminal_permit_count == 0U,
+					"later zero native-started owned drains did not reach zero permits");
+		}
 	}
 
 	void verify_non_ok_reader_unmap_retains_group_authority()
@@ -2813,10 +4082,13 @@ namespace
 			setup.session_request,
 			sqlite_shm_reader_session_terminal_kind::success,
 			identity("test.registry.reader-non-ok-unmap-terminal", 193U));
-		require(setup.coordinator->complete_reader_session(setup.session, terminal).has_value(),
+		require(setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value(),
 				"close reader before non-OK group unmap");
 		const auto unmap_callback = callback(194U);
-		auto unmap = setup.coordinator->begin_reader_unmap(handoff, unmap_callback);
+		auto unmap = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
 		require(unmap && !handoff.valid(), "admit reader non-OK group unmap");
 		const sqlite_shm_reader_map_request direct_during_unmap{
 			setup.fixture.family,
@@ -2833,15 +4105,25 @@ namespace
 		require(!bypass &&
 					bypass.error().reason == sqlite_shm_lease_rejection_reason::receipt_mismatch,
 				"distinct-connection direct map bypassed admitted registry group unmap cut");
-		auto completed = setup.coordinator->complete_reader_unmap(
-			*unmap, unmap_callback, sqlite_shm_native_cleanup_outcome::non_ok);
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_busy_status,
+			0,
+			0,
+			identity("test.registry.reader-non-ok-unmap-effect", 194U),
+			std::nullopt);
+		auto completed = setup.fixture.registry->complete_reader_unmap(
+			*setup.fixture.family_pin, *unmap, unmap_receipt);
 		const auto lease = setup.coordinator->snapshot();
 		const auto registry = setup.fixture.registry->snapshot();
 		require(
-			!completed &&
-				completed.error().reason ==
-					sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
-				!unmap->valid() && lease.quarantined && lease.reader_attachment_group_count == 1U &&
+			completed &&
+				completed->kind() == sqlite_shm_reader_unmap_terminal_kind::terminal_quarantined &&
+				completed->native_status() == sqlite_busy_status &&
+				completed->outward_status() == sqlite_busy_status && !unmap->valid() &&
+				lease.quarantined && lease.reader_attachment_group_count == 1U &&
 				lease.reader_registry_bound_group_count == 1U &&
 				lease.reader_registry_activity_authority_count == 1U &&
 				registry.active_activity_pin_count == 2U && registry.active_reader_open_count == 1U,
@@ -2858,12 +4140,16 @@ namespace
 				setup.session_request,
 				sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
 				identity("test.registry.reader-counter-initial-cancel", marker));
-			require(
-				setup.coordinator->complete_reader_session(setup.session, cancelled).has_value() &&
-					setup.fixture.registry->snapshot().active_activity_pin_count == 1U,
-				"drain initial candidate before counter exhaustion");
+			require(setup.fixture.registry
+							->complete_reader_session(
+								*setup.fixture.family_pin, setup.session, cancelled)
+							.has_value() &&
+						setup.fixture.registry->snapshot().active_activity_pin_count == 1U,
+					"drain initial candidate before counter exhaustion");
 			sqlite_same_process_shm_registry_test_peer::exhaust_counter(*setup.fixture.registry,
 																		counter);
+			const auto lifecycle_before =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
 			auto request = setup.pre_sqlite;
 			request.read_transaction_epoch =
 				identity("test.registry.reader-counter-transaction", marker);
@@ -2873,6 +4159,8 @@ namespace
 			auto exhausted = setup.fixture.registry->admit_reader_session_before_sqlite(
 				*setup.fixture.family_pin, setup.open, request);
 			const auto after = setup.coordinator->snapshot();
+			const auto lifecycle_after =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
 			require(exhausted &&
 						exhausted->kind() ==
 							sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
@@ -2885,19 +4173,230 @@ namespace
 						after.reader_registry_activity_authority_count == 0U &&
 						setup.fixture.registry->snapshot().active_activity_pin_count == 1U,
 					"candidate counter exhaustion left partial proposal custody");
+			require(
+				lifecycle_after.last_issued_sequence == lifecycle_before.last_issued_sequence &&
+					lifecycle_after.last_committed_sequence ==
+						lifecycle_before.last_committed_sequence &&
+					lifecycle_after.outstanding_terminal_permit_slots ==
+						lifecycle_before.outstanding_terminal_permit_slots &&
+					lifecycle_after.attachment_reservations.size() ==
+						lifecycle_before.attachment_reservations.size() &&
+					lifecycle_after.session_reservations.size() ==
+						lifecycle_before.session_reservations.size() &&
+					lifecycle_after.map_attempts.size() == lifecycle_before.map_attempts.size() &&
+					lifecycle_after.events.size() == lifecycle_before.events.size() &&
+					lifecycle_after.live_custody_kind_counts ==
+						lifecycle_before.live_custody_kind_counts &&
+					lifecycle_after.custody_state_counts == lifecycle_before.custody_state_counts,
+				"candidate/activity/sequence mint failure rejects before lifecycle issue, "
+				"terminal reservation, record, event, or custody publication");
 			auto replay = setup.fixture.registry->admit_reader_session_before_sqlite(
 				*setup.fixture.family_pin, setup.open, request);
+			const auto expected_replay_reason = counter ==
+					detail::sqlite_shm_registry_counter_for_testing::reader_lifecycle_sequence
+				? sqlite_shm_lease_rejection_reason::generation_exhausted
+				: sqlite_shm_lease_rejection_reason::quarantined;
 			require(replay &&
 						replay->kind() ==
 							sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
 						replay->rejection() &&
-						replay->rejection()->reason ==
-							sqlite_shm_lease_rejection_reason::quarantined &&
+						replay->rejection()->reason == expected_replay_reason &&
 						!replay->proposal_request() && !replay->take_session(),
-					"candidate counter exhaustion replay reused a partial identity");
+					"candidate/activity/sequence exhaustion replay reused a partial identity or "
+					"misclassified the source-specific terminal state");
 		};
 		run(detail::sqlite_shm_registry_counter_for_testing::reader_attachment_epoch, 195U);
 		run(detail::sqlite_shm_registry_counter_for_testing::activity_token, 197U);
+		run(detail::sqlite_shm_registry_counter_for_testing::reader_lifecycle_sequence, 199U);
+	}
+
+	void verify_reader_lifecycle_compact_export_requires_xclose_evidence()
+	{
+		constexpr std::uint8_t marker = 230U;
+		auto setup = make_reader_candidate_setup(marker);
+		const auto old_request = setup.session_request;
+		const auto map_request =
+			reader_attachment_map_request(old_request, static_cast<std::uint8_t>(marker + 1U));
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight.has_value(), "begin compact revoked-tombstone reader map");
+		const auto zero_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+				*inflight,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+				map_request,
+				sqlite_busy_status,
+				nullptr,
+				0,
+				identity("test.registry.reader-compact-zero-effect", marker));
+		auto revoked = setup.fixture.registry->complete_reader_zero_attachment_map(
+			*setup.fixture.family_pin, *inflight, zero_receipt, setup.session);
+		const auto revoked_view =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(revoked && revoked_view.attachment_reservations.size() == 1U &&
+					revoked_view.attachment_reservations.front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::revoked_no_map &&
+					revoked_view.compact_tombstone_count == 1U,
+				"first no-map terminal retains one compactable revoked reservation");
+		const auto revoked_terminal_sequence = revoked_view.last_committed_sequence;
+		const auto source_identity =
+			sqlite_same_process_shm_registry_test_peer::reader_lifecycle_sequence_source_identity(
+				*setup.fixture.registry);
+		require(setup.fixture.registry->release_reader_open(setup.open).has_value(),
+				"release reader open whose local lineage has no issuer-sealed xClose receipt");
+		retire_writer(*setup.coordinator, setup.holder, marker + 2U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke xClose-negative writer eligibility");
+		const auto before_release = setup.fixture.registry->snapshot();
+		require(before_release.retired_reader_lifecycle_tombstone_count == 0U &&
+					sqlite_same_process_shm_registry_test_peer::
+							retired_reader_lifecycle_tombstone_count(*setup.fixture.registry) == 0U,
+				"local revoked reservation is not compact authority before family release");
+		auto release = setup.fixture.registry->release_family(*setup.fixture.family_pin);
+		const auto rejected = setup.fixture.registry->snapshot();
+		require(
+			!release &&
+				release.error().reason == sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+				release.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+				!setup.fixture.family_pin->valid() && rejected.quarantined_family_count == 1U &&
+				rejected.retired_reader_lifecycle_tombstone_count == 0U &&
+				sqlite_same_process_shm_registry_test_peer::
+						retired_reader_lifecycle_tombstone_count(*setup.fixture.registry) == 0U &&
+				!sqlite_same_process_shm_registry_test_peer::
+					retired_reader_lifecycle_tombstone_matches(*setup.fixture.registry,
+															   old_request.attachment) &&
+				sqlite_same_process_shm_registry_test_peer::
+						reader_lifecycle_sequence_source_identity(*setup.fixture.registry) ==
+					source_identity &&
+				sqlite_same_process_shm_registry_test_peer::reader_lifecycle_last_issued_sequence(
+					*setup.fixture.registry) == revoked_terminal_sequence,
+			"family retirement/export fails closed when local release lacks issuer-sealed exact "
+			"xClose evidence");
+		auto successor = setup.fixture.registry->install_or_join_family(*setup.fixture.alias,
+																		setup.fixture.family);
+		require(!successor,
+				"xClose-negative family quarantine cannot be bypassed by successor installation");
+	}
+
+	void verify_reader_lifecycle_sequence_exhaustion_precedes_predelegate()
+	{
+		constexpr std::uint8_t marker = 240U;
+		auto fixture = make_fixture(marker, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve lifecycle-exhaustion predelegate coordinator");
+		auto pair = make_bound_pending_pair(fixture, marker);
+		auto eligibility = install_eligibility(*coordinator,
+											   fixture.family,
+											   pair.first.request.connection_token,
+											   pair.first.request.attachment.open_epoch(),
+											   marker + 1U);
+		std::array<sqlite_shm_pending_mapping*, 2U> pending{
+			&pair.first_pending,
+			&pair.second_pending,
+		};
+		auto gate = fixture.registry->advance_positive_writer_attachment_gate(
+			*fixture.family_pin, pair.first.request.attachment, pending, eligibility);
+		require(gate && gate->holders.size() == 2U,
+				"publish two-page writer generation for lifecycle exhaustion");
+		auto holders = std::move(gate->holders);
+		auto pre_sqlite =
+			reader_pre_sqlite_request(fixture,
+									  identity("test.registry.reader-sequence-connection", marker),
+									  identity("test.registry.reader-sequence-main-native", marker),
+									  identity("test.registry.reader-sequence-main-xopen", marker),
+									  identity("test.registry.reader-sequence-open", marker),
+									  identity("test.registry.reader-sequence-cohort", marker),
+									  marker);
+		auto open = acquire_reader_open(fixture, pre_sqlite);
+		auto first = fixture.registry->admit_reader_session_before_sqlite(
+			*fixture.family_pin, open, pre_sqlite);
+		require(first && first->proposal_request(),
+				"reserve lifecycle-exhaustion first reader session");
+		const auto first_request = *first->proposal_request();
+		auto first_session = first->take_session();
+		const auto page_zero = reader_attachment_map_request(first_request, marker + 1U, 0);
+		auto first_map =
+			fixture.registry->begin_reader_map(*fixture.family_pin, *first_session, page_zero);
+		require(first_map.has_value(), "begin lifecycle-exhaustion first reader map");
+		auto first_commit = fixture.registry->commit_reader_map(
+			*fixture.family_pin,
+			*first_map,
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+				page_zero,
+				holders.front().generation(),
+				mapping(0, pair.first.native_page.get(), 8192U),
+				identity("test.registry.reader-sequence-zero-resize", marker)),
+			*first_session);
+		require(first_commit && first_commit->formed_group(),
+				"form lifecycle-exhaustion active reader group");
+		auto handoff = first_commit->take_handoff();
+		require(handoff.has_value(), "retain lifecycle-exhaustion group handoff");
+
+		auto second_pre_sqlite = pre_sqlite;
+		second_pre_sqlite.read_transaction_epoch =
+			identity("test.registry.reader-sequence-transaction", marker + 2U);
+		second_pre_sqlite.decode_attempt =
+			identity("test.registry.reader-sequence-decode", marker + 2U);
+		second_pre_sqlite.authority_read_receipt =
+			identity("test.registry.reader-sequence-authority", marker + 2U);
+		auto second = fixture.registry->admit_reader_session_before_sqlite(
+			*fixture.family_pin, open, second_pre_sqlite);
+		require(second && second->proposal_request(),
+				"join lifecycle-exhaustion active reader group");
+		const auto second_request = *second->proposal_request();
+		auto second_session = second->take_session();
+		const auto page_one = reader_attachment_map_request(second_request, marker + 3U, 1);
+		const auto registry_before = fixture.registry->snapshot();
+		const auto lease_before = coordinator->snapshot();
+		const auto lifecycle_before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		const auto last_issued_before =
+			sqlite_same_process_shm_registry_test_peer::reader_lifecycle_last_issued_sequence(
+				*fixture.registry);
+		sqlite_same_process_shm_registry_test_peer::exhaust_reader_lifecycle_sequences(
+			*fixture.registry);
+		auto rejected =
+			fixture.registry->begin_reader_map(*fixture.family_pin, *second_session, page_one);
+		const auto registry_after = fixture.registry->snapshot();
+		const auto lease_after = coordinator->snapshot();
+		const auto lifecycle_after =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(
+			!rejected &&
+				rejected.error().reason ==
+					sqlite_shm_lease_rejection_reason::generation_exhausted &&
+				second_session->valid() && handoff->valid() &&
+				registry_after.active_activity_pin_count ==
+					registry_before.active_activity_pin_count &&
+				lease_after.reader_registry_activity_authority_count ==
+					lease_before.reader_registry_activity_authority_count &&
+				lease_after.reader_inflight_count == lease_before.reader_inflight_count &&
+				lease_after.reader_attachment_live_member_count ==
+					lease_before.reader_attachment_live_member_count &&
+				lifecycle_after.attachment_reservations.size() ==
+					lifecycle_before.attachment_reservations.size() &&
+				lifecycle_after.session_reservations.size() ==
+					lifecycle_before.session_reservations.size() &&
+				lifecycle_after.attachment_groups.size() ==
+					lifecycle_before.attachment_groups.size() &&
+				lifecycle_after.map_attempts.size() == lifecycle_before.map_attempts.size() &&
+				lifecycle_after.events.size() == lifecycle_before.events.size() &&
+				lifecycle_after.outstanding_terminal_permit_count ==
+					lifecycle_before.outstanding_terminal_permit_count &&
+				lifecycle_after.outstanding_terminal_permit_slots ==
+					lifecycle_before.outstanding_terminal_permit_slots &&
+				lifecycle_after.attachment_reservation_phase_counts ==
+					lifecycle_before.attachment_reservation_phase_counts &&
+				lifecycle_after.session_reservation_phase_counts ==
+					lifecycle_before.session_reservation_phase_counts &&
+				lifecycle_after.live_custody_kind_counts ==
+					lifecycle_before.live_custody_kind_counts &&
+				lifecycle_after.custody_state_counts == lifecycle_before.custody_state_counts &&
+				sqlite_same_process_shm_registry_test_peer::reader_lifecycle_last_issued_sequence(
+					*fixture.registry) == last_issued_before,
+			"sequence exhaustion rejects before predelegate, map record, or native custody "
+			"publication");
 	}
 
 	void verify_reader_open_token_exhaustion_has_no_partial_open()
@@ -2983,7 +4482,9 @@ namespace
 			setup.session_request,
 			sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
 			identity("test.registry.reader-cross-alias-cancel", 202U));
-		require(setup.coordinator->complete_reader_session(setup.session, cancelled).has_value(),
+		require(setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, cancelled)
+					.has_value(),
 				"cancel original cross-alias candidate");
 		require(setup.fixture.registry->release_reader_open(second_open).has_value() &&
 					setup.fixture.registry->release_reader_open(setup.open).has_value(),
@@ -3040,8 +4541,11 @@ namespace
 			setup.session_request,
 			sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
 			identity("test.registry.reader-lineage-bound-cancel", 206U));
-		require(setup.coordinator->complete_reader_session(setup.session, cancel_bound).has_value(),
-				"cancel bound lineage before reverse mixing test");
+		require(
+			setup.fixture.registry
+				->complete_reader_session(*setup.fixture.family_pin, setup.session, cancel_bound)
+				.has_value(),
+			"cancel bound lineage before reverse mixing test");
 
 		auto direct_session = setup.coordinator->begin_reader_session(direct_request);
 		require(direct_session && direct_session->valid(),
@@ -3100,7 +4604,9 @@ namespace
 					setup.session_request,
 					sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
 					identity("test.registry.reader-open-active-cancel", 210U));
-			require(setup.coordinator->complete_reader_session(setup.session, cancel_candidate)
+			require(setup.fixture.registry
+							->complete_reader_session(
+								*setup.fixture.family_pin, setup.session, cancel_candidate)
 							.has_value() &&
 						setup.coordinator->snapshot().reader_registry_open_count == 1U,
 					"drain candidate while retaining active open lineage");
@@ -3155,7 +4661,9 @@ namespace
 					setup.session_request,
 					sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
 					identity("test.registry.reader-open-abandon-cancel", 214U));
-			require(setup.coordinator->complete_reader_session(setup.session, cancel_candidate)
+			require(setup.fixture.registry
+						->complete_reader_session(
+							*setup.fixture.family_pin, setup.session, cancel_candidate)
 						.has_value(),
 					"drain candidate before open abandonment race");
 			const auto direct = direct_reader_session_request(setup, 215U);
@@ -3208,8 +4716,11 @@ namespace
 				setup.session_request,
 				sqlite_shm_reader_session_terminal_kind::success,
 				identity("test.registry.reader-open-drain-terminal", 218U));
-			require(setup.coordinator->complete_reader_session(setup.session, terminal).has_value(),
-					"close active session before established-group drain check");
+			require(
+				setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value(),
+				"close active session before established-group drain check");
 			const auto fresh_direct = direct_reader_session_request(setup, 218U);
 			const auto fresh_raw = direct_reader_map_request(setup, 218U);
 
@@ -3228,12 +4739,24 @@ namespace
 					"open abandonment admitted a fresh peer or consumed the established drain");
 
 			const auto unmap_callback = callback(219U);
-			auto unmap = setup.coordinator->begin_reader_unmap(handoff, unmap_callback);
+			auto unmap = setup.fixture.registry->begin_reader_unmap(
+				*setup.fixture.family_pin, handoff, unmap_callback);
 			require(unmap && unmap->valid() && !handoff.valid(),
 					"open abandonment disallowed the established group's owned drain route");
-			auto completed = setup.coordinator->complete_reader_unmap(
-				*unmap, unmap_callback, sqlite_shm_native_cleanup_outcome::confirmed_success);
-			auto replay = setup.coordinator->begin_reader_unmap(handoff, callback(220U));
+			const auto unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+					*unmap,
+					unmap_callback,
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					0,
+					0,
+					identity("test.registry.reader-open-drain-unmap-effect", 219U),
+					identity("test.registry.reader-open-drain-latch-reset", 219U));
+			auto completed = setup.fixture.registry->complete_reader_unmap(
+				*setup.fixture.family_pin, *unmap, unmap_receipt);
+			auto replay = setup.fixture.registry->begin_reader_unmap(
+				*setup.fixture.family_pin, handoff, callback(220U));
 			const auto lease = setup.coordinator->snapshot();
 			require(!completed && !unmap->valid() && !replay &&
 						completed.error().reason ==
@@ -7975,8 +9498,11 @@ int main()
 		verify_registry_reader_liveness_loss_is_sticky_and_retains_authority();
 		verify_registry_reader_terminal_failures_are_all_or_none();
 		verify_peer_quarantine_preserves_established_registry_group_drain();
+		verify_native_started_reader_terminals_survive_peer_quarantine();
 		verify_non_ok_reader_unmap_retains_group_authority();
 		verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity();
+		verify_reader_lifecycle_compact_export_requires_xclose_evidence();
+		verify_reader_lifecycle_sequence_exhaustion_precedes_predelegate();
 		verify_reader_open_token_exhaustion_has_no_partial_open();
 		verify_reader_open_rejects_wrong_family_pin_and_cross_alias();
 		verify_reader_lineage_mixing_is_family_wide_and_bidirectional();

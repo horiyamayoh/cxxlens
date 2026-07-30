@@ -154,6 +154,17 @@ namespace cxxlens::sdk::detail
 		sqlite_shm_reader_custody_state::transferred_to_durable_tombstone,
 	};
 
+	enum class sqlite_shm_reader_terminal_quarantine_reason : std::uint8_t
+	{
+		none,
+		owner_abandoned,
+		presented_invalid,
+		peer_quarantine,
+		native_non_ok_or_unknown,
+		injected_commit_failure,
+		internal_failure,
+	};
+
 	[[nodiscard]] constexpr bool is_sqlite_shm_reader_custody_transition(
 		const sqlite_shm_reader_custody_kind kind,
 		const sqlite_shm_reader_custody_state origin,

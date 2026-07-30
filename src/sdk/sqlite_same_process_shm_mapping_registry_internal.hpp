@@ -34,6 +34,7 @@ namespace cxxlens::sdk
 			activity_token,
 			reader_open_token,
 			reader_attachment_epoch,
+			reader_lifecycle_sequence,
 		};
 	} // namespace detail
 
@@ -323,6 +324,9 @@ namespace cxxlens::sdk
 		std::size_t cross_binding_rejection_count{};
 		std::size_t ambiguous_lookup_count{};
 		std::size_t generation_source_count{};
+		std::size_t reader_lifecycle_sequence_source_count{};
+		std::size_t retired_reader_lifecycle_tombstone_count{};
+		std::uint64_t reader_lifecycle_last_issued_sequence{};
 		bool process_live{};
 		bool registry_quarantined{};
 	};
@@ -345,6 +349,7 @@ namespace cxxlens::sdk
 		std::size_t reader_open_count{};
 		sqlite_shm_registry_family_phase phase{sqlite_shm_registry_family_phase::retired};
 		sqlite_shm_mapping_lease_snapshot coordinator;
+		std::size_t reader_lifecycle_compact_tombstone_count{};
 		bool coordinator_present{};
 		bool lookup_visible{};
 	};
@@ -658,6 +663,13 @@ namespace cxxlens::sdk
 		valid_for_predelegation(const sqlite_shm_reader_session_request& request) const noexcept;
 		[[nodiscard]] bool retains_exact_lifetimes(
 			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept;
+		/**
+		 * Validates the exact already-owned terminal-drain binding without consulting fresh
+		 * admission latches. Family quarantine revokes new work, but cannot strand an admitted
+		 * native unmap while its exact activity/open controls and process coordinates remain held.
+		 */
+		[[nodiscard]] bool retains_exact_owned_drain_lifetimes(
+			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept;
 		[[nodiscard]] bool validate_active_authority(
 			const sqlite_shm_registry_family_pin& family,
 			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept;
@@ -717,6 +729,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool valid_for_predelegation(
 			const sqlite_shm_reader_attachment_map_request& request) const noexcept;
 		[[nodiscard]] bool validate_active_authority(
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_attachment_map_request& request) const noexcept;
+		[[nodiscard]] bool retains_exact_owned_terminal_lifetimes(
 			const sqlite_shm_registry_family_pin& family,
 			const sqlite_shm_reader_attachment_map_request& request) const noexcept;
 		void invalidate_activity_for_testing() noexcept;
@@ -822,6 +837,19 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_attachment_map_inflight& inflight,
 			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
 			sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<void>
+		complete_reader_session(sqlite_shm_registry_family_pin& family,
+								sqlite_shm_reader_session& session,
+								const sqlite_shm_reader_session_terminal_receipt& receipt) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_obligation>
+		begin_reader_unmap(sqlite_shm_registry_family_pin& family,
+						   sqlite_shm_reader_handoff& handoff,
+						   const sqlite_shm_callback_execution_receipt& callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_terminal_result>
+		complete_reader_unmap(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_unmap_obligation& unmap,
+			const sqlite_shm_verified_reader_unmap_terminal_receipt& receipt) noexcept;
 		/**
 		 * Installs one validator-sealed registry-bound writer pending at the exact original
 		 * family/activity boundary. The registry mutex remains held through the lease transition.
@@ -910,6 +938,15 @@ namespace cxxlens::sdk
 			const sqlite_shm_lease_family_binding& family,
 			const sqlite_backend_opaque_identity& alias_lifetime) noexcept;
 		[[nodiscard]] const void* generation_source_identity_for_testing() const noexcept;
+		[[nodiscard]] const void*
+		reader_lifecycle_sequence_source_identity_for_testing() const noexcept;
+		[[nodiscard]] std::uint64_t
+		reader_lifecycle_last_issued_sequence_for_testing() const noexcept;
+		void exhaust_reader_lifecycle_sequence_source_for_testing() noexcept;
+		[[nodiscard]] std::size_t
+		retired_reader_lifecycle_tombstone_count_for_testing() const noexcept;
+		[[nodiscard]] bool retired_reader_lifecycle_tombstone_matches_for_testing(
+			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept;
 		void lock_state_mutex_for_testing();
 		void unlock_state_mutex_for_testing();
 
