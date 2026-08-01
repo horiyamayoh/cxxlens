@@ -549,11 +549,12 @@ namespace cxxlens::sdk
 	};
 
 	/**
-	 * Closed outward projection after an ambiguous first proposal-map terminal.
+	 * Closed outward projection after an ambiguous proposal-map terminal.
 	 *
-	 * The coordinator has retained the exact open/reservation-scoped opaque custody and every
-	 * required lifetime pin in a process-lifetime quarantine tombstone. No proposal group,
-	 * pointer, native unmap authority, or native close authority is exposed by this result.
+	 * A first-map ambiguity retains the exact open/reservation-scoped opaque custody. An ambiguity
+	 * after a group exists retains that exact group, session, lifetime, and any cut custody. Both
+	 * paths use a process-lifetime quarantine tombstone and expose no pointer, guessed native
+	 * effect, or successor authority.
 	 */
 	class sqlite_shm_reader_opaque_attachment_uncertainty_result
 	{

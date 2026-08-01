@@ -7281,11 +7281,15 @@ namespace cxxlens::sdk
 					const auto map_attempt =
 						find_by_token(reader_attachment_maps_, inflight.token_);
 					const auto owner = find_by_token(reader_sessions_, session.token_);
+					const auto first_reservation = owner != reader_sessions_.end() &&
+						owner->phase == reader_session_record_phase::reserved_for_first_map;
+					const auto existing_group = owner != reader_sessions_.end() &&
+						owner->phase == reader_session_record_phase::active_group_owner;
 					if (map_attempt == reader_attachment_maps_.end() ||
 						map_attempt->phase != reader_phase::inflight ||
 						map_attempt->session_token != session.token_ ||
 						owner == reader_sessions_.end() ||
-						owner->phase != reader_session_record_phase::reserved_for_first_map ||
+						(!first_reservation && !existing_group) ||
 						owner->generation != inflight.generation_ ||
 						owner->generation != session.generation_ ||
 						owner->request.attachment != map_attempt->request.expected_attachment)
@@ -7304,14 +7308,90 @@ namespace cxxlens::sdk
 						map_attempt->group_token != reservation->token ||
 						reservation->expected != owner->request.attachment ||
 						reservation->generation != owner->generation ||
+						reservation->registry_bound != registry_route ||
+						map_attempt->registry_predelegate_authority.has_value() !=
+							(registry_route && map_attempt->retirement_blocker))
+					{
+						quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																	 owner->token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					if (existing_group)
+					{
+						const auto cut_sealing =
+							reservation->phase == reader_attachment_group_phase::unmap_cut_sealing;
+						if (reservation->reservation_phase !=
+								sqlite_shm_reader_attachment_reservation_phase::observed_present ||
+							(!cut_sealing &&
+							 reservation->phase != reader_attachment_group_phase::active) ||
+							!reservation->observed_identity || reservation->members.empty() ||
+							reservation->audits.empty() ||
+							owner->lifecycle_phase !=
+								sqlite_shm_reader_session_reservation_phase::
+									promoted_to_group_owner ||
+							map_attempt->potential_group_cut_sequence_slot != 0U ||
+							map_attempt->potential_group_terminal_sequence_slot != 0U ||
+							!reader_group_custody_census_is_exact_locked(
+								*reservation, cut_sealing, false, true) ||
+							(registry_route &&
+							 (!reservation->registry_activity_authority ||
+							  !reservation->registry_activity_authority
+								   ->retains_exact_owned_drain_lifetimes(reservation->expected) ||
+							  (map_attempt->retirement_blocker &&
+							   !map_attempt->registry_predelegate_authority
+									->retains_exact_owned_terminal_lifetimes(
+										*registry_family, map_attempt->request)))))
+						{
+							map_attempt->quarantine_reason =
+								sqlite_shm_reader_terminal_quarantine_reason::internal_failure;
+							quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																		 owner->token);
+							inflight.disarm();
+							session.disarm();
+							return sqlite_shm_unexpected(ambiguous());
+						}
+
+						map_attempt->quarantine_reason =
+							sqlite_shm_reader_terminal_quarantine_reason::native_non_ok_or_unknown;
+						quarantine_reader_map_terminal_commit_locked(map_attempt->token,
+																	 owner->token);
+						inflight.disarm();
+						session.disarm();
+						if (registry_route)
+						{
+							auto open = std::find_if(
+								registry_reader_opens_.begin(),
+								registry_reader_opens_.end(),
+								[&reservation](const registry_reader_open_record& candidate)
+								{
+									return candidate.token ==
+										reservation->expected.registry_open_token() &&
+										reader_attachment_matches_open_epoch_binding(
+											   reservation->expected, candidate.binding);
+								});
+							if (open == registry_reader_opens_.end())
+							{
+								emergency_quarantine_.store(true, std::memory_order_release);
+								return sqlite_shm_unexpected(ambiguous());
+							}
+							quarantine_reader_open_locked(
+								*open,
+								reservation->reservation_destination_sequence,
+								sqlite_shm_reader_terminal_quarantine_reason::
+									native_non_ok_or_unknown);
+						}
+						return sqlite_shm_reader_opaque_attachment_uncertainty_result{};
+					}
+
+					if (!first_reservation ||
 						reservation->reservation_phase !=
 							sqlite_shm_reader_attachment_reservation_phase::reserved ||
 						reservation->observed_identity || !reservation->members.empty() ||
 						!reservation->audits.empty() ||
-						reservation->registry_bound != registry_route ||
-						reservation->registry_activity_authority.has_value() != registry_route ||
-						map_attempt->registry_predelegate_authority.has_value() !=
-							(registry_route && map_attempt->retirement_blocker))
+						reservation->registry_activity_authority.has_value() != registry_route)
 					{
 						quarantine_reader_map_terminal_commit_locked(map_attempt->token,
 																	 owner->token);

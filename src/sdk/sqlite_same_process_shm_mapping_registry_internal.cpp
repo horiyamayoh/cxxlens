@@ -1608,9 +1608,9 @@ namespace cxxlens::sdk
 							return rejection(sqlite_shm_lease_rejection_reason::stale_token,
 											 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 
-						// This is the terminal disposition of an already-native-started first
-						// map. It intentionally bypasses fresh-admission gates and retains both
-						// registry activity owners inside the opaque quarantine tombstone.
+						// This is the terminal disposition of an already-native-started map. It
+						// intentionally bypasses fresh-admission gates and retains the first-map
+						// opaque owners or the existing-group/cut owners in durable quarantine.
 						result.emplace(family->coordinator
 										   ->complete_registry_reader_opaque_attachment_uncertainty(
 											   pin, inflight, session));

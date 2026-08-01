@@ -6887,6 +6887,62 @@ namespace
 		clean_fixture(setup.fixture);
 	}
 
+	void verify_registry_unmap_cut_quarantines_ambiguous_preexisting_map()
+	{
+		constexpr std::uint8_t marker = 45U;
+		auto setup = make_reader_candidate_setup(marker);
+		auto handoff = form_reader_group(setup, marker + 1U);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 2U);
+		auto map = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(map && map->valid(), "begin registry ambiguous map before cut");
+		const auto unmap_callback = callback(marker + 3U);
+		auto unmap = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
+		require(unmap && !handoff.valid() && unmap->valid() && !unmap->native_effect_ready(),
+				"registry cut freezes the earlier ambiguous map attempt");
+
+		auto opaque = setup.fixture.registry->complete_reader_opaque_attachment_uncertainty(
+			*setup.fixture.family_pin, *map, setup.session);
+		const auto lease = setup.coordinator->snapshot();
+		const auto registry = setup.fixture.registry->snapshot();
+		const auto family = setup.fixture.registry->family_snapshot(setup.fixture.family);
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(opaque.has_value(),
+				"registry post-cut ambiguity reaches its closed outward terminal");
+		require(opaque->outward_status() == sqlite_ioerr_status &&
+					opaque->native_mapping() == nullptr,
+				"registry post-cut ambiguity projects IOERR/null");
+		require(!map->valid() && !setup.session.valid() && !unmap->valid() &&
+					!unmap->native_effect_ready(),
+				"registry post-cut ambiguity invalidates map, session, and cut cleanup authority");
+		require(lease.quarantined && lease.reader_attachment_group_count == 1U &&
+					lease.reader_attachment_live_member_count == 0U &&
+					lease.reader_opaque_attachment_uncertainty_count == 0U,
+				"registry post-cut ambiguity retains one quarantined existing group");
+		require(registry.quarantined_family_count == 1U &&
+					family.exact_quarantined_match_count == 1U,
+				"registry post-cut ambiguity propagates exact family quarantine");
+		require(lifecycle.attachment_groups.size() == 1U &&
+					lifecycle.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::terminal_quarantined &&
+					lifecycle.open_epochs.size() == 1U &&
+					lifecycle.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined &&
+					lifecycle.outstanding_terminal_permit_count == 0U,
+				"registry propagates post-cut map ambiguity to the exact group and open");
+
+		auto rejected = setup.fixture.registry->poll_reader_unmap_cut(
+			*setup.fixture.family_pin, *unmap, unmap_callback);
+		require(!rejected &&
+					rejected.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!unmap->valid() &&
+					setup.coordinator->snapshot().reader_attachment_group_count == 1U,
+				"registry quarantined cut rejects native unmap without a retry path");
+	}
+
 	void verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity()
 	{
 		const auto run = [](const detail::sqlite_shm_registry_counter_for_testing counter,
@@ -13423,6 +13479,7 @@ int main()
 		verify_registry_reader_unmap_cut_timeout_synchronizes_quarantine();
 		verify_registry_unmap_cut_drains_preexisting_zero_attachment_map();
 		verify_registry_unmap_cut_suppresses_preexisting_mapped_result();
+		verify_registry_unmap_cut_quarantines_ambiguous_preexisting_map();
 		verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity();
 		verify_reader_open_close_binding_and_family_recreation_are_exact();
 		verify_active_reader_group_blocks_close_until_confirmed_unmap();

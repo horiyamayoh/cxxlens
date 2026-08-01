@@ -10167,6 +10167,87 @@ namespace
 				"revoke mapped-suppression fixture writer gate");
 	}
 
+	void verify_reader_unmap_cut_quarantines_ambiguous_preexisting_map()
+	{
+		constexpr std::uint8_t marker = 33U;
+		const auto binding = family(marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int page{};
+		auto writer = install_live_writer(coordinator,
+										  binding,
+										  identity("test.connection", marker),
+										  identity("test.open-epoch", marker),
+										  marker,
+										  &page);
+		auto reader = install_live_reader_group(coordinator,
+												binding,
+												identity("test.connection", marker + 1U),
+												marker + 1U,
+												writer.holder.generation(),
+												&page);
+
+		auto map_request = reader_attachment_request(binding,
+													 identity("test.connection", marker + 1U),
+													 marker + 1U,
+													 2,
+													 marker + 1U,
+													 0,
+													 writer.holder.generation());
+		map_request.callback = callback(3U, marker + 2U);
+		auto map = coordinator.begin_reader_map(reader.session, map_request);
+		require(map && map->valid(), "begin ambiguous map before the unmap cut");
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		const auto map_token = only_reader_map_attempt(before).map_token;
+		const auto session_token = only_session_reservation(before).session_token;
+		const auto unmap_callback = callback(7U, marker + 3U);
+		auto unmap = coordinator.begin_reader_unmap(
+			reader.handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
+		require(unmap && !reader.handoff.valid() && unmap->valid() && !unmap->native_effect_ready(),
+				"cut freezes the earlier ambiguous map attempt");
+
+		auto opaque =
+			coordinator.complete_reader_opaque_attachment_uncertainty(*map, reader.session);
+		const auto snapshot = coordinator.snapshot();
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		const auto* map_quarantine = find_reader_terminal_quarantine(lifecycle, map_token);
+		const auto* session_quarantine = find_reader_terminal_quarantine(lifecycle, session_token);
+		require(opaque.has_value(), "post-cut ambiguity reaches its closed outward terminal");
+		require(opaque->outward_status() == sqlite_ioerr_status &&
+					opaque->native_mapping() == nullptr,
+				"post-cut ambiguity projects IOERR/null");
+		require(!map->valid() && !reader.session.valid() && !unmap->valid() &&
+					!unmap->native_effect_ready(),
+				"post-cut ambiguity invalidates map, session, and cut cleanup authority");
+		require(snapshot.quarantined && snapshot.reader_attachment_group_count == 1U &&
+					snapshot.reader_attachment_live_member_count == 0U &&
+					snapshot.reader_opaque_attachment_uncertainty_count == 0U,
+				"post-cut ambiguity retains one quarantined group without first-map opacity");
+		require(lifecycle.attachment_groups.size() == 1U &&
+					lifecycle.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::terminal_quarantined &&
+					lifecycle.outstanding_terminal_permit_count == 0U &&
+					all_reader_live_custody_released(lifecycle),
+				"post-cut ambiguity transfers every exact group/cut custody to quarantine");
+		require(
+			map_quarantine != nullptr && session_quarantine != nullptr &&
+				map_quarantine->reason ==
+					detail::sqlite_shm_reader_terminal_quarantine_reason::
+						native_non_ok_or_unknown &&
+				session_quarantine->reason ==
+					detail::sqlite_shm_reader_terminal_quarantine_reason::native_non_ok_or_unknown,
+			"post-cut ambiguity retains exact map/session terminal reasons");
+
+		auto rejected = coordinator.poll_reader_unmap_cut(*unmap, unmap_callback);
+		require(!rejected &&
+					rejected.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!unmap->valid() && coordinator.snapshot().reader_attachment_group_count == 1U,
+				"quarantined cut rejects native unmap without reconstructing cleanup authority");
+	}
+
 	void verify_equal_pointer_reader_connections_unmap_independently()
 	{
 		constexpr std::uint8_t marker = 218U;
@@ -15277,6 +15358,7 @@ int main()
 		verify_reader_unmap_cut_wait_policy_is_fail_closed();
 		verify_reader_unmap_cut_drains_preexisting_zero_attachment_map();
 		verify_reader_unmap_cut_suppresses_preexisting_mapped_result();
+		verify_reader_unmap_cut_quarantines_ambiguous_preexisting_map();
 		verify_equal_pointer_reader_connections_unmap_independently();
 		verify_callback_free_cached_member_use_requires_a_live_session_owner();
 		verify_reader_lifecycle_sequence_source_is_shared_and_exhausts_without_partials();
