@@ -917,6 +917,24 @@ namespace cxxlens::sdk
 			const sqlite_shm_reader_open_authority& open,
 			sqlite_shm_reader_close_obligation& close,
 			const sqlite_shm_verified_reader_close_terminal_receipt& receipt) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_live_close_obligation>
+		begin_reader_live_close(sqlite_shm_registry_family_pin& family,
+								const sqlite_shm_reader_open_authority& open,
+								sqlite_shm_reader_handoff& handoff,
+								const sqlite_shm_reader_unmap_request& unmap_request,
+								const sqlite_shm_reader_close_request& close_request) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_terminal_result>
+		complete_reader_live_close_unmap(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_open_authority& open,
+			sqlite_shm_reader_live_close_obligation& close,
+			const sqlite_shm_verified_reader_unmap_terminal_receipt& receipt) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_terminal_result>
+		complete_reader_live_close(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_open_authority& open,
+			sqlite_shm_reader_live_close_obligation& close,
+			const sqlite_shm_verified_reader_close_terminal_receipt& receipt) noexcept;
 		/**
 		 * Installs one validator-sealed registry-bound writer pending at the exact original
 		 * family/activity boundary. The registry mutex remains held through the lease transition.

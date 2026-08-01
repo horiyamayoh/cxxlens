@@ -568,8 +568,42 @@ namespace cxxlens::sdk
 					std::move(latch_reset_receipt)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_unmap_terminal_receipt
+		reader_unmap_terminal(const sqlite_shm_reader_live_close_obligation& close,
+							  sqlite_shm_callback_execution_receipt callback,
+							  const sqlite_shm_reader_unmap_evidence_kind evidence_kind,
+							  std::optional<int> native_status,
+							  const int caller_delete_flag,
+							  const int delegated_delete_flag,
+							  std::optional<sqlite_backend_opaque_identity> native_effect_receipt,
+							  std::optional<sqlite_backend_opaque_identity> latch_reset_receipt)
+		{
+			return {close,
+					std::move(callback),
+					evidence_kind,
+					native_status,
+					caller_delete_flag,
+					delegated_delete_flag,
+					std::move(native_effect_receipt),
+					std::move(latch_reset_receipt)};
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_close_terminal_receipt
 		reader_close_terminal(const sqlite_shm_reader_close_obligation& close,
+							  sqlite_shm_callback_execution_receipt callback,
+							  const sqlite_shm_reader_close_evidence_kind evidence_kind,
+							  std::optional<int> native_status,
+							  std::optional<sqlite_backend_opaque_identity> native_effect_receipt)
+		{
+			return {close,
+					std::move(callback),
+					evidence_kind,
+					native_status,
+					std::move(native_effect_receipt)};
+		}
+
+		[[nodiscard]] static sqlite_shm_verified_reader_close_terminal_receipt
+		reader_close_terminal(const sqlite_shm_reader_live_close_obligation& close,
 							  sqlite_shm_callback_execution_receipt callback,
 							  const sqlite_shm_reader_close_evidence_kind evidence_kind,
 							  std::optional<int> native_status,
@@ -722,6 +756,8 @@ namespace
 		!std::is_default_constructible_v<sqlite_shm_verified_reader_close_terminal_receipt>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_close_obligation>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_close_obligation>);
+	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_live_close_obligation>);
+	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_live_close_obligation>);
 
 	void require(const bool condition, const std::string_view message)
 	{
@@ -2146,6 +2182,305 @@ namespace
 		auto handoff = committed->take_handoff();
 		require(handoff && handoff->valid(), "take focused reader group handoff");
 		return std::move(*handoff);
+	}
+
+	void verify_live_reader_group_close_is_one_unmap_then_close_composite()
+	{
+		auto setup = make_reader_candidate_setup(210U);
+		auto handoff = form_reader_group(setup, 211U);
+		const auto unmap_callback = callback(212U);
+		const auto close_callback = callback(213U);
+
+		auto blocked = setup.fixture.registry->begin_reader_live_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			handoff,
+			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+			sqlite_shm_reader_close_request{close_callback});
+		require(!blocked && blocked.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
+					handoff.valid() && setup.session.valid(),
+				"live close waits for the exact active use-owner census without consuming either "
+				"owner");
+
+		const auto session_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				setup.session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.registry.reader-live-close-session-terminal", 211U));
+		require(setup.fixture.registry
+						->complete_reader_session(
+							*setup.fixture.family_pin, setup.session, session_terminal)
+						.has_value() &&
+					!setup.session.valid(),
+				"drain the live-close group session before the composite cut");
+
+		auto live_close = setup.fixture.registry->begin_reader_live_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			handoff,
+			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+			sqlite_shm_reader_close_request{close_callback});
+		require(
+			live_close && live_close->valid() && !live_close->close_ready() && !handoff.valid(),
+			"one move-only live-close owner atomically consumes group-unmap and connection-close");
+		const auto admitted =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(admitted.outstanding_terminal_permit_count == 2U &&
+					admitted.open_epochs.size() == 1U && admitted.attachment_groups.size() == 1U &&
+					admitted.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::close_admitted &&
+					admitted.open_epochs.front().route ==
+						sqlite_shm_reader_close_route::close_after_confirmed_unmap &&
+					admitted.open_epochs.front().close_cut_sequence ==
+						admitted.attachment_groups.front().destination_sequence &&
+					admitted.open_epochs.front().close_cut_sequence != 0U &&
+					admitted.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::native_unmap_admitted,
+				"composite close and group unmap share one exact lifecycle cut");
+
+		const auto premature_close_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+				*live_close,
+				close_callback,
+				sqlite_shm_reader_close_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				identity("test.registry.reader-live-close-premature-effect", 213U));
+		auto premature_close = setup.fixture.registry->complete_reader_live_close(
+			*setup.fixture.family_pin, setup.open, *live_close, premature_close_receipt);
+		require(!premature_close &&
+					premature_close.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
+					live_close->valid() && !live_close->close_ready(),
+				"composite owner exposes zero xClose authority before confirmed unmap");
+
+		auto standalone_loser = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
+		require(!standalone_loser &&
+					standalone_loser.error().reason ==
+						sqlite_shm_lease_rejection_reason::stale_token,
+				"composite cut makes the standalone unmap contender a zero-call loser");
+
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*live_close,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.reader-live-close-unmap-effect", 212U),
+			identity("test.registry.reader-live-close-latch-reset", 212U));
+		auto unmapped = setup.fixture.registry->complete_reader_live_close_unmap(
+			*setup.fixture.family_pin, setup.open, *live_close, unmap_receipt);
+		require(
+			unmapped &&
+				unmapped->kind() == sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+				live_close->valid() && live_close->close_ready() &&
+				setup.fixture.registry->snapshot().active_activity_pin_count == 1U,
+			"confirmed composite unmap retires the group and only then exposes close readiness");
+
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*live_close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-live-close-effect", 213U));
+		auto closed = setup.fixture.registry->complete_reader_live_close(
+			*setup.fixture.family_pin, setup.open, *live_close, close_receipt);
+		require(closed && closed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					closed->route() == sqlite_shm_reader_close_route::close_after_confirmed_unmap &&
+					!live_close->valid(),
+				"confirmed unmap exposes and consumes exactly one orthogonal xClose owner");
+		require(setup.fixture.registry->release_reader_open(setup.open).has_value() &&
+					!setup.open.valid(),
+				"release the exactly closed composite reader open");
+
+		retire_writer(*setup.coordinator, setup.holder, 214U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke composite-close writer eligibility");
+		const auto final = setup.coordinator->snapshot();
+		require(
+			final.reader_registry_bound_group_count == 0U &&
+				final.reader_registry_activity_authority_count == 0U &&
+				final.reader_close_terminal_count == 0U &&
+				final.reader_open_close_tombstone_count == 1U && !final.quarantined,
+			"composite unmap-then-close reaches exact reader quiescence without double cleanup");
+		auto lifecycle_tombstones =
+			sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+				*setup.coordinator);
+		require(lifecycle_tombstones && lifecycle_tombstones->size() == 1U,
+				"composite group exports one exact compact lifecycle tombstone");
+		auto close_tombstones =
+			sqlite_same_process_shm_lease_test_peer::export_reader_open_epoch_close_tombstones(
+				*setup.coordinator);
+		require(close_tombstones && close_tombstones->size() == 1U,
+				"composite close exports one exact open-epoch tombstone");
+
+		auto released_family = setup.fixture.registry->release_family(*setup.fixture.family_pin);
+		require(released_family.has_value() && !setup.fixture.family_pin->valid(),
+				"retire the composite-close family after exact quiescence");
+		setup.fixture.family_pin.reset();
+		auto recreated = setup.fixture.registry->install_or_join_family(*setup.fixture.alias,
+																		setup.fixture.family);
+		require(recreated.has_value(),
+				"recreate the composite-close family from exact retained tombstones");
+		setup.fixture.family_pin.emplace(std::move(*recreated));
+		auto* recreated_coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*setup.fixture.registry, setup.fixture.family);
+		require(recreated_coordinator != nullptr,
+				"resolve the recreated composite-close coordinator");
+		auto recreated_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+				*recreated_coordinator);
+		auto recreated_closes =
+			sqlite_same_process_shm_lease_test_peer::export_reader_open_epoch_close_tombstones(
+				*recreated_coordinator);
+		require(recreated_lifecycle && *recreated_lifecycle == *lifecycle_tombstones,
+				"family recreation preserves the exact composite unmap evidence");
+		require(recreated_closes && *recreated_closes == *close_tombstones,
+				"family recreation preserves the exact composite close evidence");
+		auto partial_composite = *recreated_lifecycle;
+		partial_composite.front().composite_close_owner_token = 0U;
+		auto rejected_partial =
+			sqlite_same_process_shm_lease_test_peer::import_reader_lifecycle_tombstones(
+				*recreated_coordinator, partial_composite);
+		auto after_partial =
+			sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+				*recreated_coordinator);
+		require(!rejected_partial &&
+					rejected_partial.error().reason ==
+						sqlite_shm_lease_rejection_reason::invalid_request &&
+					after_partial && *after_partial == *recreated_lifecycle,
+				"partial composite binding is rejected without changing retained evidence");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_deferred_reader_group_close_consumes_the_same_composite_owner()
+	{
+		auto setup = make_reader_candidate_setup(220U);
+		auto handoff = form_reader_group(setup, 221U);
+		const auto mismatch_request = reader_attachment_map_request(setup.session_request, 222U);
+		auto mismatch_map = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, mismatch_request);
+		require(mismatch_map && mismatch_map->valid(), "begin deferred live-close mismatch map");
+		const auto mismatch_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_existing_group_predecessor_mismatch(
+				*mismatch_map,
+				mismatch_request,
+				sqlite_readonly_status,
+				setup.writer_attempt.native_page.get(),
+				identity("test.registry.reader-deferred-live-close-mismatch", 222U));
+		auto mismatch = setup.fixture.registry->complete_reader_existing_group_predecessor_mismatch(
+			*setup.fixture.family_pin, *mismatch_map, mismatch_receipt, setup.session);
+		require(mismatch && mismatch->outward_status() == sqlite_ioerr_status &&
+					setup.coordinator->snapshot().reader_existing_group_deferred_cleanup_count ==
+						1U &&
+					handoff.valid() && setup.session.valid(),
+				"later-map mismatch transfers the group handoff to one deferred owner");
+		const auto session_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				setup.session_request,
+				sqlite_shm_reader_session_terminal_kind::failure,
+				identity("test.registry.reader-deferred-live-close-session-terminal", 222U));
+		require(setup.fixture.registry
+					->complete_reader_session(
+						*setup.fixture.family_pin, setup.session, session_terminal)
+					.has_value(),
+				"drain the deferred group use owner");
+
+		const auto unmap_callback = callback(223U);
+		const auto close_callback = callback(224U);
+		auto live_close = setup.fixture.registry->begin_reader_live_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			handoff,
+			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+			sqlite_shm_reader_close_request{close_callback});
+		require(live_close && live_close->valid() && !live_close->close_ready() && !handoff.valid(),
+				"deferred owner and connection-close owner seal into one composite cut");
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*live_close,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.reader-deferred-live-close-unmap-effect", 223U),
+			identity("test.registry.reader-deferred-live-close-latch-reset", 223U));
+		auto unmapped = setup.fixture.registry->complete_reader_live_close_unmap(
+			*setup.fixture.family_pin, setup.open, *live_close, unmap_receipt);
+		require(unmapped &&
+					unmapped->kind() == sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+					live_close->close_ready() &&
+					setup.coordinator->snapshot().reader_existing_group_deferred_cleanup_count ==
+						0U,
+				"deferred composite performs the sole group unmap before close");
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*live_close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-deferred-live-close-effect", 224U));
+		auto closed = setup.fixture.registry->complete_reader_live_close(
+			*setup.fixture.family_pin, setup.open, *live_close, close_receipt);
+		require(closed && closed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					setup.fixture.registry->release_reader_open(setup.open).has_value(),
+				"deferred composite consumes exactly one xClose after confirmed unmap");
+		retire_writer(*setup.coordinator, setup.holder, 225U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke deferred composite-close writer eligibility");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_live_close_unmap_failure_exposes_zero_close_authority()
+	{
+		auto setup = make_reader_candidate_setup(230U);
+		auto handoff = form_reader_group(setup, 231U);
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			setup.session_request,
+			sqlite_shm_reader_session_terminal_kind::success,
+			identity("test.registry.reader-live-close-failure-session", 231U));
+		require(setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value(),
+				"drain live-close failure session");
+		const auto unmap_callback = callback(232U);
+		const auto close_callback = callback(233U);
+		auto live_close = setup.fixture.registry->begin_reader_live_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			handoff,
+			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+			sqlite_shm_reader_close_request{close_callback});
+		require(live_close && live_close->valid(), "admit live-close failure composite");
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*live_close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-live-close-forbidden-effect", 233U));
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*live_close,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_busy_status,
+			0,
+			0,
+			identity("test.registry.reader-live-close-failed-unmap-effect", 232U),
+			std::nullopt);
+		auto failed = setup.fixture.registry->complete_reader_live_close_unmap(
+			*setup.fixture.family_pin, setup.open, *live_close, unmap_receipt);
+		require(failed &&
+					failed->kind() == sqlite_shm_reader_unmap_terminal_kind::terminal_quarantined &&
+					failed->outward_status() == sqlite_busy_status && !live_close->valid() &&
+					setup.coordinator->snapshot().quarantined &&
+					setup.fixture.registry->snapshot().quarantined_family_count == 1U,
+				"non-OK composite unmap quarantines the open and retains zero retry authority");
+		auto forbidden_close = setup.fixture.registry->complete_reader_live_close(
+			*setup.fixture.family_pin, setup.open, *live_close, close_receipt);
+		require(
+			!forbidden_close &&
+				(forbidden_close.error().reason == sqlite_shm_lease_rejection_reason::stale_token ||
+				 forbidden_close.error().reason == sqlite_shm_lease_rejection_reason::quarantined),
+			"failed composite unmap never reconstructs or invokes the close owner");
 	}
 
 	struct reader_unpublished_cleanup_attempt
@@ -12414,6 +12749,9 @@ int main()
 		verify_reader_ordinary_route_has_zero_proposal_custody();
 		verify_registry_reader_and_direct_routes_cannot_mix();
 		verify_registry_reader_group_retains_one_activity_until_confirmed_unmap();
+		verify_live_reader_group_close_is_one_unmap_then_close_composite();
+		verify_deferred_reader_group_close_consumes_the_same_composite_owner();
+		verify_live_close_unmap_failure_exposes_zero_close_authority();
 		verify_confirmed_reader_group_allows_same_open_fresh_attachment_epoch();
 		verify_live_reader_group_new_page_mints_fresh_predelegate();
 		verify_registry_reader_liveness_loss_is_sticky_and_retains_authority();
