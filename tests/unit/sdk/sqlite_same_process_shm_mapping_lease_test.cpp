@@ -9734,6 +9734,119 @@ namespace
 				"revoke reader group fixture writer gate");
 	}
 
+	void verify_equal_pointer_reader_connections_unmap_independently()
+	{
+		constexpr std::uint8_t marker = 218U;
+		const auto binding = family(marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int shared_page{};
+		auto writer = install_live_writer(coordinator,
+										  binding,
+										  identity("test.connection", marker),
+										  identity("test.open-epoch", marker),
+										  marker,
+										  &shared_page);
+		auto first = install_live_reader_group(coordinator,
+											   binding,
+											   identity("test.connection", marker + 1U),
+											   marker + 1U,
+											   writer.holder.generation(),
+											   &shared_page);
+		auto second = install_live_reader_group(coordinator,
+												binding,
+												identity("test.connection", marker + 2U),
+												marker + 2U,
+												writer.holder.generation(),
+												&shared_page);
+		const auto live =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		require(coordinator.snapshot().reader_attachment_group_count == 2U &&
+					coordinator.snapshot().reader_attachment_live_member_count == 2U &&
+					coordinator.snapshot().reader_handoff_count == 2U &&
+					live.attachment_groups.size() == 2U &&
+					live.attachment_groups[0U].attachment !=
+						live.attachment_groups[1U].attachment &&
+					std::ranges::count(live.attachment_groups,
+									   detail::sqlite_shm_reader_attachment_group_phase::active,
+									   &sqlite_shm_reader_attachment_group_test_view::phase) == 2,
+				"two reader connections sharing one native page pointer remain two exact groups");
+
+		const auto terminalize =
+			[&coordinator](live_reader_group_tokens& reader, const std::uint8_t receipt_marker)
+		{
+			const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				reader.session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.reader-equal-pointer-session-terminal", receipt_marker));
+			require(coordinator.complete_reader_session(reader.session, terminal).has_value() &&
+						!reader.session.valid(),
+					"terminalize one equal-pointer reader session");
+		};
+		terminalize(first, marker + 3U);
+		terminalize(second, marker + 4U);
+
+		const auto unmap_one =
+			[&coordinator](live_reader_group_tokens& reader, const std::uint8_t receipt_marker)
+		{
+			const auto unmap_callback = callback(7U, receipt_marker);
+			auto unmap = coordinator.begin_reader_unmap(
+				reader.handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
+			require(unmap && !reader.handoff.valid(), "admit one exact equal-pointer group unmap");
+			const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+				*unmap,
+				unmap_callback,
+				sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				0,
+				0,
+				identity("test.reader-equal-pointer-unmap-effect", receipt_marker),
+				identity("test.reader-equal-pointer-unmap-latch", receipt_marker));
+			auto completed = coordinator.complete_reader_unmap(*unmap, receipt);
+			require(completed &&
+						completed->kind() ==
+							sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+						!unmap->valid(),
+					"confirm one distinct equal-pointer group unmap");
+		};
+
+		unmap_one(first, marker + 5U);
+		const auto after_first =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		require(!coordinator.snapshot().quarantined &&
+					coordinator.snapshot().reader_attachment_group_count == 1U &&
+					coordinator.snapshot().reader_handoff_count == 1U && second.handoff.valid() &&
+					std::ranges::count(
+						after_first.attachment_groups,
+						detail::sqlite_shm_reader_attachment_group_phase::native_unmap_confirmed,
+						&sqlite_shm_reader_attachment_group_test_view::phase) == 1 &&
+					std::ranges::count(after_first.attachment_groups,
+									   detail::sqlite_shm_reader_attachment_group_phase::active,
+									   &sqlite_shm_reader_attachment_group_test_view::phase) == 1,
+				"the first equal-pointer unmap cannot consume or quarantine the second group");
+
+		unmap_one(second, marker + 6U);
+		const auto retired =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		const auto snapshot = coordinator.snapshot();
+		require(!snapshot.quarantined && snapshot.reader_attachment_group_count == 0U &&
+					snapshot.reader_attachment_live_member_count == 0U &&
+					snapshot.reader_handoff_count == 0U &&
+					snapshot.reader_session_owner_count == 0U &&
+					retired.outstanding_terminal_permit_count == 0U &&
+					reader_terminal_permit_slots_are_exact(retired) &&
+					all_reader_live_custody_released(retired) &&
+					std::ranges::count(
+						retired.attachment_groups,
+						detail::sqlite_shm_reader_attachment_group_phase::native_unmap_confirmed,
+						&sqlite_shm_reader_attachment_group_test_view::phase) == 2 &&
+					std::ranges::count(
+						retired.attachment_reservations,
+						detail::sqlite_shm_reader_attachment_reservation_phase::retired_confirmed,
+						&sqlite_shm_reader_attachment_reservation_test_view::phase) == 2,
+				"two equal-pointer reader groups retain two distinct confirmed unmap terminals");
+	}
+
 	void verify_reader_lifecycle_sequence_source_is_shared_and_exhausts_without_partials()
 	{
 		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
@@ -14607,6 +14720,7 @@ int main()
 		verify_unpublished_cleanup_determinate_rejection_differs_from_true_ambiguity();
 		verify_direct_opaque_first_map_has_no_group_or_native_authority();
 		verify_reader_native_attachment_group_and_session_core();
+		verify_equal_pointer_reader_connections_unmap_independently();
 		verify_reader_lifecycle_sequence_source_is_shared_and_exhausts_without_partials();
 		verify_first_reader_map_reserves_sequence_and_three_terminals_atomically();
 		verify_unavailable_shared_reader_sequence_source_preserves_owned_drains();
