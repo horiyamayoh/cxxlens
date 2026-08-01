@@ -2294,6 +2294,82 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_cut_result>
+			poll_reader_unmap_cut(sqlite_shm_registry_family_pin& pin,
+								  sqlite_shm_reader_unmap_obligation& unmap,
+								  const sqlite_shm_callback_execution_receipt& callback) noexcept
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (pin.state_.get() != this)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* alias = find_alias_locked(pin.alias_token_);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || alias == nullptr || family == nullptr ||
+						!family->coordinator)
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					auto result =
+						family->coordinator->poll_registry_reader_unmap_cut(unmap, callback);
+					if (!result)
+						synchronize_coordinator_quarantines_locked();
+					return result;
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<void>
+			fail_reader_unmap_cut_wait(sqlite_shm_registry_family_pin& pin,
+									   sqlite_shm_reader_unmap_obligation& unmap,
+									   const sqlite_shm_callback_execution_receipt& callback,
+									   const sqlite_shm_retirement_wait_failure failure) noexcept
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (pin.state_.get() != this)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* alias = find_alias_locked(pin.alias_token_);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || alias == nullptr || family == nullptr ||
+						!family->coordinator)
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					auto result = family->coordinator->fail_registry_reader_unmap_cut_wait(
+						unmap, callback, failure);
+					synchronize_coordinator_quarantines_locked();
+					return result;
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_terminal_result>
 			complete_reader_unmap(
 				sqlite_shm_registry_family_pin& pin,
@@ -6586,6 +6662,25 @@ namespace cxxlens::sdk
 		const sqlite_shm_callback_execution_receipt& callback) noexcept
 	{
 		return state_->begin_reader_unmap(family, handoff, callback);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_unmap_cut_result>
+	sqlite_same_process_shm_mapping_registry::poll_reader_unmap_cut(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_unmap_obligation& unmap,
+		const sqlite_shm_callback_execution_receipt& callback) noexcept
+	{
+		return state_->poll_reader_unmap_cut(family, unmap, callback);
+	}
+
+	sqlite_shm_lease_result<void>
+	sqlite_same_process_shm_mapping_registry::fail_reader_unmap_cut_wait(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_unmap_obligation& unmap,
+		const sqlite_shm_callback_execution_receipt& callback,
+		const sqlite_shm_retirement_wait_failure failure) noexcept
+	{
+		return state_->fail_reader_unmap_cut_wait(family, unmap, callback, failure);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_unmap_terminal_result>

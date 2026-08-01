@@ -1507,6 +1507,19 @@ namespace cxxlens::sdk
 		unknown,
 	};
 
+	enum class sqlite_shm_reader_unmap_cut_progress : std::uint8_t
+	{
+		waiting,
+		native_effect_ready,
+	};
+
+	struct sqlite_shm_reader_unmap_cut_result
+	{
+		sqlite_shm_reader_unmap_cut_progress progress{
+			sqlite_shm_reader_unmap_cut_progress::waiting};
+		std::uint64_t generation{};
+	};
+
 	enum class sqlite_shm_positive_writer_attachment_gate_progress : std::uint8_t
 	{
 		waiting,
@@ -2319,6 +2332,7 @@ namespace cxxlens::sdk
 		operator=(const sqlite_shm_reader_unmap_obligation&) = delete;
 
 		[[nodiscard]] bool valid() const noexcept;
+		[[nodiscard]] bool native_effect_ready() const noexcept;
 		[[nodiscard]] std::uint64_t generation() const noexcept;
 
 	  private:
@@ -2586,6 +2600,13 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_obligation>
 		begin_reader_unmap(sqlite_shm_reader_handoff& handoff,
 						   const sqlite_shm_reader_unmap_request& request) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_cut_result>
+		poll_reader_unmap_cut(sqlite_shm_reader_unmap_obligation& unmap,
+							  const sqlite_shm_callback_execution_receipt& callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void>
+		fail_reader_unmap_cut_wait(sqlite_shm_reader_unmap_obligation& unmap,
+								   const sqlite_shm_callback_execution_receipt& callback,
+								   sqlite_shm_retirement_wait_failure failure) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		complete_reader_unmap(sqlite_shm_reader_unmap_obligation& unmap,
 							  const sqlite_shm_callback_execution_receipt& callback,
@@ -2780,6 +2801,14 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_obligation>
 		begin_registry_reader_unmap(sqlite_shm_reader_handoff& handoff,
 									const sqlite_shm_callback_execution_receipt& callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_cut_result>
+		poll_registry_reader_unmap_cut(
+			sqlite_shm_reader_unmap_obligation& unmap,
+			const sqlite_shm_callback_execution_receipt& callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void>
+		fail_registry_reader_unmap_cut_wait(sqlite_shm_reader_unmap_obligation& unmap,
+											const sqlite_shm_callback_execution_receipt& callback,
+											sqlite_shm_retirement_wait_failure failure) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_terminal_result>
 		complete_registry_reader_unmap(
 			sqlite_shm_reader_unmap_obligation& unmap,

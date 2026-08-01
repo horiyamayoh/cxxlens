@@ -4859,20 +4859,40 @@ namespace
 		const auto deferred_unmap_callback = callback(163U);
 		const auto before_premature_unmap =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
-		auto premature_unmap = fixture.registry->begin_reader_unmap(
+		auto unmap = fixture.registry->begin_reader_unmap(
 			*fixture.family_pin, *handoff, deferred_unmap_callback);
 		const auto after_premature_unmap =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
-		require(!premature_unmap &&
-					premature_unmap.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
-					handoff->valid() &&
-					after_premature_unmap.last_issued_sequence ==
-						before_premature_unmap.last_issued_sequence &&
-					after_premature_unmap.last_committed_sequence ==
+		const auto bounded_waiter_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation);
+		const auto terminal_reporter_index =
+			static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::terminal_reporter);
+		require(unmap.has_value(), "registry-bound unmap cut is admitted with live owners");
+		require(unmap->valid() && !unmap->native_effect_ready() && !handoff->valid(),
+				"registry-bound unmap consumes its handoff before waiting");
+		require(after_premature_unmap.last_issued_sequence ==
+						after_premature_unmap.last_committed_sequence &&
+					after_premature_unmap.last_committed_sequence >
 						before_premature_unmap.last_committed_sequence &&
-					after_premature_unmap.live_custody_kind_counts ==
-						before_premature_unmap.live_custody_kind_counts,
-				"deferred mismatch cannot unmap while either established use owner remains live");
+					after_premature_unmap.outstanding_terminal_permit_count + 1U ==
+						before_premature_unmap.outstanding_terminal_permit_count,
+				"registry-bound unmap cut consumes one reserved lifecycle permit");
+		require(after_premature_unmap.attachment_groups.size() == 1U &&
+					after_premature_unmap.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::unmap_cut_sealing &&
+					after_premature_unmap.attachment_groups.front().unmap_cut_permit_slot == 0U,
+				"registry-bound group records a sealed unmap cut");
+		require(after_premature_unmap.live_custody_kind_counts[handoff_custody_index] == 0U &&
+					after_premature_unmap.live_custody_kind_counts[deferred_unmap_index] == 1U &&
+					after_premature_unmap.live_custody_kind_counts[bounded_waiter_index] == 1U &&
+					after_premature_unmap.live_custody_kind_counts[terminal_reporter_index] == 1U,
+				"deferred unmap retains exact continuation and reporter custodies while waiting");
+		auto still_waiting = fixture.registry->poll_reader_unmap_cut(
+			*fixture.family_pin, *unmap, deferred_unmap_callback);
+		require(still_waiting &&
+					still_waiting->progress == sqlite_shm_reader_unmap_cut_progress::waiting &&
+					!unmap->native_effect_ready(),
+				"registry-bound unmap remains in bounded waiting while owners are live");
 
 		auto blocked_request = active_request;
 		blocked_request.read_transaction_epoch =
@@ -4912,27 +4932,29 @@ namespace
 		const auto drained_session_lifecycle =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
 		require(
-			drained_session_lifecycle.outstanding_terminal_permit_count == 4U &&
+			drained_session_lifecycle.outstanding_terminal_permit_count == 3U &&
 				drained_session_lifecycle.attachment_groups.size() == 1U &&
-				drained_session_lifecycle.attachment_groups.front().unmap_cut_permit_slot != 0U &&
+				drained_session_lifecycle.attachment_groups.front().unmap_cut_permit_slot == 0U &&
 				drained_session_lifecycle.attachment_groups.front().unmap_terminal_permit_slot !=
 					0U,
-			"session drain preserves the group's pre-reserved cut and terminal capacity");
-		const auto unmap_callback = deferred_unmap_callback;
-		auto direct_unmap = coordinator->begin_reader_unmap(
-			*handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
-		require(!direct_unmap &&
-					direct_unmap.error().reason ==
+			"session drain preserves the already-consumed cut and terminal capacity");
+		const auto& unmap_callback = deferred_unmap_callback;
+		auto direct_poll = coordinator->poll_reader_unmap_cut(*unmap, unmap_callback);
+		require(!direct_poll &&
+					direct_poll.error().reason ==
 						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
-					direct_unmap.error().action ==
+					direct_poll.error().action ==
 						sqlite_shm_lease_recovery_action::resubmit_via_bound_route &&
-					handoff->valid() &&
+					unmap->valid() && !unmap->native_effect_ready() &&
 					sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator)
-							.outstanding_terminal_permit_count == 4U,
-				"registry-bound group unmap bypassed its registry wrapper");
-		auto unmap =
-			fixture.registry->begin_reader_unmap(*fixture.family_pin, *handoff, unmap_callback);
-		require(unmap && !handoff->valid(), "admit one group-wide reader unmap");
+							.outstanding_terminal_permit_count == 3U,
+				"registry-bound cut polling cannot bypass its registry wrapper");
+		auto ready =
+			fixture.registry->poll_reader_unmap_cut(*fixture.family_pin, *unmap, unmap_callback);
+		require(ready &&
+					ready->progress == sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+					unmap->native_effect_ready(),
+				"registry wrapper makes the same cut obligation native-ready after drain");
 		const auto unmap_admitted_view =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
 		require(unmap_admitted_view.outstanding_terminal_permit_count == 3U &&
@@ -6641,6 +6663,49 @@ namespace
 				lease.reader_registry_activity_authority_count == 1U &&
 				registry.active_activity_pin_count == 2U && registry.active_reader_open_count == 1U,
 			"non-OK group unmap released exact group/open authority");
+	}
+
+	void verify_registry_reader_unmap_cut_timeout_synchronizes_quarantine()
+	{
+		constexpr std::uint8_t marker = 226U;
+		auto setup = make_reader_candidate_setup(marker);
+		auto handoff = form_reader_group(setup, marker + 1U);
+		const auto unmap_callback = callback(marker + 2U);
+		auto unmap = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
+		require(unmap && !handoff.valid() && unmap->valid() && !unmap->native_effect_ready(),
+				"registry-bound cut waits on its established other-thread session");
+
+		const auto before_failure = setup.fixture.registry->snapshot();
+		auto failed = setup.fixture.registry->fail_reader_unmap_cut_wait(
+			*setup.fixture.family_pin,
+			*unmap,
+			unmap_callback,
+			sqlite_shm_retirement_wait_failure::timeout);
+		const auto registry = setup.fixture.registry->snapshot();
+		const auto lease = setup.coordinator->snapshot();
+		require(!failed &&
+					failed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!unmap->valid() && lease.quarantined,
+				"registry wrapper terminalizes its timeout obligation");
+		require(registry.quarantined_family_count == 1U,
+				"registry wrapper synchronizes coordinator quarantine to the family");
+		require(
+			before_failure.active_activity_pin_count != 0U &&
+				registry.active_activity_pin_count == before_failure.active_activity_pin_count,
+			"registry wrapper synchronizes timeout quarantine while preserving owned drain life");
+
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			setup.session_request,
+			sqlite_shm_reader_session_terminal_kind::success,
+			identity("test.registry.reader-unmap-cut-timeout-session", marker + 3U));
+		require(
+			setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value() &&
+				!setup.session.valid(),
+			"established registry session drains after unmap-cut timeout quarantine");
 	}
 
 	void verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity()
@@ -13176,6 +13241,7 @@ int main()
 		verify_peer_quarantine_preserves_established_registry_group_drain();
 		verify_native_started_reader_terminals_survive_peer_quarantine();
 		verify_non_ok_reader_unmap_retains_group_authority();
+		verify_registry_reader_unmap_cut_timeout_synchronizes_quarantine();
 		verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity();
 		verify_reader_open_close_binding_and_family_recreation_are_exact();
 		verify_active_reader_group_blocks_close_until_confirmed_unmap();

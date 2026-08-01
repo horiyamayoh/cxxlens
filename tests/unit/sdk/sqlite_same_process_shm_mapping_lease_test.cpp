@@ -9648,14 +9648,44 @@ namespace
 					grouped.reader_handoff_count == 1U,
 				"snapshot exposes one group, two members, three audits, and exact sessions");
 
-		auto blocked_unmap = coordinator.begin_reader_unmap(
-			handoff, sqlite_shm_reader_unmap_request{callback(6, 35), 0, 0});
-		require(!blocked_unmap && handoff.valid() &&
-					blocked_unmap.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
-					blocked_unmap.error().action ==
-						sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary &&
+		const auto unmap_callback = callback(6, 35);
+		auto unmap = coordinator.begin_reader_unmap(
+			handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
+		const auto cut_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		const auto bounded_waiter_index =
+			enum_index(detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation);
+		const auto terminal_reporter_index =
+			enum_index(detail::sqlite_shm_reader_custody_kind::terminal_reporter);
+		const auto normal_unmap_index =
+			enum_index(detail::sqlite_shm_reader_custody_kind::normal_or_deferred_unmap);
+		const auto handoff_index =
+			enum_index(detail::sqlite_shm_reader_custody_kind::attachment_group_handoff);
+		require(unmap.has_value(), "group-wide unmap cut is admitted with a live owner");
+		require(!handoff.valid() && unmap->valid() && !unmap->native_effect_ready(),
+				"group-wide unmap consumes its handoff before waiting");
+		require(cut_lifecycle.outstanding_terminal_permit_count == 2U &&
+					cut_lifecycle.last_issued_sequence == cut_lifecycle.last_committed_sequence &&
+					reader_event_sequences_are_dense(cut_lifecycle) &&
+					reader_terminal_permit_slots_are_exact(cut_lifecycle),
+				"unmap cut consumes one reserved lifecycle permit");
+		require(cut_lifecycle.attachment_groups.size() == 1U &&
+					cut_lifecycle.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::unmap_cut_sealing &&
+					cut_lifecycle.attachment_groups.front().unmap_cut_permit_slot == 0U &&
+					cut_lifecycle.attachment_groups.front().unmap_terminal_permit_slot != 0U,
+				"group lifecycle records a sealed unmap cut");
+		require(cut_lifecycle.live_custody_kind_counts[handoff_index] == 0U &&
+					cut_lifecycle.live_custody_kind_counts[normal_unmap_index] == 1U &&
+					cut_lifecycle.live_custody_kind_counts[bounded_waiter_index] == 1U &&
+					cut_lifecycle.live_custody_kind_counts[terminal_reporter_index] == 1U &&
 					!coordinator.snapshot().quarantined,
-				"group-wide unmap remains retryable until every session owner drains");
+				"sealed unmap cut retains its exact continuation and reporter custodies");
+		auto still_waiting = coordinator.poll_reader_unmap_cut(*unmap, unmap_callback);
+		require(still_waiting &&
+					still_waiting->progress == sqlite_shm_reader_unmap_cut_progress::waiting &&
+					!unmap->native_effect_ready(),
+				"other-thread session owner keeps the cut obligation in bounded waiting");
 
 		auto first_terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
 			first_session_request,
@@ -9679,7 +9709,7 @@ namespace
 						after_first_terminal,
 						detail::sqlite_shm_reader_lifecycle_event_kind::use_session_terminal) ==
 						2U &&
-					after_first_terminal.outstanding_terminal_permit_count == 2U &&
+					after_first_terminal.outstanding_terminal_permit_count == 1U &&
 					after_first_terminal.last_issued_sequence ==
 						after_first_terminal.last_committed_sequence &&
 					reader_event_sequences_are_dense(after_first_terminal) &&
@@ -9696,11 +9726,12 @@ namespace
 					request_replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
 				"terminal session request remains a non-reusable tombstone");
 
-		const auto unmap_callback = callback(6, 36);
-		auto unmap = coordinator.begin_reader_unmap(
-			handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
-		require(unmap && !handoff.valid(),
-				"group handoff becomes one group-wide unmap obligation after owners drain");
+		auto unmap_ready = coordinator.poll_reader_unmap_cut(*unmap, unmap_callback);
+		require(unmap_ready &&
+					unmap_ready->progress ==
+						sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+					unmap->native_effect_ready(),
+				"the same cut obligation becomes native-ready after the last owner drains");
 		const auto unmap_admitted_view =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
 		require(unmap_admitted_view.outstanding_terminal_permit_count == 1U &&
@@ -9826,6 +9857,90 @@ namespace
 			require(!rejected && !session->valid() && coordinator.snapshot().quarantined,
 					"session terminal cannot replace the execution receipt bound at admission");
 		}
+	}
+
+	void verify_reader_unmap_cut_wait_policy_is_fail_closed()
+	{
+		enum class scenario : std::uint8_t
+		{
+			same_thread,
+			reentrant,
+			timeout,
+		};
+
+		const auto run = [](const std::uint8_t marker, const scenario selected)
+		{
+			const auto binding = family(marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto writer = install_live_writer(coordinator,
+											  binding,
+											  identity("test.connection", marker),
+											  identity("test.open-epoch", marker),
+											  marker,
+											  &page);
+			auto reader = install_live_reader_group(coordinator,
+													binding,
+													identity("test.connection", marker + 1U),
+													marker + 1U,
+													writer.holder.generation(),
+													&page);
+			retire_last(coordinator, writer.holder, callback(9U, marker + 2U));
+			require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
+					"revoke unmap-cut wait-policy writer gate");
+
+			const auto unmap_callback = selected == scenario::same_thread
+				? sqlite_shm_callback_execution_receipt{reader.session_request.execution
+															.thread_identity,
+														0U,
+														identity("test.reader-unmap-same-thread",
+																 marker)}
+				: callback(10U, marker + 3U, selected == scenario::reentrant ? 1U : 0U);
+			auto unmap = coordinator.begin_reader_unmap(
+				reader.handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
+
+			if (selected == scenario::timeout)
+			{
+				require(unmap && !reader.handoff.valid() && unmap->valid() &&
+							!unmap->native_effect_ready() && !coordinator.snapshot().quarantined,
+						"other-thread blocker yields one live cut-wait obligation");
+				auto failed = coordinator.fail_reader_unmap_cut_wait(
+					*unmap, unmap_callback, sqlite_shm_retirement_wait_failure::timeout);
+				require(
+					!failed &&
+						failed.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						!unmap->valid() && coordinator.snapshot().quarantined,
+					"bounded wait timeout quarantines the consumed cut without native authority");
+				auto replay = coordinator.poll_reader_unmap_cut(*unmap, unmap_callback);
+				require(!replay &&
+							replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+						"timed-out cut obligation cannot be retried");
+			}
+			else
+			{
+				require(!unmap &&
+							unmap.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							!reader.handoff.valid() && coordinator.snapshot().quarantined,
+						selected == scenario::same_thread
+							? "same-thread blocker quarantines after consuming the cut"
+							: "reentrant blocker quarantines after consuming the cut");
+			}
+
+			const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				reader.session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.reader-unmap-cut-peer-drain", marker));
+			require(coordinator.complete_reader_session(reader.session, terminal).has_value() &&
+						!reader.session.valid(),
+					"established session drains after cut quarantine without reviving admission");
+		};
+
+		run(232U, scenario::same_thread);
+		run(236U, scenario::reentrant);
+		run(240U, scenario::timeout);
 	}
 
 	void verify_equal_pointer_reader_connections_unmap_independently()
@@ -14935,6 +15050,7 @@ int main()
 		verify_direct_opaque_first_map_has_no_group_or_native_authority();
 		verify_reader_session_execution_is_validated_and_exactly_bound();
 		verify_reader_native_attachment_group_and_session_core();
+		verify_reader_unmap_cut_wait_policy_is_fail_closed();
 		verify_equal_pointer_reader_connections_unmap_independently();
 		verify_callback_free_cached_member_use_requires_a_live_session_owner();
 		verify_reader_lifecycle_sequence_source_is_shared_and_exhausts_without_partials();
