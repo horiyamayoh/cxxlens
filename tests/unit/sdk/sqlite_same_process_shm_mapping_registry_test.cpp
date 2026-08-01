@@ -6708,6 +6708,100 @@ namespace
 			"established registry session drains after unmap-cut timeout quarantine");
 	}
 
+	void verify_registry_unmap_cut_drains_preexisting_zero_attachment_map()
+	{
+		constexpr std::uint8_t marker = 232U;
+		auto setup = make_reader_candidate_setup(marker);
+		auto handoff = form_reader_group(setup, marker + 1U);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 2U);
+		auto map = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(map && map->valid(), "begin registry map before the unmap cut");
+
+		const auto unmap_callback = callback(marker + 3U);
+		auto unmap = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
+		const auto after_cut = setup.fixture.registry->snapshot();
+		require(unmap && !handoff.valid() && unmap->valid() && !unmap->native_effect_ready() &&
+					after_cut.active_activity_pin_count != 0U,
+				"registry cut freezes its native-started map before waiting");
+
+		const auto zero_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+				*map,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+				map_request,
+				sqlite_busy_status,
+				nullptr,
+				0,
+				identity("test.registry.reader-unmap-cut-zero-effect", marker + 4U));
+		auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
+			*setup.fixture.family_pin, *map, zero_receipt, setup.session);
+		const auto after_map = setup.fixture.registry->snapshot();
+		require(completed &&
+					completed->kind() ==
+						sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change &&
+					completed->native_status() == sqlite_busy_status &&
+					completed->native_mapping() == nullptr && !map->valid() &&
+					setup.session.valid() && unmap->valid() && !unmap->native_effect_ready() &&
+					after_map.active_activity_pin_count == after_cut.active_activity_pin_count &&
+					after_map.quarantined_family_count == 0U,
+				"registry terminal consumes only the frozen zero-attachment map attempt");
+
+		auto later_request = map_request;
+		later_request.callback = callback(marker + 5U);
+		const auto before_rejection = setup.fixture.registry->snapshot();
+		auto rejected = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, later_request);
+		const auto after_rejection = setup.fixture.registry->snapshot();
+		require(!rejected &&
+					before_rejection.reader_lifecycle_last_issued_sequence ==
+						after_rejection.reader_lifecycle_last_issued_sequence &&
+					before_rejection.active_activity_pin_count ==
+						after_rejection.active_activity_pin_count,
+				"registry rejects a post-cut map before sequence or activity mutation");
+
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			setup.session_request,
+			sqlite_shm_reader_session_terminal_kind::success,
+			identity("test.registry.reader-unmap-cut-zero-session", marker + 6U));
+		require(
+			setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value() &&
+				!setup.session.valid(),
+			"registry drains the frozen map session after its terminal");
+		auto ready = setup.fixture.registry->poll_reader_unmap_cut(
+			*setup.fixture.family_pin, *unmap, unmap_callback);
+		require(ready &&
+					ready->progress == sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+					unmap->native_effect_ready(),
+				"registry makes the same cut obligation ready after map and session drain");
+
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.reader-unmap-cut-zero-unmap-effect", marker + 7U),
+			identity("test.registry.reader-unmap-cut-zero-latch", marker + 8U));
+		require(setup.fixture.registry
+						->complete_reader_unmap(*setup.fixture.family_pin, *unmap, unmap_receipt)
+						.has_value() &&
+					!unmap->valid(),
+				"registry confirms unmap only after the pre-cut map and session terminal");
+		close_and_release_reader_open(setup.fixture,
+									  setup.open,
+									  marker + 9U,
+									  sqlite_shm_reader_close_route::close_after_confirmed_unmap);
+		retire_writer(*setup.coordinator, setup.holder, marker + 10U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke registry pre-cut zero-map writer gate");
+		clean_fixture(setup.fixture);
+	}
+
 	void verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity()
 	{
 		const auto run = [](const detail::sqlite_shm_registry_counter_for_testing counter,
@@ -13242,6 +13336,7 @@ int main()
 		verify_native_started_reader_terminals_survive_peer_quarantine();
 		verify_non_ok_reader_unmap_retains_group_authority();
 		verify_registry_reader_unmap_cut_timeout_synchronizes_quarantine();
+		verify_registry_unmap_cut_drains_preexisting_zero_attachment_map();
 		verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity();
 		verify_reader_open_close_binding_and_family_recreation_are_exact();
 		verify_active_reader_group_blocks_close_until_confirmed_unmap();

@@ -7003,7 +7003,8 @@ namespace cxxlens::sdk
 						if (group->reservation_phase !=
 								sqlite_shm_reader_attachment_reservation_phase::observed_present ||
 							!group->observed_identity ||
-							group->phase != reader_attachment_group_phase::active ||
+							(group->phase != reader_attachment_group_phase::active &&
+							 group->phase != reader_attachment_group_phase::unmap_cut_sealing) ||
 							group->generation != owner->generation ||
 							group->expected != owner->request.attachment ||
 							map_attempt->group_token != group->token)

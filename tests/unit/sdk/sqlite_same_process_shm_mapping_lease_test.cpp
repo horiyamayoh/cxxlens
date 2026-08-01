@@ -9943,6 +9943,130 @@ namespace
 		run(240U, scenario::timeout);
 	}
 
+	void verify_reader_unmap_cut_drains_preexisting_zero_attachment_map()
+	{
+		constexpr std::uint8_t marker = 244U;
+		const auto binding = family(marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int page{};
+		auto writer = install_live_writer(coordinator,
+										  binding,
+										  identity("test.connection", marker),
+										  identity("test.open-epoch", marker),
+										  marker,
+										  &page);
+		auto reader = install_live_reader_group(coordinator,
+												binding,
+												identity("test.connection", marker + 1U),
+												marker + 1U,
+												writer.holder.generation(),
+												&page);
+		require(reader.cached_member.has_value(),
+				"pre-cut map fixture retains its exact cached member");
+
+		auto map_request = reader_attachment_request(binding,
+													 identity("test.connection", marker + 1U),
+													 marker + 1U,
+													 2,
+													 marker + 1U,
+													 0,
+													 writer.holder.generation());
+		map_request.callback = callback(3U, marker + 2U);
+		auto map = coordinator.begin_reader_map(reader.session, map_request);
+		require(map && map->valid(), "begin one exact map before the unmap cut");
+
+		const auto unmap_callback = callback(7U, marker + 3U);
+		auto unmap = coordinator.begin_reader_unmap(
+			reader.handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
+		const auto after_cut =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		require(unmap && !reader.handoff.valid() && unmap->valid() &&
+					!unmap->native_effect_ready() && after_cut.map_attempts.size() == 1U &&
+					after_cut.outstanding_terminal_permit_count == 3U &&
+					after_cut.attachment_groups.size() == 1U &&
+					after_cut.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::unmap_cut_sealing,
+				"cut freezes the earlier native-started map and its session before waiting");
+
+		const auto zero_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+				*map,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+				map_request,
+				sqlite_busy_status,
+				nullptr,
+				identity("test.reader-unmap-cut-zero-effect", marker + 4U));
+		auto completed =
+			coordinator.complete_reader_zero_attachment_map(*map, zero_receipt, reader.session);
+		const auto after_map =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		require(completed &&
+					completed->kind() ==
+						sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change &&
+					completed->native_status() == sqlite_busy_status &&
+					completed->native_mapping() == nullptr && !map->valid() &&
+					reader.session.valid() && unmap->valid() && !unmap->native_effect_ready() &&
+					after_map.map_attempts.empty() &&
+					after_map.outstanding_terminal_permit_count == 2U &&
+					after_map.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::unmap_cut_sealing &&
+					!coordinator.snapshot().quarantined,
+				"pre-cut exact no-attachment result consumes only its map attempt");
+
+		auto later_request = map_request;
+		later_request.callback = callback(3U, marker + 5U);
+		const auto before_rejection =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		auto rejected_map = coordinator.begin_reader_map(reader.session, later_request);
+		auto rejected_cached = coordinator.authenticate_reader_cached_member_use(
+			reader.session, *reader.cached_member);
+		const auto after_rejection =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		require(!rejected_map && !rejected_cached &&
+					rejected_cached.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
+					before_rejection.last_issued_sequence == after_rejection.last_issued_sequence &&
+					before_rejection.last_committed_sequence ==
+						after_rejection.last_committed_sequence &&
+					before_rejection.live_custody_kind_counts ==
+						after_rejection.live_custody_kind_counts &&
+					before_rejection.events.size() == after_rejection.events.size(),
+				"cut-first rejects later native map and cached pointer use before mutation");
+
+		auto waiting = coordinator.poll_reader_unmap_cut(*unmap, unmap_callback);
+		require(waiting && waiting->progress == sqlite_shm_reader_unmap_cut_progress::waiting,
+				"the established session remains the sole blocker after map terminal");
+		const auto session_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				reader.session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.reader-unmap-cut-zero-session", marker + 6U));
+		require(coordinator.complete_reader_session(reader.session, session_terminal).has_value() &&
+					!reader.session.valid(),
+				"terminalize the last established session after its map attempt");
+		auto ready = coordinator.poll_reader_unmap_cut(*unmap, unmap_callback);
+		require(ready &&
+					ready->progress == sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+					unmap->native_effect_ready(),
+				"the same cut obligation becomes ready after map and session drains");
+
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.reader-unmap-cut-zero-unmap-effect", marker + 7U),
+			identity("test.reader-unmap-cut-zero-latch", marker + 8U));
+		require(coordinator.complete_reader_unmap(*unmap, unmap_receipt).has_value() &&
+					!unmap->valid(),
+				"confirm native unmap only after the pre-cut map and session are terminal");
+		retire_last(coordinator, writer.holder, callback(9U, marker + 9U));
+		require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
+				"revoke pre-cut zero-map fixture writer gate");
+	}
+
 	void verify_equal_pointer_reader_connections_unmap_independently()
 	{
 		constexpr std::uint8_t marker = 218U;
@@ -15051,6 +15175,7 @@ int main()
 		verify_reader_session_execution_is_validated_and_exactly_bound();
 		verify_reader_native_attachment_group_and_session_core();
 		verify_reader_unmap_cut_wait_policy_is_fail_closed();
+		verify_reader_unmap_cut_drains_preexisting_zero_attachment_map();
 		verify_equal_pointer_reader_connections_unmap_independently();
 		verify_callback_free_cached_member_use_requires_a_live_session_owner();
 		verify_reader_lifecycle_sequence_source_is_shared_and_exhausts_without_partials();
