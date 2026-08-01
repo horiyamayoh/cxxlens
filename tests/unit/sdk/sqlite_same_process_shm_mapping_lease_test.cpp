@@ -1329,6 +1329,7 @@ namespace
 		sqlite_shm_reader_session_request session_request;
 		sqlite_shm_reader_session session;
 		sqlite_shm_reader_handoff handoff;
+		std::optional<sqlite_shm_reader_cached_member_identity> cached_member;
 	};
 
 	struct registered_reader_open_tokens
@@ -1437,6 +1438,7 @@ namespace
 			session_request,
 			std::move(*session),
 			std::move(*handoff),
+			committed->cached_member(),
 		};
 	}
 
@@ -9763,14 +9765,34 @@ namespace
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
 		require(coordinator.snapshot().reader_attachment_group_count == 2U &&
 					coordinator.snapshot().reader_attachment_live_member_count == 2U &&
-					coordinator.snapshot().reader_handoff_count == 2U &&
-					live.attachment_groups.size() == 2U &&
+					coordinator.snapshot().reader_handoff_count == 2U && first.cached_member &&
+					second.cached_member && live.attachment_groups.size() == 2U &&
 					live.attachment_groups[0U].attachment !=
 						live.attachment_groups[1U].attachment &&
 					std::ranges::count(live.attachment_groups,
 									   detail::sqlite_shm_reader_attachment_group_phase::active,
 									   &sqlite_shm_reader_attachment_group_test_view::phase) == 2,
 				"two reader connections sharing one native page pointer remain two exact groups");
+		const auto before_cross_use =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		auto first_cross_use =
+			coordinator.authenticate_reader_cached_member_use(first.session, *second.cached_member);
+		auto second_cross_use =
+			coordinator.authenticate_reader_cached_member_use(second.session, *first.cached_member);
+		const auto after_cross_use =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		require(!first_cross_use && !second_cross_use &&
+					first_cross_use.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					second_cross_use.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					first.session.valid() && second.session.valid() &&
+					before_cross_use.last_issued_sequence == after_cross_use.last_issued_sequence &&
+					before_cross_use.last_committed_sequence ==
+						after_cross_use.last_committed_sequence &&
+					before_cross_use.live_custody_kind_counts ==
+						after_cross_use.live_custody_kind_counts,
+				"equal pointer and generation cannot authenticate a member across group sessions");
 
 		const auto terminalize =
 			[&coordinator](live_reader_group_tokens& reader, const std::uint8_t receipt_marker)
@@ -9845,6 +9867,105 @@ namespace
 						detail::sqlite_shm_reader_attachment_reservation_phase::retired_confirmed,
 						&sqlite_shm_reader_attachment_reservation_test_view::phase) == 2,
 				"two equal-pointer reader groups retain two distinct confirmed unmap terminals");
+	}
+
+	void verify_callback_free_cached_member_use_requires_a_live_session_owner()
+	{
+		constexpr std::uint8_t marker = 226U;
+		const auto binding = family(marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int page{};
+		auto writer = install_live_writer(coordinator,
+										  binding,
+										  identity("test.connection", marker),
+										  identity("test.open-epoch", marker),
+										  marker,
+										  &page);
+		auto reader = install_live_reader_group(coordinator,
+												binding,
+												identity("test.connection", marker + 1U),
+												marker + 1U,
+												writer.holder.generation(),
+												&page);
+		require(reader.cached_member && reader.cached_member->mapping().native_mapping == &page,
+				"positive map commit returns its unforgeable cached-member identity");
+
+		const auto first_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				reader.session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.reader-cached-first-session-terminal", marker));
+		require(coordinator.complete_reader_session(reader.session, first_terminal).has_value() &&
+					!reader.session.valid(),
+				"finish the callback-producing session before cached reuse");
+
+		auto cached_request = reader.session_request;
+		cached_request.read_transaction_epoch =
+			identity("test.reader-cached-read-transaction", marker + 2U);
+		cached_request.decode_attempt = identity("test.reader-cached-decode-attempt", marker + 2U);
+		cached_request.authority_read_receipt =
+			identity("test.reader-cached-authority-read", marker + 2U);
+		auto cached_session = coordinator.begin_reader_session(cached_request);
+		require(cached_session &&
+					cached_session->phase() == sqlite_shm_reader_session_phase::active_group_owner,
+				"admit a distinct callback-free session from the exact retained group");
+		const auto before_use =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		const auto before_snapshot = coordinator.snapshot();
+		auto first_use = coordinator.authenticate_reader_cached_member_use(*cached_session,
+																		   *reader.cached_member);
+		auto second_use = coordinator.authenticate_reader_cached_member_use(*cached_session,
+																			*reader.cached_member);
+		const auto after_use =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		const auto after_snapshot = coordinator.snapshot();
+		require(first_use && second_use && *first_use == reader.cached_member->mapping() &&
+					*second_use == reader.cached_member->mapping() &&
+					first_use->native_mapping == &page &&
+					before_snapshot.reader_inflight_count == after_snapshot.reader_inflight_count &&
+					before_snapshot.reader_attachment_audit_count ==
+						after_snapshot.reader_attachment_audit_count &&
+					before_snapshot.reader_session_owner_count == 1U &&
+					after_snapshot.reader_session_owner_count == 1U &&
+					before_use.last_issued_sequence == after_use.last_issued_sequence &&
+					before_use.last_committed_sequence == after_use.last_committed_sequence &&
+					before_use.events.size() == after_use.events.size() &&
+					before_use.map_attempts.empty() && after_use.map_attempts.empty(),
+				"one exact owner authenticates repeated cached uses with zero xShmMap or ledger "
+				"mutation");
+
+		const auto cached_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				cached_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.reader-cached-second-session-terminal", marker));
+		require(coordinator.complete_reader_session(*cached_session, cached_terminal).has_value() &&
+					!cached_session->valid(),
+				"consume the exact callback-free session owner");
+		auto after_terminal = coordinator.authenticate_reader_cached_member_use(
+			*cached_session, *reader.cached_member);
+		require(!after_terminal &&
+					after_terminal.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+				"a terminated owner cannot authenticate a later cached pointer use");
+
+		const auto unmap_callback = callback(7U, marker + 3U);
+		auto unmap = coordinator.begin_reader_unmap(
+			reader.handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
+		require(unmap && !reader.handoff.valid(),
+				"cached-use fixture admits its exact final group unmap");
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.reader-cached-unmap-effect", marker),
+			identity("test.reader-cached-unmap-latch", marker));
+		require(coordinator.complete_reader_unmap(*unmap, unmap_receipt).has_value() &&
+					!unmap->valid(),
+				"cached-use fixture retires its one native group owner");
 	}
 
 	void verify_reader_lifecycle_sequence_source_is_shared_and_exhausts_without_partials()
@@ -14721,6 +14842,7 @@ int main()
 		verify_direct_opaque_first_map_has_no_group_or_native_authority();
 		verify_reader_native_attachment_group_and_session_core();
 		verify_equal_pointer_reader_connections_unmap_independently();
+		verify_callback_free_cached_member_use_requires_a_live_session_owner();
 		verify_reader_lifecycle_sequence_source_is_shared_and_exhausts_without_partials();
 		verify_first_reader_map_reserves_sequence_and_three_terminals_atomically();
 		verify_unavailable_shared_reader_sequence_source_preserves_owned_drains();

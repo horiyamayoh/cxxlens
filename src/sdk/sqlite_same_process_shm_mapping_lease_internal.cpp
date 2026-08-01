@@ -5448,10 +5448,10 @@ namespace cxxlens::sdk
 								sqlite_shm_lease_rejection_reason::stale_token,
 								sqlite_shm_lease_recovery_action::deny_before_native_map));
 
-						std::vector<sqlite_shm_mapping_tuple> captured_members;
+						std::vector<sqlite_shm_reader_cached_member_identity> captured_members;
 						captured_members.reserve(active_group->members.size());
 						for (const auto& member : active_group->members)
-							captured_members.push_back(member.mapping);
+							captured_members.push_back(member.identity);
 						std::vector<std::uint64_t> captured_audits;
 						captured_audits.reserve(active_group->audits.size());
 						for (const auto& audit : active_group->audits)
@@ -5901,13 +5901,13 @@ namespace cxxlens::sdk
 						reader_lifecycle_sequences_->state_.get(), binding.slots[0]};
 					reader_terminal_slot_guard terminal_slot{
 						reader_lifecycle_sequences_->state_.get(), binding.slots[1]};
-					std::vector<sqlite_shm_mapping_tuple> captured_members;
+					std::vector<sqlite_shm_reader_cached_member_identity> captured_members;
 					std::vector<std::uint64_t> captured_audits;
 					if (joins_existing_group)
 					{
 						captured_members.reserve(group->members.size());
 						for (const auto& member : group->members)
-							captured_members.push_back(member.mapping);
+							captured_members.push_back(member.identity);
 						captured_audits.reserve(group->audits.size());
 						for (const auto& audit : group->audits)
 							captured_audits.push_back(audit.map_attempt_token);
@@ -5986,6 +5986,105 @@ namespace cxxlens::sdk
 					return sqlite_shm_unexpected(
 						rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
 								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_mapping_tuple>
+			authenticate_reader_cached_member_use(
+				const sqlite_shm_reader_session& session,
+				const sqlite_shm_reader_cached_member_identity& member,
+				sqlite_shm_registry_family_pin* registry_family = nullptr) noexcept
+			{
+				if (!valid_reader_native_attachment(member.attachment_) ||
+					member.group_token_ == 0U || member.generation_ == 0U ||
+					member.member_token_ == 0U || !valid_mapping(member.mapping_))
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::invalid_request,
+								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					if (!owns(session.state_, session.token_) ||
+						session.terminal_presentation_disabled_)
+						return sqlite_shm_unexpected(
+							stale_token(sqlite_shm_lease_recovery_action::deny_before_native_map));
+					if (is_quarantined_locked())
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::quarantined,
+									  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+
+					const auto owner = find_by_token(reader_sessions_, session.token_);
+					if (owner == reader_sessions_.end() ||
+						owner->phase != reader_session_record_phase::active_group_owner ||
+						session.phase_ != sqlite_shm_reader_session_phase::active_group_owner ||
+						owner->generation != session.generation_)
+						return sqlite_shm_unexpected(
+							stale_token(sqlite_shm_lease_recovery_action::deny_before_native_map));
+					const auto registry_route = registry_family != nullptr;
+					if (owner->registry_bound != registry_route ||
+						(registry_route && has_live_legacy_reader_lineage_locked()) ||
+						(!registry_route && has_live_registry_reader_lineage_locked()))
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									  sqlite_shm_lease_recovery_action::deny_before_native_map));
+
+					const auto group = find_by_token(reader_attachment_groups_, owner->group_token);
+					if (group == reader_attachment_groups_.end() ||
+						group->phase != reader_attachment_group_phase::active ||
+						group->reservation_phase !=
+							sqlite_shm_reader_attachment_reservation_phase::observed_present ||
+						group->existing_group_deferred_cleanup_required ||
+						!group->observed_identity)
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::retiring,
+									  sqlite_shm_lease_recovery_action::deny_before_native_map));
+					if (group->token != member.group_token_ ||
+						group->generation != member.generation_ ||
+						group->expected != member.attachment_ ||
+						owner->group_token != member.group_token_ ||
+						owner->generation != member.generation_ ||
+						owner->request.attachment != member.attachment_)
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									  sqlite_shm_lease_recovery_action::deny_before_native_map));
+					if (registry_route &&
+						(!group->registry_bound || !group->registry_activity_authority ||
+						 !group->registry_activity_authority->validate_active_authority(
+							 *registry_family, group->expected)))
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+
+					const auto group_member = std::ranges::find(
+						group->members, member, &reader_attachment_group_member_record::identity);
+					const auto captured_member = std::ranges::find(owner->captured_members, member);
+					if (group_member == group->members.end() ||
+						captured_member == owner->captured_members.end())
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									  sqlite_shm_lease_recovery_action::deny_before_native_map));
+					if (group->members.size() < owner->captured_members.size() ||
+						group->audits.size() < owner->captured_audits.size())
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+					for (std::size_t index = 0; index < owner->captured_members.size(); ++index)
+						if (group->members[index].identity != owner->captured_members[index])
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+					for (std::size_t index = 0; index < owner->captured_audits.size(); ++index)
+						if (group->audits[index].map_attempt_token != owner->captured_audits[index])
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+					return member.mapping_;
+				}
+				catch (...)
+				{
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::quarantine_no_retry));
 				}
 			}
 
@@ -6075,22 +6174,22 @@ namespace cxxlens::sdk
 							group->members.end(),
 							[&request](const reader_attachment_group_member_record& value)
 							{
-								return value.mapping.page_number == request.page_number;
+								return value.identity.mapping().page_number == request.page_number;
 							});
 						if (member != group->members.end())
 						{
 							retirement_blocker = false;
-							if (member->mapping.page_size != request.page_size)
+							if (member->identity.mapping().page_size != request.page_size)
 								return sqlite_shm_unexpected(rejection(
 									sqlite_shm_lease_rejection_reason::mapping_mismatch,
 									sqlite_shm_lease_recovery_action::deny_before_native_map));
-							expected =
-								std::find_if(generation_->pages.begin(),
-											 generation_->pages.end(),
-											 [&member](const sqlite_shm_mapping_tuple& value)
-											 {
-												 return same_mapping_page(value, member->mapping);
-											 });
+							expected = std::find_if(generation_->pages.begin(),
+													generation_->pages.end(),
+													[&member](const sqlite_shm_mapping_tuple& value)
+													{
+														return same_mapping_page(
+															value, member->identity.mapping());
+													});
 						}
 					}
 					else
@@ -6450,16 +6549,24 @@ namespace cxxlens::sdk
 							group->members.end(),
 							[&mapping](const reader_attachment_group_member_record& value)
 							{
-								return value.mapping.page_number == mapping.page_number;
+								return value.identity.mapping().page_number == mapping.page_number;
 							});
 						auto kind = sqlite_shm_reader_map_commit_kind::new_member;
 						if (member != group->members.end())
 						{
-							if (member->mapping != mapping)
+							if (member->identity.mapping() != mapping)
 								return quarantine_terminal(
 									sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
 							kind = sqlite_shm_reader_map_commit_kind::existing_member_revalidation;
 						}
+						auto cached_member = member != group->members.end()
+							? member->identity
+							: sqlite_shm_reader_cached_member_identity{
+								  group->expected,
+								  sqlite_shm_lease_token_identity{group->token},
+								  sqlite_shm_mapping_generation_identity{generation},
+								  sqlite_shm_lease_token_identity{attempt_token},
+								  mapping};
 						auto next_members = group->members;
 						auto next_audits = group->audits;
 						auto next_session_members = owner->captured_members;
@@ -6470,8 +6577,8 @@ namespace cxxlens::sdk
 								generation_->phase != sqlite_shm_mapping_generation_phase::retiring)
 								return quarantine_terminal(
 									sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
-							next_members.push_back({mapping});
-							next_session_members.push_back(mapping);
+							next_members.push_back({cached_member});
+							next_session_members.push_back(cached_member);
 						}
 						next_audits.push_back({attempt_token,
 											   owner->token,
@@ -6539,7 +6646,8 @@ namespace cxxlens::sdk
 						inflight.disarm();
 						reader_last_committed_sequence_ =
 							std::max(reader_last_committed_sequence_, sequences.last);
-						return sqlite_shm_reader_map_commit{kind, std::move(mapping), std::nullopt};
+						return sqlite_shm_reader_map_commit{
+							kind, mapping, std::move(cached_member), std::nullopt};
 					}
 
 					if (owner->phase != reader_session_record_phase::reserved_for_first_map ||
@@ -6562,7 +6670,14 @@ namespace cxxlens::sdk
 						return quarantine_terminal(
 							sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
 					auto observed_identity = receipt.observed_attachment();
-					std::vector<reader_attachment_group_member_record> next_members{{mapping}};
+					auto cached_member = sqlite_shm_reader_cached_member_identity{
+						owner->request.attachment,
+						sqlite_shm_lease_token_identity{reservation->token},
+						sqlite_shm_mapping_generation_identity{generation},
+						sqlite_shm_lease_token_identity{attempt_token},
+						mapping};
+					std::vector<reader_attachment_group_member_record> next_members{
+						{cached_member}};
 					std::vector<reader_attachment_group_audit_record> next_audits{
 						{attempt_token,
 						 owner->token,
@@ -6570,7 +6685,8 @@ namespace cxxlens::sdk
 						 receipt,
 						 map_attempt->admission_sequence,
 						 0U}};
-					std::vector<sqlite_shm_mapping_tuple> captured_members{mapping};
+					std::vector<sqlite_shm_reader_cached_member_identity> captured_members{
+						cached_member};
 					std::vector<std::uint64_t> captured_audits{attempt_token};
 					auto next_custodies = reader_custodies_;
 					const auto attempt_custody = std::find_if(
@@ -6706,7 +6822,8 @@ namespace cxxlens::sdk
 						std::max(reader_last_committed_sequence_, sequences.last);
 					return sqlite_shm_reader_map_commit{
 						sqlite_shm_reader_map_commit_kind::first_member,
-						std::move(mapping),
+						mapping,
+						std::move(cached_member),
 						sqlite_shm_reader_handoff{
 							std::move(committed_state),
 							sqlite_shm_lease_token_identity{reservation->token},
@@ -12832,7 +12949,7 @@ namespace cxxlens::sdk
 				sqlite_shm_reader_session_request request;
 				std::uint64_t group_token{};
 				bool registry_bound{};
-				std::vector<sqlite_shm_mapping_tuple> captured_members;
+				std::vector<sqlite_shm_reader_cached_member_identity> captured_members;
 				std::vector<std::uint64_t> captured_audits;
 				sqlite_shm_reader_session_reservation_phase lifecycle_phase{
 					sqlite_shm_reader_session_reservation_phase::reserved_before_sqlite};
@@ -12855,7 +12972,7 @@ namespace cxxlens::sdk
 
 			struct reader_attachment_group_member_record
 			{
-				sqlite_shm_mapping_tuple mapping;
+				sqlite_shm_reader_cached_member_identity identity;
 			};
 
 			struct reader_attachment_group_audit_record
@@ -14121,7 +14238,7 @@ namespace cxxlens::sdk
 						{
 							for (std::size_t index = 0; index < session.captured_members.size();
 								 ++index)
-								if (group->members[index].mapping !=
+								if (group->members[index].identity !=
 									session.captured_members[index])
 								{
 									invalid = true;
@@ -17619,17 +17736,37 @@ namespace cxxlens::sdk
 		state_.reset();
 	}
 
+	sqlite_shm_reader_cached_member_identity::sqlite_shm_reader_cached_member_identity(
+		sqlite_shm_reader_attachment_reservation_identity attachment,
+		const detail::sqlite_shm_lease_token_identity group_token,
+		const detail::sqlite_shm_mapping_generation_identity generation,
+		const detail::sqlite_shm_lease_token_identity member_token,
+		sqlite_shm_mapping_tuple mapping) noexcept
+		: attachment_{std::move(attachment)}, group_token_{group_token.value},
+		  generation_{generation.value}, member_token_{member_token.value}, mapping_{mapping}
+	{
+	}
+
+	const sqlite_shm_mapping_tuple&
+	sqlite_shm_reader_cached_member_identity::mapping() const noexcept
+	{
+		return mapping_;
+	}
+
 	sqlite_shm_reader_map_commit::sqlite_shm_reader_map_commit(
 		const sqlite_shm_reader_map_commit_kind kind,
 		sqlite_shm_mapping_tuple mapping,
+		sqlite_shm_reader_cached_member_identity cached_member,
 		std::optional<sqlite_shm_reader_handoff> handoff) noexcept
-		: kind_{kind}, mapping_{std::move(mapping)}, handoff_{std::move(handoff)}
+		: kind_{kind}, mapping_{mapping}, cached_member_{std::move(cached_member)},
+		  handoff_{std::move(handoff)}
 	{
 	}
 
 	sqlite_shm_reader_map_commit::sqlite_shm_reader_map_commit(
 		sqlite_shm_reader_map_commit&& other) noexcept
-		: kind_{other.kind_}, mapping_{std::move(other.mapping_)}
+		: kind_{other.kind_}, mapping_{other.mapping_},
+		  cached_member_{std::move(other.cached_member_)}
 	{
 		if (other.handoff_)
 		{
@@ -17646,6 +17783,12 @@ namespace cxxlens::sdk
 	const sqlite_shm_mapping_tuple& sqlite_shm_reader_map_commit::mapping() const noexcept
 	{
 		return mapping_;
+	}
+
+	const sqlite_shm_reader_cached_member_identity&
+	sqlite_shm_reader_map_commit::cached_member() const noexcept
+	{
+		return cached_member_;
 	}
 
 	bool sqlite_shm_reader_map_commit::formed_group() const noexcept
@@ -18028,6 +18171,14 @@ namespace cxxlens::sdk
 		const sqlite_shm_reader_session_request& request)
 	{
 		return state_->begin_reader_session(request);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_mapping_tuple>
+	sqlite_same_process_shm_mapping_lease_coordinator::authenticate_reader_cached_member_use(
+		const sqlite_shm_reader_session& session,
+		const sqlite_shm_reader_cached_member_identity& member) noexcept
+	{
+		return state_->authenticate_reader_cached_member_use(session, member);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_session_admission>

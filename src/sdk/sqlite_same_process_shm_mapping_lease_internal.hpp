@@ -2240,6 +2240,38 @@ namespace cxxlens::sdk
 	};
 
 	/**
+	 * Unforgeable source-private identity for one cached reader SHM member.
+	 *
+	 * A positive map commit returns the identity that must be stored beside SQLite's cached
+	 * pointer. Field equality is not authority: each cached use must present this value together
+	 * with the exact live session owner to the coordinator or registry authentication boundary.
+	 */
+	class sqlite_shm_reader_cached_member_identity
+	{
+	  public:
+		[[nodiscard]] const sqlite_shm_mapping_tuple& mapping() const noexcept;
+		[[nodiscard]] bool
+		operator==(const sqlite_shm_reader_cached_member_identity&) const = default;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_reader_cached_member_identity(
+			sqlite_shm_reader_attachment_reservation_identity attachment,
+			detail::sqlite_shm_lease_token_identity group_token,
+			detail::sqlite_shm_mapping_generation_identity generation,
+			detail::sqlite_shm_lease_token_identity member_token,
+			sqlite_shm_mapping_tuple mapping) noexcept;
+
+		sqlite_shm_reader_attachment_reservation_identity attachment_;
+		std::uint64_t group_token_{};
+		std::uint64_t generation_{};
+		std::uint64_t member_token_{};
+		sqlite_shm_mapping_tuple mapping_;
+	};
+
+	/**
 	 * Positive atomic map commit.
 	 *
 	 * Only a first-member commit carries a newly minted group handoff. The session owner is the
@@ -2255,6 +2287,8 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] sqlite_shm_reader_map_commit_kind kind() const noexcept;
 		[[nodiscard]] const sqlite_shm_mapping_tuple& mapping() const noexcept;
+		[[nodiscard]] const sqlite_shm_reader_cached_member_identity&
+		cached_member() const noexcept;
 		[[nodiscard]] bool formed_group() const noexcept;
 		[[nodiscard]] std::optional<sqlite_shm_reader_handoff> take_handoff() noexcept;
 
@@ -2262,11 +2296,13 @@ namespace cxxlens::sdk
 		friend class detail::sqlite_shm_mapping_lease_state;
 		sqlite_shm_reader_map_commit(sqlite_shm_reader_map_commit_kind kind,
 									 sqlite_shm_mapping_tuple mapping,
+									 sqlite_shm_reader_cached_member_identity cached_member,
 									 std::optional<sqlite_shm_reader_handoff> handoff) noexcept;
 
 		sqlite_shm_reader_map_commit_kind kind_{
 			sqlite_shm_reader_map_commit_kind::existing_member_revalidation};
 		sqlite_shm_mapping_tuple mapping_;
+		sqlite_shm_reader_cached_member_identity cached_member_;
 		std::optional<sqlite_shm_reader_handoff> handoff_;
 	};
 
@@ -2496,6 +2532,10 @@ namespace cxxlens::sdk
 					   const sqlite_shm_verified_reader_post_map_receipt& receipt);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_session>
 		begin_reader_session(const sqlite_shm_reader_session_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_mapping_tuple>
+		authenticate_reader_cached_member_use(
+			const sqlite_shm_reader_session& session,
+			const sqlite_shm_reader_cached_member_identity& member) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
 		begin_reader_map(sqlite_shm_reader_session& session,
 						 const sqlite_shm_reader_attachment_map_request& request);
