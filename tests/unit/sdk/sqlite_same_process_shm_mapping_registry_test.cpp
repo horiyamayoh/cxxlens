@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -409,6 +410,58 @@ namespace cxxlens::sdk
 					std::move(zero_attachment_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_unpublished_cleanup_receipt
+		reader_unpublished_cleanup(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_reader_unpublished_cleanup_entry_kind kind,
+			sqlite_shm_reader_attachment_map_request request,
+			sqlite_shm_reader_session_request session_request,
+			const std::uint64_t generation,
+			const int native_status,
+			const volatile void* native_mapping,
+			const int delegated_extend,
+			sqlite_shm_reader_native_attachment_identity observed_attachment,
+			sqlite_backend_opaque_identity mapped_effect_receipt,
+			sqlite_backend_opaque_identity session_no_pointer_terminal_receipt)
+		{
+			return {
+				inflight,
+				kind,
+				std::move(request),
+				std::move(session_request),
+				generation,
+				native_status,
+				native_mapping,
+				delegated_extend,
+				std::move(observed_attachment),
+				std::move(mapped_effect_receipt),
+				std::move(session_no_pointer_terminal_receipt),
+			};
+		}
+
+		[[nodiscard]] static sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt
+		reader_unpublished_cleanup_terminal(
+			const sqlite_shm_reader_unpublished_cleanup_obligation& cleanup,
+			sqlite_shm_callback_execution_receipt callback,
+			const sqlite_shm_reader_unpublished_cleanup_evidence_kind evidence_kind,
+			std::optional<int> native_status,
+			const int caller_delete_flag,
+			const int delegated_delete_flag,
+			std::optional<sqlite_backend_opaque_identity> native_effect_receipt,
+			std::optional<sqlite_backend_opaque_identity> latch_reset_receipt)
+		{
+			return {
+				cleanup,
+				std::move(callback),
+				evidence_kind,
+				native_status,
+				caller_delete_flag,
+				delegated_delete_flag,
+				std::move(native_effect_receipt),
+				std::move(latch_reset_receipt),
+			};
+		}
+
 		[[nodiscard]] static sqlite_shm_reader_session_terminal_receipt
 		reader_session_terminal(sqlite_shm_reader_session_request request,
 								const sqlite_shm_reader_session_terminal_kind kind,
@@ -489,6 +542,21 @@ namespace cxxlens::sdk
 			return coordinator.export_registry_reader_lifecycle_tombstones();
 		}
 
+		[[nodiscard]] static sqlite_shm_lease_result<void> import_reader_lifecycle_tombstones(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
+			const std::span<const sqlite_shm_reader_lifecycle_compact_tombstone> tombstones)
+		{
+			return coordinator.import_registry_reader_lifecycle_tombstones(tombstones);
+		}
+
+		[[nodiscard]] static sqlite_shm_lease_result<
+			std::vector<sqlite_shm_reader_open_epoch_close_tombstone>>
+		export_reader_open_epoch_close_tombstones(
+			const sqlite_same_process_shm_mapping_lease_coordinator& coordinator)
+		{
+			return coordinator.export_registry_reader_open_epoch_close_tombstones();
+		}
+
 		[[nodiscard]] static sqlite_shm_lease_result<void> check_reader_lifecycle_tombstone(
 			const sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
 			const sqlite_shm_reader_attachment_reservation_identity& attachment)
@@ -564,6 +632,13 @@ namespace
 		!std::is_default_constructible_v<sqlite_shm_verified_alias_unregistration_receipt>);
 	static_assert(!std::is_default_constructible_v<
 				  sqlite_shm_verified_reader_attachment_zero_effect_receipt>);
+	static_assert(
+		!std::is_default_constructible_v<sqlite_shm_verified_reader_unpublished_cleanup_receipt>);
+	static_assert(!std::is_default_constructible_v<
+				  sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt>);
+	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_unpublished_cleanup_obligation>);
+	static_assert(
+		std::is_nothrow_move_constructible_v<sqlite_shm_reader_unpublished_cleanup_obligation>);
 	static_assert(
 		!std::is_default_constructible_v<sqlite_shm_verified_reader_close_terminal_receipt>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_close_obligation>);
@@ -1945,6 +2020,683 @@ namespace
 		auto handoff = committed->take_handoff();
 		require(handoff && handoff->valid(), "take focused reader group handoff");
 		return std::move(*handoff);
+	}
+
+	struct reader_unpublished_cleanup_attempt
+	{
+		reader_candidate_setup candidate;
+		sqlite_shm_reader_attachment_map_request map_request;
+		sqlite_shm_verified_reader_attachment_post_map_receipt map_receipt;
+		sqlite_backend_opaque_identity session_no_pointer_terminal_receipt;
+		sqlite_shm_reader_attachment_map_inflight inflight;
+		std::uint8_t marker{};
+	};
+
+	[[nodiscard]] reader_unpublished_cleanup_attempt
+	prepare_reader_unpublished_cleanup_attempt(const std::uint8_t marker)
+	{
+		auto candidate = make_reader_candidate_setup(marker);
+		auto map_request = reader_attachment_map_request(candidate.session_request,
+														 static_cast<std::uint8_t>(marker + 1U));
+		auto inflight = candidate.fixture.registry->begin_reader_map(
+			*candidate.fixture.family_pin, candidate.session, map_request);
+		require(inflight && inflight->valid(), "begin unpublished first reader map");
+		auto map_receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+			map_request,
+			candidate.holder.generation(),
+			mapping(candidate.writer_attempt.native_page.get()),
+			identity("test.registry.reader-unpublished-map-effect",
+					 static_cast<std::uint8_t>(marker + 1U)));
+		sqlite_same_process_shm_lease_test_peer::fail_next_reader_map_terminal_transition(
+			*candidate.coordinator);
+		auto selected = candidate.fixture.registry->commit_reader_map(
+			*candidate.fixture.family_pin, *inflight, map_receipt, candidate.session);
+		const auto lease = candidate.coordinator->snapshot();
+		const auto registry = candidate.fixture.registry->snapshot();
+		require(
+			!selected &&
+				selected.error().reason ==
+					sqlite_shm_lease_rejection_reason::unpublished_cleanup_required &&
+				selected.error().action ==
+					sqlite_shm_lease_recovery_action::attempt_nonremoving_unmap_then_outer_ioerr &&
+				inflight->valid() && candidate.session.valid() && !lease.quarantined &&
+				lease.reader_inflight_count == 1U && lease.reader_session_reservation_count == 1U &&
+				lease.reader_unpublished_cleanup_admitted_count == 0U &&
+				lease.reader_logical_ack_awaiting_count == 0U &&
+				lease.reader_registry_activity_authority_count == 2U &&
+				registry.active_activity_pin_count == 3U && registry.quarantined_family_count == 0U,
+			"mapped first-map failure did not select one recoverable unpublished cleanup");
+		return {
+			std::move(candidate),
+			std::move(map_request),
+			std::move(map_receipt),
+			identity("test.registry.reader-unpublished-session-terminal",
+					 static_cast<std::uint8_t>(marker + 2U)),
+			std::move(*inflight),
+			marker,
+		};
+	}
+
+	[[nodiscard]] sqlite_shm_verified_reader_unpublished_cleanup_receipt
+	reader_unpublished_cleanup_receipt(const reader_unpublished_cleanup_attempt& attempt,
+									   sqlite_shm_reader_attachment_map_request request,
+									   sqlite_shm_reader_session_request session_request)
+	{
+		return sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup(
+			attempt.inflight,
+			sqlite_shm_reader_unpublished_cleanup_entry_kind::exact_mapped_validation_failure,
+			std::move(request),
+			std::move(session_request),
+			attempt.map_receipt.generation(),
+			sqlite_ok_status,
+			attempt.map_receipt.mapping().native_mapping,
+			0,
+			attempt.map_receipt.observed_attachment(),
+			attempt.map_receipt.zero_resize_effect_receipt(),
+			attempt.session_no_pointer_terminal_receipt);
+	}
+
+	struct reader_unpublished_cleanup_setup
+	{
+		reader_candidate_setup candidate;
+		sqlite_shm_reader_attachment_map_request map_request;
+		sqlite_backend_opaque_identity mapped_effect_receipt;
+		sqlite_backend_opaque_identity session_no_pointer_terminal_receipt;
+		sqlite_backend_opaque_identity cleanup_native_effect_receipt;
+		sqlite_backend_opaque_identity cleanup_latch_reset_receipt;
+		sqlite_shm_reader_unpublished_cleanup_obligation cleanup;
+		std::uint8_t marker{};
+	};
+
+	[[nodiscard]] reader_unpublished_cleanup_setup
+	begin_reader_unpublished_cleanup_attempt(reader_unpublished_cleanup_attempt attempt)
+	{
+		auto receipt = reader_unpublished_cleanup_receipt(
+			attempt, attempt.map_request, attempt.candidate.session_request);
+		auto cleanup = attempt.candidate.fixture.registry->begin_reader_unpublished_cleanup(
+			*attempt.candidate.fixture.family_pin,
+			attempt.inflight,
+			receipt,
+			attempt.candidate.session);
+		const auto lease = attempt.candidate.coordinator->snapshot();
+		const auto registry = attempt.candidate.fixture.registry->snapshot();
+		const auto lifecycle = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*attempt.candidate.coordinator);
+		const auto reservation = std::ranges::find_if(
+			lifecycle.attachment_reservations,
+			[&attempt](const sqlite_shm_reader_attachment_reservation_test_view& candidate)
+			{
+				return candidate.attachment == attempt.candidate.session_request.attachment;
+			});
+		require(cleanup && cleanup->valid() && !attempt.inflight.valid() &&
+					!attempt.candidate.session.valid() && !lease.quarantined &&
+					lease.reader_inflight_count == 0U && lease.reader_cleanup_count == 1U &&
+					lease.reader_session_reservation_count == 0U &&
+					lease.reader_session_owner_count == 0U &&
+					lease.reader_unpublished_cleanup_admitted_count == 1U &&
+					lease.reader_unpublished_cleanup_confirmed_count == 0U &&
+					lease.reader_logical_ack_awaiting_count == 0U &&
+					lease.reader_registry_activity_authority_count == 1U &&
+					registry.active_activity_pin_count == 2U &&
+					registry.active_reader_open_count == 1U &&
+					registry.quarantined_family_count == 0U &&
+					reservation != lifecycle.attachment_reservations.end() &&
+					reservation->phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::
+							unpublished_cleanup_admitted &&
+					reservation->unpublished_cleanup_kind ==
+						sqlite_shm_reader_unpublished_cleanup_entry_kind::
+							exact_mapped_validation_failure &&
+					reservation->logical_ack_phase ==
+						detail::sqlite_shm_reader_logical_ack_phase::not_applicable &&
+					reservation->cleanup_session_origin_sequence <
+						reservation->cleanup_session_terminal_sequence &&
+					reservation->cleanup_session_terminal_sequence <
+						reservation->cleanup_cut_sequence &&
+					reservation->cleanup_terminal_sequence == 0U &&
+					reservation->logical_ack_sequence == 0U,
+				"unpublished cleanup admission did not atomically consume map/session and retain "
+				"one cleanup owner");
+		return {
+			std::move(attempt.candidate),
+			std::move(attempt.map_request),
+			attempt.map_receipt.zero_resize_effect_receipt(),
+			std::move(attempt.session_no_pointer_terminal_receipt),
+			identity("test.registry.reader-unpublished-cleanup-native-effect",
+					 static_cast<std::uint8_t>(attempt.marker + 3U)),
+			identity("test.registry.reader-unpublished-cleanup-latch-reset",
+					 static_cast<std::uint8_t>(attempt.marker + 4U)),
+			std::move(*cleanup),
+			attempt.marker,
+		};
+	}
+
+	[[nodiscard]] reader_unpublished_cleanup_setup
+	make_confirmed_reader_unpublished_cleanup(const std::uint8_t marker)
+	{
+		auto setup = begin_reader_unpublished_cleanup_attempt(
+			prepare_reader_unpublished_cleanup_attempt(marker));
+		const auto terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup_terminal(
+				setup.cleanup,
+				setup.map_request.callback,
+				sqlite_shm_reader_unpublished_cleanup_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				0,
+				0,
+				setup.cleanup_native_effect_receipt,
+				setup.cleanup_latch_reset_receipt);
+		auto completed = setup.candidate.fixture.registry->complete_reader_unpublished_cleanup(
+			*setup.candidate.fixture.family_pin, setup.cleanup, terminal);
+		const auto lease = setup.candidate.coordinator->snapshot();
+		const auto registry = setup.candidate.fixture.registry->snapshot();
+		const auto lifecycle = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		const auto reservation = std::ranges::find_if(
+			lifecycle.attachment_reservations,
+			[&setup](const sqlite_shm_reader_attachment_reservation_test_view& candidate)
+			{
+				return candidate.attachment == setup.candidate.session_request.attachment;
+			});
+		require(completed &&
+					completed->kind() ==
+						sqlite_shm_reader_unpublished_cleanup_terminal_kind::confirmed &&
+					completed->evidence_kind() ==
+						sqlite_shm_reader_unpublished_cleanup_evidence_kind::exact_native_result &&
+					completed->native_status() == sqlite_ok_status &&
+					completed->outward_status() == sqlite_ioerr_status &&
+					completed->native_effect_receipt() == setup.cleanup_native_effect_receipt &&
+					completed->latch_reset_receipt() == setup.cleanup_latch_reset_receipt &&
+					!setup.cleanup.valid() && !lease.quarantined &&
+					lease.reader_cleanup_count == 0U &&
+					lease.reader_unpublished_cleanup_admitted_count == 0U &&
+					lease.reader_unpublished_cleanup_confirmed_count == 1U &&
+					lease.reader_logical_ack_awaiting_count == 1U &&
+					lease.reader_registry_activity_authority_count == 1U &&
+					registry.active_activity_pin_count == 2U &&
+					registry.active_reader_open_count == 1U &&
+					registry.quarantined_family_count == 0U &&
+					reservation != lifecycle.attachment_reservations.end() &&
+					reservation->phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::
+							unpublished_cleanup_confirmed &&
+					reservation->logical_ack_phase ==
+						detail::sqlite_shm_reader_logical_ack_phase::awaiting_sqlite_ack &&
+					reservation->cleanup_cut_sequence < reservation->cleanup_terminal_sequence &&
+					reservation->destination_sequence == reservation->cleanup_terminal_sequence &&
+					reservation->logical_ack_sequence == 0U,
+				"confirmed unpublished cleanup did not install one retained logical ack");
+		return setup;
+	}
+
+	void close_and_retire_confirmed_unpublished_cleanup(reader_unpublished_cleanup_setup& setup,
+														const std::uint8_t marker)
+	{
+		close_and_release_reader_open(setup.candidate.fixture,
+									  setup.candidate.open,
+									  marker,
+									  sqlite_shm_reader_close_route::close_after_confirmed_unmap);
+		retire_writer(*setup.candidate.coordinator,
+					  setup.candidate.holder,
+					  static_cast<std::uint8_t>(marker + 1U));
+		require(setup.candidate.coordinator->revoke_writer_eligibility(setup.candidate.eligibility)
+					.has_value(),
+				"revoke confirmed unpublished-cleanup writer eligibility");
+	}
+
+	void verify_unpublished_cleanup_ack_blocks_fresh_admission_and_is_one_shot()
+	{
+		constexpr std::uint8_t marker = 92U;
+		auto setup = make_confirmed_reader_unpublished_cleanup(marker);
+		auto fresh_request = setup.candidate.pre_sqlite;
+		fresh_request.read_transaction_epoch =
+			identity("test.registry.reader-unpublished-fresh-transaction", marker);
+		fresh_request.decode_attempt =
+			identity("test.registry.reader-unpublished-fresh-decode", marker);
+		fresh_request.authority_read_receipt =
+			identity("test.registry.reader-unpublished-fresh-authority", marker);
+		const auto sequence_before =
+			sqlite_same_process_shm_registry_test_peer::reader_lifecycle_last_issued_sequence(
+				*setup.candidate.fixture.registry);
+		const auto registry_before = setup.candidate.fixture.registry->snapshot();
+		const auto lease_before = setup.candidate.coordinator->snapshot();
+
+		auto blocked_session = setup.candidate.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.candidate.fixture.family_pin, setup.candidate.open, fresh_request);
+		auto blocked_map = setup.candidate.fixture.registry->begin_reader_map(
+			*setup.candidate.fixture.family_pin, setup.candidate.session, setup.map_request);
+		auto blocked_activity =
+			setup.candidate.fixture.registry->acquire_activity(*setup.candidate.fixture.family_pin);
+
+		auto second_owner_count = std::make_shared<std::atomic_int>(0);
+		auto second_runtime_owner = std::make_shared<runtime_owner_probe>(second_owner_count);
+		auto second_alias = register_alias(*setup.candidate.fixture.registry,
+										   setup.candidate.fixture.process_instance,
+										   setup.candidate.fixture.cohort,
+										   static_cast<std::uint8_t>(marker + 20U),
+										   second_runtime_owner);
+		auto blocked_successor = setup.candidate.fixture.registry->install_or_join_family(
+			*second_alias.alias, setup.candidate.fixture.family);
+		const auto registry_blocked = setup.candidate.fixture.registry->snapshot();
+		const auto lease_blocked = setup.candidate.coordinator->snapshot();
+		require(
+			blocked_session &&
+				blocked_session->kind() ==
+					sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
+				!blocked_session->has_proposal_custody() && blocked_session->rejection() &&
+				blocked_session->rejection()->reason ==
+					sqlite_shm_lease_rejection_reason::retiring &&
+				blocked_session->rejection()->action ==
+					sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary &&
+				!blocked_map &&
+				blocked_map.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
+				blocked_map.error().action ==
+					sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary &&
+				!blocked_activity &&
+				blocked_activity.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
+				!blocked_successor &&
+				blocked_successor.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
+				blocked_successor.error().action ==
+					sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary &&
+				sqlite_same_process_shm_registry_test_peer::reader_lifecycle_last_issued_sequence(
+					*setup.candidate.fixture.registry) == sequence_before &&
+				registry_blocked.active_activity_pin_count ==
+					registry_before.active_activity_pin_count &&
+				registry_blocked.active_reader_open_count ==
+					registry_before.active_reader_open_count &&
+				lease_blocked.reader_unpublished_cleanup_confirmed_count ==
+					lease_before.reader_unpublished_cleanup_confirmed_count &&
+				lease_blocked.reader_logical_ack_awaiting_count == 1U &&
+				lease_blocked.reader_session_reservation_count == 0U &&
+				lease_blocked.reader_inflight_count == 0U && !lease_blocked.quarantined,
+			"awaiting logical ack admitted a session, map, fresh epoch, activity, or successor");
+
+		const auto ack_request = sqlite_shm_reader_logical_ack_request{
+			callback(static_cast<std::uint8_t>(marker + 5U)), 0, 0};
+		auto acknowledged = setup.candidate.fixture.registry->consume_reader_logical_ack(
+			*setup.candidate.fixture.family_pin, setup.candidate.open, ack_request);
+		const auto lease_acknowledged = setup.candidate.coordinator->snapshot();
+		const auto registry_acknowledged = setup.candidate.fixture.registry->snapshot();
+		const auto lifecycle = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		const auto reservation = std::ranges::find_if(
+			lifecycle.attachment_reservations,
+			[&setup](const sqlite_shm_reader_attachment_reservation_test_view& candidate)
+			{
+				return candidate.attachment == setup.candidate.session_request.attachment;
+			});
+		require(acknowledged &&
+					acknowledged->phase() ==
+						detail::sqlite_shm_reader_logical_ack_phase::consumed_by_exact_unmap &&
+					acknowledged->outward_status() == sqlite_ok_status &&
+					!acknowledged->delegated_native_effect() &&
+					lease_acknowledged.reader_unpublished_cleanup_confirmed_count == 1U &&
+					lease_acknowledged.reader_logical_ack_awaiting_count == 0U &&
+					lease_acknowledged.reader_registry_activity_authority_count == 0U &&
+					registry_acknowledged.active_activity_pin_count == 1U &&
+					registry_acknowledged.active_reader_open_count == 1U &&
+					reservation != lifecycle.attachment_reservations.end() &&
+					reservation->logical_ack_phase ==
+						detail::sqlite_shm_reader_logical_ack_phase::consumed_by_exact_unmap &&
+					reservation->logical_ack_sequence > reservation->cleanup_terminal_sequence &&
+					!lease_acknowledged.quarantined,
+				"exact SQLite logical ack delegated native work or failed to release its owner");
+
+		auto replay = setup.candidate.fixture.registry->consume_reader_logical_ack(
+			*setup.candidate.fixture.family_pin, setup.candidate.open, ack_request);
+		require(
+			!replay && replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+				replay.error().action == sqlite_shm_lease_recovery_action::outer_ioerr_no_retry &&
+				setup.candidate.coordinator->snapshot().reader_logical_ack_awaiting_count == 0U &&
+				setup.candidate.fixture.registry->snapshot().active_activity_pin_count == 1U,
+			"logical ack replay delegated a second native effect or corrupted the winner");
+
+		auto admitted = setup.candidate.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.candidate.fixture.family_pin, setup.candidate.open, fresh_request);
+		require(admitted &&
+					admitted->kind() ==
+						sqlite_shm_reader_session_admission_kind::
+							reserved_for_local_proposal_candidate &&
+					admitted->proposal_request() &&
+					admitted->proposal_request()->attachment !=
+						setup.candidate.session_request.attachment,
+				"consumed ack did not reopen fresh nonreusable attachment admission");
+		auto fresh_session = admitted->take_session();
+		require(fresh_session && fresh_session->valid(), "take post-ack fresh session");
+		const auto cancelled = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			*admitted->proposal_request(),
+			sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
+			identity("test.registry.reader-unpublished-fresh-cancel", marker));
+		require(setup.candidate.fixture.registry
+					->complete_reader_session(
+						*setup.candidate.fixture.family_pin, *fresh_session, cancelled)
+					.has_value(),
+				"cancel post-ack fresh session before native map");
+
+		auto joined = setup.candidate.fixture.registry->install_or_join_family(
+			*second_alias.alias, setup.candidate.fixture.family);
+		require(joined.has_value(), "consumed ack did not unblock an exact family successor");
+		second_alias.family_pin.emplace(std::move(*joined));
+		require(
+			setup.candidate.fixture.registry->release_family(*second_alias.family_pin).has_value(),
+			"release post-ack successor family pin");
+		second_alias.family_pin.reset();
+		close_and_retire_confirmed_unpublished_cleanup(setup,
+													   static_cast<std::uint8_t>(marker + 6U));
+		unregister_alias(*setup.candidate.fixture.registry,
+						 setup.candidate.fixture.process_instance,
+						 setup.candidate.fixture.cohort,
+						 second_alias);
+		second_runtime_owner.reset();
+		require(second_owner_count->load(std::memory_order_relaxed) == 1,
+				"release post-ack successor runtime owner once");
+
+		clean_fixture(setup.candidate.fixture);
+	}
+
+	void verify_unpublished_cleanup_ack_race_has_one_zero_native_winner()
+	{
+		constexpr std::uint8_t marker = 116U;
+		auto setup = make_confirmed_reader_unpublished_cleanup(marker);
+		struct outcome
+		{
+			bool succeeded{};
+			bool delegated_native_effect{};
+			int outward_status{sqlite_ioerr_status};
+			sqlite_shm_lease_rejection_reason reason{
+				sqlite_shm_lease_rejection_reason::invalid_request};
+			sqlite_shm_lease_recovery_action action{
+				sqlite_shm_lease_recovery_action::deny_before_native_map};
+		};
+		std::array<outcome, 2U> outcomes;
+		std::barrier start{3};
+		std::array<std::thread, 2U> contenders;
+		const auto launch_contender = [&](outcome& exact_outcome, std::size_t index)
+		{
+			return std::thread{
+				[&, index, exact_outcome = std::ref(exact_outcome)]
+				{
+					const auto request = sqlite_shm_reader_logical_ack_request{
+						callback(static_cast<std::uint8_t>(marker + 5U + index)), 0, 0};
+					start.arrive_and_wait();
+					auto result = setup.candidate.fixture.registry->consume_reader_logical_ack(
+						*setup.candidate.fixture.family_pin, setup.candidate.open, request);
+					if (result)
+					{
+						exact_outcome.get().succeeded = true;
+						exact_outcome.get().delegated_native_effect =
+							result->delegated_native_effect();
+						exact_outcome.get().outward_status = result->outward_status();
+					}
+					else
+					{
+						exact_outcome.get().reason = result.error().reason;
+						exact_outcome.get().action = result.error().action;
+					}
+				}};
+		};
+		contenders[0U] = launch_contender(outcomes[0U], 0U);
+		contenders[1U] = launch_contender(outcomes[1U], 1U);
+		start.arrive_and_wait();
+		for (auto& contender : contenders)
+			contender.join();
+		const auto winners = static_cast<std::size_t>(std::ranges::count_if(
+			outcomes,
+			[](const outcome& candidate)
+			{
+				return candidate.succeeded && !candidate.delegated_native_effect &&
+					candidate.outward_status == sqlite_ok_status;
+			}));
+		const auto losers = static_cast<std::size_t>(std::ranges::count_if(
+			outcomes,
+			[](const outcome& candidate)
+			{
+				return !candidate.succeeded &&
+					candidate.reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					candidate.action == sqlite_shm_lease_recovery_action::outer_ioerr_no_retry;
+			}));
+		const auto lease = setup.candidate.coordinator->snapshot();
+		const auto registry = setup.candidate.fixture.registry->snapshot();
+		require(winners == 1U && losers == 1U && lease.reader_logical_ack_awaiting_count == 0U &&
+					lease.reader_unpublished_cleanup_confirmed_count == 1U &&
+					lease.reader_registry_activity_authority_count == 0U &&
+					registry.active_activity_pin_count == 1U &&
+					registry.quarantined_family_count == 0U && !lease.quarantined,
+				"logical-ack race did not produce one zero-native winner and one IOERR loser");
+		close_and_retire_confirmed_unpublished_cleanup(setup,
+													   static_cast<std::uint8_t>(marker + 8U));
+		clean_fixture(setup.candidate.fixture);
+	}
+
+	void verify_close_consumes_unpublished_ack_and_recreates_exact_tombstone()
+	{
+		constexpr std::uint8_t marker = 140U;
+		auto setup = make_confirmed_reader_unpublished_cleanup(marker);
+		const auto lifecycle_before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+				*setup.candidate.coordinator);
+		const auto ack_custody_index =
+			static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::logical_ack);
+		const auto normal_unmap_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::normal_or_deferred_unmap);
+		const auto close_callback = callback(static_cast<std::uint8_t>(marker + 5U));
+		auto close = setup.candidate.fixture.registry->begin_reader_close(
+			*setup.candidate.fixture.family_pin,
+			setup.candidate.open,
+			sqlite_shm_reader_close_request{close_callback});
+		const auto lifecycle_admitted =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+				*setup.candidate.coordinator);
+		const auto reservation = std::ranges::find_if(
+			lifecycle_admitted.attachment_reservations,
+			[&setup](const sqlite_shm_reader_attachment_reservation_test_view& candidate)
+			{
+				return candidate.attachment == setup.candidate.session_request.attachment;
+			});
+		const auto open_epoch = std::ranges::find_if(
+			lifecycle_admitted.open_epochs,
+			[](const sqlite_shm_reader_open_epoch_test_view& candidate)
+			{
+				return candidate.phase ==
+					detail::sqlite_shm_reader_connection_close_phase::close_admitted;
+			});
+		const auto lease_admitted = setup.candidate.coordinator->snapshot();
+		const auto registry_admitted = setup.candidate.fixture.registry->snapshot();
+		require(close && close->valid() &&
+					close->route() == sqlite_shm_reader_close_route::close_after_confirmed_unmap &&
+					lifecycle_before.live_custody_kind_counts[ack_custody_index] == 1U &&
+					lifecycle_admitted.live_custody_kind_counts[ack_custody_index] == 0U &&
+					lifecycle_admitted.live_custody_kind_counts[normal_unmap_index] ==
+						lifecycle_before.live_custody_kind_counts[normal_unmap_index] &&
+					reservation != lifecycle_admitted.attachment_reservations.end() &&
+					reservation->logical_ack_phase ==
+						detail::sqlite_shm_reader_logical_ack_phase::consumed_by_close &&
+					open_epoch != lifecycle_admitted.open_epochs.end() &&
+					reservation->logical_ack_sequence == open_epoch->close_cut_sequence &&
+					lease_admitted.reader_logical_ack_awaiting_count == 0U &&
+					lease_admitted.reader_registry_activity_authority_count == 0U &&
+					registry_admitted.active_activity_pin_count == 1U &&
+					registry_admitted.active_reader_open_count == 1U && !lease_admitted.quarantined,
+				"close did not atomically consume pending ack before one xClose cut");
+
+		const auto close_effect = identity("test.registry.reader-unpublished-close-effect", marker);
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			close_effect);
+		auto completed = setup.candidate.fixture.registry->complete_reader_close(
+			*setup.candidate.fixture.family_pin, setup.candidate.open, *close, close_receipt);
+		require(completed && completed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					completed->route() ==
+						sqlite_shm_reader_close_route::close_after_confirmed_unmap &&
+					completed->native_status() == sqlite_ok_status && !close->valid(),
+				"close-after-confirmed-cleanup did not commit exactly one xClose terminal");
+		auto close_replay = setup.candidate.fixture.registry->begin_reader_close(
+			*setup.candidate.fixture.family_pin,
+			setup.candidate.open,
+			sqlite_shm_reader_close_request{close_callback});
+		require(!close_replay &&
+					close_replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					setup.candidate.coordinator->snapshot().reader_logical_ack_awaiting_count == 0U,
+				"closed ack route admitted a second unmap or close");
+		require(
+			setup.candidate.fixture.registry->release_reader_open(setup.candidate.open).has_value(),
+			"release close-consumed reader open");
+
+		retire_writer(*setup.candidate.coordinator,
+					  setup.candidate.holder,
+					  static_cast<std::uint8_t>(marker + 6U));
+		require(setup.candidate.coordinator->revoke_writer_eligibility(setup.candidate.eligibility)
+					.has_value(),
+				"revoke close-consumed writer eligibility");
+		auto local = sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+			*setup.candidate.coordinator);
+		auto closes =
+			sqlite_same_process_shm_lease_test_peer::export_reader_open_epoch_close_tombstones(
+				*setup.candidate.coordinator);
+		require(local && local->size() == 1U && closes && closes->size() == 1U &&
+					local->front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::
+							unpublished_cleanup_confirmed &&
+					local->front().logical_ack_phase ==
+						detail::sqlite_shm_reader_logical_ack_phase::consumed_by_close &&
+					local->front().logical_ack_sequence == closes->front().close_cut_sequence &&
+					local->front().replay_identities.callback_invocation_tokens ==
+						std::vector{setup.map_request.callback.invocation_token} &&
+					local->front().replay_identities.effect_receipts ==
+						std::vector{setup.mapped_effect_receipt,
+									setup.cleanup_native_effect_receipt,
+									setup.cleanup_latch_reset_receipt} &&
+					local->front().replay_identities.session_terminal_receipts ==
+						std::vector{setup.session_no_pointer_terminal_receipt} &&
+					!local->front().replay_identities.callback_free_terminal &&
+					local->front().unpublished_cleanup_session_terminal_sequence -
+							local->front().origin_sequence >
+						2U &&
+					local->front().unpublished_cleanup_cut_sequence ==
+						local->front().unpublished_cleanup_session_terminal_sequence + 1U &&
+					local->front().unpublished_cleanup_terminal_sequence ==
+						local->front().destination_sequence &&
+					local->front().logical_ack_sequence >
+						local->front().unpublished_cleanup_terminal_sequence,
+				"close-consumed compact tombstone lost exact cleanup/ack replay evidence");
+
+		const auto attachment = setup.candidate.session_request.attachment;
+		auto released =
+			setup.candidate.fixture.registry->release_family(*setup.candidate.fixture.family_pin);
+		require(released.has_value() && !setup.candidate.fixture.family_pin->valid() &&
+					setup.candidate.fixture.registry->snapshot()
+							.retired_reader_lifecycle_tombstone_count == 1U &&
+					setup.candidate.fixture.registry->snapshot()
+							.retired_reader_open_epoch_close_tombstone_count == 1U,
+				"retire confirmed-cleanup family with both compact tombstones");
+		setup.candidate.fixture.family_pin.reset();
+		auto successor = setup.candidate.fixture.registry->install_or_join_family(
+			*setup.candidate.fixture.alias, setup.candidate.fixture.family);
+		require(successor.has_value(), "recreate confirmed-cleanup compact family");
+		setup.candidate.fixture.family_pin.emplace(std::move(*successor));
+		auto* successor_coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*setup.candidate.fixture.registry, setup.candidate.fixture.family);
+		require(successor_coordinator != nullptr,
+				"resolve recreated confirmed-cleanup coordinator");
+		auto imported = sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+			*successor_coordinator);
+		auto stale = sqlite_same_process_shm_lease_test_peer::check_reader_lifecycle_tombstone(
+			*successor_coordinator, attachment);
+		require(imported && *imported == *local && !stale &&
+					stale.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+				"family recreation changed compact cleanup evidence or revived the attachment");
+
+		auto bad_sequence = *local;
+		++bad_sequence.front().unpublished_cleanup_cut_sequence;
+		auto rejected_sequence =
+			sqlite_same_process_shm_lease_test_peer::import_reader_lifecycle_tombstones(
+				*successor_coordinator, std::span{bad_sequence});
+		auto bad_ack_sequence = *local;
+		bad_ack_sequence.front().logical_ack_sequence =
+			bad_ack_sequence.front().unpublished_cleanup_terminal_sequence;
+		auto rejected_ack_sequence =
+			sqlite_same_process_shm_lease_test_peer::import_reader_lifecycle_tombstones(
+				*successor_coordinator, std::span{bad_ack_sequence});
+		auto cross_domain_replay = *local;
+		cross_domain_replay.front().replay_identities.session_terminal_receipts.front() =
+			cross_domain_replay.front().replay_identities.effect_receipts.front();
+		auto rejected_cross_domain =
+			sqlite_same_process_shm_lease_test_peer::import_reader_lifecycle_tombstones(
+				*successor_coordinator, std::span{cross_domain_replay});
+		auto after_negative =
+			sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+				*successor_coordinator);
+		require(!rejected_sequence &&
+					rejected_sequence.error().reason ==
+						sqlite_shm_lease_rejection_reason::invalid_request &&
+					!rejected_ack_sequence &&
+					rejected_ack_sequence.error().reason ==
+						sqlite_shm_lease_rejection_reason::invalid_request &&
+					!rejected_cross_domain &&
+					rejected_cross_domain.error().reason ==
+						sqlite_shm_lease_rejection_reason::invalid_request &&
+					after_negative && imported && *after_negative == *imported,
+				"invalid compact sequence/domain replay changed the imported winner");
+		clean_fixture(setup.candidate.fixture);
+	}
+
+	void verify_unpublished_cleanup_rejects_wrong_registry_binding_before_consumption()
+	{
+		constexpr std::uint8_t marker = 164U;
+		auto attempt = prepare_reader_unpublished_cleanup_attempt(marker);
+		auto wrong_request = attempt.map_request;
+		wrong_request.alias_lifetime =
+			identity("test.registry.reader-unpublished-wrong-alias", marker);
+		const auto wrong_receipt = reader_unpublished_cleanup_receipt(
+			attempt, std::move(wrong_request), attempt.candidate.session_request);
+		const auto before = attempt.candidate.coordinator->snapshot();
+		auto rejected = attempt.candidate.fixture.registry->begin_reader_unpublished_cleanup(
+			*attempt.candidate.fixture.family_pin,
+			attempt.inflight,
+			wrong_receipt,
+			attempt.candidate.session);
+		const auto after = attempt.candidate.coordinator->snapshot();
+		require(
+			!rejected &&
+				rejected.error().reason == sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				attempt.inflight.valid() && attempt.candidate.session.valid() &&
+				after.reader_inflight_count == before.reader_inflight_count &&
+				after.reader_session_reservation_count == before.reader_session_reservation_count &&
+				after.reader_unpublished_cleanup_admitted_count == 0U &&
+				after.reader_registry_activity_authority_count ==
+					before.reader_registry_activity_authority_count &&
+				!after.quarantined,
+			"wrong registry binding consumed or quarantined the exact cleanup owner");
+
+		auto setup = begin_reader_unpublished_cleanup_attempt(std::move(attempt));
+		const auto terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup_terminal(
+				setup.cleanup,
+				setup.map_request.callback,
+				sqlite_shm_reader_unpublished_cleanup_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				0,
+				0,
+				setup.cleanup_native_effect_receipt,
+				setup.cleanup_latch_reset_receipt);
+		require(setup.candidate.fixture.registry
+					->complete_reader_unpublished_cleanup(
+						*setup.candidate.fixture.family_pin, setup.cleanup, terminal)
+					.has_value(),
+				"correct cleanup receipt remains usable after binding rejection");
+		const auto ack = sqlite_shm_reader_logical_ack_request{
+			callback(static_cast<std::uint8_t>(marker + 5U)), 0, 0};
+		require(setup.candidate.fixture.registry
+					->consume_reader_logical_ack(
+						*setup.candidate.fixture.family_pin, setup.candidate.open, ack)
+					.has_value(),
+				"consume cleanup ack after nonconsuming binding rejection");
+		close_and_retire_confirmed_unpublished_cleanup(setup,
+													   static_cast<std::uint8_t>(marker + 6U));
+		clean_fixture(setup.candidate.fixture);
 	}
 
 	void verify_first_registry_reader_zero_attachment_route(
@@ -3478,36 +4230,6 @@ namespace
 
 	void verify_registry_reader_terminal_failures_are_all_or_none()
 	{
-		{
-			auto setup = make_reader_candidate_setup(186U);
-			const auto map_request = reader_attachment_map_request(setup.session_request, 187U);
-			auto inflight = setup.fixture.registry->begin_reader_map(
-				*setup.fixture.family_pin, setup.session, map_request);
-			require(inflight && inflight->valid(), "begin injected reader-map terminal");
-			sqlite_same_process_shm_lease_test_peer::fail_next_reader_map_terminal_transition(
-				*setup.coordinator);
-			auto committed = setup.fixture.registry->commit_reader_map(
-				*setup.fixture.family_pin,
-				*inflight,
-				sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
-					map_request,
-					setup.holder.generation(),
-					mapping(setup.writer_attempt.native_page.get()),
-					identity("test.registry.reader-map-terminal-zero-resize", 187U)),
-				setup.session);
-			const auto lease = setup.coordinator->snapshot();
-			const auto registry = setup.fixture.registry->snapshot();
-			require(!committed &&
-						committed.error().reason ==
-							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
-						!inflight->valid() && !setup.session.valid() && lease.quarantined &&
-						lease.reader_attachment_group_count == 0U &&
-						lease.reader_attachment_audit_count == 0U &&
-						lease.reader_registry_activity_authority_count == 2U &&
-						registry.active_activity_pin_count == 3U &&
-						registry.active_reader_open_count == 1U,
-					"reader-map terminal failure partially published or released authority");
-		}
 		{
 			auto setup = make_reader_candidate_setup(188U);
 			auto handoff = form_reader_group(setup, 189U);
@@ -10948,6 +11670,10 @@ int main()
 		verify_revoked_zero_effect_compact_replay_is_rejected();
 		verify_retired_compact_all_replay_identities_are_rejected();
 		verify_registry_reader_zero_attachment_invalid_proofs_are_all_or_none();
+		verify_unpublished_cleanup_ack_blocks_fresh_admission_and_is_one_shot();
+		verify_unpublished_cleanup_ack_race_has_one_zero_native_winner();
+		verify_close_consumes_unpublished_ack_and_recreates_exact_tombstone();
+		verify_unpublished_cleanup_rejects_wrong_registry_binding_before_consumption();
 		verify_reader_ordinary_route_has_zero_proposal_custody();
 		verify_registry_reader_and_direct_routes_cannot_mix();
 		verify_registry_reader_group_retains_one_activity_until_confirmed_unmap();

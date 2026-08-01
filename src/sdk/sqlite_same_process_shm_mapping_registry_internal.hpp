@@ -859,6 +859,23 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_attachment_map_inflight& inflight,
 			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
 			sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unpublished_cleanup_obligation>
+		begin_reader_unpublished_cleanup(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_unpublished_cleanup_receipt& receipt,
+			sqlite_shm_reader_session& session);
+		[[nodiscard]]
+		sqlite_shm_lease_result<sqlite_shm_reader_unpublished_cleanup_terminal_result>
+		complete_reader_unpublished_cleanup(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_unpublished_cleanup_obligation& cleanup,
+			const sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt&
+				receipt) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_logical_ack_result>
+		consume_reader_logical_ack(sqlite_shm_registry_family_pin& family,
+								   const sqlite_shm_reader_open_authority& open,
+								   const sqlite_shm_reader_logical_ack_request& request) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		complete_reader_session(sqlite_shm_registry_family_pin& family,
 								sqlite_shm_reader_session& session,

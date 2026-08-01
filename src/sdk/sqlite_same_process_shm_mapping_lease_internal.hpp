@@ -410,9 +410,11 @@ namespace cxxlens::sdk
 	class sqlite_shm_writer_holder;
 	class sqlite_shm_reader_session;
 	class sqlite_shm_reader_attachment_map_inflight;
+	class sqlite_shm_reader_unpublished_cleanup_obligation;
 	class sqlite_shm_reader_unmap_obligation;
 	class sqlite_shm_reader_close_obligation;
 	class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
+	class sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt;
 	class sqlite_shm_verified_reader_unmap_terminal_receipt;
 	class sqlite_shm_verified_reader_close_terminal_receipt;
 	class sqlite_shm_verified_writer_native_map_receipt;
@@ -538,6 +540,190 @@ namespace cxxlens::sdk
 		sqlite_shm_reader_attachment_zero_effect_kind kind_{
 			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change};
 		int native_status_{};
+	};
+
+	enum class sqlite_shm_reader_unpublished_cleanup_entry_kind : std::uint8_t
+	{
+		exact_mapped_validation_failure,
+		exact_protocol_invalid_mapped,
+	};
+
+	/**
+	 * Issuer-sealed mapped first-proposal failure with complete cleanup-only observation proof.
+	 *
+	 * Mapped custody is proved by the checked observed attachment and mapped-effect receipt, never
+	 * inferred from the native pointer. Therefore an exact protocol-invalid mapped row may retain a
+	 * null native pointer. Predecessor, existing-group, later-map, incomplete-effect, and ambiguous
+	 * rows cannot be represented by this receipt.
+	 */
+	class sqlite_shm_verified_reader_unpublished_cleanup_receipt
+	{
+	  public:
+		[[nodiscard]] sqlite_shm_reader_unpublished_cleanup_entry_kind kind() const noexcept;
+		[[nodiscard]] const sqlite_shm_reader_attachment_map_request& request() const noexcept;
+		[[nodiscard]] const sqlite_shm_reader_session_request& session_request() const noexcept;
+		[[nodiscard]] std::uint64_t generation() const noexcept;
+		[[nodiscard]] int native_status() const noexcept;
+		[[nodiscard]] const volatile void* native_mapping() const noexcept;
+		[[nodiscard]] int delegated_extend() const noexcept;
+		[[nodiscard]] const sqlite_shm_reader_native_attachment_identity&
+		observed_attachment() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& mapped_effect_receipt() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		session_no_pointer_terminal_receipt() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_same_process_shm_reader_receipt_validator;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_verified_reader_unpublished_cleanup_receipt(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_unpublished_cleanup_entry_kind kind,
+			sqlite_shm_reader_attachment_map_request request,
+			sqlite_shm_reader_session_request session_request,
+			std::uint64_t generation,
+			int native_status,
+			const volatile void* native_mapping,
+			int delegated_extend,
+			sqlite_shm_reader_native_attachment_identity observed_attachment,
+			sqlite_backend_opaque_identity mapped_effect_receipt,
+			sqlite_backend_opaque_identity session_no_pointer_terminal_receipt);
+
+		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		sqlite_shm_reader_unpublished_cleanup_entry_kind kind_{
+			sqlite_shm_reader_unpublished_cleanup_entry_kind::exact_mapped_validation_failure};
+		sqlite_shm_reader_attachment_map_request request_;
+		sqlite_shm_reader_session_request session_request_;
+		std::uint64_t generation_{};
+		int native_status_{};
+		const volatile void* native_mapping_{};
+		int delegated_extend_{};
+		sqlite_shm_reader_native_attachment_identity observed_attachment_;
+		sqlite_backend_opaque_identity mapped_effect_receipt_;
+		sqlite_backend_opaque_identity session_no_pointer_terminal_receipt_;
+	};
+
+	enum class sqlite_shm_reader_unpublished_cleanup_evidence_kind : std::uint8_t
+	{
+		exact_native_result,
+		throw_or_unknown,
+	};
+
+	/**
+	 * Exact terminal evidence for the sole proactive unpublished-first-map xShmUnmap(0).
+	 *
+	 * Confirmed SQLITE_OK requires one native-effect identity and one distinct latch-reset
+	 * identity. A non-OK result retains its exact effect but has no latch-reset identity. Unknown
+	 * execution has neither. The receipt is bound to the move-only cleanup owner and is consumed
+	 * exactly once.
+	 */
+	class sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt
+	{
+	  public:
+		[[nodiscard]] const sqlite_shm_callback_execution_receipt& callback() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_unpublished_cleanup_evidence_kind
+		evidence_kind() const noexcept;
+		[[nodiscard]] std::optional<int> native_status() const noexcept;
+		[[nodiscard]] int caller_delete_flag() const noexcept;
+		[[nodiscard]] int delegated_delete_flag() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		native_effect_receipt() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		latch_reset_receipt() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt(
+			const sqlite_shm_reader_unpublished_cleanup_obligation& cleanup,
+			sqlite_shm_callback_execution_receipt callback,
+			sqlite_shm_reader_unpublished_cleanup_evidence_kind evidence_kind,
+			std::optional<int> native_status,
+			int caller_delete_flag,
+			int delegated_delete_flag,
+			std::optional<sqlite_backend_opaque_identity> native_effect_receipt,
+			std::optional<sqlite_backend_opaque_identity> latch_reset_receipt);
+
+		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		std::uint64_t generation_{};
+		sqlite_shm_callback_execution_receipt callback_;
+		sqlite_shm_reader_unpublished_cleanup_evidence_kind evidence_kind_{
+			sqlite_shm_reader_unpublished_cleanup_evidence_kind::throw_or_unknown};
+		std::optional<int> native_status_;
+		int caller_delete_flag_{};
+		int delegated_delete_flag_{};
+		std::optional<sqlite_backend_opaque_identity> native_effect_receipt_;
+		std::optional<sqlite_backend_opaque_identity> latch_reset_receipt_;
+	};
+
+	enum class sqlite_shm_reader_unpublished_cleanup_terminal_kind : std::uint8_t
+	{
+		confirmed,
+		terminal_quarantined,
+	};
+
+	class sqlite_shm_reader_unpublished_cleanup_terminal_result
+	{
+	  public:
+		[[nodiscard]] sqlite_shm_reader_unpublished_cleanup_terminal_kind kind() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_unpublished_cleanup_evidence_kind
+		evidence_kind() const noexcept;
+		[[nodiscard]] std::optional<int> native_status() const noexcept;
+		[[nodiscard]] int outward_status() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		native_effect_receipt() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		latch_reset_receipt() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		sqlite_shm_reader_unpublished_cleanup_terminal_result(
+			sqlite_shm_reader_unpublished_cleanup_terminal_kind kind,
+			sqlite_shm_reader_unpublished_cleanup_evidence_kind evidence_kind,
+			std::optional<int> native_status,
+			std::optional<sqlite_backend_opaque_identity> native_effect_receipt,
+			std::optional<sqlite_backend_opaque_identity> latch_reset_receipt) noexcept;
+
+		sqlite_shm_reader_unpublished_cleanup_terminal_kind kind_{
+			sqlite_shm_reader_unpublished_cleanup_terminal_kind::terminal_quarantined};
+		sqlite_shm_reader_unpublished_cleanup_evidence_kind evidence_kind_{
+			sqlite_shm_reader_unpublished_cleanup_evidence_kind::throw_or_unknown};
+		std::optional<int> native_status_;
+		int outward_status_{};
+		std::optional<sqlite_backend_opaque_identity> native_effect_receipt_;
+		std::optional<sqlite_backend_opaque_identity> latch_reset_receipt_;
+	};
+
+	struct sqlite_shm_reader_logical_ack_request
+	{
+		sqlite_shm_callback_execution_receipt callback;
+		int caller_delete_flag{};
+		int delegated_delete_flag{};
+
+		[[nodiscard]] bool operator==(const sqlite_shm_reader_logical_ack_request&) const = default;
+	};
+
+	/** Zero-native result of consuming one exact confirmed-cleanup SQLite acknowledgement. */
+	class sqlite_shm_reader_logical_ack_result
+	{
+	  public:
+		[[nodiscard]] detail::sqlite_shm_reader_logical_ack_phase phase() const noexcept;
+		[[nodiscard]] int outward_status() const noexcept;
+		[[nodiscard]] bool delegated_native_effect() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		explicit sqlite_shm_reader_logical_ack_result(int stored_cleanup_status) noexcept;
+
+		detail::sqlite_shm_reader_logical_ack_phase phase_{
+			detail::sqlite_shm_reader_logical_ack_phase::consumed_by_exact_unmap};
+		int outward_status_{};
 	};
 
 	/**
@@ -746,14 +932,15 @@ namespace cxxlens::sdk
 	/**
 	 * Process-lifetime one-shot identities retained by a compact reader lifecycle tombstone.
 	 *
-	 * Callback invocation identities and native-effect identities remain separate semantic
-	 * domains, but every identity is unique inside its domain and survives family coordinator
-	 * replacement.
+	 * Callback invocation, native-effect, and session-terminal identities remain separate
+	 * semantic domains. Every identity is unique within and nonaliasing across those domains and
+	 * survives family coordinator replacement.
 	 */
 	struct sqlite_shm_reader_replay_identity_tombstone
 	{
 		std::vector<sqlite_backend_opaque_identity> callback_invocation_tokens;
 		std::vector<sqlite_backend_opaque_identity> effect_receipts;
+		std::vector<sqlite_backend_opaque_identity> session_terminal_receipts;
 		bool callback_free_terminal{};
 
 		[[nodiscard]] bool
@@ -774,6 +961,12 @@ namespace cxxlens::sdk
 		std::uint64_t origin_sequence{};
 		std::uint64_t destination_sequence{};
 		sqlite_shm_reader_replay_identity_tombstone replay_identities;
+		detail::sqlite_shm_reader_logical_ack_phase logical_ack_phase{
+			detail::sqlite_shm_reader_logical_ack_phase::not_applicable};
+		std::uint64_t logical_ack_sequence{};
+		std::uint64_t unpublished_cleanup_session_terminal_sequence{};
+		std::uint64_t unpublished_cleanup_cut_sequence{};
+		std::uint64_t unpublished_cleanup_terminal_sequence{};
 
 		[[nodiscard]] bool
 		operator==(const sqlite_shm_reader_lifecycle_compact_tombstone&) const = default;
@@ -959,6 +1152,7 @@ namespace cxxlens::sdk
 		generation_exhausted,
 		lifecycle_ambiguous,
 		quarantined,
+		unpublished_cleanup_required,
 	};
 
 	enum class sqlite_shm_lease_recovery_action : std::uint8_t
@@ -1151,6 +1345,9 @@ namespace cxxlens::sdk
 		std::size_t reader_session_terminal_count{};
 		std::size_t reader_attachment_zero_effect_terminal_count{};
 		std::size_t reader_attachment_revoked_no_map_count{};
+		std::size_t reader_unpublished_cleanup_admitted_count{};
+		std::size_t reader_unpublished_cleanup_confirmed_count{};
+		std::size_t reader_logical_ack_awaiting_count{};
 		std::size_t reader_registry_bound_group_count{};
 		std::size_t reader_registry_bound_session_count{};
 		std::size_t reader_registry_open_count{};
@@ -1209,6 +1406,14 @@ namespace cxxlens::sdk
 		std::uint64_t origin_sequence{};
 		std::uint64_t destination_sequence{};
 		bool group_payload_present{};
+		std::optional<sqlite_shm_reader_unpublished_cleanup_entry_kind> unpublished_cleanup_kind;
+		detail::sqlite_shm_reader_logical_ack_phase logical_ack_phase{
+			detail::sqlite_shm_reader_logical_ack_phase::not_applicable};
+		std::uint64_t cleanup_cut_sequence{};
+		std::uint64_t cleanup_terminal_sequence{};
+		std::uint64_t logical_ack_sequence{};
+		std::uint64_t cleanup_session_origin_sequence{};
+		std::uint64_t cleanup_session_terminal_sequence{};
 	};
 
 	struct sqlite_shm_reader_session_reservation_test_view
@@ -1615,6 +1820,7 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
 		friend class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
+		friend class sqlite_shm_verified_reader_unpublished_cleanup_receipt;
 		explicit sqlite_shm_reader_attachment_map_inflight(
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			detail::sqlite_shm_lease_token_identity token,
@@ -1698,6 +1904,41 @@ namespace cxxlens::sdk
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 		std::uint64_t token_{};
 		std::uint64_t generation_{};
+	};
+
+	/** Sole move-only native xShmUnmap(0) owner for an unpublished first-map failure. */
+	class sqlite_shm_reader_unpublished_cleanup_obligation
+	{
+	  public:
+		~sqlite_shm_reader_unpublished_cleanup_obligation() noexcept;
+		sqlite_shm_reader_unpublished_cleanup_obligation(
+			sqlite_shm_reader_unpublished_cleanup_obligation&&) noexcept;
+		sqlite_shm_reader_unpublished_cleanup_obligation&
+		operator=(sqlite_shm_reader_unpublished_cleanup_obligation&&) = delete;
+		sqlite_shm_reader_unpublished_cleanup_obligation(
+			const sqlite_shm_reader_unpublished_cleanup_obligation&) = delete;
+		sqlite_shm_reader_unpublished_cleanup_obligation&
+		operator=(const sqlite_shm_reader_unpublished_cleanup_obligation&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+		[[nodiscard]] std::uint64_t generation() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		explicit sqlite_shm_reader_unpublished_cleanup_obligation(
+			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
+			detail::sqlite_shm_lease_token_identity token,
+			detail::sqlite_shm_mapping_generation_identity generation) noexcept;
+		void disable_terminal_presentation() noexcept;
+		void disarm() noexcept;
+
+		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		std::uint64_t generation_{};
+		bool terminal_presentation_disabled_{};
 	};
 
 	class sqlite_shm_reader_handoff
@@ -2032,6 +2273,13 @@ namespace cxxlens::sdk
 			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
 			const sqlite_shm_reader_open_epoch_binding& binding,
 			const sqlite_shm_reader_close_request& request) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_obligation>
+		begin_registry_reader_close(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			const sqlite_shm_reader_close_request& request,
+			std::optional<sqlite_shm_reader_attachment_authority>& completed_activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_terminal_result>
 		complete_registry_reader_close(
 			std::uint64_t registry_open_token,
@@ -2062,6 +2310,26 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_session& session,
 			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate,
 			std::optional<sqlite_shm_reader_attachment_authority>& completed_candidate);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unpublished_cleanup_obligation>
+		begin_registry_reader_unpublished_cleanup(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_unpublished_cleanup_receipt& receipt,
+			sqlite_shm_reader_session& session,
+			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate);
+		[[nodiscard]]
+		sqlite_shm_lease_result<sqlite_shm_reader_unpublished_cleanup_terminal_result>
+		complete_registry_reader_unpublished_cleanup(
+			sqlite_shm_reader_unpublished_cleanup_obligation& cleanup,
+			const sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt&
+				receipt) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_logical_ack_result>
+		consume_registry_reader_logical_ack(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			const sqlite_shm_reader_logical_ack_request& request,
+			std::optional<sqlite_shm_reader_attachment_authority>& completed_activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> complete_registry_reader_session(
 			sqlite_shm_reader_session& session,
 			const sqlite_shm_reader_session_terminal_receipt& receipt,
@@ -2105,6 +2373,7 @@ namespace cxxlens::sdk
 		void inject_reader_close_begin_preparation_failure_for_testing() noexcept;
 		void inject_reader_unmap_terminal_commit_failure_for_testing() noexcept;
 		void inject_reader_unmap_post_receipt_state_failure_for_testing() noexcept;
+		void inject_reader_unpublished_cleanup_terminal_commit_failure_for_testing() noexcept;
 		void inject_reader_unmap_begin_preparation_failure_for_testing() noexcept;
 		void inject_reader_coarse_unmap_terminal_exception_for_testing() noexcept;
 		void inject_reader_operation_mutex_acquire_failure_for_testing() noexcept;
