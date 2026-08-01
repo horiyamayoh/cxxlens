@@ -10067,6 +10067,106 @@ namespace
 				"revoke pre-cut zero-map fixture writer gate");
 	}
 
+	void verify_reader_unmap_cut_suppresses_preexisting_mapped_result()
+	{
+		constexpr std::uint8_t marker = 24U;
+		const auto binding = family(marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int page{};
+		auto writer = install_live_writer(coordinator,
+										  binding,
+										  identity("test.connection", marker),
+										  identity("test.open-epoch", marker),
+										  marker,
+										  &page);
+		auto reader = install_live_reader_group(coordinator,
+												binding,
+												identity("test.connection", marker + 1U),
+												marker + 1U,
+												writer.holder.generation(),
+												&page);
+
+		auto map_request = reader_attachment_request(binding,
+													 identity("test.connection", marker + 1U),
+													 marker + 1U,
+													 2,
+													 marker + 1U,
+													 0,
+													 writer.holder.generation());
+		map_request.callback = callback(3U, marker + 2U);
+		auto map = coordinator.begin_reader_map(reader.session, map_request);
+		require(map && map->valid(), "begin mapped-result attempt before the unmap cut");
+		const auto unmap_callback = callback(7U, marker + 3U);
+		auto unmap = coordinator.begin_reader_unmap(
+			reader.handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
+		require(unmap && !reader.handoff.valid() && unmap->valid() && !unmap->native_effect_ready(),
+				"cut freezes the earlier mapped-result attempt");
+
+		const auto mapped_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_existing_group_predecessor_mismatch(
+				*map,
+				map_request,
+				sqlite_readonly_status,
+				&page,
+				identity("test.reader-unmap-cut-mapped-effect", marker + 4U));
+		auto suppressed = coordinator.complete_reader_existing_group_predecessor_mismatch(
+			*map, mapped_receipt, reader.session);
+		const auto after_map =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		require(suppressed && suppressed->native_status() == sqlite_readonly_status &&
+					suppressed->outward_status() == sqlite_ioerr_status &&
+					suppressed->native_mapping() == nullptr && !map->valid() &&
+					reader.session.valid() && unmap->valid() && !unmap->native_effect_ready() &&
+					coordinator.snapshot().reader_existing_group_deferred_cleanup_count == 1U &&
+					after_map.map_attempts.empty() &&
+					after_map.outstanding_terminal_permit_count == 2U &&
+					after_map.attachment_groups.size() == 1U &&
+					after_map.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::unmap_cut_sealing &&
+					!coordinator.snapshot().quarantined,
+				"post-cut mapped result records exact effect but publishes IOERR/null");
+		const auto normal_unmap_index =
+			enum_index(detail::sqlite_shm_reader_custody_kind::normal_or_deferred_unmap);
+		require(after_map.live_custody_kind_counts[normal_unmap_index] == 1U,
+				"mapped suppression reuses the cut-owned unmap custody without a second mint");
+
+		auto waiting = coordinator.poll_reader_unmap_cut(*unmap, unmap_callback);
+		require(waiting && waiting->progress == sqlite_shm_reader_unmap_cut_progress::waiting,
+				"mapped suppression retains its established session as the last blocker");
+		const auto session_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				reader.session_request,
+				sqlite_shm_reader_session_terminal_kind::failure,
+				identity("test.reader-unmap-cut-mapped-session", marker + 5U));
+		require(coordinator.complete_reader_session(reader.session, session_terminal).has_value() &&
+					!reader.session.valid(),
+				"terminalize mapped-suppression session");
+		auto ready = coordinator.poll_reader_unmap_cut(*unmap, unmap_callback);
+		require(ready &&
+					ready->progress == sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+					unmap->native_effect_ready(),
+				"mapped-suppression cut becomes ready after session drain");
+
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.reader-unmap-cut-mapped-unmap-effect", marker + 6U),
+			identity("test.reader-unmap-cut-mapped-latch", marker + 7U));
+		require(coordinator.complete_reader_unmap(*unmap, unmap_receipt).has_value() &&
+					!unmap->valid() &&
+					coordinator.snapshot().reader_existing_group_deferred_cleanup_count == 0U &&
+					!coordinator.snapshot().quarantined,
+				"one confirmed unmap retires the post-cut mapped suppression lineage");
+		retire_last(coordinator, writer.holder, callback(9U, marker + 8U));
+		require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
+				"revoke mapped-suppression fixture writer gate");
+	}
+
 	void verify_equal_pointer_reader_connections_unmap_independently()
 	{
 		constexpr std::uint8_t marker = 218U;
@@ -15176,6 +15276,7 @@ int main()
 		verify_reader_native_attachment_group_and_session_core();
 		verify_reader_unmap_cut_wait_policy_is_fail_closed();
 		verify_reader_unmap_cut_drains_preexisting_zero_attachment_map();
+		verify_reader_unmap_cut_suppresses_preexisting_mapped_result();
 		verify_equal_pointer_reader_connections_unmap_independently();
 		verify_callback_free_cached_member_use_requires_a_live_session_owner();
 		verify_reader_lifecycle_sequence_source_is_shared_and_exhausts_without_partials();

@@ -6802,6 +6802,91 @@ namespace
 		clean_fixture(setup.fixture);
 	}
 
+	void verify_registry_unmap_cut_suppresses_preexisting_mapped_result()
+	{
+		constexpr std::uint8_t marker = 40U;
+		auto setup = make_reader_candidate_setup(marker);
+		auto handoff = form_reader_group(setup, marker + 1U);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 2U);
+		auto map = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(map && map->valid(), "begin registry mapped-result attempt before cut");
+		const auto unmap_callback = callback(marker + 3U);
+		auto unmap = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
+		require(unmap && !handoff.valid() && unmap->valid() && !unmap->native_effect_ready(),
+				"registry cut freezes the earlier mapped-result attempt");
+
+		const auto mapped_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_existing_group_predecessor_mismatch(
+				*map,
+				map_request,
+				sqlite_readonly_status,
+				setup.writer_attempt.native_page.get(),
+				identity("test.registry.reader-unmap-cut-mapped-effect", marker + 4U));
+		auto suppressed =
+			setup.fixture.registry->complete_reader_existing_group_predecessor_mismatch(
+				*setup.fixture.family_pin, *map, mapped_receipt, setup.session);
+		const auto after_map = setup.fixture.registry->snapshot();
+		const auto lease = setup.coordinator->snapshot();
+		require(suppressed && suppressed->native_status() == sqlite_readonly_status &&
+					suppressed->outward_status() == sqlite_ioerr_status &&
+					suppressed->native_mapping() == nullptr && !map->valid() &&
+					setup.session.valid() && unmap->valid() && !unmap->native_effect_ready() &&
+					lease.reader_existing_group_deferred_cleanup_count == 1U &&
+					after_map.quarantined_family_count == 0U,
+				"registry records post-cut mapped effect while publishing IOERR/null");
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto normal_unmap_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::normal_or_deferred_unmap);
+		require(lifecycle.live_custody_kind_counts[normal_unmap_index] == 1U &&
+					lifecycle.map_attempts.empty(),
+				"registry mapped suppression reuses one cut-owned unmap custody");
+
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			setup.session_request,
+			sqlite_shm_reader_session_terminal_kind::failure,
+			identity("test.registry.reader-unmap-cut-mapped-session", marker + 5U));
+		require(
+			setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value() &&
+				!setup.session.valid(),
+			"registry drains mapped-suppression session");
+		auto ready = setup.fixture.registry->poll_reader_unmap_cut(
+			*setup.fixture.family_pin, *unmap, unmap_callback);
+		require(ready &&
+					ready->progress == sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+					unmap->native_effect_ready(),
+				"registry mapped-suppression cut becomes ready after session drain");
+
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.reader-unmap-cut-mapped-unmap-effect", marker + 6U),
+			identity("test.registry.reader-unmap-cut-mapped-latch", marker + 7U));
+		require(setup.fixture.registry
+						->complete_reader_unmap(*setup.fixture.family_pin, *unmap, unmap_receipt)
+						.has_value() &&
+					!unmap->valid() &&
+					setup.coordinator->snapshot().reader_existing_group_deferred_cleanup_count ==
+						0U,
+				"registry confirmed unmap retires post-cut mapped suppression lineage");
+		close_and_release_reader_open(setup.fixture,
+									  setup.open,
+									  marker + 8U,
+									  sqlite_shm_reader_close_route::close_after_confirmed_unmap);
+		retire_writer(*setup.coordinator, setup.holder, marker + 9U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke registry mapped-suppression writer gate");
+		clean_fixture(setup.fixture);
+	}
+
 	void verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity()
 	{
 		const auto run = [](const detail::sqlite_shm_registry_counter_for_testing counter,
@@ -13337,6 +13422,7 @@ int main()
 		verify_non_ok_reader_unmap_retains_group_authority();
 		verify_registry_reader_unmap_cut_timeout_synchronizes_quarantine();
 		verify_registry_unmap_cut_drains_preexisting_zero_attachment_map();
+		verify_registry_unmap_cut_suppresses_preexisting_mapped_result();
 		verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity();
 		verify_reader_open_close_binding_and_family_recreation_are_exact();
 		verify_active_reader_group_blocks_close_until_confirmed_unmap();
