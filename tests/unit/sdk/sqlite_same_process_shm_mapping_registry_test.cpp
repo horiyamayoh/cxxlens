@@ -576,6 +576,12 @@ namespace cxxlens::sdk
 			coordinator.inject_reader_session_terminal_commit_failure_for_testing();
 		}
 
+		static void fail_next_reader_close_terminal_transition(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_reader_close_terminal_commit_failure_for_testing();
+		}
+
 		[[nodiscard]] static sqlite_shm_reader_lifecycle_test_view
 		reader_lifecycle_view(const sqlite_same_process_shm_mapping_lease_coordinator& coordinator)
 		{
@@ -2049,6 +2055,53 @@ namespace
 		};
 	}
 
+	struct predecessor_compact_recreation_expectation
+	{
+		std::uint8_t marker{};
+		std::size_t close_count{};
+		std::size_t replay_pair_count{};
+	};
+
+	void verify_predecessor_compact_family_recreation(
+		registry_fixture& fixture, const predecessor_compact_recreation_expectation& expected)
+	{
+		auto destruction_count = std::make_shared<std::atomic_int>(0);
+		auto owner = std::make_shared<runtime_owner_probe>(destruction_count);
+		auto recreated = register_alias(*fixture.registry,
+										fixture.process_instance,
+										fixture.cohort,
+										expected.marker,
+										owner,
+										&fixture.family);
+		const auto weak_owner = std::weak_ptr<runtime_owner_probe>{owner};
+		owner.reset();
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "recreate predecessor compact family coordinator");
+		auto compact = sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+			*coordinator);
+		auto closes =
+			sqlite_same_process_shm_lease_test_peer::export_reader_open_epoch_close_tombstones(
+				*coordinator);
+		require(compact && compact->size() == 1U && closes &&
+					closes->size() == expected.close_count &&
+					compact->front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::
+							predecessor_route_retired_confirmed &&
+					compact->front().replay_identities.callback_invocation_tokens.size() ==
+						expected.replay_pair_count &&
+					compact->front().replay_identities.effect_receipts.size() ==
+						expected.replay_pair_count,
+				"recreated family imports and re-exports exact predecessor and close tombstones");
+		auto released = fixture.registry->release_family(*recreated.family_pin);
+		require(released.has_value() && !recreated.family_pin->valid(),
+				"recreated predecessor compact family retires without widening its tombstone");
+		recreated.family_pin.reset();
+		unregister_alias(*fixture.registry, fixture.process_instance, fixture.cohort, recreated);
+		require(weak_owner.expired() && destruction_count->load(std::memory_order_relaxed) == 1,
+				"recreated predecessor compact family releases its exact runtime owner once");
+	}
+
 	[[nodiscard]] sqlite_shm_reader_handoff form_reader_group(reader_candidate_setup& setup,
 															  const std::uint8_t marker)
 	{
@@ -3252,6 +3305,295 @@ namespace
 						setup.fixture.registry->snapshot().active_activity_pin_count == 1U &&
 						!setup.coordinator->snapshot().quarantined,
 					"registry predecessor unmap receipt is one-shot and does not release twice");
+			close_and_release_reader_open(
+				setup.fixture,
+				setup.open,
+				static_cast<std::uint8_t>(marker + 5U),
+				sqlite_shm_reader_close_route::close_after_confirmed_unmap);
+			retire_writer(*setup.coordinator, setup.holder, static_cast<std::uint8_t>(marker + 6U));
+			require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+					"revoke predecessor-unmapped writer eligibility");
+			auto compact =
+				sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+					*setup.coordinator);
+			auto closes =
+				sqlite_same_process_shm_lease_test_peer::export_reader_open_epoch_close_tombstones(
+					*setup.coordinator);
+			require(compact.has_value(),
+					"predecessor-unmapped route passes lifecycle compact validation");
+			require(closes.has_value(),
+					"predecessor-unmapped route passes close tombstone validation");
+			require(compact->size() == 1U,
+					"predecessor-unmapped route exports one lifecycle tombstone");
+			require(closes->size() == 2U,
+					"predecessor-unmapped route and its cross-open probe export two close "
+					"tombstones");
+			require(compact->front().phase ==
+							detail::sqlite_shm_reader_attachment_reservation_phase::
+								predecessor_route_retired_confirmed &&
+						compact->front().replay_identities.callback_invocation_tokens.size() ==
+							2U &&
+						compact->front().replay_identities.effect_receipts.size() == 2U,
+					"predecessor-unmapped route exports exact map/unmap replay evidence after one "
+					"later xClose");
+			const auto before_release = setup.coordinator->snapshot();
+			require(before_release.phase == sqlite_shm_mapping_generation_phase::empty &&
+						!before_release.generation && before_release.mapping_page_count == 0U &&
+						before_release.generation_authority_count == 0U &&
+						before_release.eligibility_count == 0U &&
+						before_release.writer_holder_count == 0U,
+					"predecessor-unmapped fixture has no live writer ownership");
+			require(before_release.reader_inflight_count == 0U &&
+						before_release.reader_cleanup_count == 0U &&
+						before_release.reader_handoff_count == 0U &&
+						before_release.reader_attachment_group_count == 0U &&
+						before_release.reader_session_reservation_count == 0U &&
+						before_release.reader_registry_bound_group_count == 0U &&
+						before_release.reader_registry_bound_session_count == 0U,
+					"predecessor-unmapped fixture has no live reader descendants");
+			require(before_release.reader_registry_open_count == 0U &&
+						before_release.reader_open_close_owner_count == 0U &&
+						before_release.reader_close_admitted_count == 0U &&
+						before_release.reader_close_terminal_count == 0U &&
+						before_release.reader_registry_activity_authority_count == 0U &&
+						!before_release.reader_admission_visible && !before_release.quarantined,
+					"predecessor-unmapped fixture has no live open or activity ownership");
+			clean_fixture(setup.fixture);
+			verify_predecessor_compact_family_recreation(
+				setup.fixture, {static_cast<std::uint8_t>(52U + index), 2U, 2U});
+		}
+	}
+
+	void verify_registry_reader_active_predecessor_is_retired_by_exact_xclose()
+	{
+		constexpr std::uint8_t marker = 40U;
+		auto setup = make_reader_candidate_setup(marker);
+		const auto map_request = reader_attachment_map_request(
+			setup.session_request, static_cast<std::uint8_t>(marker + 1U));
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin active-predecessor close fixture");
+		const auto map_effect = identity("test.registry.reader-predecessor-close-map-effect",
+										 static_cast<std::uint8_t>(marker + 2U));
+		const auto map_receipt = sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
+			*inflight,
+			sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+			map_request,
+			sqlite_readonly_status,
+			setup.writer_attempt.native_page.get(),
+			0,
+			map_effect);
+		auto predecessor = setup.fixture.registry->complete_reader_predecessor_map(
+			*setup.fixture.family_pin, *inflight, map_receipt, setup.session);
+		require(predecessor &&
+					predecessor->kind() ==
+						sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route &&
+					setup.fixture.registry->snapshot().active_activity_pin_count == 2U &&
+					setup.coordinator->snapshot().reader_predecessor_route_active_count == 1U,
+				"retain one exact predecessor-route activity until xClose");
+
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto close_callback = callback(static_cast<std::uint8_t>(marker + 3U));
+		auto close = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin, setup.open, sqlite_shm_reader_close_request{close_callback});
+		const auto admitted =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto runtime_pin_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::
+				runtime_vfs_namespace_generation_native_mapping_lifetime_pin);
+		require(close && close->valid() &&
+					close->route() == sqlite_shm_reader_close_route::close_existing_predecessor &&
+					before.live_custody_kind_counts[runtime_pin_index] == 1U &&
+					admitted.live_custody_kind_counts[runtime_pin_index] == 1U &&
+					setup.fixture.registry->snapshot().active_activity_pin_count == 2U &&
+					setup.coordinator->snapshot().reader_predecessor_route_active_count == 1U,
+				"active predecessor xClose cut retains its sole native-lifetime authority");
+
+		const auto close_effect = identity("test.registry.reader-predecessor-close-effect",
+										   static_cast<std::uint8_t>(marker + 4U));
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			close_effect);
+		auto completed = setup.fixture.registry->complete_reader_close(
+			*setup.fixture.family_pin, setup.open, *close, close_receipt);
+		const auto retired_registry = setup.fixture.registry->snapshot();
+		const auto retired_lease = setup.coordinator->snapshot();
+		const auto retired_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(completed && completed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					completed->route() ==
+						sqlite_shm_reader_close_route::close_existing_predecessor &&
+					completed->native_status() == sqlite_ok_status &&
+					completed->native_effect_receipt() == close_effect && !close->valid() &&
+					retired_registry.active_activity_pin_count == 1U &&
+					retired_registry.quarantined_family_count == 0U &&
+					retired_lease.reader_registry_activity_authority_count == 0U &&
+					retired_lease.reader_predecessor_route_active_count == 0U &&
+					retired_lease.reader_predecessor_route_retired_count == 1U &&
+					retired_lifecycle.live_custody_kind_counts[runtime_pin_index] == 0U &&
+					retired_lifecycle.predecessor_map_terminals.size() == 1U &&
+					retired_lifecycle.predecessor_map_terminals.front()
+							.predecessor_close_terminal_sequence != 0U &&
+					!retired_lease.quarantined,
+				"exact xClose atomically retires the predecessor route and releases its activity "
+				"once");
+
+		const auto late_unmap = sqlite_same_process_shm_lease_test_peer::reader_predecessor_unmap(
+			*predecessor,
+			callback(static_cast<std::uint8_t>(marker + 5U)),
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-predecessor-close-late-unmap-effect",
+					 static_cast<std::uint8_t>(marker + 6U)));
+		auto rejected_unmap = setup.fixture.registry->complete_reader_predecessor_unmap(
+			*setup.fixture.family_pin, setup.open, late_unmap);
+		auto rejected_close = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin, setup.open, sqlite_shm_reader_close_request{close_callback});
+		require(!rejected_unmap &&
+					rejected_unmap.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+				"xClose-retired predecessor rejects a later xShmUnmap as stale");
+		require(!rejected_close &&
+					rejected_close.error().reason ==
+						sqlite_shm_lease_rejection_reason::stale_token &&
+					setup.fixture.registry->snapshot().active_activity_pin_count == 1U,
+				"xClose-retired predecessor rejects close replay without releasing twice");
+		require(setup.fixture.registry->release_reader_open(setup.open).has_value() &&
+					!setup.open.valid(),
+				"release xClose-retired predecessor open");
+
+		retire_writer(*setup.coordinator, setup.holder, static_cast<std::uint8_t>(marker + 7U));
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke xClose-retired predecessor writer eligibility");
+		auto compact = sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+			*setup.coordinator);
+		auto closes =
+			sqlite_same_process_shm_lease_test_peer::export_reader_open_epoch_close_tombstones(
+				*setup.coordinator);
+		require(compact && compact->size() == 1U && closes && closes->size() == 1U &&
+					compact->front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::
+							predecessor_route_retired_confirmed &&
+					compact->front().replay_identities.callback_invocation_tokens.size() == 1U &&
+					compact->front().replay_identities.effect_receipts.size() == 1U,
+				"xClose-retired predecessor exports map replay evidence and the separate close "
+				"tombstone");
+		clean_fixture(setup.fixture);
+		verify_predecessor_compact_family_recreation(setup.fixture, {48U, 1U, 1U});
+	}
+
+	void verify_registry_reader_predecessor_xclose_failures_retain_activity()
+	{
+		enum class failure_kind : std::uint8_t
+		{
+			native_non_ok,
+			unknown,
+			mismatched_receipt,
+			injected_commit,
+		};
+		struct row
+		{
+			failure_kind failure;
+			std::uint8_t marker;
+		};
+		constexpr std::array rows{
+			row{failure_kind::native_non_ok, 72U},
+			row{failure_kind::unknown, 88U},
+			row{failure_kind::mismatched_receipt, 104U},
+			row{failure_kind::injected_commit, 120U},
+		};
+
+		for (const auto& current : rows)
+		{
+			auto setup = make_reader_candidate_setup(current.marker);
+			const auto map_request = reader_attachment_map_request(
+				setup.session_request, static_cast<std::uint8_t>(current.marker + 1U));
+			auto inflight = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(inflight && inflight->valid(), "begin predecessor xClose failure fixture");
+			const auto map_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
+					*inflight,
+					sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+					map_request,
+					sqlite_readonly_status,
+					setup.writer_attempt.native_page.get(),
+					0,
+					identity("test.registry.reader-predecessor-failed-close-map-effect",
+							 static_cast<std::uint8_t>(current.marker + 2U)));
+			auto predecessor = setup.fixture.registry->complete_reader_predecessor_map(
+				*setup.fixture.family_pin, *inflight, map_receipt, setup.session);
+			require(predecessor &&
+						setup.fixture.registry->snapshot().active_activity_pin_count == 2U,
+					"retain predecessor activity before failed xClose");
+
+			const auto close_callback = callback(static_cast<std::uint8_t>(current.marker + 3U));
+			auto close = setup.fixture.registry->begin_reader_close(
+				*setup.fixture.family_pin,
+				setup.open,
+				sqlite_shm_reader_close_request{close_callback});
+			require(close && close->valid() &&
+						close->route() == sqlite_shm_reader_close_route::close_existing_predecessor,
+					"admit one predecessor xClose failure terminal");
+			if (current.failure == failure_kind::injected_commit)
+				sqlite_same_process_shm_lease_test_peer::fail_next_reader_close_terminal_transition(
+					*setup.coordinator);
+			const auto exact_native = current.failure != failure_kind::unknown;
+			const auto receipt_callback = current.failure == failure_kind::mismatched_receipt
+				? callback(static_cast<std::uint8_t>(current.marker + 9U))
+				: close_callback;
+			const auto close_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+					*close,
+					receipt_callback,
+					exact_native ? sqlite_shm_reader_close_evidence_kind::exact_native_result
+								 : sqlite_shm_reader_close_evidence_kind::throw_or_unknown,
+					exact_native ? std::optional<int>{current.failure == failure_kind::native_non_ok
+														  ? sqlite_busy_status
+														  : sqlite_ok_status}
+								 : std::nullopt,
+					exact_native ? std::optional{identity(
+									   "test.registry.reader-predecessor-failed-close-effect",
+									   static_cast<std::uint8_t>(current.marker + 4U))}
+								 : std::nullopt);
+			auto completed = setup.fixture.registry->complete_reader_close(
+				*setup.fixture.family_pin, setup.open, *close, close_receipt);
+			const auto registry = setup.fixture.registry->snapshot();
+			const auto lease = setup.coordinator->snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto terminal_commit_rejected =
+				current.failure == failure_kind::mismatched_receipt ||
+				current.failure == failure_kind::injected_commit;
+			const auto exact_failure_projection = terminal_commit_rejected ? !completed &&
+					completed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous
+																		   : completed &&
+					completed->kind() ==
+						sqlite_shm_reader_close_terminal_kind::terminal_quarantined;
+			const auto exact_predecessor_terminal_projection =
+				lifecycle.predecessor_map_terminals.size() == 1U &&
+				(current.failure == failure_kind::mismatched_receipt
+					 ? lifecycle.predecessor_map_terminals.front()
+								 .predecessor_close_terminal_sequence == 0U &&
+						 !lifecycle.terminal_quarantines.empty()
+					 : lifecycle.predecessor_map_terminals.front()
+							 .predecessor_close_terminal_sequence != 0U);
+			require(exact_failure_projection && !close->valid() &&
+						registry.active_activity_pin_count == 2U &&
+						registry.quarantined_family_count == 1U &&
+						lease.reader_registry_activity_authority_count == 1U &&
+						lease.reader_predecessor_route_active_count == 0U &&
+						lease.reader_predecessor_route_retired_count == 0U && lease.quarantined &&
+						exact_predecessor_terminal_projection &&
+						lifecycle.attachment_reservation_phase_counts[static_cast<std::size_t>(
+							detail::sqlite_shm_reader_attachment_reservation_phase::
+								terminal_quarantined)] == 1U,
+					"non-OK, unknown, mismatched, and failed-commit predecessor xClose terminals "
+					"quarantine without releasing retained native-lifetime activity");
 		}
 	}
 
@@ -11863,6 +12205,8 @@ int main()
 	try
 	{
 		verify_registry_reader_predecessor_transfer_retains_existing_route_lifetime();
+		verify_registry_reader_active_predecessor_is_retired_by_exact_xclose();
+		verify_registry_reader_predecessor_xclose_failures_retain_activity();
 		verify_registry_reader_zero_attachment_success_routes();
 		verify_revoked_zero_effect_compact_replay_is_rejected();
 		verify_retired_compact_all_replay_identities_are_rejected();

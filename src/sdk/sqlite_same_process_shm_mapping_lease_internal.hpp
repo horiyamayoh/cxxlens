@@ -992,11 +992,12 @@ namespace cxxlens::sdk
 		std::optional<sqlite_backend_opaque_identity> latch_reset_receipt_;
 	};
 
-	/** Phase-1 close rows which delegate xClose directly and never invent xShmUnmap authority. */
+	/** Close rows which delegate xClose directly and never invent proposal xShmUnmap authority. */
 	enum class sqlite_shm_reader_close_route : std::uint8_t
 	{
 		close_without_group,
 		close_after_confirmed_unmap,
+		close_existing_predecessor,
 	};
 
 	enum class sqlite_shm_reader_close_evidence_kind : std::uint8_t
@@ -1664,6 +1665,7 @@ namespace cxxlens::sdk
 		std::optional<sqlite_shm_reader_unmap_evidence_kind> retirement_evidence_kind;
 		std::optional<int> retirement_native_status;
 		std::optional<sqlite_backend_opaque_identity> retirement_native_effect_receipt;
+		std::uint64_t predecessor_close_terminal_sequence{};
 	};
 
 	/** Test-only closed projection of the activated DF-0207 reader ledger. */
@@ -2222,8 +2224,8 @@ namespace cxxlens::sdk
 	 * Move-only Phase-1 xClose authority for one exact authenticated reader open epoch.
 	 *
 	 * It is minted only by consuming the orthogonal xOpen close owner through one sequenced close
-	 * cut. Active attachment, logical-ack, opaque, predecessor, and composite routes cannot be
-	 * represented by this checkpoint type.
+	 * cut. A byte-semantic predecessor may use its distinct existing-route row; active proposal,
+	 * opaque, and composite unmap-then-close routes remain unrepresentable by this checkpoint type.
 	 */
 	class sqlite_shm_reader_close_obligation
 	{
@@ -2478,6 +2480,14 @@ namespace cxxlens::sdk
 			const sqlite_shm_reader_open_epoch_binding& binding,
 			sqlite_shm_reader_close_obligation& close,
 			const sqlite_shm_verified_reader_close_terminal_receipt& receipt) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_terminal_result>
+		complete_registry_reader_close(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			sqlite_shm_reader_close_obligation& close,
+			const sqlite_shm_verified_reader_close_terminal_receipt& receipt,
+			std::optional<sqlite_shm_reader_attachment_authority>& completed_activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> release_registry_reader_open(
 			std::uint64_t registry_open_token,
 			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal) noexcept;
