@@ -392,6 +392,7 @@ namespace cxxlens::sdk
 	struct sqlite_shm_reader_session_request
 	{
 		sqlite_shm_reader_attachment_reservation_identity attachment;
+		sqlite_shm_callback_execution_receipt execution;
 		sqlite_backend_opaque_identity read_transaction_epoch;
 		sqlite_backend_opaque_identity decode_attempt;
 		sqlite_backend_opaque_identity authority_read_receipt;

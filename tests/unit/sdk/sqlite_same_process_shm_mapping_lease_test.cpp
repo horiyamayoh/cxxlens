@@ -1053,6 +1053,14 @@ namespace
 				identity("test.callback-invocation", invocation)};
 	}
 
+	[[nodiscard]] sqlite_shm_callback_execution_receipt
+	reader_session_execution(const std::uint8_t marker, const std::uint64_t depth = 0U)
+	{
+		return {identity("test.reader-session-thread", marker),
+				depth,
+				identity("test.reader-session-execution", marker)};
+	}
+
 	[[nodiscard]] sqlite_backend_effect_arm_receipt
 	effect_gate(const sqlite_backend_opaque_identity& connection, const std::uint8_t marker)
 	{
@@ -1226,6 +1234,7 @@ namespace
 						   const std::uint8_t marker)
 	{
 		return {request.expected_attachment,
+				reader_session_execution(marker),
 				identity("test.reader-transaction-epoch", marker),
 				identity("test.reader-decode-attempt", marker),
 				identity("test.reader-authority-read-receipt", marker)};
@@ -1833,6 +1842,7 @@ namespace
 			identity("test.phase2.reader-main-xopen", marker),
 			identity("test.phase2.reader-open-epoch", marker),
 			identity("test.phase2.reader-callback-cohort", marker),
+			reader_session_execution(marker),
 			identity("test.phase2.reader-transaction", marker),
 			identity("test.phase2.reader-decode", marker),
 			identity("test.phase2.reader-authority-read", marker),
@@ -9736,6 +9746,88 @@ namespace
 				"revoke reader group fixture writer gate");
 	}
 
+	void verify_reader_session_execution_is_validated_and_exactly_bound()
+	{
+		{
+			constexpr std::uint8_t marker = 158U;
+			const auto binding = family(marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto writer = install_live_writer(coordinator,
+											  binding,
+											  identity("test.connection", marker),
+											  identity("test.open-epoch", marker),
+											  marker,
+											  &page);
+			const auto map_request =
+				reader_attachment_request(binding,
+										  identity("test.connection", marker + 1U),
+										  marker + 1U,
+										  2,
+										  marker + 1U,
+										  0,
+										  writer.holder.generation());
+			auto invalid = reader_session_request(map_request, marker + 1U);
+			invalid.execution = {};
+			const auto before = coordinator.snapshot();
+			const auto before_lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+			auto rejected = coordinator.begin_reader_session(invalid);
+			const auto after = coordinator.snapshot();
+			const auto after_lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+			require(
+				!rejected &&
+					rejected.error().reason == sqlite_shm_lease_rejection_reason::invalid_request &&
+					before.reader_session_reservation_count ==
+						after.reader_session_reservation_count &&
+					before.reader_session_owner_count == after.reader_session_owner_count &&
+					before_lifecycle.last_issued_sequence == after_lifecycle.last_issued_sequence &&
+					before_lifecycle.last_committed_sequence ==
+						after_lifecycle.last_committed_sequence &&
+					!after.quarantined,
+				"an empty authority-read execution receipt is rejected before mutation");
+			retire_last(coordinator, writer.holder, callback(9U, marker + 2U));
+			require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
+					"revoke invalid execution fixture writer gate");
+		}
+
+		{
+			constexpr std::uint8_t marker = 162U;
+			const auto binding = family(marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto writer = install_live_writer(coordinator,
+											  binding,
+											  identity("test.connection", marker),
+											  identity("test.open-epoch", marker),
+											  marker,
+											  &page);
+			const auto map_request =
+				reader_attachment_request(binding,
+										  identity("test.connection", marker + 1U),
+										  marker + 1U,
+										  2,
+										  marker + 1U,
+										  0,
+										  writer.holder.generation());
+			const auto request = reader_session_request(map_request, marker + 1U);
+			auto session = coordinator.begin_reader_session(request);
+			require(session && session->valid(), "admit execution-binding reader session");
+			auto mismatched = request;
+			mismatched.execution = reader_session_execution(marker + 2U);
+			const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				mismatched,
+				sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
+				identity("test.reader-session-execution-terminal", marker));
+			auto rejected = coordinator.complete_reader_session(*session, terminal);
+			require(!rejected && !session->valid() && coordinator.snapshot().quarantined,
+					"session terminal cannot replace the execution receipt bound at admission");
+		}
+	}
+
 	void verify_equal_pointer_reader_connections_unmap_independently()
 	{
 		constexpr std::uint8_t marker = 218U;
@@ -11814,6 +11906,7 @@ namespace
 				coordinator, open_token, reader_open_epoch_binding(*attachment));
 			const sqlite_shm_reader_session_request forged_session{
 				*attachment,
+				reader_session_execution(marker),
 				identity("test.reader-forged-transaction", marker),
 				identity("test.reader-forged-decode", marker),
 				identity("test.reader-forged-authority", marker),
@@ -14840,6 +14933,7 @@ int main()
 		verify_unpublished_cleanup_compaction_and_replay_matrix_is_fail_closed();
 		verify_unpublished_cleanup_determinate_rejection_differs_from_true_ambiguity();
 		verify_direct_opaque_first_map_has_no_group_or_native_authority();
+		verify_reader_session_execution_is_validated_and_exactly_bound();
 		verify_reader_native_attachment_group_and_session_core();
 		verify_equal_pointer_reader_connections_unmap_independently();
 		verify_callback_free_cached_member_use_requires_a_live_session_owner();

@@ -246,6 +246,7 @@ namespace cxxlens::sdk
 			const sqlite_shm_verified_reader_unpublished_cleanup_receipt& receipt) noexcept
 		{
 			if (!valid_reader_attachment_map_request(receipt.request()) ||
+				!valid_callback(receipt.session_request().execution) ||
 				!valid_identity(receipt.session_request().read_transaction_epoch) ||
 				!valid_identity(receipt.session_request().decode_attempt) ||
 				!valid_identity(receipt.session_request().authority_read_receipt) ||
@@ -359,6 +360,7 @@ namespace cxxlens::sdk
 		valid_reader_session_request(const sqlite_shm_reader_session_request& request) noexcept
 		{
 			return valid_reader_native_attachment(request.attachment) &&
+				valid_callback(request.execution) &&
 				valid_identity(request.read_transaction_epoch) &&
 				valid_identity(request.decode_attempt) &&
 				valid_identity(request.authority_read_receipt);
@@ -371,7 +373,7 @@ namespace cxxlens::sdk
 				valid_identity(request.connection_token) &&
 				valid_identity(request.main_native_file_receipt) &&
 				valid_identity(request.main_xopen_receipt) && valid_identity(request.open_epoch) &&
-				valid_identity(request.callback_cohort) &&
+				valid_identity(request.callback_cohort) && valid_callback(request.execution) &&
 				valid_identity(request.read_transaction_epoch) &&
 				valid_identity(request.decode_attempt) &&
 				valid_identity(request.authority_read_receipt);
@@ -5426,6 +5428,7 @@ namespace cxxlens::sdk
 							reader_lifecycle_sequences_->state_.get(), binding.slots[1]};
 						auto proposal_request = sqlite_shm_reader_session_request{
 							active_group->expected,
+							request.execution,
 							request.read_transaction_epoch,
 							request.decode_attempt,
 							request.authority_read_receipt,

@@ -372,6 +372,7 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity main_xopen_receipt;
 		sqlite_backend_opaque_identity open_epoch;
 		sqlite_backend_opaque_identity callback_cohort;
+		sqlite_shm_callback_execution_receipt execution;
 		sqlite_backend_opaque_identity read_transaction_epoch;
 		sqlite_backend_opaque_identity decode_attempt;
 		sqlite_backend_opaque_identity authority_read_receipt;

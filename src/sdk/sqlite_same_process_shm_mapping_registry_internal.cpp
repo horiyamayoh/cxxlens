@@ -28,6 +28,13 @@ namespace cxxlens::sdk
 				valid_identity(family.exact_file_family);
 		}
 
+		[[nodiscard]] bool
+		valid_callback(const sqlite_shm_callback_execution_receipt& callback) noexcept
+		{
+			return valid_identity(callback.thread_identity) &&
+				valid_identity(callback.invocation_token);
+		}
+
 		[[nodiscard]] sqlite_shm_lease_rejection
 		rejection(const sqlite_shm_lease_rejection_reason reason,
 				  const sqlite_shm_lease_recovery_action action =
@@ -74,7 +81,7 @@ namespace cxxlens::sdk
 				valid_identity(request.connection_token) &&
 				valid_identity(request.main_native_file_receipt) &&
 				valid_identity(request.main_xopen_receipt) && valid_identity(request.open_epoch) &&
-				valid_identity(request.callback_cohort) &&
+				valid_identity(request.callback_cohort) && valid_callback(request.execution) &&
 				valid_identity(request.read_transaction_epoch) &&
 				valid_identity(request.decode_attempt) &&
 				valid_identity(request.authority_read_receipt);
@@ -4059,6 +4066,7 @@ namespace cxxlens::sdk
 
 				auto proposal_request = sqlite_shm_reader_session_request{
 					*attachment,
+					request.execution,
 					request.read_transaction_epoch,
 					request.decode_attempt,
 					request.authority_read_receipt,

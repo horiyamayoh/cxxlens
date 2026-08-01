@@ -963,6 +963,16 @@ namespace
 		};
 	}
 
+	[[nodiscard]] sqlite_shm_callback_execution_receipt
+	reader_session_execution(const std::uint8_t marker, const std::uint64_t depth = 0U)
+	{
+		return {
+			identity("test.registry.reader-session-thread", marker),
+			depth,
+			identity("test.registry.reader-session-execution", marker),
+		};
+	}
+
 	[[nodiscard]] sqlite_shm_native_attachment_identity
 	writer_attachment(const sqlite_shm_lease_family_binding& family,
 					  const sqlite_backend_opaque_identity& alias_lifetime,
@@ -1036,6 +1046,7 @@ namespace
 			main_xopen_receipt,
 			open_epoch,
 			callback_cohort,
+			reader_session_execution(marker),
 			identity("test.registry.reader-transaction-epoch", marker),
 			identity("test.registry.reader-decode-attempt", marker),
 			identity("test.registry.reader-authority-read", marker),
@@ -2090,13 +2101,35 @@ namespace
 									  identity("test.registry.focused-reader-cohort", marker),
 									  marker);
 		auto open = acquire_reader_open(fixture, pre_sqlite);
+		auto invalid_pre_sqlite = pre_sqlite;
+		invalid_pre_sqlite.execution = {};
+		const auto before_invalid =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		auto invalid_admission = fixture.registry->admit_reader_session_before_sqlite(
+			*fixture.family_pin, open, invalid_pre_sqlite);
+		const auto after_invalid =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(invalid_admission &&
+					invalid_admission->kind() ==
+						sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
+					invalid_admission->rejection() &&
+					invalid_admission->rejection()->reason ==
+						sqlite_shm_lease_rejection_reason::invalid_request &&
+					!invalid_admission->has_proposal_custody() &&
+					before_invalid.last_issued_sequence == after_invalid.last_issued_sequence &&
+					before_invalid.last_committed_sequence ==
+						after_invalid.last_committed_sequence &&
+					before_invalid.session_reservations.size() ==
+						after_invalid.session_reservations.size(),
+				"registry rejects an empty authority-read execution receipt before mutation");
 		auto admitted = fixture.registry->admit_reader_session_before_sqlite(
 			*fixture.family_pin, open, pre_sqlite);
 		require(admitted &&
 					admitted->kind() ==
 						sqlite_shm_reader_session_admission_kind::
 							reserved_for_local_proposal_candidate &&
-					admitted->proposal_request(),
+					admitted->proposal_request() &&
+					admitted->proposal_request()->execution == pre_sqlite.execution,
 				"reserve focused reader candidate");
 		auto session_request = *admitted->proposal_request();
 		auto session = admitted->take_session();
@@ -4338,6 +4371,7 @@ namespace
 		require(attachment.has_value(), "bind open-lineage direct reader attachment");
 		return {
 			std::move(*attachment),
+			reader_session_execution(marker),
 			identity("test.registry.reader-open-direct-transaction", marker),
 			identity("test.registry.reader-open-direct-decode", marker),
 			identity("test.registry.reader-open-direct-authority", marker),
@@ -4526,6 +4560,7 @@ namespace
 		require(direct_attachment.has_value(), "bind test-only direct reader identity");
 		const auto direct_request = sqlite_shm_reader_session_request{
 			std::move(*direct_attachment),
+			reader_session_execution(151U),
 			identity("test.registry.reader-direct-transaction", 151U),
 			identity("test.registry.reader-direct-decode", 151U),
 			identity("test.registry.reader-direct-authority", 151U),
@@ -7961,6 +7996,7 @@ namespace
 		require(direct_attachment.has_value(), "bind distinct legacy reader attachment");
 		const auto direct_request = sqlite_shm_reader_session_request{
 			*direct_attachment,
+			reader_session_execution(205U),
 			identity("test.registry.reader-lineage-direct-transaction", 205U),
 			identity("test.registry.reader-lineage-direct-decode", 205U),
 			identity("test.registry.reader-lineage-direct-authority", 205U),
