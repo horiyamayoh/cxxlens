@@ -1503,6 +1503,88 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_map_result>
+			complete_reader_predecessor_map(
+				sqlite_shm_registry_family_pin& pin,
+				sqlite_shm_reader_attachment_map_inflight& inflight,
+				const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
+				sqlite_shm_reader_session& session)
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				try
+				{
+					std::optional<sqlite_shm_reader_map_predelegate_authority>
+						completed_predelegate;
+					std::optional<sqlite_shm_reader_attachment_authority> completed_candidate;
+					std::optional<sqlite_shm_lease_result<sqlite_shm_reader_predecessor_map_result>>
+						result;
+					{
+						std::scoped_lock lock{mutex_};
+						synchronize_activity_controls_locked();
+						synchronize_reader_open_controls_locked();
+						synchronize_coordinator_quarantines_locked();
+						if (pin.state_.get() != this)
+							return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+											 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+						auto* family_pin = current_family_pin_locked(pin);
+						auto* alias = find_alias_locked(pin.alias_token_);
+						auto* family = find_family_epoch_locked(pin.family_epoch_);
+						if (family_pin == nullptr || alias == nullptr || family == nullptr ||
+							!family->coordinator)
+							return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+											 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+						// This terminalizes an already-native-started attempt and transfers the
+						// retained candidate lifetime to the existing byte-semantic route.
+						result.emplace(
+							family->coordinator->complete_registry_reader_predecessor_map(
+								pin,
+								inflight,
+								receipt,
+								session,
+								completed_predelegate,
+								completed_candidate));
+						if (!*result &&
+							(result->error().reason ==
+								 sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
+							 result->error().reason ==
+								 sqlite_shm_lease_rejection_reason::quarantined))
+							synchronize_coordinator_quarantines_locked();
+					}
+					if (!result)
+						return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					if (!*result)
+						return result->error();
+					if (completed_predelegate)
+					{
+						auto released = completed_predelegate->release_activity();
+						if (!released)
+						{
+							emergency_quarantine();
+							return released.error();
+						}
+					}
+					// A predecessor-active reservation must retain the candidate activity pin
+					// until an exact existing-route unmap or close confirms retirement.
+					if (completed_candidate)
+					{
+						emergency_quarantine();
+						return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					}
+					return **result;
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
 			[[nodiscard]]
 			sqlite_shm_lease_result<sqlite_shm_reader_unpublished_cleanup_obligation>
 			begin_reader_unpublished_cleanup(
@@ -5816,6 +5898,16 @@ namespace cxxlens::sdk
 		sqlite_shm_reader_session& session)
 	{
 		return state_->complete_reader_zero_attachment_map(family, inflight, receipt, session);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_predecessor_map_result>
+	sqlite_same_process_shm_mapping_registry::complete_reader_predecessor_map(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_attachment_map_inflight& inflight,
+		const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
+		sqlite_shm_reader_session& session)
+	{
+		return state_->complete_reader_predecessor_map(family, inflight, receipt, session);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_unpublished_cleanup_obligation>

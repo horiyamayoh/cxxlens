@@ -410,6 +410,36 @@ namespace cxxlens::sdk
 					std::move(zero_attachment_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_predecessor_map_receipt
+		reader_predecessor_map(const sqlite_shm_reader_attachment_map_inflight& inflight,
+							   const sqlite_shm_reader_predecessor_map_kind kind,
+							   sqlite_shm_reader_attachment_map_request request,
+							   const int native_status,
+							   const volatile void* native_mapping,
+							   const int delegated_extend,
+							   sqlite_backend_opaque_identity native_effect)
+		{
+			std::optional<sqlite_shm_reader_native_attachment_identity> observed;
+			if (kind == sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route)
+			{
+				auto exact_observed = sqlite_shm_reader_native_attachment_identity{
+					request.expected_attachment,
+					{"test.registry.reader-predecessor-shm-object", {std::byte{1}}},
+					{"test.registry.reader-predecessor-shm-entry", {std::byte{2}}},
+					{"test.registry.reader-predecessor-device", {std::byte{3}}},
+					{"test.registry.reader-predecessor-mount", {std::byte{4}}}};
+				observed.emplace(std::move(exact_observed));
+			}
+			return {inflight,
+					kind,
+					std::move(request),
+					native_status,
+					native_mapping,
+					delegated_extend,
+					std::move(observed),
+					std::move(native_effect)};
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_unpublished_cleanup_receipt
 		reader_unpublished_cleanup(
 			const sqlite_shm_reader_attachment_map_inflight& inflight,
@@ -603,6 +633,7 @@ namespace
 	constexpr int sqlite_ok_status = 0;
 	constexpr int sqlite_busy_status = 5;
 	constexpr int sqlite_readonly_status = 8;
+	constexpr int sqlite_readonly_cantinit_status = sqlite_readonly_status | (5 << 8);
 	constexpr int sqlite_ioerr_status = 10;
 
 	static_assert(!std::is_default_constructible_v<sqlite_shm_registry_process_owner>);
@@ -3056,6 +3087,87 @@ namespace
 				80U,
 				replay_role,
 				true);
+		}
+	}
+
+	void verify_registry_reader_predecessor_transfer_retains_existing_route_lifetime()
+	{
+		struct row
+		{
+			sqlite_shm_reader_predecessor_map_kind kind;
+			bool mapped;
+		};
+		const row rows[]{
+			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route, false},
+			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route, true},
+		};
+
+		for (std::size_t index = 0U; index < std::size(rows); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(220U + index * 8U);
+			auto setup = make_reader_candidate_setup(marker);
+			const auto map_request = reader_attachment_map_request(
+				setup.session_request, static_cast<std::uint8_t>(marker + 1U));
+			auto inflight = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(inflight && inflight->valid() &&
+						setup.fixture.registry->snapshot().active_activity_pin_count == 3U,
+					"registry predecessor fixture retains candidate and predelegate activity");
+			const auto& current = rows[index];
+			const auto effect = identity("test.registry.reader-predecessor-native-effect",
+										 static_cast<std::uint8_t>(marker + 2U));
+			const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
+				*inflight,
+				current.kind,
+				map_request,
+				sqlite_readonly_status,
+				current.mapped ? setup.writer_attempt.native_page.get() : nullptr,
+				0,
+				effect);
+			auto completed = setup.fixture.registry->complete_reader_predecessor_map(
+				*setup.fixture.family_pin, *inflight, receipt, setup.session);
+			const auto registry = setup.fixture.registry->snapshot();
+			const auto lease = setup.coordinator->snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(
+				completed && completed->kind() == current.kind &&
+					completed->native_status() ==
+						(current.mapped ? sqlite_readonly_status
+										: sqlite_readonly_cantinit_status) &&
+					completed->native_mapping() ==
+						(current.mapped ? setup.writer_attempt.native_page.get() : nullptr) &&
+					!inflight->valid() && !setup.session.valid() &&
+					registry.active_activity_pin_count == 2U &&
+					registry.quarantined_family_count == 0U &&
+					lease.reader_registry_activity_authority_count == 1U &&
+					lease.reader_registry_bound_group_count == 0U &&
+					lease.reader_registry_bound_session_count == 0U &&
+					lease.reader_attachment_group_count == 0U &&
+					lease.reader_predecessor_route_active_count == 1U &&
+					lease.reader_predecessor_map_terminal_count == 1U &&
+					lifecycle.predecessor_map_terminals.size() == 1U &&
+					lifecycle.predecessor_map_terminals.front().native_effect_receipt == effect &&
+					lifecycle.predecessor_map_terminals.front().observed_attachment_retained ==
+						current.mapped &&
+					!lease.quarantined,
+				"registry predecessor terminal releases only the map predelegate while retaining "
+				"one existing-route lifetime pin and zero proposal group/session authority");
+
+			auto replay = setup.fixture.registry->complete_reader_predecessor_map(
+				*setup.fixture.family_pin, *inflight, receipt, setup.session);
+			auto remap = setup.fixture.registry->admit_reader_session_before_sqlite(
+				*setup.fixture.family_pin, setup.open, setup.pre_sqlite);
+			require(!replay &&
+						replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+						remap &&
+						remap->kind() ==
+							sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
+						remap->rejection() &&
+						remap->rejection()->reason == sqlite_shm_lease_rejection_reason::retiring &&
+						setup.fixture.registry->snapshot().active_activity_pin_count == 2U &&
+						!setup.coordinator->snapshot().quarantined,
+					"predecessor active reservation rejects receipt replay and proposal remap");
 		}
 	}
 
@@ -11666,6 +11778,7 @@ int main()
 {
 	try
 	{
+		verify_registry_reader_predecessor_transfer_retains_existing_route_lifetime();
 		verify_registry_reader_zero_attachment_success_routes();
 		verify_revoked_zero_effect_compact_replay_is_rejected();
 		verify_retired_compact_all_replay_identities_are_rejected();

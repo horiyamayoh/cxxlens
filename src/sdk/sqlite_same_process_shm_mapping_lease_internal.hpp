@@ -414,6 +414,7 @@ namespace cxxlens::sdk
 	class sqlite_shm_reader_unmap_obligation;
 	class sqlite_shm_reader_close_obligation;
 	class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
+	class sqlite_shm_verified_reader_predecessor_map_receipt;
 	class sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt;
 	class sqlite_shm_verified_reader_unmap_terminal_receipt;
 	class sqlite_shm_verified_reader_close_terminal_receipt;
@@ -540,6 +541,78 @@ namespace cxxlens::sdk
 		sqlite_shm_reader_attachment_zero_effect_kind kind_{
 			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change};
 		int native_status_{};
+	};
+
+	enum class sqlite_shm_reader_predecessor_map_kind : std::uint8_t
+	{
+		exact_predecessor_no_attachment_route,
+		exact_predecessor_mapped_route,
+	};
+
+	/**
+	 * Issuer-sealed first-map result transferred to the existing byte-semantic route.
+	 *
+	 * The no-attachment row carries a complete zero-effect receipt. The mapped row carries the
+	 * complete observed native attachment and mapped-effect receipt. Neither row can mint a
+	 * proposal observation owner, member, handoff, use owner, or cleanup authority.
+	 */
+	class sqlite_shm_verified_reader_predecessor_map_receipt
+	{
+	  public:
+		[[nodiscard]] sqlite_shm_reader_predecessor_map_kind kind() const noexcept;
+		[[nodiscard]] const sqlite_shm_reader_attachment_map_request& request() const noexcept;
+		[[nodiscard]] int native_status() const noexcept;
+		[[nodiscard]] const volatile void* native_mapping() const noexcept;
+		[[nodiscard]] int delegated_extend() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_shm_reader_native_attachment_identity>&
+		observed_attachment() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& native_effect_receipt() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_verified_reader_predecessor_map_receipt(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_predecessor_map_kind kind,
+			sqlite_shm_reader_attachment_map_request request,
+			int native_status,
+			const volatile void* native_mapping,
+			int delegated_extend,
+			std::optional<sqlite_shm_reader_native_attachment_identity> observed_attachment,
+			sqlite_backend_opaque_identity native_effect_receipt);
+
+		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		sqlite_shm_reader_predecessor_map_kind kind_{
+			sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route};
+		sqlite_shm_reader_attachment_map_request request_;
+		int native_status_{};
+		const volatile void* native_mapping_{};
+		int delegated_extend_{};
+		std::optional<sqlite_shm_reader_native_attachment_identity> observed_attachment_;
+		sqlite_backend_opaque_identity native_effect_receipt_;
+	};
+
+	/** Closed outward projection after transfer to the existing predecessor route. */
+	class sqlite_shm_reader_predecessor_map_result
+	{
+	  public:
+		[[nodiscard]] sqlite_shm_reader_predecessor_map_kind kind() const noexcept;
+		[[nodiscard]] int native_status() const noexcept;
+		[[nodiscard]] const volatile void* native_mapping() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		sqlite_shm_reader_predecessor_map_result(sqlite_shm_reader_predecessor_map_kind kind,
+												 int native_status,
+												 const volatile void* native_mapping) noexcept;
+
+		sqlite_shm_reader_predecessor_map_kind kind_{
+			sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route};
+		int native_status_{};
+		const volatile void* native_mapping_{};
 	};
 
 	enum class sqlite_shm_reader_unpublished_cleanup_entry_kind : std::uint8_t
@@ -1344,6 +1417,8 @@ namespace cxxlens::sdk
 		std::size_t reader_session_owner_count{};
 		std::size_t reader_session_terminal_count{};
 		std::size_t reader_attachment_zero_effect_terminal_count{};
+		std::size_t reader_predecessor_map_terminal_count{};
+		std::size_t reader_predecessor_route_active_count{};
 		std::size_t reader_attachment_revoked_no_map_count{};
 		std::size_t reader_unpublished_cleanup_admitted_count{};
 		std::size_t reader_unpublished_cleanup_confirmed_count{};
@@ -1485,6 +1560,21 @@ namespace cxxlens::sdk
 		bool revoked_first_reservation{};
 	};
 
+	struct sqlite_shm_reader_predecessor_map_terminal_test_view
+	{
+		std::uint64_t owner_token{};
+		sqlite_shm_reader_attachment_reservation_identity attachment;
+		std::uint64_t terminal_sequence{};
+		sqlite_shm_reader_predecessor_map_kind kind{
+			sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route};
+		int native_status{};
+		const volatile void* native_mapping{};
+		std::optional<sqlite_shm_callback_execution_receipt> callback;
+		std::optional<sqlite_backend_opaque_identity> native_effect_receipt;
+		bool observed_attachment_retained{};
+		bool exact_terminal_receipt_retained{};
+	};
+
 	/** Test-only closed projection of the activated DF-0207 reader ledger. */
 	struct sqlite_shm_reader_lifecycle_test_view
 	{
@@ -1512,6 +1602,7 @@ namespace cxxlens::sdk
 		std::vector<sqlite_shm_reader_close_terminal_test_view> close_terminals;
 		std::vector<sqlite_shm_reader_terminal_quarantine_test_view> terminal_quarantines;
 		std::vector<sqlite_shm_reader_zero_effect_terminal_test_view> zero_effect_terminals;
+		std::vector<sqlite_shm_reader_predecessor_map_terminal_test_view> predecessor_map_terminals;
 		std::vector<sqlite_shm_reader_lifecycle_event_test_view> events;
 	};
 
@@ -1820,6 +1911,7 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
 		friend class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
+		friend class sqlite_shm_verified_reader_predecessor_map_receipt;
 		friend class sqlite_shm_verified_reader_unpublished_cleanup_receipt;
 		explicit sqlite_shm_reader_attachment_map_inflight(
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
@@ -2187,6 +2279,11 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_attachment_map_inflight& inflight,
 			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
 			sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_map_result>
+		complete_reader_predecessor_map(
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
+			sqlite_shm_reader_session& session);
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		complete_reader_session(sqlite_shm_reader_session& session,
 								const sqlite_shm_reader_session_terminal_receipt& receipt) noexcept;
@@ -2307,6 +2404,14 @@ namespace cxxlens::sdk
 			sqlite_shm_registry_family_pin& family,
 			sqlite_shm_reader_attachment_map_inflight& inflight,
 			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
+			sqlite_shm_reader_session& session,
+			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate,
+			std::optional<sqlite_shm_reader_attachment_authority>& completed_candidate);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_map_result>
+		complete_registry_reader_predecessor_map(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
 			sqlite_shm_reader_session& session,
 			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate,
 			std::optional<sqlite_shm_reader_attachment_authority>& completed_candidate);
