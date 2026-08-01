@@ -62,6 +62,16 @@ class NgCiSupplyChainTest(unittest.TestCase):
             "libclang-rt-22-dev", self.lock["llvm"]["profiles"]["compiler"]
         )
 
+    def test_llvm_package_revision_is_exactly_locked(self) -> None:
+        self.assertEqual(self.lock["llvm"]["expected_release"], "22.1.8")
+        self.assertEqual(
+            set(self.lock["llvm"]["packages"].values()),
+            {
+                "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~"
+                "20260714135019.80"
+            },
+        )
+
     def test_mutable_or_unknown_action_is_rejected(self) -> None:
         for action_line in (
             "      - uses: actions/checkout@v4\n",
