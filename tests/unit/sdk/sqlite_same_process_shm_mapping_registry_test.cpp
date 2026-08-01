@@ -440,6 +440,24 @@ namespace cxxlens::sdk
 					std::move(native_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt
+		reader_predecessor_unmap(const sqlite_shm_reader_predecessor_map_result& predecessor,
+								 sqlite_shm_callback_execution_receipt callback,
+								 const sqlite_shm_reader_unmap_evidence_kind evidence_kind,
+								 std::optional<int> native_status,
+								 std::optional<sqlite_backend_opaque_identity> native_effect,
+								 const int caller_delete_flag = 0,
+								 const int delegated_delete_flag = 0)
+		{
+			return {predecessor,
+					std::move(callback),
+					evidence_kind,
+					native_status,
+					caller_delete_flag,
+					delegated_delete_flag,
+					std::move(native_effect)};
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_unpublished_cleanup_receipt
 		reader_unpublished_cleanup(
 			const sqlite_shm_reader_attachment_map_inflight& inflight,
@@ -3097,9 +3115,10 @@ namespace
 			sqlite_shm_reader_predecessor_map_kind kind;
 			bool mapped;
 		};
-		const row rows[]{
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route, false},
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route, true},
+		const std::array rows{
+			row{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
+				false},
+			row{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route, true},
 		};
 
 		for (std::size_t index = 0U; index < std::size(rows); ++index)
@@ -3113,7 +3132,7 @@ namespace
 			require(inflight && inflight->valid() &&
 						setup.fixture.registry->snapshot().active_activity_pin_count == 3U,
 					"registry predecessor fixture retains candidate and predelegate activity");
-			const auto& current = rows[index];
+			const auto& current = rows.at(index);
 			const auto effect = identity("test.registry.reader-predecessor-native-effect",
 										 static_cast<std::uint8_t>(marker + 2U));
 			const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
@@ -3168,6 +3187,71 @@ namespace
 						setup.fixture.registry->snapshot().active_activity_pin_count == 2U &&
 						!setup.coordinator->snapshot().quarantined,
 					"predecessor active reservation rejects receipt replay and proposal remap");
+
+			const auto unmap_effect = identity("test.registry.reader-predecessor-unmap-effect",
+											   static_cast<std::uint8_t>(marker + 3U));
+			const auto unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_predecessor_unmap(
+					*completed,
+					callback(static_cast<std::uint8_t>(marker + 4U)),
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					unmap_effect);
+			auto mismatched_request = reader_pre_sqlite_request(
+				setup.fixture,
+				identity("test.registry.reader-predecessor-mismatched-connection",
+						 static_cast<std::uint8_t>(marker + 20U)),
+				identity("test.registry.reader-predecessor-mismatched-main-native",
+						 static_cast<std::uint8_t>(marker + 20U)),
+				identity("test.registry.reader-predecessor-mismatched-main-xopen",
+						 static_cast<std::uint8_t>(marker + 20U)),
+				identity("test.registry.reader-predecessor-mismatched-open",
+						 static_cast<std::uint8_t>(marker + 20U)),
+				identity("test.registry.reader-predecessor-mismatched-cohort",
+						 static_cast<std::uint8_t>(marker + 20U)),
+				static_cast<std::uint8_t>(marker + 20U));
+			auto mismatched_open = acquire_reader_open(setup.fixture, mismatched_request);
+			auto mismatched = setup.fixture.registry->complete_reader_predecessor_unmap(
+				*setup.fixture.family_pin, mismatched_open, unmap_receipt);
+			require(!mismatched &&
+						mismatched.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						setup.fixture.registry->snapshot().active_activity_pin_count == 2U &&
+						setup.coordinator->snapshot().reader_predecessor_route_active_count == 1U &&
+						!setup.coordinator->snapshot().quarantined,
+					"predecessor unmap receipt cannot cross reader open epochs or release custody");
+			close_and_release_reader_open(
+				setup.fixture, mismatched_open, static_cast<std::uint8_t>(marker + 21U));
+			auto retired = setup.fixture.registry->complete_reader_predecessor_unmap(
+				*setup.fixture.family_pin, setup.open, unmap_receipt);
+			const auto retired_registry = setup.fixture.registry->snapshot();
+			const auto retired_lease = setup.coordinator->snapshot();
+			const auto retired_lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(retired &&
+						retired->kind() ==
+							sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+						retired->outward_status() == sqlite_ok_status &&
+						retired->native_effect_receipt() == unmap_effect &&
+						retired_registry.active_activity_pin_count == 1U &&
+						retired_registry.quarantined_family_count == 0U &&
+						retired_lease.reader_registry_activity_authority_count == 0U &&
+						retired_lease.reader_predecessor_route_active_count == 0U &&
+						retired_lease.reader_predecessor_route_retired_count == 1U &&
+						retired_lifecycle.predecessor_map_terminals.size() == 1U &&
+						retired_lifecycle.predecessor_map_terminals.front()
+								.retirement_native_effect_receipt == unmap_effect &&
+						!retired_lease.quarantined,
+					"registry predecessor retirement releases the retained candidate lifetime only "
+					"after exact existing-route unmap confirmation");
+			auto unmap_replay = setup.fixture.registry->complete_reader_predecessor_unmap(
+				*setup.fixture.family_pin, setup.open, unmap_receipt);
+			require(!unmap_replay &&
+						unmap_replay.error().reason ==
+							sqlite_shm_lease_rejection_reason::stale_token &&
+						setup.fixture.registry->snapshot().active_activity_pin_count == 1U &&
+						!setup.coordinator->snapshot().quarantined,
+					"registry predecessor unmap receipt is one-shot and does not release twice");
 		}
 	}
 

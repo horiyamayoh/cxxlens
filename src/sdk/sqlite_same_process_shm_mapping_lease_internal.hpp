@@ -415,9 +415,12 @@ namespace cxxlens::sdk
 	class sqlite_shm_reader_close_obligation;
 	class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
 	class sqlite_shm_verified_reader_predecessor_map_receipt;
+	class sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt;
 	class sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt;
 	class sqlite_shm_verified_reader_unmap_terminal_receipt;
 	class sqlite_shm_verified_reader_close_terminal_receipt;
+	enum class sqlite_shm_reader_unmap_evidence_kind : std::uint8_t;
+	enum class sqlite_shm_reader_unmap_terminal_kind : std::uint8_t;
 	class sqlite_shm_verified_writer_native_map_receipt;
 	class sqlite_writer_shm_native_map_receipt_validator;
 	class sqlite_writer_shm_mapping_receipt_validator;
@@ -604,15 +607,97 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt;
+		friend class sqlite_same_process_shm_lease_test_peer;
 
-		sqlite_shm_reader_predecessor_map_result(sqlite_shm_reader_predecessor_map_kind kind,
-												 int native_status,
-												 const volatile void* native_mapping) noexcept;
+		sqlite_shm_reader_predecessor_map_result(
+			std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state,
+			std::uint64_t token,
+			std::uint64_t reservation_token,
+			std::uint64_t generation,
+			sqlite_shm_reader_predecessor_map_kind kind,
+			int native_status,
+			const volatile void* native_mapping) noexcept;
 
+		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		std::uint64_t reservation_token_{};
+		std::uint64_t generation_{};
 		sqlite_shm_reader_predecessor_map_kind kind_{
 			sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route};
 		int native_status_{};
 		const volatile void* native_mapping_{};
+	};
+
+	/**
+	 * Exact terminal evidence observed after the existing byte-semantic route owns xShmUnmap(0).
+	 *
+	 * This receipt grants no native-call authority. It is bound to the non-authorizing predecessor
+	 * lineage returned by the first-map terminal and can only retire that exact reservation after
+	 * an issuer-sealed determinate SQLite result. The production issuer remains absent while the
+	 * reader VFS route is blocked.
+	 */
+	class sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt
+	{
+	  public:
+		[[nodiscard]] const sqlite_shm_callback_execution_receipt& callback() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_unmap_evidence_kind evidence_kind() const noexcept;
+		[[nodiscard]] std::optional<int> native_status() const noexcept;
+		[[nodiscard]] int caller_delete_flag() const noexcept;
+		[[nodiscard]] int delegated_delete_flag() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		native_effect_receipt() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt(
+			const sqlite_shm_reader_predecessor_map_result& predecessor,
+			sqlite_shm_callback_execution_receipt callback,
+			sqlite_shm_reader_unmap_evidence_kind evidence_kind,
+			std::optional<int> native_status,
+			int caller_delete_flag,
+			int delegated_delete_flag,
+			std::optional<sqlite_backend_opaque_identity> native_effect_receipt);
+
+		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		std::uint64_t reservation_token_{};
+		std::uint64_t generation_{};
+		sqlite_shm_callback_execution_receipt callback_;
+		sqlite_shm_reader_unmap_evidence_kind evidence_kind_{};
+		std::optional<int> native_status_;
+		int caller_delete_flag_{};
+		int delegated_delete_flag_{};
+		std::optional<sqlite_backend_opaque_identity> native_effect_receipt_;
+	};
+
+	/** Closed projection of one existing-route predecessor xShmUnmap terminal. */
+	class sqlite_shm_reader_predecessor_unmap_terminal_result
+	{
+	  public:
+		[[nodiscard]] sqlite_shm_reader_unmap_terminal_kind kind() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_unmap_evidence_kind evidence_kind() const noexcept;
+		[[nodiscard]] std::optional<int> native_status() const noexcept;
+		[[nodiscard]] int outward_status() const noexcept;
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		native_effect_receipt() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		sqlite_shm_reader_predecessor_unmap_terminal_result(
+			sqlite_shm_reader_unmap_terminal_kind kind,
+			sqlite_shm_reader_unmap_evidence_kind evidence_kind,
+			std::optional<int> native_status,
+			std::optional<sqlite_backend_opaque_identity> native_effect_receipt) noexcept;
+
+		sqlite_shm_reader_unmap_terminal_kind kind_{};
+		sqlite_shm_reader_unmap_evidence_kind evidence_kind_{};
+		std::optional<int> native_status_;
+		int outward_status_{};
+		std::optional<sqlite_backend_opaque_identity> native_effect_receipt_;
 	};
 
 	enum class sqlite_shm_reader_unpublished_cleanup_entry_kind : std::uint8_t
@@ -1419,6 +1504,7 @@ namespace cxxlens::sdk
 		std::size_t reader_attachment_zero_effect_terminal_count{};
 		std::size_t reader_predecessor_map_terminal_count{};
 		std::size_t reader_predecessor_route_active_count{};
+		std::size_t reader_predecessor_route_retired_count{};
 		std::size_t reader_attachment_revoked_no_map_count{};
 		std::size_t reader_unpublished_cleanup_admitted_count{};
 		std::size_t reader_unpublished_cleanup_confirmed_count{};
@@ -1573,6 +1659,11 @@ namespace cxxlens::sdk
 		std::optional<sqlite_backend_opaque_identity> native_effect_receipt;
 		bool observed_attachment_retained{};
 		bool exact_terminal_receipt_retained{};
+		std::uint64_t retirement_terminal_sequence{};
+		std::optional<sqlite_shm_callback_execution_receipt> retirement_callback;
+		std::optional<sqlite_shm_reader_unmap_evidence_kind> retirement_evidence_kind;
+		std::optional<int> retirement_native_status;
+		std::optional<sqlite_backend_opaque_identity> retirement_native_effect_receipt;
 	};
 
 	/** Test-only closed projection of the activated DF-0207 reader ledger. */
@@ -2284,6 +2375,9 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_attachment_map_inflight& inflight,
 			const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
 			sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_unmap_terminal_result>
+		complete_reader_predecessor_unmap(
+			const sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt& receipt) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		complete_reader_session(sqlite_shm_reader_session& session,
 								const sqlite_shm_reader_session_terminal_receipt& receipt) noexcept;
@@ -2415,6 +2509,13 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_session& session,
 			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate,
 			std::optional<sqlite_shm_reader_attachment_authority>& completed_candidate);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_unmap_terminal_result>
+		complete_registry_reader_predecessor_unmap(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			const sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt& receipt,
+			std::optional<sqlite_shm_reader_attachment_authority>& completed_activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unpublished_cleanup_obligation>
 		begin_registry_reader_unpublished_cleanup(
 			sqlite_shm_registry_family_pin& family,

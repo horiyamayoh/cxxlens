@@ -365,6 +365,24 @@ namespace cxxlens::sdk
 					std::move(native_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt
+		reader_predecessor_unmap(const sqlite_shm_reader_predecessor_map_result& predecessor,
+								 sqlite_shm_callback_execution_receipt callback,
+								 const sqlite_shm_reader_unmap_evidence_kind evidence_kind,
+								 std::optional<int> native_status,
+								 std::optional<sqlite_backend_opaque_identity> native_effect,
+								 const int caller_delete_flag = 0,
+								 const int delegated_delete_flag = 0)
+		{
+			return {predecessor,
+					std::move(callback),
+					evidence_kind,
+					native_status,
+					caller_delete_flag,
+					delegated_delete_flag,
+					std::move(native_effect)};
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_unpublished_cleanup_receipt
 		reader_unpublished_cleanup(
 			const sqlite_shm_reader_attachment_map_inflight& inflight,
@@ -5235,16 +5253,16 @@ namespace
 			int native_status;
 			bool mapped;
 		};
-		const row rows[]{
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
-			 sqlite_readonly_status,
-			 false},
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
-			 sqlite_readonly_cantinit_status,
-			 false},
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
-			 sqlite_readonly_status,
-			 true},
+		const std::array rows{
+			row{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
+				sqlite_readonly_status,
+				false},
+			row{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
+				sqlite_readonly_cantinit_status,
+				false},
+			row{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+				sqlite_readonly_status,
+				true},
 		};
 
 		for (std::size_t index = 0U; index < std::size(rows); ++index)
@@ -5274,7 +5292,7 @@ namespace
 			require(session && session->valid(), "predecessor row reserves one first session");
 			auto inflight = coordinator.begin_reader_map(*session, map_request);
 			require(inflight && inflight->valid(), "predecessor row starts one exact map attempt");
-			const auto& current = rows[index];
+			const auto& current = rows.at(index);
 			const auto effect = identity("test.reader-predecessor-native-effect",
 										 static_cast<std::uint8_t>(marker + 3U));
 			const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
@@ -5336,8 +5354,52 @@ namespace
 						!coordinator.snapshot().quarantined,
 					"predecessor receipt cannot replay and its active route blocks proposal remap");
 
+			const auto unmap_effect = identity("test.reader-predecessor-unmap-effect",
+											   static_cast<std::uint8_t>(marker + 4U));
+			const auto unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_predecessor_unmap(
+					*completed,
+					callback(4, static_cast<std::uint8_t>(marker + 5U)),
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					unmap_effect);
+			auto retired = coordinator.complete_reader_predecessor_unmap(unmap_receipt);
+			const auto retired_snapshot = coordinator.snapshot();
+			const auto retired_lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+			require(
+				retired &&
+					retired->kind() == sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+					retired->evidence_kind() ==
+						sqlite_shm_reader_unmap_evidence_kind::exact_native_result &&
+					retired->native_status() == sqlite_ok_status &&
+					retired->outward_status() == sqlite_ok_status &&
+					retired->native_effect_receipt() == unmap_effect &&
+					retired_snapshot.reader_predecessor_route_active_count == 0U &&
+					retired_snapshot.reader_predecessor_route_retired_count == 1U &&
+					retired_lifecycle.attachment_reservations.size() == 1U &&
+					retired_lifecycle.attachment_reservations.front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::
+							predecessor_route_retired_confirmed &&
+					retired_lifecycle.predecessor_map_terminals.size() == 1U &&
+					retired_lifecycle.predecessor_map_terminals.front()
+							.retirement_terminal_sequence != 0U &&
+					retired_lifecycle.predecessor_map_terminals.front().retirement_callback ==
+						unmap_receipt.callback() &&
+					retired_lifecycle.predecessor_map_terminals.front()
+							.retirement_native_effect_receipt == unmap_effect &&
+					!retired_snapshot.quarantined,
+				"exact existing-route unmap retires the predecessor reservation without proposal "
+				"cleanup authority");
+			auto unmap_replay = coordinator.complete_reader_predecessor_unmap(unmap_receipt);
+			require(!unmap_replay &&
+						unmap_replay.error().reason ==
+							sqlite_shm_lease_rejection_reason::stale_token &&
+						!coordinator.snapshot().quarantined,
+					"confirmed predecessor unmap receipt is one-shot and replay-stale");
+
 			retire_last(
-				coordinator, writer.holder, callback(3, static_cast<std::uint8_t>(marker + 4U)));
+				coordinator, writer.holder, callback(3, static_cast<std::uint8_t>(marker + 6U)));
 			require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
 					"revoke predecessor transfer fixture writer gate");
 		}
@@ -5353,42 +5415,45 @@ namespace
 			int delegated_extend;
 			bool valid_effect;
 		};
-		const invalid_row rows[]{
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
-			 sqlite_busy_status,
-			 false,
-			 0,
-			 true},
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
-			 sqlite_readonly_status,
-			 true,
-			 0,
-			 true},
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
-			 sqlite_readonly_status,
-			 false,
-			 0,
-			 true},
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
-			 sqlite_readonly_cantinit_status,
-			 true,
-			 0,
-			 true},
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
-			 sqlite_readonly_status,
-			 true,
-			 1,
-			 true},
-			{static_cast<sqlite_shm_reader_predecessor_map_kind>(0xffU),
-			 sqlite_readonly_status,
-			 false,
-			 0,
-			 true},
-			{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
-			 sqlite_readonly_status,
-			 false,
-			 0,
-			 false},
+		const std::array rows{
+			invalid_row{
+				sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
+				sqlite_busy_status,
+				false,
+				0,
+				true},
+			invalid_row{
+				sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
+				sqlite_readonly_status,
+				true,
+				0,
+				true},
+			invalid_row{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+						sqlite_readonly_status,
+						false,
+						0,
+						true},
+			invalid_row{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+						sqlite_readonly_cantinit_status,
+						true,
+						0,
+						true},
+			invalid_row{sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+						sqlite_readonly_status,
+						true,
+						1,
+						true},
+			invalid_row{static_cast<sqlite_shm_reader_predecessor_map_kind>(0xffU),
+						sqlite_readonly_status,
+						false,
+						0,
+						true},
+			invalid_row{
+				sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
+				sqlite_readonly_status,
+				false,
+				0,
+				false},
 		};
 
 		for (std::size_t index = 0U; index < std::size(rows); ++index)
@@ -5418,7 +5483,7 @@ namespace
 			require(session.has_value(), "invalid predecessor fixture reserves session");
 			auto inflight = coordinator.begin_reader_map(*session, map_request);
 			require(inflight.has_value(), "invalid predecessor fixture begins map");
-			const auto& current = rows[index];
+			const auto& current = rows.at(index);
 			const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
 				*inflight,
 				current.kind,
@@ -5444,6 +5509,136 @@ namespace
 								terminal_quarantined,
 					"invalid predecessor status/pointer/effect shape terminalizes without route "
 					"publication");
+		}
+	}
+
+	void verify_reader_predecessor_unmap_terminal_partition_is_fail_closed()
+	{
+		struct row
+		{
+			sqlite_shm_reader_unmap_evidence_kind evidence_kind;
+			std::optional<int> native_status;
+			bool native_effect;
+			int caller_delete_flag;
+			bool inject_commit_failure;
+			bool exact_terminal_receipt;
+			int expected_outward_status;
+		};
+		const std::array rows{
+			row{sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+				sqlite_busy_status,
+				true,
+				0,
+				false,
+				true,
+				sqlite_busy_status},
+			row{sqlite_shm_reader_unmap_evidence_kind::throw_or_unknown,
+				std::nullopt,
+				false,
+				0,
+				false,
+				true,
+				sqlite_ioerr_status},
+			row{sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				false,
+				0,
+				false,
+				false,
+				sqlite_ioerr_status},
+			row{sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				true,
+				1,
+				false,
+				false,
+				sqlite_ioerr_status},
+			row{sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				true,
+				0,
+				true,
+				true,
+				sqlite_ioerr_status},
+		};
+
+		for (std::size_t index = 0U; index < std::size(rows); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(70U + index * 10U);
+			const auto binding = family(marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			auto writer = install_live_writer(coordinator,
+											  binding,
+											  identity("test.connection", marker),
+											  identity("test.open-epoch", marker),
+											  marker,
+											  &page);
+			const auto map_request = reader_attachment_request(
+				binding,
+				identity("test.connection", static_cast<std::uint8_t>(marker + 1U)),
+				static_cast<std::uint8_t>(marker + 1U),
+				2,
+				static_cast<std::uint8_t>(marker + 2U),
+				0,
+				writer.holder.generation());
+			const auto session_request =
+				reader_session_request(map_request, static_cast<std::uint8_t>(marker + 2U));
+			auto session = coordinator.begin_reader_session(session_request);
+			require(session.has_value(), "predecessor unmap fixture reserves session");
+			auto inflight = coordinator.begin_reader_map(*session, map_request);
+			require(inflight.has_value(), "predecessor unmap fixture begins map");
+			const auto map_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
+					*inflight,
+					sqlite_shm_reader_predecessor_map_kind::exact_predecessor_no_attachment_route,
+					map_request,
+					sqlite_readonly_cantinit_status,
+					nullptr,
+					identity("test.reader-predecessor-map-effect",
+							 static_cast<std::uint8_t>(marker + 3U)));
+			auto predecessor =
+				coordinator.complete_reader_predecessor_map(*inflight, map_receipt, *session);
+			require(predecessor.has_value(), "predecessor unmap fixture transfers map");
+
+			const auto& current = rows.at(index);
+			const auto terminal_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_predecessor_unmap(
+					*predecessor,
+					callback(5, static_cast<std::uint8_t>(marker + 4U)),
+					current.evidence_kind,
+					current.native_status,
+					current.native_effect ? std::optional<sqlite_backend_opaque_identity>{identity(
+												"test.reader-predecessor-unmap-terminal-effect",
+												static_cast<std::uint8_t>(marker + 5U))}
+										  : std::nullopt,
+					current.caller_delete_flag);
+			if (current.inject_commit_failure)
+				sqlite_same_process_shm_lease_test_peer::fail_next_reader_unmap_terminal_commit(
+					coordinator);
+			auto terminal = coordinator.complete_reader_predecessor_unmap(terminal_receipt);
+			const auto snapshot = coordinator.snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+			require(
+				(terminal.has_value() == current.exact_terminal_receipt) &&
+					(!terminal ||
+					 (terminal->kind() ==
+						  sqlite_shm_reader_unmap_terminal_kind::terminal_quarantined &&
+					  terminal->outward_status() == current.expected_outward_status)) &&
+					snapshot.quarantined && snapshot.reader_predecessor_route_active_count == 0U &&
+					snapshot.reader_predecessor_route_retired_count == 0U &&
+					snapshot.reader_predecessor_map_terminal_count == 1U &&
+					lifecycle.attachment_reservations.size() == 1U &&
+					lifecycle.attachment_reservations.front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::
+							terminal_quarantined &&
+					lifecycle.predecessor_map_terminals.size() == 1U &&
+					(lifecycle.predecessor_map_terminals.front().retirement_callback.has_value() ==
+					 current.exact_terminal_receipt),
+				"predecessor unmap non-OK, unknown, malformed, and commit-failure rows never "
+				"publish retirement success");
 		}
 	}
 
@@ -14253,6 +14448,7 @@ int main()
 		verify_reader_terminal_kind_is_closed_and_fail_closed();
 		verify_reader_predecessor_first_map_transfers_without_proposal_authority();
 		verify_reader_predecessor_receipt_partition_is_fail_closed();
+		verify_reader_predecessor_unmap_terminal_partition_is_fail_closed();
 		verify_reader_zero_attachment_status_partition();
 		verify_reader_zero_attachment_receipt_binding_and_effect_proof();
 		verify_cross_family_reader_terminal_receipts_are_owner_bound();
