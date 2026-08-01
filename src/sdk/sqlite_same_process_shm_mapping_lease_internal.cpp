@@ -13994,6 +13994,8 @@ namespace cxxlens::sdk
 					return std::nullopt;
 
 				auto route = sqlite_shm_reader_close_route::close_without_group;
+				auto awaiting_ack_seen = false;
+				auto active_predecessor_seen = false;
 				for (const auto& group : reader_attachment_groups_)
 				{
 					if (!group.registry_bound)
@@ -14008,9 +14010,10 @@ namespace cxxlens::sdk
 					if (group.reservation_phase ==
 						sqlite_shm_reader_attachment_reservation_phase::predecessor_route_active)
 					{
-						if (route == sqlite_shm_reader_close_route::close_after_confirmed_unmap ||
+						if (awaiting_ack_seen || active_predecessor_seen ||
 							!reader_local_predecessor_group_shape_is_exact_locked(group, false))
 							return std::nullopt;
+						active_predecessor_seen = true;
 						route = sqlite_shm_reader_close_route::close_existing_predecessor;
 						continue;
 					}
@@ -14022,6 +14025,7 @@ namespace cxxlens::sdk
 							(open.close_cut_sequence != 0U &&
 							 group.reservation_destination_sequence >= open.close_cut_sequence))
 							return std::nullopt;
+						awaiting_ack_seen = true;
 						route = sqlite_shm_reader_close_route::close_after_confirmed_unmap;
 						continue;
 					}

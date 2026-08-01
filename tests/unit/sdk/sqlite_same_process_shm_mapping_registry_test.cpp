@@ -4465,18 +4465,52 @@ namespace
 				"confirmed tombstone blocked a fresh nonreusable same-open attachment epoch");
 		const auto second_request = *second->proposal_request();
 		auto second_session = second->take_session();
-		const auto cancelled = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
-			second_request,
-			sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
-			identity("test.registry.reader-remap-second-cancel", 170U));
-		require(second_session &&
-					fixture.registry
-						->complete_reader_session(*fixture.family_pin, *second_session, cancelled)
-						.has_value(),
-				"clean fresh-remap candidate without native authority");
-		close_and_release_reader_open(
-			fixture, open, 171U, sqlite_shm_reader_close_route::close_after_confirmed_unmap);
-		retire_writer(*coordinator, *holder, 171U);
+		require(second_session && second_session->valid(), "take second fresh-remap session");
+		const auto second_map_request = reader_attachment_map_request(second_request, 170U);
+		auto second_map = fixture.registry->begin_reader_map(
+			*fixture.family_pin, *second_session, second_map_request);
+		require(second_map && second_map->valid(), "begin second fresh-remap predecessor map");
+		const auto second_map_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
+				*second_map,
+				sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+				second_map_request,
+				sqlite_readonly_status,
+				writer_attempt.native_page.get(),
+				0,
+				identity("test.registry.reader-remap-predecessor-effect", 170U));
+		auto second_predecessor = fixture.registry->complete_reader_predecessor_map(
+			*fixture.family_pin, *second_map, second_map_receipt, *second_session);
+		require(second_predecessor &&
+					second_predecessor->kind() ==
+						sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route &&
+					coordinator->snapshot().reader_predecessor_route_active_count == 1U,
+				"fresh same-open attachment activates its exact predecessor route");
+
+		const auto close_callback = callback(171U);
+		auto close = fixture.registry->begin_reader_close(
+			*fixture.family_pin, open, sqlite_shm_reader_close_request{close_callback});
+		require(close && close->valid() &&
+					close->route() == sqlite_shm_reader_close_route::close_existing_predecessor,
+				"current active predecessor dominates the older confirmed group at xClose");
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-remap-close-effect", 171U));
+		auto closed = fixture.registry->complete_reader_close(
+			*fixture.family_pin, open, *close, close_receipt);
+		const auto closed_snapshot = coordinator->snapshot();
+		require(closed && closed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					closed->route() == sqlite_shm_reader_close_route::close_existing_predecessor &&
+					closed_snapshot.reader_predecessor_route_active_count == 0U &&
+					closed_snapshot.reader_predecessor_route_retired_count == 1U &&
+					!closed_snapshot.quarantined,
+				"xClose retires the current predecessor after an older attachment was unmapped");
+		require(fixture.registry->release_reader_open(open).has_value() && !open.valid(),
+				"release fresh-remap reader open after predecessor xClose");
+		retire_writer(*coordinator, *holder, 172U);
 		require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
 				"revoke fresh-remap writer eligibility");
 		clean_fixture(fixture);
