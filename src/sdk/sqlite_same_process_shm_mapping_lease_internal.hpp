@@ -630,6 +630,27 @@ namespace cxxlens::sdk
 	};
 
 	/**
+	 * Closed outward projection for a mapped predecessor result presented after proposal-group
+	 * selection. The native READONLY/non-null result is retained for audit, but the outward row is
+	 * always IOERR/null and grants no predecessor authority.
+	 */
+	class sqlite_shm_reader_existing_group_predecessor_mismatch_result
+	{
+	  public:
+		[[nodiscard]] int native_status() const noexcept;
+		[[nodiscard]] int outward_status() const noexcept;
+		[[nodiscard]] const volatile void* native_mapping() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		explicit sqlite_shm_reader_existing_group_predecessor_mismatch_result(
+			int native_status) noexcept;
+
+		int native_status_{};
+	};
+
+	/**
 	 * Exact terminal evidence observed after the existing byte-semantic route owns xShmUnmap(0).
 	 *
 	 * This receipt grants no native-call authority. It is bound to the non-authorizing predecessor
@@ -1506,6 +1527,7 @@ namespace cxxlens::sdk
 		std::size_t reader_predecessor_map_terminal_count{};
 		std::size_t reader_predecessor_route_active_count{};
 		std::size_t reader_predecessor_route_retired_count{};
+		std::size_t reader_existing_group_deferred_cleanup_count{};
 		std::size_t reader_attachment_revoked_no_map_count{};
 		std::size_t reader_unpublished_cleanup_admitted_count{};
 		std::size_t reader_unpublished_cleanup_confirmed_count{};
@@ -2377,6 +2399,12 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_attachment_map_inflight& inflight,
 			const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
 			sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<
+			sqlite_shm_reader_existing_group_predecessor_mismatch_result>
+		complete_reader_existing_group_predecessor_mismatch(
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
+			sqlite_shm_reader_session& session);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_unmap_terminal_result>
 		complete_reader_predecessor_unmap(
 			const sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt& receipt) noexcept;
@@ -2519,6 +2547,14 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_session& session,
 			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate,
 			std::optional<sqlite_shm_reader_attachment_authority>& completed_candidate);
+		[[nodiscard]] sqlite_shm_lease_result<
+			sqlite_shm_reader_existing_group_predecessor_mismatch_result>
+		complete_registry_reader_existing_group_predecessor_mismatch(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
+			sqlite_shm_reader_session& session,
+			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_unmap_terminal_result>
 		complete_registry_reader_predecessor_unmap(
 			std::uint64_t registry_open_token,

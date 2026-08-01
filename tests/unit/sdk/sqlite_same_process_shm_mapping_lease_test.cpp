@@ -365,6 +365,30 @@ namespace cxxlens::sdk
 					std::move(native_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_predecessor_map_receipt
+		reader_existing_group_predecessor_mismatch(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_attachment_map_request request,
+			const int native_status,
+			const volatile void* native_mapping,
+			sqlite_backend_opaque_identity native_effect)
+		{
+			auto observed = sqlite_shm_reader_native_attachment_identity{
+				request.expected_attachment,
+				{"test.reader-observed-shm-object", {std::byte{1}}},
+				{"test.reader-observed-shm-entry", {std::byte{2}}},
+				{"test.reader-observed-device", {std::byte{3}}},
+				{"test.reader-observed-mount", {std::byte{4}}}};
+			return {inflight,
+					sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+					std::move(request),
+					native_status,
+					native_mapping,
+					0,
+					std::move(observed),
+					std::move(native_effect)};
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt
 		reader_predecessor_unmap(const sqlite_shm_reader_predecessor_map_result& predecessor,
 								 sqlite_shm_callback_execution_receipt callback,
@@ -6446,6 +6470,59 @@ namespace
 				!coordinator.snapshot().quarantined,
 			"later no-map attempt and callback invocation cannot replay");
 
+		auto mismatch_request = map_request;
+		mismatch_request.callback = callback(2, marker + 4U);
+		auto mismatch_map_result = coordinator.begin_reader_map(session, mismatch_request);
+		require(mismatch_map_result.has_value(),
+				"active proposal group admits the exact later mismatch attempt");
+		auto mismatch_map = std::move(*mismatch_map_result);
+		const auto mismatch_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_existing_group_predecessor_mismatch(
+				mismatch_map,
+				mismatch_request,
+				sqlite_readonly_status,
+				&page,
+				identity("test.reader-existing-group-mismatch-effect", marker));
+		const auto before_mismatch_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		auto mismatch = coordinator.complete_reader_existing_group_predecessor_mismatch(
+			mismatch_map, mismatch_receipt, session);
+		const auto after_mismatch = coordinator.snapshot();
+		const auto after_mismatch_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		const auto handoff_index =
+			enum_index(detail::sqlite_shm_reader_custody_kind::attachment_group_handoff);
+		const auto deferred_unmap_index =
+			enum_index(detail::sqlite_shm_reader_custody_kind::normal_or_deferred_unmap);
+		require(mismatch && mismatch->native_status() == sqlite_readonly_status &&
+					mismatch->outward_status() == sqlite_ioerr_status &&
+					mismatch->native_mapping() == nullptr && !mismatch_map.valid() &&
+					session.valid() && handoff.valid(),
+				"later mapped mismatch projects IOERR/null without consuming use owners");
+		require(!after_mismatch.quarantined &&
+					after_mismatch.reader_existing_group_deferred_cleanup_count == 1U &&
+					after_mismatch.reader_predecessor_map_terminal_count == 0U,
+				"later mapped mismatch hides the group without minting predecessor authority");
+		require(
+			after_mismatch_lifecycle.map_attempts.empty() &&
+				after_mismatch_lifecycle.live_custody_kind_counts[handoff_index] == 0U &&
+				after_mismatch_lifecycle.live_custody_kind_counts[deferred_unmap_index] == 1U &&
+				after_mismatch_lifecycle.last_committed_sequence >
+					before_mismatch_lifecycle.last_committed_sequence &&
+				after_mismatch_lifecycle.outstanding_terminal_permit_count == 3U &&
+				reader_terminal_permit_slots_are_exact(after_mismatch_lifecycle),
+			"later mapped mismatch hides the group and transfers exactly one deferred unmap owner");
+
+		auto rejected_request = mismatch_request;
+		rejected_request.callback = callback(2, marker + 5U);
+		auto rejected_map = coordinator.begin_reader_map(session, rejected_request);
+		require(!rejected_map &&
+					rejected_map.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
+					session.valid() && handoff.valid() &&
+					coordinator.snapshot().reader_existing_group_deferred_cleanup_count == 1U &&
+					!coordinator.snapshot().quarantined,
+				"deferred existing group rejects every fresh map before native work");
+
 		const auto terminal_receipt =
 			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
 				session_request,
@@ -6453,7 +6530,7 @@ namespace
 				identity("test.reader-session-terminal", marker));
 		require(coordinator.complete_reader_session(session, terminal_receipt) && !session.valid(),
 				"later no-map fixture closes its unchanged session owner");
-		const auto unmap_callback = callback(3, marker + 4U);
+		const auto unmap_callback = callback(3, marker + 6U);
 		auto unmap = coordinator.begin_reader_unmap(
 			handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
 		require(unmap.has_value() && !handoff.valid(),
@@ -6470,7 +6547,9 @@ namespace
 		require(coordinator.complete_reader_unmap(*unmap, unmap_receipt).has_value() &&
 					!unmap->valid(),
 				"later no-map fixture closes its original group");
-		retire_last(coordinator, writer.holder, callback(4, marker + 5U));
+		require(coordinator.snapshot().reader_existing_group_deferred_cleanup_count == 0U,
+				"confirmed deferred unmap retires the mismatch cleanup obligation");
+		retire_last(coordinator, writer.holder, callback(4, marker + 7U));
 		require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
 				"revoke later zero-attachment fixture writer gate");
 	}

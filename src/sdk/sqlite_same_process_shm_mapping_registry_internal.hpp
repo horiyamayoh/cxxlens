@@ -865,6 +865,13 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_attachment_map_inflight& inflight,
 			const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
 			sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<
+			sqlite_shm_reader_existing_group_predecessor_mismatch_result>
+		complete_reader_existing_group_predecessor_mismatch(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_predecessor_map_receipt& receipt,
+			sqlite_shm_reader_session& session);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_unmap_terminal_result>
 		complete_reader_predecessor_unmap(
 			sqlite_shm_registry_family_pin& family,

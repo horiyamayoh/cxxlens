@@ -440,6 +440,30 @@ namespace cxxlens::sdk
 					std::move(native_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_predecessor_map_receipt
+		reader_existing_group_predecessor_mismatch(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_attachment_map_request request,
+			const int native_status,
+			const volatile void* native_mapping,
+			sqlite_backend_opaque_identity native_effect)
+		{
+			auto observed = sqlite_shm_reader_native_attachment_identity{
+				request.expected_attachment,
+				{"test.registry.reader-observed-shm-object", {std::byte{1}}},
+				{"test.registry.reader-observed-shm-entry", {std::byte{2}}},
+				{"test.registry.reader-observed-device", {std::byte{3}}},
+				{"test.registry.reader-observed-mount", {std::byte{4}}}};
+			return {inflight,
+					sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+					std::move(request),
+					native_status,
+					native_mapping,
+					0,
+					std::move(observed),
+					std::move(native_effect)};
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt
 		reader_predecessor_unmap(const sqlite_shm_reader_predecessor_map_result& predecessor,
 								 sqlite_shm_callback_execution_receipt callback,
@@ -4117,6 +4141,7 @@ namespace
 					open.valid(),
 				"reader open clean release bypassed a retained candidate descendant");
 		const auto first_map_request = reader_attachment_map_request(first_session_request, 156U);
+		const auto first_map_effect = identity("test.registry.reader-group-zero-resize", 156U);
 		auto first_map = fixture.registry->begin_reader_map(
 			*fixture.family_pin, *first_session, first_map_request);
 		require(first_map && first_map->valid() &&
@@ -4130,7 +4155,7 @@ namespace
 				first_map_request,
 				generation,
 				mapping(writer_attempt.native_page.get()),
-				identity("test.registry.reader-group-zero-resize", 156U)),
+				first_map_effect),
 			*first_session);
 		require(first_commit &&
 					first_commit->kind() == sqlite_shm_reader_map_commit_kind::first_member &&
@@ -4182,12 +4207,13 @@ namespace
 			*fixture.family_pin, *second_session, revalidation_request);
 		require(revalidation && fixture.registry->snapshot().active_activity_pin_count == 1U,
 				"same-page revalidation minted a new registry activity");
+		const auto revalidation_effect = identity("test.registry.reader-group-zero-resize", 159U);
 		const auto revalidation_receipt =
 			sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
 				revalidation_request,
 				generation,
 				mapping(writer_attempt.native_page.get()),
-				identity("test.registry.reader-group-zero-resize", 159U));
+				revalidation_effect);
 		const auto before_direct_revalidation =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
 		auto direct_revalidation =
@@ -4229,6 +4255,110 @@ namespace
 		require(fixture.registry->snapshot().active_activity_pin_count == 1U,
 				"rejected fresh reader page minted a registry activity");
 
+		const auto mismatch_request = reader_attachment_map_request(second_session_request, 162U);
+		auto mismatch_map = fixture.registry->begin_reader_map(
+			*fixture.family_pin, *second_session, mismatch_request);
+		require(mismatch_map && mismatch_map->valid() &&
+					fixture.registry->snapshot().active_activity_pin_count == 1U,
+				"existing-member mismatch attempt minted no new proposal/predelegate activity");
+		const auto mismatch_effect =
+			identity("test.registry.reader-existing-group-mismatch-effect", 162U);
+		const auto mismatch_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_existing_group_predecessor_mismatch(
+				*mismatch_map,
+				mismatch_request,
+				sqlite_readonly_status,
+				writer_attempt.native_page.get(),
+				mismatch_effect);
+		const auto before_direct_mismatch =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		auto direct_mismatch = coordinator->complete_reader_existing_group_predecessor_mismatch(
+			*mismatch_map, mismatch_receipt, *second_session);
+		const auto after_direct_mismatch =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(!direct_mismatch &&
+					direct_mismatch.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					direct_mismatch.error().action ==
+						sqlite_shm_lease_recovery_action::resubmit_via_bound_route &&
+					mismatch_map->valid() && second_session->valid() &&
+					after_direct_mismatch.last_issued_sequence ==
+						before_direct_mismatch.last_issued_sequence &&
+					after_direct_mismatch.last_committed_sequence ==
+						before_direct_mismatch.last_committed_sequence &&
+					after_direct_mismatch.live_custody_kind_counts ==
+						before_direct_mismatch.live_custody_kind_counts,
+				"registry-bound mismatch terminal cannot bypass its registry route");
+		auto mismatch = fixture.registry->complete_reader_existing_group_predecessor_mismatch(
+			*fixture.family_pin, *mismatch_map, mismatch_receipt, *second_session);
+		const auto mismatch_registry = fixture.registry->snapshot();
+		const auto mismatch_lease = coordinator->snapshot();
+		const auto mismatch_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		const auto handoff_custody_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::attachment_group_handoff);
+		const auto deferred_unmap_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::normal_or_deferred_unmap);
+		require(
+			mismatch && mismatch->native_status() == sqlite_readonly_status &&
+				mismatch->outward_status() == sqlite_ioerr_status &&
+				mismatch->native_mapping() == nullptr && !mismatch_map->valid() &&
+				second_session->valid() && handoff->valid() &&
+				mismatch_registry.active_activity_pin_count == 1U &&
+				mismatch_registry.quarantined_family_count == 0U &&
+				mismatch_lease.reader_existing_group_deferred_cleanup_count == 1U &&
+				mismatch_lease.reader_predecessor_map_terminal_count == 0U &&
+				mismatch_lease.reader_registry_activity_authority_count == 1U &&
+				mismatch_lifecycle.live_custody_kind_counts[handoff_custody_index] == 0U &&
+				mismatch_lifecycle.live_custody_kind_counts[deferred_unmap_index] == 1U &&
+				!mismatch_lease.quarantined,
+			"registry mismatch hides the proposal group and retains exactly one deferred drain");
+		auto mismatch_replay =
+			fixture.registry->complete_reader_existing_group_predecessor_mismatch(
+				*fixture.family_pin, *mismatch_map, mismatch_receipt, *second_session);
+		require(!mismatch_replay &&
+					mismatch_replay.error().reason ==
+						sqlite_shm_lease_rejection_reason::stale_token &&
+					second_session->valid() && handoff->valid() &&
+					coordinator->snapshot().reader_existing_group_deferred_cleanup_count == 1U &&
+					!coordinator->snapshot().quarantined,
+				"registry mismatch terminal and native effect cannot replay");
+
+		const auto deferred_unmap_callback = callback(163U);
+		const auto before_premature_unmap =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		auto premature_unmap = fixture.registry->begin_reader_unmap(
+			*fixture.family_pin, *handoff, deferred_unmap_callback);
+		const auto after_premature_unmap =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		require(!premature_unmap &&
+					premature_unmap.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
+					handoff->valid() &&
+					after_premature_unmap.last_issued_sequence ==
+						before_premature_unmap.last_issued_sequence &&
+					after_premature_unmap.last_committed_sequence ==
+						before_premature_unmap.last_committed_sequence &&
+					after_premature_unmap.live_custody_kind_counts ==
+						before_premature_unmap.live_custody_kind_counts,
+				"deferred mismatch cannot unmap while either established use owner remains live");
+
+		auto blocked_request = active_request;
+		blocked_request.read_transaction_epoch =
+			identity("test.registry.reader-group-blocked-transaction", 162U);
+		blocked_request.decode_attempt =
+			identity("test.registry.reader-group-blocked-decode", 162U);
+		blocked_request.authority_read_receipt =
+			identity("test.registry.reader-group-blocked-authority", 162U);
+		auto blocked = fixture.registry->admit_reader_session_before_sqlite(
+			*fixture.family_pin, open, blocked_request);
+		require(blocked &&
+					blocked->kind() ==
+						sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
+					blocked->rejection() &&
+					blocked->rejection()->reason == sqlite_shm_lease_rejection_reason::retiring &&
+					fixture.registry->snapshot().active_activity_pin_count == 1U,
+				"deferred proposal group rejects fresh registry admission before native work");
+
 		const auto second_terminal =
 			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
 				second_session_request,
@@ -4256,7 +4386,7 @@ namespace
 				drained_session_lifecycle.attachment_groups.front().unmap_terminal_permit_slot !=
 					0U,
 			"session drain preserves the group's pre-reserved cut and terminal capacity");
-		const auto unmap_callback = callback(161U);
+		const auto unmap_callback = deferred_unmap_callback;
 		auto direct_unmap = coordinator->begin_reader_unmap(
 			*handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
 		require(!direct_unmap &&
@@ -4286,8 +4416,8 @@ namespace
 			sqlite_ok_status,
 			0,
 			0,
-			identity("test.registry.reader-unmap-effect", 161U),
-			identity("test.registry.reader-unmap-latch-reset", 161U));
+			identity("test.registry.reader-unmap-effect", 163U),
+			identity("test.registry.reader-unmap-latch-reset", 163U));
 		auto direct_completion = coordinator->complete_reader_unmap(*unmap, unmap_receipt);
 		require(!direct_completion &&
 					direct_completion.error().reason ==
@@ -4318,8 +4448,40 @@ namespace
 					closed.reader_registry_activity_authority_count == 0U &&
 					!closed.reader_admission_visible && !closed.quarantined,
 				"confirmed group unmap did not reach reader quiescence");
+		auto local = sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+			*coordinator);
+		require(local && local->size() == 1U &&
+					local->front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::retired_confirmed &&
+					local->front().replay_identities.callback_invocation_tokens ==
+						std::vector{first_map_request.callback.invocation_token,
+									revalidation_request.callback.invocation_token,
+									mismatch_request.callback.invocation_token,
+									unmap_callback.invocation_token} &&
+					local->front().replay_identities.effect_receipts ==
+						std::vector{first_map_effect,
+									revalidation_effect,
+									mismatch_effect,
+									identity("test.registry.reader-unmap-effect", 163U),
+									identity("test.registry.reader-unmap-latch-reset", 163U)},
+				"compact tombstone retains the later mismatch callback/effect exactly once");
 		require(coordinator->revoke_writer_eligibility(eligibility).has_value(),
 				"revoke reader group writer eligibility");
+		auto released = fixture.registry->release_family(*fixture.family_pin);
+		require(released.has_value() && !fixture.family_pin->valid(),
+				"release exact deferred-mismatch source family");
+		fixture.family_pin.reset();
+		auto recreated = fixture.registry->install_or_join_family(*fixture.alias, fixture.family);
+		require(recreated.has_value(), "recreate deferred-mismatch family");
+		fixture.family_pin.emplace(std::move(*recreated));
+		auto* recreated_coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(recreated_coordinator != nullptr,
+				"resolve recreated deferred-mismatch family coordinator");
+		auto imported = sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+			*recreated_coordinator);
+		require(imported && *imported == *local,
+				"recreated family preserves the exact deferred-mismatch replay tombstone");
 		clean_fixture(fixture);
 	}
 
