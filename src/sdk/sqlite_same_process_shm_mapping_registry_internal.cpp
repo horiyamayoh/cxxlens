@@ -1280,6 +1280,68 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_mapping_tuple>
+			authenticate_reader_cached_member_use(
+				sqlite_shm_registry_family_pin& pin,
+				const sqlite_shm_reader_session& session,
+				const sqlite_shm_reader_cached_member_identity& member) noexcept
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+									 sqlite_shm_lease_recovery_action::deny_before_native_map);
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (pin.state_.get() != this)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										 sqlite_shm_lease_recovery_action::deny_before_native_map);
+					if (admission_quarantined_locked())
+						return rejection(sqlite_shm_lease_rejection_reason::quarantined,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* alias = find_alias_locked(pin.alias_token_);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || alias == nullptr || family == nullptr)
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+										 sqlite_shm_lease_recovery_action::deny_before_native_map);
+					if (alias->phase == sqlite_shm_registry_alias_phase::quarantined ||
+						family->phase == sqlite_shm_registry_family_phase::quarantined)
+						return rejection(sqlite_shm_lease_rejection_reason::quarantined,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					if (alias->phase != sqlite_shm_registry_alias_phase::registered ||
+						family->phase != sqlite_shm_registry_family_phase::active ||
+						!family->coordinator)
+						return rejection(sqlite_shm_lease_rejection_reason::retiring,
+										 sqlite_shm_lease_recovery_action::deny_before_native_map);
+					if (!alias->runtime_lifetime.valid() || !alias->activity_authority_latch ||
+						!alias->activity_authority_latch->load(std::memory_order_acquire) ||
+						!exact_family_admission_visible_locked(*family))
+						return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+					auto authenticated =
+						family->coordinator->authenticate_registry_reader_cached_member_use(
+							pin, session, member);
+					if (!authenticated &&
+						(authenticated.error().reason ==
+							 sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
+						 authenticated.error().reason ==
+							 sqlite_shm_lease_rejection_reason::quarantined))
+						synchronize_coordinator_quarantines_locked();
+					return authenticated;
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
 			[[nodiscard]]
 			sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
 			begin_reader_map(sqlite_shm_registry_family_pin& pin,
@@ -6394,6 +6456,15 @@ namespace cxxlens::sdk
 		const sqlite_shm_reader_pre_sqlite_session_request& request)
 	{
 		return state_->admit_reader_session_before_sqlite(family, open, request);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_mapping_tuple>
+	sqlite_same_process_shm_mapping_registry::authenticate_reader_cached_member_use(
+		sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_reader_session& session,
+		const sqlite_shm_reader_cached_member_identity& member) noexcept
+	{
+		return state_->authenticate_reader_cached_member_use(family, session, member);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>

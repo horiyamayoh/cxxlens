@@ -2638,6 +2638,11 @@ namespace cxxlens::sdk
 			std::uint64_t registry_open_token,
 			const sqlite_shm_reader_pre_sqlite_session_request& request,
 			sqlite_shm_reader_candidate_authority_minter& candidate_minter);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_mapping_tuple>
+		authenticate_registry_reader_cached_member_use(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_session& session,
+			const sqlite_shm_reader_cached_member_identity& member) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> register_registry_reader_open(
 			std::uint64_t registry_open_token,
 			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,

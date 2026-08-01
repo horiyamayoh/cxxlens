@@ -844,6 +844,17 @@ namespace cxxlens::sdk
 			sqlite_shm_registry_family_pin& family,
 			const sqlite_shm_reader_open_authority& open,
 			const sqlite_shm_reader_pre_sqlite_session_request& request);
+		/**
+		 * Authenticates one cached reader SHM member immediately before pointer use.
+		 *
+		 * This boundary is callback-free and does not mutate the reader lifecycle ledger. The
+		 * exact live registry family and session owner must still authorize the cached identity.
+		 */
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_mapping_tuple>
+		authenticate_reader_cached_member_use(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_session& session,
+			const sqlite_shm_reader_cached_member_identity& member) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
 		begin_reader_map(sqlite_shm_registry_family_pin& family,
 						 sqlite_shm_reader_session& session,

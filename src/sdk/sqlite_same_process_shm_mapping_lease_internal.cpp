@@ -18192,6 +18192,16 @@ namespace cxxlens::sdk
 			family, registry_open_token, request, candidate_minter);
 	}
 
+	sqlite_shm_lease_result<sqlite_shm_mapping_tuple>
+	sqlite_same_process_shm_mapping_lease_coordinator::
+		authenticate_registry_reader_cached_member_use(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_session& session,
+			const sqlite_shm_reader_cached_member_identity& member) noexcept
+	{
+		return state_->authenticate_reader_cached_member_use(session, member, &family);
+	}
+
 	sqlite_shm_lease_result<void>
 	sqlite_same_process_shm_mapping_lease_coordinator::register_registry_reader_open(
 		const std::uint64_t registry_open_token,

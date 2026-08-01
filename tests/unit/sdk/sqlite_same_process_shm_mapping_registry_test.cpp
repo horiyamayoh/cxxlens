@@ -2162,8 +2162,10 @@ namespace
 				"recreated predecessor compact family releases its exact runtime owner once");
 	}
 
-	[[nodiscard]] sqlite_shm_reader_handoff form_reader_group(reader_candidate_setup& setup,
-															  const std::uint8_t marker)
+	[[nodiscard]] sqlite_shm_reader_handoff form_reader_group(
+		reader_candidate_setup& setup,
+		const std::uint8_t marker,
+		std::optional<sqlite_shm_reader_cached_member_identity>* cached_member = nullptr)
 	{
 		const auto map_request = reader_attachment_map_request(setup.session_request, marker);
 		auto inflight = setup.fixture.registry->begin_reader_map(
@@ -2179,9 +2181,169 @@ namespace
 				identity("test.registry.focused-reader-zero-resize", marker)),
 			setup.session);
 		require(committed && committed->formed_group(), "form focused reader group");
+		if (cached_member != nullptr)
+			cached_member->emplace(committed->cached_member());
 		auto handoff = committed->take_handoff();
 		require(handoff && handoff->valid(), "take focused reader group handoff");
 		return std::move(*handoff);
+	}
+
+	void verify_cached_reader_member_use_is_registry_authenticated_without_remap()
+	{
+		constexpr std::uint8_t marker = 201U;
+		auto setup = make_reader_candidate_setup(marker);
+		std::optional<sqlite_shm_reader_cached_member_identity> cached_member;
+		auto handoff = form_reader_group(setup, marker + 1U, &cached_member);
+		require(cached_member &&
+					cached_member->mapping() == mapping(setup.writer_attempt.native_page.get()),
+				"first reader map publishes its exact cached-member identity");
+
+		auto direct_bypass =
+			setup.coordinator->authenticate_reader_cached_member_use(setup.session, *cached_member);
+		require(!direct_bypass &&
+					direct_bypass.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch,
+				"registry-bound cached member cannot bypass the registry authentication route");
+
+		const auto first_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				setup.session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.registry.cached-member-first-terminal", marker + 2U));
+		require(setup.fixture.registry
+						->complete_reader_session(
+							*setup.fixture.family_pin, setup.session, first_terminal)
+						.has_value() &&
+					!setup.session.valid(),
+				"terminalize the map-producing reader session");
+		auto stale_first = setup.fixture.registry->authenticate_reader_cached_member_use(
+			*setup.fixture.family_pin, setup.session, *cached_member);
+		require(!stale_first &&
+					stale_first.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+				"terminal map-producing session cannot authenticate a cached member");
+
+		auto callback_free_request = setup.pre_sqlite;
+		callback_free_request.read_transaction_epoch =
+			identity("test.registry.cached-member-transaction", marker + 3U);
+		callback_free_request.decode_attempt =
+			identity("test.registry.cached-member-decode", marker + 3U);
+		callback_free_request.authority_read_receipt =
+			identity("test.registry.cached-member-authority", marker + 3U);
+		auto admitted = setup.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.fixture.family_pin, setup.open, callback_free_request);
+		require(admitted &&
+					admitted->kind() ==
+						sqlite_shm_reader_session_admission_kind::active_group_owner_admitted &&
+					admitted->proposal_request(),
+				"admit a callback-free owner of the established reader group");
+		const auto callback_free_session_request = *admitted->proposal_request();
+		auto callback_free_session = admitted->take_session();
+		require(callback_free_session && callback_free_session->valid(),
+				"take callback-free reader session owner");
+
+		const auto lifecycle_before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto lease_before = setup.coordinator->snapshot();
+		const auto registry_before = setup.fixture.registry->snapshot();
+		auto first_use = setup.fixture.registry->authenticate_reader_cached_member_use(
+			*setup.fixture.family_pin, *callback_free_session, *cached_member);
+		auto second_use = setup.fixture.registry->authenticate_reader_cached_member_use(
+			*setup.fixture.family_pin, *callback_free_session, *cached_member);
+		const auto lifecycle_after =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto lease_after = setup.coordinator->snapshot();
+		const auto registry_after = setup.fixture.registry->snapshot();
+		require(first_use && second_use && *first_use == cached_member->mapping() &&
+					*second_use == cached_member->mapping() &&
+					lifecycle_after.last_issued_sequence == lifecycle_before.last_issued_sequence &&
+					lifecycle_after.last_committed_sequence ==
+						lifecycle_before.last_committed_sequence &&
+					lifecycle_after.map_attempts.size() == lifecycle_before.map_attempts.size() &&
+					lifecycle_after.events.size() == lifecycle_before.events.size() &&
+					lease_after.reader_attachment_live_member_count ==
+						lease_before.reader_attachment_live_member_count &&
+					lease_after.reader_attachment_audit_count ==
+						lease_before.reader_attachment_audit_count &&
+					registry_after.active_activity_pin_count ==
+						registry_before.active_activity_pin_count &&
+					registry_after.reader_lifecycle_last_issued_sequence ==
+						registry_before.reader_lifecycle_last_issued_sequence,
+				"two cached-member uses authenticate without xShmMap or ledger mutation");
+
+		auto foreign = make_fixture(marker + 4U, false);
+		auto cross_family = foreign.registry->authenticate_reader_cached_member_use(
+			*foreign.family_pin, *callback_free_session, *cached_member);
+		require(
+			!cross_family &&
+				(cross_family.error().reason == sqlite_shm_lease_rejection_reason::stale_token ||
+				 cross_family.error().reason ==
+					 sqlite_shm_lease_rejection_reason::receipt_mismatch),
+			"foreign registry family cannot authenticate another group's cached member");
+		clean_fixture(foreign);
+
+		const auto callback_free_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				callback_free_session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.registry.cached-member-second-terminal", marker + 5U));
+		require(setup.fixture.registry
+					->complete_reader_session(
+						*setup.fixture.family_pin, *callback_free_session, callback_free_terminal)
+					.has_value(),
+				"terminalize callback-free cached-member session");
+		auto stale_second = setup.fixture.registry->authenticate_reader_cached_member_use(
+			*setup.fixture.family_pin, *callback_free_session, *cached_member);
+		require(!stale_second &&
+					stale_second.error().reason == sqlite_shm_lease_rejection_reason::stale_token,
+				"terminal callback-free session cannot authenticate a cached member");
+
+		const auto unmap_callback = callback(marker + 6U);
+		auto unmap = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
+		require(unmap && !handoff.valid(), "admit cached-member fixture group unmap");
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.cached-member-unmap-effect", marker + 6U),
+			identity("test.registry.cached-member-latch", marker + 6U));
+		require(setup.fixture.registry
+					->complete_reader_unmap(*setup.fixture.family_pin, *unmap, unmap_receipt)
+					.has_value(),
+				"confirm cached-member fixture group unmap");
+		close_and_release_reader_open(setup.fixture,
+									  setup.open,
+									  marker + 7U,
+									  sqlite_shm_reader_close_route::close_after_confirmed_unmap);
+		retire_writer(*setup.coordinator, setup.holder, marker + 8U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke cached-member fixture writer eligibility");
+		clean_fixture(setup.fixture);
+
+		{
+			auto lost = make_reader_candidate_setup(marker + 9U);
+			std::optional<sqlite_shm_reader_cached_member_identity> lost_member;
+			[[maybe_unused]] auto lost_handoff =
+				form_reader_group(lost, marker + 10U, &lost_member);
+			require(lost_member.has_value(),
+					"liveness-loss fixture publishes one cached-member identity");
+			sqlite_same_process_shm_lease_test_peer::lose_registry_reader_attachment_liveness(
+				*lost.coordinator);
+			auto denied = lost.fixture.registry->authenticate_reader_cached_member_use(
+				*lost.fixture.family_pin, lost.session, *lost_member);
+			const auto lease = lost.coordinator->snapshot();
+			const auto registry = lost.fixture.registry->snapshot();
+			require(
+				!denied &&
+					(denied.error().reason ==
+						 sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
+					 denied.error().reason == sqlite_shm_lease_rejection_reason::quarantined) &&
+					lease.quarantined && registry.quarantined_family_count == 1U,
+				"revoked registry activity denies cached pointer use and quarantines its family");
+		}
 	}
 
 	void verify_live_reader_group_close_is_one_unmap_then_close_composite()
@@ -12967,6 +13129,7 @@ int main()
 		verify_reader_ordinary_route_has_zero_proposal_custody();
 		verify_registry_reader_and_direct_routes_cannot_mix();
 		verify_registry_reader_group_retains_one_activity_until_confirmed_unmap();
+		verify_cached_reader_member_use_is_registry_authenticated_without_remap();
 		verify_live_reader_group_close_is_one_unmap_then_close_composite();
 		verify_deferred_reader_group_close_consumes_the_same_composite_owner();
 		verify_live_close_unmap_failure_exposes_zero_close_authority();
