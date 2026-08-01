@@ -547,6 +547,25 @@ namespace cxxlens::sdk
 		int native_status_{};
 	};
 
+	/**
+	 * Closed outward projection after an ambiguous first proposal-map terminal.
+	 *
+	 * The coordinator has retained the exact open/reservation-scoped opaque custody and every
+	 * required lifetime pin in a process-lifetime quarantine tombstone. No proposal group,
+	 * pointer, native unmap authority, or native close authority is exposed by this result.
+	 */
+	class sqlite_shm_reader_opaque_attachment_uncertainty_result
+	{
+	  public:
+		[[nodiscard]] int outward_status() const noexcept;
+		[[nodiscard]] const volatile void* native_mapping() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		sqlite_shm_reader_opaque_attachment_uncertainty_result() noexcept = default;
+	};
+
 	enum class sqlite_shm_reader_predecessor_map_kind : std::uint8_t
 	{
 		exact_predecessor_no_attachment_route,
@@ -1546,6 +1565,7 @@ namespace cxxlens::sdk
 		std::size_t reader_session_owner_count{};
 		std::size_t reader_session_terminal_count{};
 		std::size_t reader_attachment_zero_effect_terminal_count{};
+		std::size_t reader_opaque_attachment_uncertainty_count{};
 		std::size_t reader_predecessor_map_terminal_count{};
 		std::size_t reader_predecessor_route_active_count{};
 		std::size_t reader_predecessor_route_retired_count{};
@@ -1691,6 +1711,20 @@ namespace cxxlens::sdk
 		bool revoked_first_reservation{};
 	};
 
+	struct sqlite_shm_reader_opaque_attachment_uncertainty_test_view
+	{
+		std::uint64_t map_token{};
+		std::uint64_t session_token{};
+		std::uint64_t reservation_token{};
+		sqlite_shm_reader_attachment_reservation_identity attachment;
+		std::uint64_t session_origin_sequence{};
+		std::uint64_t map_admission_sequence{};
+		std::uint64_t map_terminal_sequence{};
+		std::uint64_t terminal_sequence{};
+		bool predelegate_lifetime_retained{};
+		bool candidate_lifetime_retained{};
+	};
+
 	struct sqlite_shm_reader_predecessor_map_terminal_test_view
 	{
 		std::uint64_t owner_token{};
@@ -1739,6 +1773,8 @@ namespace cxxlens::sdk
 		std::vector<sqlite_shm_reader_close_terminal_test_view> close_terminals;
 		std::vector<sqlite_shm_reader_terminal_quarantine_test_view> terminal_quarantines;
 		std::vector<sqlite_shm_reader_zero_effect_terminal_test_view> zero_effect_terminals;
+		std::vector<sqlite_shm_reader_opaque_attachment_uncertainty_test_view>
+			opaque_attachment_uncertainties;
 		std::vector<sqlite_shm_reader_predecessor_map_terminal_test_view> predecessor_map_terminals;
 		std::vector<sqlite_shm_reader_lifecycle_event_test_view> events;
 	};
@@ -2472,6 +2508,11 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_attachment_map_inflight& inflight,
 			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& receipt,
 			sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<
+			sqlite_shm_reader_opaque_attachment_uncertainty_result>
+		complete_reader_opaque_attachment_uncertainty(
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_session& session);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_map_result>
 		complete_reader_predecessor_map(
 			sqlite_shm_reader_attachment_map_inflight& inflight,
@@ -2637,6 +2678,12 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_session& session,
 			std::optional<sqlite_shm_reader_map_predelegate_authority>& completed_predelegate,
 			std::optional<sqlite_shm_reader_attachment_authority>& completed_candidate);
+		[[nodiscard]] sqlite_shm_lease_result<
+			sqlite_shm_reader_opaque_attachment_uncertainty_result>
+		complete_registry_reader_opaque_attachment_uncertainty(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_session& session);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_map_result>
 		complete_registry_reader_predecessor_map(
 			sqlite_shm_registry_family_pin& family,

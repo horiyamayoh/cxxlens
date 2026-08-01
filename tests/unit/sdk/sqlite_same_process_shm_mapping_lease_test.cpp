@@ -14156,6 +14156,62 @@ namespace
 		}
 	}
 
+	void verify_direct_opaque_first_map_has_no_group_or_native_authority()
+	{
+		constexpr std::uint8_t marker = 239U;
+		const auto binding = family(marker);
+		auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+		sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+		int native_page{};
+		auto writer = install_live_writer(coordinator,
+										  binding,
+										  identity("test.connection", marker),
+										  identity("test.open-epoch", marker),
+										  marker,
+										  &native_page);
+		const auto map_request =
+			reader_attachment_request(binding,
+									  identity("test.opaque-reader-connection", marker),
+									  marker + 1U,
+									  30U,
+									  marker + 2U,
+									  0,
+									  writer.holder.generation());
+		const auto session_request = reader_session_request(map_request, marker + 3U);
+		auto session = coordinator.begin_reader_session(session_request);
+		require(session && session->valid(), "reserve direct opaque first-map session");
+		auto inflight = coordinator.begin_reader_map(*session, map_request);
+		require(inflight && inflight->valid(), "begin direct opaque first map");
+		auto opaque =
+			coordinator.complete_reader_opaque_attachment_uncertainty(*inflight, *session);
+		const auto snapshot = coordinator.snapshot();
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(coordinator);
+		const auto durable_custody_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_state::transferred_to_durable_tombstone);
+		require(
+			opaque && opaque->outward_status() == sqlite_ioerr_status &&
+				opaque->native_mapping() == nullptr && !inflight->valid() && !session->valid() &&
+				snapshot.quarantined && snapshot.reader_attachment_group_count == 0U &&
+				snapshot.reader_opaque_attachment_uncertainty_count == 1U &&
+				snapshot.reader_registry_activity_authority_count == 0U &&
+				lifecycle.attachment_groups.empty() && lifecycle.map_attempts.empty() &&
+				lifecycle.opaque_attachment_uncertainties.size() == 1U &&
+				!lifecycle.opaque_attachment_uncertainties.front().predelegate_lifetime_retained &&
+				!lifecycle.opaque_attachment_uncertainties.front().candidate_lifetime_retained &&
+				lifecycle.outstanding_terminal_permit_count == 0U &&
+				lifecycle.custody_state_counts[durable_custody_index] == 3U &&
+				all_reader_live_custody_released(lifecycle),
+			"direct opaque terminal retains only durable no-group custody and exposes no native "
+			"authority");
+		auto replay =
+			coordinator.complete_reader_opaque_attachment_uncertainty(*inflight, *session);
+		require(!replay &&
+					replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					coordinator.snapshot().reader_opaque_attachment_uncertainty_count == 1U,
+				"opaque terminal replay cannot recreate custody or authority");
+	}
+
 	void verify_major_token_abandonment_quarantines()
 	{
 		{
@@ -14549,6 +14605,7 @@ int main()
 		verify_unpublished_ack_and_close_race_has_one_logical_winner();
 		verify_unpublished_cleanup_compaction_and_replay_matrix_is_fail_closed();
 		verify_unpublished_cleanup_determinate_rejection_differs_from_true_ambiguity();
+		verify_direct_opaque_first_map_has_no_group_or_native_authority();
 		verify_reader_native_attachment_group_and_session_core();
 		verify_reader_lifecycle_sequence_source_is_shared_and_exhausts_without_partials();
 		verify_first_reader_map_reserves_sequence_and_three_terminals_atomically();

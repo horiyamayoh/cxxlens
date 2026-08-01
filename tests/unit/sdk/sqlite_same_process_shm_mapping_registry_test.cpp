@@ -7376,6 +7376,224 @@ namespace
 			"publication");
 	}
 
+	void verify_opaque_first_reader_map_retains_no_group_quarantine_custody()
+	{
+		constexpr std::uint8_t marker = 242U;
+		auto setup = make_reader_candidate_setup(marker);
+		const auto attachment = setup.session_request.attachment;
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 1U);
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin opaque first reader map");
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(before.map_attempts.size() == 1U && before.opaque_attachment_uncertainties.empty(),
+				"opaque fixture starts with one native-started attempt and no tombstone");
+		auto direct_bypass = setup.coordinator->complete_reader_opaque_attachment_uncertainty(
+			*inflight, setup.session);
+		const auto after_bypass =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(
+			!direct_bypass &&
+				direct_bypass.error().reason ==
+					sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				inflight->valid() && setup.session.valid() &&
+				after_bypass.map_attempts.size() == 1U &&
+				after_bypass.opaque_attachment_uncertainties.empty() &&
+				after_bypass.outstanding_terminal_permit_slots ==
+					before.outstanding_terminal_permit_slots,
+			"direct coordinator route cannot bypass registry-bound opaque custody terminalization");
+
+		auto opaque = setup.fixture.registry->complete_reader_opaque_attachment_uncertainty(
+			*setup.fixture.family_pin, *inflight, setup.session);
+		const auto lease = setup.coordinator->snapshot();
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto registry = setup.fixture.registry->snapshot();
+		const auto family = setup.fixture.registry->family_snapshot(setup.fixture.family);
+		const auto no_live_custody = std::ranges::all_of(lifecycle.live_custody_kind_counts,
+														 [](const std::size_t count)
+														 {
+															 return count == 0U;
+														 });
+		const auto durable_custody_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_state::transferred_to_durable_tombstone);
+		require(opaque && opaque->outward_status() == sqlite_ioerr_status &&
+					opaque->native_mapping() == nullptr && !inflight->valid() &&
+					!setup.session.valid(),
+				"opaque terminal projects IOERR/null and consumes both exact wrappers");
+		require(
+			lease.quarantined && lease.reader_attachment_group_count == 0U &&
+				lease.reader_attachment_live_member_count == 0U &&
+				lease.reader_opaque_attachment_uncertainty_count == 1U &&
+				lease.reader_registry_activity_authority_count == 2U &&
+				lease.reader_open_close_owner_count == 0U,
+			"opaque lease census retains exactly two registry lifetimes and no group/close owner");
+		require(registry.quarantined_family_count == 1U &&
+					family.exact_quarantined_match_count == 1U,
+				"opaque terminal propagates exact family quarantine to the registry");
+		require(
+			lifecycle.attachment_reservations.size() == 1U &&
+				lifecycle.attachment_reservations.front().attachment == attachment &&
+				lifecycle.attachment_reservations.front().phase ==
+					detail::sqlite_shm_reader_attachment_reservation_phase::terminal_quarantined &&
+				!lifecycle.attachment_reservations.front().group_payload_present &&
+				lifecycle.attachment_groups.empty() && lifecycle.map_attempts.empty(),
+			"opaque reservation is retained without an observed group or live map attempt");
+		require(lifecycle.session_reservations.size() == 1U &&
+					lifecycle.session_reservations.front().phase ==
+						detail::sqlite_shm_reader_session_reservation_phase::terminal_quarantined,
+				"opaque terminal retains one exact terminal-quarantined session reservation");
+		require(
+			lifecycle.opaque_attachment_uncertainties.size() == 1U &&
+				lifecycle.opaque_attachment_uncertainties.front().attachment == attachment &&
+				lifecycle.opaque_attachment_uncertainties.front().predelegate_lifetime_retained &&
+				lifecycle.opaque_attachment_uncertainties.front().candidate_lifetime_retained,
+			"opaque tombstone retains exact attachment and both registry lifetime owners");
+		require(
+			lifecycle.opaque_attachment_uncertainties.front().map_terminal_sequence >
+					lifecycle.opaque_attachment_uncertainties.front().map_admission_sequence &&
+				lifecycle.opaque_attachment_uncertainties.front().terminal_sequence ==
+					lifecycle.opaque_attachment_uncertainties.front().map_terminal_sequence,
+			"opaque map/session terminal owners converge at one atomic sequence after admission");
+		require(lifecycle.outstanding_terminal_permit_count == 0U && no_live_custody &&
+					lifecycle.custody_state_counts[durable_custody_index] == 5U,
+				"opaque terminal moves every permit and live custody to its durable tombstone");
+		require(lifecycle.open_epochs.size() == 1U &&
+					lifecycle.open_epochs.front().registry_open_token ==
+						attachment.registry_open_token() &&
+					lifecycle.open_epochs.front().close_owner_token != 0U &&
+					lifecycle.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined &&
+					lifecycle.open_epochs.front().destination_sequence != 0U,
+				"opaque close follow-up owner remains in the exact durable open-epoch tombstone");
+
+		auto later_session = setup.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.fixture.family_pin, setup.open, setup.pre_sqlite);
+		auto later_close = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			sqlite_shm_reader_close_request{callback(marker + 2U)});
+		const auto after_followup =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(
+			later_session &&
+				later_session->kind() ==
+					sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
+				later_session->rejection() &&
+				later_session->rejection()->reason ==
+					sqlite_shm_lease_rejection_reason::quarantined &&
+				!later_session->proposal_request() && !later_session->take_session() &&
+				!later_close &&
+				(later_close.error().reason == sqlite_shm_lease_rejection_reason::quarantined ||
+				 later_close.error().reason == sqlite_shm_lease_rejection_reason::stale_token) &&
+				after_followup.opaque_attachment_uncertainties.size() == 1U &&
+				after_followup.outstanding_terminal_permit_count == 0U &&
+				after_followup.last_committed_sequence == lifecycle.last_committed_sequence,
+			"later map/session and close are zero-authority IOERR routes that cannot mutate or "
+			"revive opaque custody");
+	}
+
+	void verify_opaque_peer_quarantine_preserves_established_group_drain()
+	{
+		constexpr std::uint8_t marker = 174U;
+		auto setup = make_reader_candidate_setup(marker);
+		auto handoff = form_reader_group(setup, marker + 1U);
+		const auto established_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				setup.session_request,
+				sqlite_shm_reader_session_terminal_kind::success,
+				identity("test.registry.opaque-peer-established-session-terminal", marker));
+		require(setup.fixture.registry
+						->complete_reader_session(
+							*setup.fixture.family_pin, setup.session, established_terminal)
+						.has_value() &&
+					!setup.session.valid(),
+				"terminalize established group use owner before opaque peer quarantine");
+
+		auto peer_request =
+			reader_pre_sqlite_request(setup.fixture,
+									  identity("test.registry.opaque-peer-connection", marker),
+									  identity("test.registry.opaque-peer-main-native", marker),
+									  identity("test.registry.opaque-peer-main-xopen", marker),
+									  identity("test.registry.opaque-peer-open", marker),
+									  identity("test.registry.opaque-peer-cohort", marker),
+									  marker + 2U);
+		auto peer_open = acquire_reader_open(setup.fixture, peer_request);
+		auto admitted = setup.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.fixture.family_pin, peer_open, peer_request);
+		require(
+			admitted && admitted->proposal_request() &&
+				admitted->kind() ==
+					sqlite_shm_reader_session_admission_kind::reserved_for_local_proposal_candidate,
+			"reserve independent peer candidate beside established reader group");
+		const auto peer_session_request = *admitted->proposal_request();
+		auto peer_session = admitted->take_session();
+		require(peer_session && peer_session->valid(), "take opaque peer session");
+		const auto peer_map_request =
+			reader_attachment_map_request(peer_session_request, marker + 3U);
+		auto peer_map = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, *peer_session, peer_map_request);
+		require(peer_map && peer_map->valid(), "start opaque peer native map");
+		auto opaque = setup.fixture.registry->complete_reader_opaque_attachment_uncertainty(
+			*setup.fixture.family_pin, *peer_map, *peer_session);
+		require(
+			opaque && !peer_map->valid() && !peer_session->valid() && handoff.valid() &&
+				setup.coordinator->snapshot().quarantined &&
+				setup.coordinator->snapshot().reader_attachment_group_count == 1U &&
+				setup.coordinator->snapshot().reader_opaque_attachment_uncertainty_count == 1U,
+			"opaque peer hides fresh admission without consuming established group drain owner");
+
+		const auto unmap_callback = callback(marker + 4U);
+		auto unmap = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
+		require(unmap && unmap->valid() && !handoff.valid(),
+				"family quarantine still admits established exact group drain");
+		const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.opaque-peer-established-unmap-effect", marker),
+			identity("test.registry.opaque-peer-established-unmap-latch", marker));
+		auto completed = setup.fixture.registry->complete_reader_unmap(
+			*setup.fixture.family_pin, *unmap, receipt);
+		require(
+			completed &&
+				completed->kind() == sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+				!unmap->valid() &&
+				setup.coordinator->snapshot().reader_attachment_group_count == 0U &&
+				setup.coordinator->snapshot().reader_opaque_attachment_uncertainty_count == 1U &&
+				setup.coordinator->snapshot().reader_registry_activity_authority_count == 2U,
+			"established group drains exactly once while opaque peer lifetimes remain retained");
+		const auto close_callback = callback(marker + 5U);
+		auto close = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin, setup.open, sqlite_shm_reader_close_request{close_callback});
+		require(close && close->valid() &&
+					close->route() == sqlite_shm_reader_close_route::close_after_confirmed_unmap,
+				"quarantined family admits the established open's exact close drain");
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.opaque-peer-established-close-effect", marker));
+		auto closed = setup.fixture.registry->complete_reader_close(
+			*setup.fixture.family_pin, setup.open, *close, close_receipt);
+		require(closed && closed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					closed->outward_status() == sqlite_ok_status && !close->valid() &&
+					setup.fixture.registry->release_reader_open(setup.open).has_value() &&
+					!setup.open.valid(),
+				"established open closes and releases exactly once after opaque peer quarantine");
+		const auto after_close =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(after_close.opaque_attachment_uncertainties.size() == 1U &&
+					after_close.open_epoch_close_compact_tombstone_count == 1U,
+				"established open closes once without weakening opaque peer quarantine");
+	}
+
 	void verify_reader_open_token_exhaustion_has_no_partial_open()
 	{
 		auto fixture = make_fixture(209U, false);
@@ -12766,6 +12984,8 @@ int main()
 		verify_reader_lifecycle_compact_export_requires_xclose_evidence();
 		verify_callback_free_reader_tombstone_survives_family_recreation();
 		verify_reader_lifecycle_sequence_exhaustion_precedes_predelegate();
+		verify_opaque_first_reader_map_retains_no_group_quarantine_custody();
+		verify_opaque_peer_quarantine_preserves_established_group_drain();
 		verify_reader_open_token_exhaustion_has_no_partial_open();
 		verify_reader_open_lease_registration_failure_rolls_back_registry_publication();
 		verify_reader_open_rejects_wrong_family_pin_and_cross_alias();

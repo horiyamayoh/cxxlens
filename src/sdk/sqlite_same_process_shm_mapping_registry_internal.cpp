@@ -1510,6 +1510,56 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<
+				sqlite_shm_reader_opaque_attachment_uncertainty_result>
+			complete_reader_opaque_attachment_uncertainty(
+				sqlite_shm_registry_family_pin& pin,
+				sqlite_shm_reader_attachment_map_inflight& inflight,
+				sqlite_shm_reader_session& session)
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				try
+				{
+					std::optional<sqlite_shm_lease_result<
+						sqlite_shm_reader_opaque_attachment_uncertainty_result>>
+						result;
+					{
+						std::scoped_lock lock{mutex_};
+						synchronize_activity_controls_locked();
+						synchronize_reader_open_controls_locked();
+						synchronize_coordinator_quarantines_locked();
+						if (pin.state_.get() != this)
+							return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+											 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+						auto* family_pin = current_family_pin_locked(pin);
+						auto* family = find_family_epoch_locked(pin.family_epoch_);
+						if (family_pin == nullptr || family == nullptr || !family->coordinator)
+							return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+											 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+						// This is the terminal disposition of an already-native-started first
+						// map. It intentionally bypasses fresh-admission gates and retains both
+						// registry activity owners inside the opaque quarantine tombstone.
+						result.emplace(family->coordinator
+										   ->complete_registry_reader_opaque_attachment_uncertainty(
+											   pin, inflight, session));
+						synchronize_coordinator_quarantines_locked();
+					}
+					if (!result)
+						return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					return *result;
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_predecessor_map_result>
 			complete_reader_predecessor_map(
 				sqlite_shm_registry_family_pin& pin,
@@ -6373,6 +6423,15 @@ namespace cxxlens::sdk
 		sqlite_shm_reader_session& session)
 	{
 		return state_->complete_reader_zero_attachment_map(family, inflight, receipt, session);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_opaque_attachment_uncertainty_result>
+	sqlite_same_process_shm_mapping_registry::complete_reader_opaque_attachment_uncertainty(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_attachment_map_inflight& inflight,
+		sqlite_shm_reader_session& session)
+	{
+		return state_->complete_reader_opaque_attachment_uncertainty(family, inflight, session);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_predecessor_map_result>
