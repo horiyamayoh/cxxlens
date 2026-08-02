@@ -5176,8 +5176,8 @@ namespace
 				callback_identity,
 				marker + 20U,
 				recreate				? callback_identity
-						? "imported revoked callback cannot authorize a recreated close"
-						: "imported revoked effect cannot terminalize a recreated close"
+									   ? "imported revoked callback cannot authorize a recreated close"
+									   : "imported revoked effect cannot terminalize a recreated close"
 					: callback_identity ? "local revoked callback cannot authorize a later close"
 										: "local revoked effect cannot terminalize a later close");
 		}
@@ -8146,57 +8146,10 @@ namespace
 	{
 		constexpr std::uint8_t marker = 232U;
 		auto setup = make_reader_candidate_setup(marker);
-		const auto before_active_close =
-			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
-		auto active_session_close = setup.fixture.registry->begin_reader_close(
-			*setup.fixture.family_pin,
-			setup.open,
-			sqlite_shm_reader_close_request{callback(marker + 1U)});
-		const auto after_active_close =
-			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
-		require(!active_session_close &&
-					active_session_close.error().reason ==
-						sqlite_shm_lease_rejection_reason::retiring &&
-					setup.session.valid() &&
-					after_active_close.last_issued_sequence ==
-						before_active_close.last_issued_sequence &&
-					after_active_close.last_committed_sequence ==
-						before_active_close.last_committed_sequence &&
-					after_active_close.outstanding_terminal_permit_slots ==
-						before_active_close.outstanding_terminal_permit_slots &&
-					after_active_close.live_custody_kind_counts ==
-						before_active_close.live_custody_kind_counts &&
-					after_active_close.close_terminals.empty() &&
-					after_active_close.live_custody_kind_counts[static_cast<std::size_t>(
-						detail::sqlite_shm_reader_custody_kind::connection_close)] == 1U,
-				"active session blocks close before any native authority or close-cut mutation");
-
 		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 2U);
 		auto inflight = setup.fixture.registry->begin_reader_map(
 			*setup.fixture.family_pin, setup.session, map_request);
-		require(inflight && inflight->valid(), "begin active-map close counterexample");
-		const auto before_active_map_close =
-			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
-		auto active_map_close = setup.fixture.registry->begin_reader_close(
-			*setup.fixture.family_pin,
-			setup.open,
-			sqlite_shm_reader_close_request{callback(marker + 2U)});
-		const auto after_active_map_close =
-			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
-		require(!active_map_close &&
-					active_map_close.error().reason ==
-						sqlite_shm_lease_rejection_reason::retiring &&
-					inflight->valid() && setup.session.valid() &&
-					after_active_map_close.last_issued_sequence ==
-						before_active_map_close.last_issued_sequence &&
-					after_active_map_close.last_committed_sequence ==
-						before_active_map_close.last_committed_sequence &&
-					after_active_map_close.outstanding_terminal_permit_slots ==
-						before_active_map_close.outstanding_terminal_permit_slots &&
-					after_active_map_close.live_custody_kind_counts ==
-						before_active_map_close.live_custody_kind_counts &&
-					after_active_map_close.map_attempts.size() == 1U,
-				"active native map blocks close with zero close-cut/native mutation");
+		require(inflight && inflight->valid(), "begin active-group close fixture map");
 		auto committed = setup.fixture.registry->commit_reader_map(
 			*setup.fixture.family_pin,
 			*inflight,
@@ -8206,11 +8159,9 @@ namespace
 				mapping(setup.writer_attempt.native_page.get()),
 				identity("test.registry.reader-close-active-map-effect", marker)),
 			setup.session);
-		require(committed && committed->formed_group(),
-				"form group after active-map close rejection");
+		require(committed && committed->formed_group(), "form active-group close fixture");
 		auto handoff_result = committed->take_handoff();
-		require(handoff_result && handoff_result->valid(),
-				"take group handoff after active-map close rejection");
+		require(handoff_result && handoff_result->valid(), "take active-group close handoff");
 		auto handoff = std::move(*handoff_result);
 
 		const auto session_terminal =
@@ -8269,6 +8220,270 @@ namespace
 		retire_writer(*setup.coordinator, setup.holder, marker + 6U);
 		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
 				"revoke active-group close fixture writer eligibility");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_reader_first_map_close_cut_drains_zero_terminal()
+	{
+		constexpr std::uint8_t marker = 154U;
+		auto setup = make_reader_candidate_setup(marker);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 1U);
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin first-map close-cut zero fixture");
+		const auto close_callback = callback(marker + 20U);
+		auto close = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin, setup.open, sqlite_shm_reader_close_request{close_callback});
+		const auto cut =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(close && close->valid() && !close->native_effect_ready() && !close->route() &&
+					cut.open_epochs.size() == 1U && cut.open_epochs.front().route == std::nullopt &&
+					cut.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::close_admitted &&
+					cut.open_epochs.front().close_cut_sequence != 0U &&
+					cut.live_custody_kind_counts[static_cast<std::size_t>(
+						detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation)] ==
+						1U &&
+					cut.live_custody_kind_counts[static_cast<std::size_t>(
+						detail::sqlite_shm_reader_custody_kind::terminal_reporter)] == 1U,
+				"first-map close cut hides xClose and retains one exact wait resolution owner");
+		auto waiting = setup.fixture.registry->poll_reader_close_cut(
+			*setup.fixture.family_pin, setup.open, *close, close_callback);
+		require(waiting && waiting->progress == sqlite_shm_reader_close_cut_progress::waiting &&
+					!waiting->route && close->valid() && !close->native_effect_ready(),
+				"close cut remains waiting while the pre-cut first map is live");
+		const auto zero_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+				*inflight,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+				map_request,
+				sqlite_busy_status,
+				nullptr,
+				0,
+				identity("test.registry.reader-first-close-zero-effect", marker));
+		auto zero = setup.fixture.registry->complete_reader_zero_attachment_map(
+			*setup.fixture.family_pin, *inflight, zero_receipt, setup.session);
+		require(zero &&
+					zero->kind() ==
+						sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change &&
+					!inflight->valid() && !setup.session.valid(),
+				"pre-cut zero map terminal revokes the unformed reservation without a pointer");
+		auto ready = setup.fixture.registry->poll_reader_close_cut(
+			*setup.fixture.family_pin, setup.open, *close, close_callback);
+		const auto resolved =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(ready &&
+					ready->progress == sqlite_shm_reader_close_cut_progress::native_effect_ready &&
+					ready->route == sqlite_shm_reader_close_route::close_without_group &&
+					close->native_effect_ready() &&
+					close->route() == sqlite_shm_reader_close_route::close_without_group &&
+					resolved.live_custody_kind_counts[static_cast<std::size_t>(
+						detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation)] ==
+						0U &&
+					resolved.live_custody_kind_counts[static_cast<std::size_t>(
+						detail::sqlite_shm_reader_custody_kind::terminal_reporter)] == 0U,
+				"zero terminal resolves exactly one direct close_without_group route");
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-first-close-zero-native", marker));
+		auto closed = setup.fixture.registry->complete_reader_close(
+			*setup.fixture.family_pin, setup.open, *close, close_receipt);
+		require(closed && closed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					closed->route() == sqlite_shm_reader_close_route::close_without_group &&
+					!close->valid(),
+				"resolved first-map close executes exactly once");
+		require(setup.fixture.registry->release_reader_open(setup.open).has_value(),
+				"resolved first-map close releases its exact open");
+		retire_writer(*setup.coordinator, setup.holder, marker + 21U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke first-map close zero writer eligibility");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_reader_first_map_close_cut_converges_mapped_cleanup_ack()
+	{
+		constexpr std::uint8_t marker = 164U;
+		auto setup = make_reader_candidate_setup(marker);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 1U);
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin first-map close-cut mapped fixture");
+		const auto close_callback = callback(marker + 20U);
+		auto close = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin, setup.open, sqlite_shm_reader_close_request{close_callback});
+		require(close && close->valid() && !close->native_effect_ready() && !close->route(),
+				"mapped first-map close installs a waiting cut before its terminal");
+		const auto mapped_effect =
+			identity("test.registry.reader-first-close-mapped-effect", marker);
+		const auto mapped_receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+			map_request,
+			setup.holder.generation(),
+			mapping(setup.writer_attempt.native_page.get()),
+			mapped_effect);
+		auto suppressed = setup.fixture.registry->commit_reader_map(
+			*setup.fixture.family_pin, *inflight, mapped_receipt, setup.session);
+		require(
+			!suppressed &&
+				suppressed.error().reason ==
+					sqlite_shm_lease_rejection_reason::unpublished_cleanup_required &&
+				suppressed.error().action ==
+					sqlite_shm_lease_recovery_action::attempt_nonremoving_unmap_then_outer_ioerr &&
+				inflight->valid() && setup.session.valid() && close->valid() &&
+				!close->native_effect_ready(),
+			"mapped result after the close cut publishes no pointer and selects one cleanup");
+		const auto session_terminal =
+			identity("test.registry.reader-first-close-session-terminal", marker);
+		const auto cleanup_entry =
+			sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup(
+				*inflight,
+				sqlite_shm_reader_unpublished_cleanup_entry_kind::exact_mapped_validation_failure,
+				map_request,
+				setup.session_request,
+				mapped_receipt.generation(),
+				sqlite_ok_status,
+				mapped_receipt.mapping().native_mapping,
+				0,
+				mapped_receipt.observed_attachment(),
+				mapped_effect,
+				session_terminal);
+		auto cleanup = setup.fixture.registry->begin_reader_unpublished_cleanup(
+			*setup.fixture.family_pin, *inflight, cleanup_entry, setup.session);
+		require(cleanup && cleanup->valid() && !inflight->valid() && !setup.session.valid() &&
+					close->valid() && !close->native_effect_ready(),
+				"cut-aware first-map cleanup consumes map/session but retains the close wait");
+		const auto cleanup_terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup_terminal(
+				*cleanup,
+				map_request.callback,
+				sqlite_shm_reader_unpublished_cleanup_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				0,
+				0,
+				identity("test.registry.reader-first-close-cleanup-effect", marker),
+				identity("test.registry.reader-first-close-cleanup-latch", marker));
+		auto cleaned = setup.fixture.registry->complete_reader_unpublished_cleanup(
+			*setup.fixture.family_pin, *cleanup, cleanup_terminal);
+		require(cleaned &&
+					cleaned->kind() ==
+						sqlite_shm_reader_unpublished_cleanup_terminal_kind::confirmed &&
+					!cleanup->valid() && close->valid() && !close->native_effect_ready() &&
+					setup.coordinator->snapshot().reader_logical_ack_awaiting_count == 1U,
+				"confirmed cleanup installs one ack still owned by the earlier close cut");
+		const auto pins_before_poll = setup.fixture.registry->snapshot().active_activity_pin_count;
+		auto ready = setup.fixture.registry->poll_reader_close_cut(
+			*setup.fixture.family_pin, setup.open, *close, close_callback);
+		const auto lease_ready = setup.coordinator->snapshot();
+		require(ready &&
+					ready->progress == sqlite_shm_reader_close_cut_progress::native_effect_ready &&
+					ready->route == sqlite_shm_reader_close_route::close_after_confirmed_unmap &&
+					close->native_effect_ready() &&
+					close->route() == sqlite_shm_reader_close_route::close_after_confirmed_unmap &&
+					lease_ready.reader_logical_ack_awaiting_count == 0U &&
+					lease_ready.reader_registry_activity_authority_count == 0U &&
+					setup.fixture.registry->snapshot().active_activity_pin_count + 1U ==
+						pins_before_poll,
+				"close poll consumes its later ack and exposes one close_after_confirmed_unmap");
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-first-close-mapped-native", marker));
+		auto closed = setup.fixture.registry->complete_reader_close(
+			*setup.fixture.family_pin, setup.open, *close, close_receipt);
+		require(closed && closed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					closed->route() == sqlite_shm_reader_close_route::close_after_confirmed_unmap,
+				"mapped cleanup close executes its exact ready route once");
+		require(setup.fixture.registry->release_reader_open(setup.open).has_value(),
+				"mapped cleanup close releases its exact open");
+		retire_writer(*setup.coordinator, setup.holder, marker + 21U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke first-map mapped-close writer eligibility");
+		auto lifecycle_tombstones =
+			sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+				*setup.coordinator);
+		require(lifecycle_tombstones && lifecycle_tombstones->size() == 1U,
+				"mapped cleanup close exports one exact durable lifecycle tombstone");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_reader_first_map_close_cut_converges_predecessor()
+	{
+		constexpr std::uint8_t marker = 174U;
+		auto setup = make_reader_candidate_setup(marker);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 1U);
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin first-map close-cut predecessor fixture");
+		const auto close_callback = callback(marker + 20U);
+		auto close = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin, setup.open, sqlite_shm_reader_close_request{close_callback});
+		require(close && close->valid() && !close->native_effect_ready() && !close->route(),
+				"predecessor first-map close installs a waiting cut before its terminal");
+		const auto predecessor_effect =
+			identity("test.registry.reader-first-close-predecessor-effect", marker);
+		const auto predecessor_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
+				*inflight,
+				sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+				map_request,
+				sqlite_readonly_status,
+				setup.writer_attempt.native_page.get(),
+				0,
+				predecessor_effect);
+		auto predecessor = setup.fixture.registry->complete_reader_predecessor_map(
+			*setup.fixture.family_pin, *inflight, predecessor_receipt, setup.session);
+		require(predecessor &&
+					predecessor->kind() ==
+						sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route &&
+					!inflight->valid() && !setup.session.valid() && close->valid() &&
+					!close->native_effect_ready() &&
+					setup.fixture.registry->snapshot().active_activity_pin_count == 2U,
+				"pre-cut predecessor terminal retains its one existing-route activity");
+		auto ready = setup.fixture.registry->poll_reader_close_cut(
+			*setup.fixture.family_pin, setup.open, *close, close_callback);
+		require(ready &&
+					ready->progress == sqlite_shm_reader_close_cut_progress::native_effect_ready &&
+					ready->route == sqlite_shm_reader_close_route::close_existing_predecessor &&
+					close->native_effect_ready() &&
+					close->route() == sqlite_shm_reader_close_route::close_existing_predecessor &&
+					setup.coordinator->snapshot().reader_predecessor_route_active_count == 1U &&
+					setup.fixture.registry->snapshot().active_activity_pin_count == 2U,
+				"close poll exposes the exact predecessor route without releasing it early");
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-first-close-predecessor-native", marker));
+		auto closed = setup.fixture.registry->complete_reader_close(
+			*setup.fixture.family_pin, setup.open, *close, close_receipt);
+		require(closed && closed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					closed->route() == sqlite_shm_reader_close_route::close_existing_predecessor &&
+					!close->valid() &&
+					setup.coordinator->snapshot().reader_predecessor_route_active_count == 0U &&
+					setup.coordinator->snapshot().reader_predecessor_route_retired_count == 1U &&
+					setup.fixture.registry->snapshot().active_activity_pin_count == 1U,
+				"exact close retires the pre-cut predecessor and its activity once");
+		const auto late_unmap = sqlite_same_process_shm_lease_test_peer::reader_predecessor_unmap(
+			*predecessor,
+			callback(marker + 21U),
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-first-close-predecessor-late-unmap", marker));
+		auto late = setup.fixture.registry->complete_reader_predecessor_unmap(
+			*setup.fixture.family_pin, setup.open, late_unmap);
+		require(!late && late.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					setup.fixture.registry->snapshot().active_activity_pin_count == 1U,
+				"predecessor retired through the close cut cannot release its activity twice");
+		require(setup.fixture.registry->release_reader_open(setup.open).has_value(),
+				"predecessor close-cut releases its exact open");
+		retire_writer(*setup.coordinator, setup.holder, marker + 22U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke first-map predecessor-close writer eligibility");
 		clean_fixture(setup.fixture);
 	}
 
@@ -14412,6 +14627,9 @@ int main()
 		verify_reader_candidate_counter_exhaustion_never_reuses_partial_identity();
 		verify_reader_open_close_binding_and_family_recreation_are_exact();
 		verify_active_reader_group_blocks_close_until_confirmed_unmap();
+		verify_reader_first_map_close_cut_drains_zero_terminal();
+		verify_reader_first_map_close_cut_converges_mapped_cleanup_ack();
+		verify_reader_first_map_close_cut_converges_predecessor();
 		verify_peer_quarantine_preserves_exact_reader_close_drain();
 		verify_reader_lifecycle_compact_export_requires_xclose_evidence();
 		verify_callback_free_reader_tombstone_survives_family_recreation();

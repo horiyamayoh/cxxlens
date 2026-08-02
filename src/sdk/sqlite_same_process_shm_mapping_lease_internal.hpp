@@ -1184,12 +1184,14 @@ namespace cxxlens::sdk
 		std::uint64_t unpublished_cleanup_session_terminal_sequence{};
 		std::uint64_t unpublished_cleanup_cut_sequence{};
 		std::uint64_t unpublished_cleanup_terminal_sequence{};
-		// Nonzero only when one live-close owner joined xShmUnmap and xClose.  Retaining
-		// the exact owner/open/cut binding keeps the unmap-after-close-cut ordering
-		// representable across family coordinator replacement.
+		// Nonzero when a live-close owner joined xShmUnmap/xClose or a first-map
+		// reservation was cut before its terminal.  Retaining the exact owner/open/cut
+		// and optional wait-resolution binding keeps both orderings representable across
+		// family coordinator replacement.
 		std::uint64_t composite_close_owner_token{};
 		std::uint64_t composite_close_registry_open_token{};
 		std::uint64_t composite_close_cut_sequence{};
+		std::uint64_t composite_close_wait_resolution_sequence{};
 
 		[[nodiscard]] bool
 		operator==(const sqlite_shm_reader_lifecycle_compact_tombstone&) const = default;
@@ -1512,6 +1514,19 @@ namespace cxxlens::sdk
 	{
 		waiting,
 		native_effect_ready,
+	};
+
+	enum class sqlite_shm_reader_close_cut_progress : std::uint8_t
+	{
+		waiting,
+		native_effect_ready,
+	};
+
+	struct sqlite_shm_reader_close_cut_result
+	{
+		sqlite_shm_reader_close_cut_progress progress{
+			sqlite_shm_reader_close_cut_progress::waiting};
+		std::optional<sqlite_shm_reader_close_route> route;
 	};
 
 	struct sqlite_shm_reader_unmap_cut_result
@@ -2375,25 +2390,40 @@ namespace cxxlens::sdk
 		operator=(const sqlite_shm_reader_close_obligation&) = delete;
 
 		[[nodiscard]] bool valid() const noexcept;
-		[[nodiscard]] sqlite_shm_reader_close_route route() const noexcept;
+		[[nodiscard]] bool native_effect_ready() const noexcept;
+		[[nodiscard]] std::optional<sqlite_shm_reader_close_route> route() const noexcept;
 
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
 		friend class sqlite_shm_verified_reader_close_terminal_receipt;
 		friend class sqlite_same_process_shm_lease_test_peer;
 
+		enum class phase : std::uint8_t
+		{
+			reservation_waiting,
+			close_ready,
+		};
+
 		sqlite_shm_reader_close_obligation(
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			detail::sqlite_shm_lease_token_identity owner_token,
 			std::uint64_t registry_open_token,
-			sqlite_shm_reader_close_route route) noexcept;
+			std::optional<sqlite_shm_reader_close_route> route,
+			phase initial_phase = phase::close_ready,
+			std::uint64_t reservation_token = 0U,
+			std::uint64_t generation = 0U,
+			std::uint64_t wait_resolution_sequence_slot = 0U) noexcept;
 		void disable_terminal_presentation() noexcept;
 		void disarm() noexcept;
 
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 		std::uint64_t owner_token_{};
 		std::uint64_t registry_open_token_{};
-		sqlite_shm_reader_close_route route_{sqlite_shm_reader_close_route::close_without_group};
+		std::optional<sqlite_shm_reader_close_route> route_;
+		phase phase_{phase::close_ready};
+		std::uint64_t reservation_token_{};
+		std::uint64_t generation_{};
+		std::uint64_t wait_resolution_sequence_slot_{};
 		bool terminal_presentation_disabled_{};
 	};
 
@@ -2693,6 +2723,21 @@ namespace cxxlens::sdk
 			const sqlite_shm_reader_open_epoch_binding& binding,
 			const sqlite_shm_reader_close_request& request,
 			std::optional<sqlite_shm_reader_attachment_authority>& completed_activity) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_cut_result>
+		poll_registry_reader_close_cut(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			sqlite_shm_reader_close_obligation& close,
+			const sqlite_shm_callback_execution_receipt& close_callback,
+			std::optional<sqlite_shm_reader_attachment_authority>& completed_activity) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void> fail_registry_reader_close_cut_wait(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			sqlite_shm_reader_close_obligation& close,
+			const sqlite_shm_callback_execution_receipt& close_callback,
+			sqlite_shm_retirement_wait_failure failure) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_close_terminal_result>
 		complete_registry_reader_close(
 			std::uint64_t registry_open_token,
