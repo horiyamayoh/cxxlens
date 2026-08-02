@@ -22,6 +22,9 @@ CONTRACT = pathlib.Path("schemas/cxxlens_ng_snapshot_store_contract.yaml")
 CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml"
 )
+EXPECTED_SCHEMA_DIGEST = (
+    "sha256:27c5a7525a0bb73ee91e8a071fc189763cbcbe8755fed92b74d89469eb65029e"
+)
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_snapshot_manifest.schema.yaml")
 VECTORS = pathlib.Path("schemas/cxxlens_ng_store_conformance_vectors.yaml")
 VECTORS_SCHEMA = pathlib.Path(
@@ -32,7 +35,7 @@ REPORT_SCHEMA = pathlib.Path(
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:84490b8adcc0e29866f83f4426bcdeccd2735722dcda10854f1119ec822589c4"
+    "sha256:f520b130d9de2703926fe7ea560961bdab191b916f251d2c0a3a0a03b40f96f4"
 )
 EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
     "sha256:fd2a96157107d3823c03c730606e9f380875a454cb82eaeecf9ba5cda785aa8f"
@@ -41,7 +44,7 @@ EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
     "sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6"
 )
 EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
-    "sha256:29dbc601594da603efd68d183a42ab3b6b5cd61b49e8fe2a1d9017ebf373e4f0"
+    "sha256:9927b4ddbca7711c6e4809c47ae2dba0fe28711b9fad77cf6930ab26e86e417b"
 )
 EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
     "sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb"
@@ -750,6 +753,15 @@ def canonical_json(value: Any) -> bytes:
 
 def document_digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def validate_exact_schema(schema: dict[str, Any]) -> None:
+    actual = document_digest(schema)
+    if actual != EXPECTED_SCHEMA_DIGEST:
+        fail(
+            "store.schema-drift",
+            f"expected={EXPECTED_SCHEMA_DIGEST}, actual={actual}",
+        )
 
 
 def _length(value: int) -> bytes:
@@ -1934,6 +1946,7 @@ def validate_all(
 ) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
     contract = load_yaml(root / CONTRACT)
     contract_schema = load_yaml(root / CONTRACT_SCHEMA)
+    validate_exact_schema(contract_schema)
     validate_df_0200_ingress_schema(contract_schema)
     schema_validate(contract, contract_schema, "store contract")
     try:

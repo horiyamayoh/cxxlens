@@ -21,6 +21,7 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
     EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
     EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
+    EXPECTED_SCHEMA_DIGEST,
     EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
     EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
     SELECTOR_FIELDS,
@@ -46,6 +47,7 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     validate_all,
     validate_contract_shape,
     validate_df_0200_ingress_schema,
+    validate_exact_schema,
     validate_identity_graph,
 )
 
@@ -72,6 +74,11 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(len(results), 31)
         self.assertEqual(comparisons, 36)
+        self.assertEqual(document_digest(self.schema), EXPECTED_SCHEMA_DIGEST)
+        changed_schema = copy.deepcopy(self.schema)
+        changed_schema["$id"] = "https://cxxlens.invalid/weakened-schema"
+        with self.assertRaisesRegex(StoreContractError, "store.schema-drift"):
+            validate_exact_schema(changed_schema)
 
     def test_sqlite_writer_mapping_lease_proposal_is_exact_and_fail_closed(
         self,
@@ -258,6 +265,40 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "connection-open-epoch",
                 "file-family-and-mapping-generation",
             ],
+        )
+        self.assertIn(
+            "original-owned-SQLite-call-and-session-context",
+            late_close["outer_unwind_authority"]["issuance_and_cut_transfer"],
+        )
+        self.assertIn(
+            "moves-the-one-caller-owner-under-the-registry-mutex",
+            late_close["outer_unwind_authority"]["presentation_transport"],
+        )
+        self.assertEqual(
+            late_close["close_terminal_provenance"]["kind_enum"],
+            [
+                "same_thread_or_reentrant_precleanup_quarantine",
+                "bounded_other_thread_timeout_precleanup_quarantine",
+                "bounded_other_thread_unknown_precleanup_quarantine",
+            ],
+        )
+        self.assertIn(
+            "native-xClose-call-count-zero",
+            late_close["close_terminal_provenance"]["tuple_fields"],
+        )
+        self.assertEqual(
+            late_close["drain_subledger"]["transition_graph"]
+            ["cleanup_confirmed_awaiting_sqlite_ack"],
+            ["consumed_by_exact_outer_unmap", "terminal_quarantined"],
+        )
+        self.assertIn(
+            "preserves-the-valid-awaiting-ack",
+            late_close["acknowledgement"]["wrong_outer_owner"],
+        )
+        self.assertIn(
+            "transitions-cleanup_confirmed_awaiting_sqlite_ack-to-"
+            "terminal_quarantined",
+            late_close["acknowledgement"]["exact_outer_owner_indeterminate"],
         )
         self.assertIn(
             "same-callback-open-epoch",
@@ -884,6 +925,58 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                     "acknowledgement"
                 ].__setitem__(
                     "consumption", "any-later-unmap-may-consume-and-return-OK"
+                ),
+            ),
+            (
+                "reader-late-close-cleanup-outer-owner-binding-underbound",
+                lambda value: reader_late_close_cleanup(value)[
+                    "outer_unwind_authority"
+                ]["binding"].remove("expected-outer-unwind-owner-token"),
+            ),
+            (
+                "reader-late-close-cleanup-presentation-transport-registry-owns",
+                lambda value: reader_late_close_cleanup(value)[
+                    "outer_unwind_authority"
+                ].__setitem__(
+                    "presentation_transport",
+                    "registry-owns-and-reconstructs-the-caller-owner",
+                ),
+            ),
+            (
+                "reader-late-close-cleanup-close-provenance-native-close-added",
+                lambda value: reader_late_close_cleanup(value)[
+                    "close_terminal_provenance"
+                ]["kind_enum"].append("native_xClose_completed"),
+            ),
+            (
+                "reader-late-close-cleanup-close-provenance-tuple-underbound",
+                lambda value: reader_late_close_cleanup(value)[
+                    "close_terminal_provenance"
+                ]["tuple_fields"].remove("exact-close-owner-token"),
+            ),
+            (
+                "reader-late-close-cleanup-ack-indeterminate-transition-removed",
+                lambda value: reader_late_close_cleanup(value)[
+                    "drain_subledger"
+                ]["transition_graph"][
+                    "cleanup_confirmed_awaiting_sqlite_ack"
+                ].remove("terminal_quarantined"),
+            ),
+            (
+                "reader-late-close-cleanup-wrong-owner-steals-ack",
+                lambda value: reader_late_close_cleanup(value)[
+                    "acknowledgement"
+                ].__setitem__(
+                    "wrong_outer_owner", "wrong-owner-consumes-the-valid-ack"
+                ),
+            ),
+            (
+                "reader-late-close-cleanup-exact-owner-indeterminate-replayable",
+                lambda value: reader_late_close_cleanup(value)[
+                    "acknowledgement"
+                ].__setitem__(
+                    "exact_outer_owner_indeterminate",
+                    "preserve-awaiting-ack-and-retry-later",
                 ),
             ),
             (

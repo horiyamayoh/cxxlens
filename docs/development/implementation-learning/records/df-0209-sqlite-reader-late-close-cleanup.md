@@ -126,6 +126,14 @@ open-epoch `xShmUnmap(0)` to consume it once with zero native effect. Confirmed 
 a zero-native `SQLITE_IOERR` and cannot enter the carve-out. Zero-effect, predecessor, opaque,
 non-OK/throw/unknown, duplicate, abandonment, and terminal-commit-failure peers remain fail closed.
 
+The exact outer unwind must present a pre-cut issuer-sealed noncopyable one-shot owner retained in the
+original SQLite call/session context; the registry and close cut retain only its nonauthorizing validation
+seal/control until exact entry moves that owner under the registry mutex. Eligibility also requires a closed
+close-terminal provenance receipt selecting only same-thread/reentrant quarantine or bounded-other-thread
+timeout/unknown, with zero native `xClose` and zero prior ack. A wrong presenter preserves the valid owner
+and ack, while exact-owner abandonment, unknown, destruction, or terminal-commit failure transitions the
+ack to terminal quarantine with every pin retained and no native retry or reconstruction.
+
 The exact contract amendment must receive independent semantic and structural review before the late
 mapped implementation or tests are accepted.
 
@@ -147,3 +155,17 @@ successor, fresh-admission,
 unregister, unload, or wakeup authority revives. `implementation_disposition` remains `blocked`,
 `resolution_refs` remains empty, and neither this record nor the proposal subtree authorizes runtime or test
 implementation before exact-commit independent review and explicit normative acceptance.
+
+2026-08-02: Semantic review of exact `3a35af9` rejected the proposal with P1=3 because the outer-unwind
+issuer/custody, close-terminal provenance, and ack indeterminate-terminal rows were under-specified:
+<https://github.com/horiyamayoh/cxxlens/issues/209#issuecomment-5154806081>. The revised proposal closes
+those three axes with a caller-context move-only presentation owner plus registry-only validation seal,
+closed provenance enum/receipt/tuple/sequence, wrong-owner preservation, and exact-owner indeterminate
+terminalization. This rejected review is evidence, not an acceptance receipt.
+
+2026-08-02: Structural review of exact `3a35af9` was GO with P0=0, P1=0, P2=1 and requested an independent
+Snapshot schema digest pin:
+<https://github.com/horiyamayoh/cxxlens/issues/209#issuecomment-5154807970>. The pin and fail-closed test were
+added. Review metadata remains `pending` because the materially revised exact proposal commit has not yet
+received fresh independent semantic and structural review. Status remains `proposed`, disposition remains
+`blocked`, and the revised subtree still authorizes no runtime or test implementation.
