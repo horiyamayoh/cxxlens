@@ -27,18 +27,18 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:f6d57ed7c55d5094914cbc919fd4a98a6a310e71a2be71f480d2c6d81dcc27ab"
+    "sha256:dde4116cad266ebda55a391599b17aa7d4965e6ebe1974dd90ec608496c472d1"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:d7d113b7480ac9301c28e42f68a3678bfcf7d6e17472d12a3311f1d7f4ceb478"
+    "sha256:f2eebb1112621d9194167b087020937db4f3cb85a4c3badaa361d576f6f6b067"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:49acfa53da2802e106d7766ec39c89024182de43bb63922f47813b624538c02b"
+    "sha256:f3158554c033ca6b28a7607af1fe9b8401e8baa71d1428cd61573afffc6b9542"
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:f42cb94b284b2af1683d7fe573ef0a9b9d6d6706d111bf0f97d8d22a554edab5"
+    "sha256:84490b8adcc0e29866f83f4426bcdeccd2735722dcda10854f1119ec822589c4"
 )
 
 EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
@@ -46,6 +46,9 @@ EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
 )
 EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
     "sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6"
+)
+EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
+    "sha256:29dbc601594da603efd68d183a42ab3b6b5cd61b49e8fe2a1d9017ebf373e4f0"
 )
 EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
     "sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb"
@@ -4681,6 +4684,10 @@ def validate_mapping_lease_amendments(contract: dict[str, Any]) -> None:
             "reader-native-attachment": (
                 lease["reader_native_attachment_amendment_proposal"],
                 EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
+            ),
+            "reader-late-close-cleanup": (
+                lease["reader_late_close_cleanup_amendment_proposal"],
+                EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
             ),
             "writer-gate-outcome-evidence": (
                 lease["writer_gate_outcome_evidence_amendment_proposal"],

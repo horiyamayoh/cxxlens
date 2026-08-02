@@ -1122,6 +1122,54 @@ format_compatibility:
           route_partition_regressions:
             required: [ordinary-cross-process-or-no-live-local-generation-mints-a-proposal-reservation-attachment-epoch-map-attempt-or-owner, missing-local-generation-is-invented-imported-transferred-posthoc-bound-or-used-to-reject-a-qualified-existing-predecessor-read, active-proposal-group-bypasses-its-exact-owner-or-local-proposal-candidate-bypasses-its-generation-bound-reservation, ambiguous-partition-enters-SQLite-or-native-before-reject]
             positive: [active-proposal-group-admits-one-exact-session-owner, exact-live-local-generation-admits-one-generation-bound-proposal-reservation, ordinary-existing-cross-process-or-no-local-generation-enters-existing-byte-route-with-zero-proposal-custody, ambiguous-or-cut-partition-rejects-before-SQLite-entry]
+        reader_late_close_cleanup_amendment_proposal:
+          id: cxxlens.sqlite.reader-late-close-cleanup.v1
+          status: proposed-unqualified-non-authorizing
+          tracking: {issue: '#209', feedback: DF-0209}
+          authority_boundary:
+            normative_effect: proposal-only-no-current-authority-change-no-runtime-or-test-behavior-is-authorized-by-this-subtree
+            implementation_disposition: blocked-until-an-exact-proposal-commit-receives-fresh-independent-semantic-and-structural-review-and-the-four-authority-mirrors-are-explicitly-accepted
+            accepted_reader_authority: cxxlens.sqlite.reader-shm-native-attachment.v1-remains-byte-semantically-unchanged-and-controlling
+          scope: one-original-first-map-callback-drain-after-pre-cleanup-terminal-close-quarantine-only-no-production-vfs-public-api-native-OK-writer-or-other-reader-authority-change
+          eligibility:
+            exact_row: one-original-nonreentrant-first-map-callback-whose-native-start-precedes-the-exact-close-cut-whose-determinate-mapped-terminal-loses-publication-to-that-cut-and-whose-zero-use-zero-member-unpublished-first-cleanup-remains-the-already-owned-lineage
+            close_state: terminal-close-quarantine-committed-after-that-exact-original-native-start-and-before-its-callback-terminal-or-cleanup-terminal
+            exclusion: confirmed-after-close-replay-later-map-later-close-fresh-epoch-cross-open-cross-generation-duplicate-abandoned-opaque-or-reconstructed-owner-is-never-this-row
+          ordering:
+            close_quarantine_first: atomically-terminalize-open-reservation-group-close-and-family-admission-while-transferring-only-the-one-exact-original-callback-cleanup-lineage-and-its-pins-to-the-drain-subledger
+            callback_drain_second: the-exact-original-callback-may-complete-only-through-that-preexisting-subledger-with-no-pointer-member-predecessor-successor-use-session-close-or-fresh-admission-publication
+            cleanup_terminal_third: the-exact-cleanup-terminal-is-committed-once-before-any-logical-ack-can-be-observed-and-no-ordinary-terminal-state-is-reactivated
+          drain_subledger:
+            cardinality: exactly-one-or-zero-noncopyable-owner-per-exact-open-epoch-original-first-map-attempt-and-never-minted-after-the-close-cut
+            retained_pins: [proposal-candidate, reader-map-predelegate, runtime-vfs-registration-and-callback-cohort, connection-open-epoch, file-family-and-mapping-generation]
+            state_enum: [not_applicable, retained_original_callback_drain, cleanup_admitted, cleanup_confirmed_awaiting_sqlite_ack, terminal_quarantined, consumed_by_exact_outer_unmap]
+            transition_graph:
+              not_applicable: [retained_original_callback_drain]
+              retained_original_callback_drain: [cleanup_admitted, terminal_quarantined]
+              cleanup_admitted: [cleanup_confirmed_awaiting_sqlite_ack, terminal_quarantined]
+              cleanup_confirmed_awaiting_sqlite_ack: [consumed_by_exact_outer_unmap]
+              terminal_quarantined: []
+              consumed_by_exact_outer_unmap: []
+          cleanup:
+            admission: only-the-exact-retained-original-callback-owner-may-consume-the-one-cleanup-permit-for-one-nonremoving-xShmUnmap-zero-native-delegation-outside-the-registry-mutex
+            success: exact-native-SQLITE_OK-plus-successful-terminal-commit-records-confirmed-unpublished-first-cleanup-and-installs-exactly-one-awaiting-SQLite-ack-with-zero-member-zero-group-count-and-zero-pointer-effect
+            non_success: native-nonOK-throw-unknown-abandonment-or-terminal-commit-failure-enters-terminal_quarantined-retains-every-pin-returns-the-closed-error-row-and-never-installs-retries-or-reconstructs-an-ack-cleanup-close-or-admission-owner
+          acknowledgement:
+            installation: exactly-one-ack-is-installed-only-by-the-exact-successful-unpublished-first-cleanup-terminal-in-this-subledger
+            consumption: only-the-exact-outer-unwind-xShmUnmap-deleteFlag-zero-for-the-same-callback-open-epoch-may-consume-that-ack-once-return-stored-SQLITE_OK-and-perform-zero-native-call-zero-latch-reset-zero-pin-release-and-zero-close-or-group-effect
+            confirmed_after_close_replay: an-xShmUnmap-after-a-close-terminal-that-either-consumed-an-ack-already-present-before-close-or-completed-native-xClose-is-distinct-from-the-pre-cleanup-terminal-close-quarantine-row-and-always-returns-SQLITE_IOERR-with-zero-native-effect-while-an-already-consumed-missing-cross-bound-reconstructed-or-late-owner-also-cannot-enter-the-carve-out
+          quarantine:
+            retained_terminal_states: open-reservation-group-close-family-and-generation-remain-terminal-quarantined-before-during-and-after-drain-and-ack-consumption
+            retained_lifetime: candidate-predelegate-runtime-vfs-open-family-generation-native-file-and-ambiguity-pins-remain-in-process-lifetime-quarantine-and-ack-consumption-releases-none
+            forbidden_authority: no-close-retry-close-owner-reconstruction-group-revival-fresh-reader-or-writer-admission-fresh-epoch-successor-predecessor-map-use-pointer-publication-runtime-unregister-vfs-unload-or-family-wakeup
+          fail_closed_matrix:
+            required: [late-callback-without-exact-precut-native-start, close-cut-or-open-epoch-sequence-mismatch, duplicate-or-reconstructed-drain-owner, cleanup-without-exact-determinate-mapped-identity, cleanup-nonOK-throw-unknown-abandonment-or-terminal-commit-failure-installs-ack, ack-consumed-by-close-map-fresh-epoch-cross-open-cross-generation-or-nonzero-deleteFlag, confirmed-after-close-replay-consumes-ack-or-returns-success, drain-or-ack-releases-candidate-predelegate-runtime-open-family-or-generation-pin, drain-revives-group-close-predecessor-successor-or-fresh-admission-authority, proposal-status-review-or-authority-mirror-is-used-to-self-authorize-implementation]
+            positive: [precleanup-close-quarantine-retains-one-original-callback-drain-subledger, exact-late-mapped-original-callback-cleans-up-once-with-no-pointer-or-group-publication, exact-successful-unpublished-first-cleanup-installs-one-ack, exact-outer-open-epoch-xShmUnmap-zero-consumes-one-ack-with-zero-native-effect, confirmed-after-close-replay-is-zero-native-IOERR, ack-consumption-retains-all-close-quarantine-pins-and-terminal-states]
+          authorization:
+            before_independent_acceptance: contract-edit-readonly-audit-and-temporary-reproduction-only-no-runtime-test-state-machine-production-native-OK-or-public-API-implementation
+            acceptance_requirement: fresh-independent-semantic-and-structural-review-of-the-exact-proposal-commit-plus-explicit-status-review-receipt-and-resolution-ref-replacement-in-all-four-authority-mirrors
+            transitive_authorization: forbidden-this-proposal-does-not-authorize-any-reader-writer-close-group-production-VFS-public-API-or-native-OK-behavior
+            public_api: unchanged
         writer_gate_outcome_evidence_amendment_proposal:
           id: cxxlens.sqlite.writer-gate-outcome-evidence.v1
           status: accepted-authority-implementation-pending

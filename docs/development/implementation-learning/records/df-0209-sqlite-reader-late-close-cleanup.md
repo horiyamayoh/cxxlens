@@ -1,7 +1,7 @@
 ---
 id: DF-0209
 title: Resolve SQLite reader cleanup after close quarantine
-status: observed
+status: proposed
 kind: contract-contradiction
 impact: invariant
 confidence: high
@@ -56,11 +56,13 @@ reader admission, pointer publication, successor publication, or release of proc
 pins. The original pre-cut callback nevertheless remains a distinct already-owned drain and may need
 an internal single-use subledger that is orthogonal to the terminal open/reservation/group states.
 
-Two internally consistent outcomes remain possible. A confirmed late cleanup could install the normal
-one-shot acknowledgement and permit only the exact outer open-epoch `xShmUnmap(0)` to consume it with
-zero native work while retaining every close-quarantine pin. Alternatively, a dedicated late-close
-cleanup terminal could record the exact native cleanup and omit the acknowledgement, making every later
-unmap or close a zero-call `SQLITE_IOERR`. Existing authority does not distinguish these outcomes.
+Two internally consistent outcomes remain possible under the currently accepted authority. This
+proposal selects a confirmed late cleanup installing the normal one-shot acknowledgement and permitting
+only the exact outer open-epoch `xShmUnmap(0)` to consume it with zero native work while retaining every
+close-quarantine pin. The alternative would define a dedicated late-close cleanup terminal that records
+the exact native cleanup without an acknowledgement and makes every later unmap or close a zero-call
+`SQLITE_IOERR`. The proposal records the selection for review; it does not resolve the ambiguity or
+authorize implementation until the normative mirrors are independently reviewed and explicitly accepted.
 
 ## Mismatch or opportunity
 
@@ -98,10 +100,11 @@ is unresolved.
 
 ## Alternatives and trade-offs
 
-1. Preserve a terminal-close drain subledger, install the normal acknowledgement after exact successful
-   cleanup, and allow only the exact outer open-epoch unmap to consume it with zero native work. This
-   preserves the general cleanup-to-ack rule but needs explicit authority that the unmap is not an
-   after-close replay and that it releases no close-quarantine lifetime pin.
+1. **Proposed selection:** preserve exactly one original-callback terminal-close drain subledger, install
+   the normal acknowledgement after exact successful unpublished-first cleanup, and allow only the exact
+   outer open-epoch `xShmUnmap(0)` to consume it with zero native work. This preserves the general
+   cleanup-to-ack rule, distinguishes that already-owned outer unwind from confirmed after-close replay,
+   and releases no close-quarantine lifetime pin.
 2. Preserve a terminal-close drain subledger but define exact successful cleanup as a dedicated terminal
    quarantine row with no acknowledgement. This keeps all later calls uniformly rejected but creates an
    exception to the mandatory acknowledgement rule and must define how the outer SQLite unwind is
@@ -113,13 +116,15 @@ is unresolved.
 
 ## Recommendation
 
-Add one narrow, precedence-ordered authority row for an original first-map callback whose native start
-precedes an exact close cut but whose exact mapped terminal arrives after that close enters terminal
-quarantine. The row must keep open/reservation/group terminal, retain candidate/predelegate/runtime/open
-and family pins, prohibit pointer/predecessor/successor publication, authorize exactly one cleanup owner,
-and select the exact acknowledgement fate. It must also define zero-effect, predecessor, opaque,
-non-OK/throw/unknown, duplicate, abandonment, and terminal-commit-failure peers so unrelated quarantine
-cannot enter the carve-out.
+Independently review and, only after acceptance, add the proposed narrow precedence-ordered authority row
+for an original first-map callback whose native start precedes an exact close cut but whose exact mapped
+terminal arrives after that close enters terminal quarantine. The proposed row keeps open/reservation/group
+terminal, retains candidate/predelegate/runtime/open and family pins, prohibits
+pointer/predecessor/successor publication, preserves exactly one original callback cleanup owner, installs
+one acknowledgement after exact successful unpublished-first cleanup, and permits only the exact outer
+open-epoch `xShmUnmap(0)` to consume it once with zero native effect. Confirmed after-close replay remains
+a zero-native `SQLITE_IOERR` and cannot enter the carve-out. Zero-effect, predecessor, opaque,
+non-OK/throw/unknown, duplicate, abandonment, and terminal-commit-failure peers remain fail closed.
 
 The exact contract amendment must receive independent semantic and structural review before the late
 mapped implementation or tests are accepted.
@@ -129,3 +134,16 @@ mapped implementation or tests are accepted.
 2026-08-02: Observation recorded at exact head
 `1c9d7eebf6d4b5abadbb9d2de53daf7630cb90a7` and tracked by Issue #209. The late mapped cleanup and
 logical-ack implementation is blocked. This record is non-normative and authorizes no behavior.
+
+2026-08-02: Status advanced to `proposed` with the narrow option-1 selection mirrored as
+`cxxlens.sqlite.reader-late-close-cleanup.v1`. The proposal preserves exactly one original callback drain
+through pre-cleanup terminal close quarantine, installs one ack only after exact successful unpublished-first
+cleanup, permits only the exact outer same-open-epoch `xShmUnmap(0)` to consume it with zero native effect,
+and rejects confirmed after-close replay. Here, confirmed after-close replay means an unmap after a close
+terminal either consumed an ack that was already present before close or completed native `xClose`; it
+explicitly excludes the pre-cleanup terminal close-quarantine row. Candidate, predelegate, runtime/VFS,
+open, family, generation, native-file, and ambiguity pins remain retained; no close, group, predecessor,
+successor, fresh-admission,
+unregister, unload, or wakeup authority revives. `implementation_disposition` remains `blocked`,
+`resolution_refs` remains empty, and neither this record nor the proposal subtree authorizes runtime or test
+implementation before exact-commit independent review and explicit normative acceptance.

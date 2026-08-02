@@ -32,13 +32,16 @@ REPORT_SCHEMA = pathlib.Path(
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:f42cb94b284b2af1683d7fe573ef0a9b9d6d6706d111bf0f97d8d22a554edab5"
+    "sha256:84490b8adcc0e29866f83f4426bcdeccd2735722dcda10854f1119ec822589c4"
 )
 EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
     "sha256:fd2a96157107d3823c03c730606e9f380875a454cb82eaeecf9ba5cda785aa8f"
 )
 EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
     "sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6"
+)
+EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
+    "sha256:29dbc601594da603efd68d183a42ab3b6b5cd61b49e8fe2a1d9017ebf373e4f0"
 )
 EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
     "sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb"
@@ -1222,6 +1225,11 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
             "reader-native-attachment",
             "reader_native_attachment_amendment_proposal",
             EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
+        ),
+        (
+            "reader-late-close-cleanup",
+            "reader_late_close_cleanup_amendment_proposal",
+            EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
         ),
         (
             "writer-gate-outcome-evidence",

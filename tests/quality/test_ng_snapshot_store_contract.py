@@ -18,6 +18,7 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     CONTRACT,
     CONTRACT_SCHEMA,
     CLOSURE_FIELDS,
+    EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
     EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
     EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
     EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
@@ -234,6 +235,42 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         )
         self.assertGreaterEqual(
             len(reader_attachment["fail_closed_matrix"]["positive"]), 24
+        )
+        late_close = lease[
+            "reader_late_close_cleanup_amendment_proposal"
+        ]
+        self.assertEqual(
+            document_digest(late_close),
+            EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
+        )
+        self.assertEqual(
+            late_close["status"], "proposed-unqualified-non-authorizing"
+        )
+        self.assertEqual(
+            late_close["tracking"], {"issue": "#209", "feedback": "DF-0209"}
+        )
+        self.assertEqual(
+            late_close["drain_subledger"]["retained_pins"],
+            [
+                "proposal-candidate",
+                "reader-map-predelegate",
+                "runtime-vfs-registration-and-callback-cohort",
+                "connection-open-epoch",
+                "file-family-and-mapping-generation",
+            ],
+        )
+        self.assertIn(
+            "same-callback-open-epoch",
+            late_close["acknowledgement"]["consumption"],
+        )
+        self.assertIn(
+            "completed-native-xClose-is-distinct-from-the-pre-cleanup-terminal-"
+            "close-quarantine-row",
+            late_close["acknowledgement"]["confirmed_after_close_replay"],
+        )
+        self.assertIn(
+            "does-not-authorize-any-reader-writer-close-group",
+            late_close["authorization"]["transitive_authorization"],
         )
         gate_outcome = lease[
             "writer_gate_outcome_evidence_amendment_proposal"
@@ -505,6 +542,9 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
 
         def reader_native_attachment(value: dict[str, Any]) -> dict[str, Any]:
             return value["reader_native_attachment_amendment_proposal"]
+
+        def reader_late_close_cleanup(value: dict[str, Any]) -> dict[str, Any]:
+            return value["reader_late_close_cleanup_amendment_proposal"]
 
         def writer_gate_outcome(value: dict[str, Any]) -> dict[str, Any]:
             return value["writer_gate_outcome_evidence_amendment_proposal"]
@@ -825,6 +865,49 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 lambda value: reader_native_attachment(value)[
                     "authorization"
                 ].__setitem__("production_activation", "allowed"),
+            ),
+            (
+                "reader-late-close-cleanup-proposal-removed",
+                lambda value: value.pop(
+                    "reader_late_close_cleanup_amendment_proposal"
+                ),
+            ),
+            (
+                "reader-late-close-cleanup-status-self-authorized",
+                lambda value: reader_late_close_cleanup(value).__setitem__(
+                    "status", "accepted-authority-implementation-pending"
+                ),
+            ),
+            (
+                "reader-late-close-cleanup-outer-ack-open-ended",
+                lambda value: reader_late_close_cleanup(value)[
+                    "acknowledgement"
+                ].__setitem__(
+                    "consumption", "any-later-unmap-may-consume-and-return-OK"
+                ),
+            ),
+            (
+                "reader-late-close-cleanup-after-close-replay-accepted",
+                lambda value: reader_late_close_cleanup(value)[
+                    "acknowledgement"
+                ].__setitem__(
+                    "confirmed_after_close_replay",
+                    "consume-after-native-close-and-return-OK",
+                ),
+            ),
+            (
+                "reader-late-close-cleanup-candidate-pin-released",
+                lambda value: reader_late_close_cleanup(value)[
+                    "drain_subledger"
+                ]["retained_pins"].remove("proposal-candidate"),
+            ),
+            (
+                "reader-late-close-cleanup-fresh-authority-revived",
+                lambda value: reader_late_close_cleanup(value)[
+                    "quarantine"
+                ].__setitem__(
+                    "forbidden_authority", "fresh-reader-admission-is-allowed"
+                ),
             ),
             (
                 "gate-outcome-proposal-removed",
