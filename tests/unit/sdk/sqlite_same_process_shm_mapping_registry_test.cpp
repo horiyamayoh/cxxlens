@@ -2383,19 +2383,90 @@ namespace
 	{
 		auto setup = make_reader_candidate_setup(210U);
 		auto handoff = form_reader_group(setup, 211U);
+		const auto map_request = reader_attachment_map_request(setup.session_request, 215U);
+		auto map = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(map && map->valid(), "begin map before the composite close cut");
 		const auto unmap_callback = callback(212U);
 		const auto close_callback = callback(213U);
 
-		auto blocked = setup.fixture.registry->begin_reader_live_close(
+		auto live_close = setup.fixture.registry->begin_reader_live_close(
 			*setup.fixture.family_pin,
 			setup.open,
 			handoff,
 			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
 			sqlite_shm_reader_close_request{close_callback});
-		require(!blocked && blocked.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
-					handoff.valid() && setup.session.valid(),
-				"live close waits for the exact active use-owner census without consuming either "
-				"owner");
+		require(live_close && live_close->valid() && !live_close->native_effect_ready() &&
+					!live_close->close_ready() && !handoff.valid() && setup.session.valid(),
+				"live close consumes the composite cut before bounded other-thread waiting");
+		const auto waiting =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(waiting.outstanding_terminal_permit_count == 4U &&
+					waiting.open_epochs.size() == 1U && waiting.attachment_groups.size() == 1U &&
+					waiting.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::close_admitted &&
+					waiting.open_epochs.front().route ==
+						sqlite_shm_reader_close_route::close_after_confirmed_unmap &&
+					waiting.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::unmap_cut_sealing,
+				"composite close hides the open and group while retaining exact terminal capacity");
+		auto still_waiting = setup.fixture.registry->poll_reader_live_close_unmap_cut(
+			*setup.fixture.family_pin, setup.open, *live_close, close_callback);
+		require(still_waiting &&
+					still_waiting->progress == sqlite_shm_reader_unmap_cut_progress::waiting &&
+					live_close->valid() && !live_close->native_effect_ready(),
+				"same composite owner remains waiting while the frozen session is live");
+		auto blocked_request = setup.pre_sqlite;
+		blocked_request.read_transaction_epoch =
+			identity("test.registry.reader-live-close-blocked-transaction", 216U);
+		blocked_request.decode_attempt =
+			identity("test.registry.reader-live-close-blocked-decode", 216U);
+		blocked_request.authority_read_receipt =
+			identity("test.registry.reader-live-close-blocked-authority", 216U);
+		auto blocked = setup.fixture.registry->admit_reader_session_before_sqlite(
+			*setup.fixture.family_pin, setup.open, blocked_request);
+		require(blocked &&
+					blocked->kind() ==
+						sqlite_shm_reader_session_admission_kind::rejected_before_sqlite &&
+					blocked->rejection() &&
+					blocked->rejection()->reason == sqlite_shm_lease_rejection_reason::retiring,
+				"close cut rejects every later session before SQLite entry");
+		const auto map_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+				*map,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+				map_request,
+				sqlite_busy_status,
+				nullptr,
+				0,
+				identity("test.registry.reader-live-close-map-effect", 215U));
+		auto map_terminal = setup.fixture.registry->complete_reader_zero_attachment_map(
+			*setup.fixture.family_pin, *map, map_receipt, setup.session);
+		require(map_terminal && !map->valid() && setup.session.valid() && live_close->valid() &&
+					!live_close->native_effect_ready(),
+				"pre-cut map reaches one exact terminal without bypassing the close wait");
+		auto waiting_on_session = setup.fixture.registry->poll_reader_live_close_unmap_cut(
+			*setup.fixture.family_pin, setup.open, *live_close, close_callback);
+		require(waiting_on_session &&
+					waiting_on_session->progress == sqlite_shm_reader_unmap_cut_progress::waiting &&
+					!live_close->native_effect_ready(),
+				"composite cut remains waiting after only the frozen map drains");
+		const auto premature_unmap_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+				*live_close,
+				unmap_callback,
+				sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				0,
+				0,
+				identity("test.registry.reader-live-close-premature-unmap-effect", 212U),
+				identity("test.registry.reader-live-close-premature-unmap-latch", 212U));
+		auto premature_unmap = setup.fixture.registry->complete_reader_live_close_unmap(
+			*setup.fixture.family_pin, setup.open, *live_close, premature_unmap_receipt);
+		require(!premature_unmap &&
+					premature_unmap.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
+					live_close->valid() && !live_close->native_effect_ready(),
+				"waiting composite owner exposes zero native unmap authority");
 
 		const auto session_terminal =
 			sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
@@ -2407,17 +2478,15 @@ namespace
 							*setup.fixture.family_pin, setup.session, session_terminal)
 						.has_value() &&
 					!setup.session.valid(),
-				"drain the live-close group session before the composite cut");
+				"drain the live-close group session after the composite cut");
 
-		auto live_close = setup.fixture.registry->begin_reader_live_close(
-			*setup.fixture.family_pin,
-			setup.open,
-			handoff,
-			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
-			sqlite_shm_reader_close_request{close_callback});
-		require(
-			live_close && live_close->valid() && !live_close->close_ready() && !handoff.valid(),
-			"one move-only live-close owner atomically consumes group-unmap and connection-close");
+		auto ready = setup.fixture.registry->poll_reader_live_close_unmap_cut(
+			*setup.fixture.family_pin, setup.open, *live_close, close_callback);
+		require(ready &&
+					ready->progress == sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+					live_close->valid() && live_close->native_effect_ready() &&
+					!live_close->close_ready(),
+				"same composite owner becomes native-ready only after exact session drain");
 		const auto admitted =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
 		require(admitted.outstanding_terminal_permit_count == 2U &&
@@ -2432,6 +2501,13 @@ namespace
 					admitted.attachment_groups.front().phase ==
 						detail::sqlite_shm_reader_attachment_group_phase::native_unmap_admitted,
 				"composite close and group unmap share one exact lifecycle cut");
+		auto ready_again = setup.fixture.registry->poll_reader_live_close_unmap_cut(
+			*setup.fixture.family_pin, setup.open, *live_close, close_callback);
+		require(ready_again &&
+					ready_again->progress ==
+						sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+					live_close->native_effect_ready(),
+				"idempotent poll preserves the one already-admitted composite owner");
 
 		const auto premature_close_receipt =
 			sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
@@ -2468,7 +2544,8 @@ namespace
 		require(
 			unmapped &&
 				unmapped->kind() == sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
-				live_close->valid() && live_close->close_ready() &&
+				live_close->valid() && !live_close->native_effect_ready() &&
+				live_close->close_ready() &&
 				setup.fixture.registry->snapshot().active_activity_pin_count == 1U,
 			"confirmed composite unmap retires the group and only then exposes close readiness");
 
@@ -2589,7 +2666,8 @@ namespace
 			handoff,
 			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
 			sqlite_shm_reader_close_request{close_callback});
-		require(live_close && live_close->valid() && !live_close->close_ready() && !handoff.valid(),
+		require(live_close && live_close->valid() && live_close->native_effect_ready() &&
+					!live_close->close_ready() && !handoff.valid(),
 				"deferred owner and connection-close owner seal into one composite cut");
 		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
 			*live_close,
@@ -2645,7 +2723,8 @@ namespace
 			handoff,
 			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
 			sqlite_shm_reader_close_request{close_callback});
-		require(live_close && live_close->valid(), "admit live-close failure composite");
+		require(live_close && live_close->valid() && live_close->native_effect_ready(),
+				"admit live-close failure composite");
 		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
 			*live_close,
 			close_callback,
@@ -2676,6 +2755,850 @@ namespace
 				(forbidden_close.error().reason == sqlite_shm_lease_rejection_reason::stale_token ||
 				 forbidden_close.error().reason == sqlite_shm_lease_rejection_reason::quarantined),
 			"failed composite unmap never reconstructs or invokes the close owner");
+	}
+
+	void verify_live_close_cut_terminalizes_every_preexisting_map_outcome()
+	{
+		const auto drain_composite = [](reader_candidate_setup& setup,
+										sqlite_shm_reader_live_close_obligation& close,
+										const sqlite_shm_callback_execution_receipt& unmap_callback,
+										const sqlite_shm_callback_execution_receipt& close_callback,
+										const std::uint8_t marker)
+		{
+			const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				setup.session_request,
+				sqlite_shm_reader_session_terminal_kind::failure,
+				identity("test.registry.reader-live-close-map-session", marker));
+			require(
+				setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value(),
+				"drain the post-cut map session");
+			auto ready = setup.fixture.registry->poll_reader_live_close_unmap_cut(
+				*setup.fixture.family_pin, setup.open, close, close_callback);
+			require(ready &&
+						ready->progress ==
+							sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+						close.native_effect_ready(),
+					"post-cut map terminal leaves the same composite ready after session drain");
+			const auto unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+					close,
+					unmap_callback,
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					0,
+					0,
+					identity("test.registry.reader-live-close-map-unmap-effect", marker),
+					identity("test.registry.reader-live-close-map-unmap-latch", marker));
+			auto unmapped = setup.fixture.registry->complete_reader_live_close_unmap(
+				*setup.fixture.family_pin, setup.open, close, unmap_receipt);
+			require(unmapped &&
+						unmapped->kind() ==
+							sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+						close.close_ready(),
+					"post-cut map terminal preserves exactly one confirmed composite unmap");
+			const auto close_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+					close,
+					close_callback,
+					sqlite_shm_reader_close_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					identity("test.registry.reader-live-close-map-close-effect", marker));
+			auto closed = setup.fixture.registry->complete_reader_live_close(
+				*setup.fixture.family_pin, setup.open, close, close_receipt);
+			require(closed.has_value(),
+					"post-cut map terminal admits its confirmed close terminal");
+			require(closed->kind() == sqlite_shm_reader_close_terminal_kind::closed,
+					"post-cut map terminal records one confirmed close");
+			require(setup.fixture.registry->release_reader_open(setup.open).has_value(),
+					"release the post-cut map terminal reader open");
+			retire_writer(*setup.coordinator, setup.holder, static_cast<std::uint8_t>(marker + 1U));
+			require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+					"revoke post-cut map fixture writer eligibility");
+			clean_fixture(setup.fixture);
+		};
+
+		for (const auto [marker, exact_ok] :
+			 std::array{std::pair{140U, true}, std::pair{150U, false}})
+		{
+			auto setup = make_reader_candidate_setup(static_cast<std::uint8_t>(marker));
+			auto handoff = form_reader_group(setup, static_cast<std::uint8_t>(marker + 1U));
+			const auto map_request = reader_attachment_map_request(
+				setup.session_request, static_cast<std::uint8_t>(marker + 2U));
+			auto map = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(map && map->valid(), "begin map before live-close publication cut");
+			const auto unmap_callback = callback(static_cast<std::uint8_t>(marker + 3U));
+			const auto close_callback = callback(static_cast<std::uint8_t>(marker + 4U));
+			auto close = setup.fixture.registry->begin_reader_live_close(
+				*setup.fixture.family_pin,
+				setup.open,
+				handoff,
+				sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+				sqlite_shm_reader_close_request{close_callback});
+			require(close && close->valid() && !close->native_effect_ready() && !handoff.valid(),
+					"live-close cut freezes the earlier map before its terminal");
+
+			if (exact_ok)
+			{
+				const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+					map_request,
+					setup.holder.generation(),
+					mapping(setup.writer_attempt.native_page.get()),
+					identity("test.registry.reader-live-close-exact-map-effect",
+							 static_cast<std::uint8_t>(marker)));
+				auto suppressed = setup.fixture.registry->commit_reader_map(
+					*setup.fixture.family_pin, *map, receipt, setup.session);
+				require(!suppressed &&
+							suppressed.error().reason ==
+								sqlite_shm_lease_rejection_reason::retiring &&
+							suppressed.error().action ==
+								sqlite_shm_lease_recovery_action::outer_ioerr_no_retry &&
+							!map->valid() && setup.session.valid() && close->valid() &&
+							!close->native_effect_ready() &&
+							setup.coordinator->snapshot()
+									.reader_existing_group_deferred_cleanup_count == 1U,
+						"exact post-cut map effect is recorded but never publishes its pointer");
+			}
+			else
+			{
+				const auto receipt = sqlite_same_process_shm_lease_test_peer::
+					reader_existing_group_predecessor_mismatch(
+						*map,
+						map_request,
+						sqlite_readonly_status,
+						setup.writer_attempt.native_page.get(),
+						identity("test.registry.reader-live-close-mismatch-effect",
+								 static_cast<std::uint8_t>(marker)));
+				auto suppressed =
+					setup.fixture.registry->complete_reader_existing_group_predecessor_mismatch(
+						*setup.fixture.family_pin, *map, receipt, setup.session);
+				require(suppressed && suppressed->outward_status() == sqlite_ioerr_status &&
+							suppressed->native_mapping() == nullptr && !map->valid() &&
+							setup.session.valid() && close->valid() &&
+							!close->native_effect_ready() &&
+							setup.coordinator->snapshot()
+									.reader_existing_group_deferred_cleanup_count == 1U,
+						"mapped post-cut result reuses the existing composite cleanup owner");
+			}
+			drain_composite(setup,
+							*close,
+							unmap_callback,
+							close_callback,
+							static_cast<std::uint8_t>(marker + 5U));
+		}
+
+		constexpr std::uint8_t marker = 160U;
+		auto setup = make_reader_candidate_setup(marker);
+		auto handoff = form_reader_group(setup, marker + 1U);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 2U);
+		auto map = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		const auto unmap_callback = callback(marker + 3U);
+		const auto close_callback = callback(marker + 4U);
+		auto close = setup.fixture.registry->begin_reader_live_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			handoff,
+			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+			sqlite_shm_reader_close_request{close_callback});
+		require(map && close && close->valid(),
+				"begin opaque map and seal its exact live-close composite");
+		auto opaque = setup.fixture.registry->complete_reader_opaque_attachment_uncertainty(
+			*setup.fixture.family_pin, *map, setup.session);
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(
+			opaque && opaque->outward_status() == sqlite_ioerr_status &&
+				opaque->native_mapping() == nullptr && !map->valid() && !setup.session.valid() &&
+				!close->valid() && setup.coordinator->snapshot().quarantined &&
+				setup.fixture.registry->snapshot().quarantined_family_count == 1U &&
+				lifecycle.attachment_groups.size() == 1U && lifecycle.open_epochs.size() == 1U &&
+				lifecycle.attachment_groups.front().phase ==
+					detail::sqlite_shm_reader_attachment_group_phase::terminal_quarantined &&
+				lifecycle.open_epochs.front().phase ==
+					detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined,
+			"opaque post-cut map quarantines the composite group, open, and family at once");
+	}
+
+	void verify_two_pre_cut_maps_converge_on_one_live_close_composite()
+	{
+		enum class terminal_kind : std::uint8_t
+		{
+			exact,
+			mismatch,
+		};
+		struct row
+		{
+			std::uint8_t marker;
+			terminal_kind first;
+			terminal_kind second;
+		};
+
+		for (const auto current :
+			 std::array{row{21U, terminal_kind::exact, terminal_kind::exact},
+						row{41U, terminal_kind::mismatch, terminal_kind::mismatch},
+						row{61U, terminal_kind::exact, terminal_kind::mismatch},
+						row{71U, terminal_kind::mismatch, terminal_kind::exact}})
+		{
+			auto setup = make_reader_candidate_setup(current.marker);
+			auto handoff = form_reader_group(setup, current.marker + 1U);
+			auto second_pre_sqlite = setup.pre_sqlite;
+			second_pre_sqlite.read_transaction_epoch =
+				identity("test.registry.reader-live-close-pair-transaction", current.marker);
+			second_pre_sqlite.decode_attempt =
+				identity("test.registry.reader-live-close-pair-decode", current.marker);
+			second_pre_sqlite.authority_read_receipt =
+				identity("test.registry.reader-live-close-pair-authority", current.marker);
+			auto second_admission = setup.fixture.registry->admit_reader_session_before_sqlite(
+				*setup.fixture.family_pin, setup.open, second_pre_sqlite);
+			require(second_admission &&
+						second_admission->kind() ==
+							sqlite_shm_reader_session_admission_kind::active_group_owner_admitted &&
+						second_admission->proposal_request(),
+					"admit the second pre-cut live-close group session");
+			const auto second_session_request = *second_admission->proposal_request();
+			auto second_session = second_admission->take_session();
+			require(second_session && second_session->valid(),
+					"take the second pre-cut live-close group session");
+
+			const auto first_map_request =
+				reader_attachment_map_request(setup.session_request, current.marker + 2U);
+			const auto second_map_request =
+				reader_attachment_map_request(second_session_request, current.marker + 3U);
+			auto first_map = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, first_map_request);
+			auto second_map = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, *second_session, second_map_request);
+			require(first_map && first_map->valid() && second_map && second_map->valid(),
+					"begin two maps before the shared live-close cut");
+
+			const auto unmap_callback = callback(current.marker + 4U);
+			const auto close_callback = callback(current.marker + 5U);
+			auto close = setup.fixture.registry->begin_reader_live_close(
+				*setup.fixture.family_pin,
+				setup.open,
+				handoff,
+				sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+				sqlite_shm_reader_close_request{close_callback});
+			require(close && close->valid() && !close->native_effect_ready() && !handoff.valid(),
+					"one live-close composite seals both pre-cut maps and sessions");
+
+			const auto complete_map = [&](sqlite_shm_reader_attachment_map_inflight& map,
+										  sqlite_shm_reader_session& session,
+										  const sqlite_shm_reader_attachment_map_request& request,
+										  const terminal_kind kind,
+										  const std::uint8_t marker)
+			{
+				if (kind == terminal_kind::exact)
+				{
+					const auto receipt =
+						sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+							request,
+							setup.holder.generation(),
+							mapping(setup.writer_attempt.native_page.get()),
+							identity("test.registry.reader-live-close-pair-exact-effect", marker));
+					auto completed = setup.fixture.registry->commit_reader_map(
+						*setup.fixture.family_pin, map, receipt, session);
+					require(!completed &&
+								completed.error().reason ==
+									sqlite_shm_lease_rejection_reason::retiring &&
+								completed.error().action ==
+									sqlite_shm_lease_recovery_action::outer_ioerr_no_retry,
+							"exact mapped result after the cut is suppressed without a new owner");
+				}
+				else
+				{
+					const auto receipt = sqlite_same_process_shm_lease_test_peer::
+						reader_existing_group_predecessor_mismatch(
+							map,
+							request,
+							sqlite_readonly_status,
+							setup.writer_attempt.native_page.get(),
+							identity("test.registry.reader-live-close-pair-mismatch-effect",
+									 marker));
+					auto completed =
+						setup.fixture.registry->complete_reader_existing_group_predecessor_mismatch(
+							*setup.fixture.family_pin, map, receipt, session);
+					require(completed && completed->outward_status() == sqlite_ioerr_status &&
+								completed->native_mapping() == nullptr,
+							"mismatched mapped result after the cut reuses the composite owner");
+				}
+				require(!map.valid() && session.valid() && close->valid() &&
+							!close->native_effect_ready() &&
+							setup.coordinator->snapshot()
+									.reader_existing_group_deferred_cleanup_count == 1U,
+						"each post-cut map terminal converges on the same deferred composite");
+			};
+
+			complete_map(
+				*first_map, setup.session, first_map_request, current.first, current.marker + 6U);
+			complete_map(*second_map,
+						 *second_session,
+						 second_map_request,
+						 current.second,
+						 current.marker + 7U);
+			const auto converged =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto composite_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::close_cut_or_composite);
+			const auto waiter_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation);
+			const auto reporter_index =
+				static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::terminal_reporter);
+			require(converged.outstanding_terminal_permit_count == 4U &&
+						converged.live_custody_kind_counts[composite_index] == 1U &&
+						converged.live_custody_kind_counts[waiter_index] == 1U &&
+						converged.live_custody_kind_counts[reporter_index] == 1U &&
+						converged.attachment_groups.size() == 1U &&
+						converged.open_epochs.size() == 1U,
+					"two terminal outcomes retain one composite, waiter, and reporter custody");
+
+			const auto first_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+					setup.session_request,
+					sqlite_shm_reader_session_terminal_kind::success,
+					identity("test.registry.reader-live-close-pair-first-session", current.marker));
+			const auto second_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+					second_session_request,
+					sqlite_shm_reader_session_terminal_kind::success,
+					identity("test.registry.reader-live-close-pair-second-session",
+							 current.marker));
+			require(setup.fixture.registry
+							->complete_reader_session(
+								*setup.fixture.family_pin, setup.session, first_terminal)
+							.has_value() &&
+						setup.fixture.registry
+							->complete_reader_session(
+								*setup.fixture.family_pin, *second_session, second_terminal)
+							.has_value(),
+					"drain both sessions behind the one live-close cut");
+			auto ready = setup.fixture.registry->poll_reader_live_close_unmap_cut(
+				*setup.fixture.family_pin, setup.open, *close, close_callback);
+			require(ready &&
+						ready->progress ==
+							sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+						close->native_effect_ready(),
+					"both session terminals release one composite native-unmap owner");
+
+			const auto unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+					*close,
+					unmap_callback,
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					0,
+					0,
+					identity("test.registry.reader-live-close-pair-unmap-effect", current.marker),
+					identity("test.registry.reader-live-close-pair-latch", current.marker));
+			auto unmapped = setup.fixture.registry->complete_reader_live_close_unmap(
+				*setup.fixture.family_pin, setup.open, *close, unmap_receipt);
+			require(unmapped && close->close_ready(),
+					"the one composite unmap advances the exact close owner");
+			const auto close_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+					*close,
+					close_callback,
+					sqlite_shm_reader_close_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					identity("test.registry.reader-live-close-pair-close-effect", current.marker));
+			auto closed = setup.fixture.registry->complete_reader_live_close(
+				*setup.fixture.family_pin, setup.open, *close, close_receipt);
+			require(closed && closed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+						setup.fixture.registry->release_reader_open(setup.open).has_value(),
+					"the one composite owner closes and releases its exact open");
+			retire_writer(*setup.coordinator, setup.holder, current.marker + 8U);
+			require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+					"revoke the two-map composite writer eligibility");
+			require(!setup.coordinator->snapshot().quarantined &&
+						setup.coordinator->snapshot().reader_registry_bound_group_count == 0U,
+					"two pre-cut map terminals reach exact non-quarantined group quiescence");
+			auto compact =
+				sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+					*setup.coordinator);
+			auto closes =
+				sqlite_same_process_shm_lease_test_peer::export_reader_open_epoch_close_tombstones(
+					*setup.coordinator);
+			const auto replay_identities_are_nonempty = [](const auto& replay)
+			{
+				const auto identity_is_nonempty = [](const sqlite_backend_opaque_identity& value)
+				{
+					return !value.profile.empty() && !value.bytes.empty();
+				};
+				return std::ranges::all_of(replay.callback_invocation_tokens,
+										   identity_is_nonempty) &&
+					std::ranges::all_of(replay.effect_receipts, identity_is_nonempty) &&
+					std::ranges::all_of(replay.session_terminal_receipts, identity_is_nonempty);
+			};
+			require(
+				compact && compact->size() == 1U && closes && closes->size() == 1U &&
+					compact->front().attachment.family() == setup.fixture.family &&
+					closes->front().binding.family == setup.fixture.family &&
+					replay_identities_are_nonempty(compact->front().replay_identities) &&
+					replay_identities_are_nonempty(closes->front().replay_identities),
+				"multi-map composite exports exact-family tombstones with valid replay identities");
+			clean_fixture(setup.fixture);
+		}
+	}
+
+	void verify_live_close_replay_domain_collisions_quarantine_every_composite_owner()
+	{
+		enum class collision_kind : std::uint8_t
+		{
+			map_effect_with_unmap_invocation,
+			session_terminal_with_close_invocation,
+		};
+		struct row
+		{
+			std::uint8_t marker;
+			collision_kind kind;
+		};
+
+		for (const auto current :
+			 std::array{row{121U, collision_kind::map_effect_with_unmap_invocation},
+						row{131U, collision_kind::session_terminal_with_close_invocation}})
+		{
+			auto setup = make_reader_candidate_setup(current.marker);
+			auto handoff = form_reader_group(setup, current.marker + 1U);
+			const auto map_request =
+				reader_attachment_map_request(setup.session_request, current.marker + 2U);
+			auto map = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(map && map->valid(), "begin the pre-cut map for replay-domain collision");
+			const auto unmap_callback = callback(current.marker + 3U);
+			const auto close_callback = callback(current.marker + 4U);
+			auto close = setup.fixture.registry->begin_reader_live_close(
+				*setup.fixture.family_pin,
+				setup.open,
+				handoff,
+				sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+				sqlite_shm_reader_close_request{close_callback});
+			require(close && close->valid() && !close->native_effect_ready() && !handoff.valid(),
+					"seal the collision fixture behind one live-close composite");
+			const auto before =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(before.map_attempts.size() == 1U && before.session_reservations.size() == 1U,
+					"collision fixture retains exact map and session owners");
+			const auto map_token = before.map_attempts.front().map_token;
+			const auto session_token = before.session_reservations.front().session_token;
+
+			sqlite_shm_lease_rejection rejection{};
+			if (current.kind == collision_kind::map_effect_with_unmap_invocation)
+			{
+				const auto receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+					map_request,
+					setup.holder.generation(),
+					mapping(setup.writer_attempt.native_page.get()),
+					unmap_callback.invocation_token);
+				auto completed = setup.fixture.registry->commit_reader_map(
+					*setup.fixture.family_pin, *map, receipt, setup.session);
+				require(!completed,
+						"map effect cannot reuse the planned unmap invocation identity");
+				rejection = completed.error();
+			}
+			else
+			{
+				const auto terminal =
+					sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+						setup.session_request,
+						sqlite_shm_reader_session_terminal_kind::failure,
+						close_callback.invocation_token);
+				auto completed = setup.fixture.registry->complete_reader_session(
+					*setup.fixture.family_pin, setup.session, terminal);
+				require(!completed,
+						"session terminal cannot reuse the planned close invocation identity");
+				rejection = completed.error();
+			}
+
+			const auto lease = setup.coordinator->snapshot();
+			const auto registry = setup.fixture.registry->snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto map_quarantine =
+				std::ranges::find(lifecycle.terminal_quarantines,
+								  map_token,
+								  &sqlite_shm_reader_terminal_quarantine_test_view::owner_token);
+			const auto session_quarantine =
+				std::ranges::find(lifecycle.terminal_quarantines,
+								  session_token,
+								  &sqlite_shm_reader_terminal_quarantine_test_view::owner_token);
+			const auto composite_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::close_cut_or_composite);
+			const auto waiter_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation);
+			const auto reporter_index =
+				static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::terminal_reporter);
+			require((rejection.reason == sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
+					 rejection.reason == sqlite_shm_lease_rejection_reason::receipt_mismatch) &&
+						rejection.action == sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+						!map->valid() && !setup.session.valid() && !close->valid() &&
+						!setup.open.valid() && lease.quarantined &&
+						registry.quarantined_family_count == 1U,
+					"cross-domain collision quarantines map, session, group, open, and family");
+			require(
+				lifecycle.outstanding_terminal_permit_count == 0U &&
+					lifecycle.map_attempts.empty() && lifecycle.attachment_groups.size() == 1U &&
+					lifecycle.open_epochs.size() == 1U &&
+					lifecycle.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::terminal_quarantined &&
+					lifecycle.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined &&
+					map_quarantine != lifecycle.terminal_quarantines.end() &&
+					session_quarantine != lifecycle.terminal_quarantines.end(),
+				"collision retains exact map/session/group/open quarantine tombstones");
+			require(lifecycle.live_custody_kind_counts[composite_index] == 0U &&
+						lifecycle.live_custody_kind_counts[waiter_index] == 0U &&
+						lifecycle.live_custody_kind_counts[reporter_index] == 0U,
+					"collision leaves no live composite, waiter, or terminal-reporter custody");
+		}
+	}
+
+	void verify_live_close_same_thread_and_reentrant_waits_quarantine_after_cut()
+	{
+		struct row
+		{
+			std::uint8_t marker;
+			bool reentrant;
+		};
+		for (const auto current : std::array{row{82U, false}, row{92U, true}})
+		{
+			auto setup = make_reader_candidate_setup(current.marker);
+			auto handoff = form_reader_group(setup, current.marker + 1U);
+			const auto map_request =
+				reader_attachment_map_request(setup.session_request, current.marker + 2U);
+			auto map = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(map && map->valid(), "begin active map before same-thread live-close cut");
+			const sqlite_shm_callback_execution_receipt unmap_callback{
+				identity("test.registry.reader-live-close-unmap-thread", current.marker),
+				current.reentrant ? 1U : 0U,
+				identity("test.registry.reader-live-close-cut-unmap", current.marker)};
+			const sqlite_shm_callback_execution_receipt close_callback{
+				current.reentrant
+					? identity("test.registry.reader-live-close-close-thread", current.marker)
+					: map_request.callback.thread_identity,
+				0U,
+				identity("test.registry.reader-live-close-cut-close", current.marker)};
+			auto failed = setup.fixture.registry->begin_reader_live_close(
+				*setup.fixture.family_pin,
+				setup.open,
+				handoff,
+				sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+				sqlite_shm_reader_close_request{close_callback});
+			const auto lease = setup.coordinator->snapshot();
+			const auto registry = setup.fixture.registry->snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(
+				!failed &&
+					failed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!handoff.valid() && setup.session.valid() && lease.quarantined &&
+					registry.quarantined_family_count == 1U,
+				current.reentrant
+					? "reentrant live close consumes its cut then quarantines without native work"
+					: "same-thread live close consumes its cut then quarantines without native "
+					  "work");
+			require(lifecycle.attachment_groups.size() == 1U &&
+						lifecycle.open_epochs.size() == 1U && lifecycle.map_attempts.size() == 1U,
+					"same-thread close retains the exact quarantined group, open, and map rows");
+			require(lifecycle.outstanding_terminal_permit_count == 2U,
+					"same-thread close retains only map and session terminal permits");
+			require(
+				lifecycle.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::terminal_quarantined &&
+					lifecycle.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined,
+				"same-thread close quarantines group and open after the cut");
+			require(lifecycle.open_epochs.front().close_cut_sequence != 0U &&
+						lifecycle.open_epochs.front().close_cut_sequence >
+							lifecycle.attachment_groups.front().origin_sequence &&
+						lifecycle.attachment_groups.front().destination_sequence >
+							lifecycle.open_epochs.front().close_cut_sequence &&
+						lifecycle.open_epochs.front().destination_sequence >
+							lifecycle.open_epochs.front().close_cut_sequence,
+					"same-thread close records quarantine destinations after its shared cut");
+
+			const auto map_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					*map,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					map_request,
+					sqlite_busy_status,
+					nullptr,
+					0,
+					identity("test.registry.reader-live-close-cut-map-effect", current.marker));
+			auto rejected_terminal = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, *map, map_receipt, setup.session);
+			require(!rejected_terminal &&
+						rejected_terminal.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						!map->valid() && !setup.session.valid(),
+					"post-cut quarantine exposes no later map or session authority");
+		}
+	}
+
+	void verify_live_close_requires_the_exact_reader_open_at_every_boundary()
+	{
+		constexpr std::uint8_t marker = 170U;
+		auto setup = make_reader_candidate_setup(marker);
+		auto handoff = form_reader_group(setup, marker + 1U);
+		auto peer_request = reader_pre_sqlite_request(
+			setup.fixture,
+			identity("test.registry.reader-live-close-peer-connection", marker),
+			identity("test.registry.reader-live-close-peer-main-native", marker),
+			identity("test.registry.reader-live-close-peer-main-xopen", marker),
+			identity("test.registry.reader-live-close-peer-open", marker),
+			identity("test.registry.reader-live-close-peer-cohort", marker),
+			marker);
+		auto peer_open = acquire_reader_open(setup.fixture, peer_request);
+		const auto unmap_callback = callback(marker + 2U);
+		const auto close_callback = callback(marker + 3U);
+		auto close = setup.fixture.registry->begin_reader_live_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			handoff,
+			sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+			sqlite_shm_reader_close_request{close_callback});
+		require(close && close->valid() && !close->native_effect_ready() && !handoff.valid(),
+				"seal one waiting live close beside a distinct open in the same family");
+
+		const auto before_wrong_poll =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto registry_before_wrong_poll = setup.fixture.registry->snapshot();
+		auto wrong_poll = setup.fixture.registry->poll_reader_live_close_unmap_cut(
+			*setup.fixture.family_pin, peer_open, *close, close_callback);
+		const auto after_wrong_poll =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto registry_after_wrong_poll = setup.fixture.registry->snapshot();
+		require(
+			!wrong_poll &&
+				wrong_poll.error().reason == sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				close->valid() && peer_open.valid() &&
+				after_wrong_poll.last_issued_sequence == before_wrong_poll.last_issued_sequence &&
+				after_wrong_poll.last_committed_sequence ==
+					before_wrong_poll.last_committed_sequence &&
+				after_wrong_poll.outstanding_terminal_permit_slots ==
+					before_wrong_poll.outstanding_terminal_permit_slots &&
+				after_wrong_poll.live_custody_kind_counts ==
+					before_wrong_poll.live_custody_kind_counts &&
+				registry_after_wrong_poll.active_activity_pin_count ==
+					registry_before_wrong_poll.active_activity_pin_count &&
+				registry_after_wrong_poll.active_reader_open_count ==
+					registry_before_wrong_poll.active_reader_open_count,
+			"peer-open poll is rejected before sequence, custody, pin, or open mutation");
+		auto wrong_fail = setup.fixture.registry->fail_reader_live_close_unmap_cut_wait(
+			*setup.fixture.family_pin,
+			peer_open,
+			*close,
+			close_callback,
+			sqlite_shm_retirement_wait_failure::timeout);
+		const auto after_wrong_fail =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto registry_after_wrong_fail = setup.fixture.registry->snapshot();
+		require(
+			!wrong_fail &&
+				wrong_fail.error().reason == sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				close->valid() && peer_open.valid() && !close->native_effect_ready() &&
+				after_wrong_fail.last_issued_sequence == after_wrong_poll.last_issued_sequence &&
+				after_wrong_fail.last_committed_sequence ==
+					after_wrong_poll.last_committed_sequence &&
+				after_wrong_fail.outstanding_terminal_permit_slots ==
+					after_wrong_poll.outstanding_terminal_permit_slots &&
+				after_wrong_fail.live_custody_kind_counts ==
+					after_wrong_poll.live_custody_kind_counts &&
+				registry_after_wrong_fail.active_activity_pin_count ==
+					registry_after_wrong_poll.active_activity_pin_count &&
+				registry_after_wrong_fail.active_reader_open_count ==
+					registry_after_wrong_poll.active_reader_open_count &&
+				!setup.coordinator->snapshot().quarantined,
+			"peer-open wait failure is rejected before sequence, custody, pin, or open mutation");
+
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			setup.session_request,
+			sqlite_shm_reader_session_terminal_kind::success,
+			identity("test.registry.reader-live-close-peer-session", marker));
+		require(setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value(),
+				"drain the exact live-close session after peer-open rejection");
+		auto ready = setup.fixture.registry->poll_reader_live_close_unmap_cut(
+			*setup.fixture.family_pin, setup.open, *close, close_callback);
+		require(ready &&
+					ready->progress == sqlite_shm_reader_unmap_cut_progress::native_effect_ready &&
+					close->native_effect_ready(),
+				"exact open advances its preserved composite owner");
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*close,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.reader-live-close-peer-unmap-effect", marker),
+			identity("test.registry.reader-live-close-peer-unmap-latch", marker));
+		const auto before_wrong_complete =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto registry_before_wrong_complete = setup.fixture.registry->snapshot();
+		auto wrong_complete = setup.fixture.registry->complete_reader_live_close_unmap(
+			*setup.fixture.family_pin, peer_open, *close, unmap_receipt);
+		const auto after_wrong_complete =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto registry_after_wrong_complete = setup.fixture.registry->snapshot();
+		require(!wrong_complete &&
+					wrong_complete.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					close->valid() && peer_open.valid() && close->native_effect_ready() &&
+					after_wrong_complete.last_issued_sequence ==
+						before_wrong_complete.last_issued_sequence &&
+					after_wrong_complete.last_committed_sequence ==
+						before_wrong_complete.last_committed_sequence &&
+					after_wrong_complete.outstanding_terminal_permit_slots ==
+						before_wrong_complete.outstanding_terminal_permit_slots &&
+					after_wrong_complete.live_custody_kind_counts ==
+						before_wrong_complete.live_custody_kind_counts &&
+					registry_after_wrong_complete.active_activity_pin_count ==
+						registry_before_wrong_complete.active_activity_pin_count &&
+					registry_after_wrong_complete.active_reader_open_count ==
+						registry_before_wrong_complete.active_reader_open_count &&
+					!setup.coordinator->snapshot().quarantined,
+				"peer-open completion is rejected before sequence, custody, pin, or open mutation");
+		auto unmapped = setup.fixture.registry->complete_reader_live_close_unmap(
+			*setup.fixture.family_pin, setup.open, *close, unmap_receipt);
+		require(unmapped &&
+					unmapped->kind() == sqlite_shm_reader_unmap_terminal_kind::retired_confirmed &&
+					close->close_ready(),
+				"exact open consumes the same still-unspent unmap receipt");
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-live-close-peer-close-effect", marker));
+		const auto before_wrong_close =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		auto wrong_close = setup.fixture.registry->complete_reader_live_close(
+			*setup.fixture.family_pin, peer_open, *close, close_receipt);
+		const auto after_wrong_close =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(
+			!wrong_close &&
+				wrong_close.error().reason == sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				close->valid() && close->close_ready() && peer_open.valid() &&
+				after_wrong_close.last_issued_sequence == before_wrong_close.last_issued_sequence &&
+				after_wrong_close.last_committed_sequence ==
+					before_wrong_close.last_committed_sequence &&
+				after_wrong_close.outstanding_terminal_permit_slots ==
+					before_wrong_close.outstanding_terminal_permit_slots &&
+				after_wrong_close.live_custody_kind_counts ==
+					before_wrong_close.live_custody_kind_counts &&
+				!setup.coordinator->snapshot().quarantined,
+			"peer-open close is rejected before consuming the close-ready owner");
+		auto closed = setup.fixture.registry->complete_reader_live_close(
+			*setup.fixture.family_pin, setup.open, *close, close_receipt);
+		require(closed && closed->kind() == sqlite_shm_reader_close_terminal_kind::closed &&
+					setup.fixture.registry->release_reader_open(setup.open).has_value(),
+				"exact open completes and releases the preserved composite owner");
+		close_and_release_reader_open(setup.fixture, peer_open, marker + 4U);
+		retire_writer(*setup.coordinator, setup.holder, marker + 5U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke exact-open binding writer eligibility");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_live_close_wait_failures_synchronize_registry_quarantine()
+	{
+		struct row
+		{
+			std::uint8_t marker;
+			sqlite_shm_retirement_wait_failure failure;
+		};
+		for (const auto current :
+			 std::array{row{102U, sqlite_shm_retirement_wait_failure::timeout},
+						row{112U, sqlite_shm_retirement_wait_failure::unknown}})
+		{
+			auto setup = make_reader_candidate_setup(current.marker);
+			auto handoff = form_reader_group(setup, current.marker + 1U);
+			const auto unmap_callback = callback(current.marker + 2U);
+			const auto close_callback = callback(current.marker + 3U);
+			auto close = setup.fixture.registry->begin_reader_live_close(
+				*setup.fixture.family_pin,
+				setup.open,
+				handoff,
+				sqlite_shm_reader_unmap_request{unmap_callback, 0, 0},
+				sqlite_shm_reader_close_request{close_callback});
+			require(close && close->valid() && !close->native_effect_ready() && !handoff.valid(),
+					"live close retains one bounded other-thread wait owner");
+			const auto prefailed_unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+					*close,
+					unmap_callback,
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					0,
+					0,
+					identity("test.registry.reader-live-close-wait-prefailed-effect",
+							 current.marker),
+					identity("test.registry.reader-live-close-wait-prefailed-latch",
+							 current.marker));
+			const auto before = setup.fixture.registry->snapshot();
+			auto failed = setup.fixture.registry->fail_reader_live_close_unmap_cut_wait(
+				*setup.fixture.family_pin, setup.open, *close, close_callback, current.failure);
+			const auto lease = setup.coordinator->snapshot();
+			const auto registry = setup.fixture.registry->snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(
+				!failed &&
+					failed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!close->valid() && lease.quarantined &&
+					registry.quarantined_family_count == 1U &&
+					registry.active_activity_pin_count == before.active_activity_pin_count &&
+					lifecycle.attachment_groups.size() == 1U &&
+					lifecycle.open_epochs.size() == 1U &&
+					lifecycle.attachment_groups.front().phase ==
+						detail::sqlite_shm_reader_attachment_group_phase::terminal_quarantined &&
+					lifecycle.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined,
+				"live-close bounded wait failure quarantines group, open, and family once");
+			auto receipt_replay = setup.fixture.registry->complete_reader_live_close_unmap(
+				*setup.fixture.family_pin, setup.open, *close, prefailed_unmap_receipt);
+			const auto after_receipt_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(!receipt_replay &&
+						receipt_replay.error().reason !=
+							sqlite_shm_lease_rejection_reason::retiring &&
+						receipt_replay.error().action ==
+							sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+						!close->valid() && setup.coordinator->snapshot().quarantined &&
+						after_receipt_replay.last_committed_sequence ==
+							lifecycle.last_committed_sequence &&
+						after_receipt_replay.outstanding_terminal_permit_slots ==
+							lifecycle.outstanding_terminal_permit_slots,
+					"prefailed unmap evidence cannot revive native authority after wait failure");
+			auto replay = setup.fixture.registry->poll_reader_live_close_unmap_cut(
+				*setup.fixture.family_pin, setup.open, *close, close_callback);
+			require(!replay && !close->valid() &&
+						(replay.error().reason ==
+							 sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
+						 replay.error().reason == sqlite_shm_lease_rejection_reason::quarantined ||
+						 replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token),
+					"wait failure exposes no poll retry or reconstructed native authority");
+
+			const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+				setup.session_request,
+				sqlite_shm_reader_session_terminal_kind::failure,
+				identity("test.registry.reader-live-close-wait-session", current.marker));
+			require(setup.fixture.registry
+							->complete_reader_session(
+								*setup.fixture.family_pin, setup.session, terminal)
+							.has_value() &&
+						!setup.session.valid(),
+					"wait-failed live close preserves its established session drain");
+		}
 	}
 
 	struct reader_unpublished_cleanup_attempt
@@ -13469,6 +14392,12 @@ int main()
 		verify_live_reader_group_close_is_one_unmap_then_close_composite();
 		verify_deferred_reader_group_close_consumes_the_same_composite_owner();
 		verify_live_close_unmap_failure_exposes_zero_close_authority();
+		verify_live_close_cut_terminalizes_every_preexisting_map_outcome();
+		verify_two_pre_cut_maps_converge_on_one_live_close_composite();
+		verify_live_close_replay_domain_collisions_quarantine_every_composite_owner();
+		verify_live_close_same_thread_and_reentrant_waits_quarantine_after_cut();
+		verify_live_close_requires_the_exact_reader_open_at_every_boundary();
+		verify_live_close_wait_failures_synchronize_registry_quarantine();
 		verify_confirmed_reader_group_allows_same_open_fresh_attachment_epoch();
 		verify_live_reader_group_new_page_mints_fresh_predelegate();
 		verify_registry_reader_liveness_loss_is_sticky_and_retains_authority();

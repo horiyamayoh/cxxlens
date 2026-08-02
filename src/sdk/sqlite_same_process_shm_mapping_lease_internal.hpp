@@ -2252,6 +2252,7 @@ namespace cxxlens::sdk
 		first_member,
 		new_member,
 		existing_member_revalidation,
+		suppressed_after_cut,
 	};
 
 	/**
@@ -2399,9 +2400,10 @@ namespace cxxlens::sdk
 	/**
 	 * One move-only composite close owner for an exact live proposal attachment group.
 	 *
-	 * The owner first exposes the already-consumed group-wide xShmUnmap permit. Only an exact
-	 * confirmed unmap terminal advances it to the orthogonal xClose phase; every other terminal
-	 * permanently quarantines the open epoch and exposes no close authority.
+	 * The owner first exposes either one bounded-wait continuation or the already-consumed
+	 * group-wide xShmUnmap permit. Only an exact confirmed unmap terminal advances it to the
+	 * orthogonal xClose phase; every other terminal permanently quarantines the open epoch and
+	 * exposes no close authority.
 	 */
 	class sqlite_shm_reader_live_close_obligation
 	{
@@ -2416,6 +2418,7 @@ namespace cxxlens::sdk
 		operator=(const sqlite_shm_reader_live_close_obligation&) = delete;
 
 		[[nodiscard]] bool valid() const noexcept;
+		[[nodiscard]] bool native_effect_ready() const noexcept;
 		[[nodiscard]] bool close_ready() const noexcept;
 		[[nodiscard]] std::uint64_t generation() const noexcept;
 
@@ -2427,6 +2430,7 @@ namespace cxxlens::sdk
 
 		enum class phase : std::uint8_t
 		{
+			unmap_waiting,
 			unmap_admitted,
 			close_ready,
 		};
@@ -2436,7 +2440,8 @@ namespace cxxlens::sdk
 			detail::sqlite_shm_lease_token_identity group_token,
 			detail::sqlite_shm_mapping_generation_identity generation,
 			detail::sqlite_shm_lease_token_identity close_owner_token,
-			std::uint64_t registry_open_token) noexcept;
+			std::uint64_t registry_open_token,
+			phase initial_phase) noexcept;
 		void disable_terminal_presentation() noexcept;
 		void disarm() noexcept;
 
@@ -2711,8 +2716,25 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_handoff& handoff,
 			const sqlite_shm_reader_unmap_request& unmap_request,
 			const sqlite_shm_reader_close_request& close_request) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_cut_result>
+		poll_registry_reader_live_close_unmap_cut(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			sqlite_shm_reader_live_close_obligation& close,
+			const sqlite_shm_callback_execution_receipt& close_callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void> fail_registry_reader_live_close_unmap_cut_wait(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
+			sqlite_shm_reader_live_close_obligation& close,
+			const sqlite_shm_callback_execution_receipt& close_callback,
+			sqlite_shm_retirement_wait_failure failure) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_terminal_result>
 		complete_registry_reader_live_close_unmap(
+			std::uint64_t registry_open_token,
+			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal,
+			const sqlite_shm_reader_open_epoch_binding& binding,
 			sqlite_shm_reader_live_close_obligation& close,
 			const sqlite_shm_verified_reader_unmap_terminal_receipt& receipt,
 			std::optional<sqlite_shm_reader_attachment_authority>& completed_activity) noexcept;

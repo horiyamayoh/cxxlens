@@ -950,6 +950,18 @@ namespace cxxlens::sdk
 								sqlite_shm_reader_handoff& handoff,
 								const sqlite_shm_reader_unmap_request& unmap_request,
 								const sqlite_shm_reader_close_request& close_request) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_cut_result>
+		poll_reader_live_close_unmap_cut(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_open_authority& open,
+			sqlite_shm_reader_live_close_obligation& close,
+			const sqlite_shm_callback_execution_receipt& close_callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void> fail_reader_live_close_unmap_cut_wait(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_open_authority& open,
+			sqlite_shm_reader_live_close_obligation& close,
+			const sqlite_shm_callback_execution_receipt& close_callback,
+			sqlite_shm_retirement_wait_failure failure) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_terminal_result>
 		complete_reader_live_close_unmap(
 			sqlite_shm_registry_family_pin& family,
