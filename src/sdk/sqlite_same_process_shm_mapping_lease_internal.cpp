@@ -4821,7 +4821,9 @@ namespace cxxlens::sdk
 							sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
 						return sqlite_shm_unexpected(ambiguous());
 					}
-					if (!callback_can_start_locked(request.callback) ||
+					if (reader_callback_was_completed_locked(request.callback) ||
+						!callback_can_start_locked(
+							request.callback, 0U, phase1_waiting ? phase1_group->token : 0U) ||
 						reader_effect_identity_seen_locked(
 							request.callback.invocation_token, 0U, 0U, 0U) ||
 						reader_session_terminal_identity_seen_locked(
@@ -5359,6 +5361,10 @@ namespace cxxlens::sdk
 						close.owner_token_ == open->close_owner_token && !close.route_ &&
 						close.phase_ ==
 							sqlite_shm_reader_close_obligation::phase::reservation_waiting &&
+						close.generation_ == group->generation &&
+						close.wait_resolution_sequence_slot_ != 0U &&
+						close.wait_resolution_sequence_slot_ ==
+							group->composite_close_wait_resolution_sequence_slot &&
 						open->close_callback && *open->close_callback == close_callback &&
 						reader_phase1_close_cut_is_exact_locked(*group, *open) &&
 						reader_open_close_custody_census_is_exact_locked(
@@ -18427,6 +18433,20 @@ namespace cxxlens::sdk
 					}
 					else
 						emergency_quarantine_.store(true, std::memory_order_release);
+				}
+				// A terminal group can no longer consume the speculative cut/terminal pair
+				// reserved by an in-flight first map.  Keep only the map/session terminal
+				// reservations needed to account for the already-started native callback.
+				for (auto& map : reader_attachment_maps_)
+				{
+					if (map.group_token != group.token)
+						continue;
+					cancel_reader_lifecycle_terminal_slot_locked(
+						map.potential_group_cut_sequence_slot);
+					cancel_reader_lifecycle_terminal_slot_locked(
+						map.potential_group_terminal_sequence_slot);
+					map.potential_group_cut_sequence_slot = 0U;
+					map.potential_group_terminal_sequence_slot = 0U;
 				}
 				if (!reader_reservation_is_compactable(group))
 					group.reservation_phase =

@@ -8405,8 +8405,32 @@ namespace
 		auto lifecycle_tombstones =
 			sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
 				*setup.coordinator);
-		require(lifecycle_tombstones && lifecycle_tombstones->size() == 1U,
-				"mapped cleanup close exports one exact durable lifecycle tombstone");
+		auto close_tombstones =
+			sqlite_same_process_shm_lease_test_peer::export_reader_open_epoch_close_tombstones(
+				*setup.coordinator);
+		require(lifecycle_tombstones && lifecycle_tombstones->size() == 1U && close_tombstones &&
+					close_tombstones->size() == 1U &&
+					lifecycle_tombstones->front().unpublished_cleanup_terminal_sequence <
+						lifecycle_tombstones->front().logical_ack_sequence &&
+					lifecycle_tombstones->front().logical_ack_sequence <
+						lifecycle_tombstones->front().composite_close_wait_resolution_sequence &&
+					lifecycle_tombstones->front().composite_close_wait_resolution_sequence <
+						close_tombstones->front().terminal_sequence,
+				"mapped cleanup close exports exact cleanup, ack, wait, and close ordering");
+		auto forged_order = *lifecycle_tombstones;
+		std::swap(forged_order.front().logical_ack_sequence,
+				  forged_order.front().composite_close_wait_resolution_sequence);
+		auto rejected_order =
+			sqlite_same_process_shm_lease_test_peer::import_reader_lifecycle_tombstones(
+				*setup.coordinator, std::span{forged_order});
+		auto after_rejected_order =
+			sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+				*setup.coordinator);
+		require(!rejected_order &&
+					rejected_order.error().reason ==
+						sqlite_shm_lease_rejection_reason::invalid_request &&
+					after_rejected_order && *after_rejected_order == *lifecycle_tombstones,
+				"compact import rejects ack-after-wait ordering without mutating evidence");
 		clean_fixture(setup.fixture);
 	}
 
@@ -8485,6 +8509,256 @@ namespace
 		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
 				"revoke first-map predecessor-close writer eligibility");
 		clean_fixture(setup.fixture);
+	}
+
+	void verify_reader_first_map_close_cut_quarantines_opaque_terminal()
+	{
+		constexpr std::uint8_t marker = 184U;
+		auto setup = make_reader_candidate_setup(marker);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 1U);
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin first-map close-cut opaque fixture");
+		const auto close_callback = callback(marker + 20U);
+		auto close = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin, setup.open, sqlite_shm_reader_close_request{close_callback});
+		require(close && close->valid() && !close->native_effect_ready() && !close->route(),
+				"opaque first-map close installs one waiting cut");
+		const auto prebuilt_close_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+				*close,
+				close_callback,
+				sqlite_shm_reader_close_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				identity("test.registry.reader-first-close-opaque-native", marker));
+		const auto pins_before = setup.fixture.registry->snapshot().active_activity_pin_count;
+		auto opaque = setup.fixture.registry->complete_reader_opaque_attachment_uncertainty(
+			*setup.fixture.family_pin, *inflight, setup.session);
+		const auto lease = setup.coordinator->snapshot();
+		const auto registry = setup.fixture.registry->snapshot();
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto waiter_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation);
+		const auto reporter_index =
+			static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::terminal_reporter);
+		require(opaque && opaque->outward_status() == sqlite_ioerr_status &&
+					opaque->native_mapping() == nullptr && !inflight->valid() &&
+					!setup.session.valid() && !close->valid(),
+				"opaque terminal exposes IOERR/null and no close native authority");
+		require(lease.quarantined && lease.reader_opaque_attachment_uncertainty_count == 1U &&
+					lease.reader_attachment_group_count == 0U &&
+					lease.reader_registry_activity_authority_count == 2U &&
+					registry.quarantined_family_count == 1U &&
+					registry.active_activity_pin_count == pins_before,
+				"opaque close-cut terminal retains both exact registry lifetimes in quarantine");
+		require(lifecycle.outstanding_terminal_permit_count == 0U &&
+					lifecycle.open_epochs.size() == 1U &&
+					lifecycle.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined &&
+					lifecycle.live_custody_kind_counts[waiter_index] == 0U &&
+					lifecycle.live_custody_kind_counts[reporter_index] == 0U,
+				"opaque terminal consumes close wait slots and tombstones waiter/report custody");
+		const auto before_replay = lifecycle;
+		auto close_replay = setup.fixture.registry->complete_reader_close(
+			*setup.fixture.family_pin, setup.open, *close, prebuilt_close_receipt);
+		auto poll_replay = setup.fixture.registry->poll_reader_close_cut(
+			*setup.fixture.family_pin, setup.open, *close, close_callback);
+		const auto after_replay =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(!close_replay && !poll_replay && !close->valid() &&
+					after_replay.last_committed_sequence == before_replay.last_committed_sequence &&
+					after_replay.outstanding_terminal_permit_slots ==
+						before_replay.outstanding_terminal_permit_slots &&
+					after_replay.live_custody_kind_counts == before_replay.live_custody_kind_counts,
+				"opaque terminal replay cannot reconstruct poll or native close authority");
+	}
+
+	void verify_reader_first_map_close_cut_wait_failures_quarantine()
+	{
+		struct row
+		{
+			std::uint8_t marker;
+			sqlite_shm_retirement_wait_failure failure;
+		};
+		for (const auto current :
+			 std::array{row{194U, sqlite_shm_retirement_wait_failure::timeout},
+						row{204U, sqlite_shm_retirement_wait_failure::unknown}})
+		{
+			auto setup = make_reader_candidate_setup(current.marker);
+			const auto map_request =
+				reader_attachment_map_request(setup.session_request, current.marker + 1U);
+			auto inflight = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(inflight && inflight->valid(), "begin first-map close wait-failure fixture");
+			const auto close_callback = callback(current.marker + 20U);
+			auto close = setup.fixture.registry->begin_reader_close(
+				*setup.fixture.family_pin,
+				setup.open,
+				sqlite_shm_reader_close_request{close_callback});
+			require(close && close->valid() && !close->native_effect_ready() && !close->route(),
+					"first-map close retains one bounded other-thread wait owner");
+			const auto prebuilt_close_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+					*close,
+					close_callback,
+					sqlite_shm_reader_close_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					identity("test.registry.reader-first-close-wait-native", current.marker));
+			const auto pins_before = setup.fixture.registry->snapshot().active_activity_pin_count;
+			auto failed = setup.fixture.registry->fail_reader_close_cut_wait(
+				*setup.fixture.family_pin, setup.open, *close, close_callback, current.failure);
+			const auto lease = setup.coordinator->snapshot();
+			const auto registry = setup.fixture.registry->snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto waiter_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation);
+			const auto reporter_index =
+				static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::terminal_reporter);
+			require(
+				!failed &&
+					failed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!close->valid() && inflight->valid() && setup.session.valid() &&
+					lease.quarantined && registry.quarantined_family_count == 1U &&
+					registry.active_activity_pin_count == pins_before,
+				"first-map close wait failure quarantines without releasing native-started drains");
+			require(
+				lifecycle.outstanding_terminal_permit_count == 2U &&
+					lifecycle.open_epochs.size() == 1U &&
+					lifecycle.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined &&
+					lifecycle.live_custody_kind_counts[waiter_index] == 0U &&
+					lifecycle.live_custody_kind_counts[reporter_index] == 0U,
+				"wait failure consumes only close/wait permits and tombstones its reporters");
+			auto close_replay = setup.fixture.registry->complete_reader_close(
+				*setup.fixture.family_pin, setup.open, *close, prebuilt_close_receipt);
+			auto poll_replay = setup.fixture.registry->poll_reader_close_cut(
+				*setup.fixture.family_pin, setup.open, *close, close_callback);
+			const auto after_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(!close_replay && !poll_replay && !close->valid() &&
+						after_replay.last_committed_sequence == lifecycle.last_committed_sequence &&
+						after_replay.outstanding_terminal_permit_slots ==
+							lifecycle.outstanding_terminal_permit_slots &&
+						after_replay.live_custody_kind_counts == lifecycle.live_custody_kind_counts,
+					"wait failure replay cannot revive a ready or native close route");
+		}
+	}
+
+	void verify_reader_first_map_close_cut_same_thread_and_reentrant_quarantine()
+	{
+		struct row
+		{
+			std::uint8_t marker;
+			bool reentrant;
+		};
+		for (const auto current : std::array{row{214U, false}, row{224U, true}})
+		{
+			auto setup = make_reader_candidate_setup(current.marker);
+			const auto map_request =
+				reader_attachment_map_request(setup.session_request, current.marker + 1U);
+			auto inflight = setup.fixture.registry->begin_reader_map(
+				*setup.fixture.family_pin, setup.session, map_request);
+			require(inflight && inflight->valid(), "begin same-thread first-map close fixture");
+			const sqlite_shm_callback_execution_receipt close_callback{
+				current.reentrant
+					? identity("test.registry.reader-first-close-reentrant-thread", current.marker)
+					: map_request.callback.thread_identity,
+				current.reentrant ? 1U : 0U,
+				identity("test.registry.reader-first-close-same-thread-call", current.marker)};
+			auto failed = setup.fixture.registry->begin_reader_close(
+				*setup.fixture.family_pin,
+				setup.open,
+				sqlite_shm_reader_close_request{close_callback});
+			const auto lease = setup.coordinator->snapshot();
+			const auto registry = setup.fixture.registry->snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			const auto waiter_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation);
+			const auto reporter_index =
+				static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::terminal_reporter);
+			require(!failed &&
+						failed.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						inflight->valid() && setup.session.valid() && lease.quarantined &&
+						registry.quarantined_family_count == 1U,
+					current.reentrant
+						? "reentrant first-map close cuts then quarantines without waiting"
+						: "same-thread first-map close cuts then quarantines without waiting");
+			require(
+				lifecycle.outstanding_terminal_permit_count == 2U &&
+					lifecycle.open_epochs.size() == 1U &&
+					lifecycle.open_epochs.front().close_cut_sequence != 0U &&
+					lifecycle.open_epochs.front().phase ==
+						detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined &&
+					lifecycle.live_custody_kind_counts[waiter_index] == 0U &&
+					lifecycle.live_custody_kind_counts[reporter_index] == 0U,
+				"same-thread close leaves only the already-started map/session permits");
+			const auto zero_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					*inflight,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					map_request,
+					sqlite_busy_status,
+					nullptr,
+					0,
+					identity("test.registry.reader-first-close-same-thread-map", current.marker));
+			auto rejected = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, *inflight, zero_receipt, setup.session);
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						!inflight->valid() && !setup.session.valid(),
+					"post-cut quarantine exposes no map or session publication authority");
+		}
+	}
+
+	void verify_reader_first_map_close_cut_rejects_reused_invocation_identity()
+	{
+		constexpr std::uint8_t marker = 232U;
+		auto setup = make_reader_candidate_setup(marker);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 1U);
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin reused close-invocation fixture");
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(before.open_epochs.size() == 1U,
+				"reused close-invocation fixture has one exact open epoch");
+		const sqlite_shm_callback_execution_receipt reused_callback{
+			map_request.callback.thread_identity, 0U, map_request.callback.invocation_token};
+		auto failed = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			sqlite_shm_reader_close_request{reused_callback});
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto waiter_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation);
+		const auto reporter_index =
+			static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::terminal_reporter);
+		auto expected_slots = before.outstanding_terminal_permit_slots;
+		std::erase(expected_slots, before.open_epochs.front().close_cut_permit_slot);
+		std::erase(expected_slots, before.open_epochs.front().close_terminal_permit_slot);
+		require(
+			!failed &&
+				failed.error().reason == sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+				failed.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+				inflight->valid() && setup.session.valid() &&
+				setup.coordinator->snapshot().quarantined &&
+				setup.fixture.registry->snapshot().quarantined_family_count == 1U &&
+				lifecycle.outstanding_terminal_permit_slots == expected_slots &&
+				lifecycle.open_epochs.size() == 1U &&
+				lifecycle.open_epochs.front().close_cut_sequence == 0U &&
+				lifecycle.open_epochs.front().destination_sequence != 0U &&
+				lifecycle.open_epochs.front().phase ==
+					detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined &&
+				lifecycle.live_custody_kind_counts[waiter_index] == 0U &&
+				lifecycle.live_custody_kind_counts[reporter_index] == 0U,
+			"reused map invocation is rejected before creating close-cut or wait authority");
 	}
 
 	void verify_peer_quarantine_preserves_exact_reader_close_drain()
@@ -14630,6 +14904,10 @@ int main()
 		verify_reader_first_map_close_cut_drains_zero_terminal();
 		verify_reader_first_map_close_cut_converges_mapped_cleanup_ack();
 		verify_reader_first_map_close_cut_converges_predecessor();
+		verify_reader_first_map_close_cut_quarantines_opaque_terminal();
+		verify_reader_first_map_close_cut_wait_failures_quarantine();
+		verify_reader_first_map_close_cut_same_thread_and_reentrant_quarantine();
+		verify_reader_first_map_close_cut_rejects_reused_invocation_identity();
 		verify_peer_quarantine_preserves_exact_reader_close_drain();
 		verify_reader_lifecycle_compact_export_requires_xclose_evidence();
 		verify_callback_free_reader_tombstone_survives_family_recreation();
