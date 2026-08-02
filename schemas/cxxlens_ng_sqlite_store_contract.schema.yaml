@@ -921,11 +921,12 @@ $defs:
                       positive: [active-proposal-group-admits-one-exact-session-owner, exact-live-local-generation-admits-one-generation-bound-proposal-reservation, ordinary-existing-cross-process-or-no-local-generation-enters-existing-byte-route-with-zero-proposal-custody, ambiguous-or-cut-partition-rejects-before-SQLite-entry]
                   reader_late_close_cleanup_amendment_proposal:
                     id: cxxlens.sqlite.reader-late-close-cleanup.v1
-                    status: proposed-unqualified-non-authorizing
+                    status: accepted-authority-implementation-pending
                     tracking: {issue: '#209', feedback: DF-0209}
+                    acceptance_review_receipt: exact-proposal-commit-e47ef147ddd1e5172f37643ca79403e62ecde963-issue-209-semantic-comment-5154882128-structural-comment-5154880206-fresh-independent-P0-0-P1-0-P2-0-authorizes-only-internal-reader-late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-and-focused-tests-production-VFS-public-API-native-OK-writer-and-unrelated-reader-authority-remain-blocked
                     authority_boundary:
-                      normative_effect: proposal-only-no-current-authority-change-no-runtime-or-test-behavior-is-authorized-by-this-subtree
-                      implementation_disposition: blocked-until-an-exact-proposal-commit-receives-fresh-independent-semantic-and-structural-review-and-the-four-authority-mirrors-are-explicitly-accepted
+                      normative_effect: accepted-narrow-internal-authority-for-the-reader-late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-and-focused-tests-only
+                      implementation_disposition: may-proceed-only-for-the-exact-narrow-internal-scope-named-by-the-acceptance-review-receipt
                       accepted_reader_authority: cxxlens.sqlite.reader-shm-native-attachment.v1-remains-byte-semantically-unchanged-and-controlling
                     scope: one-original-first-map-callback-drain-after-pre-cleanup-terminal-close-quarantine-only-no-production-vfs-public-api-native-OK-writer-or-other-reader-authority-change
                     eligibility:
@@ -980,7 +981,9 @@ $defs:
                       positive: [precleanup-close-quarantine-retains-one-original-callback-drain-subledger, issuer-sealed-one-shot-outer-unwind-caller-owner-remains-in-original-map-session-call-context-while-cut-arms-only-registry-validation-seal-and-control-with-complete-binding, exact-outer-entry-moves-the-caller-owner-under-the-registry-mutex-and-peer-callback-has-no-owner, same-thread-reentrant-or-bounded-other-thread-timeout-unknown-close-terminal-provenance-proves-zero-xClose-zero-prior-ack-and-exact-sequence, exact-late-mapped-original-callback-cleans-up-once-with-no-pointer-or-group-publication, exact-successful-unpublished-first-cleanup-installs-one-ack, exact-outer-open-epoch-xShmUnmap-zero-presents-one-authority-and-consumes-one-ack-with-zero-native-effect, wrong-or-duplicate-presentation-preserves-valid-owner-and-ack, exact-owner-indeterminate-or-destruction-submits-one-terminal-row-terminalizes-ack-and-retains-all-pins-with-zero-native-retry-or-reconstruction, confirmed-after-close-replay-is-zero-native-IOERR, ack-consumption-retains-all-close-quarantine-pins-and-terminal-states]
                     authorization:
                       before_independent_acceptance: contract-edit-readonly-audit-and-temporary-reproduction-only-no-runtime-test-state-machine-production-native-OK-or-public-API-implementation
-                      acceptance_requirement: fresh-independent-semantic-and-structural-review-of-the-exact-proposal-commit-plus-explicit-status-review-receipt-and-resolution-ref-replacement-in-all-four-authority-mirrors
+                      acceptance_requirement: satisfied-only-by-exact-proposal-commit-e47ef147ddd1e5172f37643ca79403e62ecde963-and-issue-209-semantic-comment-5154882128-structural-comment-5154880206-with-P0-0-P1-0-P2-0-and-identical-explicit-acceptance-in-all-four-authority-mirrors
+                      after_acceptance: internal-reader-late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-registry-callback-gates-and-focused-tests-may-be-implemented
+                      production_activation: blocked-until-the-distinct-exact-implementation-complete-counterexample-matrix-production-VFS-public-native-OK-and-race-qualification-receive-separate-independent-review
                       transitive_authorization: forbidden-this-proposal-does-not-authorize-any-reader-writer-close-group-production-VFS-public-API-or-native-OK-behavior
                       public_api: unchanged
                   writer_gate_outcome_evidence_amendment_proposal:

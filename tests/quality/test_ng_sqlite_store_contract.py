@@ -299,10 +299,28 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
         )
         self.assertEqual(
-            late_close["status"], "proposed-unqualified-non-authorizing"
+            late_close["status"], "accepted-authority-implementation-pending"
         )
         self.assertEqual(
             late_close["tracking"], {"issue": "#209", "feedback": "DF-0209"}
+        )
+        self.assertEqual(
+            late_close["acceptance_review_receipt"],
+            "exact-proposal-commit-e47ef147ddd1e5172f37643ca79403e62ecde963-"
+            "issue-209-semantic-comment-5154882128-structural-comment-5154880206-"
+            "fresh-independent-P0-0-P1-0-P2-0-authorizes-only-internal-reader-"
+            "late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-"
+            "and-focused-tests-production-VFS-public-API-native-OK-writer-and-"
+            "unrelated-reader-authority-remain-blocked",
+        )
+        self.assertIn(
+            "internal-reader-late-close-cleanup-owner-seal-provenance-drain-"
+            "ack-state-machine",
+            late_close["authorization"]["after_acceptance"],
+        )
+        self.assertIn(
+            "blocked-until-the-distinct-exact-implementation-complete",
+            late_close["authorization"]["production_activation"],
         )
         self.assertEqual(
             late_close["drain_subledger"]["retained_pins"],
@@ -1790,10 +1808,22 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "reader-late-close-cleanup-status-self-authorized",
+                "reader-late-close-cleanup-status-regressed",
                 lambda value: reader_late_close_cleanup(value).__setitem__(
-                    "status", "accepted-authority-implementation-pending"
+                    "status", "proposed-unqualified-non-authorizing"
                 ),
+            ),
+            (
+                "reader-late-close-cleanup-review-receipt-removed",
+                lambda value: reader_late_close_cleanup(value).pop(
+                    "acceptance_review_receipt"
+                ),
+            ),
+            (
+                "reader-late-close-cleanup-production-self-authorized",
+                lambda value: reader_late_close_cleanup(value)[
+                    "authorization"
+                ].__setitem__("production_activation", "allowed"),
             ),
             (
                 "reader-late-close-cleanup-outer-ack-open-ended",

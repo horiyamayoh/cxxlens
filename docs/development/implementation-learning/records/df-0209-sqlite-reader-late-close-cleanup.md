@@ -1,11 +1,11 @@
 ---
 id: DF-0209
 title: Resolve SQLite reader cleanup after close quarantine
-status: proposed
+status: accepted
 kind: contract-contradiction
 impact: invariant
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - store.sqlite-same-process-shm-mapping
   - store.sqlite-reader-native-attachment-lifetime
@@ -22,14 +22,26 @@ authority_refs:
 tracking_issue: '#209'
 implementation_issues:
   - '#181'
-resolution_refs: []
+resolution_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0013-ng-sqlite-physical-store.md
+  - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+  - schemas/cxxlens_ng_sqlite_store_contract.yaml
+  - schemas/cxxlens_ng_sqlite_store_contract.schema.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.schema.yaml
+  - tools/quality/check_ng_sqlite_store_contract.py
+  - tools/quality/check_ng_snapshot_store_contract.py
+  - tests/quality/test_ng_sqlite_store_contract.py
+  - tests/quality/test_ng_snapshot_store_contract.py
 review:
   mode: independent
-  status: pending
-  author: codex-agent-sqlite-reader-late-close-observation
-  reviewer: null
+  status: complete
+  author: codex-agent-sqlite-reader-late-close-authority-draft
+  reviewer: codex-agent-fresh-independent-df0209-semantic-and-structural-review
   refs:
-    - https://github.com/horiyamayoh/cxxlens/issues/209
+    - https://github.com/horiyamayoh/cxxlens/issues/209#issuecomment-5154882128
+    - https://github.com/horiyamayoh/cxxlens/issues/209#issuecomment-5154880206
 created: '2026-08-02'
 ---
 
@@ -169,3 +181,17 @@ Snapshot schema digest pin:
 added. Review metadata remains `pending` because the materially revised exact proposal commit has not yet
 received fresh independent semantic and structural review. Status remains `proposed`, disposition remains
 `blocked`, and the revised subtree still authorizes no runtime or test implementation.
+
+2026-08-02: The revised exact proposal commit
+`e47ef147ddd1e5172f37643ca79403e62ecde963` received fresh independent semantic review with
+P0=0, P1=0, P2=0
+(<https://github.com/horiyamayoh/cxxlens/issues/209#issuecomment-5154882128>) and fresh independent
+structural review with P0=0, P1=0, P2=0
+(<https://github.com/horiyamayoh/cxxlens/issues/209#issuecomment-5154880206>). The four normative
+mirrors now explicitly accept the exact proposal and bind that exact commit and both review receipts.
+Status is `accepted` and `implementation_disposition` is `may-proceed` only for the internal reader
+late-close cleanup owner/seal, closed provenance, callback-drain, logical-ack state machine, registry
+callback gates, and focused tests named by `cxxlens.sqlite.reader-late-close-cleanup.v1`. Production VFS,
+public API, native `SQLITE_OK` projection, writer behavior, unrelated reader authority, and production
+activation remain blocked pending a distinct exact implementation-complete counterexample matrix and
+separate independent review.
