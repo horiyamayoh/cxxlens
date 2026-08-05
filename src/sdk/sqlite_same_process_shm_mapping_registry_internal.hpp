@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -13,6 +14,7 @@ namespace cxxlens::sdk
 {
 	namespace detail
 	{
+		class sqlite_shm_process_identity_issuer_state;
 		struct sqlite_shm_registry_process_owner_seal;
 		struct sqlite_shm_registry_runtime_owner_box;
 		struct sqlite_shm_registry_activity_control;
@@ -40,6 +42,9 @@ namespace cxxlens::sdk
 	} // namespace detail
 
 	class sqlite_same_process_shm_registry_test_peer;
+	class sqlite_shm_process_global_identity_issuer;
+	class sqlite_shm_reader_lifecycle_identity_scope;
+	enum class sqlite_shm_reader_lifecycle_owner_kind : std::uint8_t;
 	class sqlite_shm_registry_activity_pin;
 	class sqlite_shm_reader_open_authority;
 	class sqlite_shm_reader_attachment_authority;
@@ -552,6 +557,7 @@ namespace cxxlens::sdk
 			std::uint64_t alias_token{};
 			std::uint64_t family_epoch{};
 			std::uint64_t pin_token{};
+			std::shared_ptr<std::atomic_bool> identity_authority_latch;
 		};
 
 		sqlite_shm_registry_family_pin(
@@ -564,6 +570,7 @@ namespace cxxlens::sdk
 		std::uint64_t alias_token_{};
 		std::uint64_t family_epoch_{};
 		std::uint64_t pin_token_{};
+		std::shared_ptr<std::atomic_bool> identity_authority_latch_;
 	};
 
 	/**
@@ -1059,7 +1066,7 @@ namespace cxxlens::sdk
 		friend class sqlite_same_process_shm_registry_test_peer;
 
 		sqlite_same_process_shm_mapping_registry(
-			std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state) noexcept;
+			std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state);
 		[[nodiscard]] static sqlite_shm_lease_result<
 			std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
 		create_with_generation_for_testing(sqlite_shm_registry_process_owner owner,
@@ -1111,7 +1118,22 @@ namespace cxxlens::sdk
 			const sqlite_shm_reader_open_epoch_binding& binding) const noexcept;
 		void lock_state_mutex_for_testing();
 		void unlock_state_mutex_for_testing();
+		[[nodiscard]] sqlite_shm_process_global_identity_issuer
+		identity_issuer_for_testing() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_lifecycle_identity_scope
+		seal_reader_lifecycle_identity_scope_for_testing(
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_backend_opaque_identity& callback_cohort,
+			const sqlite_backend_opaque_identity& request_seal,
+			std::uint64_t registry_open_token,
+			sqlite_shm_reader_lifecycle_owner_kind owner_kind,
+			std::uint64_t lifecycle_owner_token,
+			std::uint64_t writer_mapping_generation) const;
+		void exhaust_identity_issuer_for_testing() noexcept;
 
 		std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state_;
+		std::shared_ptr<std::atomic_bool> identity_issuer_owner_latch_;
+		std::shared_ptr<detail::sqlite_shm_process_identity_issuer_state>
+			identity_issuer_state_;
 	};
 } // namespace cxxlens::sdk

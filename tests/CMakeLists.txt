@@ -229,6 +229,20 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;store;sqlite;vfs;shm;registry;lifecycle;fork;security")
 
+cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-shm-identity-issuer
+  unit/sdk/sqlite_same_process_shm_identity_issuer_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-shm-identity-issuer
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-sqlite-shm-identity-issuer
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-shm-identity-issuer
+         COMMAND cxxlens-unit-sdk-sqlite-shm-identity-issuer)
+set_tests_properties(
+  unit.sdk-sqlite-shm-identity-issuer
+  PROPERTIES LABELS
+             "unit;sdk;store;sqlite;vfs;shm;identity;issuer;lifecycle;fork;security")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-writer-shm-mapping-epoch
                             unit/sdk/sqlite_writer_shm_mapping_epoch_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-writer-shm-mapping-epoch
@@ -829,6 +843,7 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-disposable-qualification
   cxxlens-unit-sdk-sqlite-limit-length-precedence
   cxxlens-unit-sdk-sqlite-payload-streaming
+  cxxlens-unit-sdk-sqlite-shm-identity-issuer
   cxxlens-unit-sdk-sqlite-shm-mapping-lease
   cxxlens-unit-sdk-sqlite-shm-mapping-registry
   cxxlens-unit-sdk-sqlite-writer-shm-mapping-epoch

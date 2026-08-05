@@ -1,0 +1,1431 @@
+#include "sqlite_same_process_shm_identity_issuer_internal.hpp"
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <limits>
+#include <thread>
+#include <utility>
+
+namespace cxxlens::sdk
+{
+	namespace
+	{
+		static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
+					  "the qualified fork profile requires a lock-free process epoch and issuer "
+					  "sequence");
+		static_assert(std::atomic<std::uint8_t>::is_always_lock_free,
+					  "the qualified fork profile requires lock-free owner phases");
+		static_assert(std::atomic<std::uint32_t>::is_always_lock_free,
+					  "the qualified fork profile requires lock-free role claims");
+		static_assert(std::atomic<std::size_t>::is_always_lock_free,
+					  "the qualified fork profile requires lock-free owner counters");
+		static_assert(std::atomic_bool::is_always_lock_free,
+					  "the qualified fork profile requires lock-free scope phases");
+
+		[[nodiscard]] bool valid_identity(const sqlite_backend_opaque_identity& value) noexcept
+		{
+			return !value.profile.empty() && !value.bytes.empty();
+		}
+
+		[[nodiscard]] bool valid_family(const sqlite_shm_lease_family_binding& family) noexcept
+		{
+			return valid_identity(family.process_instance) &&
+				valid_identity(family.shared_runtime_vfs_cohort) &&
+				valid_identity(family.exact_file_family);
+		}
+
+		[[nodiscard]] bool
+		valid_owner_kind(const sqlite_shm_reader_lifecycle_owner_kind value) noexcept
+		{
+			switch (value)
+			{
+			case sqlite_shm_reader_lifecycle_owner_kind::map:
+			case sqlite_shm_reader_lifecycle_owner_kind::unpublished_cleanup:
+			case sqlite_shm_reader_lifecycle_owner_kind::attachment:
+			case sqlite_shm_reader_lifecycle_owner_kind::close:
+			case sqlite_shm_reader_lifecycle_owner_kind::logical_ack:
+			case sqlite_shm_reader_lifecycle_owner_kind::late_outer_unwind:
+				return true;
+			}
+			return false;
+		}
+
+		[[nodiscard]] bool valid_callback_role(
+			const sqlite_shm_reader_callback_identity_role value) noexcept
+		{
+			switch (value)
+			{
+			case sqlite_shm_reader_callback_identity_role::map:
+			case sqlite_shm_reader_callback_identity_role::unpublished_cleanup_unmap:
+			case sqlite_shm_reader_callback_identity_role::attachment_unmap:
+			case sqlite_shm_reader_callback_identity_role::close:
+			case sqlite_shm_reader_callback_identity_role::logical_ack_unmap:
+			case sqlite_shm_reader_callback_identity_role::late_outer_unmap:
+				return true;
+			}
+			return false;
+		}
+
+		[[nodiscard]] bool
+		valid_effect_role(const sqlite_shm_reader_effect_identity_role value) noexcept
+		{
+			switch (value)
+			{
+			case sqlite_shm_reader_effect_identity_role::mapped_result:
+			case sqlite_shm_reader_effect_identity_role::zero_attachment_result:
+			case sqlite_shm_reader_effect_identity_role::native_unmap:
+			case sqlite_shm_reader_effect_identity_role::latch_reset:
+			case sqlite_shm_reader_effect_identity_role::native_close:
+				return true;
+			}
+			return false;
+		}
+
+		[[nodiscard]] bool scope_accepts_callback(
+			const sqlite_shm_reader_lifecycle_owner_kind owner,
+			const sqlite_shm_reader_callback_identity_role role) noexcept
+		{
+			using owner_kind = sqlite_shm_reader_lifecycle_owner_kind;
+			using callback_role = sqlite_shm_reader_callback_identity_role;
+			return (owner == owner_kind::map && role == callback_role::map) ||
+				(owner == owner_kind::unpublished_cleanup &&
+				 role == callback_role::unpublished_cleanup_unmap) ||
+				(owner == owner_kind::attachment && role == callback_role::attachment_unmap) ||
+				(owner == owner_kind::close && role == callback_role::close) ||
+				(owner == owner_kind::logical_ack && role == callback_role::logical_ack_unmap) ||
+				(owner == owner_kind::late_outer_unwind &&
+				 role == callback_role::late_outer_unmap);
+		}
+
+		[[nodiscard]] bool callback_accepts_effect(
+			const sqlite_shm_reader_callback_identity_role callback,
+			const sqlite_shm_reader_effect_identity_role effect) noexcept
+		{
+			using callback_role = sqlite_shm_reader_callback_identity_role;
+			using effect_role = sqlite_shm_reader_effect_identity_role;
+			switch (callback)
+			{
+			case callback_role::map:
+				return effect == effect_role::mapped_result ||
+					effect == effect_role::zero_attachment_result;
+			case callback_role::unpublished_cleanup_unmap:
+			case callback_role::attachment_unmap:
+				return effect == effect_role::native_unmap || effect == effect_role::latch_reset;
+			case callback_role::close:
+				return effect == effect_role::native_close;
+			case callback_role::logical_ack_unmap:
+			case callback_role::late_outer_unmap:
+				return false;
+			}
+			return false;
+		}
+
+		template <class Value>
+		[[nodiscard]] bool checked_increment(std::atomic<Value>& value) noexcept
+		{
+			auto observed = value.load(std::memory_order_acquire);
+			while (observed != std::numeric_limits<Value>::max())
+			{
+				if (value.compare_exchange_weak(observed, static_cast<Value>(observed + 1U),
+										std::memory_order_acq_rel,
+										std::memory_order_acquire))
+					return true;
+			}
+			return false;
+		}
+
+		template <class Value>
+		[[nodiscard]] bool checked_decrement(std::atomic<Value>& value) noexcept
+		{
+			auto observed = value.load(std::memory_order_acquire);
+			while (observed != 0U)
+			{
+				if (value.compare_exchange_weak(observed, static_cast<Value>(observed - 1U),
+										std::memory_order_acq_rel,
+										std::memory_order_acquire))
+					return true;
+			}
+			return false;
+		}
+
+		[[nodiscard]] bool claim_role(std::atomic<std::uint32_t>& claims,
+							  const std::uint8_t role) noexcept
+		{
+			if (role >= 32U)
+				return false;
+			const auto bit = static_cast<std::uint32_t>(1U) << role;
+			auto observed = claims.load(std::memory_order_acquire);
+			while ((observed & bit) == 0U)
+			{
+				if (claims.compare_exchange_weak(observed, observed | bit,
+										std::memory_order_acq_rel,
+										std::memory_order_acquire))
+					return true;
+			}
+			return false;
+		}
+
+		[[nodiscard]] bool claim_effect_role(
+			std::atomic<std::uint32_t>& claims,
+			const sqlite_shm_reader_callback_identity_role callback,
+			const sqlite_shm_reader_effect_identity_role effect) noexcept
+		{
+			const auto role = static_cast<std::uint8_t>(effect);
+			if (role >= 32U)
+				return false;
+			const auto bit = static_cast<std::uint32_t>(1U) << role;
+			const auto mapped_bit = static_cast<std::uint32_t>(1U)
+				<< static_cast<std::uint8_t>(sqlite_shm_reader_effect_identity_role::mapped_result);
+			const auto zero_bit = static_cast<std::uint32_t>(1U)
+				<< static_cast<std::uint8_t>(
+					sqlite_shm_reader_effect_identity_role::zero_attachment_result);
+			auto observed = claims.load(std::memory_order_acquire);
+			while ((observed & bit) == 0U)
+			{
+				if (callback == sqlite_shm_reader_callback_identity_role::map &&
+					(observed & (mapped_bit | zero_bit)) != 0U)
+					return false;
+				if (claims.compare_exchange_weak(observed, observed | bit,
+										std::memory_order_acq_rel,
+										std::memory_order_acquire))
+					return true;
+			}
+			return false;
+		}
+
+		[[nodiscard]] sqlite_shm_lease_rejection reject(
+			const sqlite_shm_lease_rejection_reason reason,
+			const sqlite_shm_lease_recovery_action action =
+				sqlite_shm_lease_recovery_action::deny_before_native_map) noexcept
+		{
+			return {reason, action};
+		}
+
+		template <class Integer>
+		void append_integer(std::vector<std::byte>& bytes, const Integer value)
+		{
+			for (std::size_t index = 0; index < sizeof(value); ++index)
+				bytes.push_back(static_cast<std::byte>(
+					(value >> static_cast<unsigned>(index * 8U)) & static_cast<Integer>(0xffU)));
+		}
+
+		std::atomic<std::uint64_t> next_issuer_incarnation{1U};
+
+		[[nodiscard]] std::optional<std::uint64_t> allocate_issuer_incarnation() noexcept
+		{
+			auto observed = next_issuer_incarnation.load(std::memory_order_acquire);
+			while (observed != 0U)
+			{
+				const auto replacement = observed == std::numeric_limits<std::uint64_t>::max()
+					? 0U
+					: observed + 1U;
+				if (next_issuer_incarnation.compare_exchange_weak(
+						observed,
+						replacement,
+						std::memory_order_acq_rel,
+						std::memory_order_acquire))
+					return observed;
+			}
+			return std::nullopt;
+		}
+	}
+
+	namespace detail
+	{
+		enum class sqlite_shm_process_identity_record_phase : std::uint8_t
+		{
+			reserved,
+			sealed,
+			issuing_effect,
+			retiring,
+			retired,
+			abandoned,
+		};
+
+		static_assert(std::atomic<sqlite_shm_process_identity_record_phase>::is_always_lock_free,
+					  "the qualified fork profile requires lock-free record phases");
+
+		struct sqlite_shm_reader_lifecycle_identity_scope_control
+		{
+			std::weak_ptr<sqlite_shm_process_identity_issuer_state> issuer;
+			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch;
+			std::uint64_t expected_process_epoch{};
+			std::weak_ptr<void> registry_state;
+			std::shared_ptr<std::atomic_bool> registry_quarantine_latch;
+			std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch;
+			std::shared_ptr<std::atomic_bool> family_authority_latch;
+			std::uint64_t family_epoch{};
+			std::uint64_t family_pin_token{};
+			sqlite_shm_lease_family_binding family;
+			sqlite_backend_opaque_identity callback_cohort;
+			sqlite_backend_opaque_identity request_seal;
+			sqlite_shm_reader_lifecycle_owner_coordinates coordinates;
+			std::atomic_bool active{true};
+			std::atomic_bool quarantined{false};
+			std::atomic<std::size_t> live_records{0U};
+			std::atomic<std::uint32_t> issued_callback_roles{0U};
+		};
+
+		struct sqlite_shm_process_identity_record_control
+		{
+			std::weak_ptr<sqlite_shm_process_identity_issuer_state> issuer;
+			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch;
+			std::uint64_t expected_process_epoch{};
+			std::shared_ptr<sqlite_shm_reader_lifecycle_identity_scope_control> scope;
+			std::uint64_t sequence{};
+			sqlite_shm_reader_lifecycle_identity_domain domain{
+				sqlite_shm_reader_lifecycle_identity_domain::callback_invocation};
+			std::uint8_t role{};
+			std::weak_ptr<sqlite_shm_process_identity_record_control> parent_callback;
+			std::atomic<std::size_t> live_children{0U};
+			std::atomic<std::uint32_t> issued_effect_roles{0U};
+			std::atomic<sqlite_shm_process_identity_record_phase> phase{
+				sqlite_shm_process_identity_record_phase::reserved};
+			sqlite_backend_opaque_identity thread_identity;
+			std::uint64_t reentrancy_depth{};
+			sqlite_backend_opaque_identity projection;
+		};
+
+		[[nodiscard]] bool scope_control_current(
+			const std::shared_ptr<sqlite_shm_reader_lifecycle_identity_scope_control>& control) noexcept
+		{
+			return control && control->process_epoch && control->expected_process_epoch != 0U &&
+				control->process_epoch->load(std::memory_order_acquire) ==
+					control->expected_process_epoch &&
+				control->active.load(std::memory_order_acquire) &&
+				!control->quarantined.load(std::memory_order_acquire) &&
+				control->registry_quarantine_latch &&
+				!control->registry_quarantine_latch->load(std::memory_order_acquire) &&
+				control->registry_issuer_owner_latch &&
+				control->registry_issuer_owner_latch->load(std::memory_order_acquire) &&
+				control->family_authority_latch &&
+				control->family_authority_latch->load(std::memory_order_acquire) &&
+				!control->registry_state.expired() && !control->issuer.expired();
+		}
+
+		void quarantine_scope(
+			const std::shared_ptr<sqlite_shm_reader_lifecycle_identity_scope_control>& control) noexcept
+		{
+			if (!control)
+				return;
+			control->quarantined.store(true, std::memory_order_release);
+			control->active.store(false, std::memory_order_release);
+		}
+
+		[[nodiscard]] bool decrement_accounting(
+			std::atomic<std::size_t>& counter,
+			const std::shared_ptr<sqlite_shm_reader_lifecycle_identity_scope_control>& scope) noexcept
+		{
+			const auto accounted = checked_decrement(counter);
+			if (!accounted)
+				quarantine_scope(scope);
+			return accounted;
+		}
+
+		[[nodiscard]] bool increment_accounting(
+			std::atomic<std::size_t>& counter,
+			const std::shared_ptr<sqlite_shm_reader_lifecycle_identity_scope_control>& scope) noexcept
+		{
+			const auto accounted = checked_increment(counter);
+			if (!accounted)
+				quarantine_scope(scope);
+			return accounted;
+		}
+
+		[[nodiscard]] bool record_parent_current(
+			const std::shared_ptr<sqlite_shm_process_identity_record_control>& control) noexcept
+		{
+			if (!control || control->domain !=
+					sqlite_shm_reader_lifecycle_identity_domain::native_or_zero_effect)
+				return true;
+			const auto parent = control->parent_callback.lock();
+			if (!parent || !scope_control_current(parent->scope))
+				return false;
+			const auto phase = parent->phase.load(std::memory_order_acquire);
+			return phase == sqlite_shm_process_identity_record_phase::sealed ||
+				phase == sqlite_shm_process_identity_record_phase::issuing_effect;
+		}
+
+		class sqlite_shm_process_identity_issuer_state final
+			: public std::enable_shared_from_this<sqlite_shm_process_identity_issuer_state>
+		{
+		  public:
+			sqlite_shm_process_identity_issuer_state(
+				std::weak_ptr<void> registry_state,
+				std::shared_ptr<std::atomic<std::uint64_t>> process_epoch,
+				std::shared_ptr<std::atomic_bool> registry_quarantine_latch,
+				std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch,
+				const std::uint64_t expected_process_epoch,
+				sqlite_backend_opaque_identity process_instance,
+				const std::uint64_t incarnation,
+				const std::uint64_t first_sequence) noexcept
+				: registry_state_{std::move(registry_state)}, process_epoch_{std::move(process_epoch)},
+				  registry_quarantine_latch_{std::move(registry_quarantine_latch)},
+				  registry_issuer_owner_latch_{std::move(registry_issuer_owner_latch)},
+				  expected_process_epoch_{expected_process_epoch},
+				  process_instance_{std::move(process_instance)}, incarnation_{incarnation},
+				  next_sequence_{first_sequence}
+			{
+			}
+
+			[[nodiscard]] bool current_before_owner_lock() const noexcept
+			{
+				return process_epoch_ && expected_process_epoch_ != 0U &&
+					process_epoch_->load(std::memory_order_acquire) == expected_process_epoch_ &&
+					registry_quarantine_latch_ &&
+					!registry_quarantine_latch_->load(std::memory_order_acquire) &&
+					registry_issuer_owner_latch_ &&
+					registry_issuer_owner_latch_->load(std::memory_order_acquire);
+			}
+
+			[[nodiscard]] bool current() const noexcept
+			{
+				return current_before_owner_lock() && !registry_state_.expired();
+			}
+
+			[[nodiscard]] sqlite_shm_reader_lifecycle_identity_scope seal_scope(
+				const sqlite_shm_lease_family_binding& family,
+				std::shared_ptr<std::atomic_bool> family_authority_latch,
+				const std::uint64_t family_epoch,
+				const std::uint64_t family_pin_token,
+				const sqlite_backend_opaque_identity& callback_cohort,
+				const sqlite_backend_opaque_identity& request_seal,
+				const sqlite_shm_reader_lifecycle_owner_coordinates& coordinates)
+			{
+				if (!current_before_owner_lock() || !valid_family(family) ||
+					family.process_instance != process_instance_ || !family_authority_latch ||
+					!family_authority_latch->load(std::memory_order_acquire) ||
+					family_epoch == 0U || family_pin_token == 0U ||
+					!valid_identity(callback_cohort) ||
+					!valid_identity(request_seal) || coordinates.registry_open_token == 0U ||
+					!valid_owner_kind(coordinates.owner_kind) ||
+					coordinates.lifecycle_owner_token == 0U ||
+					coordinates.writer_mapping_generation == 0U || registry_state_.expired())
+					return sqlite_shm_reader_lifecycle_identity_scope{nullptr};
+
+				auto control = std::make_shared<sqlite_shm_reader_lifecycle_identity_scope_control>();
+				control->issuer = weak_from_this();
+				control->process_epoch = process_epoch_;
+				control->expected_process_epoch = expected_process_epoch_;
+				control->registry_state = registry_state_;
+				control->registry_quarantine_latch = registry_quarantine_latch_;
+				control->registry_issuer_owner_latch = registry_issuer_owner_latch_;
+				control->family_authority_latch = std::move(family_authority_latch);
+				control->family_epoch = family_epoch;
+				control->family_pin_token = family_pin_token;
+				control->family = family;
+				control->callback_cohort = callback_cohort;
+				control->request_seal = request_seal;
+				control->coordinates = coordinates;
+				if (!scope_control_current(control) ||
+					control->issuer.lock().get() != this)
+				{
+					control->active.store(false, std::memory_order_release);
+					return sqlite_shm_reader_lifecycle_identity_scope{nullptr};
+				}
+				return sqlite_shm_reader_lifecycle_identity_scope{std::move(control)};
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_callback_identity_permit>
+			reserve_callback(const sqlite_shm_reader_lifecycle_identity_scope& scope,
+						 sqlite_shm_reader_callback_identity_role role,
+						 sqlite_backend_opaque_identity thread_identity,
+						 const std::uint64_t reentrancy_depth)
+			{
+				if (!current_before_owner_lock())
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				const auto scope_control = scope.control_;
+				if (!scope_matches_control(scope_control) || !valid_identity(thread_identity) ||
+					!valid_callback_role(role) ||
+					!scope_accepts_callback(scope_control->coordinates.owner_kind, role))
+					return reject(sqlite_shm_lease_rejection_reason::invalid_identity);
+				if (!claim_role(scope_control->issued_callback_roles,
+							static_cast<std::uint8_t>(role)))
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+
+				const auto sequence = allocate_sequence();
+				if (!sequence)
+					return reject(sqlite_shm_lease_rejection_reason::generation_exhausted);
+				if (!current_before_owner_lock())
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+
+				std::shared_ptr<sqlite_shm_process_identity_record_control> control;
+				bool scope_counted{};
+				try
+				{
+					control = std::make_shared<sqlite_shm_process_identity_record_control>();
+					control->issuer = weak_from_this();
+					control->process_epoch = process_epoch_;
+					control->expected_process_epoch = expected_process_epoch_;
+					control->scope = scope_control;
+					control->sequence = *sequence;
+					control->domain =
+						sqlite_shm_reader_lifecycle_identity_domain::callback_invocation;
+					control->role = static_cast<std::uint8_t>(role);
+					control->thread_identity = std::move(thread_identity);
+					control->reentrancy_depth = reentrancy_depth;
+					control->projection = make_projection(
+						*sequence,
+						sqlite_shm_reader_lifecycle_identity_domain::callback_invocation,
+						control->role,
+						*scope_control);
+					if (!increment_accounting(scope_control->live_records, scope_control))
+						return reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					scope_counted = true;
+					pause_for_testing(sqlite_shm_identity_issuer_pause_point_for_testing::
+						reserve_after_scope_count);
+					if (!scope_matches_control(scope_control))
+					{
+						const auto accounted =
+							decrement_accounting(scope_control->live_records, scope_control);
+						scope_counted = false;
+						control->phase.store(sqlite_shm_process_identity_record_phase::abandoned,
+										 std::memory_order_release);
+						return accounted
+							? sqlite_shm_lease_result<sqlite_shm_reader_callback_identity_permit>{
+								  reject(sqlite_shm_lease_rejection_reason::stale_token)}
+							: sqlite_shm_lease_result<sqlite_shm_reader_callback_identity_permit>{
+								  reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry)};
+					}
+					auto output = sqlite_shm_reader_callback_identity_permit{control};
+					return std::move(output);
+				}
+				catch (...)
+				{
+					if (scope_counted)
+						abandon_record(control);
+					quarantine_scope(scope_control);
+					return reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_issued_reader_callback_identity>
+			seal_callback(sqlite_shm_reader_callback_identity_permit& permit,
+						  const sqlite_shm_reader_lifecycle_identity_scope& scope,
+						  const sqlite_shm_reader_callback_identity_role role) noexcept
+			{
+				if (!current_before_owner_lock())
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				const auto scope_control = scope.control_;
+				const auto permit_control = permit.control_;
+				if (!scope_matches_control(scope_control) ||
+					!record_matches(permit_control, scope,
+						sqlite_shm_reader_lifecycle_identity_domain::callback_invocation,
+						static_cast<std::uint8_t>(role),
+						sqlite_shm_process_identity_record_phase::reserved))
+					return reject(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+				try
+				{
+					auto receipt = sqlite_shm_callback_execution_receipt{
+						permit_control->thread_identity,
+						permit_control->reentrancy_depth,
+						permit_control->projection,
+					};
+					auto expected = sqlite_shm_process_identity_record_phase::reserved;
+					if (!permit_control->phase.compare_exchange_strong(
+							expected,
+							sqlite_shm_process_identity_record_phase::sealed,
+							std::memory_order_acq_rel,
+							std::memory_order_acquire))
+						return reject(sqlite_shm_lease_rejection_reason::stale_token);
+					if (!scope_matches_control(scope_control))
+					{
+						abandon_record(permit_control);
+						return reject(sqlite_shm_lease_rejection_reason::stale_token);
+					}
+					auto control = std::move(permit.control_);
+					auto output = sqlite_shm_issued_reader_callback_identity{
+						std::move(control), std::move(receipt)};
+					return std::move(output);
+				}
+				catch (...)
+				{
+					abandon_record(permit.control_);
+					quarantine_scope(scope_control);
+					return reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_issued_reader_effect_identity>
+			issue_effect(const sqlite_shm_reader_lifecycle_identity_scope& scope,
+						 const sqlite_shm_issued_reader_callback_identity& callback,
+						 const sqlite_shm_reader_effect_identity_role role)
+			{
+				if (!current_before_owner_lock())
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				const auto scope_control = scope.control_;
+				const auto callback_control = callback.control_;
+				if (!scope_matches_control(scope_control) || !callback_control ||
+					!callback_matches(scope, callback) ||
+					!valid_effect_role(role) ||
+					!callback_accepts_effect(
+						static_cast<sqlite_shm_reader_callback_identity_role>(callback_control->role),
+						role))
+					return reject(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+				auto callback_phase = sqlite_shm_process_identity_record_phase::sealed;
+				if (!callback_control->phase.compare_exchange_strong(
+						callback_phase,
+						sqlite_shm_process_identity_record_phase::issuing_effect,
+						std::memory_order_acq_rel,
+						std::memory_order_acquire))
+					return reject(sqlite_shm_lease_rejection_reason::retiring);
+				if (!scope_matches_control(scope_control))
+				{
+					callback_control->phase.store(
+						sqlite_shm_process_identity_record_phase::sealed,
+						std::memory_order_release);
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				}
+				pause_for_testing(sqlite_shm_identity_issuer_pause_point_for_testing::
+					effect_after_callback_phase);
+				const auto callback_role =
+					static_cast<sqlite_shm_reader_callback_identity_role>(callback_control->role);
+				if (!claim_effect_role(callback_control->issued_effect_roles, callback_role, role))
+				{
+					callback_control->phase.store(
+						sqlite_shm_process_identity_record_phase::sealed,
+						std::memory_order_release);
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				}
+				if (!increment_accounting(callback_control->live_children, scope_control))
+				{
+					callback_control->phase.store(
+						sqlite_shm_process_identity_record_phase::sealed,
+						std::memory_order_release);
+					return reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+
+				bool scope_counted{};
+				bool wrapper_owns_counts{};
+				std::shared_ptr<sqlite_shm_process_identity_record_control> control;
+				try
+				{
+					const auto sequence = allocate_sequence();
+					if (!sequence)
+					{
+						const auto accounted = decrement_accounting(
+							callback_control->live_children, scope_control);
+						callback_control->phase.store(
+							sqlite_shm_process_identity_record_phase::sealed,
+							std::memory_order_release);
+						return reject(accounted
+							? sqlite_shm_lease_rejection_reason::generation_exhausted
+							: sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							accounted
+								? sqlite_shm_lease_recovery_action::deny_before_native_map
+								: sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					}
+					if (!current_before_owner_lock())
+					{
+						const auto accounted = decrement_accounting(
+							callback_control->live_children, scope_control);
+						callback_control->phase.store(
+							sqlite_shm_process_identity_record_phase::sealed,
+							std::memory_order_release);
+						return reject(accounted
+							? sqlite_shm_lease_rejection_reason::stale_token
+							: sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							accounted
+								? sqlite_shm_lease_recovery_action::deny_before_native_map
+								: sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					}
+
+					control = std::make_shared<sqlite_shm_process_identity_record_control>();
+					control->issuer = weak_from_this();
+					control->process_epoch = process_epoch_;
+					control->expected_process_epoch = expected_process_epoch_;
+					control->scope = scope_control;
+					control->sequence = *sequence;
+					control->domain =
+						sqlite_shm_reader_lifecycle_identity_domain::native_or_zero_effect;
+					control->role = static_cast<std::uint8_t>(role);
+					control->parent_callback = callback_control;
+					control->projection = make_projection(
+						*sequence,
+						sqlite_shm_reader_lifecycle_identity_domain::native_or_zero_effect,
+						control->role,
+						*scope_control);
+					auto projection = control->projection;
+					if (!increment_accounting(scope_control->live_records, scope_control))
+					{
+						(void)decrement_accounting(
+							callback_control->live_children, scope_control);
+						callback_control->phase.store(
+							sqlite_shm_process_identity_record_phase::sealed,
+							std::memory_order_release);
+						return reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					}
+					scope_counted = true;
+					if (callback_control->phase.load(std::memory_order_acquire) !=
+							sqlite_shm_process_identity_record_phase::issuing_effect ||
+						!scope_matches_control(scope_control))
+					{
+						const auto child_accounted = decrement_accounting(
+							callback_control->live_children, scope_control);
+						const auto scope_accounted = decrement_accounting(
+							scope_control->live_records, scope_control);
+						scope_counted = false;
+						callback_control->phase.store(
+							sqlite_shm_process_identity_record_phase::sealed,
+							std::memory_order_release);
+						return reject(child_accounted && scope_accounted
+							? sqlite_shm_lease_rejection_reason::stale_token
+							: sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							child_accounted && scope_accounted
+								? sqlite_shm_lease_recovery_action::deny_before_native_map
+								: sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					}
+					control->phase.store(sqlite_shm_process_identity_record_phase::sealed,
+									 std::memory_order_release);
+					auto output = sqlite_shm_issued_reader_effect_identity{
+						control, std::move(projection)};
+					wrapper_owns_counts = true;
+					callback_control->phase.store(
+						sqlite_shm_process_identity_record_phase::sealed,
+						std::memory_order_release);
+					return std::move(output);
+				}
+				catch (...)
+				{
+					callback_control->phase.store(
+						sqlite_shm_process_identity_record_phase::sealed,
+						std::memory_order_release);
+					if (!wrapper_owns_counts)
+					{
+						if (scope_counted && control)
+							abandon_record(control);
+						else
+							(void)decrement_accounting(
+								callback_control->live_children, scope_control);
+					}
+					quarantine_scope(scope_control);
+					return reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<void> validate_callback(
+				const sqlite_shm_reader_lifecycle_identity_scope& scope,
+				const sqlite_shm_issued_reader_callback_identity& callback,
+				const sqlite_shm_reader_callback_identity_role role) const noexcept
+			{
+				if (!current_before_owner_lock())
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				return callback_matches(scope, callback) && callback.control_->role ==
+						static_cast<std::uint8_t>(role) &&
+					callback.receipt_.thread_identity == callback.control_->thread_identity &&
+					callback.receipt_.reentrancy_depth == callback.control_->reentrancy_depth &&
+					callback.receipt_.invocation_token == callback.control_->projection
+					? sqlite_shm_lease_result<void>{}
+					: sqlite_shm_lease_result<void>{
+						  reject(sqlite_shm_lease_rejection_reason::receipt_mismatch)};
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<void> validate_effect(
+				const sqlite_shm_reader_lifecycle_identity_scope& scope,
+				const sqlite_shm_issued_reader_callback_identity& callback,
+				const sqlite_shm_issued_reader_effect_identity& effect,
+				const sqlite_shm_reader_effect_identity_role role) const noexcept
+			{
+				if (!current_before_owner_lock())
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				return callback_matches(scope, callback) &&
+					record_matches(effect.control_, scope,
+						sqlite_shm_reader_lifecycle_identity_domain::native_or_zero_effect,
+						static_cast<std::uint8_t>(role),
+						sqlite_shm_process_identity_record_phase::sealed) &&
+					effect.control_->parent_callback.lock().get() == callback.control_.get() &&
+					effect.identity_ == effect.control_->projection
+					? sqlite_shm_lease_result<void>{}
+					: sqlite_shm_lease_result<void>{
+						  reject(sqlite_shm_lease_rejection_reason::receipt_mismatch)};
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<void> retire_callback(
+				const sqlite_shm_reader_lifecycle_identity_scope& scope,
+				sqlite_shm_issued_reader_callback_identity& callback,
+				const sqlite_shm_reader_callback_identity_role role) noexcept
+			{
+				const auto control = callback.control_;
+				if (!control)
+					return reject(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+				const auto validated = validate_callback(scope, callback, role);
+				if (!validated)
+					return validated.error();
+				auto expected = sqlite_shm_process_identity_record_phase::sealed;
+				if (!control->phase.compare_exchange_strong(
+						expected,
+						sqlite_shm_process_identity_record_phase::retiring,
+						std::memory_order_acq_rel,
+						std::memory_order_acquire))
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				if (control->live_children.load(std::memory_order_acquire) != 0U)
+				{
+					expected = sqlite_shm_process_identity_record_phase::retiring;
+					(void)control->phase.compare_exchange_strong(
+						expected,
+						sqlite_shm_process_identity_record_phase::sealed,
+						std::memory_order_acq_rel,
+						std::memory_order_acquire);
+					return reject(sqlite_shm_lease_rejection_reason::retiring);
+				}
+				control->phase.store(sqlite_shm_process_identity_record_phase::retired,
+								 std::memory_order_release);
+				if (!decrement_accounting(control->scope->live_records, control->scope))
+					return reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				return {};
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<void> retire_effect(
+				const sqlite_shm_reader_lifecycle_identity_scope& scope,
+				const sqlite_shm_issued_reader_callback_identity& callback,
+				sqlite_shm_issued_reader_effect_identity& effect,
+				const sqlite_shm_reader_effect_identity_role role) noexcept
+			{
+				const auto validated = validate_effect(scope, callback, effect, role);
+				if (!validated)
+					return validated.error();
+				const auto control = effect.control_;
+				const auto parent = callback.control_;
+				if (!retire_record_phase(control))
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				const auto scope_accounted =
+					decrement_accounting(control->scope->live_records, control->scope);
+				const auto parent_accounted = parent &&
+					decrement_accounting(parent->live_children, control->scope);
+				if (!scope_accounted || !parent_accounted)
+					return reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				return {};
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<void>
+			retire_scope(sqlite_shm_reader_lifecycle_identity_scope& scope) noexcept
+			{
+				if (!current_before_owner_lock())
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				if (!scope_matches(scope))
+					return reject(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+				bool expected = true;
+				if (!scope.control_->active.compare_exchange_strong(
+						expected, false, std::memory_order_acq_rel, std::memory_order_acquire))
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				if (scope.control_->live_records.load(std::memory_order_acquire) != 0U)
+				{
+					scope.control_->active.store(true, std::memory_order_release);
+					if (scope.control_->quarantined.load(std::memory_order_acquire))
+					{
+						scope.control_->active.store(false, std::memory_order_release);
+						return reject(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					}
+					return reject(sqlite_shm_lease_rejection_reason::retiring);
+				}
+				return {};
+			}
+
+			void exhaust_for_testing() noexcept
+			{
+				auto observed = next_sequence_.load(std::memory_order_acquire);
+				while (observed != 0U &&
+					   !next_sequence_.compare_exchange_weak(
+						   observed,
+						   std::numeric_limits<std::uint64_t>::max(),
+						   std::memory_order_acq_rel,
+						   std::memory_order_acquire))
+				{
+				}
+			}
+
+			void arm_pause_for_testing(
+				const sqlite_shm_identity_issuer_pause_point_for_testing point) noexcept
+			{
+				test_pause_release_.store(false, std::memory_order_release);
+				test_pause_entered_.store(false, std::memory_order_release);
+				test_pause_point_.store(static_cast<std::uint8_t>(point),
+									std::memory_order_release);
+			}
+
+			[[nodiscard]] bool pause_entered_for_testing(
+				const sqlite_shm_identity_issuer_pause_point_for_testing point) const noexcept
+			{
+				return test_pause_point_.load(std::memory_order_acquire) ==
+						static_cast<std::uint8_t>(point) &&
+					test_pause_entered_.load(std::memory_order_acquire);
+			}
+
+			void release_pause_for_testing() noexcept
+			{
+				test_pause_point_.store(
+					static_cast<std::uint8_t>(
+						sqlite_shm_identity_issuer_pause_point_for_testing::none),
+					std::memory_order_release);
+				test_pause_release_.store(true, std::memory_order_release);
+			}
+
+			[[nodiscard]] const std::shared_ptr<std::atomic<std::uint64_t>>&
+			process_epoch() const noexcept
+			{
+				return process_epoch_;
+			}
+
+			[[nodiscard]] std::uint64_t expected_process_epoch() const noexcept
+			{
+				return expected_process_epoch_;
+			}
+
+		  private:
+			void pause_for_testing(
+				const sqlite_shm_identity_issuer_pause_point_for_testing point) noexcept
+			{
+				if (test_pause_point_.load(std::memory_order_acquire) !=
+					static_cast<std::uint8_t>(point))
+					return;
+				test_pause_entered_.store(true, std::memory_order_release);
+				while (!test_pause_release_.load(std::memory_order_acquire))
+					std::this_thread::yield();
+			}
+
+			[[nodiscard]] bool scope_matches(
+				const sqlite_shm_reader_lifecycle_identity_scope& scope) const noexcept
+			{
+				return scope_matches_control(scope.control_);
+			}
+
+			[[nodiscard]] bool scope_matches_control(
+				const std::shared_ptr<sqlite_shm_reader_lifecycle_identity_scope_control>& control)
+				const noexcept
+			{
+				return current_before_owner_lock() && scope_control_current(control) &&
+					control->family_epoch != 0U && control->family_pin_token != 0U &&
+					control->expected_process_epoch == expected_process_epoch_ &&
+					control->process_epoch.get() == process_epoch_.get() &&
+					control->issuer.lock().get() == this &&
+					control->family.process_instance == process_instance_;
+			}
+
+			[[nodiscard]] bool record_matches(
+				const std::shared_ptr<sqlite_shm_process_identity_record_control>& record,
+				const sqlite_shm_reader_lifecycle_identity_scope& scope,
+				const sqlite_shm_reader_lifecycle_identity_domain domain,
+				const std::uint8_t role,
+				const sqlite_shm_process_identity_record_phase phase) const noexcept
+			{
+				return scope_matches(scope) && record && record->scope.get() == scope.control_.get() &&
+					record->issuer.lock().get() == this && record->process_epoch.get() == process_epoch_.get() &&
+					record->expected_process_epoch == expected_process_epoch_ &&
+					record->sequence != 0U && record->domain == domain && record->role == role &&
+					record->phase.load(std::memory_order_acquire) == phase;
+			}
+
+			[[nodiscard]] bool callback_matches(
+				const sqlite_shm_reader_lifecycle_identity_scope& scope,
+				const sqlite_shm_issued_reader_callback_identity& callback) const noexcept
+			{
+				if (!callback.control_ || !scope_matches(scope) ||
+					callback.control_->scope.get() != scope.control_.get() ||
+					callback.control_->issuer.lock().get() != this ||
+					callback.control_->domain !=
+						sqlite_shm_reader_lifecycle_identity_domain::callback_invocation ||
+					callback.receipt_.invocation_token != callback.control_->projection)
+					return false;
+				const auto phase = callback.control_->phase.load(std::memory_order_acquire);
+				return phase == sqlite_shm_process_identity_record_phase::sealed ||
+					phase == sqlite_shm_process_identity_record_phase::issuing_effect;
+			}
+
+			[[nodiscard]] std::optional<std::uint64_t> allocate_sequence() noexcept
+			{
+				auto observed = next_sequence_.load(std::memory_order_acquire);
+				while (observed != 0U)
+				{
+					const auto replacement = observed == std::numeric_limits<std::uint64_t>::max()
+						? 0U
+						: observed + 1U;
+					if (next_sequence_.compare_exchange_weak(observed, replacement,
+												std::memory_order_acq_rel,
+												std::memory_order_acquire))
+						return observed;
+				}
+				return std::nullopt;
+			}
+
+			static void append_opaque_identity(std::vector<std::byte>& bytes,
+									   const sqlite_backend_opaque_identity& identity)
+			{
+				append_integer(bytes, static_cast<std::uint64_t>(identity.profile.size()));
+				for (const auto value : identity.profile)
+					bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(value)));
+				append_integer(bytes, static_cast<std::uint64_t>(identity.bytes.size()));
+				bytes.insert(bytes.end(), identity.bytes.begin(), identity.bytes.end());
+			}
+
+			[[nodiscard]] sqlite_backend_opaque_identity make_projection(
+				const std::uint64_t sequence,
+				const sqlite_shm_reader_lifecycle_identity_domain domain,
+				const std::uint8_t role,
+				const sqlite_shm_reader_lifecycle_identity_scope_control& scope) const
+			{
+				std::vector<std::byte> bytes;
+				bytes.reserve(256U);
+				append_opaque_identity(bytes, process_instance_);
+				append_opaque_identity(bytes, scope.family.shared_runtime_vfs_cohort);
+				append_opaque_identity(bytes, scope.family.exact_file_family);
+				append_opaque_identity(bytes, scope.callback_cohort);
+				append_opaque_identity(bytes, scope.request_seal);
+				append_integer(bytes, incarnation_);
+				append_integer(bytes, expected_process_epoch_);
+				append_integer(bytes, scope.family_epoch);
+				append_integer(bytes, scope.family_pin_token);
+				append_integer(bytes, scope.coordinates.registry_open_token);
+				bytes.push_back(static_cast<std::byte>(scope.coordinates.owner_kind));
+				append_integer(bytes, scope.coordinates.lifecycle_owner_token);
+				append_integer(bytes, scope.coordinates.writer_mapping_generation);
+				append_integer(bytes, sequence);
+				bytes.push_back(static_cast<std::byte>(domain));
+				bytes.push_back(static_cast<std::byte>(role));
+				return {"cxxlens.sqlite.reader-lifecycle.process-issued-identity.v1",
+						std::move(bytes)};
+			}
+
+			[[nodiscard]] static bool retire_record_phase(
+				const std::shared_ptr<sqlite_shm_process_identity_record_control>& record) noexcept
+			{
+				if (!record)
+					return false;
+				auto expected = sqlite_shm_process_identity_record_phase::sealed;
+				return record->phase.compare_exchange_strong(expected,
+						sqlite_shm_process_identity_record_phase::retired,
+						std::memory_order_acq_rel, std::memory_order_acquire) && record->scope;
+			}
+
+			static void abandon_record(
+				const std::shared_ptr<sqlite_shm_process_identity_record_control>& record) noexcept
+			{
+				if (!record)
+					return;
+				// A qualified at-fork/process-port hook invalidates this lock-free epoch before
+				// any child callback. The stale child must not lock an inherited weak owner or
+				// touch parent accounting; its private address-space copy may be dropped as-is.
+				if (!record->process_epoch ||
+					record->process_epoch->load(std::memory_order_acquire) !=
+						record->expected_process_epoch)
+					return;
+				if (!record->scope || !record->scope->registry_issuer_owner_latch ||
+					!record->scope->registry_issuer_owner_latch->load(std::memory_order_acquire))
+					return;
+				auto phase = record->phase.load(std::memory_order_acquire);
+				while (phase == sqlite_shm_process_identity_record_phase::reserved ||
+					   phase == sqlite_shm_process_identity_record_phase::sealed)
+				{
+					if (record->phase.compare_exchange_weak(
+							phase,
+							sqlite_shm_process_identity_record_phase::abandoned,
+							std::memory_order_acq_rel,
+							std::memory_order_acquire))
+					{
+						if (record->scope)
+							(void)decrement_accounting(
+								record->scope->live_records, record->scope);
+						if (auto parent = record->parent_callback.lock())
+							(void)decrement_accounting(
+								parent->live_children, record->scope);
+						return;
+					}
+				}
+			}
+
+			friend class ::cxxlens::sdk::sqlite_shm_reader_callback_identity_permit;
+			friend class ::cxxlens::sdk::sqlite_shm_issued_reader_callback_identity;
+			friend class ::cxxlens::sdk::sqlite_shm_issued_reader_effect_identity;
+
+			std::weak_ptr<void> registry_state_;
+			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch_;
+			std::shared_ptr<std::atomic_bool> registry_quarantine_latch_;
+			std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch_;
+			std::uint64_t expected_process_epoch_{};
+			sqlite_backend_opaque_identity process_instance_;
+			std::uint64_t incarnation_{};
+			std::atomic<std::uint64_t> next_sequence_{1U};
+			std::atomic<std::uint8_t> test_pause_point_{
+				static_cast<std::uint8_t>(
+					sqlite_shm_identity_issuer_pause_point_for_testing::none)};
+			std::atomic_bool test_pause_entered_{false};
+			std::atomic_bool test_pause_release_{true};
+		};
+
+		std::shared_ptr<sqlite_shm_process_identity_issuer_state>
+		make_identity_issuer_state_for_registry(
+			std::weak_ptr<void> registry_state,
+			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch,
+			std::shared_ptr<std::atomic_bool> registry_quarantine_latch,
+			std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch,
+			const std::uint64_t expected_process_epoch,
+			const sqlite_backend_opaque_identity& process_instance,
+			const std::uint64_t first_sequence)
+		{
+			const auto incarnation = allocate_issuer_incarnation();
+			if (!incarnation)
+				return {};
+			const auto stale_child_epoch = process_epoch;
+			return std::shared_ptr<sqlite_shm_process_identity_issuer_state>{
+				new sqlite_shm_process_identity_issuer_state{
+					std::move(registry_state),
+					std::move(process_epoch),
+					std::move(registry_quarantine_latch),
+					std::move(registry_issuer_owner_latch),
+					expected_process_epoch,
+					process_instance,
+					*incarnation,
+					first_sequence},
+				[stale_child_epoch, expected_process_epoch](
+					sqlite_shm_process_identity_issuer_state* state) noexcept
+				{
+					// Match the registry state's qualified-fork destruction discipline: once the
+					// process-port hook invalidates the epoch, a child leaks its inherited state
+					// instead of running heap/member destruction from a multi-threaded parent.
+					if (stale_child_epoch &&
+						stale_child_epoch->load(std::memory_order_acquire) ==
+							expected_process_epoch)
+						delete state;
+				}};
+		}
+
+		sqlite_shm_reader_lifecycle_identity_scope seal_identity_scope_for_registry(
+			const std::shared_ptr<sqlite_shm_process_identity_issuer_state>& state,
+			const sqlite_shm_lease_family_binding& family,
+			std::shared_ptr<std::atomic_bool> family_authority_latch,
+			const std::uint64_t family_epoch,
+			const std::uint64_t family_pin_token,
+			const sqlite_backend_opaque_identity& callback_cohort,
+			const sqlite_backend_opaque_identity& request_seal,
+			const sqlite_shm_reader_lifecycle_owner_coordinates& coordinates)
+		{
+			return state->seal_scope(family,
+				std::move(family_authority_latch),
+				family_epoch,
+				family_pin_token,
+				callback_cohort,
+				request_seal,
+				coordinates);
+		}
+
+		void exhaust_identity_issuer_for_registry(
+			const std::shared_ptr<sqlite_shm_process_identity_issuer_state>& state) noexcept
+		{
+			if (state)
+				state->exhaust_for_testing();
+		}
+	} // namespace detail
+
+	bool sqlite_shm_reader_lifecycle_identity_scope::valid() const noexcept
+	{
+		return detail::scope_control_current(control_);
+	}
+
+	sqlite_shm_reader_lifecycle_identity_scope::~sqlite_shm_reader_lifecycle_identity_scope() noexcept
+	{
+		if (control_)
+			control_->active.store(false, std::memory_order_release);
+	}
+
+	sqlite_shm_reader_lifecycle_identity_scope::sqlite_shm_reader_lifecycle_identity_scope(
+		std::shared_ptr<detail::sqlite_shm_reader_lifecycle_identity_scope_control> control) noexcept
+		: control_{std::move(control)}
+	{
+	}
+
+	sqlite_shm_reader_callback_identity_permit::~sqlite_shm_reader_callback_identity_permit() noexcept
+	{
+		detail::sqlite_shm_process_identity_issuer_state::abandon_record(control_);
+	}
+
+	sqlite_shm_reader_callback_identity_permit::sqlite_shm_reader_callback_identity_permit(
+		sqlite_shm_reader_callback_identity_permit&& other) noexcept
+		: control_{std::move(other.control_)}
+	{
+	}
+
+	sqlite_shm_reader_callback_identity_permit::sqlite_shm_reader_callback_identity_permit(
+		std::shared_ptr<detail::sqlite_shm_process_identity_record_control> control) noexcept
+		: control_{std::move(control)}
+	{
+	}
+
+	bool sqlite_shm_reader_callback_identity_permit::valid() const noexcept
+	{
+		return control_ && detail::scope_control_current(control_->scope) &&
+			!control_->issuer.expired() &&
+			control_->phase.load(std::memory_order_acquire) ==
+				detail::sqlite_shm_process_identity_record_phase::reserved;
+	}
+
+	sqlite_shm_issued_reader_callback_identity::~sqlite_shm_issued_reader_callback_identity() noexcept
+	{
+		detail::sqlite_shm_process_identity_issuer_state::abandon_record(control_);
+	}
+
+	sqlite_shm_issued_reader_callback_identity::sqlite_shm_issued_reader_callback_identity(
+		sqlite_shm_issued_reader_callback_identity&& other) noexcept
+		: control_{std::move(other.control_)}, receipt_{std::move(other.receipt_)}
+	{
+	}
+
+	sqlite_shm_issued_reader_callback_identity::sqlite_shm_issued_reader_callback_identity(
+		std::shared_ptr<detail::sqlite_shm_process_identity_record_control> control,
+		sqlite_shm_callback_execution_receipt receipt) noexcept
+		: control_{std::move(control)}, receipt_{std::move(receipt)}
+	{
+	}
+
+	bool sqlite_shm_issued_reader_callback_identity::valid() const noexcept
+	{
+		if (!control_ || !detail::scope_control_current(control_->scope) ||
+			control_->issuer.expired())
+			return false;
+		const auto phase = control_->phase.load(std::memory_order_acquire);
+		return phase == detail::sqlite_shm_process_identity_record_phase::sealed ||
+			phase == detail::sqlite_shm_process_identity_record_phase::issuing_effect;
+	}
+
+	const sqlite_shm_callback_execution_receipt&
+	sqlite_shm_issued_reader_callback_identity::receipt() const noexcept
+	{
+		return receipt_;
+	}
+
+	sqlite_shm_issued_reader_effect_identity::~sqlite_shm_issued_reader_effect_identity() noexcept
+	{
+		detail::sqlite_shm_process_identity_issuer_state::abandon_record(control_);
+	}
+
+	sqlite_shm_issued_reader_effect_identity::sqlite_shm_issued_reader_effect_identity(
+		sqlite_shm_issued_reader_effect_identity&& other) noexcept
+		: control_{std::move(other.control_)}, identity_{std::move(other.identity_)}
+	{
+	}
+
+	sqlite_shm_issued_reader_effect_identity::sqlite_shm_issued_reader_effect_identity(
+		std::shared_ptr<detail::sqlite_shm_process_identity_record_control> control,
+		sqlite_backend_opaque_identity identity) noexcept
+		: control_{std::move(control)}, identity_{std::move(identity)}
+	{
+	}
+
+	bool sqlite_shm_issued_reader_effect_identity::valid() const noexcept
+	{
+		return control_ && detail::scope_control_current(control_->scope) &&
+			!control_->issuer.expired() && detail::record_parent_current(control_) &&
+			control_->phase.load(std::memory_order_acquire) ==
+				detail::sqlite_shm_process_identity_record_phase::sealed;
+	}
+
+	const sqlite_backend_opaque_identity&
+	sqlite_shm_issued_reader_effect_identity::identity() const noexcept
+	{
+		return identity_;
+	}
+
+	sqlite_shm_process_global_identity_issuer::sqlite_shm_process_global_identity_issuer(
+		std::weak_ptr<detail::sqlite_shm_process_identity_issuer_state> state,
+		std::shared_ptr<std::atomic<std::uint64_t>> process_epoch,
+		std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch,
+		const std::uint64_t expected_process_epoch) noexcept
+		: state_{std::move(state)}, process_epoch_{std::move(process_epoch)},
+		  registry_issuer_owner_latch_{std::move(registry_issuer_owner_latch)},
+		  expected_process_epoch_{expected_process_epoch}
+	{
+	}
+
+	bool sqlite_shm_process_global_identity_issuer::current_before_state_lock() const noexcept
+	{
+		return process_epoch_ && expected_process_epoch_ != 0U &&
+			process_epoch_->load(std::memory_order_acquire) == expected_process_epoch_ &&
+			registry_issuer_owner_latch_ &&
+			registry_issuer_owner_latch_->load(std::memory_order_acquire);
+	}
+
+	void sqlite_shm_process_global_identity_issuer::set_scope_live_records_for_testing(
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		const std::size_t value) noexcept
+	{
+		if (scope.control_)
+			scope.control_->live_records.store(value, std::memory_order_release);
+	}
+
+	std::size_t sqlite_shm_process_global_identity_issuer::scope_live_records_for_testing(
+		const sqlite_shm_reader_lifecycle_identity_scope& scope) const noexcept
+	{
+		return scope.control_
+			? scope.control_->live_records.load(std::memory_order_acquire)
+			: 0U;
+	}
+
+	void sqlite_shm_process_global_identity_issuer::set_callback_live_children_for_testing(
+		const sqlite_shm_issued_reader_callback_identity& callback,
+		const std::size_t value) noexcept
+	{
+		if (callback.control_)
+			callback.control_->live_children.store(value, std::memory_order_release);
+	}
+
+	std::size_t sqlite_shm_process_global_identity_issuer::callback_live_children_for_testing(
+		const sqlite_shm_issued_reader_callback_identity& callback) const noexcept
+	{
+		return callback.control_
+			? callback.control_->live_children.load(std::memory_order_acquire)
+			: 0U;
+	}
+
+	void sqlite_shm_process_global_identity_issuer::arm_pause_for_testing(
+		const sqlite_shm_identity_issuer_pause_point_for_testing point) noexcept
+	{
+		if (!current_before_state_lock())
+			return;
+		if (const auto state = state_.lock())
+			state->arm_pause_for_testing(point);
+	}
+
+	bool sqlite_shm_process_global_identity_issuer::pause_entered_for_testing(
+		const sqlite_shm_identity_issuer_pause_point_for_testing point) const noexcept
+	{
+		if (!current_before_state_lock())
+			return false;
+		const auto state = state_.lock();
+		return state && state->pause_entered_for_testing(point);
+	}
+
+	void sqlite_shm_process_global_identity_issuer::release_pause_for_testing() noexcept
+	{
+		if (!process_epoch_ ||
+			process_epoch_->load(std::memory_order_acquire) != expected_process_epoch_)
+			return;
+		if (const auto state = state_.lock())
+			state->release_pause_for_testing();
+	}
+
+	bool sqlite_shm_process_global_identity_issuer::valid() const noexcept
+	{
+		if (!current_before_state_lock())
+			return false;
+		const auto state = state_.lock();
+		return state && state->current();
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_callback_identity_permit>
+	sqlite_shm_process_global_identity_issuer::reserve_callback(
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		const sqlite_shm_reader_callback_identity_role role,
+		sqlite_backend_opaque_identity thread_identity,
+		const std::uint64_t reentrancy_depth)
+	{
+		if (!current_before_state_lock())
+			return reject(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto state = state_.lock();
+		return state ? state->reserve_callback(scope, role, std::move(thread_identity),
+										 reentrancy_depth)
+					 : sqlite_shm_lease_result<sqlite_shm_reader_callback_identity_permit>{
+						   reject(sqlite_shm_lease_rejection_reason::stale_token)};
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_issued_reader_callback_identity>
+	sqlite_shm_process_global_identity_issuer::seal_callback(
+		sqlite_shm_reader_callback_identity_permit& permit,
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		const sqlite_shm_reader_callback_identity_role role) noexcept
+	{
+		if (!current_before_state_lock())
+			return reject(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto state = state_.lock();
+		return state ? state->seal_callback(permit, scope, role)
+					 : sqlite_shm_lease_result<sqlite_shm_issued_reader_callback_identity>{
+						   reject(sqlite_shm_lease_rejection_reason::stale_token)};
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_issued_reader_effect_identity>
+	sqlite_shm_process_global_identity_issuer::issue_effect(
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		const sqlite_shm_issued_reader_callback_identity& callback,
+		const sqlite_shm_reader_effect_identity_role role)
+	{
+		if (!current_before_state_lock())
+			return reject(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto state = state_.lock();
+		return state ? state->issue_effect(scope, callback, role)
+					 : sqlite_shm_lease_result<sqlite_shm_issued_reader_effect_identity>{
+						   reject(sqlite_shm_lease_rejection_reason::stale_token)};
+	}
+
+	sqlite_shm_lease_result<void> sqlite_shm_process_global_identity_issuer::validate_callback(
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		const sqlite_shm_issued_reader_callback_identity& callback,
+		const sqlite_shm_reader_callback_identity_role role) const noexcept
+	{
+		if (!current_before_state_lock())
+			return reject(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto state = state_.lock();
+		return state ? state->validate_callback(scope, callback, role)
+					 : sqlite_shm_lease_result<void>{
+						   reject(sqlite_shm_lease_rejection_reason::stale_token)};
+	}
+
+	sqlite_shm_lease_result<void> sqlite_shm_process_global_identity_issuer::validate_effect(
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		const sqlite_shm_issued_reader_callback_identity& callback,
+		const sqlite_shm_issued_reader_effect_identity& effect,
+		const sqlite_shm_reader_effect_identity_role role) const noexcept
+	{
+		if (!current_before_state_lock())
+			return reject(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto state = state_.lock();
+		return state ? state->validate_effect(scope, callback, effect, role)
+					 : sqlite_shm_lease_result<void>{
+						   reject(sqlite_shm_lease_rejection_reason::stale_token)};
+	}
+
+	sqlite_shm_lease_result<void> sqlite_shm_process_global_identity_issuer::retire_callback(
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		sqlite_shm_issued_reader_callback_identity& callback,
+		const sqlite_shm_reader_callback_identity_role role) noexcept
+	{
+		if (!current_before_state_lock())
+			return reject(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto state = state_.lock();
+		return state ? state->retire_callback(scope, callback, role)
+					 : sqlite_shm_lease_result<void>{
+						   reject(sqlite_shm_lease_rejection_reason::stale_token)};
+	}
+
+	sqlite_shm_lease_result<void> sqlite_shm_process_global_identity_issuer::retire_effect(
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		const sqlite_shm_issued_reader_callback_identity& callback,
+		sqlite_shm_issued_reader_effect_identity& effect,
+		const sqlite_shm_reader_effect_identity_role role) noexcept
+	{
+		if (!current_before_state_lock())
+			return reject(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto state = state_.lock();
+		return state ? state->retire_effect(scope, callback, effect, role)
+					 : sqlite_shm_lease_result<void>{
+						   reject(sqlite_shm_lease_rejection_reason::stale_token)};
+	}
+
+	sqlite_shm_lease_result<void> sqlite_shm_process_global_identity_issuer::retire_scope(
+		sqlite_shm_reader_lifecycle_identity_scope& scope) noexcept
+	{
+		if (!current_before_state_lock())
+			return reject(sqlite_shm_lease_rejection_reason::stale_token);
+		const auto state = state_.lock();
+		return state ? state->retire_scope(scope)
+					 : sqlite_shm_lease_result<void>{
+						   reject(sqlite_shm_lease_rejection_reason::stale_token)};
+	}
+} // namespace cxxlens::sdk
