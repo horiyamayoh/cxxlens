@@ -654,6 +654,14 @@ namespace
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_holder>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_map_inflight>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_reader_attachment_map_inflight>);
+	static_assert(
+		!std::is_default_constructible_v<sqlite_shm_reader_late_close_outer_unwind_authority>);
+	static_assert(
+		!std::is_copy_constructible_v<sqlite_shm_reader_late_close_outer_unwind_authority>);
+	static_assert(!std::is_copy_assignable_v<sqlite_shm_reader_late_close_outer_unwind_authority>);
+	static_assert(!std::is_move_assignable_v<sqlite_shm_reader_late_close_outer_unwind_authority>);
+	static_assert(
+		!std::is_trivially_copyable_v<sqlite_shm_reader_late_close_outer_unwind_authority>);
 	static_assert(!std::is_default_constructible_v<
 				  sqlite_shm_verified_reader_attachment_zero_effect_receipt>);
 	static_assert(
@@ -685,6 +693,8 @@ namespace
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_holder>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_map_inflight>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_attachment_map_inflight>);
+	static_assert(std::is_nothrow_move_constructible_v<
+				  sqlite_shm_reader_late_close_outer_unwind_authority>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_session>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_cleanup_obligation>);
 	static_assert(
@@ -695,6 +705,8 @@ namespace
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_release>);
 	static_assert(std::is_nothrow_destructible_v<sqlite_shm_writer_holder>);
 	static_assert(std::is_nothrow_destructible_v<sqlite_shm_reader_handoff>);
+	static_assert(
+		std::is_nothrow_destructible_v<sqlite_shm_reader_late_close_outer_unwind_authority>);
 
 	void require(const bool condition, const std::string_view message)
 	{
@@ -904,15 +916,18 @@ namespace
 		using custody_state = sqlite_shm_reader_custody_state;
 		using group = sqlite_shm_reader_attachment_group_phase;
 		using ack = sqlite_shm_reader_logical_ack_phase;
+		using late_close = sqlite_shm_reader_late_close_drain_phase;
 		using close = sqlite_shm_reader_connection_close_phase;
 		using cut = sqlite_shm_reader_cut_phase;
+		using provenance = sqlite_shm_reader_late_close_provenance_kind;
 
 		static_assert(sqlite_shm_reader_attachment_reservation_phases.size() == 9U);
 		static_assert(sqlite_shm_reader_session_reservation_phases.size() == 5U);
-		static_assert(sqlite_shm_reader_custody_kinds.size() == 16U);
+		static_assert(sqlite_shm_reader_custody_kinds.size() == 18U);
 		static_assert(sqlite_shm_reader_custody_states.size() == 4U);
 		static_assert(sqlite_shm_reader_attachment_group_phases.size() == 5U);
 		static_assert(sqlite_shm_reader_logical_ack_phases.size() == 4U);
+		static_assert(sqlite_shm_reader_late_close_drain_phases.size() == 6U);
 		static_assert(sqlite_shm_reader_connection_close_phases.size() == 4U);
 		static_assert(sqlite_shm_reader_lifecycle_event_kinds.size() == 8U);
 		static_assert(sqlite_shm_reader_cut_kinds.size() == 4U);
@@ -1005,6 +1020,53 @@ namespace
 									   ack_edges,
 									   is_sqlite_shm_reader_logical_ack_transition,
 									   "reader logical acknowledgement graph is exact and closed");
+
+		static_assert(
+			sqlite_shm_reader_late_close_drain_phases ==
+			std::array{late_close::not_applicable,
+						   late_close::retained_original_callback_drain,
+						   late_close::cleanup_admitted,
+						   late_close::cleanup_confirmed_awaiting_sqlite_ack,
+						   late_close::terminal_quarantined,
+						   late_close::consumed_by_exact_outer_unmap});
+		constexpr std::array late_close_edges{
+			std::pair{late_close::not_applicable,
+					  late_close::retained_original_callback_drain},
+			std::pair{late_close::retained_original_callback_drain,
+					  late_close::cleanup_admitted},
+			std::pair{late_close::retained_original_callback_drain,
+					  late_close::terminal_quarantined},
+			std::pair{late_close::cleanup_admitted,
+					  late_close::cleanup_confirmed_awaiting_sqlite_ack},
+			std::pair{late_close::cleanup_admitted, late_close::terminal_quarantined},
+			std::pair{late_close::cleanup_confirmed_awaiting_sqlite_ack,
+					  late_close::consumed_by_exact_outer_unmap},
+			std::pair{late_close::cleanup_confirmed_awaiting_sqlite_ack,
+					  late_close::terminal_quarantined},
+		};
+		verify_closed_transition_graph(sqlite_shm_reader_late_close_drain_phases,
+									   late_close_edges,
+									   is_sqlite_shm_reader_late_close_drain_transition,
+									   "reader late-close drain graph is exact and closed");
+		for (const auto destination : sqlite_shm_reader_late_close_drain_phases)
+		{
+			require(!is_sqlite_shm_reader_late_close_drain_transition(
+						late_close::terminal_quarantined, destination),
+					"terminal late-close quarantine has no successor");
+			require(!is_sqlite_shm_reader_late_close_drain_transition(
+						late_close::consumed_by_exact_outer_unmap, destination),
+					"consumed late-close outer unwind has no successor");
+		}
+
+		constexpr std::array late_close_provenance_kinds{
+			provenance::same_thread_or_reentrant_precleanup_quarantine,
+			provenance::bounded_other_thread_timeout_precleanup_quarantine,
+			provenance::bounded_other_thread_unknown_precleanup_quarantine,
+		};
+		static_assert(late_close_provenance_kinds.size() == 3U);
+		verify_dense_unique_enum_values(
+			late_close_provenance_kinds,
+			"reader late-close provenance vocabulary is dense and unique");
 
 		constexpr std::array close_edges{
 			std::pair{close::open, close::close_admitted},
@@ -9890,13 +9952,14 @@ namespace
 			require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
 					"revoke unmap-cut wait-policy writer gate");
 
-			const auto unmap_callback = selected == scenario::same_thread
+			const auto unmap_callback = selected == scenario::same_thread ||
+				selected == scenario::reentrant
 				? sqlite_shm_callback_execution_receipt{reader.session_request.execution
-															.thread_identity,
-														0U,
-														identity("test.reader-unmap-same-thread",
-																 marker)}
-				: callback(10U, marker + 3U, selected == scenario::reentrant ? 1U : 0U);
+													.thread_identity,
+												selected == scenario::reentrant ? 1U : 0U,
+												identity("test.reader-unmap-same-thread",
+														 marker)}
+				: callback(10U, marker + 3U);
 			auto unmap = coordinator.begin_reader_unmap(
 				reader.handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});
 

@@ -21,6 +21,7 @@ namespace cxxlens::sdk
 		class sqlite_shm_mapping_lease_state;
 		class sqlite_shm_mapping_registry_state;
 		class sqlite_writer_shm_mapping_epoch_state;
+		struct sqlite_shm_reader_late_close_outer_unwind_control;
 
 		struct sqlite_shm_lease_token_identity
 		{
@@ -315,6 +316,42 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity invocation_token;
 
 		[[nodiscard]] bool operator==(const sqlite_shm_callback_execution_receipt&) const = default;
+	};
+
+	/** Closed DF-0209 provenance for a terminal close that retained one original callback drain. */
+	enum class sqlite_shm_reader_late_close_provenance_kind : std::uint8_t
+	{
+		same_thread_or_reentrant_precleanup_quarantine,
+		bounded_other_thread_timeout_precleanup_quarantine,
+		bounded_other_thread_unknown_precleanup_quarantine,
+	};
+
+	struct sqlite_shm_reader_late_close_provenance
+	{
+		sqlite_shm_reader_late_close_provenance_kind kind{
+			sqlite_shm_reader_late_close_provenance_kind::
+				same_thread_or_reentrant_precleanup_quarantine};
+		const void* process_registry_instance{};
+		std::optional<sqlite_shm_lease_family_binding> family;
+		std::optional<sqlite_shm_reader_attachment_reservation_identity> attachment;
+		std::optional<sqlite_shm_reader_open_epoch_binding> open_binding;
+		std::uint64_t writer_generation{};
+		std::uint64_t native_map_start_sequence{};
+		std::uint64_t registry_open_token{};
+		std::uint64_t close_owner_token{};
+		std::uint64_t close_cut_sequence{};
+		std::uint64_t close_owner_consumption_sequence{};
+		std::uint64_t wait_owner_token{};
+		bool same_thread_marker{};
+		std::uint64_t wait_start_sequence{};
+		std::uint64_t wait_terminal_sequence{};
+		std::uint64_t close_terminal_sequence{};
+		sqlite_shm_callback_execution_receipt close_callback;
+		std::uint32_t native_xclose_call_count{};
+		std::uint32_t prior_logical_ack_count{};
+
+		[[nodiscard]] bool operator==(const sqlite_shm_reader_late_close_provenance&) const =
+			default;
 	};
 
 	/** Exact page tuple. The pointer is non-owning and is used only as opaque identity. */
@@ -924,6 +961,25 @@ namespace cxxlens::sdk
 
 		detail::sqlite_shm_reader_logical_ack_phase phase_{
 			detail::sqlite_shm_reader_logical_ack_phase::consumed_by_exact_unmap};
+		int outward_status_{};
+	};
+
+	/** Zero-native result of consuming the exact caller-owned late-close outer unwind. */
+	class sqlite_shm_reader_late_close_logical_ack_result
+	{
+	  public:
+		[[nodiscard]] detail::sqlite_shm_reader_late_close_drain_phase phase() const noexcept;
+		[[nodiscard]] int outward_status() const noexcept;
+		[[nodiscard]] bool delegated_native_effect() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		explicit sqlite_shm_reader_late_close_logical_ack_result(
+			int stored_cleanup_status) noexcept;
+
+		detail::sqlite_shm_reader_late_close_drain_phase phase_{
+			detail::sqlite_shm_reader_late_close_drain_phase::consumed_by_exact_outer_unmap};
 		int outward_status_{};
 	};
 
@@ -1670,6 +1726,12 @@ namespace cxxlens::sdk
 		std::uint64_t logical_ack_sequence{};
 		std::uint64_t cleanup_session_origin_sequence{};
 		std::uint64_t cleanup_session_terminal_sequence{};
+		detail::sqlite_shm_reader_late_close_drain_phase late_close_drain_phase{
+			detail::sqlite_shm_reader_late_close_drain_phase::not_applicable};
+		std::optional<sqlite_shm_reader_late_close_provenance> late_close_provenance;
+		bool late_close_outer_owner_claimed{};
+		bool late_close_outer_owner_armed{};
+		std::uint64_t late_close_ack_sequence{};
 	};
 
 	struct sqlite_shm_reader_session_reservation_test_view
@@ -2095,6 +2157,45 @@ namespace cxxlens::sdk
 		std::uint64_t generation_{};
 	};
 
+	/**
+	 * Caller-side, pre-close-cut one-shot authority for the original first-map outer unwind.
+	 *
+	 * The registry may retain the shared nonauthorizing control, but never this move-only owner.
+	 * Destruction of an armed exact owner terminalizes a published late acknowledgement and does
+	 * not release any retained lifetime pin.
+	 */
+	class sqlite_shm_reader_late_close_outer_unwind_authority
+	{
+	  public:
+		~sqlite_shm_reader_late_close_outer_unwind_authority() noexcept;
+		sqlite_shm_reader_late_close_outer_unwind_authority(
+			sqlite_shm_reader_late_close_outer_unwind_authority&&) noexcept;
+		sqlite_shm_reader_late_close_outer_unwind_authority&
+		operator=(sqlite_shm_reader_late_close_outer_unwind_authority&&) = delete;
+		sqlite_shm_reader_late_close_outer_unwind_authority(
+			const sqlite_shm_reader_late_close_outer_unwind_authority&) = delete;
+		sqlite_shm_reader_late_close_outer_unwind_authority&
+		operator=(const sqlite_shm_reader_late_close_outer_unwind_authority&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_shm_reader_attachment_map_inflight;
+		friend class sqlite_same_process_shm_lease_test_peer;
+		sqlite_shm_reader_late_close_outer_unwind_authority(
+			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
+			std::shared_ptr<detail::sqlite_shm_reader_late_close_outer_unwind_control> control,
+			detail::sqlite_shm_lease_token_identity token,
+			detail::sqlite_shm_mapping_generation_identity generation) noexcept;
+		void disarm() noexcept;
+
+		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::shared_ptr<detail::sqlite_shm_reader_late_close_outer_unwind_control> control_;
+		std::uint64_t token_{};
+		std::uint64_t generation_{};
+	};
+
 	class sqlite_shm_reader_attachment_map_inflight
 	{
 	  public:
@@ -2110,6 +2211,7 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] bool valid() const noexcept;
 		[[nodiscard]] std::uint64_t generation() const noexcept;
+		[[nodiscard]] bool late_close_outer_unwind_armed() const noexcept;
 
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
@@ -2127,6 +2229,8 @@ namespace cxxlens::sdk
 		std::uint64_t token_{};
 		std::uint64_t generation_{};
 		bool terminal_presentation_disabled_{};
+		std::shared_ptr<detail::sqlite_shm_reader_late_close_outer_unwind_control>
+			late_close_control_;
 	};
 
 	enum class sqlite_shm_reader_session_phase : std::uint8_t
@@ -2217,6 +2321,7 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] bool valid() const noexcept;
 		[[nodiscard]] std::uint64_t generation() const noexcept;
+		[[nodiscard]] bool is_late_close_drain() const noexcept;
 
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
@@ -2226,7 +2331,8 @@ namespace cxxlens::sdk
 		explicit sqlite_shm_reader_unpublished_cleanup_obligation(
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			detail::sqlite_shm_lease_token_identity token,
-			detail::sqlite_shm_mapping_generation_identity generation) noexcept;
+			detail::sqlite_shm_mapping_generation_identity generation,
+			bool late_close_drain = false) noexcept;
 		void disable_terminal_presentation() noexcept;
 		void disarm() noexcept;
 
@@ -2234,6 +2340,7 @@ namespace cxxlens::sdk
 		std::uint64_t token_{};
 		std::uint64_t generation_{};
 		bool terminal_presentation_disabled_{};
+		bool late_close_drain_{};
 	};
 
 	class sqlite_shm_reader_handoff
@@ -2798,6 +2905,17 @@ namespace cxxlens::sdk
 								  sqlite_shm_reader_session& session,
 								  const sqlite_shm_reader_attachment_map_request& request,
 								  sqlite_shm_reader_map_predelegate_minter& predelegate_minter);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_late_close_outer_unwind_authority>
+		mint_registry_reader_late_close_outer_unwind_authority(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_session& session,
+			const sqlite_shm_callback_execution_receipt& expected_outer_unmap_callback);
+		[[nodiscard]] sqlite_shm_lease_result<void> mark_registry_reader_late_close_native_map_start(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_reader_session& session,
+			const sqlite_shm_reader_late_close_outer_unwind_authority& owner) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_map_commit>
 		commit_registry_reader_map(
 			sqlite_shm_registry_family_pin& family,
@@ -2862,6 +2980,11 @@ namespace cxxlens::sdk
 			const sqlite_shm_reader_open_epoch_binding& binding,
 			const sqlite_shm_reader_logical_ack_request& request,
 			std::optional<sqlite_shm_reader_attachment_authority>& completed_activity) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_late_close_logical_ack_result>
+		consume_registry_reader_late_close_logical_ack(
+			const sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_late_close_outer_unwind_authority& owner,
+			const sqlite_shm_reader_logical_ack_request& request) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> complete_registry_reader_session(
 			sqlite_shm_reader_session& session,
 			const sqlite_shm_reader_session_terminal_receipt& receipt,
@@ -2914,6 +3037,9 @@ namespace cxxlens::sdk
 		void inject_reader_unmap_terminal_commit_failure_for_testing() noexcept;
 		void inject_reader_unmap_post_receipt_state_failure_for_testing() noexcept;
 		void inject_reader_unpublished_cleanup_terminal_commit_failure_for_testing() noexcept;
+		void inject_reader_logical_ack_commit_failure_for_testing() noexcept;
+		void inject_reader_callback_replay_for_testing(
+			sqlite_backend_opaque_identity invocation_token) noexcept;
 		void inject_reader_unmap_begin_preparation_failure_for_testing() noexcept;
 		void inject_reader_coarse_unmap_terminal_exception_for_testing() noexcept;
 		void inject_reader_operation_mutex_acquire_failure_for_testing() noexcept;

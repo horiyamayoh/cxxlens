@@ -757,6 +757,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool retains_exact_owned_terminal_lifetimes(
 			const sqlite_shm_registry_family_pin& family,
 			const sqlite_shm_reader_attachment_map_request& request) const noexcept;
+		[[nodiscard]] bool retains_exact_owned_terminal_lifetimes(
+			const void* process_registry_instance,
+			const sqlite_shm_reader_attachment_map_request& request) const noexcept;
 		void invalidate_activity_for_testing() noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
 
@@ -860,6 +863,17 @@ namespace cxxlens::sdk
 		begin_reader_map(sqlite_shm_registry_family_pin& family,
 						 sqlite_shm_reader_session& session,
 						 const sqlite_shm_reader_attachment_map_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_late_close_outer_unwind_authority>
+		mint_reader_late_close_outer_unwind_authority(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_session& session,
+			const sqlite_shm_callback_execution_receipt& expected_outer_unmap_callback);
+		[[nodiscard]] sqlite_shm_lease_result<void> mark_reader_late_close_native_map_start(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_reader_session& session,
+			const sqlite_shm_reader_late_close_outer_unwind_authority& owner) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_map_commit>
 		commit_reader_map(sqlite_shm_registry_family_pin& family,
 						  sqlite_shm_reader_attachment_map_inflight& inflight,
@@ -912,6 +926,11 @@ namespace cxxlens::sdk
 		consume_reader_logical_ack(sqlite_shm_registry_family_pin& family,
 								   const sqlite_shm_reader_open_authority& open,
 								   const sqlite_shm_reader_logical_ack_request& request) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_late_close_logical_ack_result>
+		consume_reader_late_close_logical_ack(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_late_close_outer_unwind_authority& owner,
+			const sqlite_shm_reader_logical_ack_request& request) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		complete_reader_session(sqlite_shm_registry_family_pin& family,
 								sqlite_shm_reader_session& session,

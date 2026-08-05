@@ -640,10 +640,55 @@ namespace cxxlens::sdk
 			coordinator.inject_reader_close_terminal_commit_failure_for_testing();
 		}
 
+		static void fail_next_reader_unpublished_cleanup_terminal_transition(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_reader_unpublished_cleanup_terminal_commit_failure_for_testing();
+		}
+
+		static void fail_next_reader_logical_ack_transition(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_reader_logical_ack_commit_failure_for_testing();
+		}
+
+		static void inject_reader_callback_replay(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
+			sqlite_backend_opaque_identity invocation_token) noexcept
+		{
+			coordinator.inject_reader_callback_replay_for_testing(
+				std::move(invocation_token));
+		}
+
+		[[nodiscard]] static std::uint64_t reader_late_close_outer_owner_token(
+			const sqlite_shm_reader_late_close_outer_unwind_authority& owner) noexcept
+		{
+			return owner.token_;
+		}
+
+		[[nodiscard]] static std::uint64_t reader_unpublished_cleanup_owner_token(
+			const sqlite_shm_reader_unpublished_cleanup_obligation& cleanup) noexcept
+		{
+			return cleanup.token_;
+		}
+
 		[[nodiscard]] static sqlite_shm_reader_lifecycle_test_view
 		reader_lifecycle_view(const sqlite_same_process_shm_mapping_lease_coordinator& coordinator)
 		{
 			return coordinator.reader_lifecycle_view_for_testing();
+		}
+
+		[[nodiscard]] static sqlite_shm_lease_result<
+			sqlite_shm_reader_late_close_outer_unwind_authority>
+		mint_reader_late_close_outer_unwind_authority(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_session& session,
+			const sqlite_shm_callback_execution_receipt& expected_outer_callback)
+		{
+			return coordinator.mint_registry_reader_late_close_outer_unwind_authority(
+				family, inflight, session, expected_outer_callback);
 		}
 
 		[[nodiscard]] static sqlite_shm_lease_result<
@@ -3449,7 +3494,7 @@ namespace
 				*setup.fixture.family_pin, setup.session, map_request);
 			require(map && map->valid(), "begin active map before same-thread live-close cut");
 			const sqlite_shm_callback_execution_receipt unmap_callback{
-				identity("test.registry.reader-live-close-unmap-thread", current.marker),
+				map_request.callback.thread_identity,
 				current.reentrant ? 1U : 0U,
 				identity("test.registry.reader-live-close-cut-unmap", current.marker)};
 			const sqlite_shm_callback_execution_receipt close_callback{
@@ -7784,8 +7829,8 @@ namespace
 			sqlite_shm_retirement_wait_failure::timeout);
 		const auto registry = setup.fixture.registry->snapshot();
 		const auto lease = setup.coordinator->snapshot();
-		require(!failed &&
-					failed.error().reason ==
+		require(!failed, "exact-owner ack commit injection returns an error");
+		require(failed.error().reason ==
 						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
 					!unmap->valid() && lease.quarantined,
 				"registry wrapper terminalizes its timeout obligation");
@@ -8860,10 +8905,7 @@ namespace
 					*setup.fixture.family_pin, setup.session, map_request);
 				require(inflight && inflight->valid(), "begin same-thread first-map close fixture");
 				const sqlite_shm_callback_execution_receipt close_callback{
-					current.reentrant
-						? identity("test.registry.reader-first-close-reentrant-thread",
-								   current.marker)
-						: map_request.callback.thread_identity,
+					map_request.callback.thread_identity,
 					current.reentrant ? 1U : 0U,
 					identity("test.registry.reader-first-close-same-thread-call", current.marker)};
 				auto failed = setup.fixture.registry->begin_reader_close(
@@ -8949,6 +8991,1334 @@ namespace
 				lifecycle.live_custody_kind_counts[waiter_index] == 0U &&
 				lifecycle.live_custody_kind_counts[reporter_index] == 0U,
 			"reused map invocation is rejected before creating close-cut or wait authority");
+	}
+
+	enum class reader_late_close_path : std::uint8_t
+	{
+		same_thread,
+		reentrant,
+		timeout,
+		unknown,
+		different_thread_depth_one_timeout,
+	};
+
+	struct reader_late_close_mapped_setup
+	{
+		reader_candidate_setup candidate;
+		sqlite_shm_reader_attachment_map_request map_request;
+		sqlite_shm_verified_reader_attachment_post_map_receipt map_receipt;
+		sqlite_shm_callback_execution_receipt expected_outer_callback;
+		sqlite_shm_reader_attachment_map_inflight inflight;
+		sqlite_shm_reader_late_close_outer_unwind_authority outer_owner;
+		std::uint64_t map_owner_token{};
+		std::uint64_t session_owner_token{};
+		std::uint64_t outer_owner_token{};
+		std::size_t retained_activity_pin_count{};
+		std::size_t retained_registry_activity_count{};
+		std::uint8_t marker{};
+	};
+
+	[[nodiscard]] const sqlite_shm_reader_attachment_reservation_test_view&
+	only_reader_reservation(const reader_late_close_mapped_setup& setup,
+						  const sqlite_shm_reader_lifecycle_test_view& lifecycle)
+	{
+		const auto reservation = std::ranges::find_if(
+			lifecycle.attachment_reservations,
+			[&setup](const sqlite_shm_reader_attachment_reservation_test_view& candidate)
+			{
+				return candidate.attachment == setup.candidate.session_request.attachment;
+			});
+		require(reservation != lifecycle.attachment_reservations.end(),
+				"late-close lifecycle retains its exact attachment reservation");
+		return *reservation;
+	}
+
+	void retire_unused_reader_candidate(reader_candidate_setup& setup,
+									 const std::uint8_t marker)
+	{
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			setup.session_request,
+			sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
+			identity("test.registry.reader-late-close-wrong-session-terminal", marker));
+		require(setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value(),
+				"cancel wrong-session late-close fixture");
+		close_and_release_reader_open(setup.fixture, setup.open, marker + 1U);
+		retire_writer(*setup.coordinator, setup.holder, marker + 2U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke wrong-session late-close writer eligibility");
+		clean_fixture(setup.fixture);
+	}
+
+	[[nodiscard]] reader_late_close_mapped_setup prepare_reader_late_close_mapped_setup(
+		const std::uint8_t marker, const bool verify_wrong_native_start_owner = false)
+	{
+		auto candidate = make_reader_candidate_setup(marker);
+		auto map_request =
+			reader_attachment_map_request(candidate.session_request, marker + 1U);
+		auto inflight = candidate.fixture.registry->begin_reader_map(
+			*candidate.fixture.family_pin, candidate.session, map_request);
+		require(inflight && inflight->valid(), "begin native-started late-close first map");
+		const sqlite_shm_callback_execution_receipt expected_outer_callback{
+			map_request.callback.thread_identity,
+			map_request.callback.reentrancy_depth,
+			identity("test.registry.reader-late-close-outer-unmap", marker)};
+		const auto before_mint =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*candidate.coordinator);
+		const auto pins_before_mint =
+			candidate.fixture.registry->snapshot().active_activity_pin_count;
+		auto owner = candidate.fixture.registry->mint_reader_late_close_outer_unwind_authority(
+			*candidate.fixture.family_pin,
+			*inflight,
+			candidate.session,
+			expected_outer_callback);
+		const auto after_mint =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*candidate.coordinator);
+		require(owner && owner->valid() &&
+				pins_before_mint ==
+					candidate.fixture.registry->snapshot().active_activity_pin_count &&
+				after_mint.last_committed_sequence == before_mint.last_committed_sequence &&
+				after_mint.outstanding_terminal_permit_count ==
+					before_mint.outstanding_terminal_permit_count + 1U,
+				"mint one caller-owned late-close outer unwind without changing pin ownership");
+		require(after_mint.map_attempts.size() == 1U &&
+				after_mint.session_reservations.size() == 1U,
+				"minted late-close fixture exposes one exact map and session test row");
+		const auto map_owner_token = after_mint.map_attempts.front().map_token;
+		const auto session_owner_token = after_mint.session_reservations.front().session_token;
+		const auto outer_owner_token =
+			sqlite_same_process_shm_lease_test_peer::reader_late_close_outer_owner_token(*owner);
+		require(map_owner_token != 0U && session_owner_token != 0U && outer_owner_token != 0U &&
+				map_owner_token != session_owner_token && map_owner_token != outer_owner_token &&
+				session_owner_token != outer_owner_token,
+				"map, session, and outer unwind use distinct one-shot owner tokens");
+
+		if (verify_wrong_native_start_owner)
+		{
+			auto wrong = make_reader_candidate_setup(marker + 30U);
+			const auto before_wrong =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*candidate.coordinator);
+			const auto registry_before_wrong = candidate.fixture.registry->snapshot();
+			auto rejected = candidate.fixture.registry->mark_reader_late_close_native_map_start(
+				*candidate.fixture.family_pin, *inflight, wrong.session, *owner);
+			const auto after_wrong =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*candidate.coordinator);
+			const auto registry_after_wrong = candidate.fixture.registry->snapshot();
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						inflight->valid() && candidate.session.valid() && owner->valid() &&
+						after_wrong.last_issued_sequence == before_wrong.last_issued_sequence &&
+						after_wrong.last_committed_sequence ==
+							before_wrong.last_committed_sequence &&
+						after_wrong.outstanding_terminal_permit_slots ==
+							before_wrong.outstanding_terminal_permit_slots &&
+						registry_after_wrong.active_activity_pin_count ==
+							registry_before_wrong.active_activity_pin_count,
+					"wrong session cannot mark native map start or consume its reserved slot");
+			retire_unused_reader_candidate(wrong, marker + 30U);
+		}
+
+		auto marked = candidate.fixture.registry->mark_reader_late_close_native_map_start(
+			*candidate.fixture.family_pin, *inflight, candidate.session, *owner);
+		const auto after_mark =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*candidate.coordinator);
+		require(marked && inflight->valid() && candidate.session.valid() && owner->valid() &&
+				after_mark.last_committed_sequence > after_mint.last_committed_sequence &&
+				after_mark.outstanding_terminal_permit_count + 1U ==
+					after_mint.outstanding_terminal_permit_count &&
+				candidate.fixture.registry->snapshot().active_activity_pin_count ==
+					pins_before_mint,
+				"exact caller marks native xShmMap start once before the close cut");
+		const auto before_replay = after_mark;
+		auto replay = candidate.fixture.registry->mark_reader_late_close_native_map_start(
+			*candidate.fixture.family_pin, *inflight, candidate.session, *owner);
+		const auto after_replay =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*candidate.coordinator);
+		require(!replay && replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+				inflight->valid() && candidate.session.valid() && owner->valid() &&
+				after_replay.last_issued_sequence == before_replay.last_issued_sequence &&
+				after_replay.last_committed_sequence == before_replay.last_committed_sequence &&
+				after_replay.outstanding_terminal_permit_slots ==
+					before_replay.outstanding_terminal_permit_slots,
+				"native-start mark replay is rejected without allocating or consuming evidence");
+
+		auto map_receipt = sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+			map_request,
+			candidate.holder.generation(),
+			mapping(candidate.writer_attempt.native_page.get()),
+			identity("test.registry.reader-late-close-mapped-effect", marker));
+		const auto retained_activity_pin_count =
+			candidate.fixture.registry->snapshot().active_activity_pin_count;
+		const auto retained_registry_activity_count =
+			candidate.coordinator->snapshot().reader_registry_activity_authority_count;
+		require(retained_activity_pin_count == 3U && retained_registry_activity_count == 2U &&
+				candidate.coordinator->snapshot().reader_registry_activity_liveness_lost_count == 0U,
+				"native-started late-close fixture owns candidate and predelegate activity pins");
+		return {
+			std::move(candidate),
+			std::move(map_request),
+			std::move(map_receipt),
+			expected_outer_callback,
+			std::move(*inflight),
+			std::move(*owner),
+			map_owner_token,
+			session_owner_token,
+			outer_owner_token,
+			retained_activity_pin_count,
+			retained_registry_activity_count,
+			marker,
+		};
+	}
+
+	void terminalize_reader_late_close(reader_late_close_mapped_setup& setup,
+								   const reader_late_close_path path)
+	{
+		const auto same_thread = path == reader_late_close_path::same_thread;
+		const auto reentrant = path == reader_late_close_path::reentrant;
+		const auto unrelated_depth_one =
+			path == reader_late_close_path::different_thread_depth_one_timeout;
+		const auto bounded = path == reader_late_close_path::timeout ||
+			path == reader_late_close_path::unknown ||
+			path == reader_late_close_path::different_thread_depth_one_timeout;
+		const sqlite_shm_callback_execution_receipt close_callback{
+			same_thread || reentrant ? setup.map_request.callback.thread_identity
+						: identity(reentrant
+								   ? "test.registry.reader-late-close-reentrant-thread"
+								   : "test.registry.reader-late-close-other-thread",
+							   setup.marker),
+			reentrant || unrelated_depth_one ? 1U : 0U,
+			identity("test.registry.reader-late-close-xclose", setup.marker)};
+		auto close = setup.candidate.fixture.registry->begin_reader_close(
+			*setup.candidate.fixture.family_pin,
+			setup.candidate.open,
+			sqlite_shm_reader_close_request{close_callback});
+		if (bounded)
+		{
+			require(close && close->valid() && !close->native_effect_ready() && !close->route(),
+					"bounded late-close path retains one waiting close owner");
+			const auto failure = path == reader_late_close_path::timeout ||
+				path == reader_late_close_path::different_thread_depth_one_timeout
+				? sqlite_shm_retirement_wait_failure::timeout
+				: sqlite_shm_retirement_wait_failure::unknown;
+			auto failed = setup.candidate.fixture.registry->fail_reader_close_cut_wait(
+				*setup.candidate.fixture.family_pin,
+				setup.candidate.open,
+				*close,
+				close_callback,
+				failure);
+			require(!failed &&
+						failed.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						!close->valid(),
+					"bounded timeout/unknown terminal consumes the close wait owner");
+		}
+		else
+			require(!close &&
+						close.error().reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+					reentrant ? "reentrant late close terminalizes without waiting"
+							  : "same-thread late close terminalizes without waiting");
+
+		const auto lease = setup.candidate.coordinator->snapshot();
+		const auto registry = setup.candidate.fixture.registry->snapshot();
+		const auto lifecycle = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		const auto& reservation = only_reader_reservation(setup, lifecycle);
+		require(reservation.late_close_provenance.has_value(),
+				"late close retains one closed provenance record");
+		const auto& provenance = *reservation.late_close_provenance;
+		const auto expected_kind = [&]
+		{
+			switch (path)
+			{
+				case reader_late_close_path::same_thread:
+				case reader_late_close_path::reentrant:
+					return sqlite_shm_reader_late_close_provenance_kind::
+						same_thread_or_reentrant_precleanup_quarantine;
+				case reader_late_close_path::timeout:
+				case reader_late_close_path::different_thread_depth_one_timeout:
+					return sqlite_shm_reader_late_close_provenance_kind::
+						bounded_other_thread_timeout_precleanup_quarantine;
+				case reader_late_close_path::unknown:
+					return sqlite_shm_reader_late_close_provenance_kind::
+						bounded_other_thread_unknown_precleanup_quarantine;
+			}
+			std::unreachable();
+		}();
+		const auto late_drain_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+		const auto late_seal_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_outer_unwind_validation_seal);
+		const auto runtime_pin_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::
+				runtime_vfs_namespace_generation_native_mapping_lifetime_pin);
+		require(
+			setup.outer_owner.valid() && lease.quarantined &&
+				registry.quarantined_family_count == 1U &&
+				registry.active_activity_pin_count == setup.retained_activity_pin_count &&
+				lease.reader_registry_activity_authority_count ==
+					setup.retained_registry_activity_count &&
+				lease.reader_registry_activity_liveness_lost_count == 0U &&
+				lease.reader_attachment_group_count == 0U &&
+				lease.reader_attachment_live_member_count == 0U &&
+				lease.reader_attachment_audit_count == 0U &&
+				reservation.phase ==
+					detail::sqlite_shm_reader_attachment_reservation_phase::terminal_quarantined &&
+				!reservation.group_payload_present &&
+				reservation.late_close_drain_phase ==
+					detail::sqlite_shm_reader_late_close_drain_phase::
+						retained_original_callback_drain &&
+				reservation.late_close_outer_owner_claimed &&
+				reservation.late_close_outer_owner_armed &&
+				reservation.late_close_ack_sequence == 0U &&
+				lifecycle.live_custody_kind_counts[late_drain_index] == 1U &&
+				lifecycle.live_custody_kind_counts[late_seal_index] == 1U &&
+				lifecycle.live_custody_kind_counts[runtime_pin_index] == 1U &&
+				lifecycle.open_epochs.size() == 1U &&
+				lifecycle.open_epochs.front().phase ==
+					detail::sqlite_shm_reader_connection_close_phase::terminal_quarantined,
+			"late close retains only the mapped callback drain, validation seal, and lifetime pin");
+		require(
+			provenance.kind == expected_kind && provenance.process_registry_instance != nullptr &&
+				provenance.family && *provenance.family == setup.candidate.fixture.family &&
+				provenance.attachment &&
+					*provenance.attachment == setup.candidate.session_request.attachment &&
+				provenance.open_binding &&
+					*provenance.open_binding == lifecycle.open_epochs.front().binding &&
+				provenance.writer_generation == setup.candidate.holder.generation() &&
+				provenance.native_map_start_sequence != 0U &&
+				provenance.native_map_start_sequence < provenance.close_cut_sequence &&
+				provenance.registry_open_token ==
+					setup.candidate.session_request.attachment.registry_open_token() &&
+				provenance.close_owner_token == lifecycle.open_epochs.front().close_owner_token &&
+				provenance.close_callback == close_callback &&
+				provenance.close_cut_sequence < provenance.close_owner_consumption_sequence &&
+				provenance.close_owner_consumption_sequence < provenance.wait_terminal_sequence &&
+				provenance.wait_terminal_sequence < provenance.close_terminal_sequence &&
+				provenance.close_terminal_sequence ==
+					lifecycle.open_epochs.front().destination_sequence &&
+				provenance.native_xclose_call_count == 0U &&
+				provenance.prior_logical_ack_count == 0U,
+			"late-close provenance binds the full process/family/attachment/open/generation row");
+		if (bounded)
+			require(!provenance.same_thread_marker && provenance.wait_owner_token != 0U &&
+						provenance.close_owner_consumption_sequence <
+							provenance.wait_start_sequence &&
+						provenance.wait_start_sequence < provenance.wait_terminal_sequence,
+					"bounded P2/P3 provenance retains owner, wait-start, and wait-terminal order");
+		else
+			require(provenance.same_thread_marker && provenance.wait_owner_token == 0U &&
+						provenance.wait_start_sequence == 0U,
+					"P1 provenance records same-thread/reentrant resolution without a waiter");
+	}
+
+	[[nodiscard]] sqlite_shm_reader_unpublished_cleanup_obligation
+	begin_reader_late_close_cleanup(reader_late_close_mapped_setup& setup)
+	{
+		auto suppressed = setup.candidate.fixture.registry->commit_reader_map(
+			*setup.candidate.fixture.family_pin,
+			setup.inflight,
+			setup.map_receipt,
+			setup.candidate.session);
+		require(!suppressed &&
+					suppressed.error().reason ==
+						sqlite_shm_lease_rejection_reason::unpublished_cleanup_required &&
+					suppressed.error().action ==
+						sqlite_shm_lease_recovery_action::
+							attempt_nonremoving_unmap_then_outer_ioerr &&
+					setup.inflight.valid() && setup.candidate.session.valid() &&
+					setup.outer_owner.valid(),
+				"post-close mapped terminal publishes no pointer and selects one retained cleanup");
+		const auto cleanup_entry =
+			sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup(
+				setup.inflight,
+				sqlite_shm_reader_unpublished_cleanup_entry_kind::
+					exact_mapped_validation_failure,
+				setup.map_request,
+				setup.candidate.session_request,
+				setup.map_receipt.generation(),
+				sqlite_ok_status,
+				setup.map_receipt.mapping().native_mapping,
+				0,
+				setup.map_receipt.observed_attachment(),
+				setup.map_receipt.zero_resize_effect_receipt(),
+				identity("test.registry.reader-late-close-session-terminal", setup.marker));
+		auto cleanup = setup.candidate.fixture.registry->begin_reader_unpublished_cleanup(
+			*setup.candidate.fixture.family_pin,
+			setup.inflight,
+			cleanup_entry,
+			setup.candidate.session);
+		require(cleanup.has_value(), "admit one late-close unpublished cleanup obligation");
+		require(cleanup->valid(), "late-close cleanup obligation is immediately live");
+		require(!setup.inflight.valid() && !setup.candidate.session.valid(),
+				"late-close cleanup atomically consumes the original map/session owners");
+		require(setup.outer_owner.valid(),
+				"late-close cleanup admission preserves the exact outer unwind owner");
+		const auto cleanup_owner_token =
+			sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup_owner_token(*cleanup);
+		const auto lifecycle = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		const auto& reservation = only_reader_reservation(setup, lifecycle);
+		const auto cleanup_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::unpublished_cleanup);
+		const auto exact_present_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::exact_present_attachment);
+		require(cleanup_owner_token != 0U && cleanup_owner_token != setup.map_owner_token &&
+				cleanup_owner_token != setup.session_owner_token &&
+				cleanup_owner_token != setup.outer_owner_token &&
+				reservation.phase ==
+					detail::sqlite_shm_reader_attachment_reservation_phase::terminal_quarantined &&
+				!reservation.group_payload_present &&
+				reservation.late_close_drain_phase ==
+					detail::sqlite_shm_reader_late_close_drain_phase::cleanup_admitted &&
+				reservation.logical_ack_phase ==
+					detail::sqlite_shm_reader_logical_ack_phase::not_applicable &&
+				lifecycle.live_custody_kind_counts[cleanup_index] == 1U &&
+				lifecycle.live_custody_kind_counts[exact_present_index] == 1U &&
+				setup.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+					setup.retained_activity_pin_count &&
+				setup.candidate.coordinator->snapshot().reader_registry_activity_authority_count ==
+					setup.retained_registry_activity_count &&
+				setup.candidate.coordinator->snapshot()
+						.reader_registry_activity_liveness_lost_count == 0U,
+			"cleanup uses a distinct owner while the retained predelegate/activity pins stay exact");
+		return std::move(*cleanup);
+	}
+
+	void complete_reader_late_close_cleanup_ok(
+		reader_late_close_mapped_setup& setup,
+		sqlite_shm_reader_unpublished_cleanup_obligation& cleanup)
+	{
+		const auto terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup_terminal(
+				cleanup,
+				setup.map_request.callback,
+				sqlite_shm_reader_unpublished_cleanup_evidence_kind::exact_native_result,
+				sqlite_ok_status,
+				0,
+				0,
+				identity("test.registry.reader-late-close-cleanup-effect", setup.marker),
+				identity("test.registry.reader-late-close-cleanup-latch", setup.marker));
+		auto completed = setup.candidate.fixture.registry->complete_reader_unpublished_cleanup(
+			*setup.candidate.fixture.family_pin, cleanup, terminal);
+		const auto lifecycle = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		const auto& reservation = only_reader_reservation(setup, lifecycle);
+		const auto ack_index =
+			static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::logical_ack);
+		const auto late_drain_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+		const auto late_seal_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_outer_unwind_validation_seal);
+		require(
+			completed &&
+				completed->kind() ==
+					sqlite_shm_reader_unpublished_cleanup_terminal_kind::confirmed &&
+				completed->evidence_kind() ==
+					sqlite_shm_reader_unpublished_cleanup_evidence_kind::exact_native_result &&
+				completed->native_status() == sqlite_ok_status &&
+				completed->outward_status() == sqlite_ioerr_status && !cleanup.valid() &&
+				setup.outer_owner.valid() &&
+				reservation.late_close_drain_phase ==
+					detail::sqlite_shm_reader_late_close_drain_phase::
+						cleanup_confirmed_awaiting_sqlite_ack &&
+				reservation.late_close_outer_owner_armed &&
+				reservation.cleanup_terminal_sequence > reservation.cleanup_cut_sequence &&
+				reservation.late_close_ack_sequence == 0U &&
+				lifecycle.live_custody_kind_counts[ack_index] == 1U &&
+				lifecycle.live_custody_kind_counts[late_drain_index] == 1U &&
+				lifecycle.live_custody_kind_counts[late_seal_index] == 1U &&
+				setup.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+					setup.retained_activity_pin_count &&
+				setup.candidate.coordinator->snapshot().reader_registry_activity_authority_count ==
+					setup.retained_registry_activity_count &&
+				setup.candidate.coordinator->snapshot()
+						.reader_registry_activity_liveness_lost_count == 0U,
+			"confirmed late cleanup retains one exact ack and every preexisting activity pin");
+	}
+
+	void verify_reader_late_close_mapped_positive_matrix()
+	{
+		struct row
+		{
+			std::uint8_t marker;
+			reader_late_close_path path;
+		};
+		for (const auto current : std::array{
+				 row{10U, reader_late_close_path::same_thread},
+				 row{20U, reader_late_close_path::reentrant},
+				 row{30U, reader_late_close_path::timeout},
+				 row{40U, reader_late_close_path::unknown},
+				 row{42U, reader_late_close_path::different_thread_depth_one_timeout}})
+		{
+			auto setup = prepare_reader_late_close_mapped_setup(
+				current.marker, current.path == reader_late_close_path::same_thread);
+			terminalize_reader_late_close(setup, current.path);
+			auto cleanup = begin_reader_late_close_cleanup(setup);
+			complete_reader_late_close_cleanup_ok(setup, cleanup);
+
+			const auto before_wrong =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			const auto registry_before_wrong = setup.candidate.fixture.registry->snapshot();
+			const auto lease_before_wrong = setup.candidate.coordinator->snapshot();
+			const auto wrong_request = sqlite_shm_reader_logical_ack_request{
+				{setup.expected_outer_callback.thread_identity,
+				 setup.expected_outer_callback.reentrancy_depth,
+				 identity("test.registry.reader-late-close-wrong-outer", current.marker)},
+				0,
+				0};
+			auto wrong = setup.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+				*setup.candidate.fixture.family_pin, setup.outer_owner, wrong_request);
+			const auto after_wrong =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			const auto registry_after_wrong = setup.candidate.fixture.registry->snapshot();
+			const auto lease_after_wrong = setup.candidate.coordinator->snapshot();
+			const auto& reservation_after_wrong = only_reader_reservation(setup, after_wrong);
+			require(!wrong &&
+						wrong.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						wrong.error().action ==
+							sqlite_shm_lease_recovery_action::outer_ioerr_no_retry &&
+						setup.outer_owner.valid() &&
+						reservation_after_wrong.late_close_outer_owner_armed &&
+						reservation_after_wrong.late_close_drain_phase ==
+							detail::sqlite_shm_reader_late_close_drain_phase::
+								cleanup_confirmed_awaiting_sqlite_ack &&
+						after_wrong.last_issued_sequence == before_wrong.last_issued_sequence &&
+						after_wrong.last_committed_sequence ==
+							before_wrong.last_committed_sequence &&
+						after_wrong.outstanding_terminal_permit_slots ==
+							before_wrong.outstanding_terminal_permit_slots &&
+						after_wrong.live_custody_kind_counts ==
+							before_wrong.live_custody_kind_counts &&
+						registry_after_wrong.active_activity_pin_count ==
+							registry_before_wrong.active_activity_pin_count &&
+						lease_after_wrong.reader_registry_activity_authority_count ==
+							lease_before_wrong.reader_registry_activity_authority_count &&
+						lease_after_wrong.reader_registry_activity_liveness_lost_count == 0U,
+					"wrong outer presentation preserves the exact ack owner, slot, custody, and pins");
+			if (current.path == reader_late_close_path::same_thread)
+			{
+				const auto before_delete = after_wrong;
+				const auto wrong_delete_request = sqlite_shm_reader_logical_ack_request{
+					setup.expected_outer_callback, 1, 0};
+				auto wrong_delete =
+					setup.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+						*setup.candidate.fixture.family_pin,
+						setup.outer_owner,
+						wrong_delete_request);
+				const auto after_delete =
+					sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+						*setup.candidate.coordinator);
+				require(!wrong_delete &&
+							wrong_delete.error().reason ==
+								sqlite_shm_lease_rejection_reason::invalid_request &&
+							setup.outer_owner.valid() &&
+							after_delete.last_issued_sequence == before_delete.last_issued_sequence &&
+							after_delete.last_committed_sequence ==
+								before_delete.last_committed_sequence &&
+							after_delete.outstanding_terminal_permit_slots ==
+								before_delete.outstanding_terminal_permit_slots &&
+							after_delete.live_custody_kind_counts ==
+								before_delete.live_custody_kind_counts,
+						"nonzero delete flag preserves the exact owner and awaiting ack");
+			}
+
+			const auto exact_request = sqlite_shm_reader_logical_ack_request{
+				setup.expected_outer_callback, 0, 0};
+			auto acknowledged =
+				setup.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+					*setup.candidate.fixture.family_pin, setup.outer_owner, exact_request);
+			const auto acknowledged_view =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			const auto& acknowledged_reservation =
+				only_reader_reservation(setup, acknowledged_view);
+			const auto ack_index =
+				static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::logical_ack);
+			const auto late_drain_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+			const auto late_seal_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::
+					late_close_outer_unwind_validation_seal);
+			const auto runtime_pin_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::
+					runtime_vfs_namespace_generation_native_mapping_lifetime_pin);
+			require(
+				acknowledged &&
+					acknowledged->phase() ==
+						detail::sqlite_shm_reader_late_close_drain_phase::
+							consumed_by_exact_outer_unmap &&
+					acknowledged->outward_status() == sqlite_ok_status &&
+					!acknowledged->delegated_native_effect() && !setup.outer_owner.valid() &&
+					acknowledged_reservation.late_close_drain_phase ==
+						detail::sqlite_shm_reader_late_close_drain_phase::
+							consumed_by_exact_outer_unmap &&
+					!acknowledged_reservation.late_close_outer_owner_armed &&
+					acknowledged_reservation.late_close_ack_sequence >
+						acknowledged_reservation.cleanup_terminal_sequence &&
+					acknowledged_view.live_custody_kind_counts[ack_index] == 0U &&
+					acknowledged_view.live_custody_kind_counts[late_drain_index] == 0U &&
+					acknowledged_view.live_custody_kind_counts[late_seal_index] == 0U &&
+					acknowledged_view.live_custody_kind_counts[runtime_pin_index] == 1U &&
+					setup.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+						setup.retained_activity_pin_count &&
+					setup.candidate.coordinator->snapshot().reader_registry_activity_authority_count ==
+						setup.retained_registry_activity_count &&
+					setup.candidate.coordinator->snapshot()
+							.reader_registry_activity_liveness_lost_count == 0U,
+				"exact outer unwind consumes zero-native ack once without releasing retained pins");
+			const auto before_replay = acknowledged_view;
+			auto replay = setup.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+				*setup.candidate.fixture.family_pin, setup.outer_owner, exact_request);
+			const auto after_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			require(!replay &&
+						(replay.error().reason ==
+							 sqlite_shm_lease_rejection_reason::invalid_request ||
+						 replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token) &&
+						!setup.outer_owner.valid() &&
+						after_replay.last_issued_sequence == before_replay.last_issued_sequence &&
+						after_replay.last_committed_sequence ==
+							before_replay.last_committed_sequence &&
+						after_replay.live_custody_kind_counts ==
+							before_replay.live_custody_kind_counts &&
+						setup.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+							setup.retained_activity_pin_count,
+					"late-close ack replay cannot reconstruct owner, native effect, custody, or pin release");
+		}
+	}
+
+	void verify_reader_late_close_outer_owner_abandonment_is_terminal()
+	{
+		for (const bool abandon_after_cleanup : std::array{false, true})
+		{
+			const auto marker = static_cast<std::uint8_t>(abandon_after_cleanup ? 52U : 50U);
+			auto setup = prepare_reader_late_close_mapped_setup(marker);
+			terminalize_reader_late_close(setup, reader_late_close_path::same_thread);
+			std::optional<sqlite_shm_reader_unpublished_cleanup_obligation> cleanup;
+			if (abandon_after_cleanup)
+			{
+				cleanup.emplace(begin_reader_late_close_cleanup(setup));
+				complete_reader_late_close_cleanup_ok(setup, *cleanup);
+			}
+			const auto before =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			std::optional<sqlite_shm_reader_late_close_outer_unwind_authority> caller_owner;
+			caller_owner.emplace(std::move(setup.outer_owner));
+			require(caller_owner->valid(), "move exact late-close owner before abandonment");
+			caller_owner.reset();
+			const auto after =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			const auto& reservation = only_reader_reservation(setup, after);
+			const auto ack_index =
+				static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::logical_ack);
+			const auto late_drain_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+			const auto late_seal_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::
+					late_close_outer_unwind_validation_seal);
+			const auto runtime_pin_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::
+					runtime_vfs_namespace_generation_native_mapping_lifetime_pin);
+			require(
+				!setup.outer_owner.valid() &&
+					reservation.late_close_drain_phase ==
+						detail::sqlite_shm_reader_late_close_drain_phase::terminal_quarantined &&
+					!reservation.late_close_outer_owner_armed &&
+					after.live_custody_kind_counts[ack_index] == 0U &&
+					after.live_custody_kind_counts[late_drain_index] == 0U &&
+					after.live_custody_kind_counts[late_seal_index] == 0U &&
+					after.live_custody_kind_counts[runtime_pin_index] == 1U &&
+					after.last_committed_sequence >= before.last_committed_sequence &&
+					setup.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+						setup.retained_activity_pin_count &&
+					setup.candidate.coordinator->snapshot().reader_registry_activity_authority_count ==
+						setup.retained_registry_activity_count &&
+					setup.candidate.coordinator->snapshot()
+							.reader_registry_activity_liveness_lost_count == 0U,
+				abandon_after_cleanup
+					? "awaiting-ack owner abandonment terminalizes once and retains every pin"
+					: "precleanup owner abandonment terminalizes once and retains every pin");
+			if (abandon_after_cleanup)
+				require(reservation.late_close_ack_sequence >
+							reservation.cleanup_terminal_sequence,
+						"awaiting-ack abandonment consumes its reserved terminal slot");
+		}
+	}
+
+	void verify_reader_late_close_foreign_owner_preserves_exact_ack()
+	{
+		auto exact = prepare_reader_late_close_mapped_setup(54U);
+		terminalize_reader_late_close(exact, reader_late_close_path::same_thread);
+		auto exact_cleanup = begin_reader_late_close_cleanup(exact);
+		complete_reader_late_close_cleanup_ok(exact, exact_cleanup);
+		auto foreign = prepare_reader_late_close_mapped_setup(56U);
+		terminalize_reader_late_close(foreign, reader_late_close_path::same_thread);
+		auto foreign_cleanup = begin_reader_late_close_cleanup(foreign);
+		complete_reader_late_close_cleanup_ok(foreign, foreign_cleanup);
+		const auto exact_before = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*exact.candidate.coordinator);
+		const auto foreign_before = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*foreign.candidate.coordinator);
+		const auto exact_pins_before =
+			exact.candidate.fixture.registry->snapshot().active_activity_pin_count;
+		const auto foreign_pins_before =
+			foreign.candidate.fixture.registry->snapshot().active_activity_pin_count;
+		const auto exact_request =
+			sqlite_shm_reader_logical_ack_request{exact.expected_outer_callback, 0, 0};
+		auto rejected = exact.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+			*exact.candidate.fixture.family_pin, foreign.outer_owner, exact_request);
+		const auto exact_after = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*exact.candidate.coordinator);
+		const auto foreign_after = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*foreign.candidate.coordinator);
+		require(
+			!rejected &&
+				rejected.error().reason == sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				exact.outer_owner.valid() && foreign.outer_owner.valid() &&
+				exact_after.last_issued_sequence == exact_before.last_issued_sequence &&
+				exact_after.last_committed_sequence == exact_before.last_committed_sequence &&
+				exact_after.outstanding_terminal_permit_slots ==
+					exact_before.outstanding_terminal_permit_slots &&
+				exact_after.live_custody_kind_counts == exact_before.live_custody_kind_counts &&
+				foreign_after.last_issued_sequence == foreign_before.last_issued_sequence &&
+				foreign_after.last_committed_sequence == foreign_before.last_committed_sequence &&
+				foreign_after.outstanding_terminal_permit_slots ==
+					foreign_before.outstanding_terminal_permit_slots &&
+				foreign_after.live_custody_kind_counts == foreign_before.live_custody_kind_counts &&
+				exact.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+					exact_pins_before &&
+				foreign.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+					foreign_pins_before,
+			"foreign owner plus right callback preserves both exact awaiting-ack domains");
+		auto exact_ack = exact.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+			*exact.candidate.fixture.family_pin, exact.outer_owner, exact_request);
+		const auto foreign_request =
+			sqlite_shm_reader_logical_ack_request{foreign.expected_outer_callback, 0, 0};
+		auto foreign_ack =
+			foreign.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+				*foreign.candidate.fixture.family_pin,
+				foreign.outer_owner,
+				foreign_request);
+		require(exact_ack && foreign_ack && !exact.outer_owner.valid() &&
+				!foreign.outer_owner.valid() &&
+				exact_ack->phase() ==
+					detail::sqlite_shm_reader_late_close_drain_phase::
+						consumed_by_exact_outer_unmap &&
+				foreign_ack->phase() ==
+					detail::sqlite_shm_reader_late_close_drain_phase::
+						consumed_by_exact_outer_unmap,
+				"both exact owners remain usable after foreign-owner rejection");
+	}
+
+	void verify_reader_late_close_cleanup_failures_are_terminal()
+	{
+		enum class failure_kind : std::uint8_t
+		{
+			non_ok,
+			unknown,
+			internal_indeterminate,
+		};
+		struct row
+		{
+			std::uint8_t marker;
+			failure_kind kind;
+		};
+		for (const auto current : std::array{row{60U, failure_kind::non_ok},
+											 row{62U, failure_kind::unknown},
+											 row{64U, failure_kind::internal_indeterminate}})
+		{
+			auto setup = prepare_reader_late_close_mapped_setup(current.marker);
+			terminalize_reader_late_close(setup, reader_late_close_path::same_thread);
+			auto cleanup = begin_reader_late_close_cleanup(setup);
+			const auto terminal = current.kind == failure_kind::unknown
+				? sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup_terminal(
+					  cleanup,
+					  setup.map_request.callback,
+					  sqlite_shm_reader_unpublished_cleanup_evidence_kind::throw_or_unknown,
+					  std::nullopt,
+					  0,
+					  0,
+					  std::nullopt,
+					  std::nullopt)
+				: sqlite_same_process_shm_lease_test_peer::reader_unpublished_cleanup_terminal(
+					  cleanup,
+					  setup.map_request.callback,
+					  sqlite_shm_reader_unpublished_cleanup_evidence_kind::exact_native_result,
+					  current.kind == failure_kind::non_ok ? std::optional{sqlite_ioerr_status}
+														   : std::optional{sqlite_ok_status},
+					  0,
+					  0,
+					  identity("test.registry.reader-late-close-failed-cleanup", current.marker),
+					  current.kind == failure_kind::internal_indeterminate
+						  ? std::optional{identity(
+								"test.registry.reader-late-close-failed-cleanup-latch",
+								current.marker)}
+						  : std::nullopt);
+			if (current.kind == failure_kind::internal_indeterminate)
+				sqlite_same_process_shm_lease_test_peer::
+					fail_next_reader_unpublished_cleanup_terminal_transition(
+						*setup.candidate.coordinator);
+			auto completed = setup.candidate.fixture.registry->complete_reader_unpublished_cleanup(
+				*setup.candidate.fixture.family_pin, cleanup, terminal);
+			if (current.kind == failure_kind::internal_indeterminate)
+				require(!completed &&
+							completed.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+						"internal cleanup commit failure returns one indeterminate terminal");
+			else
+				require(completed &&
+							completed->kind() ==
+								sqlite_shm_reader_unpublished_cleanup_terminal_kind::
+									terminal_quarantined,
+						current.kind == failure_kind::unknown
+							? "unknown cleanup evidence terminalizes late close"
+							: "non-OK cleanup evidence terminalizes late close");
+			const auto before_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			const auto& reservation = only_reader_reservation(setup, before_replay);
+			const auto ack_index =
+				static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::logical_ack);
+			const auto late_drain_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+			const auto late_seal_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::
+					late_close_outer_unwind_validation_seal);
+			const auto runtime_pin_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::
+					runtime_vfs_namespace_generation_native_mapping_lifetime_pin);
+			require(!cleanup.valid() && !setup.outer_owner.valid() &&
+						reservation.late_close_drain_phase ==
+							detail::sqlite_shm_reader_late_close_drain_phase::terminal_quarantined &&
+						!reservation.late_close_outer_owner_armed &&
+						before_replay.live_custody_kind_counts[ack_index] == 0U &&
+						before_replay.live_custody_kind_counts[late_drain_index] == 0U &&
+						before_replay.live_custody_kind_counts[late_seal_index] == 0U &&
+						before_replay.live_custody_kind_counts[runtime_pin_index] == 1U &&
+						setup.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+							setup.retained_activity_pin_count &&
+						setup.candidate.coordinator->snapshot().reader_registry_activity_authority_count ==
+							setup.retained_registry_activity_count &&
+						setup.candidate.coordinator->snapshot()
+								.reader_registry_activity_liveness_lost_count == 0U,
+					"failed cleanup exposes no ack owner and releases no retained lifetime");
+			const auto exact_request = sqlite_shm_reader_logical_ack_request{
+				setup.expected_outer_callback, 0, 0};
+			auto replay = setup.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+				*setup.candidate.fixture.family_pin, setup.outer_owner, exact_request);
+			const auto after_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			require(!replay && after_replay.last_issued_sequence == before_replay.last_issued_sequence &&
+						after_replay.last_committed_sequence ==
+							before_replay.last_committed_sequence &&
+						after_replay.live_custody_kind_counts ==
+							before_replay.live_custody_kind_counts,
+					"terminal cleanup cannot be replayed through the abandoned outer owner");
+		}
+	}
+
+	void verify_reader_late_close_exact_ack_commit_failure_is_terminal()
+	{
+		constexpr std::uint8_t marker = 66U;
+		auto setup = prepare_reader_late_close_mapped_setup(marker);
+		terminalize_reader_late_close(setup, reader_late_close_path::same_thread);
+		auto cleanup = begin_reader_late_close_cleanup(setup);
+		complete_reader_late_close_cleanup_ok(setup, cleanup);
+		const auto request =
+			sqlite_shm_reader_logical_ack_request{setup.expected_outer_callback, 0, 0};
+		sqlite_same_process_shm_lease_test_peer::fail_next_reader_logical_ack_transition(
+			*setup.candidate.coordinator);
+		auto failed = setup.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+			*setup.candidate.fixture.family_pin, setup.outer_owner, request);
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		const auto& reservation = only_reader_reservation(setup, terminal);
+		const auto ack_index =
+			static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::logical_ack);
+		const auto late_drain_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+		const auto late_seal_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_outer_unwind_validation_seal);
+		const auto runtime_pin_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::
+				runtime_vfs_namespace_generation_native_mapping_lifetime_pin);
+		require(!failed &&
+					failed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					failed.error().action ==
+						sqlite_shm_lease_recovery_action::outer_ioerr_no_retry,
+				"exact-owner ack commit injection reports terminal indeterminacy");
+		require(!setup.outer_owner.valid(),
+				"exact-owner ack commit indeterminacy disarms caller owner");
+		require(reservation.late_close_drain_phase ==
+					detail::sqlite_shm_reader_late_close_drain_phase::terminal_quarantined &&
+				!reservation.late_close_outer_owner_armed &&
+				reservation.late_close_ack_sequence > reservation.cleanup_terminal_sequence,
+				"exact-owner ack commit indeterminacy seals one terminal phase and sequence");
+		require(terminal.live_custody_kind_counts[ack_index] == 0U &&
+				terminal.live_custody_kind_counts[late_drain_index] == 0U &&
+				terminal.live_custody_kind_counts[late_seal_index] == 0U &&
+				terminal.live_custody_kind_counts[runtime_pin_index] == 1U,
+				"exact-owner ack commit indeterminacy tombstones ack/drain/seal only");
+		require(setup.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+					setup.retained_activity_pin_count &&
+				setup.candidate.coordinator->snapshot().reader_registry_activity_authority_count ==
+					setup.retained_registry_activity_count &&
+				setup.candidate.coordinator->snapshot()
+						.reader_registry_activity_liveness_lost_count == 0U,
+			"exact-owner ack commit indeterminacy terminalizes once and retains every lifetime pin");
+		const auto before_replay = terminal;
+		auto replay = setup.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+			*setup.candidate.fixture.family_pin, setup.outer_owner, request);
+		const auto after_replay = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		require(!replay && after_replay.last_issued_sequence == before_replay.last_issued_sequence &&
+				after_replay.last_committed_sequence == before_replay.last_committed_sequence &&
+				after_replay.live_custody_kind_counts == before_replay.live_custody_kind_counts,
+				"indeterminate exact ack cannot reconstruct terminal owner or custody");
+	}
+
+	void verify_reader_late_close_callback_replay_preserves_owner_until_abandonment()
+	{
+		constexpr std::uint8_t marker = 68U;
+		auto setup = prepare_reader_late_close_mapped_setup(marker);
+		terminalize_reader_late_close(setup, reader_late_close_path::same_thread);
+		auto cleanup = begin_reader_late_close_cleanup(setup);
+		complete_reader_late_close_cleanup_ok(setup, cleanup);
+		sqlite_same_process_shm_lease_test_peer::inject_reader_callback_replay(
+			*setup.candidate.coordinator,
+			setup.expected_outer_callback.invocation_token);
+		const auto before = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		const auto before_reservation = only_reader_reservation(setup, before);
+		const auto registry_before = setup.candidate.fixture.registry->snapshot();
+		const auto lease_before = setup.candidate.coordinator->snapshot();
+		const auto owner_token_before =
+			sqlite_same_process_shm_lease_test_peer::reader_late_close_outer_owner_token(
+				setup.outer_owner);
+		const auto request =
+			sqlite_shm_reader_logical_ack_request{setup.expected_outer_callback, 0, 0};
+		auto rejected = setup.candidate.fixture.registry->consume_reader_late_close_logical_ack(
+			*setup.candidate.fixture.family_pin, setup.outer_owner, request);
+		const auto after = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		const auto after_reservation = only_reader_reservation(setup, after);
+		const auto registry_after = setup.candidate.fixture.registry->snapshot();
+		const auto lease_after = setup.candidate.coordinator->snapshot();
+		const auto ack_index =
+			static_cast<std::size_t>(detail::sqlite_shm_reader_custody_kind::logical_ack);
+		const auto late_drain_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+		const auto late_seal_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_outer_unwind_validation_seal);
+		const auto runtime_pin_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::
+				runtime_vfs_namespace_generation_native_mapping_lifetime_pin);
+		require(!rejected &&
+					rejected.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					rejected.error().action ==
+						sqlite_shm_lease_recovery_action::outer_ioerr_no_retry &&
+					setup.outer_owner.valid() && owner_token_before != 0U &&
+					sqlite_same_process_shm_lease_test_peer::
+						reader_late_close_outer_owner_token(setup.outer_owner) ==
+						owner_token_before,
+				"replayed sealed callback rejects with IOERR without consuming the exact owner");
+		require(after_reservation.phase == before_reservation.phase &&
+					after_reservation.destination_sequence ==
+						before_reservation.destination_sequence &&
+					after_reservation.logical_ack_phase == before_reservation.logical_ack_phase &&
+					after_reservation.cleanup_cut_sequence ==
+						before_reservation.cleanup_cut_sequence &&
+					after_reservation.cleanup_terminal_sequence ==
+						before_reservation.cleanup_terminal_sequence &&
+					after_reservation.late_close_drain_phase ==
+						detail::sqlite_shm_reader_late_close_drain_phase::
+							cleanup_confirmed_awaiting_sqlite_ack &&
+					after_reservation.late_close_drain_phase ==
+						before_reservation.late_close_drain_phase &&
+					after_reservation.late_close_provenance ==
+						before_reservation.late_close_provenance &&
+					after_reservation.late_close_outer_owner_claimed ==
+						before_reservation.late_close_outer_owner_claimed &&
+					after_reservation.late_close_outer_owner_armed &&
+					after_reservation.late_close_outer_owner_armed ==
+						before_reservation.late_close_outer_owner_armed &&
+					after_reservation.late_close_ack_sequence ==
+						before_reservation.late_close_ack_sequence,
+				"callback replay leaves the awaiting-ack reservation byte-equivalent");
+		require(after.last_issued_sequence == before.last_issued_sequence &&
+					after.last_committed_sequence == before.last_committed_sequence &&
+					after.outstanding_terminal_permit_slots ==
+						before.outstanding_terminal_permit_slots &&
+					after.live_custody_kind_counts == before.live_custody_kind_counts &&
+					after.custody_state_counts == before.custody_state_counts &&
+					after.live_custody_kind_counts[ack_index] == 1U &&
+					after.live_custody_kind_counts[late_drain_index] == 1U &&
+					after.live_custody_kind_counts[late_seal_index] == 1U &&
+					after.live_custody_kind_counts[runtime_pin_index] == 1U &&
+					registry_after.active_activity_pin_count ==
+						registry_before.active_activity_pin_count &&
+					lease_after.reader_registry_activity_authority_count ==
+						lease_before.reader_registry_activity_authority_count &&
+					lease_after.reader_registry_activity_liveness_lost_count == 0U,
+				"callback replay mutates no ack slot, custody, activity authority, or lifetime pin");
+
+		std::optional<sqlite_shm_reader_late_close_outer_unwind_authority> caller_owner;
+		caller_owner.emplace(std::move(setup.outer_owner));
+		caller_owner.reset();
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+			*setup.candidate.coordinator);
+		const auto& terminal_reservation = only_reader_reservation(setup, terminal);
+		require(!setup.outer_owner.valid() &&
+					terminal_reservation.late_close_drain_phase ==
+						detail::sqlite_shm_reader_late_close_drain_phase::terminal_quarantined &&
+					!terminal_reservation.late_close_outer_owner_armed &&
+					terminal_reservation.late_close_ack_sequence >
+						terminal_reservation.cleanup_terminal_sequence &&
+					terminal.live_custody_kind_counts[ack_index] == 0U &&
+					terminal.live_custody_kind_counts[late_drain_index] == 0U &&
+					terminal.live_custody_kind_counts[late_seal_index] == 0U &&
+					terminal.live_custody_kind_counts[runtime_pin_index] == 1U &&
+					setup.candidate.fixture.registry->snapshot().active_activity_pin_count ==
+						setup.retained_activity_pin_count &&
+					setup.candidate.coordinator->snapshot().reader_registry_activity_authority_count ==
+						setup.retained_registry_activity_count &&
+					setup.candidate.coordinator->snapshot()
+							.reader_registry_activity_liveness_lost_count == 0U,
+				"owner destruction terminalizes replay-blocked ack while retaining lifetime pins");
+	}
+
+	void verify_reader_late_close_requires_native_start_before_the_cut()
+	{
+		constexpr std::uint8_t marker = 70U;
+		auto setup = make_reader_candidate_setup(marker);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 1U);
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin unstarted late-close gate fixture");
+		const sqlite_shm_callback_execution_receipt expected_outer_callback{
+			map_request.callback.thread_identity,
+			map_request.callback.reentrancy_depth,
+			identity("test.registry.reader-late-close-unstarted-outer", marker)};
+		auto owner = setup.fixture.registry->mint_reader_late_close_outer_unwind_authority(
+			*setup.fixture.family_pin, *inflight, setup.session, expected_outer_callback);
+		require(owner && owner->valid(), "mint unstarted caller-side late-close owner");
+		const sqlite_shm_callback_execution_receipt close_callback{
+			map_request.callback.thread_identity,
+			0U,
+			identity("test.registry.reader-late-close-unstarted-close", marker)};
+		auto closed = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			sqlite_shm_reader_close_request{close_callback});
+		const auto lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto reservation = std::ranges::find_if(
+			lifecycle.attachment_reservations,
+			[&setup](const sqlite_shm_reader_attachment_reservation_test_view& candidate)
+			{
+				return candidate.attachment == setup.session_request.attachment;
+			});
+		const auto late_drain_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+		const auto late_seal_index = static_cast<std::size_t>(
+			detail::sqlite_shm_reader_custody_kind::late_close_outer_unwind_validation_seal);
+		require(
+			!closed &&
+				closed.error().reason == sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+				!owner->valid() && inflight->valid() && setup.session.valid() &&
+				reservation != lifecycle.attachment_reservations.end() &&
+				reservation->late_close_drain_phase ==
+					detail::sqlite_shm_reader_late_close_drain_phase::not_applicable &&
+				!reservation->late_close_provenance && !reservation->late_close_outer_owner_armed &&
+				lifecycle.live_custody_kind_counts[late_drain_index] == 0U &&
+				lifecycle.live_custody_kind_counts[late_seal_index] == 0U,
+			"close cut before native start cannot open the DF-0209 retained drain exception");
+		require_phase1_late_terminal_convergence(
+			setup,
+			*inflight,
+			map_request,
+			phase1_late_terminal_kind::mapped,
+			marker,
+			detail::sqlite_shm_reader_terminal_quarantine_reason::presented_invalid);
+	}
+
+	void verify_reader_late_close_mint_rejects_foreign_registry_family()
+	{
+		constexpr std::uint8_t marker = 71U;
+		auto setup = make_reader_candidate_setup(marker);
+		auto foreign = make_fixture(marker + 1U, false);
+		const auto map_request = reader_attachment_map_request(setup.session_request, marker + 2U);
+		auto inflight = setup.fixture.registry->begin_reader_map(
+			*setup.fixture.family_pin, setup.session, map_request);
+		require(inflight && inflight->valid(), "begin foreign-family mint fixture");
+		const sqlite_shm_callback_execution_receipt expected_outer_callback{
+			map_request.callback.thread_identity,
+			map_request.callback.reentrancy_depth,
+			identity("test.registry.reader-late-close-foreign-mint-outer", marker)};
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto foreign_before = foreign.registry->snapshot();
+		auto rejected =
+			sqlite_same_process_shm_lease_test_peer::mint_reader_late_close_outer_unwind_authority(
+				*setup.coordinator,
+				*foreign.family_pin,
+				*inflight,
+				setup.session,
+				expected_outer_callback);
+		const auto after =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		const auto foreign_after = foreign.registry->snapshot();
+		require(!rejected &&
+					rejected.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					inflight->valid() && setup.session.valid() &&
+					after.last_issued_sequence == before.last_issued_sequence &&
+					after.last_committed_sequence == before.last_committed_sequence &&
+					after.outstanding_terminal_permit_slots ==
+						before.outstanding_terminal_permit_slots &&
+					after.live_custody_kind_counts == before.live_custody_kind_counts &&
+					foreign_after.active_activity_pin_count ==
+						foreign_before.active_activity_pin_count &&
+					foreign_after.quarantined_family_count ==
+						foreign_before.quarantined_family_count,
+				"foreign registry/family pin cannot claim local map, session, slot, or custody");
+		auto owner = setup.fixture.registry->mint_reader_late_close_outer_unwind_authority(
+			*setup.fixture.family_pin, *inflight, setup.session, expected_outer_callback);
+		require(owner && owner->valid(),
+				"correct local mint succeeds after nonconsuming foreign-family rejection");
+		const auto zero_receipt =
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+				*inflight,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+				map_request,
+				sqlite_busy_status,
+				nullptr,
+				0,
+				identity("test.registry.reader-late-close-foreign-mint-zero", marker));
+		require(setup.fixture.registry
+					->complete_reader_zero_attachment_map(
+						*setup.fixture.family_pin, *inflight, zero_receipt, setup.session)
+					.has_value() &&
+				!owner->valid(),
+				"retire correct local owner through ordinary zero terminal");
+		const auto close_callback = callback(marker + 3U);
+		auto close = setup.fixture.registry->begin_reader_close(
+			*setup.fixture.family_pin,
+			setup.open,
+			sqlite_shm_reader_close_request{close_callback});
+		require(close.has_value(),
+				"foreign-family mint rejection leaves ordinary reader close admissible");
+		const auto close_receipt = sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+			*close,
+			close_callback,
+			sqlite_shm_reader_close_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			identity("test.registry.reader-late-close-foreign-mint-close", marker));
+		require(setup.fixture.registry
+					->complete_reader_close(
+						*setup.fixture.family_pin, setup.open, *close, close_receipt)
+					.has_value() &&
+				setup.fixture.registry->release_reader_open(setup.open).has_value(),
+				"complete and release foreign-family mint rejection reader open");
+		retire_writer(*setup.coordinator, setup.holder, marker + 4U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke foreign-mint writer eligibility");
+		clean_fixture(setup.fixture);
+		clean_fixture(foreign);
+	}
+
+	void verify_reader_late_close_owner_retires_on_ordinary_terminals()
+	{
+		{
+			constexpr std::uint8_t marker = 72U;
+			auto setup = prepare_reader_late_close_mapped_setup(marker);
+			const auto zero_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					setup.inflight,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					setup.map_request,
+					sqlite_busy_status,
+					nullptr,
+					0,
+					identity("test.registry.reader-late-close-zero-effect", marker));
+			auto zero = setup.candidate.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.candidate.fixture.family_pin,
+				setup.inflight,
+				zero_receipt,
+				setup.candidate.session);
+			const auto ordinary =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			const auto& reservation = only_reader_reservation(setup, ordinary);
+			const auto late_drain_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+			const auto late_seal_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::
+					late_close_outer_unwind_validation_seal);
+			require(zero && !setup.inflight.valid() && !setup.candidate.session.valid() &&
+						!setup.outer_owner.valid() &&
+						reservation.phase ==
+							detail::sqlite_shm_reader_attachment_reservation_phase::revoked_no_map &&
+						reservation.late_close_drain_phase ==
+							detail::sqlite_shm_reader_late_close_drain_phase::not_applicable &&
+						!reservation.late_close_provenance &&
+						ordinary.live_custody_kind_counts[late_drain_index] == 0U &&
+						ordinary.live_custody_kind_counts[late_seal_index] == 0U &&
+						ordinary.outstanding_terminal_permit_count == 2U,
+					"exact zero terminal retires minted owner and its unused native-start evidence");
+			auto close = setup.candidate.fixture.registry->begin_reader_close(
+				*setup.candidate.fixture.family_pin,
+				setup.candidate.open,
+				sqlite_shm_reader_close_request{setup.expected_outer_callback});
+			require(close && close->valid() && close->native_effect_ready() &&
+						close->route() == sqlite_shm_reader_close_route::close_without_group,
+					"retired zero owner releases its expected callback identity to ordinary close");
+			const auto close_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+					*close,
+					setup.expected_outer_callback,
+					sqlite_shm_reader_close_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					identity("test.registry.reader-late-close-zero-close-effect", marker));
+			auto completed = setup.candidate.fixture.registry->complete_reader_close(
+				*setup.candidate.fixture.family_pin,
+				setup.candidate.open,
+				*close,
+				close_receipt);
+			require(completed && !close->valid(),
+					"ordinary close consumes released expected callback exactly once");
+			const auto before_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			auto replay = setup.candidate.fixture.registry->complete_reader_close(
+				*setup.candidate.fixture.family_pin,
+				setup.candidate.open,
+				*close,
+				close_receipt);
+			const auto after_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			require(!replay && after_replay.last_committed_sequence ==
+							before_replay.last_committed_sequence,
+					"released expected callback identity remains one-shot after ordinary close");
+			require(setup.candidate.fixture.registry->release_reader_open(setup.candidate.open)
+						.has_value(),
+					"release zero-terminal reader open");
+			retire_writer(*setup.candidate.coordinator, setup.candidate.holder, marker + 2U);
+			require(setup.candidate.coordinator->revoke_writer_eligibility(
+						setup.candidate.eligibility)
+						.has_value(),
+					"revoke zero-terminal writer eligibility");
+			clean_fixture(setup.candidate.fixture);
+		}
+
+		{
+			constexpr std::uint8_t marker = 74U;
+			auto setup = prepare_reader_late_close_mapped_setup(marker);
+			const auto predecessor_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
+					setup.inflight,
+					sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+					setup.map_request,
+					sqlite_readonly_status,
+					setup.candidate.writer_attempt.native_page.get(),
+					0,
+					identity("test.registry.reader-late-close-predecessor-effect", marker));
+			auto predecessor = setup.candidate.fixture.registry->complete_reader_predecessor_map(
+				*setup.candidate.fixture.family_pin,
+				setup.inflight,
+				predecessor_receipt,
+				setup.candidate.session);
+			const auto ordinary =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			const auto& reservation = only_reader_reservation(setup, ordinary);
+			const auto late_drain_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::late_close_original_callback_drain);
+			const auto late_seal_index = static_cast<std::size_t>(
+				detail::sqlite_shm_reader_custody_kind::
+					late_close_outer_unwind_validation_seal);
+			require(predecessor && !setup.inflight.valid() && !setup.candidate.session.valid() &&
+						!setup.outer_owner.valid() &&
+						reservation.phase ==
+							detail::sqlite_shm_reader_attachment_reservation_phase::
+								predecessor_route_active &&
+						reservation.late_close_drain_phase ==
+							detail::sqlite_shm_reader_late_close_drain_phase::not_applicable &&
+						!reservation.late_close_provenance &&
+						ordinary.live_custody_kind_counts[late_drain_index] == 0U &&
+						ordinary.live_custody_kind_counts[late_seal_index] == 0U,
+					"exact predecessor terminal retires minted owner with no late custody");
+			const auto unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_predecessor_unmap(
+					*predecessor,
+					setup.expected_outer_callback,
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					identity("test.registry.reader-late-close-predecessor-unmap", marker));
+			auto unmapped = setup.candidate.fixture.registry->complete_reader_predecessor_unmap(
+				*setup.candidate.fixture.family_pin, setup.candidate.open, unmap_receipt);
+			require(unmapped &&
+						unmapped->kind() ==
+							sqlite_shm_reader_unmap_terminal_kind::retired_confirmed,
+					"released expected callback completes ordinary predecessor unmap");
+			const auto before_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			auto replay = setup.candidate.fixture.registry->complete_reader_predecessor_unmap(
+				*setup.candidate.fixture.family_pin, setup.candidate.open, unmap_receipt);
+			const auto after_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
+					*setup.candidate.coordinator);
+			require(!replay &&
+						replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+						after_replay.last_committed_sequence ==
+							before_replay.last_committed_sequence,
+					"ordinary predecessor callback replay cannot revive the retired owner");
+			const auto close_callback = callback(marker + 10U);
+			auto close = setup.candidate.fixture.registry->begin_reader_close(
+				*setup.candidate.fixture.family_pin,
+				setup.candidate.open,
+				sqlite_shm_reader_close_request{close_callback});
+			require(close.has_value(),
+					"predecessor owner retirement leaves ordinary reader close admissible");
+			const auto close_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_close_terminal(
+					*close,
+					close_callback,
+					sqlite_shm_reader_close_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					identity("test.registry.reader-late-close-predecessor-close", marker));
+			require(setup.candidate.fixture.registry
+						->complete_reader_close(
+							*setup.candidate.fixture.family_pin,
+							setup.candidate.open,
+							*close,
+							close_receipt)
+						.has_value() &&
+						setup.candidate.fixture.registry->release_reader_open(
+							setup.candidate.open)
+							.has_value(),
+					"complete and release predecessor-terminal reader open");
+			retire_writer(*setup.candidate.coordinator, setup.candidate.holder, marker + 2U);
+			require(setup.candidate.coordinator->revoke_writer_eligibility(
+						setup.candidate.eligibility)
+						.has_value(),
+					"revoke predecessor-terminal writer eligibility");
+			clean_fixture(setup.candidate.fixture);
+		}
 	}
 
 	void verify_peer_quarantine_preserves_exact_reader_close_drain()
@@ -15098,6 +16468,15 @@ int main()
 		verify_reader_first_map_close_cut_wait_failures_quarantine();
 		verify_reader_first_map_close_cut_same_thread_and_reentrant_quarantine();
 		verify_reader_first_map_close_cut_rejects_reused_invocation_identity();
+		verify_reader_late_close_mapped_positive_matrix();
+		verify_reader_late_close_outer_owner_abandonment_is_terminal();
+		verify_reader_late_close_foreign_owner_preserves_exact_ack();
+		verify_reader_late_close_cleanup_failures_are_terminal();
+		verify_reader_late_close_exact_ack_commit_failure_is_terminal();
+		verify_reader_late_close_callback_replay_preserves_owner_until_abandonment();
+		verify_reader_late_close_requires_native_start_before_the_cut();
+		verify_reader_late_close_mint_rejects_foreign_registry_family();
+		verify_reader_late_close_owner_retires_on_ordinary_terminals();
 		verify_peer_quarantine_preserves_exact_reader_close_drain();
 		verify_reader_lifecycle_compact_export_requires_xclose_evidence();
 		verify_callback_free_reader_tombstone_survives_family_recreation();

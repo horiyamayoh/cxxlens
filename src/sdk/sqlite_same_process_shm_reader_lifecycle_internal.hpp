@@ -115,6 +115,8 @@ namespace cxxlens::sdk::detail
 		close_cut_or_composite,
 		bounded_waiter_or_continuation,
 		terminal_reporter,
+		late_close_original_callback_drain,
+		late_close_outer_unwind_validation_seal,
 		opaque_attachment_uncertainty,
 		runtime_vfs_namespace_generation_native_mapping_lifetime_pin,
 	};
@@ -134,6 +136,8 @@ namespace cxxlens::sdk::detail
 		sqlite_shm_reader_custody_kind::close_cut_or_composite,
 		sqlite_shm_reader_custody_kind::bounded_waiter_or_continuation,
 		sqlite_shm_reader_custody_kind::terminal_reporter,
+		sqlite_shm_reader_custody_kind::late_close_original_callback_drain,
+		sqlite_shm_reader_custody_kind::late_close_outer_unwind_validation_seal,
 		sqlite_shm_reader_custody_kind::opaque_attachment_uncertainty,
 		sqlite_shm_reader_custody_kind::
 			runtime_vfs_namespace_generation_native_mapping_lifetime_pin,
@@ -195,6 +199,8 @@ namespace cxxlens::sdk::detail
 			case kind_type::connection_close:
 			case kind_type::unmap_cut:
 			case kind_type::close_cut_or_composite:
+			case kind_type::late_close_original_callback_drain:
+			case kind_type::late_close_outer_unwind_validation_seal:
 				return true;
 		}
 		return false;
@@ -265,6 +271,51 @@ namespace cxxlens::sdk::detail
 		if (origin == phase::awaiting_sqlite_ack)
 			return destination == phase::consumed_by_exact_unmap ||
 				destination == phase::consumed_by_close;
+		return false;
+	}
+
+	/** Closed DF-0209 subledger. It never reactivates an ordinary reader lifecycle phase. */
+	enum class sqlite_shm_reader_late_close_drain_phase : std::uint8_t
+	{
+		not_applicable,
+		retained_original_callback_drain,
+		cleanup_admitted,
+		cleanup_confirmed_awaiting_sqlite_ack,
+		terminal_quarantined,
+		consumed_by_exact_outer_unmap,
+	};
+
+	inline constexpr std::array sqlite_shm_reader_late_close_drain_phases{
+		sqlite_shm_reader_late_close_drain_phase::not_applicable,
+		sqlite_shm_reader_late_close_drain_phase::retained_original_callback_drain,
+		sqlite_shm_reader_late_close_drain_phase::cleanup_admitted,
+		sqlite_shm_reader_late_close_drain_phase::cleanup_confirmed_awaiting_sqlite_ack,
+		sqlite_shm_reader_late_close_drain_phase::terminal_quarantined,
+		sqlite_shm_reader_late_close_drain_phase::consumed_by_exact_outer_unmap,
+	};
+
+	[[nodiscard]] constexpr bool is_sqlite_shm_reader_late_close_drain_transition(
+		const sqlite_shm_reader_late_close_drain_phase origin,
+		const sqlite_shm_reader_late_close_drain_phase destination) noexcept
+	{
+		using phase = sqlite_shm_reader_late_close_drain_phase;
+		switch (origin)
+		{
+			case phase::not_applicable:
+				return destination == phase::retained_original_callback_drain;
+			case phase::retained_original_callback_drain:
+				return destination == phase::cleanup_admitted ||
+					destination == phase::terminal_quarantined;
+			case phase::cleanup_admitted:
+				return destination == phase::cleanup_confirmed_awaiting_sqlite_ack ||
+					destination == phase::terminal_quarantined;
+			case phase::cleanup_confirmed_awaiting_sqlite_ack:
+				return destination == phase::consumed_by_exact_outer_unmap ||
+					destination == phase::terminal_quarantined;
+			case phase::terminal_quarantined:
+			case phase::consumed_by_exact_outer_unmap:
+				return false;
+		}
 		return false;
 	}
 
