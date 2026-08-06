@@ -430,6 +430,41 @@ namespace cxxlens::sdk
 					std::move(zero_attachment_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_zero_effect_receipt
+		reader_attachment_zero_effect_with_qualified_control(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& source,
+			const sqlite_shm_reader_attachment_zero_effect_kind kind,
+			const int native_status,
+			const volatile void* native_mapping,
+			const int delegated_extend = 0)
+		{
+			return {inflight,
+				kind,
+				source.request_,
+				native_status,
+				native_mapping,
+				delegated_extend,
+				source.zero_attachment_effect_receipt_,
+				source.qualified_control_};
+		}
+
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_zero_effect_receipt
+		reader_attachment_zero_effect_with_qualified_effect_substitution(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_attachment_zero_effect_receipt& source,
+			sqlite_backend_opaque_identity replacement_effect)
+		{
+			return {inflight,
+				source.kind_,
+				source.request_,
+				source.native_status_,
+				source.native_mapping_,
+				source.delegated_extend_,
+				std::move(replacement_effect),
+				source.qualified_control_};
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_predecessor_map_receipt
 		reader_predecessor_map(const sqlite_shm_reader_attachment_map_inflight& inflight,
 							   const sqlite_shm_reader_predecessor_map_kind kind,
@@ -796,6 +831,27 @@ namespace
 	constexpr int sqlite_readonly_cantinit_status = sqlite_readonly_status | (5 << 8);
 	constexpr int sqlite_ioerr_status = 10;
 
+	template <typename Effect>
+	concept qualified_zero_effect_presenter = requires(
+		sqlite_same_process_shm_mapping_registry& registry,
+		sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_reader_attachment_map_inflight& inflight,
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		const sqlite_shm_issued_reader_callback_identity& callback,
+		const Effect& effect)
+	{
+		sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			registry, family, inflight, scope, callback, effect, 0, nullptr, 0);
+	};
+
+	template <typename Validator>
+	concept unqualified_zero_effect_validator = requires(
+		const sqlite_shm_reader_attachment_map_inflight& inflight,
+		const sqlite_shm_issued_reader_effect_identity& effect)
+	{
+		Validator::validate(inflight, effect, 0, nullptr, 0);
+	};
+
 	static_assert(!std::is_default_constructible_v<sqlite_shm_registry_process_owner>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_registry_process_owner>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_registry_process_owner>);
@@ -823,6 +879,24 @@ namespace
 		!std::is_default_constructible_v<sqlite_shm_verified_alias_unregistration_receipt>);
 	static_assert(!std::is_default_constructible_v<
 				  sqlite_shm_verified_reader_attachment_zero_effect_receipt>);
+	static_assert(std::is_final_v<sqlite_same_process_shm_reader_zero_effect_receipt_validator>);
+	static_assert(
+		!std::is_constructible_v<sqlite_same_process_shm_reader_zero_effect_receipt_validator>);
+	static_assert(noexcept(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+		std::declval<sqlite_same_process_shm_mapping_registry&>(),
+		std::declval<sqlite_shm_registry_family_pin&>(),
+		std::declval<const sqlite_shm_reader_attachment_map_inflight&>(),
+		std::declval<const sqlite_shm_reader_lifecycle_identity_scope&>(),
+		std::declval<const sqlite_shm_issued_reader_callback_identity&>(),
+		std::declval<const sqlite_shm_issued_reader_effect_identity&>(),
+		0,
+		nullptr,
+		0)));
+	static_assert(qualified_zero_effect_presenter<sqlite_shm_issued_reader_effect_identity>);
+	static_assert(!qualified_zero_effect_presenter<sqlite_backend_opaque_identity>);
+	static_assert(
+		!unqualified_zero_effect_validator<
+			sqlite_same_process_shm_reader_zero_effect_receipt_validator>);
 	static_assert(
 		!std::is_default_constructible_v<sqlite_shm_verified_reader_unpublished_cleanup_receipt>);
 	static_assert(!std::is_default_constructible_v<
@@ -2259,20 +2333,25 @@ namespace
 
 	void complete_callback_free_identity_smoke(reader_candidate_setup& setup,
 										 sqlite_shm_reader_attachment_map_inflight& inflight,
-										 const sqlite_shm_reader_attachment_map_request& request,
-										 const sqlite_backend_opaque_identity& zero_effect,
+										 const sqlite_shm_reader_lifecycle_identity_scope& scope,
+										 const sqlite_shm_issued_reader_callback_identity& callback_identity,
+										 const sqlite_shm_issued_reader_effect_identity& zero_effect,
 										 const std::uint8_t marker)
 	{
-		const auto zero = sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+		auto zero = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
 			inflight,
-			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
-			request,
+			scope,
+			callback_identity,
+			zero_effect,
 			sqlite_busy_status,
 			nullptr,
-			0,
-			zero_effect);
+			0);
+		require(zero && zero_effect.valid(),
+			"qualified zero validation preserves the exact issued presenter until commit");
 		auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
-			*setup.fixture.family_pin, inflight, zero, setup.session);
+			*setup.fixture.family_pin, inflight, *zero, setup.session);
 		require(completed && !inflight.valid() && !setup.session.valid(),
 			"qualified callback-free preparation reaches one exact zero terminal");
 		close_and_release_reader_open(setup.fixture, setup.open, marker);
@@ -2334,6 +2413,42 @@ namespace
 			std::move(*prepared),
 			std::move(*scope),
 			std::move(*callback_identity)};
+	}
+
+	struct qualified_zero_map_owner
+	{
+		qualified_reader_map_owner identity;
+		sqlite_shm_reader_attachment_map_inflight inflight;
+		sqlite_shm_issued_reader_effect_identity effect;
+	};
+
+	[[nodiscard]] qualified_zero_map_owner
+	prepare_qualified_map_effect_owner(
+		reader_candidate_setup& setup,
+		const std::uint8_t marker,
+		const sqlite_shm_reader_effect_identity_role role)
+	{
+		auto owner = prepare_qualified_reader_map_owner(setup, marker);
+		auto bound = setup.fixture.registry->bind_reader_map_identity(
+			*setup.fixture.family_pin,
+			setup.session,
+			owner.prepared,
+			owner.scope,
+			owner.callback_identity);
+		require(bound && bound->valid(), "bind focused qualified zero-map owner");
+		auto effect = owner.issuer.issue_effect(owner.scope,
+			owner.callback_identity,
+			role);
+		require(effect && effect->valid(), "issue focused qualified map-effect presenter");
+		return {std::move(owner), std::move(*bound), std::move(*effect)};
+	}
+
+	[[nodiscard]] qualified_zero_map_owner
+	prepare_qualified_zero_map_owner(reader_candidate_setup& setup, const std::uint8_t marker)
+	{
+		return prepare_qualified_map_effect_owner(setup,
+			marker,
+			sqlite_shm_reader_effect_identity_role::zero_attachment_result);
 	}
 
 	void verify_callback_free_reader_identity_prepare_claim_bind_and_registry_collision()
@@ -2492,15 +2607,13 @@ namespace
 					*exact.fixture.registry, exact.fixture.family) == 0U,
 			"exact registry atomically changes admission to owned at typed bind");
 		auto inflight = std::move(*bound);
-		const auto bound_request =
-			reader_attachment_map_request(pre_request, callback_identity->receipt());
 		auto zero_effect = issuer.issue_effect(scope,
 			*callback_identity,
 			sqlite_shm_reader_effect_identity_role::zero_attachment_result);
 		require(zero_effect && zero_effect->valid(),
 			"owned phase mints the exact typed zero-effect identity");
 		complete_callback_free_identity_smoke(
-			exact, inflight, bound_request, zero_effect->identity(), 34U);
+			exact, inflight, scope, *callback_identity, *zero_effect, 34U);
 		require(!scope.valid() && !callback_identity->valid() && !zero_effect->valid(),
 			"exact zero terminal closes every qualified identity presenter");
 
@@ -2579,10 +2692,8 @@ namespace
 			sqlite_shm_reader_effect_identity_role::zero_attachment_result);
 		require(effect && effect->valid(), "scope-claim race winner owns its zero-effect role");
 		auto inflight = std::move(*bound);
-		const auto bound_request =
-			reader_attachment_map_request(pre_request, callback_identity->receipt());
 		complete_callback_free_identity_smoke(
-			setup, inflight, bound_request, effect->identity(), 42U);
+			setup, inflight, scope, *callback_identity, *effect, 42U);
 	}
 
 	enum class qualified_identity_drop_stage : std::uint8_t
@@ -2725,17 +2836,21 @@ namespace
 			}
 			else
 			{
-				const auto receipt =
-					sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+				auto receipt =
+					sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+						*setup.fixture.registry,
+						*setup.fixture.family_pin,
 						*bound,
-						sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
-						request,
+						owner.scope,
+						owner.callback_identity,
+						*effect,
 						sqlite_busy_status,
 						nullptr,
-						0,
-						effect->identity());
+						0);
+				require(receipt && effect->valid(),
+					"owned zero result validates after ordinary family quarantine");
 				auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
-					*setup.fixture.family_pin, *bound, receipt, setup.session);
+					*setup.fixture.family_pin, *bound, *receipt, setup.session);
 				require(completed && !bound->valid() && !setup.session.valid(),
 					"owned zero terminal survives ordinary family quarantine");
 			}
@@ -2822,9 +2937,13 @@ namespace
 			"global-stale child destroys qualified wrappers without inherited mutex access");
 	}
 
+	void finish_qualified_zero_fixture(reader_candidate_setup& setup, std::uint8_t marker);
+
 	void verify_legacy_reader_map_remains_unqualified()
 	{
 		auto setup = make_reader_candidate_setup(85U);
+		auto proof_setup = make_reader_candidate_setup(88U);
+		auto qualified_proof = prepare_qualified_zero_map_owner(proof_setup, 89U);
 		const auto request = reader_attachment_map_request(setup.session_request, 86U);
 		auto inflight = setup.fixture.registry->begin_reader_map(
 			*setup.fixture.family_pin, setup.session, request);
@@ -2833,6 +2952,29 @@ namespace
 					*setup.fixture.registry, setup.fixture.family) == 0U &&
 				request.callback.invocation_token.profile == "test.registry.callback",
 			"legacy raw begin path cannot manufacture qualified identity ownership");
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		auto rejected = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
+			*inflight,
+			qualified_proof.identity.scope,
+			qualified_proof.identity.callback_identity,
+			qualified_proof.effect,
+			sqlite_busy_status,
+			nullptr,
+			0);
+		const auto after =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(!rejected &&
+				rejected.error().reason ==
+					sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				inflight->valid() && setup.session.valid() && qualified_proof.effect.valid() &&
+				before.last_issued_sequence == after.last_issued_sequence &&
+				before.last_committed_sequence == after.last_committed_sequence &&
+				before.map_attempts.size() == after.map_attempts.size() &&
+				before.terminal_quarantines.size() == after.terminal_quarantines.size(),
+			"new validator rejects a live unqualified inflight without mutating its legacy route");
 		const auto zero = sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
 			*inflight,
 			sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
@@ -2851,6 +2993,25 @@ namespace
 		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
 			"revoke legacy-isolation writer eligibility");
 		clean_fixture(setup.fixture);
+		auto qualified_receipt =
+			sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*proof_setup.fixture.registry,
+				*proof_setup.fixture.family_pin,
+				qualified_proof.inflight,
+				qualified_proof.identity.scope,
+				qualified_proof.identity.callback_identity,
+				qualified_proof.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+		require(qualified_receipt && proof_setup.fixture.registry
+						->complete_reader_zero_attachment_map(*proof_setup.fixture.family_pin,
+							qualified_proof.inflight,
+							*qualified_receipt,
+							proof_setup.session)
+						.has_value(),
+			"foreign qualified proofs remain independently usable after legacy rejection");
+		finish_qualified_zero_fixture(proof_setup, 90U);
 	}
 
 	[[nodiscard]] sqlite_shm_reader_handoff form_reader_group(
@@ -2928,19 +3089,21 @@ namespace
 			auto effect = issuer.issue_effect(
 				*scope, *callback_identity, sqlite_shm_reader_effect_identity_role::zero_attachment_result);
 			require(effect && effect->valid(), "issue same-ledger weak-phase zero effect");
-			const auto bound_request =
-				reader_attachment_map_request(request, callback_identity->receipt());
-			const auto zero = sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+			auto zero = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
 				*inflight,
-				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
-				bound_request,
+				*scope,
+				*callback_identity,
+				*effect,
 				sqlite_busy_status,
 				nullptr,
-				0,
-				effect->identity());
+				0);
+			require(zero && effect->valid(),
+				"validate same-ledger zero effect without consuming the presenter");
 			require(setup.fixture.registry
 						->complete_reader_zero_attachment_map(
-							*setup.fixture.family_pin, *inflight, zero, *session)
+							*setup.fixture.family_pin, *inflight, *zero, *session)
 						.has_value() &&
 					session->valid(),
 				"same-ledger zero terminal preserves established-group session");
@@ -2981,6 +3144,994 @@ namespace
 		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
 			"revoke weak-phase fixture eligibility");
 		clean_fixture(setup.fixture);
+	}
+
+	void finish_qualified_zero_fixture(reader_candidate_setup& setup, const std::uint8_t marker)
+	{
+		close_and_release_reader_open(setup.fixture, setup.open, marker);
+		retire_writer(*setup.coordinator, setup.holder, marker);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+			"revoke focused qualified-zero writer eligibility");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_qualified_zero_validator_closed_native_matrix()
+	{
+		struct accepted_row
+		{
+			int native_status;
+			bool nonnull_mapping;
+			sqlite_shm_reader_attachment_zero_effect_kind kind;
+			int outward_status;
+		};
+		constexpr auto unsupported_readonly = sqlite_readonly_status | (7 << 8);
+		constexpr auto extended_ioerr = sqlite_ioerr_status | (3 << 8);
+		const std::array accepted{
+			accepted_row{sqlite_busy_status,
+				false,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+				sqlite_busy_status},
+			accepted_row{extended_ioerr,
+				false,
+				sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+				extended_ioerr},
+			accepted_row{sqlite_ok_status,
+				false,
+				sqlite_shm_reader_attachment_zero_effect_kind::
+					exact_protocol_invalid_no_attachment,
+				sqlite_ioerr_status},
+			accepted_row{unsupported_readonly,
+				false,
+				sqlite_shm_reader_attachment_zero_effect_kind::
+					exact_protocol_invalid_no_attachment,
+				sqlite_ioerr_status},
+			accepted_row{sqlite_readonly_cantinit_status,
+				true,
+				sqlite_shm_reader_attachment_zero_effect_kind::
+					exact_protocol_invalid_no_attachment,
+				sqlite_ioerr_status},
+			accepted_row{sqlite_busy_status,
+				true,
+				sqlite_shm_reader_attachment_zero_effect_kind::
+					exact_protocol_invalid_no_attachment,
+				sqlite_ioerr_status},
+		};
+
+		for (std::size_t index = 0U; index < accepted.size(); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(101U + index * 3U);
+			auto setup = make_reader_candidate_setup(marker);
+			auto qualified = prepare_qualified_zero_map_owner(setup, marker + 1U);
+			const auto native_mapping = accepted[index].nonnull_mapping
+				? static_cast<const volatile void*>(setup.writer_attempt.native_page.get())
+				: nullptr;
+			auto receipt = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				accepted[index].native_status,
+				native_mapping,
+				0);
+			const auto expected_request = reader_attachment_map_request(
+				qualified.identity.request, qualified.identity.callback_identity.receipt());
+			require(receipt && receipt->kind() == accepted[index].kind &&
+					receipt->request() == expected_request &&
+					receipt->native_status() == accepted[index].native_status &&
+					receipt->native_mapping() == native_mapping &&
+					receipt->delegated_extend() == 0 &&
+					receipt->zero_attachment_effect_receipt() == qualified.effect.identity() &&
+					qualified.inflight.valid() &&
+					qualified.identity.scope.valid() &&
+					qualified.identity.callback_identity.valid() && qualified.effect.valid(),
+				"closed qualified-zero validator derives one exact accepted row without consuming proofs");
+			auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, *receipt, setup.session);
+			require(completed && completed->kind() == accepted[index].kind &&
+					completed->native_status() == accepted[index].outward_status &&
+					completed->native_mapping() == nullptr && !qualified.inflight.valid() &&
+					!setup.session.valid() && !qualified.identity.scope.valid() &&
+					!qualified.identity.callback_identity.valid() && !qualified.effect.valid() &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						1U,
+				"qualified zero terminal consumes private provenance and publishes only its closed projection");
+			finish_qualified_zero_fixture(setup, marker + 2U);
+		}
+	}
+
+	void verify_qualified_zero_validator_burns_every_invalid_native_shape()
+	{
+		struct invalid_row
+		{
+			int native_status;
+			bool nonnull_mapping;
+			int delegated_extend;
+		};
+		constexpr auto unsupported_readonly = sqlite_readonly_status | (7 << 8);
+		const std::array invalid{
+			invalid_row{sqlite_ok_status, true, 0},
+			invalid_row{sqlite_readonly_status, false, 0},
+			invalid_row{sqlite_readonly_status, true, 0},
+			invalid_row{sqlite_readonly_cantinit_status, false, 0},
+			invalid_row{unsupported_readonly, true, 0},
+			invalid_row{-1, false, 0},
+			invalid_row{27, false, 0},
+			invalid_row{1 << 8, false, 0},
+			invalid_row{sqlite_busy_status, false, 1},
+		};
+
+		for (std::size_t index = 0U; index < invalid.size(); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(131U + index * 2U);
+			auto setup = make_reader_candidate_setup(marker);
+			auto qualified = prepare_qualified_zero_map_owner(setup, marker + 1U);
+			const auto native_mapping = invalid[index].nonnull_mapping
+				? static_cast<const volatile void*>(setup.writer_attempt.native_page.get())
+				: nullptr;
+			auto rejected = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				invalid[index].native_status,
+				native_mapping,
+				invalid[index].delegated_extend);
+			const auto after_invalid =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(!rejected &&
+					rejected.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					rejected.error().action ==
+						sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+					!qualified.inflight.valid() && !setup.session.valid() &&
+					!qualified.identity.scope.valid() &&
+					!qualified.identity.callback_identity.valid() && !qualified.effect.valid() &&
+					setup.coordinator->snapshot().quarantined &&
+					setup.fixture.registry->snapshot().quarantined_family_count == 1U &&
+					after_invalid.zero_effect_terminals.empty(),
+				"first exact malformed zero observation burns its one shot and quarantines without a terminal");
+			auto corrected = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			const auto after_corrected =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(!corrected && after_corrected.zero_effect_terminals.empty() &&
+					after_corrected.terminal_quarantines.size() ==
+						after_invalid.terminal_quarantines.size(),
+				"burned malformed zero observation cannot be corrected or replayed");
+		}
+	}
+
+	void verify_qualified_zero_validator_rejects_foreign_proofs_before_claim()
+	{
+		auto exact = make_reader_candidate_setup(153U);
+		auto foreign = make_reader_candidate_setup(154U);
+		auto wrong_role_setup = make_reader_candidate_setup(155U);
+		auto exact_zero = prepare_qualified_zero_map_owner(exact, 155U);
+		auto foreign_zero = prepare_qualified_zero_map_owner(foreign, 156U);
+		auto wrong_role = prepare_qualified_map_effect_owner(wrong_role_setup,
+			157U,
+			sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto moved_foreign_effect = std::move(foreign_zero.effect);
+		require(!foreign_zero.effect.valid() && moved_foreign_effect.valid(),
+			"retain a live foreign effect beside its moved-from presenter");
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*exact.coordinator);
+		const auto registry_before = exact.fixture.registry->snapshot();
+
+		const auto reject = [](const auto& result)
+		{
+			require(!result &&
+					(result.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch ||
+					 result.error().reason == sqlite_shm_lease_rejection_reason::stale_token),
+				"foreign or stale qualified-zero proof rejects before native observation claim");
+		};
+		reject(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*foreign.fixture.registry,
+			*foreign.fixture.family_pin,
+			exact_zero.inflight,
+			exact_zero.identity.scope,
+			exact_zero.identity.callback_identity,
+			exact_zero.effect,
+			sqlite_busy_status,
+			nullptr,
+			0));
+		reject(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*exact.fixture.registry,
+			*foreign.fixture.family_pin,
+			exact_zero.inflight,
+			exact_zero.identity.scope,
+			exact_zero.identity.callback_identity,
+			exact_zero.effect,
+			sqlite_busy_status,
+			nullptr,
+			0));
+		reject(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			foreign_zero.inflight,
+			exact_zero.identity.scope,
+			exact_zero.identity.callback_identity,
+			exact_zero.effect,
+			sqlite_busy_status,
+			nullptr,
+			0));
+		reject(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_zero.inflight,
+			foreign_zero.identity.scope,
+			exact_zero.identity.callback_identity,
+			exact_zero.effect,
+			sqlite_busy_status,
+			nullptr,
+			0));
+		reject(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_zero.inflight,
+			exact_zero.identity.scope,
+			foreign_zero.identity.callback_identity,
+			exact_zero.effect,
+			sqlite_busy_status,
+			nullptr,
+			0));
+		reject(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_zero.inflight,
+			exact_zero.identity.scope,
+			exact_zero.identity.callback_identity,
+			moved_foreign_effect,
+			sqlite_busy_status,
+			nullptr,
+			0));
+		reject(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_zero.inflight,
+			exact_zero.identity.scope,
+			exact_zero.identity.callback_identity,
+			wrong_role.effect,
+			sqlite_busy_status,
+			nullptr,
+			0));
+		reject(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_zero.inflight,
+			exact_zero.identity.scope,
+			exact_zero.identity.callback_identity,
+			foreign_zero.effect,
+			sqlite_busy_status,
+			nullptr,
+			0));
+		auto foreign_receipt =
+			sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*foreign.fixture.registry,
+				*foreign.fixture.family_pin,
+				foreign_zero.inflight,
+				foreign_zero.identity.scope,
+				foreign_zero.identity.callback_identity,
+				moved_foreign_effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+		require(foreign_receipt && foreign.fixture.registry
+						->complete_reader_zero_attachment_map(*foreign.fixture.family_pin,
+							foreign_zero.inflight,
+							*foreign_receipt,
+							foreign.session)
+						.has_value() &&
+				!moved_foreign_effect.valid(),
+			"retire a still-owning foreign effect presenter for the stale-proof row");
+		reject(sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_zero.inflight,
+			exact_zero.identity.scope,
+			exact_zero.identity.callback_identity,
+			moved_foreign_effect,
+			sqlite_busy_status,
+			nullptr,
+			0));
+
+		const auto after =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*exact.coordinator);
+		const auto registry_after = exact.fixture.registry->snapshot();
+		require(exact_zero.inflight.valid() && exact.session.valid() &&
+				exact_zero.identity.scope.valid() &&
+				exact_zero.identity.callback_identity.valid() && exact_zero.effect.valid() &&
+				wrong_role.effect.valid() &&
+				before.last_issued_sequence == after.last_issued_sequence &&
+				before.last_committed_sequence == after.last_committed_sequence &&
+				before.map_attempts.size() == after.map_attempts.size() &&
+				before.terminal_quarantines.size() == after.terminal_quarantines.size() &&
+				before.zero_effect_terminals.size() == after.zero_effect_terminals.size() &&
+				registry_before.quarantined_family_count ==
+					registry_after.quarantined_family_count,
+			"all foreign, sibling, wrong-role, and moved proofs leave the exact owner unchanged");
+
+		auto exact_receipt =
+			sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*exact.fixture.registry,
+				*exact.fixture.family_pin,
+				exact_zero.inflight,
+				exact_zero.identity.scope,
+				exact_zero.identity.callback_identity,
+				exact_zero.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+		require(exact_receipt && exact.fixture.registry
+						->complete_reader_zero_attachment_map(*exact.fixture.family_pin,
+							exact_zero.inflight,
+							*exact_receipt,
+							exact.session)
+						.has_value(),
+			"correct exact proof wins after every nonmutating foreign presentation");
+
+		finish_qualified_zero_fixture(exact, 157U);
+		finish_qualified_zero_fixture(foreign, 158U);
+	}
+
+	void verify_qualified_zero_validator_duplicate_and_abandonment_cuts()
+	{
+		{
+			auto setup = make_reader_candidate_setup(159U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 160U);
+			auto first = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			require(first && qualified.effect.valid(),
+				"first exact validation seals one still-live zero observation");
+			auto duplicate =
+				sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+					*setup.fixture.registry,
+					*setup.fixture.family_pin,
+					qualified.inflight,
+					qualified.identity.scope,
+					qualified.identity.callback_identity,
+					qualified.effect,
+					sqlite_busy_status,
+					nullptr,
+					0);
+			auto first_commit = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, *first, setup.session);
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(!duplicate &&
+					duplicate.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					!first_commit && !qualified.inflight.valid() && !qualified.effect.valid() &&
+					setup.coordinator->snapshot().quarantined &&
+					lifecycle.zero_effect_terminals.empty(),
+				"second exact validation before commit poisons the first sealed receipt");
+		}
+
+		{
+			auto setup = make_reader_candidate_setup(161U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 162U);
+			auto receipt = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			require(receipt && setup.fixture.registry
+						->complete_reader_zero_attachment_map(*setup.fixture.family_pin,
+							qualified.inflight,
+							*receipt,
+							setup.session)
+						.has_value(),
+				"commit one exact validation before replay");
+			const auto before =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			auto replay = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			const auto after =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(!replay &&
+					replay.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+					replay.error().action ==
+						sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+					!setup.coordinator->snapshot().quarantined &&
+					after.zero_effect_terminals.size() == 1U &&
+					after.terminal_quarantines.size() == before.terminal_quarantines.size() &&
+					after.last_committed_sequence == before.last_committed_sequence,
+				"replay after terminal commit is stale and cannot retroactively poison its winner");
+			finish_qualified_zero_fixture(setup, 163U);
+		}
+
+		{
+			auto setup = make_reader_candidate_setup(164U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 165U);
+			std::optional<sqlite_shm_verified_reader_attachment_zero_effect_receipt> receipt;
+			{
+				auto validated =
+					sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+						*setup.fixture.registry,
+						*setup.fixture.family_pin,
+						qualified.inflight,
+						qualified.identity.scope,
+						qualified.identity.callback_identity,
+						qualified.effect,
+						sqlite_busy_status,
+						nullptr,
+						0);
+				require(validated.has_value(), "validate receipt-drop fixture");
+				receipt.emplace(std::move(*validated));
+			}
+			receipt.reset();
+			require(!qualified.inflight.valid() && !qualified.effect.valid() &&
+					setup.coordinator->snapshot().quarantined &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						0U,
+				"dropping the last validated receipt before commit abandons the exact owner");
+		}
+
+		{
+			auto setup = make_reader_candidate_setup(166U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 167U);
+			std::optional<sqlite_shm_issued_reader_effect_identity> effect{
+				std::move(qualified.effect)};
+			auto receipt = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				*effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			require(receipt && effect->valid(), "validate effect-drop fixture");
+			effect.reset();
+			auto stale = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, *receipt, setup.session);
+			require(!stale && !qualified.inflight.valid() &&
+					setup.coordinator->snapshot().quarantined &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						0U,
+				"dropping the issued effect after validation makes its private receipt noncommittable");
+		}
+
+		{
+			auto setup = make_reader_candidate_setup(168U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 169U);
+			std::optional<sqlite_shm_reader_attachment_map_inflight> inflight{
+				std::move(qualified.inflight)};
+			inflight.reset();
+			require(!qualified.identity.scope.valid() &&
+					!qualified.identity.callback_identity.valid() && !qualified.effect.valid() &&
+					setup.coordinator->snapshot().quarantined &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						0U,
+				"dropping the qualified inflight before validation fail-closes the owner");
+		}
+	}
+
+	void verify_qualified_zero_validator_concurrent_duplicate_has_no_winner()
+	{
+		auto setup = make_reader_candidate_setup(170U);
+		auto qualified = prepare_qualified_zero_map_owner(setup, 171U);
+		std::array<std::optional<sqlite_shm_verified_reader_attachment_zero_effect_receipt>, 2>
+			receipts;
+		std::array<bool, 2> succeeded{};
+		std::barrier start{3};
+		const auto validate = [&](const std::size_t index)
+		{
+			start.arrive_and_wait();
+			auto result = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			if (result)
+			{
+				receipts[index].emplace(std::move(*result));
+				succeeded[index] = true;
+			}
+		};
+		std::thread first{validate, 0U};
+		std::thread second{validate, 1U};
+		start.arrive_and_wait();
+		first.join();
+		second.join();
+		const auto success_count = static_cast<std::size_t>(succeeded[0]) +
+			static_cast<std::size_t>(succeeded[1]);
+		require(success_count == 1U && !qualified.inflight.valid() && !qualified.effect.valid() &&
+				setup.coordinator->snapshot().quarantined &&
+				setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count == 0U,
+			"two exact concurrent validations expose one receipt but poison all terminal authority");
+		const auto winner = succeeded[0] ? 0U : 1U;
+		auto rejected = setup.fixture.registry->complete_reader_zero_attachment_map(
+			*setup.fixture.family_pin, qualified.inflight, *receipts[winner], setup.session);
+		require(!rejected &&
+				setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count == 0U,
+			"scheduler-selected validation receipt cannot commit after concurrent ambiguity");
+	}
+
+	void verify_qualified_zero_terminal_rejects_raw_and_friend_substitutions()
+	{
+		{
+			auto setup = make_reader_candidate_setup(172U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 173U);
+			const auto request = reader_attachment_map_request(
+				qualified.identity.request, qualified.identity.callback_identity.receipt());
+			const auto raw =
+				sqlite_same_process_shm_lease_test_peer::reader_attachment_zero_effect(
+					qualified.inflight,
+					sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change,
+					request,
+					sqlite_busy_status,
+					nullptr,
+					0,
+					qualified.effect.identity());
+			auto rejected = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, raw, setup.session);
+			require(!rejected && !qualified.inflight.valid() && !qualified.effect.valid() &&
+					setup.coordinator->snapshot().quarantined &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						0U,
+				"qualified route rejects an otherwise-valid test-peer receipt lacking hidden control");
+		}
+
+		{
+			auto setup = make_reader_candidate_setup(174U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 175U);
+			auto canonical =
+				sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+					*setup.fixture.registry,
+					*setup.fixture.family_pin,
+					qualified.inflight,
+					qualified.identity.scope,
+					qualified.identity.callback_identity,
+					qualified.effect,
+					sqlite_busy_status,
+					nullptr,
+					0);
+			require(canonical.has_value(), "validate tuple-substitution fixture");
+			const auto forged =
+				sqlite_same_process_shm_lease_test_peer::
+					reader_attachment_zero_effect_with_qualified_control(
+						qualified.inflight,
+						*canonical,
+						sqlite_shm_reader_attachment_zero_effect_kind::
+							exact_protocol_invalid_no_attachment,
+						sqlite_ok_status,
+						nullptr);
+			auto rejected = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, forged, setup.session);
+			auto canonical_replay = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, *canonical, setup.session);
+			require(!rejected && !canonical_replay && setup.coordinator->snapshot().quarantined &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						0U,
+				"hidden control cannot authorize a substituted accepted status/kind fingerprint");
+		}
+
+		{
+			auto setup = make_reader_candidate_setup(176U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 177U);
+			auto canonical =
+				sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+					*setup.fixture.registry,
+					*setup.fixture.family_pin,
+					qualified.inflight,
+					qualified.identity.scope,
+					qualified.identity.callback_identity,
+					qualified.effect,
+					sqlite_busy_status,
+					nullptr,
+					0);
+			require(canonical.has_value(), "validate effect-substitution fixture");
+			const auto forged =
+				sqlite_same_process_shm_lease_test_peer::
+					reader_attachment_zero_effect_with_qualified_effect_substitution(
+						qualified.inflight,
+						*canonical,
+						identity("test.registry.qualified-zero-substituted-effect", 177U));
+			auto rejected = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, forged, setup.session);
+			require(!rejected && setup.coordinator->snapshot().quarantined &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						0U,
+				"hidden control remains bound to the exact issued effect identity at terminal");
+		}
+	}
+
+	void verify_qualified_zero_validator_owned_drain_exhaustion_and_commit_failure()
+	{
+		{
+			auto setup = make_reader_candidate_setup(178U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 179U);
+			auto receipt = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			require(receipt && qualified.effect.valid(), "validate before ordinary family quarantine");
+			quarantine_reader_family_by_activity_abandonment(setup, 180U);
+			auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, *receipt, setup.session);
+			require(completed && !qualified.inflight.valid() && !qualified.effect.valid() &&
+					setup.coordinator->snapshot().reader_attachment_zero_effect_terminal_count ==
+						1U,
+				"already-owned validated zero terminal drains after ordinary family quarantine");
+		}
+
+		{
+			auto setup = make_reader_candidate_setup(181U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 182U);
+			sqlite_same_process_shm_registry_test_peer::exhaust_identity_issuer(
+				*setup.fixture.registry);
+			auto receipt = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			require(receipt && qualified.effect.valid() && setup.fixture.registry
+						->complete_reader_zero_attachment_map(*setup.fixture.family_pin,
+							qualified.inflight,
+							*receipt,
+							setup.session)
+						.has_value(),
+				"issuer exhaustion cannot revoke an already-issued exact zero effect");
+			finish_qualified_zero_fixture(setup, 183U);
+		}
+
+		{
+			auto setup = make_reader_candidate_setup(184U);
+			sqlite_same_process_shm_registry_test_peer::exhaust_identity_issuer(
+				*setup.fixture.registry);
+			auto owner = prepare_qualified_reader_map_owner(setup, 185U);
+			auto bound = setup.fixture.registry->bind_reader_map_identity(
+				*setup.fixture.family_pin,
+				setup.session,
+				owner.prepared,
+				owner.scope,
+				owner.callback_identity);
+			require(bound && bound->valid(), "bind fresh-effect exhaustion fixture");
+			auto failed = owner.issuer.issue_effect(owner.scope,
+				owner.callback_identity,
+				sqlite_shm_reader_effect_identity_role::zero_attachment_result);
+			require(!failed, "exhausted issuer cannot mint a fresh zero effect");
+			require(failed.error().reason ==
+					sqlite_shm_lease_rejection_reason::generation_exhausted,
+				"fresh exhausted effect reports exact generation exhaustion");
+			require(!bound->valid(), "fresh exhausted effect invalidates its qualified owner");
+			require(setup.coordinator->snapshot().quarantined,
+				"fresh exhausted effect fail-closes its lease family");
+		}
+
+		{
+			auto setup = make_reader_candidate_setup(186U);
+			auto qualified = prepare_qualified_zero_map_owner(setup, 187U);
+			auto receipt = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			require(receipt.has_value(), "validate injected terminal-failure fixture");
+			sqlite_same_process_shm_lease_test_peer::fail_next_reader_map_terminal_transition(
+				*setup.coordinator);
+			auto failed = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, *receipt, setup.session);
+			const auto lease_after_failure = setup.coordinator->snapshot();
+			const auto registry_after_failure = setup.fixture.registry->snapshot();
+			const auto lifecycle_after_failure =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			auto replay = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, *receipt, setup.session);
+			const auto lifecycle_after_replay =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(!failed &&
+					failed.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					failed.error().action ==
+						sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+					!replay && !qualified.inflight.valid() && !setup.session.valid() &&
+					!qualified.identity.scope.valid() &&
+					!qualified.identity.callback_identity.valid() && !qualified.effect.valid() &&
+					lease_after_failure.quarantined &&
+					lease_after_failure.reader_attachment_group_count == 0U &&
+					lease_after_failure.reader_attachment_audit_count == 0U &&
+					lease_after_failure.reader_attachment_zero_effect_terminal_count == 0U &&
+					lease_after_failure.reader_attachment_revoked_no_map_count == 0U &&
+					registry_after_failure.quarantined_family_count == 1U &&
+					lifecycle_after_failure.zero_effect_terminals.empty() &&
+					lifecycle_after_failure.compact_tombstone_count == 0U &&
+					lifecycle_after_failure.open_epoch_close_compact_tombstone_count == 0U &&
+					lifecycle_after_replay.last_issued_sequence ==
+						lifecycle_after_failure.last_issued_sequence &&
+					lifecycle_after_replay.last_committed_sequence ==
+						lifecycle_after_failure.last_committed_sequence &&
+					lifecycle_after_replay.terminal_quarantines.size() ==
+						lifecycle_after_failure.terminal_quarantines.size() &&
+					lifecycle_after_replay.custody_state_counts ==
+						lifecycle_after_failure.custody_state_counts,
+				"qualified terminal commit failure publishes no half record and cannot replay");
+		}
+	}
+
+	void verify_sealed_qualified_zero_rejects_every_alternate_terminal()
+	{
+		enum class alternate_terminal : std::uint8_t
+		{
+			mapped,
+			predecessor,
+			opaque,
+		};
+		const std::array alternates{alternate_terminal::mapped,
+			alternate_terminal::predecessor,
+			alternate_terminal::opaque};
+		for (std::size_t index = 0U; index < alternates.size(); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(188U + index * 2U);
+			auto setup = make_reader_candidate_setup(marker);
+			auto qualified = prepare_qualified_zero_map_owner(setup, marker + 1U);
+			auto zero = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				qualified.effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			require(zero && qualified.effect.valid(), "seal zero before alternate-terminal attempt");
+			const auto request = reader_attachment_map_request(
+				qualified.identity.request, qualified.identity.callback_identity.receipt());
+			bool alternate_rejected{};
+			switch (alternates[index])
+			{
+				case alternate_terminal::mapped:
+				{
+					auto result = setup.fixture.registry->commit_reader_map(
+						*setup.fixture.family_pin,
+						qualified.inflight,
+						sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+							request,
+							setup.holder.generation(),
+							mapping(setup.writer_attempt.native_page.get()),
+							identity("test.registry.sealed-zero-mapped-substitute", marker)),
+						setup.session);
+					alternate_rejected = !result;
+					break;
+				}
+				case alternate_terminal::predecessor:
+				{
+					auto result = setup.fixture.registry->complete_reader_predecessor_map(
+						*setup.fixture.family_pin,
+						qualified.inflight,
+						sqlite_same_process_shm_lease_test_peer::reader_predecessor_map(
+							qualified.inflight,
+							sqlite_shm_reader_predecessor_map_kind::exact_predecessor_mapped_route,
+							request,
+							sqlite_readonly_status,
+							setup.writer_attempt.native_page.get(),
+							0,
+							identity("test.registry.sealed-zero-predecessor-substitute", marker)),
+						setup.session);
+					alternate_rejected = !result;
+					break;
+				}
+				case alternate_terminal::opaque:
+				{
+					auto result = setup.fixture.registry->complete_reader_opaque_attachment_uncertainty(
+						*setup.fixture.family_pin, qualified.inflight, setup.session);
+					alternate_rejected = !result;
+					break;
+				}
+			}
+			auto zero_replay = setup.fixture.registry->complete_reader_zero_attachment_map(
+				*setup.fixture.family_pin, qualified.inflight, *zero, setup.session);
+			const auto lease = setup.coordinator->snapshot();
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(alternate_rejected && !zero_replay && lease.quarantined &&
+					lease.reader_attachment_group_count == 0U &&
+					lease.reader_attachment_audit_count == 0U &&
+					lease.reader_attachment_zero_effect_terminal_count == 0U &&
+					lease.reader_opaque_attachment_uncertainty_count == 0U &&
+					lease.reader_predecessor_map_terminal_count == 0U &&
+					lifecycle.zero_effect_terminals.empty() &&
+					lifecycle.predecessor_map_terminals.empty() &&
+					lifecycle.opaque_attachment_uncertainties.empty(),
+				"sealed zero provenance blocks mapped, predecessor, and opaque terminal substitution");
+		}
+	}
+
+	void verify_qualified_zero_protocol_invalid_preserves_active_group()
+	{
+		auto setup = make_reader_candidate_setup(194U);
+		auto handoff = form_reader_group(setup, 195U, nullptr);
+		require(setup.session.valid() && handoff.valid(),
+			"formed group retains its active session and unmap handoff");
+		auto qualified = prepare_qualified_zero_map_owner(setup, 196U);
+		const auto before = setup.coordinator->snapshot();
+		auto receipt = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
+			qualified.inflight,
+			qualified.identity.scope,
+			qualified.identity.callback_identity,
+			qualified.effect,
+			sqlite_ok_status,
+			nullptr,
+			0);
+		require(receipt && receipt->kind() ==
+				sqlite_shm_reader_attachment_zero_effect_kind::
+					exact_protocol_invalid_no_attachment,
+			"validate later-map protocol-invalid zero row");
+		auto completed = setup.fixture.registry->complete_reader_zero_attachment_map(
+			*setup.fixture.family_pin, qualified.inflight, *receipt, setup.session);
+		const auto after = setup.coordinator->snapshot();
+		require(completed && completed->kind() ==
+				sqlite_shm_reader_attachment_zero_effect_kind::
+					exact_protocol_invalid_no_attachment &&
+				completed->native_status() == sqlite_ioerr_status &&
+				completed->native_mapping() == nullptr && !qualified.inflight.valid() &&
+				!qualified.effect.valid() && setup.session.valid() && handoff.valid() &&
+				after.reader_attachment_group_count == before.reader_attachment_group_count &&
+				after.reader_session_owner_count == before.reader_session_owner_count &&
+				after.reader_attachment_zero_effect_terminal_count ==
+					before.reader_attachment_zero_effect_terminal_count + 1U,
+			"later protocol-invalid consumes only its map attempt and preserves group/session custody");
+
+		const auto terminal = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+			setup.session_request,
+			sqlite_shm_reader_session_terminal_kind::success,
+			identity("test.registry.qualified-zero-later-session", 197U));
+		require(setup.fixture.registry
+					->complete_reader_session(*setup.fixture.family_pin, setup.session, terminal)
+					.has_value(),
+			"terminalize later protocol-invalid session");
+		const auto unmap_callback = callback(198U);
+		auto unmap = setup.fixture.registry->begin_reader_unmap(
+			*setup.fixture.family_pin, handoff, unmap_callback);
+		require(unmap.has_value(), "begin later protocol-invalid group unmap");
+		const auto unmap_receipt = sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+			*unmap,
+			unmap_callback,
+			sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+			sqlite_ok_status,
+			0,
+			0,
+			identity("test.registry.qualified-zero-later-unmap", 198U),
+			identity("test.registry.qualified-zero-later-latch", 198U));
+		require(setup.fixture.registry
+					->complete_reader_unmap(*setup.fixture.family_pin, *unmap, unmap_receipt)
+					.has_value(),
+			"complete later protocol-invalid group unmap");
+		close_and_release_reader_open(setup.fixture,
+			setup.open,
+			199U,
+			sqlite_shm_reader_close_route::close_after_confirmed_unmap);
+		retire_writer(*setup.coordinator, setup.holder, 199U);
+		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+			"revoke later protocol-invalid writer eligibility");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_validated_qualified_zero_fork_destructors_are_lock_free()
+	{
+		auto setup = make_reader_candidate_setup(200U);
+		auto qualified = prepare_qualified_zero_map_owner(setup, 201U);
+		std::optional<sqlite_shm_issued_reader_effect_identity> effect{
+			std::move(qualified.effect)};
+		auto validated = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
+			qualified.inflight,
+			qualified.identity.scope,
+			qualified.identity.callback_identity,
+			*effect,
+			sqlite_busy_status,
+			nullptr,
+			0);
+		require(validated && effect->valid(), "validate hidden-receipt fork fixture");
+		std::optional<sqlite_shm_verified_reader_attachment_zero_effect_receipt> receipt;
+		receipt.emplace(std::move(*validated));
+		sqlite_same_process_shm_registry_test_peer::lock_registry_mutex(*setup.fixture.registry);
+		sqlite_same_process_shm_lease_test_peer::lock_state_mutex_for_fork_testing(
+			*setup.coordinator);
+		const auto child = ::fork();
+		require(child >= 0, "fork validated hidden receipt with registry and lease mutexes held");
+		if (child == 0)
+		{
+			::alarm(5U);
+			sqlite_same_process_shm_registry_test_peer::invalidate_process_instance(
+				*setup.fixture.registry);
+			auto stale = sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				qualified.inflight,
+				qualified.identity.scope,
+				qualified.identity.callback_identity,
+				*effect,
+				sqlite_busy_status,
+				nullptr,
+				0);
+			const auto exact_stale = !stale &&
+				stale.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+				stale.error().action ==
+					sqlite_shm_lease_recovery_action::quarantine_no_retry;
+			receipt.reset();
+			effect.reset();
+			::alarm(0U);
+			::_exit(exact_stale ? 0 : 1);
+		}
+		int status{};
+		require(::waitpid(child, &status, 0) == child, "wait validated hidden-receipt child");
+		sqlite_same_process_shm_lease_test_peer::unlock_state_mutex_for_fork_testing(
+			*setup.coordinator);
+		sqlite_same_process_shm_registry_test_peer::unlock_registry_mutex(
+			*setup.fixture.registry);
+		require(WIFEXITED(status) && WEXITSTATUS(status) == 0 && receipt && effect &&
+				effect->valid(),
+			"stale child validates and destroys hidden receipt/effect without inherited locks");
+		require(setup.fixture.registry
+					->complete_reader_zero_attachment_map(*setup.fixture.family_pin,
+						qualified.inflight,
+						*receipt,
+						setup.session)
+					.has_value(),
+			"parent still commits the exact validated receipt after stale-child destruction");
+		finish_qualified_zero_fixture(setup, 202U);
 	}
 
 	enum class phase1_late_terminal_kind : std::uint8_t
@@ -17221,6 +18372,16 @@ int main()
 		verify_callback_free_reader_identity_fork_and_global_stale_fast_path();
 		verify_legacy_reader_map_remains_unqualified();
 		verify_callback_free_reader_identity_weak_phase_ledger_is_bounded();
+		verify_qualified_zero_validator_closed_native_matrix();
+		verify_qualified_zero_validator_burns_every_invalid_native_shape();
+		verify_qualified_zero_validator_rejects_foreign_proofs_before_claim();
+		verify_qualified_zero_validator_duplicate_and_abandonment_cuts();
+		verify_qualified_zero_validator_concurrent_duplicate_has_no_winner();
+		verify_qualified_zero_terminal_rejects_raw_and_friend_substitutions();
+		verify_qualified_zero_validator_owned_drain_exhaustion_and_commit_failure();
+		verify_sealed_qualified_zero_rejects_every_alternate_terminal();
+		verify_qualified_zero_protocol_invalid_preserves_active_group();
+		verify_validated_qualified_zero_fork_destructors_are_lock_free();
 		verify_registry_reader_predecessor_transfer_retains_existing_route_lifetime();
 		verify_registry_reader_active_predecessor_is_retired_by_exact_xclose();
 		verify_registry_reader_predecessor_xclose_failures_retain_activity();

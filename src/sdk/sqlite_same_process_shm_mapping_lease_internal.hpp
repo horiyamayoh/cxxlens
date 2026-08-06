@@ -25,6 +25,7 @@ namespace cxxlens::sdk
 		class sqlite_writer_shm_mapping_epoch_state;
 		struct sqlite_shm_reader_late_close_outer_unwind_control;
 		struct sqlite_shm_reader_map_identity_owner_control;
+		struct sqlite_shm_reader_zero_effect_receipt_control;
 		class sqlite_shm_reader_lifecycle_owner_abandonment_control;
 		class sqlite_shm_reader_identity_completion_control;
 
@@ -78,6 +79,13 @@ namespace cxxlens::sdk
 	class sqlite_shm_reader_session_admission;
 	struct sqlite_shm_reader_pre_sqlite_session_request;
 	class sqlite_writer_shm_mapping_epoch_arm;
+	class sqlite_same_process_shm_mapping_registry;
+	class sqlite_shm_reader_lifecycle_identity_scope;
+	class sqlite_shm_issued_reader_callback_identity;
+	class sqlite_shm_issued_reader_effect_identity;
+	class sqlite_shm_reader_zero_effect_identity_validation_capability;
+	template <typename Value>
+	class sqlite_shm_lease_result;
 
 	/**
 	 * Exact process/runtime/file-family binding consumed by the pure lease coordinator.
@@ -540,12 +548,10 @@ namespace cxxlens::sdk
 	 *
 	 * This receipt is bound to one exact proposal attachment-map attempt. It can describe only
 	 * the two zero-attachment Step 5a routes; mapped, predecessor, incomplete-effect, and
-	 * ambiguous results cannot be represented by this type. The production validator remains
-	 * deliberately absent until the source-private VFS issuer is implemented and reviewed.
-	 *
-	 * That issuer must bind the full process/family/attempt/request/callback/admission/effect role
-	 * and make the effect identity nonreusable for process lifetime across families and mapped/zero
-	 * kinds. Coordinator-local replay census is defense-in-depth, not an issuer replacement.
+	 * ambiguous results cannot be represented by this type. The closed validator authenticates the
+	 * exact qualified owner, family, scope, callback, and still-live issued zero-effect presenter,
+	 * then attaches private one-shot provenance consumed only by the terminal coordinator. Raw
+	 * test-peer receipts remain available solely for the legacy unqualified route.
 	 */
 	class sqlite_shm_verified_reader_attachment_zero_effect_receipt
 	{
@@ -571,7 +577,9 @@ namespace cxxlens::sdk
 			int native_status,
 			const volatile void* native_mapping,
 			int delegated_extend,
-			sqlite_backend_opaque_identity zero_attachment_effect_receipt);
+			sqlite_backend_opaque_identity zero_attachment_effect_receipt,
+			std::shared_ptr<detail::sqlite_shm_reader_zero_effect_receipt_control>
+				qualified_control = {});
 
 		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 		std::uint64_t token_{};
@@ -582,6 +590,35 @@ namespace cxxlens::sdk
 		const volatile void* native_mapping_{};
 		int delegated_extend_{};
 		sqlite_backend_opaque_identity zero_attachment_effect_receipt_;
+		std::shared_ptr<detail::sqlite_shm_reader_zero_effect_receipt_control>
+			qualified_control_;
+	};
+
+	/**
+	 * Closed validator for one exact qualified reader-map zero-attachment native result.
+	 *
+	 * The request and result kind are derived from the already-bound owner and the closed native
+	 * status/pointer partition.  There is intentionally no raw receipt, caller-selected kind,
+	 * caller-supplied request, or opaque-identity overload.  Successful validation leaves the
+	 * in-flight owner, scope, callback, and issued effect presenters live until the existing terminal
+	 * consumer commits them.
+	 */
+	class sqlite_same_process_shm_reader_zero_effect_receipt_validator final
+	{
+	  public:
+		sqlite_same_process_shm_reader_zero_effect_receipt_validator() = delete;
+
+		[[nodiscard]] static
+		sqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_zero_effect_receipt>
+		validate(sqlite_same_process_shm_mapping_registry& registry,
+			 sqlite_shm_registry_family_pin& family,
+			 const sqlite_shm_reader_attachment_map_inflight& inflight,
+			 const sqlite_shm_reader_lifecycle_identity_scope& scope,
+			 const sqlite_shm_issued_reader_callback_identity& callback,
+			 const sqlite_shm_issued_reader_effect_identity& effect,
+			 int native_status,
+			 const volatile void* native_mapping,
+			 int delegated_extend) noexcept;
 	};
 
 	/**
@@ -2255,6 +2292,10 @@ namespace cxxlens::sdk
 			const std::shared_ptr<std::atomic<std::uint64_t>>& process_epoch,
 			const std::shared_ptr<std::atomic_bool>& global_emergency_latch) const noexcept;
 		[[nodiscard]] bool has_qualified_identity_for_registry() const noexcept;
+		[[nodiscard]] bool terminal_presentation_stale_for_registry() const noexcept;
+		[[nodiscard]]
+		std::weak_ptr<detail::sqlite_shm_reader_lifecycle_owner_abandonment_control>
+		qualified_identity_owner_abandonment_for_registry() const noexcept;
 
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 		std::uint64_t token_{};
@@ -3074,6 +3115,15 @@ namespace cxxlens::sdk
 			const sqlite_shm_reader_attachment_map_request& request,
 			sqlite_shm_reader_map_identity_binding_capability capability,
 			sqlite_shm_reader_map_predelegate_minter& predelegate_minter);
+		[[nodiscard]]
+		sqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_zero_effect_receipt>
+		validate_registry_reader_zero_attachment_effect(
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_zero_effect_identity_validation_capability capability,
+			int native_status,
+			const volatile void* native_mapping,
+			int delegated_extend) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_late_close_outer_unwind_authority>
 		mint_registry_reader_late_close_outer_unwind_authority(
 			sqlite_shm_registry_family_pin& family,

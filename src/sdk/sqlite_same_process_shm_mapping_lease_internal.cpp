@@ -213,6 +213,49 @@ namespace cxxlens::sdk
 			return false;
 		}
 
+		[[nodiscard]] std::optional<sqlite_shm_reader_attachment_zero_effect_kind>
+		classify_reader_zero_attachment_native_result(
+			const int native_status,
+			const volatile void* native_mapping,
+			const int delegated_extend) noexcept
+		{
+			if (delegated_extend != 0 || native_status < 0)
+				return std::nullopt;
+			const auto primary_status = native_status & sqlite_primary_status_mask;
+			const auto closed_error_status =
+				primary_status >= sqlite_error_primary_status_first &&
+				primary_status <= sqlite_error_primary_status_last;
+			if (closed_error_status && primary_status != sqlite_readonly_status &&
+				native_mapping == nullptr)
+				return sqlite_shm_reader_attachment_zero_effect_kind::exact_no_attachment_change;
+			if ((native_status == static_cast<int>(sqlite_native_map_status::ok) &&
+				 native_mapping == nullptr) ||
+				(primary_status == sqlite_readonly_status &&
+				 native_status != sqlite_readonly_status &&
+				 native_status != sqlite_readonly_cantinit_status &&
+				 native_mapping == nullptr) ||
+				(native_status == sqlite_readonly_cantinit_status && native_mapping != nullptr) ||
+				(closed_error_status && primary_status != sqlite_readonly_status &&
+				 native_mapping != nullptr))
+				return sqlite_shm_reader_attachment_zero_effect_kind::
+					exact_protocol_invalid_no_attachment;
+			return std::nullopt;
+		}
+
+		[[nodiscard]] std::uint64_t reader_zero_attachment_fingerprint(
+			const sqlite_shm_reader_attachment_zero_effect_kind kind,
+			const int native_status,
+			const volatile void* native_mapping) noexcept
+		{
+			// Accepted rows are nonnegative.  Preserve every status bit and only pointer nullness:
+			// protocol-invalid non-null rows prove that no attachment may be published, so the
+			// address itself is deliberately not identity or authority.
+			return (std::uint64_t{1U} << 63U) |
+				(static_cast<std::uint64_t>(static_cast<std::uint32_t>(native_status))) |
+				(static_cast<std::uint64_t>(static_cast<std::uint8_t>(kind)) << 32U) |
+				(static_cast<std::uint64_t>(native_mapping != nullptr) << 40U);
+		}
+
 		[[nodiscard]] bool valid_reader_predecessor_map_receipt(
 			const sqlite_shm_verified_reader_predecessor_map_receipt& receipt) noexcept
 		{
@@ -802,11 +845,14 @@ namespace cxxlens::sdk
 			const int native_status,
 			const volatile void* native_mapping,
 			const int delegated_extend,
-			sqlite_backend_opaque_identity zero_attachment_effect_receipt)
+			sqlite_backend_opaque_identity zero_attachment_effect_receipt,
+			std::shared_ptr<detail::sqlite_shm_reader_zero_effect_receipt_control>
+				qualified_control)
 		: state_{inflight.state_}, token_{inflight.token_}, kind_{kind},
 		  request_{std::move(request)}, native_status_{native_status},
 		  native_mapping_{native_mapping}, delegated_extend_{delegated_extend},
-		  zero_attachment_effect_receipt_{std::move(zero_attachment_effect_receipt)}
+		  zero_attachment_effect_receipt_{std::move(zero_attachment_effect_receipt)},
+		  qualified_control_{std::move(qualified_control)}
 	{
 	}
 
@@ -843,6 +889,28 @@ namespace cxxlens::sdk
 		const noexcept
 	{
 		return zero_attachment_effect_receipt_;
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_zero_effect_receipt>
+	sqlite_same_process_shm_reader_zero_effect_receipt_validator::validate(
+		sqlite_same_process_shm_mapping_registry& registry,
+		sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_reader_attachment_map_inflight& inflight,
+		const sqlite_shm_reader_lifecycle_identity_scope& scope,
+		const sqlite_shm_issued_reader_callback_identity& callback,
+		const sqlite_shm_issued_reader_effect_identity& effect,
+		const int native_status,
+		const volatile void* native_mapping,
+		const int delegated_extend) noexcept
+	{
+		return registry.validate_reader_zero_attachment_effect(family,
+			inflight,
+			scope,
+			callback,
+			effect,
+			native_status,
+			native_mapping,
+			delegated_extend);
 	}
 
 	sqlite_shm_reader_attachment_zero_effect_result::
@@ -2273,6 +2341,19 @@ namespace cxxlens::sdk
 
 		static_assert(std::atomic<sqlite_shm_reader_map_identity_disposition>::is_always_lock_free);
 
+		enum class sqlite_shm_reader_zero_effect_validation_phase : std::uint8_t
+		{
+			unclaimed,
+			validating,
+			sealed,
+			terminal_consumed,
+			poisoned,
+		};
+
+		static_assert(
+			std::atomic<sqlite_shm_reader_zero_effect_validation_phase>::is_always_lock_free);
+		static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+
 		struct sqlite_shm_reader_map_identity_owner_control final
 			: sqlite_shm_reader_lifecycle_owner_abandonment_control
 		{
@@ -2288,6 +2369,10 @@ namespace cxxlens::sdk
 			std::optional<sqlite_shm_reader_attachment_map_pre_request> pre_request;
 			std::shared_ptr<sqlite_shm_reader_identity_completion_control> identity_completion;
 			std::atomic_bool identity_scope_claimed{false};
+			std::atomic<sqlite_shm_reader_zero_effect_validation_phase>
+				zero_effect_validation_phase{
+					sqlite_shm_reader_zero_effect_validation_phase::unclaimed};
+			std::atomic<std::uint64_t> zero_effect_validation_fingerprint{0U};
 			std::atomic<sqlite_shm_reader_map_identity_disposition> disposition{
 				sqlite_shm_reader_map_identity_disposition::live};
 
@@ -2295,6 +2380,27 @@ namespace cxxlens::sdk
 			[[nodiscard]] bool begin_terminal_completion() noexcept;
 			[[nodiscard]] bool terminal_completion_claimed() const noexcept override;
 			void abandon() noexcept override;
+		};
+
+		struct sqlite_shm_reader_zero_effect_receipt_control final
+		{
+			sqlite_shm_reader_zero_effect_receipt_control(
+				sqlite_shm_reader_zero_effect_identity_validation_capability capability_value,
+				const std::shared_ptr<sqlite_shm_reader_map_identity_owner_control>& owner_value,
+				const std::uint64_t fingerprint_value) noexcept
+				: capability{std::move(capability_value)}, owner{owner_value},
+				  process_epoch{owner_value ? owner_value->process_epoch : nullptr},
+				  expected_process_epoch{owner_value ? owner_value->expected_process_epoch : 0U},
+				  fingerprint{fingerprint_value}
+			{
+			}
+			~sqlite_shm_reader_zero_effect_receipt_control() noexcept;
+
+			sqlite_shm_reader_zero_effect_identity_validation_capability capability;
+			std::weak_ptr<sqlite_shm_reader_map_identity_owner_control> owner;
+			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch;
+			std::uint64_t expected_process_epoch{};
+			std::uint64_t fingerprint{};
 		};
 
 		struct sqlite_shm_reader_late_close_outer_unwind_control
@@ -7914,6 +8020,160 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]]
+			sqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_zero_effect_receipt>
+			validate_reader_zero_attachment_effect(
+				const sqlite_shm_registry_family_pin& registry_family,
+				const sqlite_shm_reader_attachment_map_inflight& inflight,
+				sqlite_shm_reader_zero_effect_identity_validation_capability capability,
+				const int native_status,
+				const volatile void* native_mapping,
+				const int delegated_extend) noexcept
+			{
+				std::shared_ptr<sqlite_shm_reader_map_identity_owner_control> exact_owner;
+				bool observation_burned{};
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					if (!owns(inflight.state_, inflight.token_))
+						return sqlite_shm_unexpected(stale_token(
+							sqlite_shm_lease_recovery_action::quarantine_no_retry));
+					const auto map = find_by_token(reader_attachment_maps_, inflight.token_);
+					if (map == reader_attachment_maps_.end() ||
+						map->phase != reader_phase::inflight || !map->registry_bound ||
+						!map->qualified_identity_bound || !map->identity_owner_control ||
+						map->identity_owner_control.get() != inflight.qualified_owner_control_.get() ||
+						map->qualified_owner_phase.get() != inflight.qualified_owner_phase_.get() ||
+						map->generation != inflight.generation_ ||
+						(map->registry_predelegate_authority &&
+						 !map->registry_predelegate_authority->retains_exact_owned_terminal_lifetimes(
+							 registry_family, map->request)))
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch,
+							sqlite_shm_lease_recovery_action::quarantine_no_retry));
+
+					exact_owner = map->identity_owner_control;
+					const std::shared_ptr<sqlite_shm_reader_lifecycle_owner_abandonment_control>
+						exact_owner_base = exact_owner;
+					if (!capability.matches_live_owner(exact_owner_base) ||
+						exact_owner->disposition.load(std::memory_order_acquire) !=
+							sqlite_shm_reader_map_identity_disposition::live)
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::receipt_mismatch,
+							sqlite_shm_lease_recovery_action::quarantine_no_retry));
+
+					auto expected_phase =
+						sqlite_shm_reader_zero_effect_validation_phase::unclaimed;
+					if (!exact_owner->zero_effect_validation_phase.compare_exchange_strong(
+							expected_phase,
+							sqlite_shm_reader_zero_effect_validation_phase::validating,
+							std::memory_order_acq_rel,
+							std::memory_order_acquire))
+					{
+						if (expected_phase ==
+							sqlite_shm_reader_zero_effect_validation_phase::terminal_consumed)
+							return sqlite_shm_unexpected(stale_token(
+								sqlite_shm_lease_recovery_action::quarantine_no_retry));
+						exact_owner->zero_effect_validation_fingerprint.store(1U,
+							std::memory_order_release);
+						exact_owner->zero_effect_validation_phase.store(
+							sqlite_shm_reader_zero_effect_validation_phase::poisoned,
+							std::memory_order_release);
+						map->quarantine_reason =
+							sqlite_shm_reader_terminal_quarantine_reason::presented_invalid;
+						quarantine_reader_map_terminal_commit_locked(map->token, map->session_token);
+						return sqlite_shm_unexpected(ambiguous());
+					}
+					observation_burned = true;
+
+					const auto kind = classify_reader_zero_attachment_native_result(
+						native_status, native_mapping, delegated_extend);
+					if (!kind)
+					{
+						exact_owner->zero_effect_validation_fingerprint.store(1U,
+							std::memory_order_release);
+						exact_owner->zero_effect_validation_phase.store(
+							sqlite_shm_reader_zero_effect_validation_phase::poisoned,
+							std::memory_order_release);
+						map->quarantine_reason =
+							sqlite_shm_reader_terminal_quarantine_reason::presented_invalid;
+						quarantine_reader_map_terminal_commit_locked(map->token, map->session_token);
+						return sqlite_shm_unexpected(ambiguous());
+					}
+
+					auto request = map->request;
+					auto effect_identity = capability.copy_effect_identity();
+					if (!capability.matches_live_owner(exact_owner_base) ||
+						exact_owner->disposition.load(std::memory_order_acquire) !=
+							sqlite_shm_reader_map_identity_disposition::live)
+					{
+						exact_owner->zero_effect_validation_fingerprint.store(1U,
+							std::memory_order_release);
+						exact_owner->zero_effect_validation_phase.store(
+							sqlite_shm_reader_zero_effect_validation_phase::poisoned,
+							std::memory_order_release);
+						map->quarantine_reason =
+							sqlite_shm_reader_terminal_quarantine_reason::owner_abandoned;
+						quarantine_reader_map_terminal_commit_locked(map->token, map->session_token);
+						return sqlite_shm_unexpected(ambiguous());
+					}
+					const auto fingerprint = reader_zero_attachment_fingerprint(
+						*kind, native_status, native_mapping);
+					auto qualified_control =
+						std::make_shared<sqlite_shm_reader_zero_effect_receipt_control>(
+							std::move(capability), exact_owner, fingerprint);
+					auto receipt = sqlite_shm_verified_reader_attachment_zero_effect_receipt{
+						inflight,
+						*kind,
+						std::move(request),
+						native_status,
+						native_mapping,
+						delegated_extend,
+						std::move(effect_identity),
+						std::move(qualified_control)};
+					static_assert(std::is_nothrow_move_constructible_v<
+						sqlite_shm_verified_reader_attachment_zero_effect_receipt>);
+					auto output = sqlite_shm_lease_result<
+						sqlite_shm_verified_reader_attachment_zero_effect_receipt>{
+						std::move(receipt)};
+					static_assert(std::is_nothrow_move_constructible_v<decltype(output)>);
+					if (!output->qualified_control_ ||
+						!output->qualified_control_->capability.matches_live_owner(exact_owner_base) ||
+						exact_owner->disposition.load(std::memory_order_acquire) !=
+							sqlite_shm_reader_map_identity_disposition::live)
+					{
+						exact_owner->zero_effect_validation_fingerprint.store(1U,
+							std::memory_order_release);
+						exact_owner->zero_effect_validation_phase.store(
+							sqlite_shm_reader_zero_effect_validation_phase::poisoned,
+							std::memory_order_release);
+						map->quarantine_reason =
+							sqlite_shm_reader_terminal_quarantine_reason::owner_abandoned;
+						quarantine_reader_map_terminal_commit_locked(map->token, map->session_token);
+						return sqlite_shm_unexpected(ambiguous());
+					}
+					exact_owner->zero_effect_validation_fingerprint.store(
+						fingerprint, std::memory_order_release);
+					exact_owner->zero_effect_validation_phase.store(
+						sqlite_shm_reader_zero_effect_validation_phase::sealed,
+						std::memory_order_release);
+					return output;
+				}
+				catch (...)
+				{
+					if (observation_burned && exact_owner)
+					{
+						exact_owner->zero_effect_validation_fingerprint.store(1U,
+							std::memory_order_release);
+						exact_owner->zero_effect_validation_phase.store(
+							sqlite_shm_reader_zero_effect_validation_phase::poisoned,
+							std::memory_order_release);
+						exact_owner->abandon();
+					}
+					return sqlite_shm_unexpected(ambiguous());
+				}
+			}
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_map_commit> commit_reader(
 				sqlite_shm_reader_attachment_map_inflight& inflight,
 				const sqlite_shm_verified_reader_attachment_post_map_receipt& receipt,
@@ -8630,6 +8890,72 @@ namespace cxxlens::sdk
 					// Copy every fallible receipt field after route selection and before mutation.
 					auto prepared_receipt = receipt;
 					auto pending_receipt = receipt;
+					const auto qualified_owned_terminal = map_attempt->qualified_identity_bound;
+					auto qualified_control = prepared_receipt.qualified_control_;
+					const auto qualified_receipt_kind =
+						classify_reader_zero_attachment_native_result(
+							prepared_receipt.native_status(),
+							prepared_receipt.native_mapping(),
+							prepared_receipt.delegated_extend());
+					const auto qualified_receipt_fingerprint = qualified_receipt_kind
+						? reader_zero_attachment_fingerprint(*qualified_receipt_kind,
+							  prepared_receipt.native_status(),
+							  prepared_receipt.native_mapping())
+						: 0U;
+					const auto exact_qualified_control = qualified_owned_terminal &&
+						map_attempt->identity_owner_control && qualified_control &&
+						qualified_receipt_kind &&
+						*qualified_receipt_kind == prepared_receipt.kind() &&
+						qualified_control->fingerprint == qualified_receipt_fingerprint &&
+						qualified_control->capability.matches_effect_identity(
+							prepared_receipt.zero_attachment_effect_receipt()) &&
+						qualified_control->owner.lock().get() ==
+							map_attempt->identity_owner_control.get() &&
+						qualified_control->fingerprint != 0U &&
+						map_attempt->identity_owner_control->zero_effect_validation_fingerprint.load(
+							std::memory_order_acquire) == qualified_control->fingerprint &&
+						map_attempt->identity_owner_control->zero_effect_validation_phase.load(
+							std::memory_order_acquire) ==
+							sqlite_shm_reader_zero_effect_validation_phase::sealed;
+					if ((qualified_owned_terminal && !exact_qualified_control) ||
+						(!qualified_owned_terminal && qualified_control))
+					{
+						if (map_attempt->identity_owner_control)
+						{
+							map_attempt->identity_owner_control->zero_effect_validation_fingerprint.store(
+								1U, std::memory_order_release);
+							map_attempt->identity_owner_control->zero_effect_validation_phase.store(
+								sqlite_shm_reader_zero_effect_validation_phase::poisoned,
+								std::memory_order_release);
+						}
+						map_attempt->quarantine_reason =
+							sqlite_shm_reader_terminal_quarantine_reason::presented_invalid;
+						quarantine_reader_map_terminal_commit_locked(
+							map_attempt->token, owner->token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+					if (qualified_owned_terminal)
+					{
+						const std::shared_ptr<sqlite_shm_reader_lifecycle_owner_abandonment_control>
+							exact_owner_base = map_attempt->identity_owner_control;
+						if (!qualified_control->capability.matches_live_owner(exact_owner_base))
+						{
+							map_attempt->identity_owner_control->zero_effect_validation_fingerprint.store(
+								1U, std::memory_order_release);
+							map_attempt->identity_owner_control->zero_effect_validation_phase.store(
+								sqlite_shm_reader_zero_effect_validation_phase::poisoned,
+								std::memory_order_release);
+							map_attempt->quarantine_reason =
+								sqlite_shm_reader_terminal_quarantine_reason::owner_abandoned;
+							quarantine_reader_map_terminal_commit_locked(
+								map_attempt->token, owner->token);
+							inflight.disarm();
+							session.disarm();
+							return sqlite_shm_unexpected(ambiguous());
+						}
+					}
 					const auto zero_effect_identity_reused =
 						reader_map_effect_identity_seen_locked(
 							prepared_receipt.zero_attachment_effect_receipt(),
@@ -8882,6 +9208,45 @@ namespace cxxlens::sdk
 												  session_origin_sequence,
 												  map_attempt->admission_sequence,
 											  0U});
+					if (qualified_owned_terminal)
+					{
+						const std::shared_ptr<sqlite_shm_reader_lifecycle_owner_abandonment_control>
+							exact_owner_base = map_attempt->identity_owner_control;
+						auto expected_validation_phase =
+							sqlite_shm_reader_zero_effect_validation_phase::sealed;
+						if (!qualified_control ||
+							qualified_control->owner.lock().get() !=
+								map_attempt->identity_owner_control.get() ||
+							!qualified_receipt_kind ||
+							*qualified_receipt_kind != result_kind ||
+							qualified_control->fingerprint != qualified_receipt_fingerprint ||
+							!qualified_control->capability.matches_effect_identity(
+								prepared_terminals.back()
+									.receipt.zero_attachment_effect_receipt()) ||
+							qualified_control->fingerprint !=
+								map_attempt->identity_owner_control
+									->zero_effect_validation_fingerprint.load(
+										std::memory_order_acquire) ||
+							!qualified_control->capability.matches_live_owner(exact_owner_base) ||
+							!map_attempt->identity_owner_control->zero_effect_validation_phase
+								 .compare_exchange_strong(
+									expected_validation_phase,
+									sqlite_shm_reader_zero_effect_validation_phase::terminal_consumed,
+									std::memory_order_acq_rel,
+									std::memory_order_acquire))
+						{
+							map_attempt->identity_owner_control->zero_effect_validation_fingerprint.store(
+								1U, std::memory_order_release);
+							map_attempt->identity_owner_control->zero_effect_validation_phase.store(
+								sqlite_shm_reader_zero_effect_validation_phase::poisoned,
+								std::memory_order_release);
+							quarantine_reader_map_terminal_commit_locked(
+								map_attempt->token, owner->token);
+							inflight.disarm();
+							session.disarm();
+							return sqlite_shm_unexpected(ambiguous());
+						}
+					}
 					if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
 					{
 						quarantine_reader_map_terminal_commit_locked(map_attempt->token, owner->token);
@@ -20899,7 +21264,17 @@ namespace cxxlens::sdk
 			{
 				if (!map.qualified_identity_bound)
 					return true;
-				const auto claimed = !is_quarantined_locked() && map.identity_owner_control &&
+				const auto zero_validation_phase = map.identity_owner_control
+					? map.identity_owner_control->zero_effect_validation_phase.load(
+						  std::memory_order_acquire)
+					: sqlite_shm_reader_zero_effect_validation_phase::poisoned;
+				const auto zero_route_compatible =
+					zero_validation_phase ==
+						sqlite_shm_reader_zero_effect_validation_phase::unclaimed ||
+					zero_validation_phase ==
+						sqlite_shm_reader_zero_effect_validation_phase::terminal_consumed;
+				const auto claimed = zero_route_compatible && !is_quarantined_locked() &&
+					map.identity_owner_control &&
 					map.qualified_owner_phase &&
 					map.identity_owner_control->process_epoch &&
 					map.identity_owner_control->global_emergency_latch &&
@@ -21690,6 +22065,19 @@ namespace cxxlens::sdk
 			if (auto owner = state.lock())
 				owner->abandon(lease_token_kind::reader_attachment_map_inflight, token);
 		}
+
+		sqlite_shm_reader_zero_effect_receipt_control::
+			~sqlite_shm_reader_zero_effect_receipt_control() noexcept
+		{
+			if (!process_epoch || expected_process_epoch == 0U ||
+				process_epoch->load(std::memory_order_acquire) != expected_process_epoch)
+				return;
+			const auto exact_owner = owner.lock();
+			if (exact_owner &&
+				exact_owner->zero_effect_validation_phase.load(std::memory_order_acquire) ==
+					sqlite_shm_reader_zero_effect_validation_phase::sealed)
+				exact_owner->abandon();
+		}
 	} // namespace detail
 
 	sqlite_shm_writer_eligibility::sqlite_shm_writer_eligibility(
@@ -22067,6 +22455,19 @@ namespace cxxlens::sdk
 		const noexcept
 	{
 		return qualified_owner_control_ != nullptr || qualified_owner_phase_ != nullptr;
+	}
+
+	bool sqlite_shm_reader_attachment_map_inflight::terminal_presentation_stale_for_registry()
+		const noexcept
+	{
+		return terminal_presentation_disabled_ || !state_ || token_ == 0U || generation_ == 0U;
+	}
+
+	std::weak_ptr<detail::sqlite_shm_reader_lifecycle_owner_abandonment_control>
+	sqlite_shm_reader_attachment_map_inflight::
+		qualified_identity_owner_abandonment_for_registry() const noexcept
+	{
+		return qualified_owner_control_;
 	}
 
 	void sqlite_shm_reader_attachment_map_inflight::disable_terminal_presentation() noexcept
@@ -23112,6 +23513,24 @@ namespace cxxlens::sdk
 	{
 		return state_->bind_registry_reader_map_identity(
 			family, session, prepared, request, std::move(capability), predelegate_minter);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_zero_effect_receipt>
+	sqlite_same_process_shm_mapping_lease_coordinator::
+		validate_registry_reader_zero_attachment_effect(
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_zero_effect_identity_validation_capability capability,
+			const int native_status,
+			const volatile void* native_mapping,
+			const int delegated_extend) noexcept
+	{
+		return state_->validate_reader_zero_attachment_effect(family,
+			inflight,
+			std::move(capability),
+			native_status,
+			native_mapping,
+			delegated_extend);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_late_close_outer_unwind_authority>
