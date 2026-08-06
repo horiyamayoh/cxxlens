@@ -14,6 +14,23 @@ namespace cxxlens::sdk
 	{
 		struct sqlite_shm_process_identity_record_control;
 		struct sqlite_shm_reader_lifecycle_identity_scope_control;
+		class sqlite_shm_reader_lifecycle_owner_abandonment_control
+		{
+		  public:
+			virtual ~sqlite_shm_reader_lifecycle_owner_abandonment_control() = default;
+			virtual void abandon() noexcept = 0;
+			[[nodiscard]] virtual bool terminal_completion_claimed() const noexcept
+			{
+				return false;
+			}
+		};
+
+		class sqlite_shm_reader_identity_completion_control
+		{
+		  public:
+			virtual ~sqlite_shm_reader_identity_completion_control() = default;
+			virtual void complete() noexcept = 0;
+		};
 	}
 
 	/** Closed reader callback roles already present in the accepted DF-0207/DF-0209 ledger. */
@@ -44,10 +61,27 @@ namespace cxxlens::sdk
 		native_close,
 	};
 
+	/** Closed terminal roles for an exact reader session owner. */
+	enum class sqlite_shm_reader_session_terminal_identity_role : std::uint8_t
+	{
+		success,
+		failure,
+		cancelled_before_authority_read,
+	};
+
 	enum class sqlite_shm_reader_lifecycle_identity_domain : std::uint8_t
 	{
 		callback_invocation,
 		native_or_zero_effect,
+		session_terminal,
+	};
+
+	/** Lock-free phase of a production-qualified lifecycle owner. */
+	enum class sqlite_shm_reader_lifecycle_owner_phase : std::uint8_t
+	{
+		admission,
+		owned,
+		inactive,
 	};
 
 	/** Deterministic concurrency cut points exposed only through the registry test peer. */
@@ -67,16 +101,17 @@ namespace cxxlens::sdk
 		close,
 		logical_ack,
 		late_outer_unwind,
+		session,
 	};
 
 	/**
 	 * Asserted coordinates for one reader lifecycle owner family.
 	 *
-	 * This aggregate is not authority. The U1 testing seam authenticates the exact registry and live
-	 * family pin, then records these values in a private scope control. It does not yet prove that the
-	 * asserted owner/request exists or enforce one scope per owner. Production lifecycle-owner
-	 * authentication and one-shot scope minting are deferred to U2; copied values alone still cannot
-	 * be presented to this issuer or validator.
+	 * This aggregate is not authority. The U1 `_for_testing` seam remains an unqualified route: it
+	 * authenticates the exact registry and live family pin, then records these values in a private
+	 * scope control, but does not prove that the asserted owner/request exists or enforce one scope
+	 * per owner. U2a1a's separate registry-private reader-map gate performs that qualification; copied
+	 * coordinates do not convey it and cannot be presented to this issuer or validator by themselves.
 	 */
 	struct sqlite_shm_reader_lifecycle_owner_coordinates
 	{
@@ -95,8 +130,9 @@ namespace cxxlens::sdk
 	 *
 	 * It grants no callback or effect authority by itself. Only the process-global issuer can
 	 * consume it, and every validation checks exact private issuer/scope control provenance.
-	 * In U1, the `_for_testing` registry seam does not authenticate owner existence or exact-one
-	 * scope minting; a production owner gate is explicitly deferred to U2.
+	 * The U1 `_for_testing` registry seam remains unqualified and does not authenticate owner
+	 * existence or exact-one scope minting. U2a1a's registry-private reader-map gate is separate and
+	 * is not conveyed by this presenter alone.
 	 * The presenter object itself must not be concurrently moved or destroyed while an issuance
 	 * call uses it. `retire_scope` is an atomic control transition and may race issuance; one side
 	 * wins the documented total order without replacing the presenter's shared control. Independent
@@ -211,6 +247,34 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity identity_;
 	};
 
+	/** Move-only issuer proof for one exact closed reader-session terminal role. */
+	class sqlite_shm_issued_reader_session_terminal_identity
+	{
+	  public:
+		~sqlite_shm_issued_reader_session_terminal_identity() noexcept;
+		sqlite_shm_issued_reader_session_terminal_identity(
+			sqlite_shm_issued_reader_session_terminal_identity&&) noexcept;
+		sqlite_shm_issued_reader_session_terminal_identity&
+		operator=(sqlite_shm_issued_reader_session_terminal_identity&&) = delete;
+		sqlite_shm_issued_reader_session_terminal_identity(
+			const sqlite_shm_issued_reader_session_terminal_identity&) = delete;
+		sqlite_shm_issued_reader_session_terminal_identity&
+		operator=(const sqlite_shm_issued_reader_session_terminal_identity&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& identity() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_process_identity_issuer_state;
+		friend class sqlite_shm_process_global_identity_issuer;
+		sqlite_shm_issued_reader_session_terminal_identity(
+			std::shared_ptr<detail::sqlite_shm_process_identity_record_control> control,
+			sqlite_backend_opaque_identity identity) noexcept;
+
+		std::shared_ptr<detail::sqlite_shm_process_identity_record_control> control_;
+		sqlite_backend_opaque_identity identity_;
+	};
+
 	/**
 	 * Production-inert facade over the one issuer owned by one process registry.
 	 *
@@ -220,9 +284,10 @@ namespace cxxlens::sdk
 	 * Public aggregate equality is never validation: every operation checks the private control
 	 * provenance, process epoch, registry owner-equivalence, scope, domain, and role. The issuer
 	 * retains no ever-issued ledger; nonreuse comes from its single checked no-wrap sequence.
-	 * This U1 bridge intentionally covers callback-invocation and native/zero-effect identities
-	 * only. Session-terminal identities must join the same process source in a later reviewed unit;
-	 * this type does not mint or validate that deferred domain.
+	 * U2a1a mints and validates callback-invocation, native/zero-effect, and session-terminal identity
+	 * domains from this one process source. Full session-transaction terminal validation, including
+	 * the exact session owner and no-live-lock condition, remains deferred; this facade provides the
+	 * identity primitive rather than that semantic validator.
 	 */
 	class sqlite_shm_process_global_identity_issuer
 	{
@@ -242,6 +307,9 @@ namespace cxxlens::sdk
 		issue_effect(const sqlite_shm_reader_lifecycle_identity_scope& scope,
 				 const sqlite_shm_issued_reader_callback_identity& callback,
 				 sqlite_shm_reader_effect_identity_role role);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_issued_reader_session_terminal_identity>
+		issue_session_terminal(const sqlite_shm_reader_lifecycle_identity_scope& scope,
+						 sqlite_shm_reader_session_terminal_identity_role role);
 
 		[[nodiscard]] sqlite_shm_lease_result<void> validate_callback(
 			const sqlite_shm_reader_lifecycle_identity_scope& scope,
@@ -252,6 +320,10 @@ namespace cxxlens::sdk
 			const sqlite_shm_issued_reader_callback_identity& callback,
 			const sqlite_shm_issued_reader_effect_identity& effect,
 			sqlite_shm_reader_effect_identity_role role) const noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void> validate_session_terminal(
+			const sqlite_shm_reader_lifecycle_identity_scope& scope,
+			const sqlite_shm_issued_reader_session_terminal_identity& terminal,
+			sqlite_shm_reader_session_terminal_identity_role role) const noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> retire_callback(
 			const sqlite_shm_reader_lifecycle_identity_scope& scope,
 			sqlite_shm_issued_reader_callback_identity& callback,
@@ -261,6 +333,10 @@ namespace cxxlens::sdk
 			const sqlite_shm_issued_reader_callback_identity& callback,
 			sqlite_shm_issued_reader_effect_identity& effect,
 			sqlite_shm_reader_effect_identity_role role) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void> retire_session_terminal(
+			const sqlite_shm_reader_lifecycle_identity_scope& scope,
+			sqlite_shm_issued_reader_session_terminal_identity& terminal,
+			sqlite_shm_reader_session_terminal_identity_role role) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		retire_scope(sqlite_shm_reader_lifecycle_identity_scope& scope) noexcept;
 

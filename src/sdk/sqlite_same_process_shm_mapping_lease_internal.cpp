@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "sqlite_same_process_shm_mapping_registry_internal.hpp"
+#include "sqlite_same_process_shm_identity_issuer_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -153,6 +154,29 @@ namespace cxxlens::sdk
 				request.expected_attachment.connection_token() == request.connection_token &&
 				valid_callback(request.callback) && request.page_number >= 0 &&
 				request.page_size > 0 && request.caller_extend == 0;
+		}
+
+		[[nodiscard]] bool valid_reader_attachment_map_pre_request(
+			const sqlite_shm_reader_attachment_map_pre_request& request) noexcept
+		{
+			return valid_family(request.family) && valid_identity(request.alias_lifetime) &&
+				valid_identity(request.connection_token) &&
+				valid_reader_native_attachment(request.expected_attachment) &&
+				request.expected_attachment.family() == request.family &&
+				request.expected_attachment.alias_lifetime() == request.alias_lifetime &&
+				request.expected_attachment.connection_token() == request.connection_token &&
+				request.page_number >= 0 && request.page_size > 0 && request.caller_extend == 0;
+		}
+
+		[[nodiscard]] bool map_request_extends_pre_request(
+			const sqlite_shm_reader_attachment_map_request& request,
+			const sqlite_shm_reader_attachment_map_pre_request& pre) noexcept
+		{
+			return request.family == pre.family && request.alias_lifetime == pre.alias_lifetime &&
+				request.connection_token == pre.connection_token &&
+				request.expected_attachment == pre.expected_attachment &&
+				request.page_number == pre.page_number && request.page_size == pre.page_size &&
+				request.caller_extend == pre.caller_extend;
 		}
 
 		[[nodiscard]] bool valid_reader_zero_attachment_receipt(
@@ -2240,6 +2264,39 @@ namespace cxxlens::sdk
 
 	namespace detail
 	{
+		enum class sqlite_shm_reader_map_identity_disposition : std::uint8_t
+		{
+			live,
+			abandoning,
+			terminal_completing,
+		};
+
+		static_assert(std::atomic<sqlite_shm_reader_map_identity_disposition>::is_always_lock_free);
+
+		struct sqlite_shm_reader_map_identity_owner_control final
+			: sqlite_shm_reader_lifecycle_owner_abandonment_control
+		{
+			std::weak_ptr<sqlite_shm_mapping_lease_state> state;
+			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch;
+			std::shared_ptr<std::atomic_bool> global_emergency_latch;
+			std::uint64_t expected_process_epoch{};
+			std::uint64_t token{};
+			std::uint64_t family_epoch{};
+			std::uint64_t family_pin_token{};
+			std::uint64_t alias_token{};
+			std::shared_ptr<std::atomic<sqlite_shm_reader_lifecycle_owner_phase>> phase;
+			std::optional<sqlite_shm_reader_attachment_map_pre_request> pre_request;
+			std::shared_ptr<sqlite_shm_reader_identity_completion_control> identity_completion;
+			std::atomic_bool identity_scope_claimed{false};
+			std::atomic<sqlite_shm_reader_map_identity_disposition> disposition{
+				sqlite_shm_reader_map_identity_disposition::live};
+
+			[[nodiscard]] bool begin_terminalization() noexcept;
+			[[nodiscard]] bool begin_terminal_completion() noexcept;
+			[[nodiscard]] bool terminal_completion_claimed() const noexcept override;
+			void abandon() noexcept override;
+		};
+
 		struct sqlite_shm_reader_late_close_outer_unwind_control
 		{
 			explicit sqlite_shm_reader_late_close_outer_unwind_control(
@@ -7174,6 +7231,222 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_prepared>
+			prepare_registry_reader_map_identity(
+				sqlite_shm_registry_family_pin& registry_family,
+				sqlite_shm_reader_session& session,
+				const sqlite_shm_reader_attachment_map_pre_request& request,
+				sqlite_shm_reader_map_identity_prepare_capability capability)
+			{
+				auto process_epoch = std::move(capability.process_epoch_);
+				auto global_emergency_latch = std::move(capability.global_emergency_latch_);
+				const auto expected_process_epoch = capability.expected_process_epoch_;
+				const auto family_epoch = capability.family_epoch_;
+				const auto family_pin_token = capability.family_pin_token_;
+				const auto alias_token = capability.alias_token_;
+				if (!valid_reader_attachment_map_pre_request(request) || !process_epoch ||
+					!global_emergency_latch ||
+					expected_process_epoch == 0U || family_epoch == 0U ||
+					family_pin_token == 0U || alias_token == 0U ||
+					process_epoch->load(std::memory_order_acquire) != expected_process_epoch ||
+					global_emergency_latch->load(std::memory_order_acquire))
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::invalid_request,
+							sqlite_shm_lease_recovery_action::deny_before_native_map));
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					if (!owns(session.state_, session.token_))
+						return sqlite_shm_unexpected(stale_token(
+							sqlite_shm_lease_recovery_action::deny_before_native_map));
+					if (auto blocked = blocked_locked(
+							sqlite_shm_lease_recovery_action::deny_before_native_map))
+						return sqlite_shm_unexpected(*blocked);
+					auto owner = find_by_token(reader_sessions_, session.token_);
+					if (owner == reader_sessions_.end() ||
+						owner->phase == reader_session_record_phase::terminal_quarantined ||
+						!owner->registry_bound || registry_family.state_.get() == nullptr ||
+						owner->generation != session.generation_ ||
+						owner->request.attachment != request.expected_attachment ||
+						request.family != family_ || !generation_ ||
+						generation_->value != owner->generation ||
+						std::ranges::any_of(reader_attachment_maps_,
+							[&owner](const reader_attachment_map_record& value)
+							{
+								return value.session_token == owner->token &&
+									value.phase != reader_phase::terminal_quarantined;
+							}))
+						return sqlite_shm_unexpected(stale_token(
+							sqlite_shm_lease_recovery_action::deny_before_native_map));
+					auto expected = generation_->pages.end();
+					auto group = find_by_token(reader_attachment_groups_, owner->group_token);
+					bool retirement_blocker = true;
+					if (owner->phase == reader_session_record_phase::active_group_owner)
+					{
+						if (group == reader_attachment_groups_.end() ||
+							group->phase != reader_attachment_group_phase::active ||
+							group->generation != owner->generation ||
+							group->expected != owner->request.attachment ||
+							group->existing_group_deferred_cleanup_required ||
+							!group->registry_bound || !group->registry_activity_authority ||
+							!group->registry_activity_authority->validate_active_authority(
+								registry_family, group->expected))
+							return sqlite_shm_unexpected(stale_token(
+								sqlite_shm_lease_recovery_action::deny_before_native_map));
+						const auto member = std::find_if(
+							group->members.begin(), group->members.end(),
+							[&request](const reader_attachment_group_member_record& value)
+							{
+								return value.identity.mapping().page_number == request.page_number;
+							});
+						if (member != group->members.end())
+						{
+							if (member->identity.mapping().page_size != request.page_size)
+								return sqlite_shm_unexpected(rejection(
+									sqlite_shm_lease_rejection_reason::mapping_mismatch,
+									sqlite_shm_lease_recovery_action::deny_before_native_map));
+							retirement_blocker = false;
+							expected = std::find_if(
+								generation_->pages.begin(), generation_->pages.end(),
+								[&member](const sqlite_shm_mapping_tuple& value)
+								{
+									return same_mapping_page(value, member->identity.mapping());
+								});
+						}
+					}
+					else if (owner->phase != reader_session_record_phase::reserved_for_first_map ||
+						group == reader_attachment_groups_.end() ||
+						group->expected != owner->request.attachment ||
+						group->reservation_phase !=
+							sqlite_shm_reader_attachment_reservation_phase::reserved ||
+						group->observed_identity || !group->registry_bound ||
+						group->composite_close_owner_token != 0U ||
+						group->composite_close_registry_open_token != 0U ||
+						group->composite_close_cut_sequence != 0U ||
+						group->composite_close_wait_resolution_sequence_slot != 0U ||
+						group->composite_close_wait_resolution_sequence != 0U)
+						return sqlite_shm_unexpected(stale_token(
+							sqlite_shm_lease_recovery_action::deny_before_native_map));
+					if (expected == generation_->pages.end())
+					{
+						if (generation_->phase != sqlite_shm_mapping_generation_phase::live)
+							return sqlite_shm_unexpected(rejection(
+								generation_->handoff_count == 0U
+									? sqlite_shm_lease_rejection_reason::retiring
+									: sqlite_shm_lease_rejection_reason::successor_handoff_live,
+								sqlite_shm_lease_recovery_action::deny_before_native_map));
+						expected = find_page_locked(request.page_number);
+					}
+					if (expected == generation_->pages.end() ||
+						expected->page_size != request.page_size || !can_allocate_tokens_locked(1U))
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::mapping_mismatch,
+							sqlite_shm_lease_recovery_action::deny_before_native_map));
+
+					const auto first_map =
+						owner->phase == reader_session_record_phase::reserved_for_first_map;
+					const auto binding =
+						reserve_reader_lifecycle_admission_binding_locked(first_map ? 4U : 2U);
+					if (!binding.succeeded)
+						return sqlite_shm_unexpected(ambiguous());
+					reader_terminal_slot_guard admission_slot{
+						reader_lifecycle_sequences_->state_.get(), binding.slots[0]};
+					reader_terminal_slot_guard terminal_slot{
+						reader_lifecycle_sequences_->state_.get(), binding.slots[1]};
+					reader_terminal_slot_guard group_cut_slot{
+						reader_lifecycle_sequences_->state_.get(), binding.slots[2]};
+					reader_terminal_slot_guard group_terminal_slot{
+						reader_lifecycle_sequences_->state_.get(), binding.slots[3]};
+					const auto token = next_token_;
+					auto phase = std::make_shared<
+						std::atomic<sqlite_shm_reader_lifecycle_owner_phase>>(
+							sqlite_shm_reader_lifecycle_owner_phase::admission);
+					auto* raw = new sqlite_shm_reader_map_identity_owner_control{};
+					auto control = std::shared_ptr<sqlite_shm_reader_map_identity_owner_control>{
+						raw,
+						[process_epoch, expected_process_epoch](
+							sqlite_shm_reader_map_identity_owner_control* value) noexcept
+						{
+							if (process_epoch->load(std::memory_order_acquire) ==
+								expected_process_epoch)
+								delete value;
+						}};
+					control->state = weak_from_this();
+					auto* raw_state_owner =
+						new std::shared_ptr<sqlite_shm_mapping_lease_state>{shared_from_this()};
+					auto state_owner_box =
+						std::shared_ptr<std::shared_ptr<sqlite_shm_mapping_lease_state>>{
+							raw_state_owner,
+							[process_epoch, expected_process_epoch](auto* value) noexcept
+							{
+								if (process_epoch->load(std::memory_order_acquire) ==
+									expected_process_epoch)
+									delete value;
+							}};
+					auto fork_safe_state_owner = std::shared_ptr<sqlite_shm_mapping_lease_state>{
+						state_owner_box, raw_state_owner->get()};
+					control->process_epoch = std::move(process_epoch);
+					control->global_emergency_latch = std::move(global_emergency_latch);
+					control->expected_process_epoch = expected_process_epoch;
+					control->token = token;
+					control->family_epoch = family_epoch;
+					control->family_pin_token = family_pin_token;
+					control->alias_token = alias_token;
+					control->phase = std::move(phase);
+					control->pre_request = request;
+					auto full_request = sqlite_shm_reader_attachment_map_request{
+						request.family, request.alias_lifetime, request.connection_token,
+						request.expected_attachment, {}, request.page_number, request.page_size,
+						request.caller_extend};
+					auto expected_mapping = *expected;
+					expected_mapping.sealed_shm_size = generation_->sealed_shm_size;
+					auto next_custodies = reader_custodies_;
+					next_custodies.push_back({sqlite_shm_reader_custody_kind::map_attempt,
+						sqlite_shm_reader_custody_state::live, owner->request.attachment, token,
+						0U, 0U});
+					std::list<reader_attachment_map_record> prepared_maps;
+					prepared_maps.push_back({
+						token, reader_phase::prepared_pre_callback, std::move(full_request),
+						owner->generation, expected_mapping, generation_->pages.size(), std::nullopt,
+						std::nullopt, owner->token, owner->group_token, retirement_blocker, true,
+						std::nullopt,
+						0U, 0U, 0U, 0U, 0U, false,
+						sqlite_shm_reader_terminal_quarantine_reason::none, nullptr,
+						false, control->phase, request, control});
+					if (is_quarantined_locked() ||
+						control->process_epoch->load(std::memory_order_acquire) !=
+							control->expected_process_epoch ||
+						control->global_emergency_latch->load(std::memory_order_acquire))
+						return sqlite_shm_unexpected(ambiguous());
+					const auto sequences = commit_reader_lifecycle_admission_binding_locked(
+						std::span{binding.slots}.first(first_map ? 4U : 2U));
+					if (!sequences.succeeded)
+						return sqlite_shm_unexpected(ambiguous());
+					(void)allocate_token_unchecked_locked();
+					next_custodies.back().origin_sequence = sequences.first;
+					prepared_maps.back().admission_sequence = sequences.first;
+					prepared_maps.back().terminal_sequence_slot = binding.slots[1];
+					prepared_maps.back().potential_group_cut_sequence_slot = binding.slots[2];
+					prepared_maps.back().potential_group_terminal_sequence_slot = binding.slots[3];
+					reader_attachment_maps_.splice(reader_attachment_maps_.end(), prepared_maps);
+					reader_custodies_.swap(next_custodies);
+					reader_last_committed_sequence_ =
+						std::max(reader_last_committed_sequence_, sequences.first);
+					admission_slot.release();
+					terminal_slot.release();
+					group_cut_slot.release();
+					group_terminal_slot.release();
+					return sqlite_shm_reader_attachment_map_prepared{
+						std::move(fork_safe_state_owner), control,
+						sqlite_shm_lease_token_identity{token},
+						sqlite_shm_mapping_generation_identity{owner->generation}};
+				}
+				catch (...)
+				{
+					return sqlite_shm_unexpected(ambiguous());
+				}
+			}
+
 			[[nodiscard]]
 			sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight> begin_reader(
 				sqlite_shm_reader_session& session,
@@ -7401,6 +7674,10 @@ namespace cxxlens::sdk
 										 0U,
 										 false,
 										 sqlite_shm_reader_terminal_quarantine_reason::none,
+										 nullptr,
+										 false,
+										 nullptr,
+										 std::nullopt,
 										 nullptr});
 					auto admitted_state = shared_from_this();
 					if (predelegate)
@@ -7450,6 +7727,190 @@ namespace cxxlens::sdk
 					return sqlite_shm_unexpected(
 						rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
 								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
+			bind_registry_reader_map_identity(
+				sqlite_shm_registry_family_pin& registry_family,
+				sqlite_shm_reader_session& session,
+				sqlite_shm_reader_attachment_map_prepared& prepared,
+				const sqlite_shm_reader_attachment_map_request& request,
+				sqlite_shm_reader_map_identity_binding_capability capability,
+				sqlite_shm_reader_map_predelegate_minter& predelegate_minter)
+			{
+				const auto control = capability.control_;
+				if (!control || control.get() != prepared.control_.get() ||
+					!capability.completion_ ||
+					!valid_reader_attachment_map_request(request) || !control->process_epoch ||
+					request.callback != capability.callback_ ||
+					control->process_epoch->load(std::memory_order_acquire) !=
+						control->expected_process_epoch)
+					return sqlite_shm_unexpected(rejection(
+						sqlite_shm_lease_rejection_reason::receipt_mismatch,
+						sqlite_shm_lease_recovery_action::deny_before_native_map));
+				std::optional<sqlite_shm_reader_map_predelegate_authority> predelegate;
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					const auto map = find_by_token(reader_attachment_maps_, prepared.token_);
+					const auto owner = find_by_token(reader_sessions_, session.token_);
+					if (!owns(prepared.state_, prepared.token_) ||
+						!owns(session.state_, session.token_) || map == reader_attachment_maps_.end() ||
+						owner == reader_sessions_.end() || map->phase != reader_phase::prepared_pre_callback ||
+						!map->pre_request || !map_request_extends_pre_request(request, *map->pre_request) ||
+						map->identity_owner_control.get() != control.get() ||
+						map->qualified_owner_phase.get() != control->phase.get() ||
+						control->phase->load(std::memory_order_acquire) !=
+							sqlite_shm_reader_lifecycle_owner_phase::admission ||
+						owner->token != map->session_token || owner->generation != map->generation ||
+						registry_family.state_.get() == nullptr || request.family != family_)
+					{
+						return sqlite_shm_unexpected(rejection(
+							sqlite_shm_lease_rejection_reason::stale_token,
+							sqlite_shm_lease_recovery_action::deny_before_native_map));
+					}
+					const auto fail_claimed_owner = [&]()
+						-> sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
+					{
+						if (control->begin_terminalization())
+							quarantine_reader_session_locked(
+								*owner,
+								sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
+						return sqlite_shm_unexpected(ambiguous());
+					};
+					if (reader_callback_was_completed_locked(request.callback) ||
+						!callback_can_start_locked(request.callback, 0U, 0U, 0U, map->token) ||
+						!generation_ || generation_->value != map->generation ||
+						generation_->pages.size() != map->mapping_page_count)
+						return fail_claimed_owner();
+					const auto group = find_by_token(reader_attachment_groups_, owner->group_token);
+					auto expected = generation_->pages.end();
+					if (owner->phase == reader_session_record_phase::active_group_owner)
+					{
+						const auto member = group == reader_attachment_groups_.end()
+							? static_cast<reader_attachment_group_member_record*>(nullptr)
+							: [&]() -> reader_attachment_group_member_record*
+							  {
+								  const auto found = std::find_if(
+									  group->members.begin(), group->members.end(),
+									  [&request](const auto& value)
+									  {
+										  return value.identity.mapping().page_number ==
+											  request.page_number;
+									  });
+								  return found == group->members.end() ? nullptr : &*found;
+							  }();
+						const auto expected_blocker = member == nullptr;
+						if (group == reader_attachment_groups_.end() ||
+							group->phase != reader_attachment_group_phase::active ||
+							group->generation != owner->generation ||
+							group->expected != owner->request.attachment ||
+							group->existing_group_deferred_cleanup_required || !group->registry_bound ||
+							map->retirement_blocker != expected_blocker ||
+							(member != nullptr &&
+							 member->identity.mapping().page_size != request.page_size) ||
+							!group->registry_activity_authority ||
+							!group->registry_activity_authority->validate_active_authority(
+								registry_family, group->expected))
+							return fail_claimed_owner();
+						if (member != nullptr)
+							expected = std::find_if(
+								generation_->pages.begin(), generation_->pages.end(),
+								[member](const sqlite_shm_mapping_tuple& value)
+								{
+									return same_mapping_page(value, member->identity.mapping());
+								});
+					}
+					else if (owner->phase != reader_session_record_phase::reserved_for_first_map ||
+						group == reader_attachment_groups_.end() ||
+						group->expected != owner->request.attachment || !group->registry_bound ||
+						group->reservation_phase !=
+							sqlite_shm_reader_attachment_reservation_phase::reserved ||
+						group->observed_identity || group->composite_close_owner_token != 0U ||
+						group->composite_close_registry_open_token != 0U ||
+						group->composite_close_cut_sequence != 0U ||
+						group->composite_close_wait_resolution_sequence_slot != 0U ||
+						group->composite_close_wait_resolution_sequence != 0U)
+						return fail_claimed_owner();
+					if (expected == generation_->pages.end())
+					{
+						if (generation_->phase != sqlite_shm_mapping_generation_phase::live)
+							return fail_claimed_owner();
+						expected = find_page_locked(request.page_number);
+					}
+					if (expected == generation_->pages.end() ||
+						expected->page_size != request.page_size)
+						return fail_claimed_owner();
+					auto expected_mapping = *expected;
+					expected_mapping.sealed_shm_size = generation_->sealed_shm_size;
+					if (expected_mapping != map->expected_mapping)
+						return fail_claimed_owner();
+					if (map->retirement_blocker)
+					{
+						auto minted = predelegate_minter.mint(request);
+						if (!minted)
+						{
+							quarantine_reader_session_locked(
+								*owner, sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
+							control->phase->store(
+								sqlite_shm_reader_lifecycle_owner_phase::inactive,
+								std::memory_order_release);
+							return sqlite_shm_unexpected(minted.error());
+						}
+						predelegate.emplace(std::move(*minted));
+						if (!predelegate->valid_for_predelegation(request) ||
+							!predelegate->validate_active_authority(registry_family, request))
+						{
+							predelegate_minter.cancel(*predelegate);
+							quarantine_reader_session_locked(
+								*owner, sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
+							control->phase->store(
+								sqlite_shm_reader_lifecycle_owner_phase::inactive,
+								std::memory_order_release);
+							return sqlite_shm_unexpected(ambiguous());
+						}
+					}
+
+					map->request = request;
+					map->qualified_identity_bound = true;
+					map->phase = reader_phase::inflight;
+					if (predelegate)
+						map->registry_predelegate_authority.emplace(std::move(*predelegate));
+					auto admitted_state = prepared.state_;
+					const auto map_token = map->token;
+					const auto map_generation = map->generation;
+					if (is_quarantined_locked() || !control->global_emergency_latch ||
+						control->global_emergency_latch->load(std::memory_order_acquire) ||
+						control->process_epoch->load(std::memory_order_acquire) !=
+							control->expected_process_epoch)
+						return fail_claimed_owner();
+					auto expected_phase = sqlite_shm_reader_lifecycle_owner_phase::admission;
+					if (!control->phase->compare_exchange_strong(
+							expected_phase, sqlite_shm_reader_lifecycle_owner_phase::owned,
+							std::memory_order_acq_rel, std::memory_order_acquire))
+					{
+						quarantine_reader_session_locked(
+							*owner, sqlite_shm_reader_terminal_quarantine_reason::owner_abandoned);
+						return sqlite_shm_unexpected(stale_token(
+							sqlite_shm_lease_recovery_action::deny_before_native_map));
+					}
+					control->identity_completion = std::move(capability.completion_);
+					prepared.disarm();
+					auto result = sqlite_shm_reader_attachment_map_inflight{
+						std::move(admitted_state), sqlite_shm_lease_token_identity{map_token},
+						sqlite_shm_mapping_generation_identity{map_generation}};
+					result.qualified_owner_phase_ = control->phase;
+					result.qualified_owner_control_ = control;
+					return result;
+				}
+				catch (...)
+				{
+					control->phase->store(
+						sqlite_shm_reader_lifecycle_owner_phase::inactive,
+						std::memory_order_release);
+					control->abandon();
+					return sqlite_shm_unexpected(ambiguous());
 				}
 			}
 
@@ -7508,6 +7969,7 @@ namespace cxxlens::sdk
 							sqlite_shm_lease_rejection_reason::unpublished_cleanup_required,
 							sqlite_shm_lease_recovery_action::
 								attempt_nonremoving_unmap_then_outer_ioerr));
+					const auto qualified_owned_terminal = map_attempt->qualified_identity_bound;
 					auto prepared_terminal_receipt = receipt;
 					const auto quarantine_terminal =
 						[&](const sqlite_shm_reader_terminal_quarantine_reason reason)
@@ -7644,19 +8106,27 @@ namespace cxxlens::sdk
 						if (map_attempt->retirement_blocker !=
 								map_attempt->registry_predelegate_authority.has_value() ||
 							(map_attempt->registry_predelegate_authority &&
-							 (!map_attempt->registry_predelegate_authority->valid_for_predelegation(
-								  map_attempt->request) ||
-							  !map_attempt->registry_predelegate_authority
-								   ->validate_active_authority(*registry_family,
-															   map_attempt->request))))
+							 !(qualified_owned_terminal
+								   ? map_attempt->registry_predelegate_authority
+										 ->retains_exact_owned_terminal_lifetimes(
+											 *registry_family, map_attempt->request)
+								   : map_attempt->registry_predelegate_authority
+										 ->valid_for_predelegation(map_attempt->request) &&
+										 map_attempt->registry_predelegate_authority
+											 ->validate_active_authority(
+												 *registry_family, map_attempt->request))))
 							return quarantine_terminal(
 								sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
 						if (owner->phase == reader_session_record_phase::reserved_for_first_map)
 						{
 							if (!reservation->registry_activity_authority ||
-								!reservation->registry_activity_authority
-									 ->validate_active_authority(*registry_family,
-																 owner->request.attachment))
+								!(qualified_owned_terminal
+									  ? reservation->registry_activity_authority
+											->retains_exact_owned_drain_lifetimes(
+												owner->request.attachment)
+									  : reservation->registry_activity_authority
+											->validate_active_authority(
+												*registry_family, owner->request.attachment)))
 								return quarantine_terminal(
 									sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
 						}
@@ -7667,9 +8137,13 @@ namespace cxxlens::sdk
 							if (bound_group == reader_attachment_groups_.end() ||
 								!bound_group->registry_bound ||
 								!bound_group->registry_activity_authority ||
-								!bound_group->registry_activity_authority
-									 ->validate_active_authority(*registry_family,
-																 bound_group->expected))
+								!(qualified_owned_terminal
+									  ? bound_group->registry_activity_authority
+											->retains_exact_owned_drain_lifetimes(
+												bound_group->expected)
+									  : bound_group->registry_activity_authority
+											->validate_active_authority(
+												*registry_family, bound_group->expected)))
 								return quarantine_terminal(
 									sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
 						}
@@ -7731,6 +8205,9 @@ namespace cxxlens::sdk
 							next_session_audits.reserve(next_audits.size());
 							for (const auto& audit : next_audits)
 								next_session_audits.push_back(audit.map_attempt_token);
+							if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
+								return quarantine_terminal(
+									sqlite_shm_reader_terminal_quarantine_reason::owner_abandoned);
 							const auto sequences = consume_reader_lifecycle_terminal_slot_locked(
 								map_attempt->terminal_sequence_slot);
 							if (!sequences.succeeded)
@@ -7765,6 +8242,7 @@ namespace cxxlens::sdk
 								group->existing_group_deferred_cleanup_sequence = sequences.first;
 							}
 							reader_custodies_.swap(next_custodies);
+							complete_reader_map_identity_locked(*map_attempt);
 							reader_attachment_maps_.erase(map_attempt);
 							inflight.disarm();
 							reader_last_committed_sequence_ =
@@ -7836,14 +8314,24 @@ namespace cxxlens::sdk
 								sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
 						if (registry_route &&
 							(!group->registry_activity_authority ||
-							 !group->registry_activity_authority->validate_active_authority(
-								 *registry_family, group->expected) ||
+							 !(qualified_owned_terminal
+								   ? group->registry_activity_authority
+										 ->retains_exact_owned_drain_lifetimes(group->expected)
+								   : group->registry_activity_authority->validate_active_authority(
+										 *registry_family, group->expected)) ||
 							 (map_attempt->registry_predelegate_authority &&
-							  !map_attempt->registry_predelegate_authority
-								   ->validate_active_authority(*registry_family,
-															   map_attempt->request))))
+							  !(qualified_owned_terminal
+									? map_attempt->registry_predelegate_authority
+										  ->retains_exact_owned_terminal_lifetimes(
+											  *registry_family, map_attempt->request)
+									: map_attempt->registry_predelegate_authority
+										  ->validate_active_authority(
+											  *registry_family, map_attempt->request)))))
 							return quarantine_terminal(
 								sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
+						if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
+							return quarantine_terminal(
+								sqlite_shm_reader_terminal_quarantine_reason::owner_abandoned);
 						const auto sequences = consume_reader_lifecycle_terminal_slot_locked(
 							map_attempt->terminal_sequence_slot);
 						if (!sequences.succeeded)
@@ -7875,6 +8363,7 @@ namespace cxxlens::sdk
 								std::move(*map_attempt->registry_predelegate_authority));
 							map_attempt->registry_predelegate_authority.reset();
 						}
+						complete_reader_map_identity_locked(*map_attempt);
 						reader_attachment_maps_.erase(map_attempt);
 						inflight.disarm();
 						reader_last_committed_sequence_ =
@@ -7978,11 +8467,19 @@ namespace cxxlens::sdk
 						 0U});
 					if (registry_route &&
 						(!reservation->registry_activity_authority ||
-						 !reservation->registry_activity_authority->validate_active_authority(
-							 *registry_family, owner->request.attachment) ||
+						 !(qualified_owned_terminal
+							   ? reservation->registry_activity_authority
+									 ->retains_exact_owned_drain_lifetimes(owner->request.attachment)
+							   : reservation->registry_activity_authority->validate_active_authority(
+									 *registry_family, owner->request.attachment)) ||
 						 !map_attempt->registry_predelegate_authority ||
-						 !map_attempt->registry_predelegate_authority->validate_active_authority(
-							 *registry_family, map_attempt->request)))
+						 !(qualified_owned_terminal
+							   ? map_attempt->registry_predelegate_authority
+									 ->retains_exact_owned_terminal_lifetimes(
+										 *registry_family, map_attempt->request)
+							   : map_attempt->registry_predelegate_authority
+									 ->validate_active_authority(
+										 *registry_family, map_attempt->request))))
 						return quarantine_terminal(
 							sqlite_shm_reader_terminal_quarantine_reason::internal_failure);
 					const auto injected_map_terminal_commit =
@@ -8001,6 +8498,9 @@ namespace cxxlens::sdk
 						}
 					}
 					auto committed_state = shared_from_this();
+					if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
+						return quarantine_terminal(
+							sqlite_shm_reader_terminal_quarantine_reason::owner_abandoned);
 					const auto sequences = consume_reader_lifecycle_terminal_slot_locked(
 						map_attempt->terminal_sequence_slot);
 					if (!sequences.succeeded)
@@ -8050,6 +8550,7 @@ namespace cxxlens::sdk
 							std::move(*map_attempt->registry_predelegate_authority));
 						map_attempt->registry_predelegate_authority.reset();
 					}
+					complete_reader_map_identity_locked(*map_attempt);
 					reader_attachment_maps_.erase(map_attempt);
 					inflight.disarm();
 					reader_last_committed_sequence_ =
@@ -8380,7 +8881,14 @@ namespace cxxlens::sdk
 												  std::move(prepared_receipt),
 												  session_origin_sequence,
 												  map_attempt->admission_sequence,
-												  0U});
+											  0U});
+					if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
+					{
+						quarantine_reader_map_terminal_commit_locked(map_attempt->token, owner->token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
 					const auto sequences = first_reservation
 						? consume_reader_lifecycle_terminal_slots_locked(
 							  map_attempt->terminal_sequence_slot, owner->terminal_sequence_slot)
@@ -8457,6 +8965,7 @@ namespace cxxlens::sdk
 						group->registry_activity_authority.reset();
 					}
 
+					complete_reader_map_identity_locked(*map_attempt);
 					reader_attachment_maps_.erase(map_attempt);
 					inflight.disarm();
 					if (first_reservation)
@@ -8534,8 +9043,7 @@ namespace cxxlens::sdk
 						owner->registry_bound != registry_route)
 						return sqlite_shm_unexpected(
 							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
-									  sqlite_shm_lease_recovery_action::quarantine_no_retry));
-
+								sqlite_shm_lease_recovery_action::quarantine_no_retry));
 					auto reservation = find_by_token(reader_attachment_groups_, owner->group_token);
 					if (reservation == reader_attachment_groups_.end() ||
 						map_attempt->group_token != reservation->token ||
@@ -8594,6 +9102,14 @@ namespace cxxlens::sdk
 							return sqlite_shm_unexpected(ambiguous());
 						}
 
+						if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
+						{
+							quarantine_reader_map_terminal_commit_locked(
+								map_attempt->token, owner->token);
+							inflight.disarm();
+							session.disarm();
+							return sqlite_shm_unexpected(ambiguous());
+						}
 						map_attempt->quarantine_reason =
 							sqlite_shm_reader_terminal_quarantine_reason::native_non_ok_or_unknown;
 						quarantine_reader_map_terminal_commit_locked(map_attempt->token,
@@ -8727,6 +9243,13 @@ namespace cxxlens::sdk
 										0U,
 										registry_route,
 										std::nullopt});
+					if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
+					{
+						quarantine_reader_map_terminal_commit_locked(attempt_token, session_token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
 
 					const auto sequences = consume_reader_lifecycle_terminal_slots_locked(
 						map_attempt->terminal_sequence_slot, owner->terminal_sequence_slot);
@@ -8781,6 +9304,7 @@ namespace cxxlens::sdk
 					reservation->phase = reader_attachment_group_phase::terminal_quarantined;
 					reservation->quarantine_reason =
 						sqlite_shm_reader_terminal_quarantine_reason::native_non_ok_or_unknown;
+					complete_reader_map_identity_locked(*map_attempt);
 					reader_attachment_maps_.erase(map_attempt);
 					reader_sessions_.erase(owner);
 					reader_custodies_.swap(next_custodies);
@@ -8879,9 +9403,8 @@ namespace cxxlens::sdk
 						(registry_route &&
 						 (completed_predelegate->has_value() || completed_candidate->has_value())))
 						return sqlite_shm_unexpected(
-							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
 									  sqlite_shm_lease_recovery_action::resubmit_via_bound_route));
-
 					const auto& prepared_receipt = receipt;
 					auto terminal_receipt = receipt;
 					const auto effect_identity_reused =
@@ -9008,7 +9531,14 @@ namespace cxxlens::sdk
 												  std::move(terminal_receipt),
 												  session_origin_sequence,
 												  map_attempt->admission_sequence,
-												  0U});
+											  0U});
+					if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
+					{
+						quarantine_reader_map_terminal_commit_locked(map_attempt->token, owner->token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
 					const auto sequences = consume_reader_lifecycle_terminal_slots_locked(
 						map_attempt->terminal_sequence_slot, owner->terminal_sequence_slot);
 					if (!sequences.succeeded)
@@ -9061,6 +9591,7 @@ namespace cxxlens::sdk
 					owner->lifecycle_destination_sequence = sequences.first;
 					reader_predecessor_map_terminals_.splice(
 						reader_predecessor_map_terminals_.end(), prepared_terminals);
+					complete_reader_map_identity_locked(*map_attempt);
 					reader_attachment_maps_.erase(map_attempt);
 					reader_sessions_.erase(owner);
 					reader_custodies_.swap(next_custodies);
@@ -9135,9 +9666,8 @@ namespace cxxlens::sdk
 						owner->registry_bound != registry_route ||
 						(registry_route && completed_predelegate->has_value()))
 						return sqlite_shm_unexpected(
-							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
 									  sqlite_shm_lease_recovery_action::resubmit_via_bound_route));
-
 					const auto receipt_state = receipt.state_.lock();
 					const auto effect_reused =
 						reader_map_effect_identity_seen_locked(receipt.native_effect_receipt(),
@@ -9325,7 +9855,14 @@ namespace cxxlens::sdk
 												  group->token,
 												  receipt,
 												  map_attempt->admission_sequence,
-												  0U});
+											  0U});
+					if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
+					{
+						quarantine_reader_map_terminal_commit_locked(map_attempt->token, owner->token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
 					const auto sequences = consume_reader_lifecycle_terminal_slot_locked(
 						map_attempt->terminal_sequence_slot);
 					if (!sequences.succeeded)
@@ -9364,6 +9901,7 @@ namespace cxxlens::sdk
 						reader_existing_group_predecessor_mismatch_terminals_.end(),
 						prepared_terminals);
 					reader_custodies_.swap(next_custodies);
+					complete_reader_map_identity_locked(*map_attempt);
 					reader_attachment_maps_.erase(map_attempt);
 					inflight.disarm();
 					reader_last_committed_sequence_ =
@@ -9685,7 +10223,6 @@ namespace cxxlens::sdk
 						owner->group_token != map_attempt->group_token)
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
-
 					auto prepared_receipt = receipt;
 					const auto receipt_state = prepared_receipt.state_.lock();
 					if (!receipt_state || receipt_state.get() != this ||
@@ -9759,7 +10296,7 @@ namespace cxxlens::sdk
 						group->registry_activity_authority &&
 						group->registry_activity_authority->retains_exact_owned_drain_lifetimes(
 							group->expected) &&
-						(late_close ||
+						(late_close || map_attempt->qualified_identity_bound ||
 						 group->registry_activity_authority->validate_active_authority(
 							 registry_family, group->expected));
 					const auto exact_predelegate = map_attempt->retirement_blocker &&
@@ -9767,7 +10304,7 @@ namespace cxxlens::sdk
 						map_attempt->registry_predelegate_authority
 							->retains_exact_owned_terminal_lifetimes(registry_family,
 																	 map_attempt->request) &&
-						(late_close ||
+						(late_close || map_attempt->qualified_identity_bound ||
 						 map_attempt->registry_predelegate_authority->validate_active_authority(
 							 registry_family, map_attempt->request));
 					const auto exact_single_session =
@@ -9937,6 +10474,13 @@ namespace cxxlens::sdk
 						owner->terminal_sequence_slot,
 						map_attempt->potential_group_cut_sequence_slot,
 					};
+					if (!claim_reader_map_identity_terminalization_locked(*map_attempt))
+					{
+						quarantine_reader_map_terminal_commit_locked(map_attempt->token, owner->token);
+						inflight.disarm();
+						session.disarm();
+						return sqlite_shm_unexpected(ambiguous());
+					}
 					const auto sequences =
 						consume_reader_lifecycle_terminal_slots_locked(terminal_slots);
 					if (!sequences.succeeded)
@@ -10009,6 +10553,7 @@ namespace cxxlens::sdk
 						? group->late_close_control->cleanup_owner_token
 						: group->token;
 					const auto generation = group->generation;
+					complete_reader_map_identity_locked(*map_attempt);
 					reader_attachment_maps_.erase(map_attempt);
 					reader_sessions_.erase(owner);
 					reader_custodies_.swap(next_custodies);
@@ -14169,6 +14714,52 @@ namespace cxxlens::sdk
 					true, std::memory_order_release);
 			}
 
+			[[nodiscard]] bool reader_map_identity_prepared_live(
+				const std::uint64_t token,
+				const std::uint64_t generation,
+				const sqlite_shm_reader_map_identity_owner_control* control) noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					const auto map = find_by_token(reader_attachment_maps_, token);
+					return alive_ && map != reader_attachment_maps_.end() &&
+						map->phase == reader_phase::prepared_pre_callback &&
+						map->generation == generation &&
+						map->identity_owner_control.get() == control && map->pre_request.has_value();
+				}
+				catch (...)
+				{
+					emergency_quarantine_.store(true, std::memory_order_release);
+					return false;
+				}
+			}
+
+			[[nodiscard]] bool reader_map_identity_prepared_matches(
+				const std::uint64_t token,
+				const std::uint64_t generation,
+				const sqlite_shm_reader_map_identity_owner_control* control,
+				const sqlite_shm_reader_attachment_map_pre_request& request) noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					const auto map = find_by_token(reader_attachment_maps_, token);
+					return alive_ && map != reader_attachment_maps_.end() &&
+						map->phase == reader_phase::prepared_pre_callback &&
+						map->generation == generation && map->identity_owner_control.get() == control &&
+						map->pre_request && *map->pre_request == request &&
+						map->qualified_owner_phase &&
+						map->qualified_owner_phase->load(std::memory_order_acquire) ==
+							sqlite_shm_reader_lifecycle_owner_phase::admission;
+				}
+				catch (...)
+				{
+					emergency_quarantine_.store(true, std::memory_order_release);
+					return false;
+				}
+			}
+
 			void inject_reader_operation_mutex_acquire_failure_for_testing() noexcept
 			{
 				fail_next_reader_operation_mutex_acquire_for_testing_.store(
@@ -14313,6 +14904,16 @@ namespace cxxlens::sdk
 				{
 					emergency_quarantine_.store(true, std::memory_order_release);
 				}
+			}
+
+			void lock_state_mutex_for_fork_testing()
+			{
+				mutex_.lock();
+			}
+
+			void unlock_state_mutex_for_fork_testing() noexcept
+			{
+				mutex_.unlock();
 			}
 
 			void abandon(const lease_token_kind kind, const std::uint64_t token) noexcept
@@ -14462,6 +15063,7 @@ namespace cxxlens::sdk
 								const auto map = find_by_token(reader_attachment_maps_, token);
 								if (map != reader_attachment_maps_.end())
 								{
+									deactivate_reader_map_identity_locked(*map);
 									map->phase = reader_phase::terminal_quarantined;
 									map->quarantine_reason =
 										sqlite_shm_reader_terminal_quarantine_reason::
@@ -14989,6 +15591,7 @@ namespace cxxlens::sdk
 
 			enum class reader_phase : std::uint8_t
 			{
+				prepared_pre_callback,
 				inflight,
 				post_native_rejected,
 				cleanup_obligation,
@@ -15155,6 +15758,12 @@ namespace cxxlens::sdk
 					sqlite_shm_reader_terminal_quarantine_reason::none};
 				std::shared_ptr<sqlite_shm_reader_late_close_outer_unwind_control>
 					late_close_control;
+				bool qualified_identity_bound{};
+				std::shared_ptr<std::atomic<sqlite_shm_reader_lifecycle_owner_phase>>
+					qualified_owner_phase;
+				std::optional<sqlite_shm_reader_attachment_map_pre_request> pre_request;
+				std::shared_ptr<sqlite_shm_reader_map_identity_owner_control>
+					identity_owner_control;
 			};
 
 			struct reader_attachment_zero_effect_terminal_record
@@ -15967,6 +16576,15 @@ namespace cxxlens::sdk
 				{
 					if (map.phase == reader_phase::terminal_quarantined || !map.retirement_blocker)
 						continue;
+					if (map.phase == reader_phase::prepared_pre_callback)
+					{
+						has_blocker = true;
+						const auto session = find_by_token(reader_sessions_, map.session_token);
+						if (session == reader_sessions_.end() ||
+							session->request.execution.thread_identity == callback.thread_identity)
+							has_same_thread_blocker = true;
+						continue;
+					}
 					observe(map.request.callback);
 				}
 				if (std::ranges::any_of(reader_sessions_,
@@ -16317,7 +16935,8 @@ namespace cxxlens::sdk
 					std::ranges::any_of(reader_attachment_maps_,
 										[&invocation](const reader_attachment_map_record& map)
 										{
-											return map.request.callback.invocation_token ==
+											return map.phase != reader_phase::prepared_pre_callback &&
+												map.request.callback.invocation_token ==
 												invocation;
 										}) ||
 					std::ranges::any_of(handoffs_,
@@ -16431,7 +17050,8 @@ namespace cxxlens::sdk
 				const sqlite_shm_callback_execution_receipt& callback,
 				const std::uint64_t excluded_writer_token = 0U,
 				const std::uint64_t excluded_reader_group_token = 0U,
-				const std::uint64_t excluded_registry_open_token = 0U) const noexcept
+				const std::uint64_t excluded_registry_open_token = 0U,
+				const std::uint64_t excluded_reader_map_token = 0U) const noexcept
 			{
 				if (!valid_callback(callback) ||
 					reader_callback_was_completed_locked(callback,
@@ -16480,13 +17100,17 @@ namespace cxxlens::sdk
 										}))
 					return false;
 				if (std::ranges::any_of(reader_attachment_maps_,
-										[&ordered_after, excluded_reader_group_token](
+										[&ordered_after, excluded_reader_group_token,
+										 excluded_reader_map_token](
 											const reader_attachment_map_record& map)
 										{
-											if (map.phase == reader_phase::terminal_quarantined ||
+											if (map.token == excluded_reader_map_token ||
+												map.phase == reader_phase::terminal_quarantined ||
 												(excluded_reader_group_token != 0U &&
 												 map.group_token == excluded_reader_group_token))
 												return false;
+											if (map.phase == reader_phase::prepared_pre_callback)
+												return true;
 											return !ordered_after(map.request.callback);
 										}))
 					return false;
@@ -16660,14 +17284,31 @@ namespace cxxlens::sdk
 				}
 				for (const auto& map : reader_attachment_maps_)
 				{
-					const auto expected_authority = map.registry_bound && map.retirement_blocker;
+					const auto prepared = map.phase == reader_phase::prepared_pre_callback;
+					const auto expected_authority =
+						map.registry_bound && map.retirement_blocker && !prepared;
 					const auto group = find_by_token(reader_attachment_groups_, map.group_token);
 					const auto retained_late_map = group != reader_attachment_groups_.end() &&
 						map.late_close_control && group->late_close_control &&
 						map.late_close_control.get() == group->late_close_control.get() &&
 						group->late_close_drain_phase !=
 							sqlite_shm_reader_late_close_drain_phase::not_applicable;
-					if (map.registry_predelegate_authority.has_value() != expected_authority ||
+					const auto invalid_prepared = prepared &&
+						(!map.registry_bound || !map.pre_request || !map.identity_owner_control ||
+						 !map.qualified_owner_phase ||
+						 map.identity_owner_control->phase.get() != map.qualified_owner_phase.get() ||
+						 !map.identity_owner_control->process_epoch ||
+						 !map.identity_owner_control->global_emergency_latch ||
+						 map.identity_owner_control->process_epoch->load(std::memory_order_acquire) !=
+							 map.identity_owner_control->expected_process_epoch ||
+						 map.identity_owner_control->global_emergency_latch->load(
+							 std::memory_order_acquire) ||
+						 map.identity_owner_control->disposition.load(std::memory_order_acquire) !=
+							 sqlite_shm_reader_map_identity_disposition::live ||
+						 map.qualified_owner_phase->load(std::memory_order_acquire) !=
+							 sqlite_shm_reader_lifecycle_owner_phase::admission);
+					if (invalid_prepared ||
+						map.registry_predelegate_authority.has_value() != expected_authority ||
 						(map.registry_predelegate_authority &&
 						 !(retained_late_map
 							   ? map.registry_predelegate_authority
@@ -18864,6 +19505,36 @@ namespace cxxlens::sdk
 						map.request.expected_attachment, open.binding);
 					if (!token_matches && !binding_matches)
 						continue;
+					if (map.phase == reader_phase::prepared_pre_callback)
+					{
+						const auto session = find_by_token(reader_sessions_, map.session_token);
+						if (token_matches != binding_matches ||
+							map.request.expected_attachment != group.expected || !map.registry_bound ||
+							map.group_token != group.token || map.generation != group.generation ||
+							!map.pre_request ||
+							!valid_reader_attachment_map_pre_request(*map.pre_request) ||
+							!map.qualified_owner_phase ||
+							map.qualified_owner_phase->load(std::memory_order_acquire) !=
+								sqlite_shm_reader_lifecycle_owner_phase::admission ||
+							session == reader_sessions_.end() || session->group_token != group.token ||
+							std::ranges::count_if(
+								reader_custodies_,
+								[&group, &map](const reader_custody_record& custody)
+								{
+									return custody.kind ==
+											sqlite_shm_reader_custody_kind::map_attempt &&
+										custody.state == sqlite_shm_reader_custody_state::live &&
+										custody.attachment == group.expected &&
+										custody.owner_token == map.token &&
+										custody.origin_sequence == map.admission_sequence &&
+										custody.destination_sequence == 0U;
+								}) != 1)
+							return reader_unmap_cut_blocker_decision::ambiguous;
+						++blocker_count;
+						same_thread = same_thread ||
+							session->request.execution.thread_identity == callback.thread_identity;
+						continue;
+					}
 					if (token_matches != binding_matches ||
 						map.request.expected_attachment != group.expected || !map.registry_bound ||
 						map.phase != reader_phase::inflight || map.group_token != group.token ||
@@ -19385,6 +20056,35 @@ namespace cxxlens::sdk
 						map.phase == reader_phase::terminal_quarantined)
 						continue;
 					const auto session = find_by_token(reader_sessions_, map.session_token);
+					if (map.phase == reader_phase::prepared_pre_callback)
+					{
+						if (map.group_token != group.token || map.generation != group.generation ||
+							map.admission_sequence == 0U || map.terminal_sequence != 0U ||
+							!map.registry_bound || !map.pre_request ||
+							!valid_reader_attachment_map_pre_request(*map.pre_request) ||
+							!map.qualified_owner_phase ||
+							map.qualified_owner_phase->load(std::memory_order_acquire) !=
+								sqlite_shm_reader_lifecycle_owner_phase::admission ||
+							session == reader_sessions_.end() ||
+							session->request.attachment != group.expected ||
+							std::ranges::count_if(
+								reader_custodies_,
+								[&group, &map](const reader_custody_record& custody)
+								{
+									return custody.kind ==
+											sqlite_shm_reader_custody_kind::map_attempt &&
+										custody.state == sqlite_shm_reader_custody_state::live &&
+										custody.attachment == group.expected &&
+										custody.owner_token == map.token &&
+										custody.origin_sequence == map.admission_sequence &&
+										custody.destination_sequence == 0U;
+								}) != 1)
+							return reader_unmap_cut_blocker_decision::ambiguous;
+						++blocker_count;
+						same_thread = same_thread ||
+							session->request.execution.thread_identity == callback.thread_identity;
+						continue;
+					}
 					if (map.phase != reader_phase::inflight || map.group_token != group.token ||
 						map.generation != group.generation || map.admission_sequence == 0U ||
 						map.terminal_sequence != 0U ||
@@ -19916,6 +20616,7 @@ namespace cxxlens::sdk
 				{
 					if (map.session_token != session.token)
 						continue;
+					deactivate_reader_map_identity_locked(map);
 					map.phase = reader_phase::terminal_quarantined;
 					if (map.quarantine_reason == sqlite_shm_reader_terminal_quarantine_reason::none)
 						map.quarantine_reason = reason;
@@ -20062,6 +20763,7 @@ namespace cxxlens::sdk
 				const auto map = find_by_token(reader_attachment_maps_, map_token);
 				if (map != reader_attachment_maps_.end())
 				{
+					deactivate_reader_map_identity_locked(*map);
 					map->phase = reader_phase::terminal_quarantined;
 					generation = map->generation;
 					group_token = map->group_token;
@@ -20123,6 +20825,7 @@ namespace cxxlens::sdk
 				reader_attachment_map_record& map,
 				const sqlite_shm_reader_terminal_quarantine_reason reason) noexcept
 			{
+				deactivate_reader_map_identity_locked(map);
 				map.phase = reader_phase::terminal_quarantined;
 				if (map.quarantine_reason == sqlite_shm_reader_terminal_quarantine_reason::none)
 					map.quarantine_reason = reason;
@@ -20162,6 +20865,57 @@ namespace cxxlens::sdk
 				reader_last_committed_sequence_ =
 					std::max(reader_last_committed_sequence_, map.terminal_sequence);
 				quarantine_locked();
+			}
+
+			static void deactivate_reader_map_identity_locked(
+				reader_attachment_map_record& map) noexcept
+			{
+				if (map.identity_owner_control)
+					(void)map.identity_owner_control->begin_terminalization();
+				if (!map.qualified_owner_phase)
+					return;
+				auto observed = map.qualified_owner_phase->load(std::memory_order_acquire);
+				while (observed != sqlite_shm_reader_lifecycle_owner_phase::inactive &&
+					!map.qualified_owner_phase->compare_exchange_weak(
+						observed, sqlite_shm_reader_lifecycle_owner_phase::inactive,
+						std::memory_order_acq_rel, std::memory_order_acquire))
+				{
+				}
+			}
+
+			static void complete_reader_map_identity_locked(
+				reader_attachment_map_record& map) noexcept
+			{
+				deactivate_reader_map_identity_locked(map);
+				if (map.identity_owner_control && map.identity_owner_control->identity_completion)
+				{
+					map.identity_owner_control->identity_completion->complete();
+					map.identity_owner_control->identity_completion.reset();
+				}
+			}
+
+			[[nodiscard]] bool claim_reader_map_identity_terminalization_locked(
+				reader_attachment_map_record& map) noexcept
+			{
+				if (!map.qualified_identity_bound)
+					return true;
+				const auto claimed = !is_quarantined_locked() && map.identity_owner_control &&
+					map.qualified_owner_phase &&
+					map.identity_owner_control->process_epoch &&
+					map.identity_owner_control->global_emergency_latch &&
+					map.identity_owner_control->process_epoch->load(std::memory_order_acquire) ==
+						map.identity_owner_control->expected_process_epoch &&
+					!map.identity_owner_control->global_emergency_latch->load(
+						std::memory_order_acquire) &&
+					map.qualified_owner_phase->load(std::memory_order_acquire) ==
+						sqlite_shm_reader_lifecycle_owner_phase::owned &&
+					map.identity_owner_control->begin_terminal_completion();
+				if (claimed && map.identity_owner_control->identity_completion)
+				{
+					map.identity_owner_control->identity_completion->complete();
+					map.identity_owner_control->identity_completion.reset();
+				}
+				return claimed;
 			}
 
 			void quarantine_reader_map_terminal_commit(
@@ -20829,7 +21583,8 @@ namespace cxxlens::sdk
 					{
 						const auto map = find_by_token(reader_attachment_maps_, token);
 						return map != reader_attachment_maps_.end() &&
-							map->phase == reader_phase::inflight;
+							(map->phase == reader_phase::prepared_pre_callback ||
+							 map->phase == reader_phase::inflight);
 					}
 				}
 				return true;
@@ -20851,7 +21606,7 @@ namespace cxxlens::sdk
 			std::list<registry_reader_open_record> registry_reader_opens_;
 			std::list<reader_session_record> reader_sessions_;
 			std::list<reader_attachment_group_record> reader_attachment_groups_;
-			std::list<reader_attachment_map_record> reader_attachment_maps_;
+				std::list<reader_attachment_map_record> reader_attachment_maps_;
 			std::list<reader_session_terminal_record> reader_session_terminals_;
 			std::list<reader_attachment_zero_effect_terminal_record>
 				reader_attachment_zero_effect_terminals_;
@@ -20893,6 +21648,48 @@ namespace cxxlens::sdk
 			bool fail_next_registry_writer_pending_liveness_for_testing_{};
 			std::atomic_bool emergency_quarantine_{false};
 		};
+
+		bool sqlite_shm_reader_map_identity_owner_control::begin_terminalization() noexcept
+		{
+			auto expected = sqlite_shm_reader_map_identity_disposition::live;
+			if (!disposition.compare_exchange_strong(
+					expected, sqlite_shm_reader_map_identity_disposition::abandoning,
+					std::memory_order_acq_rel, std::memory_order_acquire))
+				return false;
+			if (phase)
+				phase->store(sqlite_shm_reader_lifecycle_owner_phase::inactive,
+					std::memory_order_release);
+			return true;
+		}
+
+		bool sqlite_shm_reader_map_identity_owner_control::begin_terminal_completion() noexcept
+		{
+			auto expected = sqlite_shm_reader_map_identity_disposition::live;
+			if (!disposition.compare_exchange_strong(
+					expected, sqlite_shm_reader_map_identity_disposition::terminal_completing,
+					std::memory_order_acq_rel, std::memory_order_acquire))
+				return false;
+			if (phase)
+				phase->store(sqlite_shm_reader_lifecycle_owner_phase::inactive,
+					std::memory_order_release);
+			return true;
+		}
+
+		bool sqlite_shm_reader_map_identity_owner_control::terminal_completion_claimed()
+			const noexcept
+		{
+			return disposition.load(std::memory_order_acquire) ==
+				sqlite_shm_reader_map_identity_disposition::terminal_completing;
+		}
+
+		void sqlite_shm_reader_map_identity_owner_control::abandon() noexcept
+		{
+			if (!process_epoch || process_epoch->load(std::memory_order_acquire) !=
+					expected_process_epoch || !begin_terminalization())
+				return;
+			if (auto owner = state.lock())
+				owner->abandon(lease_token_kind::reader_attachment_map_inflight, token);
+		}
 	} // namespace detail
 
 	sqlite_shm_writer_eligibility::sqlite_shm_writer_eligibility(
@@ -21186,6 +21983,15 @@ namespace cxxlens::sdk
 
 	sqlite_shm_reader_attachment_map_inflight::~sqlite_shm_reader_attachment_map_inflight() noexcept
 	{
+		if (qualified_owner_control_)
+		{
+			if (!qualified_owner_control_->process_epoch ||
+				qualified_owner_control_->process_epoch->load(std::memory_order_acquire) !=
+					qualified_owner_control_->expected_process_epoch)
+				return;
+			qualified_owner_control_->abandon();
+			return;
+		}
 		if (state_)
 			state_->abandon(lease_token_kind::reader_attachment_map_inflight, token_);
 	}
@@ -21196,12 +22002,23 @@ namespace cxxlens::sdk
 		  generation_{std::exchange(other.generation_, 0U)},
 		  terminal_presentation_disabled_{
 			  std::exchange(other.terminal_presentation_disabled_, false)},
-		  late_close_control_{std::move(other.late_close_control_)}
+		  late_close_control_{std::move(other.late_close_control_)},
+		  qualified_owner_phase_{std::move(other.qualified_owner_phase_)},
+		  qualified_owner_control_{std::move(other.qualified_owner_control_)}
 	{
 	}
 
 	bool sqlite_shm_reader_attachment_map_inflight::valid() const noexcept
 	{
+		if (qualified_owner_control_ &&
+			(!qualified_owner_control_->process_epoch ||
+			 !qualified_owner_control_->global_emergency_latch ||
+			 qualified_owner_control_->global_emergency_latch->load(std::memory_order_acquire) ||
+			 qualified_owner_control_->process_epoch->load(std::memory_order_acquire) !=
+				qualified_owner_control_->expected_process_epoch ||
+			 !qualified_owner_phase_ || qualified_owner_phase_->load(std::memory_order_acquire) !=
+				sqlite_shm_reader_lifecycle_owner_phase::owned))
+			return false;
 		return !terminal_presentation_disabled_ && state_ != nullptr &&
 			state_->reader_owner_handle_is_live(
 				lease_token_kind::reader_attachment_map_inflight, token_, generation_);
@@ -21221,6 +22038,37 @@ namespace cxxlens::sdk
 			!late_close_control_->consumed.load(std::memory_order_acquire);
 	}
 
+	bool sqlite_shm_reader_attachment_map_inflight::qualified_identity_owned_for_registry(
+		const std::uint64_t family_epoch,
+		const std::uint64_t family_pin_token,
+		const std::uint64_t alias_token,
+		const std::shared_ptr<std::atomic<std::uint64_t>>& process_epoch,
+		const std::shared_ptr<std::atomic_bool>& global_emergency_latch) const noexcept
+	{
+		return qualified_owner_control_ && qualified_owner_phase_ &&
+			qualified_owner_control_->process_epoch.get() == process_epoch.get() &&
+			qualified_owner_control_->global_emergency_latch.get() ==
+				global_emergency_latch.get() &&
+			qualified_owner_control_->family_epoch == family_epoch &&
+			qualified_owner_control_->family_pin_token == family_pin_token &&
+			qualified_owner_control_->alias_token == alias_token &&
+			qualified_owner_control_->process_epoch &&
+			qualified_owner_control_->global_emergency_latch &&
+			!qualified_owner_control_->global_emergency_latch->load(std::memory_order_acquire) &&
+			qualified_owner_control_->process_epoch->load(std::memory_order_acquire) ==
+				qualified_owner_control_->expected_process_epoch &&
+			qualified_owner_control_->disposition.load(std::memory_order_acquire) ==
+				detail::sqlite_shm_reader_map_identity_disposition::live &&
+			qualified_owner_phase_->load(std::memory_order_acquire) ==
+				sqlite_shm_reader_lifecycle_owner_phase::owned;
+	}
+
+	bool sqlite_shm_reader_attachment_map_inflight::has_qualified_identity_for_registry()
+		const noexcept
+	{
+		return qualified_owner_control_ != nullptr || qualified_owner_phase_ != nullptr;
+	}
+
 	void sqlite_shm_reader_attachment_map_inflight::disable_terminal_presentation() noexcept
 	{
 		terminal_presentation_disabled_ = true;
@@ -21232,6 +22080,134 @@ namespace cxxlens::sdk
 		generation_ = 0U;
 		terminal_presentation_disabled_ = false;
 		late_close_control_.reset();
+		qualified_owner_phase_.reset();
+		qualified_owner_control_.reset();
+		state_.reset();
+	}
+
+	sqlite_shm_reader_attachment_map_prepared::sqlite_shm_reader_attachment_map_prepared(
+		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
+		std::shared_ptr<detail::sqlite_shm_reader_map_identity_owner_control> control,
+		const detail::sqlite_shm_lease_token_identity token,
+		const detail::sqlite_shm_mapping_generation_identity generation) noexcept
+		: state_{std::move(state)}, control_{std::move(control)}, token_{token.value},
+		  generation_{generation.value}
+	{
+	}
+
+	sqlite_shm_reader_attachment_map_prepared::~sqlite_shm_reader_attachment_map_prepared() noexcept
+	{
+		if (!control_ || !control_->process_epoch ||
+			control_->process_epoch->load(std::memory_order_acquire) !=
+				control_->expected_process_epoch)
+			return;
+		control_->abandon();
+	}
+
+	sqlite_shm_reader_attachment_map_prepared::sqlite_shm_reader_attachment_map_prepared(
+		sqlite_shm_reader_attachment_map_prepared&& other) noexcept
+		: state_{std::move(other.state_)}, control_{std::move(other.control_)},
+		  token_{std::exchange(other.token_, 0U)},
+		  generation_{std::exchange(other.generation_, 0U)}
+	{
+	}
+
+	bool sqlite_shm_reader_attachment_map_prepared::valid() const noexcept
+	{
+		if (!control_ || !control_->process_epoch ||
+			control_->process_epoch->load(std::memory_order_acquire) !=
+				control_->expected_process_epoch || !control_->phase ||
+			control_->phase->load(std::memory_order_acquire) !=
+				sqlite_shm_reader_lifecycle_owner_phase::admission)
+			return false;
+		return state_ && state_->reader_map_identity_prepared_live(
+			token_, generation_, control_.get());
+	}
+
+	std::uint64_t sqlite_shm_reader_attachment_map_prepared::generation() const noexcept
+	{
+		return generation_;
+	}
+
+	bool sqlite_shm_reader_attachment_map_prepared::claim_identity_scope_for_registry() const noexcept
+	{
+		if (!control_ || !control_->process_epoch || !control_->phase || token_ == 0U ||
+			control_->process_epoch->load(std::memory_order_acquire) !=
+				control_->expected_process_epoch ||
+			control_->phase->load(std::memory_order_acquire) !=
+				sqlite_shm_reader_lifecycle_owner_phase::admission)
+			return false;
+		auto expected = false;
+		return control_->identity_scope_claimed.compare_exchange_strong(
+			expected, true, std::memory_order_acq_rel, std::memory_order_acquire);
+	}
+
+	bool sqlite_shm_reader_attachment_map_prepared::matches_identity_pre_request_for_registry(
+		const sqlite_shm_reader_attachment_map_pre_request& request) const noexcept
+	{
+		if (!control_ || !control_->process_epoch ||
+			control_->process_epoch->load(std::memory_order_acquire) !=
+				control_->expected_process_epoch || !state_)
+			return false;
+		return state_->reader_map_identity_prepared_matches(
+			token_, generation_, control_.get(), request);
+	}
+
+	bool sqlite_shm_reader_attachment_map_prepared::
+		matches_identity_registry_coordinates_for_registry(
+			const std::uint64_t family_epoch,
+			const std::uint64_t family_pin_token,
+			const std::uint64_t alias_token,
+			const std::shared_ptr<std::atomic<std::uint64_t>>& process_epoch,
+			const std::shared_ptr<std::atomic_bool>& global_emergency_latch) const noexcept
+	{
+		return control_ && control_->family_epoch == family_epoch &&
+			control_->family_pin_token == family_pin_token && control_->alias_token == alias_token &&
+			control_->process_epoch.get() == process_epoch.get() &&
+			control_->global_emergency_latch.get() == global_emergency_latch.get();
+	}
+
+	std::shared_ptr<std::atomic<sqlite_shm_reader_lifecycle_owner_phase>>
+	sqlite_shm_reader_attachment_map_prepared::identity_owner_phase_for_registry() const noexcept
+	{
+		return control_ ? control_->phase : nullptr;
+	}
+
+	std::weak_ptr<detail::sqlite_shm_reader_lifecycle_owner_abandonment_control>
+	sqlite_shm_reader_attachment_map_prepared::identity_owner_abandonment_for_registry()
+		const noexcept
+	{
+		return control_;
+	}
+
+	std::shared_ptr<detail::sqlite_shm_reader_map_identity_owner_control>
+	sqlite_shm_reader_attachment_map_prepared::identity_owner_control_for_registry() const noexcept
+	{
+		return control_;
+	}
+
+	std::optional<sqlite_shm_reader_attachment_map_pre_request>
+	sqlite_shm_reader_attachment_map_prepared::identity_pre_request_for_registry() const
+	{
+		return control_ && control_->process_epoch &&
+			control_->process_epoch->load(std::memory_order_acquire) ==
+				control_->expected_process_epoch
+			? std::optional<sqlite_shm_reader_attachment_map_pre_request>{control_->pre_request}
+			: std::nullopt;
+	}
+
+	void sqlite_shm_reader_attachment_map_prepared::abandon_identity_owner_for_registry()
+		const noexcept
+	{
+		if (control_)
+			control_->abandon();
+	}
+
+	void sqlite_shm_reader_attachment_map_prepared::disarm() noexcept
+	{
+		token_ = 0U;
+		generation_ = 0U;
+		control_.reset();
 		state_.reset();
 	}
 
@@ -22114,6 +23090,30 @@ namespace cxxlens::sdk
 		return state_->begin_reader(session, request, &family, &predelegate_minter);
 	}
 
+	sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_prepared>
+	sqlite_same_process_shm_mapping_lease_coordinator::prepare_registry_reader_map_identity(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_session& session,
+		const sqlite_shm_reader_attachment_map_pre_request& request,
+		sqlite_shm_reader_map_identity_prepare_capability capability)
+	{
+		return state_->prepare_registry_reader_map_identity(
+			family, session, request, std::move(capability));
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
+	sqlite_same_process_shm_mapping_lease_coordinator::bind_registry_reader_map_identity(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_session& session,
+		sqlite_shm_reader_attachment_map_prepared& prepared,
+		const sqlite_shm_reader_attachment_map_request& request,
+		sqlite_shm_reader_map_identity_binding_capability capability,
+		sqlite_shm_reader_map_predelegate_minter& predelegate_minter)
+	{
+		return state_->bind_registry_reader_map_identity(
+			family, session, prepared, request, std::move(capability), predelegate_minter);
+	}
+
 	sqlite_shm_lease_result<sqlite_shm_reader_late_close_outer_unwind_authority>
 	sqlite_same_process_shm_mapping_lease_coordinator::
 		mint_registry_reader_late_close_outer_unwind_authority(
@@ -22666,5 +23666,18 @@ namespace cxxlens::sdk
 		inject_registry_writer_pending_liveness_loss_for_testing() noexcept
 	{
 		state_->inject_registry_writer_pending_liveness_loss_for_testing();
+	}
+
+	void sqlite_same_process_shm_mapping_lease_coordinator::lock_state_mutex_for_fork_testing()
+	{
+		if (state_)
+			state_->lock_state_mutex_for_fork_testing();
+	}
+
+	void sqlite_same_process_shm_mapping_lease_coordinator::
+		unlock_state_mutex_for_fork_testing() noexcept
+	{
+		if (state_)
+			state_->unlock_state_mutex_for_fork_testing();
 	}
 } // namespace cxxlens::sdk

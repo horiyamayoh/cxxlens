@@ -44,6 +44,7 @@ namespace cxxlens::sdk
 	class sqlite_same_process_shm_registry_test_peer;
 	class sqlite_shm_process_global_identity_issuer;
 	class sqlite_shm_reader_lifecycle_identity_scope;
+	class sqlite_shm_issued_reader_callback_identity;
 	enum class sqlite_shm_reader_lifecycle_owner_kind : std::uint8_t;
 	class sqlite_shm_registry_activity_pin;
 	class sqlite_shm_reader_open_authority;
@@ -870,6 +871,23 @@ namespace cxxlens::sdk
 		begin_reader_map(sqlite_shm_registry_family_pin& family,
 						 sqlite_shm_reader_session& session,
 						 const sqlite_shm_reader_attachment_map_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_prepared>
+		prepare_reader_map_identity(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_session& session,
+			const sqlite_shm_reader_attachment_map_pre_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_lifecycle_identity_scope>
+		claim_reader_map_identity_scope(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_attachment_map_prepared& prepared,
+			const sqlite_shm_reader_attachment_map_pre_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
+		bind_reader_map_identity(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_session& session,
+			sqlite_shm_reader_attachment_map_prepared& prepared,
+			const sqlite_shm_reader_lifecycle_identity_scope& scope,
+			const sqlite_shm_issued_reader_callback_identity& callback);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_late_close_outer_unwind_authority>
 		mint_reader_late_close_outer_unwind_authority(
 			sqlite_shm_registry_family_pin& family,
@@ -1130,6 +1148,8 @@ namespace cxxlens::sdk
 			std::uint64_t lifecycle_owner_token,
 			std::uint64_t writer_mapping_generation) const;
 		void exhaust_identity_issuer_for_testing() noexcept;
+		[[nodiscard]] std::size_t reader_map_identity_phase_count_for_testing(
+			const sqlite_shm_lease_family_binding& family) const noexcept;
 
 		std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state_;
 		std::shared_ptr<std::atomic_bool> identity_issuer_owner_latch_;

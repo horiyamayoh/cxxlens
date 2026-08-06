@@ -169,6 +169,7 @@ namespace cxxlens::sdk
 	{
 		using callback_role = sqlite_shm_reader_callback_identity_role;
 		using effect_role = sqlite_shm_reader_effect_identity_role;
+		using terminal_role = sqlite_shm_reader_session_terminal_identity_role;
 		using owner_kind = sqlite_shm_reader_lifecycle_owner_kind;
 		using rejection_reason = sqlite_shm_lease_rejection_reason;
 
@@ -440,6 +441,7 @@ namespace cxxlens::sdk
 		{
 			static_assert(std::is_same_v<std::underlying_type_t<callback_role>, std::uint8_t>);
 			static_assert(std::is_same_v<std::underlying_type_t<effect_role>, std::uint8_t>);
+			static_assert(std::is_same_v<std::underlying_type_t<terminal_role>, std::uint8_t>);
 			static_assert(std::is_same_v<std::underlying_type_t<owner_kind>, std::uint8_t>);
 #define CXXLENS_REQUIRE_MOVE_ONLY(Type)                                                        \
 	static_assert(!std::is_default_constructible_v<Type>);                                    \
@@ -451,6 +453,7 @@ namespace cxxlens::sdk
 			CXXLENS_REQUIRE_MOVE_ONLY(sqlite_shm_reader_callback_identity_permit);
 			CXXLENS_REQUIRE_MOVE_ONLY(sqlite_shm_issued_reader_callback_identity);
 			CXXLENS_REQUIRE_MOVE_ONLY(sqlite_shm_issued_reader_effect_identity);
+			CXXLENS_REQUIRE_MOVE_ONLY(sqlite_shm_issued_reader_session_terminal_identity);
 #undef CXXLENS_REQUIRE_MOVE_ONLY
 			static_assert(std::is_copy_constructible_v<sqlite_shm_process_global_identity_issuer>);
 		}
@@ -625,6 +628,70 @@ namespace cxxlens::sdk
 				first_issuer, first_scope, first_callback, callback_role::map);
 			retire_callback_and_scope(
 				second_issuer, second_scope, second_callback, callback_role::map);
+		}
+
+		void verify_session_terminal_roles_share_the_process_sequence()
+		{
+			auto value = make_fixture(26U);
+			auto issuer = sqlite_same_process_shm_registry_test_peer::issuer(*value.registry);
+			auto map_scope = make_scope(value, owner_kind::map, 1U);
+			auto callback = issue_callback(issuer, map_scope, callback_role::map, 1U);
+			auto effect = issuer.issue_effect(map_scope, callback, effect_role::mapped_result);
+			require(effect && effect->valid(), "issue callback/effect sequence prefix");
+			const auto callback_sequence =
+				projection_sequence(callback.receipt().invocation_token);
+			const auto effect_sequence = projection_sequence(effect->identity());
+
+			constexpr std::array roles{terminal_role::success,
+				terminal_role::failure,
+				terminal_role::cancelled_before_authority_read};
+			for (std::size_t index = 0U; index < roles.size(); ++index)
+			{
+				auto scope = make_scope(value, owner_kind::session, 10U + index);
+				auto terminal = issuer.issue_session_terminal(scope, roles[index]);
+				require(terminal && terminal->valid() &&
+						projection_sequence(terminal->identity()) == effect_sequence + index + 1U &&
+						issuer.validate_session_terminal(scope, *terminal, roles[index]).has_value(),
+					"session terminal role uses the common checked process sequence");
+				auto duplicate = issuer.issue_session_terminal(scope, roles[index]);
+				require_rejection(duplicate,
+					rejection_reason::stale_token,
+					"session terminal scope is mutually exclusive and one-shot");
+				const auto wrong_role = roles[(index + 1U) % roles.size()];
+				require_rejection(
+					issuer.validate_session_terminal(scope, *terminal, wrong_role),
+					rejection_reason::receipt_mismatch,
+					"session terminal proof rejects a different terminal role");
+				require(issuer.retire_session_terminal(scope, *terminal, roles[index]).has_value() &&
+						!terminal->valid() && issuer.retire_scope(scope).has_value(),
+					"retire exact session-terminal proof and scope");
+			}
+			require(callback_sequence + 1U == effect_sequence,
+				"callback and effect consume adjacent positions before session terminals");
+			auto map_terminal = issuer.issue_session_terminal(map_scope, terminal_role::success);
+			require_rejection(map_terminal,
+				rejection_reason::invalid_identity,
+				"non-session owner cannot mint a session terminal");
+			auto invalid_scope = make_scope(value, owner_kind::session, 20U);
+			auto invalid = issuer.issue_session_terminal(
+				invalid_scope, static_cast<terminal_role>(0xffU));
+			require_rejection(invalid,
+				rejection_reason::invalid_identity,
+				"invalid session-terminal enum claims no sequence or role");
+			auto valid_after_invalid =
+				issuer.issue_session_terminal(invalid_scope, terminal_role::success);
+			require(valid_after_invalid &&
+					projection_sequence(valid_after_invalid->identity()) == effect_sequence + 4U,
+				"valid session terminal follows invalid enum without a sequence gap");
+			require(issuer.retire_session_terminal(
+					invalid_scope, *valid_after_invalid, terminal_role::success)
+					.has_value() &&
+					issuer.retire_scope(invalid_scope).has_value(),
+				"retire valid terminal after invalid enum");
+			require(issuer.retire_effect(map_scope, callback, *effect, effect_role::mapped_result)
+					.has_value(),
+				"retire shared-sequence effect");
+			retire_callback_and_scope(issuer, map_scope, callback, callback_role::map);
 		}
 
 		void retire_effects_callback_and_scope(
@@ -1361,6 +1428,12 @@ namespace cxxlens::sdk
 			require_rejection(exhausted,
 				rejection_reason::generation_exhausted,
 				"sequence remains permanently exhausted after UINT64_MAX");
+			auto exhausted_terminal_scope = make_scope(value, owner_kind::session, 30U);
+			auto exhausted_terminal = issuer.issue_session_terminal(
+				exhausted_terminal_scope, terminal_role::success);
+			require_rejection(exhausted_terminal,
+				rejection_reason::generation_exhausted,
+				"session-terminal domain shares permanent no-wrap exhaustion");
 			sqlite_same_process_shm_registry_test_peer::exhaust(*value.registry);
 			auto replay_scope = make_scope(value, owner_kind::map, 4U);
 			auto replay = issuer.reserve_callback(
@@ -1381,6 +1454,7 @@ namespace cxxlens::sdk
 			retire_callback_and_scope(
 				issuer, existing_scope, existing, callback_role::map);
 			require(issuer.retire_scope(exhausted_scope).has_value() &&
+					issuer.retire_scope(exhausted_terminal_scope).has_value() &&
 					issuer.retire_scope(replay_scope).has_value(),
 				"failed exhaustion scopes retain no live owners");
 
@@ -1718,6 +1792,7 @@ int main()
 		cxxlens::sdk::verify_type_traits();
 		cxxlens::sdk::verify_owner_and_callback_role_table();
 		cxxlens::sdk::verify_projection_framing_and_hidden_registry_incarnation();
+		cxxlens::sdk::verify_session_terminal_roles_share_the_process_sequence();
 		cxxlens::sdk::verify_effect_role_table_and_duplicates();
 		cxxlens::sdk::verify_wrong_presenter_scope_claim_and_sequence();
 		cxxlens::sdk::verify_family_release_recreation_and_quarantine();
