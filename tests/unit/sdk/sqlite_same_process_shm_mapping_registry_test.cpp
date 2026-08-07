@@ -412,6 +412,29 @@ namespace cxxlens::sdk
 					std::move(zero_resize_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_reader_mapped_post_native_observation
+		reader_mapped_post_native_observation(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_attachment_map_request request,
+			const int native_status,
+			const volatile void* native_mapping,
+			const int delegated_extend,
+			sqlite_backend_opaque_identity observed_shm_object_receipt,
+			sqlite_backend_opaque_identity observed_shm_entry_receipt,
+			sqlite_backend_opaque_identity observed_device_receipt,
+			sqlite_backend_opaque_identity observed_mount_receipt)
+		{
+			return {inflight,
+				std::move(request),
+				native_status,
+				native_mapping,
+				delegated_extend,
+				std::move(observed_shm_object_receipt),
+				std::move(observed_shm_entry_receipt),
+				std::move(observed_device_receipt),
+				std::move(observed_mount_receipt)};
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_attachment_zero_effect_receipt
 		reader_attachment_zero_effect(const sqlite_shm_reader_attachment_map_inflight& inflight,
 									  const sqlite_shm_reader_attachment_zero_effect_kind kind,
@@ -2822,15 +2845,29 @@ namespace
 				"owned terminal reporter retains exact effect role after ordinary quarantine");
 			if (mapped)
 			{
-				auto committed = setup.fixture.registry->commit_reader_map(
+				auto observation =
+					sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+						*bound,
+						request,
+						0,
+						setup.writer_attempt.native_page.get(),
+						0,
+						identity("test.registry.qualified-mapped-shm-object", 78U),
+						identity("test.registry.qualified-mapped-shm-entry", 78U),
+						identity("test.registry.qualified-mapped-device", 78U),
+						identity("test.registry.qualified-mapped-mount", 78U));
+				auto receipt = sqlite_same_process_shm_reader_receipt_validator::validate(
+					*setup.fixture.registry,
 					*setup.fixture.family_pin,
 					*bound,
-					sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
-						request,
-						setup.holder.generation(),
-						mapping(setup.writer_attempt.native_page.get()),
-						effect->identity()),
-					setup.session);
+					owner.scope,
+					owner.callback_identity,
+					*effect,
+					std::move(observation));
+				require(receipt && effect->valid(),
+					"owned mapped result validates after ordinary family quarantine");
+				auto committed = setup.fixture.registry->commit_reader_map(
+					*setup.fixture.family_pin, *bound, *receipt, setup.session);
 				require(committed && committed->formed_group() && !bound->valid(),
 					"owned mapped terminal survives ordinary family quarantine");
 			}
@@ -18360,10 +18397,334 @@ namespace
 	}
 } // namespace
 
+
+	static_assert(
+		!std::is_copy_constructible_v<sqlite_shm_reader_mapped_post_native_observation>,
+		"mapped observation capability is noncopyable");
+	static_assert(
+		!std::is_copy_assignable_v<sqlite_shm_reader_mapped_post_native_observation>,
+		"mapped observation capability is nonassignable");
+
+	[[nodiscard]] auto validate_qualified_mapped_result(
+		reader_candidate_setup& setup,
+		const qualified_zero_map_owner& owner,
+		const int native_status,
+		const volatile void* native_mapping,
+		const int delegated_extend,
+		const std::uint8_t marker)
+	{
+		auto request = reader_attachment_map_request(
+			owner.identity.request, owner.identity.callback_identity.receipt());
+		auto observation =
+			sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+				owner.inflight,
+				std::move(request),
+				native_status,
+				native_mapping,
+				delegated_extend,
+				identity("test.registry.qualified-mapped-shm-object", marker),
+				identity("test.registry.qualified-mapped-shm-entry", marker),
+				identity("test.registry.qualified-mapped-device", marker),
+				identity("test.registry.qualified-mapped-mount", marker));
+		return sqlite_same_process_shm_reader_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
+			owner.inflight,
+			owner.identity.scope,
+			owner.identity.callback_identity,
+			owner.effect,
+			std::move(observation));
+	}
+
+	void verify_qualified_mapped_validator_wrong_role_is_nonmutating()
+	{
+		auto setup = make_reader_candidate_setup(201U);
+		auto owner = prepare_qualified_map_effect_owner(setup,
+			202U,
+			sqlite_shm_reader_effect_identity_role::zero_attachment_result);
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		auto rejected = validate_qualified_mapped_result(setup,
+			owner,
+			0,
+			setup.writer_attempt.native_page.get(),
+			0,
+			203U);
+		const auto after =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(!rejected &&
+				rejected.error().reason ==
+					sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				owner.inflight.valid() && setup.session.valid() && owner.effect.valid() &&
+				before.last_issued_sequence == after.last_issued_sequence &&
+				before.last_committed_sequence == after.last_committed_sequence &&
+				before.map_attempts.size() == after.map_attempts.size() &&
+				before.terminal_quarantines.size() == after.terminal_quarantines.size(),
+			"mapped validator rejects the zero-effect role without consuming the exact owner");
+		complete_callback_free_identity_smoke(setup,
+			owner.inflight,
+			owner.identity.scope,
+			owner.identity.callback_identity,
+			owner.effect,
+			204U);
+	}
+
+	void verify_qualified_mapped_validator_invalid_native_row_is_terminal()
+	{
+		auto setup = make_reader_candidate_setup(205U);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 206U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto invalid = validate_qualified_mapped_result(setup, owner, 0, nullptr, 0, 207U);
+		auto replay = validate_qualified_mapped_result(setup,
+			owner,
+			0,
+			setup.writer_attempt.native_page.get(),
+			0,
+			208U);
+		require(!invalid && !replay,
+			"invalid mapped native row burns the observation and cannot be retried as success");
+	}
+
+	void verify_qualified_mapped_validator_receipt_drop_abandons_owner()
+	{
+		auto setup = make_reader_candidate_setup(209U);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 210U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		{
+			auto validated = validate_qualified_mapped_result(setup,
+				owner,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				211U);
+			require(validated && owner.effect.valid(),
+				"seal one exact mapped receipt before testing receipt destruction");
+		}
+		auto replay = validate_qualified_mapped_result(setup,
+			owner,
+			0,
+			setup.writer_attempt.native_page.get(),
+			0,
+			212U);
+		require(!replay && !owner.identity.scope.valid() && !owner.effect.valid(),
+			"dropping the sealed mapped receipt abandons its exact qualified owner");
+	}
+
+	void verify_qualified_mapped_validator_effect_drop_blocks_commit()
+	{
+		auto setup = make_reader_candidate_setup(213U);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 214U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto validated = validate_qualified_mapped_result(setup,
+			owner,
+			0,
+			setup.writer_attempt.native_page.get(),
+			0,
+			215U);
+		require(validated && owner.effect.valid(),
+			"seal mapped receipt before presenter-drop test");
+		{
+			auto dropped = std::move(owner.effect);
+			require(dropped.valid(), "move the exact mapped effect presenter before dropping it");
+		}
+		auto committed = setup.fixture.registry->commit_reader_map(
+			*setup.fixture.family_pin, owner.inflight, *validated, setup.session);
+		require(!committed,
+			"dropping the issued mapped effect presenter invalidates the retained receipt");
+	}
+
+	void verify_qualified_mapped_commit_rejects_raw_receipt_bypass()
+	{
+		auto setup = make_reader_candidate_setup(216U);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 217U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto request = reader_attachment_map_request(
+			owner.identity.request, owner.identity.callback_identity.receipt());
+		auto raw = sqlite_same_process_shm_lease_test_peer::reader_attachment_map(
+			request,
+			setup.holder.generation(),
+			mapping(setup.writer_attempt.native_page.get()),
+			owner.effect.identity());
+		auto committed = setup.fixture.registry->commit_reader_map(
+			*setup.fixture.family_pin, owner.inflight, raw, setup.session);
+		require(!committed,
+			"qualified mapped terminal rejects a structurally valid raw test-peer receipt");
+	}
+
+	void verify_qualified_mapped_validator_duplicate_poisoning_is_one_shot()
+	{
+		auto setup = make_reader_candidate_setup(218U);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 219U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto first = validate_qualified_mapped_result(setup,
+			owner,
+			0,
+			setup.writer_attempt.native_page.get(),
+			0,
+			220U);
+		auto duplicate = validate_qualified_mapped_result(setup,
+			owner,
+			0,
+			setup.writer_attempt.native_page.get(),
+			0,
+			221U);
+		require(first && !duplicate, "only the first mapped validation can seal provenance");
+		auto committed = setup.fixture.registry->commit_reader_map(
+			*setup.fixture.family_pin, owner.inflight, *first, setup.session);
+		require(!committed,
+			"a duplicate mapped observation poisons the original receipt before terminal commit");
+	}
+
+	void verify_qualified_mapped_validator_foreign_proof_is_nonmutating()
+	{
+		auto exact = make_reader_candidate_setup(222U);
+		auto foreign = make_reader_candidate_setup(223U);
+		auto exact_owner = prepare_qualified_map_effect_owner(
+			exact, 224U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto foreign_owner = prepare_qualified_map_effect_owner(
+			foreign, 225U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*exact.coordinator);
+		auto request = reader_attachment_map_request(
+			exact_owner.identity.request, exact_owner.identity.callback_identity.receipt());
+		auto observation =
+			sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+				exact_owner.inflight,
+				std::move(request),
+				0,
+				exact.writer_attempt.native_page.get(),
+				0,
+				identity("test.registry.foreign-mapped-shm-object", 226U),
+				identity("test.registry.foreign-mapped-shm-entry", 226U),
+				identity("test.registry.foreign-mapped-device", 226U),
+				identity("test.registry.foreign-mapped-mount", 226U));
+		auto rejected = sqlite_same_process_shm_reader_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_owner.inflight,
+			foreign_owner.identity.scope,
+			foreign_owner.identity.callback_identity,
+			foreign_owner.effect,
+			std::move(observation));
+		const auto after =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*exact.coordinator);
+		require(!rejected && exact_owner.effect.valid() && foreign_owner.effect.valid() &&
+				before.last_issued_sequence == after.last_issued_sequence &&
+				before.last_committed_sequence == after.last_committed_sequence &&
+				before.map_attempts.size() == after.map_attempts.size() &&
+				before.terminal_quarantines.size() == after.terminal_quarantines.size(),
+			"foreign mapped scope/callback/effect cannot mutate the exact in-flight owner");
+	}
+
+	void verify_qualified_mapped_validator_concurrent_duplicate_is_bounded()
+	{
+		auto setup = make_reader_candidate_setup(227U);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 228U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		using validation_result = decltype(validate_qualified_mapped_result(
+			setup, owner, 0, setup.writer_attempt.native_page.get(), 0, 229U));
+		std::optional<validation_result> left;
+		std::optional<validation_result> right;
+		std::atomic_bool start{false};
+		std::thread first([&]
+		{
+			while (!start.load(std::memory_order_acquire))
+				std::this_thread::yield();
+			left.emplace(validate_qualified_mapped_result(setup,
+				owner,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				230U));
+		});
+		std::thread second([&]
+		{
+			while (!start.load(std::memory_order_acquire))
+				std::this_thread::yield();
+			right.emplace(validate_qualified_mapped_result(setup,
+				owner,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				231U));
+		});
+		start.store(true, std::memory_order_release);
+		first.join();
+		second.join();
+		require(left && right,
+			"both bounded mapped-validation contenders return one typed result");
+		const auto success_count = static_cast<int>(left->has_value()) +
+			static_cast<int>(right->has_value());
+		require(success_count == 1,
+			"registry serialization admits exactly one concurrent mapped validation winner");
+		const auto& winner = left->has_value() ? *left : *right;
+		auto committed = setup.fixture.registry->commit_reader_map(
+			*setup.fixture.family_pin, owner.inflight, *winner, setup.session);
+		require(!committed,
+			"the losing duplicate poisons the provisional winner before terminal commit");
+	}
+
+
+
+	void verify_qualified_mapped_validator_wrong_source_observation_is_nonmutating()
+	{
+		auto exact = make_reader_candidate_setup(232U);
+		auto foreign = make_reader_candidate_setup(233U);
+		auto exact_owner = prepare_qualified_map_effect_owner(
+			exact, 234U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto foreign_owner = prepare_qualified_map_effect_owner(
+			foreign, 235U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto foreign_request = reader_attachment_map_request(
+			foreign_owner.identity.request,
+			foreign_owner.identity.callback_identity.receipt());
+		auto foreign_observation =
+			sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+				foreign_owner.inflight,
+				std::move(foreign_request),
+				0,
+				foreign.writer_attempt.native_page.get(),
+				0,
+				identity("test.registry.wrong-source-mapped-shm-object", 236U),
+				identity("test.registry.wrong-source-mapped-shm-entry", 236U),
+				identity("test.registry.wrong-source-mapped-device", 236U),
+				identity("test.registry.wrong-source-mapped-mount", 236U));
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*exact.coordinator);
+		auto rejected = sqlite_same_process_shm_reader_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_owner.inflight,
+			exact_owner.identity.scope,
+			exact_owner.identity.callback_identity,
+			exact_owner.effect,
+			std::move(foreign_observation));
+		const auto after =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*exact.coordinator);
+		require(!rejected &&
+				rejected.error().reason ==
+					sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				exact_owner.effect.valid() && foreign_owner.effect.valid() &&
+				before.last_issued_sequence == after.last_issued_sequence &&
+				before.last_committed_sequence == after.last_committed_sequence &&
+				before.map_attempts.size() == after.map_attempts.size() &&
+				before.terminal_quarantines.size() == after.terminal_quarantines.size(),
+			"a source-private observation for another owner cannot mutate the exact attempt");
+	}
+
+
 int main()
 {
 	try
 	{
+		verify_qualified_mapped_validator_wrong_role_is_nonmutating();
+		verify_qualified_mapped_validator_invalid_native_row_is_terminal();
+		verify_qualified_mapped_validator_receipt_drop_abandons_owner();
+		verify_qualified_mapped_validator_effect_drop_blocks_commit();
+		verify_qualified_mapped_commit_rejects_raw_receipt_bypass();
+		verify_qualified_mapped_validator_duplicate_poisoning_is_one_shot();
+		verify_qualified_mapped_validator_wrong_source_observation_is_nonmutating();
+		verify_qualified_mapped_validator_foreign_proof_is_nonmutating();
+		verify_qualified_mapped_validator_concurrent_duplicate_is_bounded();
 		verify_callback_free_reader_identity_prepare_claim_bind_and_registry_collision();
 		verify_callback_free_reader_identity_scope_claim_is_exactly_once();
 		verify_callback_free_reader_identity_drop_stages_fail_closed();
