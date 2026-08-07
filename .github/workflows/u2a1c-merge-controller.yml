@@ -1,0 +1,156 @@
+name: U2a1c guarded integration controller
+
+on:
+  push:
+    branches:
+      - agent/u2a1c-merge-controller-181
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  CMAKE_GENERATOR: Ninja
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+  CTEST_PARALLEL_LEVEL: 1
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Wait for the fail-closed finalizer to publish an exact source head
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY}"
+          head_branch=agent/u2a1c-qualified-mapped-result-181
+          base_branch=issue-181-clang22-materialization-runtime
+          rm -rf unit
+          git clone --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${repo}.git" unit
+          cd unit
+          git fetch --no-tags origin "${head_branch}" "${base_branch}"
+
+          ready=0
+          for attempt in $(seq 1 60); do
+            git fetch --no-tags origin "${head_branch}" "${base_branch}"
+            git checkout -B guarded-head "origin/${head_branch}"
+            head_sha=$(git rev-parse HEAD)
+
+            if [[ -e .github/workflows/u2a1c-finalize.yml ]]; then
+              echo "attempt ${attempt}: finalizer still present at ${head_sha}"
+              sleep 30
+              continue
+            fi
+
+            mapfile -t paths < <(git diff --name-only "origin/${base_branch}"...HEAD)
+            if (( ${#paths[@]} != 7 )); then
+              echo "attempt ${attempt}: expected 7 paths, found ${#paths[@]} at ${head_sha}"
+              printf '  %s\n' "${paths[@]:-}"
+              sleep 30
+              continue
+            fi
+
+            invalid=0
+            for path in "${paths[@]}"; do
+              case "${path}" in
+                src/sdk/sqlite_same_process_shm_*|tests/unit/sdk/sqlite_same_process_shm_*) ;;
+                *) echo "unexpected path: ${path}"; invalid=1 ;;
+              esac
+            done
+            if (( invalid != 0 )); then
+              sleep 30
+              continue
+            fi
+
+            for temporary in \
+              .github/workflows/u2a1c-clang22-export.yml \
+              .github/workflows/u2a1c-qualified-mapped-result-v2.yml \
+              .github/workflows/u2a1c-qualified-mapped-result.yml \
+              .github/workflows/u2a1c-source-export.yml \
+              tools/agent/u2a1c_fix_mapped_control_destructor_v2.py \
+              tools/agent/u2a1c_fix_mapped_control_destructor_v3.py \
+              tools/agent/u2a1c_transform_common.py \
+              tools/agent/u2a1c_transform_issuer.py \
+              tools/agent/u2a1c_transform_lease_header.py \
+              tools/agent/u2a1c_transform_lease_state.py \
+              tools/agent/u2a1c_transform_lease_support.py \
+              tools/agent/u2a1c_transform_registry.py \
+              tools/agent/u2a1c_transform_test.py
+            do
+              if [[ -e "${temporary}" ]]; then
+                echo "temporary file remains: ${temporary}"
+                invalid=1
+              fi
+            done
+            if (( invalid != 0 )); then
+              sleep 30
+              continue
+            fi
+
+            printf '%s\n' "${head_sha}" > ../qualified-head.txt
+            printf '%s\n' "${paths[@]}" > ../qualified-paths.txt
+            ready=1
+            break
+          done
+
+          if (( ready != 1 )); then
+            echo 'Finalizer did not produce an admissible source head within 30 minutes.' >&2
+            exit 1
+          fi
+
+      - name: Install exact developer toolchain
+        working-directory: unit
+        shell: bash
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+
+      - name: Rebuild and repeatedly falsify the exact published head
+        working-directory: unit
+        shell: bash
+        env:
+          CXX: clang++-22
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$(cat ../qualified-head.txt)"
+          git diff --check "origin/issue-181-clang22-materialization-runtime"...HEAD
+          cmake --preset ci-quick \
+            -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=OFF
+          cmake --build --preset ci-quick --target \
+            cxxlens-unit-sdk-sqlite-shm-identity-issuer \
+            cxxlens-unit-sdk-sqlite-shm-mapping-lease \
+            cxxlens-unit-sdk-sqlite-shm-mapping-registry
+          ctest --test-dir build/ci-quick \
+            --output-on-failure \
+            --repeat until-fail:50 \
+            -R 'unit\.sdk-sqlite-(shm-identity-issuer|shm-mapping-lease|shm-mapping-registry)$'
+
+      - name: Merge only the exact independently rebuilt head
+        working-directory: unit
+        shell: bash
+        run: |
+          set -euo pipefail
+          head_sha=$(cat ../qualified-head.txt)
+          response=$(gh api --method PUT \
+            "repos/${GITHUB_REPOSITORY}/pulls/213/merge" \
+            -f merge_method=merge \
+            -f sha="${head_sha}" \
+            -f commit_title='Merge PR #213: qualify mapped reader result ownership')
+          python3 -c 'import json,sys; data=json.load(sys.stdin); assert data.get("merged") is True, data; print(data.get("sha"))' <<<"${response}" | tee ../integration-sha.txt
+
+      - name: Close the superseded workbench PR and record the unit receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          integration_sha=$(cat integration-sha.txt)
+          head_sha=$(cat qualified-head.txt)
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/210" -f state=closed >/dev/null
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/181/comments" \
+            -f body="U2a1c completed and integrated through PR #213. Verified source head: \`${head_sha}\`. Integration commit on \`issue-181-clang22-materialization-runtime\`: \`${integration_sha}\`. Exact final diff: seven bounded production files; temporary workflows/transforms absent. Independent controller rebuilt the three focused Clang 22 targets and passed the ownership/replay/drop/race suites for 50 consecutive repetitions before merge. Known downstream Store CAS/materialization competitor failures remain assigned to the next serial unit. Learning checkpoint: none." >/dev/null
+
+      - name: Delete the one-shot controller branch
+        if: success()
+        shell: bash
+        run: git -C unit push origin --delete agent/u2a1c-merge-controller-181
