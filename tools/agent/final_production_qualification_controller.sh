@@ -112,6 +112,25 @@ PY
   esac
 fi
 
+log 'Close superseded generated serial PRs'
+while IFS= read -r number; do
+  case "${number}" in
+    189|193|203|204) continue ;;
+  esac
+  head_ref=$(api "repos/${GITHUB_REPOSITORY}/pulls/${number}" --jq '.head.ref')
+  case "${head_ref}" in
+    agent/*)
+      api --method POST "repos/${GITHUB_REPOSITORY}/issues/${number}/comments" \
+        -f body="Final production audit: this generated serial/workbench PR is superseded by the exact-head implementation already integrated on \`${FEATURE_BRANCH}\`. Closing it prevents stale candidate state from entering the final main qualification. Learning checkpoint: none." >/dev/null || true
+      api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/${number}" -f state=closed >/dev/null
+      ;;
+    *)
+      echo "Unexpected non-agent open PR #${number} (${head_ref}); refusing automatic closure" >&2
+      exit 1
+      ;;
+  esac
+done < <(api "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].number')
+
 log 'Require PR #193 to be the only remaining open PR'
 mapfile -t open_prs < <(api "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].number')
 if (( ${#open_prs[@]} != 1 )) || [[ "${open_prs[0]}" != 193 ]]; then
