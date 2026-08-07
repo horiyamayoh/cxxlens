@@ -1,0 +1,47 @@
+name: Upgrade final controller secondary reviewer
+
+on:
+  push:
+    branches:
+      - agent/final-production-qualification-controller-v2
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout final controller branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/final-production-qualification-controller-v2
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Use a large-context independent secondary reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/agent/final_production_qualification_controller.sh')
+          source = path.read_text()
+          source = source.replace('openai/gpt-4o', 'openai/gpt-4.1-mini')
+          if 'openai/gpt-4o' in source:
+              raise SystemExit('legacy secondary reviewer remains')
+          if 'openai/gpt-4.1-mini' not in source:
+              raise SystemExit('large-context secondary reviewer was not installed')
+          path.write_text(source)
+          PY
+          bash -n tools/agent/final_production_qualification_controller.sh
+          rm -f .github/workflows/final-review-model-upgrade.yml
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'ci: use large-context final secondary reviewer'
+          git push origin HEAD:agent/final-production-qualification-controller-v2
