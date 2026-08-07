@@ -1,0 +1,408 @@
+name: U2a1c mapped-result execute v10
+
+on:
+  push:
+    branches:
+      - agent/u2a1c-mapped-result-workbench-181
+    paths:
+      - tools/agent/u2a1c_apply_source.py
+      - tools/agent/u2a1c_apply_source_v8.py
+      - tools/agent/u2a1c_apply_source_v9.py
+      - .github/workflows/u2a1c-execute-v10.yml
+
+concurrency:
+  group: issue-181-u2a1c-v10-finalizer
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  qualify-publish-integrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    env:
+      CMAKE_GENERATOR: Ninja
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      CTEST_PARALLEL_LEVEL: 2
+      BASE_BRANCH: issue-181-clang22-materialization-runtime
+      U2A1B_SHA: 7dd0adb0e1c5545dd804908bc8083e88f85b95bd
+      OUTPUT_BRANCH: agent/u2a1c-mapped-result-181-v10
+    steps:
+      - name: Checkout authority-complete workbench
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/u2a1c-mapped-result-workbench-181
+          fetch-depth: 2
+
+      - name: Wait boundedly for obsolete writers to finish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 45); do
+            runs="$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs?branch=agent/u2a1c-mapped-result-workbench-181&per_page=100")"
+            active="$(python3 -c 'import json,sys; d=json.load(sys.stdin); names={"U2a1c mapped-result execute v6","U2a1c mapped-result execute v7","U2a1c mapped-result execute v9"}; print(sum(1 for r in d.get("workflow_runs",[]) if r.get("name") in names and r.get("status") in {"queued","in_progress","waiting","requested","pending"}))' <<<"${runs}")"
+            [[ "${active}" == "0" ]] && exit 0
+            echo "Obsolete writer still active (${attempt}/45)"
+            sleep 20
+          done
+          echo "Obsolete writer exceeded the 15-minute coordination bound"
+          exit 1
+
+      - name: Classify active #193 head and prepare fresh or repair branch
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp tools/agent/u2a1c_apply_source.py "${RUNNER_TEMP}/u2a1c_apply_source.py"
+          cp tools/agent/u2a1c_apply_source_v8.py "${RUNNER_TEMP}/u2a1c_apply_source_v8.py"
+          cp tools/agent/u2a1c_apply_source_v9.py "${RUNNER_TEMP}/u2a1c_apply_source_v9.py"
+          remote_sha="$(git ls-remote origin "refs/heads/${BASE_BRANCH}" | awk '{print $1}')"
+          test -n "${remote_sha}"
+          echo "remote_sha=${remote_sha}" >> "${GITHUB_OUTPUT}"
+          git fetch --no-tags origin "${remote_sha}"
+          git switch --detach "${remote_sha}"
+
+          if grep -q 'class sqlite_shm_reader_mapped_native_observation final' \
+               src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp && \
+             grep -q 'sqlite_shm_reader_mapped_effect_identity_validation_capability' \
+               src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp && \
+             grep -q 'sqlite_same_process_shm_reader_receipt_validator::validate' \
+               src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp && \
+             grep -q 'mapped_effect_validation_phase' \
+               src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp; then
+            echo "mode=already" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if git ls-remote --exit-code origin "refs/heads/${OUTPUT_BRANCH}"; then
+            echo "Output branch already exists; refusing rewrite"
+            exit 1
+          fi
+
+          mode=fresh
+          if [[ "${remote_sha}" != "${U2A1B_SHA}" ]]; then
+            if grep -q 'sqlite_shm_reader_mapped_effect_identity_validation_capability' \
+                 src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp && \
+               grep -q 'sqlite_same_process_shm_reader_receipt_validator::validate' \
+                 src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp && \
+               [[ "$(git rev-parse HEAD^)" == "${U2A1B_SHA}" ]]; then
+              mode=repair
+            else
+              echo "Unexpected #193 movement; refusing to stack automatically"
+              exit 1
+            fi
+          fi
+
+          git switch -c "${OUTPUT_BRANCH}"
+          if [[ "${mode}" == "repair" ]]; then
+            git revert --no-commit "${remote_sha}"
+            git diff --quiet "${U2A1B_SHA}" -- \
+              src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp \
+              src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp \
+              src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp \
+              src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp \
+              src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp \
+              src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp \
+              tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp
+          fi
+          mkdir -p tools/agent
+          cp "${RUNNER_TEMP}/u2a1c_apply_source.py" tools/agent/u2a1c_apply_source.py
+          cp "${RUNNER_TEMP}/u2a1c_apply_source_v8.py" tools/agent/u2a1c_apply_source_v8.py
+          cp "${RUNNER_TEMP}/u2a1c_apply_source_v9.py" tools/agent/u2a1c_apply_source_v9.py
+          echo "mode=${mode}" >> "${GITHUB_OUTPUT}"
+
+      - name: Record already-integrated no-op
+        if: steps.base.outputs.mode == 'already'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="## U2a1c v10 bounded no-op\n\nAuthority-complete U2a1c is already present at \`${{ steps.base.outputs.remote_sha }}\`; no duplicate branch or PR was created. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          payload="$(python3 -c 'import json,sys; print(json.dumps({"body":sys.stdin.read()}))' <<<"${body}")"
+          curl --fail-with-body --silent --show-error -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${GITHUB_REPOSITORY}/issues/181/comments" -d "${payload}"
+
+      - name: Apply hardened authority-complete transformation
+        if: steps.base.outputs.mode != 'already'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/agent/u2a1c_apply_source_v9.py | tee "${RUNNER_TEMP}/transform.log"
+          git diff --check
+          test -n "$(git status --short)"
+
+      - name: Independent authority and non-circularity review
+        if: steps.base.outputs.mode != 'already'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          h=Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp').read_text()
+          c=Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp').read_text()
+          i=Path('src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp').read_text()
+          t=Path('tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp').read_text()
+          a=h[h.index('\tclass sqlite_shm_reader_mapped_native_observation final'):]
+          a=a[:a.index('\n\t};')]
+          assert 'friend class detail::sqlite_shm_mapping_registry_state;' in a
+          assert 'friend class sqlite_same_process_shm_lease_test_peer;' in a
+          assert 'const sqlite_shm_reader_mapped_native_observation&) = delete' in a
+          n=h[h.index('\tclass sqlite_shm_reader_native_attachment_identity'):]
+          n=n[:n.index('\n\t};')]
+          assert 'friend class detail::sqlite_shm_mapping_lease_state;' in n
+          assert 'friend class sqlite_same_process_shm_reader_receipt_validator;' not in n
+          v=h[h.index('\tclass sqlite_same_process_shm_reader_receipt_validator final'):]
+          v=v[:v.index('\n\t};')]
+          assert 'sqlite_shm_reader_mapped_native_observation observation' in v
+          assert 'sqlite_shm_reader_native_attachment_identity observed_attachment' not in v
+          assert 'observed_shm_object_receipt' not in v
+          assert 'observation.expected() == map->request.expected_attachment' in c
+          assert 'observation.native_mapping() == map->expected_mapping.native_mapping' in c
+          assert 'map_attempt->receipt->observed_attachment()' in c
+          assert 'map_attempt->receipt->zero_resize_effect_receipt()' in c
+          assert 'sqlite_shm_reader_mapped_effect_validation_phase::terminal_consumed' in c
+          assert 'mapped_effect_capability_is_current' in i
+          assert '!std::is_copy_constructible_v<sqlite_shm_reader_mapped_native_observation>' in t
+          print('authority/non-circularity review PASS')
+          PY
+
+      - name: Independent lifecycle, race-surface, and exact-scope review
+        if: steps.base.outputs.mode != 'already'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          allowed={
+            'src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp',
+            'src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp',
+            'src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp',
+            'src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp',
+            'src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp',
+            'src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp',
+            'tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp',
+            'tools/agent/u2a1c_apply_source.py','tools/agent/u2a1c_apply_source_v8.py',
+            'tools/agent/u2a1c_apply_source_v9.py'}
+          paths={line[3:] for line in subprocess.check_output(['git','status','--short'],text=True).splitlines()}
+          assert not paths-allowed, paths-allowed
+          production={p for p in paths if not p.startswith('tools/agent/')}
+          assert len(production)==7, production
+          assert all('store.cpp' not in p and 'vfs' not in p.lower() and '/public/' not in p for p in production)
+          lease=open('src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp',encoding='utf-8').read()
+          registry=open('src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp',encoding='utf-8').read()
+          for phase in ('validating','poisoned','sealed','terminal_consumed'):
+            assert f'sqlite_shm_reader_mapped_effect_validation_phase::{phase}' in lease
+          assert 'validate_mapped_effect_identity_for_registry' in registry
+          assert 'admission_quarantined_locked()' in registry
+          assert '/dev/null' not in lease and '/dev/null' not in registry
+          print('lifecycle/race/scope review PASS')
+          PY
+          git diff --check
+
+      - name: Install pinned Clang 22 toolchain
+        if: steps.base.outputs.mode != 'already'
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+
+      - name: Configure and build exact transformed tree
+        if: steps.base.outputs.mode != 'already'
+        env:
+          CXX: clang++-22
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=30s 1320s \
+            cmake --preset ci-quick -B build/u2a1c -DCXXLENS_CLANG_ADAPTER=ON -DCXXLENS_BUILD_SHARED=OFF \
+            2>&1 | tee "${RUNNER_TEMP}/configure.log"
+          timeout --signal=TERM --kill-after=30s 1320s cmake --build build/u2a1c \
+            2>&1 | tee "${RUNNER_TEMP}/build.log"
+
+      - name: Discover and repeat focused lifecycle tests
+        if: steps.base.outputs.mode != 'already'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir build/u2a1c --show-only=json-v1 > "${RUNNER_TEMP}/tests.json"
+          python3 - "${RUNNER_TEMP}/tests.json" "${RUNNER_TEMP}/focused.txt" <<'PY'
+          import json,sys
+          names=[x['name'] for x in json.load(open(sys.argv[1],encoding='utf-8'))['tests']]
+          tokens=('identity-issuer','mapping-lease','mapping-registry','same-process-shm')
+          selected=[n for n in names if any(t in n for t in tokens)]
+          if len(selected)<3: raise SystemExit(selected)
+          open(sys.argv[2],'w',encoding='utf-8').write('\n'.join(selected)+'\n')
+          print('\n'.join(selected))
+          PY
+          while IFS= read -r test_name; do
+            escaped="$(printf '%s' "${test_name}" | sed 's/[][(){}.^$*+?|\\]/\\&/g')"
+            timeout --signal=TERM --kill-after=20s 600s \
+              ctest --test-dir build/u2a1c --tests-regex "^${escaped}$" \
+                --repeat until-fail:20 --output-on-failure \
+              2>&1 | tee -a "${RUNNER_TEMP}/focused.log"
+          done < "${RUNNER_TEMP}/focused.txt"
+
+      - name: Run complete CTest inventory with exact known-gap classification
+        if: steps.base.outputs.mode != 'already'
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          timeout --signal=TERM --kill-after=30s 1200s \
+            ctest --test-dir build/u2a1c --output-on-failure --output-junit "${RUNNER_TEMP}/all.xml" \
+            2>&1 | tee "${RUNNER_TEMP}/all.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          python3 - "${RUNNER_TEMP}/all.xml" "${rc}" <<'PY'
+          import sys,xml.etree.ElementTree as ET
+          path,raw=sys.argv[1:]; rc=int(raw)
+          if rc not in (0,8): raise SystemExit(f'non-CTest-failure exit {rc}')
+          root=ET.parse(path).getroot()
+          failed={c.attrib.get('name','') for c in root.iter('testcase') if c.find('failure') is not None or c.find('error') is not None}
+          allowed={'unit.sdk-store','adapter.clang22-materialization-store'}
+          if failed-allowed: raise SystemExit(f'unexpected failures {sorted(failed-allowed)}')
+          if rc==0 and failed: raise SystemExit(f'XML failures with zero rc {sorted(failed)}')
+          if rc==8 and not failed: raise SystemExit('CTest failure rc without failed cases')
+          print(f'full inventory accepted; known gaps={sorted(failed)}')
+          PY
+
+      - name: Configure ASan and UBSan focused build
+        if: steps.base.outputs.mode != 'already'
+        env:
+          CXX: clang++-22
+        shell: bash
+        run: |
+          set -euo pipefail
+          san='-fsanitize=address,undefined -fno-omit-frame-pointer'
+          timeout --signal=TERM --kill-after=30s 1320s \
+            cmake --preset ci-quick -B build/u2a1c-san \
+              -DCXXLENS_CLANG_ADAPTER=ON -DCXXLENS_BUILD_SHARED=OFF \
+              -DCMAKE_CXX_FLAGS="${san}" -DCMAKE_EXE_LINKER_FLAGS="${san}" \
+            2>&1 | tee "${RUNNER_TEMP}/san-configure.log"
+          timeout --signal=TERM --kill-after=30s 1320s cmake --build build/u2a1c-san \
+            2>&1 | tee "${RUNNER_TEMP}/san-build.log"
+
+      - name: Run focused ASan and UBSan tests
+        if: steps.base.outputs.mode != 'already'
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r test_name; do
+            escaped="$(printf '%s' "${test_name}" | sed 's/[][(){}.^$*+?|\\]/\\&/g')"
+            timeout --signal=TERM --kill-after=20s 600s \
+              ctest --test-dir build/u2a1c-san --tests-regex "^${escaped}$" \
+                --repeat until-fail:5 --output-on-failure \
+              2>&1 | tee -a "${RUNNER_TEMP}/san-focused.log"
+          done < "${RUNNER_TEMP}/focused.txt"
+
+      - name: Commit and publish exact seven-file source branch
+        if: steps.base.outputs.mode != 'already'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm tools/agent/u2a1c_apply_source.py tools/agent/u2a1c_apply_source_v8.py tools/agent/u2a1c_apply_source_v9.py
+          git diff --check
+          git config user.name cxxlens-u2a1c-workbench
+          git config user.email cxxlens-u2a1c-workbench@users.noreply.github.com
+          git add \
+            src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp \
+            src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp \
+            src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp \
+            src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp \
+            src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp \
+            src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp \
+            tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp
+          mapfile -t staged < <(git diff --cached --name-only)
+          test "${#staged[@]}" = 7
+          git commit -m "Implement owner-qualified reader mapped-result validation"
+          source_head="$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD^)" = "${{ steps.base.outputs.remote_sha }}"
+          test "$(git ls-remote origin "refs/heads/${BASE_BRANCH}" | awk '{print $1}')" = "${{ steps.base.outputs.remote_sha }}"
+          git push origin "HEAD:refs/heads/${OUTPUT_BRANCH}"
+          echo "SOURCE_HEAD=${source_head}" >> "${GITHUB_ENV}"
+
+      - name: Create and squash-merge GitHub-Flow PR
+        if: steps.base.outputs.mode != 'already'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin "refs/heads/${BASE_BRANCH}" | awk '{print $1}')" = "${{ steps.base.outputs.remote_sha }}"
+          payload="$(python3 - "${{ steps.base.outputs.mode }}" <<'PY'
+          import json,sys
+          print(json.dumps({'title':'Implement owner-qualified reader mapped-result validation','head':'agent/u2a1c-mapped-result-181-v10','base':'issue-181-clang22-materialization-runtime','draft':False,'maintainer_can_modify':True,'body':f'Authority-complete bounded U2a1c ({sys.argv[1]} mode): distinct move-only registry-private mapped-native observation, exact owner/callback/effect validation, retained mapping provenance, one-shot terminal consumption, independent reviews, full Clang 22 build, repeated focused tests, full inventory classification, and ASan+UBSan. No VFS/Store/public/outward-native-OK activation.'}))
+          PY
+          )"
+          pr="$(curl --fail-with-body --silent --show-error -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${GITHUB_REPOSITORY}/pulls" -d "${payload}")"
+          number="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["number"])' <<<"${pr}")"
+          pr_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["html_url"])' <<<"${pr}")"
+          test "$(python3 -c 'import json,sys; print(json.load(sys.stdin)["head"]["sha"])' <<<"${pr}")" = "${SOURCE_HEAD}"
+          merge="$(python3 - "${SOURCE_HEAD}" <<'PY'
+          import json,sys
+          print(json.dumps({'sha':sys.argv[1],'merge_method':'squash','commit_title':'Implement owner-qualified reader mapped-result validation','commit_message':'Complete authority-correct U2a1c after exact bounded qualification.'}))
+          PY
+          )"
+          result=''
+          for attempt in 1 2 3 4 5; do
+            set +e
+            result="$(curl --fail-with-body --silent --show-error -X PUT \
+              -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${number}/merge" -d "${merge}" 2>"${RUNNER_TEMP}/merge.err")"
+            code=$?; set -e
+            [[ ${code} -eq 0 ]] && break
+            cat "${RUNNER_TEMP}/merge.err"; sleep 5
+          done
+          test "$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)["merged"]).lower())' <<<"${result}")" = true
+          echo "PR_URL=${pr_url}" >> "${GITHUB_ENV}"
+          echo "MERGE_SHA=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])' <<<"${result}")" >> "${GITHUB_ENV}"
+
+      - name: Persist successful checkpoint
+        if: success() && steps.base.outputs.mode != 'already'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="## U2a1c authority-complete mapped-result unit merged\n\n- mode: \`${{ steps.base.outputs.mode }}\`\n- PR: ${PR_URL}\n- qualified head: \`${SOURCE_HEAD}\`\n- squash commit: \`${MERGE_SHA}\`\n- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\n\nPassed two independent reviews, exact Clang 22 build, focused 20x repetition, full CTest inventory classification, ASan+UBSan 5x, exact seven-file scope, and GitHub-Flow merge. No production activation claim."
+          payload="$(python3 -c 'import json,sys; print(json.dumps({"body":sys.stdin.read()}))' <<<"${body}")"
+          curl --fail-with-body --silent --show-error -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${GITHUB_REPOSITORY}/issues/181/comments" -d "${payload}"
+
+      - name: Persist fail-closed checkpoint
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="## U2a1c v10 stopped fail-closed\n\nNo PR was merged. Named logs and the failing step are retained at ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. The job, writer wait, build, full suite, sanitizer suite, and merge retries all have explicit finite bounds."
+          payload="$(python3 -c 'import json,sys; print(json.dumps({"body":sys.stdin.read()}))' <<<"${body}")"
+          curl --fail-with-body --silent --show-error -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${GITHUB_REPOSITORY}/issues/181/comments" -d "${payload}"
