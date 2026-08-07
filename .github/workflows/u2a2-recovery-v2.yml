@@ -1,0 +1,52 @@
+name: U2a2 exact-owner native-OK recovery v2
+
+on:
+  push:
+    branches:
+      - agent/u2a2-recovery-controller-205
+
+concurrency:
+  group: cxxlens-u2a2-exact-owner-recovery
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  models: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  CMAKE_GENERATOR: Ninja
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+  CTEST_PARALLEL_LEVEL: 1
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout one-shot recovery controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/u2a2-recovery-controller-205
+          path: controller
+          fetch-depth: 1
+
+      - name: Clone product repository
+        shell: bash
+        run: git clone --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+
+      - name: Implement, review, qualify, and integrate issue 205
+        shell: bash
+        run: python3 controller/tools/agent/u2a2_recovery_controller.py repo u2a2-recovery-work
+
+      - name: Delete one-shot controller after verified completion
+        if: success()
+        working-directory: repo
+        shell: bash
+        run: |
+          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/205" --jq '.state')" == closed ]]; then
+            git push origin --delete agent/u2a2-recovery-controller-205 || true
+            git push origin --delete agent/u2a2-model-controller-205 || true
+          fi
