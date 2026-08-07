@@ -1,0 +1,196 @@
+name: U2a1c qualified mapped-result apply
+
+on:
+  push:
+    branches:
+      - agent/u2a1c-qualified-mapped-result-181
+    paths:
+      - tools/agent/u2a1c_transform_common.py
+      - tools/agent/u2a1c_transform_issuer.py
+      - tools/agent/u2a1c_transform_lease_header.py
+      - tools/agent/u2a1c_transform_lease_support.py
+      - tools/agent/u2a1c_transform_lease_state.py
+      - tools/agent/u2a1c_transform_registry.py
+      - tools/agent/u2a1c_transform_test.py
+      - .github/workflows/u2a1c-qualified-mapped-result.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: u2a1c-qualified-mapped-result
+  cancel-in-progress: false
+
+jobs:
+  apply-build-test-publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - name: Checkout exact child branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/u2a1c-qualified-mapped-result-181
+          fetch-depth: 0
+
+      - name: Verify exact parent and bounded workbench delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 60s git fetch origin issue-181-clang22-materialization-runtime
+          git merge-base --is-ancestor origin/issue-181-clang22-materialization-runtime HEAD
+          git diff --name-only origin/issue-181-clang22-materialization-runtime...HEAD > u2a1c-preapply-files.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          allowed = {
+              'tools/agent/u2a1c_transform_common.py',
+              'tools/agent/u2a1c_transform_issuer.py',
+              'tools/agent/u2a1c_transform_lease_header.py',
+              'tools/agent/u2a1c_transform_lease_support.py',
+              'tools/agent/u2a1c_transform_lease_state.py',
+              'tools/agent/u2a1c_transform_registry.py',
+              'tools/agent/u2a1c_transform_test.py',
+              '.github/workflows/u2a1c-qualified-mapped-result.yml',
+          }
+          actual = set(Path('u2a1c-preapply-files.txt').read_text().splitlines())
+          if not actual or not actual <= allowed:
+              raise SystemExit(f'unbounded pre-apply delta: {sorted(actual - allowed)}')
+          PY
+
+      - name: Apply exact source transformation
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 60s python3 tools/agent/u2a1c_transform_issuer.py
+          timeout --signal=TERM --kill-after=10s 60s python3 tools/agent/u2a1c_transform_lease_header.py
+          timeout --signal=TERM --kill-after=10s 60s python3 tools/agent/u2a1c_transform_lease_support.py
+          timeout --signal=TERM --kill-after=10s 60s python3 tools/agent/u2a1c_transform_lease_state.py
+          timeout --signal=TERM --kill-after=10s 60s python3 tools/agent/u2a1c_transform_registry.py
+          timeout --signal=TERM --kill-after=10s 60s python3 tools/agent/u2a1c_transform_test.py
+          git diff --check
+
+      - name: Enforce production-inert boundary and one-shot structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only > u2a1c-source-files.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          allowed = {
+              'src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp',
+              'src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp',
+              'src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp',
+              'tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp',
+          }
+          actual = set(Path('u2a1c-source-files.txt').read_text().splitlines())
+          if actual != allowed:
+              raise SystemExit(f'unexpected source delta: {sorted(actual ^ allowed)}')
+          issuer = Path('src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp').read_text()
+          lease_h = Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp').read_text()
+          lease = Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp').read_text()
+          registry = Path('src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp').read_text()
+          test = Path('tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp').read_text()
+          assert issuer.count('validate_mapped_effect_identity_for_registry(') >= 3
+          assert 'sqlite_shm_reader_effect_identity_role::mapped_result' in issuer
+          assert lease_h.count('class sqlite_same_process_shm_reader_receipt_validator final') == 1
+          for phase in ('unclaimed', 'validating', 'sealed', 'terminal_consumed', 'poisoned'):
+              assert phase in lease
+          assert lease.count('mapped_effect_validation_phase.compare_exchange_strong') >= 2
+          assert '(!qualified_owned_terminal && qualified_control)' in lease
+          assert 'map->expected_mapping.native_mapping == native_mapping' in lease
+          assert 'detail::validate_mapped_effect_identity_for_registry' in registry
+          assert 'owned mapped result validates after ordinary family quarantine' in test
+          forbidden = ('src/sdk/store.cpp', 'include/', 'forwarding_vfs')
+          for path in actual:
+              if path == forbidden[0] or path.startswith(forbidden[1]) or forbidden[2] in path:
+                  raise SystemExit(f'forbidden production surface: {path}')
+          PY
+
+      - name: Configure bounded build
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/u2a1c-qualified
+          if command -v clang++-22 > clang-probe.log 2>&1; then
+            cxx=clang++-22
+          elif command -v clang++ > clang-probe.log 2>&1; then
+            cxx=clang++
+          else
+            cxx=g++
+          fi
+          printf 'CXX=%s\n' "$cxx" | tee u2a1c-compiler.txt
+          timeout --signal=TERM --kill-after=30s 300s env CXX="$cxx" \
+            cmake --preset ci-quick -B build/u2a1c-qualified -DCXXLENS_CLANG_ADAPTER=OFF \
+            > u2a1c-configure.log 2>&1
+
+      - name: Build bounded source set
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=30s 600s \
+            cmake --build build/u2a1c-qualified --parallel 4 \
+            > u2a1c-build.log 2>&1
+
+      - name: Run focused lifecycle tests and repetition
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=30s 480s \
+            ctest --test-dir build/u2a1c-qualified --output-on-failure \
+              -R 'sqlite.*(same-process|shm|identity-issuer|mapping-lease|mapping-registry)' \
+            > u2a1c-ctest.log 2>&1
+          timeout --signal=TERM --kill-after=30s 420s \
+            ctest --test-dir build/u2a1c-qualified --output-on-failure \
+              -R 'mapping-registry' --repeat until-fail:20 \
+            > u2a1c-repeat.log 2>&1
+
+      - name: Commit source and remove workbench files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'cxxlens-u2a1c-bounded-bot'
+          git config user.email 'cxxlens-u2a1c-bounded-bot@users.noreply.github.com'
+          git add \
+            src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp \
+            src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp \
+            src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp \
+            src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp \
+            src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp \
+            src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp \
+            tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp
+          git commit -m 'Qualify mapped reader result ownership'
+          source_sha="$(git rev-parse HEAD)"
+          printf 'SOURCE_COMMIT=%s\n' "$source_sha" | tee u2a1c-source-commit.txt
+          git rm \
+            tools/agent/u2a1c_transform_common.py \
+            tools/agent/u2a1c_transform_issuer.py \
+            tools/agent/u2a1c_transform_lease_header.py \
+            tools/agent/u2a1c_transform_lease_support.py \
+            tools/agent/u2a1c_transform_lease_state.py \
+            tools/agent/u2a1c_transform_registry.py \
+            tools/agent/u2a1c_transform_test.py \
+            .github/workflows/u2a1c-qualified-mapped-result.yml
+          git commit -m 'Remove U2a1c apply workbench'
+          git diff --check origin/issue-181-clang22-materialization-runtime...HEAD
+          final_files="$(git diff --name-only origin/issue-181-clang22-materialization-runtime...HEAD)"
+          printf '%s\n' "$final_files" | tee u2a1c-final-files.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          allowed = {
+              'src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp',
+              'src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp',
+              'src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp',
+              'tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp',
+          }
+          actual = set(Path('u2a1c-final-files.txt').read_text().splitlines())
+          if actual != allowed:
+              raise SystemExit(f'final PR pollution: {sorted(actual ^ allowed)}')
+          PY
+          timeout --signal=TERM --kill-after=30s 120s \
+            git push origin HEAD:agent/u2a1c-qualified-mapped-result-181 \
+            > u2a1c-push.log 2>&1
