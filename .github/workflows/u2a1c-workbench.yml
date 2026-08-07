@@ -7,6 +7,12 @@ on:
     paths:
       - tools/agent/u2a1c_audit.py
       - .github/workflows/u2a1c-workbench.yml
+  pull_request:
+    branches:
+      - issue-181-clang22-materialization-runtime
+    paths:
+      - tools/agent/u2a1c_audit.py
+      - .github/workflows/u2a1c-workbench.yml
 
 permissions:
   contents: read
