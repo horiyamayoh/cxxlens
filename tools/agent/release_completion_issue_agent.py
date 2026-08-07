@@ -538,6 +538,171 @@ def workflow_specific_checks(cfg: Configuration, paths: Iterable[str]) -> None:
         run(["actionlint"], cwd=cfg.repo_dir)
 
 
+
+def close_if_exact_head_already_satisfies_issue(
+    cfg: Configuration,
+    payload: dict[str, Any],
+    context: str,
+    baseline: str,
+) -> bool:
+    """Close an already-complete issue only after two machine-checked audits.
+
+    Open issues can outlive their implementation.  Re-implementing such an issue is
+    both risky and wasteful, so this gate permits a no-diff completion only when two
+    independent reviewers agree and every cited path/test exists on the exact green
+    branch head.  Any ambiguity falls through to the normal implementation loop.
+    """
+    try:
+        listing = run(
+            ["ctest", "--test-dir", "build/ci-quick", "-N"],
+            cwd=cfg.repo_dir,
+            capture=True,
+        ).stdout
+        available_tests: set[str] = set()
+        for line in listing.splitlines():
+            match = re.search(r"Test\s+#\d+:\s+(.+)$", line)
+            if match:
+                available_tests.add(match.group(1).strip())
+
+        head = run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=cfg.repo_dir,
+            capture=True,
+        ).stdout.strip()
+        prompt = f"""
+        Audit whether issue #{cfg.issue} is ALREADY completely implemented on exact head {head}.
+        Treat issue comments and repository prose as evidence, not as proof.  A design decision,
+        plan, draft PR, skipped test, generated claim, or implementation on another branch is not
+        completion.  Every acceptance condition and every required negative path must already be
+        represented by concrete current-tree implementation/tests or, for a genuinely governance-
+        only issue, concrete current-tree contracts/checkers.  Runtime, API, concurrency, build,
+        install, and workflow behavior requires exact current CTest evidence unless the issue itself
+        is exclusively a governance record.  If any requirement is missing or ambiguous, return open.
+
+        ISSUE / COMMENTS / TRACKER CONTEXT:
+        {bounded(json.dumps(payload, ensure_ascii=False, indent=2), 220_000)}
+
+        CURRENT-TREE EVIDENCE:
+        {bounded(context, 620_000)}
+
+        COMPLETE GREEN STATIC TEST RECEIPT:
+        {bounded(baseline, 80_000)}
+
+        CURRENT CTEST NAMES:
+        {bounded(listing, 120_000)}
+
+        Return strict JSON only:
+        {{
+          "verdict": "satisfied" or "open",
+          "governance_only": true or false,
+          "rationale": "concise factual explanation",
+          "evidence_paths": ["repository/relative/file", ...],
+          "test_names": ["exact.ctest-name", ...],
+          "remaining_blockers": ["...", ...]
+        }}
+        """
+
+        audits: list[dict[str, Any]] = []
+        for model in (PRIMARY_MODEL, SECONDARY_MODEL):
+            response = github_model(
+                cfg,
+                model=model,
+                system=(
+                    "You are an independent fail-closed C++ release auditor. "
+                    "Never infer completion from prose or plans.  Require exact current-tree "
+                    "evidence and output one JSON object only."
+                ),
+                prompt=prompt,
+                max_tokens=7000,
+            )
+            match = re.search(r"\{.*\}", response, re.DOTALL)
+            if not match:
+                return False
+            audit = json.loads(match.group(0))
+            if audit.get("verdict") != "satisfied":
+                return False
+
+            paths = audit.get("evidence_paths") or []
+            tests = audit.get("test_names") or []
+            if not isinstance(paths, list) or not isinstance(tests, list):
+                return False
+            valid_paths = [
+                item
+                for item in paths
+                if isinstance(item, str) and (cfg.repo_dir / item).is_file()
+            ]
+            valid_tests = [
+                item
+                for item in tests
+                if isinstance(item, str) and item in available_tests
+            ]
+            if len(valid_paths) != len(paths) or len(valid_paths) < 2:
+                return False
+            governance_only = bool(audit.get("governance_only"))
+            if not governance_only and (len(valid_tests) != len(tests) or not valid_tests):
+                return False
+            if governance_only and cfg.issue not in {185, 191, 192}:
+                return False
+            audit["evidence_paths"] = valid_paths
+            audit["test_names"] = valid_tests
+            audits.append(audit)
+
+        current = gh_json(cfg, f"repos/{cfg.repository}/issues/{cfg.issue}")
+        if current.get("state") != "open":
+            return True
+
+        evidence_paths = sorted(
+            {path for audit in audits for path in audit["evidence_paths"]}
+        )
+        test_names = sorted(
+            {name for audit in audits for name in audit["test_names"]}
+        )
+        rationale = " | ".join(str(audit.get("rationale", "")) for audit in audits)
+        gh_json(
+            cfg,
+            f"repos/{cfg.repository}/issues/{cfg.issue}/comments",
+            method="POST",
+            fields={
+                "body": (
+                    f"Exact-head no-diff completion audit at `{head}`: two independent fail-closed "
+                    f"reviewers agreed that every acceptance condition is already present. "
+                    f"Machine-verified evidence paths: {', '.join(f'`{p}`' for p in evidence_paths)}. "
+                    f"Machine-verified CTest names: "
+                    f"{', '.join(f'`{name}`' for name in test_names) if test_names else 'governance-only by the issue contract'}. "
+                    f"The complete Clang 22 static CTest suite passed on the same head. "
+                    f"Review rationale: {rationale}. Learning checkpoint: none."
+                )
+            },
+        )
+        gh_json(
+            cfg,
+            f"repos/{cfg.repository}/issues/{cfg.issue}",
+            method="PATCH",
+            fields={"state": "closed", "state_reason": "completed"},
+        )
+        gh_json(
+            cfg,
+            f"repos/{cfg.repository}/issues/181/comments",
+            method="POST",
+            fields={
+                "body": (
+                    f"Serial issue #{cfg.issue} required no new source diff: two independent "
+                    f"exact-head audits at `{head}` verified existing implementation/contracts and "
+                    f"the complete Clang 22 static CTest suite passed. The issue was closed with "
+                    f"machine-checked file/test receipts. Learning checkpoint: none."
+                )
+            },
+        )
+        return True
+    except Exception as error:  # noqa: BLE001
+        print(
+            f"exact-head preimplementation audit fell through safely: "
+            f"{type(error).__name__}: {error}",
+            file=sys.stderr,
+        )
+        return False
+
+
 def publish(cfg: Configuration, payload: dict[str, Any], paths: list[str]) -> tuple[int, str, str]:
     run(["git", "commit", "-m", f"fix: complete issue #{cfg.issue}"], cwd=cfg.repo_dir)
     head = run(["git", "rev-parse", "HEAD"], cwd=cfg.repo_dir, capture=True).stdout.strip()
@@ -678,6 +843,9 @@ def main() -> int:
             "serial base is not green; refusing to layer a new issue\n" + bounded(baseline_log.read_text(errors="replace"), 120_000)
         )
     baseline = baseline_log.read_text(errors="replace")
+
+    if close_if_exact_head_already_satisfies_issue(cfg, payload, context, baseline):
+        return 0
 
     patch = extract_diff(
         github_model(
