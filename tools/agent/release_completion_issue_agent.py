@@ -25,7 +25,7 @@ from typing import Any, Iterable
 
 MODELS_ENDPOINT = "https://models.github.ai/inference/chat/completions"
 PRIMARY_MODEL = "openai/gpt-4.1"
-SECONDARY_MODEL = "openai/gpt-4o"
+SECONDARY_MODEL = "openai/gpt-4.1-mini"
 
 
 @dataclass(frozen=True)
