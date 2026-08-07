@@ -1,0 +1,53 @@
+name: U2a1c post-integration issue closure
+
+on:
+  push:
+    branches:
+      - agent/u2a1c-post-integration-181
+
+permissions:
+  contents: write
+  pull-requests: read
+  issues: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  close-owned-issue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Wait for guarded PR integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          merged=false
+          for attempt in $(seq 1 80); do
+            state=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/213" --jq '.merged')
+            if [[ "${state}" == true ]]; then
+              merged=true
+              break
+            fi
+            echo "attempt ${attempt}: PR #213 is not merged yet"
+            sleep 30
+          done
+          [[ "${merged}" == true ]]
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/213" --jq '.merge_commit_sha' > merge-sha.txt
+
+      - name: Close the exact acceptance-matrix issue
+        shell: bash
+        run: |
+          set -euo pipefail
+          merge_sha=$(cat merge-sha.txt)
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/211/comments" \
+            -f body="Completed by the bounded source-only PR #213 and integrated into \`issue-181-clang22-materialization-runtime\` at \`${merge_sha}\`. The final source boundary contains exactly seven production files and no construction workflow/transform files. A separate clean controller rebuilt the exact head with Clang 22 and passed the owner-qualified mapped-result ownership, invalid presenter, drop/replay, terminalization, fork, allocation-failure, and race-focused suites for 50 consecutive repetitions before integration. This closes only the production-inert adversarial/ownership matrix; forwarding-VFS activation, Store CAS, public status, and outward native-\`SQLITE_OK\` remain explicitly outside this issue and continue under #181/#205. Learning checkpoint: none."
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/211" \
+            -f state=closed -f state_reason=completed >/dev/null
+
+      - name: Delete the one-shot post-integration branch
+        shell: bash
+        run: |
+          git init cleanup
+          git -C cleanup remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git -C cleanup push origin --delete agent/u2a1c-post-integration-181
