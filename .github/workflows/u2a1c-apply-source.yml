@@ -1,0 +1,36 @@
+name: U2a1c source apply
+
+on:
+  push:
+    branches:
+      - agent/u2a1c-mapped-result-workbench-181
+    paths:
+      - tools/agent/u2a1c_apply_source.py
+      - .github/workflows/u2a1c-apply-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout workbench branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/u2a1c-mapped-result-workbench-181
+          fetch-depth: 2
+      - name: Apply bounded source transformation
+        run: python3 tools/agent/u2a1c_apply_source.py
+      - name: Commit transformed source
+        run: |
+          if git diff --quiet -- src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp; then
+            echo "No source changes to commit"
+            exit 0
+          fi
+          git config user.name "cxxlens-u2a1c-workbench"
+          git config user.email "cxxlens-u2a1c-workbench@users.noreply.github.com"
+          git add src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp
+          git commit -m "Implement qualified reader mapped-result validator"
+          git push origin HEAD:agent/u2a1c-mapped-result-workbench-181
