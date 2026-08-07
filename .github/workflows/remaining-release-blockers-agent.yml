@@ -1,0 +1,95 @@
+name: Remaining release blockers serial resolver
+
+on:
+  push:
+    branches:
+      - agent/remaining-blockers-controller-181
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  models: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  CMAKE_GENERATOR: Ninja
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+  CTEST_PARALLEL_LEVEL: 1
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout one-shot agent tooling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/release-completion-agent-tools
+          path: agent-tools
+          fetch-depth: 1
+
+      - name: Clone product repository with exact write identity
+        shell: bash
+        run: git clone --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+
+      - name: Install exact developer toolchain
+        working-directory: repo
+        shell: bash
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+
+      - name: Wait for the four principal serial units
+        shell: bash
+        run: |
+          set -euo pipefail
+          for number in 205 183 184 185 174; do
+            complete=false
+            for attempt in $(seq 1 600); do
+              if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/${number}" --jq '.state')" == closed ]]; then
+                complete=true
+                break
+              fi
+              echo "issue #${number}: wait attempt ${attempt}"
+              sleep 30
+            done
+            [[ "${complete}" == true ]]
+          done
+
+      - name: Resolve only decision or blocker issues that remain open
+        shell: bash
+        run: |
+          set -euo pipefail
+          for number in 191 192 194 195 196 197 198 199 200 201 202 211; do
+            state=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${number}" --jq '.state')
+            if [[ "${state}" == closed ]]; then
+              echo "issue #${number} already complete; skipping"
+              continue
+            fi
+            python3 agent-tools/tools/agent/release_completion_issue_agent.py \
+              --issue "${number}" \
+              --base-branch issue-181-clang22-materialization-runtime \
+              --unit-branch "agent/issue-${number}-remaining-blocker" \
+              --scope core \
+              --repeat-count 3 \
+              --repo-dir repo \
+              --work-dir "issue-${number}-work"
+          done
+
+      - name: Prove the blocker set is empty
+        shell: bash
+        run: |
+          set -euo pipefail
+          remaining=()
+          for number in 191 192 194 195 196 197 198 199 200 201 202 211; do
+            [[ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/${number}" --jq '.state')" == closed ]] || remaining+=("#${number}")
+          done
+          if (( ${#remaining[@]} != 0 )); then
+            printf 'Remaining open blockers: %s\n' "${remaining[*]}" >&2
+            exit 1
+          fi
+
+      - name: Delete one-shot resolver branch
+        if: success()
+        working-directory: repo
+        shell: bash
+        run: git push origin --delete agent/remaining-blockers-controller-181 || true
