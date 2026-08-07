@@ -26,3 +26,16 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Print compact U2a1c source index
         run: python3 tools/agent/u2a1c_index.py
+      - name: Bundle exact workbench source without Git metadata
+        run: |
+          tar --exclude=.git -czf "${RUNNER_TEMP}/cxxlens-u2a1c-source.tar.gz" .
+          sha256sum "${RUNNER_TEMP}/cxxlens-u2a1c-source.tar.gz" | tee "${RUNNER_TEMP}/cxxlens-u2a1c-source.sha256"
+      - name: Preserve exact workbench source bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cxxlens-u2a1c-source-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/cxxlens-u2a1c-source.tar.gz
+            ${{ runner.temp }}/cxxlens-u2a1c-source.sha256
+          if-no-files-found: error
+          retention-days: 2
