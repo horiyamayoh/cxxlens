@@ -1,0 +1,52 @@
+name: Expand temporary watchdog cleanup
+
+on:
+  push:
+    branches:
+      - agent/final-production-qualification-controller-v2
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout final controller branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/final-production-qualification-controller-v2
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Remove every temporary watchdog resource from final product head
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('tools/agent/final_production_qualification_controller.sh')
+          source = path.read_text()
+          desired = "rm -f .github/workflows/cxxlens-completion-watchdog.yml .github/workflows/cxxlens-watchdog-*.yml tools/agent/cxxlens_completion_watchdog.sh tools/agent/u2a1c_watchdog_recovery.py"
+          source, count = re.subn(
+              r'rm -f \.github/workflows/cxxlens-completion-watchdog\.yml(?:[^\n]|\n\s+tools/agent/cxxlens_completion_watchdog\.sh)*',
+              desired,
+              source,
+              count=1,
+          )
+          if count == 0:
+              raise SystemExit('watchdog cleanup command not found')
+          path.write_text(source)
+          PY
+          bash -n tools/agent/final_production_qualification_controller.sh
+          rm -f .github/workflows/final-controller-watchdog-cleanup-expansion.yml
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'ci: remove all watchdog resources before final qualification'
+          git push origin HEAD:agent/final-production-qualification-controller-v2
