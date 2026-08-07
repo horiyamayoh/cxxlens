@@ -704,6 +704,24 @@ def close_if_exact_head_already_satisfies_issue(
 
 
 def publish(cfg: Configuration, payload: dict[str, Any], paths: list[str]) -> tuple[int, str, str]:
+    current_issue = gh_json(cfg, f"repos/{cfg.repository}/issues/{cfg.issue}")
+    if current_issue.get("state") != "open":
+        current_head = run(["git", "rev-parse", "HEAD"], cwd=cfg.repo_dir, capture=True).stdout.strip()
+        print(f"issue #{cfg.issue} was completed by another serial owner; discarding the local candidate")
+        return 0, current_head, ""
+
+    starting_base = run(["git", "rev-parse", "HEAD"], cwd=cfg.repo_dir, capture=True).stdout.strip()
+    run(["git", "fetch", "--no-tags", "origin", cfg.base_branch], cwd=cfg.repo_dir)
+    current_base = run(
+        ["git", "rev-parse", f"origin/{cfg.base_branch}"],
+        cwd=cfg.repo_dir,
+        capture=True,
+    ).stdout.strip()
+    if current_base != starting_base:
+        raise RuntimeError(
+            f"serial base changed during issue qualification: {starting_base} -> {current_base}"
+        )
+
     run(["git", "commit", "-m", f"fix: complete issue #{cfg.issue}"], cwd=cfg.repo_dir)
     head = run(["git", "rev-parse", "HEAD"], cwd=cfg.repo_dir, capture=True).stdout.strip()
     run(
