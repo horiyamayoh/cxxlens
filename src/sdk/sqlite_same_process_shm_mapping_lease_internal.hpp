@@ -3360,6 +3360,7 @@ namespace cxxlens::sdk
 		void inject_writer_native_transition_failure_for_testing() noexcept;
 		void inject_writer_attachment_seal_failure_for_testing() noexcept;
 		void inject_writer_completion_transition_failure_for_testing() noexcept;
+		void inject_reader_mapped_validation_allocation_failure_for_testing() noexcept;
 		void inject_reader_map_terminal_commit_failure_for_testing() noexcept;
 		void inject_reader_session_terminal_commit_failure_for_testing() noexcept;
 		void inject_registry_reader_attachment_liveness_loss_for_testing() noexcept;

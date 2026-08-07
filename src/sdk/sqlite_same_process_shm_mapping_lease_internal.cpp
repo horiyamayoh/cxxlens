@@ -6,6 +6,7 @@
 #include <limits>
 #include <list>
 #include <mutex>
+#include <new>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -8179,6 +8180,9 @@ namespace cxxlens::sdk
 						return sqlite_shm_unexpected(ambiguous());
 					}
 					observation_burned = true;
+					if (fail_next_reader_mapped_validation_allocation_for_testing_.exchange(
+							false, std::memory_order_acq_rel))
+						throw std::bad_alloc{};
 
 					const auto exact_native_result =
 						observation.native_status_ ==
@@ -15491,6 +15495,12 @@ namespace cxxlens::sdk
 				}
 			}
 
+			void inject_reader_mapped_validation_allocation_failure_for_testing() noexcept
+			{
+				fail_next_reader_mapped_validation_allocation_for_testing_.store(
+					true, std::memory_order_release);
+			}
+
 			void inject_reader_map_terminal_commit_failure_for_testing() noexcept
 			{
 				try
@@ -22335,6 +22345,7 @@ namespace cxxlens::sdk
 			bool fail_next_reader_close_terminal_commit_for_testing_{};
 			bool fail_next_reader_close_post_receipt_state_for_testing_{};
 			bool fail_next_reader_close_begin_preparation_for_testing_{};
+			std::atomic_bool fail_next_reader_mapped_validation_allocation_for_testing_{false};
 			std::atomic_bool fail_next_reader_operation_mutex_acquire_for_testing_{false};
 			std::atomic_bool fail_next_reader_recovery_mutex_reacquire_for_testing_{false};
 			bool registry_member_admission_blocked_{};
@@ -24304,6 +24315,12 @@ namespace cxxlens::sdk
 		inject_writer_attachment_seal_failure_for_testing() noexcept
 	{
 		state_->inject_writer_attachment_seal_failure_for_testing();
+	}
+
+	void sqlite_same_process_shm_mapping_lease_coordinator::
+		inject_reader_mapped_validation_allocation_failure_for_testing() noexcept
+	{
+		state_->inject_reader_mapped_validation_allocation_failure_for_testing();
 	}
 
 	void sqlite_same_process_shm_mapping_lease_coordinator::
