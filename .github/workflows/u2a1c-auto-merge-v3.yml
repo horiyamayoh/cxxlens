@@ -1,0 +1,78 @@
+name: U2a1c mapped-result merge gate v3
+
+on:
+  workflow_run:
+    workflows:
+      - Quality gates
+    types:
+      - completed
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  merge-subordinate-pr:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'agent/u2a1c-mapped-result-181-v3'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Merge exact green subordinate PR into the active implementation branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+          REPOSITORY: ${{ github.repository }}
+          OUTPUT_BRANCH: agent/u2a1c-mapped-result-181-v3
+          BASE_BRANCH: issue-181-clang22-materialization-runtime
+          QUALITY_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          QUALITY_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${REPOSITORY%%/*}"
+          pulls="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${REPOSITORY}/pulls?state=open&head=${owner}:${OUTPUT_BRANCH}&base=${BASE_BRANCH}")"
+          count="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' <<<"${pulls}")"
+          test "${count}" = "1"
+          number="$(python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["number"])' <<<"${pulls}")"
+          draft="$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)[0]["draft"]).lower())' <<<"${pulls}")"
+          head_sha="$(python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["head"]["sha"])' <<<"${pulls}")"
+          pr_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["html_url"])' <<<"${pulls}")"
+          test "${draft}" = "false"
+          test "${head_sha}" = "${QUALITY_HEAD_SHA}"
+          merge_payload="$(python3 - "${head_sha}" <<'PY'
+          import json,sys
+          print(json.dumps({
+              "sha": sys.argv[1],
+              "merge_method": "squash",
+              "commit_title": "Implement owner-qualified reader mapped-result validation",
+              "commit_message": "Complete the bounded U2a1c mapped-result validator sub-unit of #181 after exact pull-request Quality qualification.",
+          }))
+          PY
+          )"
+          merged="$(curl --fail-with-body --silent --show-error \
+            -X PUT \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${REPOSITORY}/pulls/${number}/merge" \
+            -d "${merge_payload}")"
+          merged_ok="$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)["merged"]).lower())' <<<"${merged}")"
+          merged_sha="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("sha", ""))' <<<"${merged}")"
+          test "${merged_ok}" = "true"
+          body="## U2a1c merged into #193 branch\n\n- subordinate PR: ${pr_url}\n- exact green head: \`${head_sha}\`\n- pull-request Quality: ${QUALITY_RUN_URL}\n- squash commit on \`${BASE_BRANCH}\`: \`${merged_sha}\`\n\nThe next bounded write unit may start only from this verified branch head. This is not a merge of #193 into main and makes no production VFS/Store activation claim."
+          payload="$(python3 -c 'import json,sys; print(json.dumps({"body":sys.stdin.read()}))' <<<"${body}")"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${REPOSITORY}/issues/181/comments" \
+            -d "${payload}"
