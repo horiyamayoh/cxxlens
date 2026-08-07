@@ -412,6 +412,93 @@ namespace cxxlens::sdk
 					std::move(zero_resize_effect)};
 		}
 
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_post_map_receipt
+		reader_attachment_map_with_qualified_request(
+			const sqlite_shm_verified_reader_attachment_post_map_receipt& source,
+			sqlite_shm_reader_attachment_map_request request)
+		{
+			return {std::move(request),
+				source.generation_,
+				source.mapping_,
+				source.observed_attachment_,
+				source.zero_resize_effect_receipt_,
+				source.qualified_control_};
+		}
+
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_post_map_receipt
+		reader_attachment_map_with_qualified_generation(
+			const sqlite_shm_verified_reader_attachment_post_map_receipt& source,
+			const std::uint64_t generation)
+		{
+			return {source.request_,
+				generation,
+				source.mapping_,
+				source.observed_attachment_,
+				source.zero_resize_effect_receipt_,
+				source.qualified_control_};
+		}
+
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_post_map_receipt
+		reader_attachment_map_with_qualified_mapping(
+			const sqlite_shm_verified_reader_attachment_post_map_receipt& source,
+			const sqlite_shm_mapping_tuple mapping)
+		{
+			return {source.request_,
+				source.generation_,
+				mapping,
+				source.observed_attachment_,
+				source.zero_resize_effect_receipt_,
+				source.qualified_control_};
+		}
+
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_post_map_receipt
+		reader_attachment_map_with_qualified_observation(
+			const sqlite_shm_verified_reader_attachment_post_map_receipt& source,
+			sqlite_backend_opaque_identity observed_shm_object_receipt,
+			sqlite_backend_opaque_identity observed_shm_entry_receipt,
+			sqlite_backend_opaque_identity observed_device_receipt,
+			sqlite_backend_opaque_identity observed_mount_receipt)
+		{
+			auto observed = sqlite_shm_reader_native_attachment_identity{
+				source.observed_attachment_.expected(),
+				std::move(observed_shm_object_receipt),
+				std::move(observed_shm_entry_receipt),
+				std::move(observed_device_receipt),
+				std::move(observed_mount_receipt)};
+			return {source.request_,
+				source.generation_,
+				source.mapping_,
+				std::move(observed),
+				source.zero_resize_effect_receipt_,
+				source.qualified_control_};
+		}
+
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_post_map_receipt
+		reader_attachment_map_with_qualified_effect(
+			const sqlite_shm_verified_reader_attachment_post_map_receipt& source,
+			sqlite_backend_opaque_identity effect)
+		{
+			return {source.request_,
+				source.generation_,
+				source.mapping_,
+				source.observed_attachment_,
+				std::move(effect),
+				source.qualified_control_};
+		}
+
+		[[nodiscard]] static sqlite_shm_verified_reader_attachment_post_map_receipt
+		reader_attachment_map_with_foreign_qualified_control(
+			const sqlite_shm_verified_reader_attachment_post_map_receipt& payload,
+			const sqlite_shm_verified_reader_attachment_post_map_receipt& control_source)
+		{
+			return {payload.request_,
+				payload.generation_,
+				payload.mapping_,
+				payload.observed_attachment_,
+				payload.zero_resize_effect_receipt_,
+				control_source.qualified_control_};
+		}
+
 		[[nodiscard]] static sqlite_shm_reader_mapped_post_native_observation
 		reader_mapped_post_native_observation(
 			const sqlite_shm_reader_attachment_map_inflight& inflight,
@@ -698,6 +785,18 @@ namespace cxxlens::sdk
 			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
 		{
 			coordinator.inject_writer_attachment_seal_failure_for_testing();
+		}
+
+		static void fail_next_reader_mapped_validation_allocation(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_reader_mapped_validation_allocation_failure_for_testing();
+		}
+
+		static void fail_next_reader_operation_mutex_acquire(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_reader_operation_mutex_acquire_failure_for_testing();
 		}
 
 		static void fail_next_reader_map_terminal_transition(
@@ -18712,10 +18811,305 @@ namespace
 	}
 
 
+	enum class qualified_mapped_native_drift : std::uint8_t
+	{
+		status,
+		null_mapping,
+		foreign_mapping,
+		delegated_extend,
+		shm_object,
+		shm_entry,
+		device,
+		mount,
+	};
+
+	void verify_qualified_mapped_validator_burns_each_native_observation_drift()
+	{
+		const std::array drifts{
+			qualified_mapped_native_drift::status,
+			qualified_mapped_native_drift::null_mapping,
+			qualified_mapped_native_drift::foreign_mapping,
+			qualified_mapped_native_drift::delegated_extend,
+			qualified_mapped_native_drift::shm_object,
+			qualified_mapped_native_drift::shm_entry,
+			qualified_mapped_native_drift::device,
+			qualified_mapped_native_drift::mount,
+		};
+		for (std::size_t index = 0U; index < drifts.size(); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(80U + index);
+			auto setup = make_reader_candidate_setup(marker);
+			auto owner = prepare_qualified_map_effect_owner(
+				setup,
+				static_cast<std::uint8_t>(100U + index),
+				sqlite_shm_reader_effect_identity_role::mapped_result);
+			std::array<std::byte, 4096> foreign_page{};
+			auto request = reader_attachment_map_request(
+				owner.identity.request, owner.identity.callback_identity.receipt());
+			int native_status{};
+			const volatile void* native_mapping = setup.writer_attempt.native_page.get();
+			int delegated_extend{};
+			auto object = identity("test.registry.mapped-drift-object", marker);
+			auto entry = identity("test.registry.mapped-drift-entry", marker);
+			auto device = identity("test.registry.mapped-drift-device", marker);
+			auto mount = identity("test.registry.mapped-drift-mount", marker);
+			switch (drifts[index])
+			{
+				case qualified_mapped_native_drift::status:
+					native_status = sqlite_busy_status;
+					break;
+				case qualified_mapped_native_drift::null_mapping:
+					native_mapping = nullptr;
+					break;
+				case qualified_mapped_native_drift::foreign_mapping:
+					native_mapping = foreign_page.data();
+					break;
+				case qualified_mapped_native_drift::delegated_extend:
+					delegated_extend = 1;
+					break;
+				case qualified_mapped_native_drift::shm_object:
+					object = {};
+					break;
+				case qualified_mapped_native_drift::shm_entry:
+					entry = {};
+					break;
+				case qualified_mapped_native_drift::device:
+					device = {};
+					break;
+				case qualified_mapped_native_drift::mount:
+					mount = {};
+					break;
+			}
+			auto observation =
+				sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+					owner.inflight,
+					std::move(request),
+					native_status,
+					native_mapping,
+					delegated_extend,
+					std::move(object),
+					std::move(entry),
+					std::move(device),
+					std::move(mount));
+			auto rejected = sqlite_same_process_shm_reader_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				owner.inflight,
+				owner.identity.scope,
+				owner.identity.callback_identity,
+				owner.effect,
+				std::move(observation));
+			auto replay = validate_qualified_mapped_result(
+				setup,
+				owner,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				static_cast<std::uint8_t>(120U + index));
+			const auto lifecycle =
+				sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+			require(!rejected && !replay && setup.coordinator->snapshot().quarantined &&
+					!lifecycle.terminal_quarantines.empty(),
+				"each mapped native/observation drift burns once and reaches durable quarantine");
+		}
+	}
+
+	void verify_qualified_mapped_validation_allocation_failure_is_terminal()
+	{
+		auto setup = make_reader_candidate_setup(130U);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 131U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		sqlite_same_process_shm_lease_test_peer::fail_next_reader_mapped_validation_allocation(
+			*setup.coordinator);
+		auto failed = validate_qualified_mapped_result(
+			setup, owner, 0, setup.writer_attempt.native_page.get(), 0, 132U);
+		auto replay = validate_qualified_mapped_result(
+			setup, owner, 0, setup.writer_attempt.native_page.get(), 0, 133U);
+		require(!failed && !replay && !owner.identity.scope.valid() && !owner.effect.valid(),
+			"allocation failure after mapped observation burn abandons the exact owner once");
+	}
+
+	enum class qualified_mapped_terminal_drift : std::uint8_t
+	{
+		request,
+		generation,
+		mapping,
+		shm_object,
+		shm_entry,
+		device,
+		mount,
+		effect,
+	};
+
+	void verify_qualified_mapped_terminal_drift_matrix_is_fail_closed()
+	{
+		const std::array drifts{
+			qualified_mapped_terminal_drift::request,
+			qualified_mapped_terminal_drift::generation,
+			qualified_mapped_terminal_drift::mapping,
+			qualified_mapped_terminal_drift::shm_object,
+			qualified_mapped_terminal_drift::shm_entry,
+			qualified_mapped_terminal_drift::device,
+			qualified_mapped_terminal_drift::mount,
+			qualified_mapped_terminal_drift::effect,
+		};
+		for (std::size_t index = 0U; index < drifts.size(); ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(140U + index);
+			auto setup = make_reader_candidate_setup(marker);
+			auto owner = prepare_qualified_map_effect_owner(
+				setup,
+				static_cast<std::uint8_t>(160U + index),
+				sqlite_shm_reader_effect_identity_role::mapped_result);
+			auto validated = validate_qualified_mapped_result(
+				setup,
+				owner,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				static_cast<std::uint8_t>(180U + index));
+			require(validated.has_value(), "seal exact mapped receipt before terminal drift");
+			std::optional<sqlite_shm_verified_reader_attachment_post_map_receipt> drifted;
+			switch (drifts[index])
+			{
+				case qualified_mapped_terminal_drift::request:
+				{
+					auto request = validated->request();
+					++request.page_number;
+					drifted.emplace(
+						sqlite_same_process_shm_lease_test_peer::
+							reader_attachment_map_with_qualified_request(*validated, std::move(request)));
+					break;
+				}
+				case qualified_mapped_terminal_drift::generation:
+					drifted.emplace(
+						sqlite_same_process_shm_lease_test_peer::
+							reader_attachment_map_with_qualified_generation(
+								*validated, validated->generation() + 1U));
+					break;
+				case qualified_mapped_terminal_drift::mapping:
+				{
+					auto changed = validated->mapping();
+					++changed.sealed_shm_size;
+					drifted.emplace(
+						sqlite_same_process_shm_lease_test_peer::
+							reader_attachment_map_with_qualified_mapping(*validated, changed));
+					break;
+				}
+				case qualified_mapped_terminal_drift::shm_object:
+				case qualified_mapped_terminal_drift::shm_entry:
+				case qualified_mapped_terminal_drift::device:
+				case qualified_mapped_terminal_drift::mount:
+				{
+					auto object = validated->observed_attachment().observed_shm_object_receipt();
+					auto entry = validated->observed_attachment().observed_shm_entry_receipt();
+					auto device = validated->observed_attachment().observed_device_receipt();
+					auto mount = validated->observed_attachment().observed_mount_receipt();
+					const auto replacement = identity("test.registry.mapped-terminal-drift", marker);
+					if (drifts[index] == qualified_mapped_terminal_drift::shm_object)
+						object = replacement;
+					else if (drifts[index] == qualified_mapped_terminal_drift::shm_entry)
+						entry = replacement;
+					else if (drifts[index] == qualified_mapped_terminal_drift::device)
+						device = replacement;
+					else
+						mount = replacement;
+					drifted.emplace(
+						sqlite_same_process_shm_lease_test_peer::
+							reader_attachment_map_with_qualified_observation(
+								*validated,
+								std::move(object),
+								std::move(entry),
+								std::move(device),
+								std::move(mount)));
+					break;
+				}
+				case qualified_mapped_terminal_drift::effect:
+					drifted.emplace(
+						sqlite_same_process_shm_lease_test_peer::
+							reader_attachment_map_with_qualified_effect(
+								*validated,
+								identity("test.registry.mapped-terminal-effect-drift", marker)));
+					break;
+			}
+			auto committed = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, owner.inflight, *drifted, setup.session);
+			auto replay = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, owner.inflight, *validated, setup.session);
+			require(!committed && !replay && !owner.inflight.valid() && !setup.session.valid(),
+				"every qualified mapped terminal field is hidden-control bound and one-shot");
+		}
+	}
+
+	void verify_qualified_mapped_terminal_rejects_foreign_hidden_control()
+	{
+		auto exact = make_reader_candidate_setup(190U);
+		auto foreign = make_reader_candidate_setup(191U);
+		auto exact_owner = prepare_qualified_map_effect_owner(
+			exact, 192U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto foreign_owner = prepare_qualified_map_effect_owner(
+			foreign, 193U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto exact_receipt = validate_qualified_mapped_result(
+			exact, exact_owner, 0, exact.writer_attempt.native_page.get(), 0, 194U);
+		auto foreign_receipt = validate_qualified_mapped_result(
+			foreign, foreign_owner, 0, foreign.writer_attempt.native_page.get(), 0, 195U);
+		require(exact_receipt && foreign_receipt,
+			"seal both exact and foreign mapped controls before substitution");
+		auto substituted =
+			sqlite_same_process_shm_lease_test_peer::reader_attachment_map_with_foreign_qualified_control(
+				*exact_receipt, *foreign_receipt);
+		auto rejected = exact.fixture.registry->commit_reader_map(
+			*exact.fixture.family_pin, exact_owner.inflight, substituted, exact.session);
+		require(!rejected && !exact_owner.inflight.valid() && !exact.session.valid(),
+			"a qualified mapped receipt cannot borrow another registry owner's hidden control");
+	}
+
+	void verify_qualified_mapped_terminal_failure_injections_are_one_shot()
+	{
+		{
+			auto setup = make_reader_candidate_setup(196U);
+			auto owner = prepare_qualified_map_effect_owner(
+				setup, 197U, sqlite_shm_reader_effect_identity_role::mapped_result);
+			auto receipt = validate_qualified_mapped_result(
+				setup, owner, 0, setup.writer_attempt.native_page.get(), 0, 198U);
+			require(receipt.has_value(), "seal mapped receipt before mutex failure injection");
+			sqlite_same_process_shm_lease_test_peer::fail_next_reader_operation_mutex_acquire(
+				*setup.coordinator);
+			auto failed = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, owner.inflight, *receipt, setup.session);
+			auto replay = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, owner.inflight, *receipt, setup.session);
+			require(!failed && !replay,
+				"operation-mutex failure after mapped sealing cannot expose a retryable success");
+		}
+		{
+			auto setup = make_reader_candidate_setup(199U);
+			auto owner = prepare_qualified_map_effect_owner(
+				setup, 200U, sqlite_shm_reader_effect_identity_role::mapped_result);
+			auto receipt = validate_qualified_mapped_result(
+				setup, owner, 0, setup.writer_attempt.native_page.get(), 0, 201U);
+			require(receipt.has_value(), "seal mapped receipt before terminal commit injection");
+			sqlite_same_process_shm_lease_test_peer::fail_next_reader_map_terminal_transition(
+				*setup.coordinator);
+			auto failed = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, owner.inflight, *receipt, setup.session);
+			auto replay = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, owner.inflight, *receipt, setup.session);
+			require(!failed && !replay,
+				"terminal commit failure after mapped sealing is durable and nonreplayable");
+		}
+	}
+
+
 int main()
 {
 	try
 	{
+		verify_qualified_mapped_validator_burns_each_native_observation_drift();
+		verify_qualified_mapped_validation_allocation_failure_is_terminal();
+		verify_qualified_mapped_terminal_drift_matrix_is_fail_closed();
+		verify_qualified_mapped_terminal_rejects_foreign_hidden_control();
+		verify_qualified_mapped_terminal_failure_injections_are_one_shot();
 		verify_qualified_mapped_validator_wrong_role_is_nonmutating();
 		verify_qualified_mapped_validator_invalid_native_row_is_terminal();
 		verify_qualified_mapped_validator_receipt_drop_abandons_owner();
