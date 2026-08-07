@@ -5,15 +5,13 @@ on:
     branches:
       - agent/u2a1c-mapped-result-workbench-181
     paths:
-      - tools/agent/u2a1c_audit.py
-      - tools/agent/u2a1c_deep_audit.py
+      - tools/agent/u2a1c_index.py
       - .github/workflows/u2a1c-workbench.yml
   pull_request:
     branches:
       - issue-181-clang22-materialization-runtime
     paths:
-      - tools/agent/u2a1c_audit.py
-      - tools/agent/u2a1c_deep_audit.py
+      - tools/agent/u2a1c_index.py
       - .github/workflows/u2a1c-workbench.yml
 
 permissions:
@@ -22,9 +20,9 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - name: Checkout exact workbench head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Print focused mapped-result source contexts
-        run: python3 tools/agent/u2a1c_deep_audit.py
+      - name: Print compact U2a1c source index
+        run: python3 tools/agent/u2a1c_index.py
