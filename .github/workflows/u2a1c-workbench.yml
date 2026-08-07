@@ -1,0 +1,22 @@
+name: U2a1c mapped-result workbench
+
+on:
+  push:
+    branches:
+      - agent/u2a1c-mapped-result-workbench-181
+    paths:
+      - tools/agent/u2a1c_audit.py
+      - .github/workflows/u2a1c-workbench.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout exact workbench head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Print bounded mapped-result source contexts
+        run: python3 tools/agent/u2a1c_audit.py
