@@ -70,7 +70,8 @@ if [[ "${pr189_state}" == open && "${pr189_merged}" != true ]]; then
   api "repos/${GITHUB_REPOSITORY}/pulls/189/files?per_page=100" > controller-work/pr-189-files.json
   api "repos/${GITHUB_REPOSITORY}/issues/173" > controller-work/tracker-173.json
   api "repos/${GITHUB_REPOSITORY}/issues/181" > controller-work/tracker-181.json
-  gh pr diff 189 --repo "${GITHUB_REPOSITORY}" | head -c 650000 > controller-work/pr-189.diff
+  gh pr diff 189 --repo "${GITHUB_REPOSITORY}" > controller-work/pr-189.full.diff
+  head -c 650000 controller-work/pr-189.full.diff > controller-work/pr-189.diff
   cat > controller-work/audit_pr.py <<'PY'
 import json, os, pathlib, re, time, urllib.request
 endpoint='https://models.github.ai/inference/chat/completions'
