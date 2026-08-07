@@ -26,8 +26,10 @@ namespace cxxlens::sdk
 		struct sqlite_shm_reader_late_close_outer_unwind_control;
 		struct sqlite_shm_reader_map_identity_owner_control;
 		struct sqlite_shm_reader_zero_effect_receipt_control;
+		struct sqlite_shm_reader_mapped_effect_receipt_control;
 		class sqlite_shm_reader_lifecycle_owner_abandonment_control;
 		class sqlite_shm_reader_identity_completion_control;
+		class sqlite_shm_reader_mapped_post_native_observation_minter;
 
 		struct sqlite_shm_lease_token_identity
 		{
@@ -84,6 +86,8 @@ namespace cxxlens::sdk
 	class sqlite_shm_issued_reader_callback_identity;
 	class sqlite_shm_issued_reader_effect_identity;
 	class sqlite_shm_reader_zero_effect_identity_validation_capability;
+	class sqlite_shm_reader_mapped_effect_identity_validation_capability;
+	class sqlite_shm_reader_mapped_post_native_observation;
 	template <typename Value>
 	class sqlite_shm_lease_result;
 
@@ -295,6 +299,7 @@ namespace cxxlens::sdk
 		operator==(const sqlite_shm_reader_native_attachment_identity&) const = default;
 
 	  private:
+		friend class sqlite_shm_reader_mapped_post_native_observation;
 		friend class sqlite_same_process_shm_reader_receipt_validator;
 		friend class sqlite_same_process_shm_lease_test_peer;
 
@@ -483,6 +488,7 @@ namespace cxxlens::sdk
 	class sqlite_shm_reader_close_obligation;
 	class sqlite_shm_reader_live_close_obligation;
 	class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
+	class sqlite_shm_verified_reader_attachment_post_map_receipt;
 	class sqlite_shm_verified_reader_predecessor_map_receipt;
 	class sqlite_shm_verified_reader_predecessor_unmap_terminal_receipt;
 	class sqlite_shm_verified_reader_unpublished_cleanup_terminal_receipt;
@@ -603,6 +609,32 @@ namespace cxxlens::sdk
 	 * in-flight owner, scope, callback, and issued effect presenters live until the existing terminal
 	 * consumer commits them.
 	 */
+	/**
+	 * Closed validator for one exact qualified reader-map mapped native result.
+	 *
+	 * The request, generation, mapping tuple, and expected attachment are derived from the
+	 * already-bound owner. The caller supplies only the closed native result and independently
+	 * observed SHM object/entry/device/mount receipts. There is no raw request, mapping tuple,
+	 * generation, or opaque-effect overload. Successful validation preserves the in-flight owner,
+	 * scope, callback, and issued effect presenter until the terminal coordinator consumes the
+	 * attached one-shot provenance.
+	 */
+	class sqlite_same_process_shm_reader_receipt_validator final
+	{
+	  public:
+		sqlite_same_process_shm_reader_receipt_validator() = delete;
+
+		[[nodiscard]] static
+		sqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_post_map_receipt>
+		validate(sqlite_same_process_shm_mapping_registry& registry,
+			 sqlite_shm_registry_family_pin& family,
+			 const sqlite_shm_reader_attachment_map_inflight& inflight,
+			 const sqlite_shm_reader_lifecycle_identity_scope& scope,
+			 const sqlite_shm_issued_reader_callback_identity& callback,
+			 const sqlite_shm_issued_reader_effect_identity& effect,
+			 sqlite_shm_reader_mapped_post_native_observation observation) noexcept;
+	};
+
 	class sqlite_same_process_shm_reader_zero_effect_receipt_validator final
 	{
 	  public:
@@ -1448,6 +1480,53 @@ namespace cxxlens::sdk
 	 * lifetime across families and mapped/zero kinds. Coordinator-local replay census is
 	 * defense-in-depth, not an issuer replacement.
 	 */
+	/**
+	 * Move-only, non-projectable post-native observation for one exact reader map attempt.
+	 *
+	 * Production has no general constructor or aggregate overload. A future source-private backend
+	 * minter may form this capability only after the exact native callback and direct SHM
+	 * object/entry/device/mount observation complete. The test peer is privileged solely to exercise
+	 * this production-inert boundary. The terminal validator consumes the capability by value.
+	 */
+	class sqlite_shm_reader_mapped_post_native_observation final
+	{
+	  public:
+		sqlite_shm_reader_mapped_post_native_observation(
+			sqlite_shm_reader_mapped_post_native_observation&&) noexcept = default;
+		sqlite_shm_reader_mapped_post_native_observation& operator=(
+			sqlite_shm_reader_mapped_post_native_observation&&) = delete;
+		sqlite_shm_reader_mapped_post_native_observation(
+			const sqlite_shm_reader_mapped_post_native_observation&) = delete;
+		sqlite_shm_reader_mapped_post_native_observation& operator=(
+			const sqlite_shm_reader_mapped_post_native_observation&) = delete;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
+		friend class detail::sqlite_shm_reader_mapped_post_native_observation_minter;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_reader_mapped_post_native_observation(
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_attachment_map_request request,
+			int native_status,
+			const volatile void* native_mapping,
+			int delegated_extend,
+			sqlite_backend_opaque_identity observed_shm_object_receipt,
+			sqlite_backend_opaque_identity observed_shm_entry_receipt,
+			sqlite_backend_opaque_identity observed_device_receipt,
+			sqlite_backend_opaque_identity observed_mount_receipt);
+
+		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		std::uint64_t generation_{};
+		sqlite_shm_reader_attachment_map_request request_;
+		int native_status_{};
+		const volatile void* native_mapping_{};
+		int delegated_extend_{};
+		sqlite_shm_reader_native_attachment_identity observed_attachment_;
+	};
+
 	class sqlite_shm_verified_reader_attachment_post_map_receipt
 	{
 	  public:
@@ -1460,6 +1539,8 @@ namespace cxxlens::sdk
 		zero_resize_effect_receipt() const noexcept;
 
 	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_reader_receipt_validator;
 		friend class sqlite_same_process_shm_lease_test_peer;
 
@@ -1468,13 +1549,17 @@ namespace cxxlens::sdk
 			std::uint64_t generation,
 			sqlite_shm_mapping_tuple mapping,
 			sqlite_shm_reader_native_attachment_identity observed_attachment,
-			sqlite_backend_opaque_identity zero_resize_effect_receipt);
+			sqlite_backend_opaque_identity zero_resize_effect_receipt,
+			std::shared_ptr<detail::sqlite_shm_reader_mapped_effect_receipt_control>
+				qualified_control = {});
 
 		sqlite_shm_reader_attachment_map_request request_;
 		std::uint64_t generation_{};
 		sqlite_shm_mapping_tuple mapping_;
 		sqlite_shm_reader_native_attachment_identity observed_attachment_;
 		sqlite_backend_opaque_identity zero_resize_effect_receipt_;
+		std::shared_ptr<detail::sqlite_shm_reader_mapped_effect_receipt_control>
+			qualified_control_;
 	};
 
 	enum class sqlite_shm_lease_rejection_reason : std::uint8_t
@@ -2276,6 +2361,7 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
 		friend class detail::sqlite_shm_mapping_registry_state;
+		friend class sqlite_shm_reader_mapped_post_native_observation;
 		friend class sqlite_shm_verified_reader_attachment_zero_effect_receipt;
 		friend class sqlite_shm_verified_reader_predecessor_map_receipt;
 		friend class sqlite_shm_verified_reader_unpublished_cleanup_receipt;
@@ -3124,6 +3210,14 @@ namespace cxxlens::sdk
 			int native_status,
 			const volatile void* native_mapping,
 			int delegated_extend) noexcept;
+		[[nodiscard]]
+		sqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_post_map_receipt>
+		validate_registry_reader_mapped_attachment_effect(
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			sqlite_shm_reader_mapped_effect_identity_validation_capability capability,
+			sqlite_shm_reader_mapped_post_native_observation observation) noexcept;
+
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_late_close_outer_unwind_authority>
 		mint_registry_reader_late_close_outer_unwind_authority(
 			sqlite_shm_registry_family_pin& family,

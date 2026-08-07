@@ -286,6 +286,37 @@ namespace cxxlens::sdk
 		std::weak_ptr<detail::sqlite_shm_reader_lifecycle_owner_abandonment_control> owner_;
 	};
 
+	class sqlite_shm_reader_mapped_effect_identity_validation_capability final
+	{
+	  public:
+		sqlite_shm_reader_mapped_effect_identity_validation_capability(
+			sqlite_shm_reader_mapped_effect_identity_validation_capability&&) noexcept = default;
+		sqlite_shm_reader_mapped_effect_identity_validation_capability& operator=(
+			sqlite_shm_reader_mapped_effect_identity_validation_capability&&) = delete;
+		sqlite_shm_reader_mapped_effect_identity_validation_capability(
+			const sqlite_shm_reader_mapped_effect_identity_validation_capability&) = delete;
+		sqlite_shm_reader_mapped_effect_identity_validation_capability& operator=(
+			const sqlite_shm_reader_mapped_effect_identity_validation_capability&) = delete;
+
+	  private:
+		friend class detail::sqlite_shm_process_identity_issuer_state;
+		friend class detail::sqlite_shm_mapping_lease_state;
+
+		sqlite_shm_reader_mapped_effect_identity_validation_capability(
+			std::shared_ptr<detail::sqlite_shm_process_identity_record_control> effect,
+			std::weak_ptr<detail::sqlite_shm_reader_lifecycle_owner_abandonment_control>
+				owner) noexcept;
+		[[nodiscard]] bool matches_live_owner(
+			const std::shared_ptr<detail::sqlite_shm_reader_lifecycle_owner_abandonment_control>&
+				owner) const noexcept;
+		[[nodiscard]] bool
+		matches_effect_identity(const sqlite_backend_opaque_identity& identity) const noexcept;
+		[[nodiscard]] sqlite_backend_opaque_identity copy_effect_identity() const;
+
+		std::shared_ptr<detail::sqlite_shm_process_identity_record_control> effect_;
+		std::weak_ptr<detail::sqlite_shm_reader_lifecycle_owner_abandonment_control> owner_;
+	};
+
 	/** Move-only issuer proof for one exact closed reader-session terminal role. */
 	class sqlite_shm_issued_reader_session_terminal_identity
 	{

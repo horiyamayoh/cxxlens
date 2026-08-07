@@ -46,6 +46,7 @@ namespace cxxlens::sdk
 	class sqlite_shm_reader_lifecycle_identity_scope;
 	class sqlite_shm_issued_reader_callback_identity;
 	class sqlite_shm_issued_reader_effect_identity;
+	class sqlite_same_process_shm_reader_receipt_validator;
 	class sqlite_same_process_shm_reader_zero_effect_receipt_validator;
 	enum class sqlite_shm_reader_lifecycle_owner_kind : std::uint8_t;
 	class sqlite_shm_registry_activity_pin;
@@ -1084,6 +1085,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_same_process_shm_registry_test_peer;
+		friend class sqlite_same_process_shm_reader_receipt_validator;
 		friend class sqlite_same_process_shm_reader_zero_effect_receipt_validator;
 
 		sqlite_same_process_shm_mapping_registry(
@@ -1099,6 +1101,16 @@ namespace cxxlens::sdk
 			int native_status,
 			const volatile void* native_mapping,
 			int delegated_extend) noexcept;
+		[[nodiscard]]
+		sqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_post_map_receipt>
+		validate_reader_mapped_attachment_effect(
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_reader_lifecycle_identity_scope& scope,
+			const sqlite_shm_issued_reader_callback_identity& callback,
+			const sqlite_shm_issued_reader_effect_identity& effect,
+			sqlite_shm_reader_mapped_post_native_observation observation) noexcept;
+
 		[[nodiscard]] static sqlite_shm_lease_result<
 			std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
 		create_with_generation_for_testing(sqlite_shm_registry_process_owner owner,

@@ -1051,6 +1051,35 @@ namespace cxxlens::sdk
 					effect.control_, actual};
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<
+				sqlite_shm_reader_mapped_effect_identity_validation_capability>
+			validate_mapped_effect_identity_for_registry(
+				const sqlite_shm_reader_lifecycle_identity_scope& scope,
+				const sqlite_shm_issued_reader_callback_identity& callback,
+				const sqlite_shm_issued_reader_effect_identity& effect,
+				const std::weak_ptr<sqlite_shm_reader_lifecycle_owner_abandonment_control>&
+					expected_owner) const noexcept
+			{
+				if (!current_before_owner_lock())
+					return reject(sqlite_shm_lease_rejection_reason::stale_token);
+				const auto expected = expected_owner.lock();
+				const auto actual = scope.control_ ? scope.control_->owner_abandonment.lock() : nullptr;
+				if (!expected || !actual || actual.get() != expected.get())
+					return reject(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+				const auto callback_validated = validate_callback(
+					scope, callback, sqlite_shm_reader_callback_identity_role::map);
+				if (!callback_validated)
+					return callback_validated.error();
+				const auto effect_validated = validate_effect(scope,
+					callback,
+					effect,
+					sqlite_shm_reader_effect_identity_role::mapped_result);
+				if (!effect_validated)
+					return effect_validated.error();
+				return sqlite_shm_reader_mapped_effect_identity_validation_capability{
+					effect.control_, actual};
+			}
+
 			[[nodiscard]] bool zero_effect_capability_is_current(
 				const std::shared_ptr<sqlite_shm_process_identity_record_control>& effect,
 				const std::shared_ptr<sqlite_shm_reader_lifecycle_owner_abandonment_control>&
@@ -1064,6 +1093,37 @@ namespace cxxlens::sdk
 						sqlite_shm_reader_lifecycle_identity_domain::native_or_zero_effect ||
 					effect->role != static_cast<std::uint8_t>(
 						sqlite_shm_reader_effect_identity_role::zero_attachment_result) ||
+					effect->phase.load(std::memory_order_acquire) !=
+						sqlite_shm_process_identity_record_phase::sealed ||
+					!effect->scope->enforce_owner_phase || !effect->scope->owner_phase ||
+					effect->scope->owner_phase->load(std::memory_order_acquire) !=
+						sqlite_shm_reader_lifecycle_owner_phase::owned)
+					return false;
+				const auto actual_owner = effect->scope->owner_abandonment.lock();
+				const auto parent = effect->parent_callback.lock();
+				return actual_owner && actual_owner.get() == expected_owner.get() && parent &&
+					parent->issuer.lock().get() == this && parent->scope.get() == effect->scope.get() &&
+					parent->domain ==
+						sqlite_shm_reader_lifecycle_identity_domain::callback_invocation &&
+					parent->role == static_cast<std::uint8_t>(
+						sqlite_shm_reader_callback_identity_role::map) &&
+					parent->phase.load(std::memory_order_acquire) ==
+						sqlite_shm_process_identity_record_phase::sealed;
+			}
+
+			[[nodiscard]] bool mapped_effect_capability_is_current(
+				const std::shared_ptr<sqlite_shm_process_identity_record_control>& effect,
+				const std::shared_ptr<sqlite_shm_reader_lifecycle_owner_abandonment_control>&
+					expected_owner) const noexcept
+			{
+				if (!effect || !expected_owner || !scope_matches_control(effect->scope) ||
+					effect->issuer.lock().get() != this ||
+					effect->process_epoch.get() != process_epoch_.get() ||
+					effect->expected_process_epoch != expected_process_epoch_ ||
+					effect->domain !=
+						sqlite_shm_reader_lifecycle_identity_domain::native_or_zero_effect ||
+					effect->role != static_cast<std::uint8_t>(
+						sqlite_shm_reader_effect_identity_role::mapped_result) ||
 					effect->phase.load(std::memory_order_acquire) !=
 						sqlite_shm_process_identity_record_phase::sealed ||
 					!effect->scope->enforce_owner_phase || !effect->scope->owner_phase ||
@@ -1453,6 +1513,8 @@ namespace cxxlens::sdk
 			friend class ::cxxlens::sdk::sqlite_shm_issued_reader_session_terminal_identity;
 			friend class ::cxxlens::sdk::
 				sqlite_shm_reader_zero_effect_identity_validation_capability;
+			friend class ::cxxlens::sdk::
+				sqlite_shm_reader_mapped_effect_identity_validation_capability;
 
 			std::weak_ptr<void> registry_state_;
 			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch_;
@@ -1599,6 +1661,23 @@ namespace cxxlens::sdk
 					  scope, callback, effect, expected_owner)
 				: sqlite_shm_lease_result<
 					  sqlite_shm_reader_zero_effect_identity_validation_capability>{
+					  reject(sqlite_shm_lease_rejection_reason::stale_token)};
+		}
+
+		sqlite_shm_lease_result<sqlite_shm_reader_mapped_effect_identity_validation_capability>
+		validate_mapped_effect_identity_for_registry(
+			const std::shared_ptr<sqlite_shm_process_identity_issuer_state>& state,
+			const sqlite_shm_reader_lifecycle_identity_scope& scope,
+			const sqlite_shm_issued_reader_callback_identity& callback,
+			const sqlite_shm_issued_reader_effect_identity& effect,
+			const std::weak_ptr<sqlite_shm_reader_lifecycle_owner_abandonment_control>&
+				expected_owner) noexcept
+		{
+			return state
+				? state->validate_mapped_effect_identity_for_registry(
+					  scope, callback, effect, expected_owner)
+				: sqlite_shm_lease_result<
+					  sqlite_shm_reader_mapped_effect_identity_validation_capability>{
 					  reject(sqlite_shm_lease_rejection_reason::stale_token)};
 		}
 
@@ -1761,6 +1840,41 @@ namespace cxxlens::sdk
 
 	sqlite_backend_opaque_identity
 	sqlite_shm_reader_zero_effect_identity_validation_capability::copy_effect_identity() const
+	{
+		return effect_ ? effect_->projection : sqlite_backend_opaque_identity{};
+	}
+
+	sqlite_shm_reader_mapped_effect_identity_validation_capability::
+		sqlite_shm_reader_mapped_effect_identity_validation_capability(
+			std::shared_ptr<detail::sqlite_shm_process_identity_record_control> effect,
+			std::weak_ptr<detail::sqlite_shm_reader_lifecycle_owner_abandonment_control>
+				owner) noexcept
+		: effect_{std::move(effect)}, owner_{std::move(owner)}
+	{
+	}
+
+	bool sqlite_shm_reader_mapped_effect_identity_validation_capability::matches_live_owner(
+		const std::shared_ptr<detail::sqlite_shm_reader_lifecycle_owner_abandonment_control>&
+			owner) const noexcept
+	{
+		if (!effect_ || !effect_->process_epoch ||
+			effect_->process_epoch->load(std::memory_order_acquire) !=
+				effect_->expected_process_epoch)
+			return false;
+		const auto expected = owner_.lock();
+		const auto issuer = effect_->issuer.lock();
+		return expected && owner && expected.get() == owner.get() && issuer &&
+			issuer->mapped_effect_capability_is_current(effect_, owner);
+	}
+
+	bool sqlite_shm_reader_mapped_effect_identity_validation_capability::matches_effect_identity(
+		const sqlite_backend_opaque_identity& identity) const noexcept
+	{
+		return effect_ && effect_->projection == identity;
+	}
+
+	sqlite_backend_opaque_identity
+	sqlite_shm_reader_mapped_effect_identity_validation_capability::copy_effect_identity() const
 	{
 		return effect_ ? effect_->projection : sqlite_backend_opaque_identity{};
 	}
