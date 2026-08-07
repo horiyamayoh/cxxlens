@@ -1,0 +1,35 @@
+name: Final production qualification v2
+
+on:
+  push:
+    branches:
+      - agent/final-production-qualification-controller-v2
+
+concurrency:
+  group: cxxlens-final-production-qualification
+  cancel-in-progress: true
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  issues: write
+  models: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  qualify-and-complete:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout corrected one-shot controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/final-production-qualification-controller-v2
+          fetch-depth: 1
+
+      - name: Execute fail-closed exact-main production completion
+        shell: bash
+        run: bash tools/agent/final_production_qualification_controller.sh
