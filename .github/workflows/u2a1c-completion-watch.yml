@@ -1,0 +1,86 @@
+name: U2a1c completion watch
+
+on:
+  workflow_run:
+    workflows:
+      - U2a1c source apply and focused qualification
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  persist-result:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Persist bounded result and create subordinate PR only on success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          OUTPUT_BRANCH: agent/u2a1c-mapped-result-181-v1
+          BASE_BRANCH: issue-181-clang22-materialization-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          jobs_json="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100")"
+          summary="$(python3 -c 'import json,sys; data=json.load(sys.stdin); print("; ".join(f"{j[\"name\"]}={j.get(\"conclusion\") or j.get(\"status\")}" for j in data.get("jobs", [])))' <<<"${jobs_json}")"
+
+          pr_note=""
+          if [[ "${CONCLUSION}" == "success" ]]; then
+            pulls_json="$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${API_URL}/repos/${REPOSITORY}/pulls?state=open&head=horiyamayoh:${OUTPUT_BRANCH}&base=${BASE_BRANCH}")"
+            count="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' <<<"${pulls_json}")"
+            if [[ "${count}" == "0" ]]; then
+              payload="$(python3 - <<'PY'
+          import json
+          print(json.dumps({
+              "title": "Implement owner-qualified reader mapped-result validation",
+              "head": "agent/u2a1c-mapped-result-181-v1",
+              "base": "issue-181-clang22-materialization-runtime",
+              "draft": True,
+              "maintainer_can_modify": True,
+              "body": "Implements the bounded U2a1c sub-unit of #181 from exact parent `7dd0adb0e1c5545dd804908bc8083e88f85b95bd`.\n\nAdds production-inert exact mapped-result issuer/owner validation, complete private mapping and SHM observation provenance, one-shot terminal consumption, and focused regression coverage. No forwarding VFS, Store, public API/catalog/status, native callback execution, or outward native-`SQLITE_OK` projection is changed or authorized.\n\nThe branch was published only after the exact-base guard, pinned Clang 22 build, repeated focused lifecycle tests, and diff checks succeeded."
+          }))
+          PY
+          )"
+              created="$(curl --fail-with-body --silent --show-error \
+                -X POST \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "${API_URL}/repos/${REPOSITORY}/pulls" \
+                -d "${payload}")"
+              pr_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["html_url"])' <<<"${created}")"
+              pr_note="\n\nSubordinate PR created: ${pr_url}"
+            else
+              pr_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["html_url"])' <<<"${pulls_json}")"
+              pr_note="\n\nSubordinate PR already present: ${pr_url}"
+            fi
+          fi
+
+          body="## U2a1c bounded gate completed\n\n- conclusion: \`${CONCLUSION}\`\n- workbench head: \`${RUN_HEAD_SHA}\`\n- run: ${RUN_URL}\n- jobs: ${summary}${pr_note}"
+          comment_payload="$(python3 -c 'import json,sys; print(json.dumps({"body": sys.stdin.read()}))' <<<"${body}")"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${REPOSITORY}/issues/181/comments" \
+            -d "${comment_payload}"
