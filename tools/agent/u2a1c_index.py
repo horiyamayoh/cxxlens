@@ -2,61 +2,28 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TARGETS = {
-    "src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp": [
-        "sqlite_shm_reader_zero_effect_identity_validation_capability",
-        "class sqlite_shm_process_global_identity_issuer",
-    ],
-    "src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp": [
-        "validate_zero_effect_identity_for_registry(",
-        "zero_effect_capability_is_current(",
-        "sqlite_shm_reader_zero_effect_identity_validation_capability::",
-    ],
-    "src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp": [
-        "struct sqlite_shm_reader_map_identity_owner_control",
-        "class sqlite_shm_verified_reader_attachment_post_map_receipt",
-        "class sqlite_same_process_shm_reader_receipt_validator",
-        "class sqlite_same_process_shm_reader_zero_effect_receipt_validator",
-        "class sqlite_shm_reader_attachment_map_inflight",
-        "commit_reader_map(",
-    ],
-    "src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp": [
-        "struct sqlite_shm_reader_map_identity_owner_control",
-        "~sqlite_shm_reader_zero_effect_receipt_control",
-        "sqlite_shm_reader_map_identity_owner_control::begin_terminalization",
-        "sqlite_shm_reader_map_identity_owner_control::begin_terminal_completion",
-        "sqlite_shm_reader_map_identity_owner_control::abandon",
-        "zero_effect_validation_phase",
-        "sqlite_shm_verified_reader_attachment_post_map_receipt::",
-        "reader_zero_attachment_fingerprint(",
-        "valid_reader_attachment_receipt(",
-        "validate_reader_zero_attachment_effect(",
-        "complete_reader_zero_attachment(",
-        "commit_registry_reader_map(",
-        "commit_reader(",
-        "commit_reader_map(",
-    ],
-    "src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp": [
-        "sqlite_same_process_shm_reader_zero_effect_receipt_validator",
-        "validate_reader_zero_attachment_effect(",
-        "commit_reader_map(",
-    ],
-    "src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp": [
-        "validate_reader_zero_attachment_effect(",
-        "commit_reader_map(",
-    ],
-    "tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp": [
-        "finish_qualified_zero_fixture",
-        "verify_qualified_zero",
-        "zero_attachment",
-        "commit_reader_map(",
-        "int main(",
-    ],
-}
-
-for rel, needles in TARGETS.items():
-    lines = (ROOT / rel).read_text(encoding="utf-8").splitlines()
-    print(f"[{rel}] lines={len(lines)}")
-    for needle in needles:
-        hits = [str(i + 1) for i, line in enumerate(lines) if needle in line]
-        print(f"  {needle}: {','.join(hits) if hits else '-'}")
+TERMS = (
+    "mapped_result",
+    "SQLITE_READONLY",
+    "SQLITE_OK/non-null",
+    "sqlite_readonly_status",
+    "readonly_cantinit",
+    "exact_predecessor_mapped_route",
+)
+ALLOWED = {".cpp", ".hpp", ".md", ".yaml", ".yml", ".json"}
+for path in sorted(ROOT.rglob("*")):
+    if not path.is_file() or path.suffix not in ALLOWED or ".git" in path.parts:
+        continue
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:
+        continue
+    hits = []
+    for index, line in enumerate(lines, start=1):
+        if any(term in line for term in TERMS):
+            hits.append((index, line.strip()))
+    if not hits:
+        continue
+    print(f"[{path.relative_to(ROOT)}]")
+    for index, line in hits[:40]:
+        print(f"  {index}: {line}")
