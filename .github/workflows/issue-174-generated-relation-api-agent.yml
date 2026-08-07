@@ -1,0 +1,59 @@
+name: Issue 174 generated relation API serial agent
+
+on:
+  push:
+    branches:
+      - agent/issue-174-controller
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  models: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  CMAKE_GENERATOR: Ninja
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+  CTEST_PARALLEL_LEVEL: 1
+
+jobs:
+  implement:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout one-shot agent tooling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/release-completion-agent-tools
+          path: agent-tools
+          fetch-depth: 1
+
+      - name: Clone product repository with exact write identity
+        shell: bash
+        run: git clone --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+
+      - name: Install exact developer toolchain
+        working-directory: repo
+        shell: bash
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+
+      - name: Implement, review, qualify, integrate, and close issue 174
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 agent-tools/tools/agent/release_completion_issue_agent.py \
+            --issue 174 \
+            --predecessor-issue 185 \
+            --base-branch issue-181-clang22-materialization-runtime \
+            --unit-branch agent/issue-174-generated-relation-api \
+            --scope public \
+            --repeat-count 3 \
+            --repo-dir repo \
+            --work-dir issue-174-work
+
+      - name: Delete one-shot controller branch
+        if: success()
+        working-directory: repo
+        shell: bash
+        run: git push origin --delete agent/issue-174-controller || true
