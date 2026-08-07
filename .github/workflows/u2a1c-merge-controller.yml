@@ -1,156 +1,345 @@
-name: U2a1c guarded integration controller
+name: U2a1c deterministic finalization and integration
 
 on:
   push:
     branches:
       - agent/u2a1c-merge-controller-181
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
   issues: write
 
+concurrency:
+  group: u2a1c-deterministic-integration
+  cancel-in-progress: true
+
 env:
+  GH_TOKEN: ${{ github.token }}
   CMAKE_GENERATOR: Ninja
   CMAKE_BUILD_PARALLEL_LEVEL: 4
   CTEST_PARALLEL_LEVEL: 1
-  GH_TOKEN: ${{ github.token }}
+  BASE_BRANCH: issue-181-clang22-materialization-runtime
+  HEAD_BRANCH: agent/u2a1c-qualified-mapped-result-181
+  WORKBENCH_BRANCH: agent/u2a1c-mapped-result-workbench-181
 
 jobs:
-  integrate:
+  finalize-test-and-merge:
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 90
     steps:
-      - name: Wait for the fail-closed finalizer to publish an exact source head
+      - name: Checkout controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Checkout exact target branches
         shell: bash
         run: |
           set -euo pipefail
-          repo="${GITHUB_REPOSITORY}"
-          head_branch=agent/u2a1c-qualified-mapped-result-181
-          base_branch=issue-181-clang22-materialization-runtime
-          rm -rf unit
-          git clone --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${repo}.git" unit
+          git clone --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" unit
           cd unit
-          git fetch --no-tags origin "${head_branch}" "${base_branch}"
+          git fetch --no-tags origin "${BASE_BRANCH}" "${HEAD_BRANCH}" "${WORKBENCH_BRANCH}"
+          git checkout -B final-source "origin/${HEAD_BRANCH}"
+          git rev-parse HEAD | tee ../observed-head.txt
 
-          ready=0
-          for attempt in $(seq 1 60); do
-            git fetch --no-tags origin "${head_branch}" "${base_branch}"
-            git checkout -B guarded-head "origin/${head_branch}"
-            head_sha=$(git rev-parse HEAD)
-
-            if [[ -e .github/workflows/u2a1c-finalize.yml ]]; then
-              echo "attempt ${attempt}: finalizer still present at ${head_sha}"
-              sleep 30
-              continue
-            fi
-
-            mapfile -t paths < <(git diff --name-only "origin/${base_branch}"...HEAD)
-            if (( ${#paths[@]} != 7 )); then
-              echo "attempt ${attempt}: expected 7 paths, found ${#paths[@]} at ${head_sha}"
-              printf '  %s\n' "${paths[@]:-}"
-              sleep 30
-              continue
-            fi
-
-            invalid=0
-            for path in "${paths[@]}"; do
-              case "${path}" in
-                src/sdk/sqlite_same_process_shm_*|tests/unit/sdk/sqlite_same_process_shm_*) ;;
-                *) echo "unexpected path: ${path}"; invalid=1 ;;
-              esac
-            done
-            if (( invalid != 0 )); then
-              sleep 30
-              continue
-            fi
-
-            for temporary in \
-              .github/workflows/u2a1c-clang22-export.yml \
-              .github/workflows/u2a1c-qualified-mapped-result-v2.yml \
-              .github/workflows/u2a1c-qualified-mapped-result.yml \
-              .github/workflows/u2a1c-source-export.yml \
-              tools/agent/u2a1c_fix_mapped_control_destructor_v2.py \
-              tools/agent/u2a1c_fix_mapped_control_destructor_v3.py \
-              tools/agent/u2a1c_transform_common.py \
-              tools/agent/u2a1c_transform_issuer.py \
-              tools/agent/u2a1c_transform_lease_header.py \
-              tools/agent/u2a1c_transform_lease_state.py \
-              tools/agent/u2a1c_transform_lease_support.py \
-              tools/agent/u2a1c_transform_registry.py \
-              tools/agent/u2a1c_transform_test.py
-            do
-              if [[ -e "${temporary}" ]]; then
-                echo "temporary file remains: ${temporary}"
-                invalid=1
-              fi
-            done
-            if (( invalid != 0 )); then
-              sleep 30
-              continue
-            fi
-
-            printf '%s\n' "${head_sha}" > ../qualified-head.txt
-            printf '%s\n' "${paths[@]}" > ../qualified-paths.txt
-            ready=1
-            break
-          done
-
-          if (( ready != 1 )); then
-            echo 'Finalizer did not produce an admissible source head within 30 minutes.' >&2
+      - name: Materialize the audited seven-file source
+        working-directory: unit
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="origin/${BASE_BRANCH}"
+          workbench="origin/${WORKBENCH_BRANCH}"
+          mapfile -t paths < <(
+            git diff --name-only "${base}" "${workbench}" -- \
+              'src/sdk/sqlite_same_process_shm_*' \
+              'tests/unit/sdk/sqlite_same_process_shm_*'
+          )
+          if (( ${#paths[@]} != 7 )); then
+            printf 'Expected exactly seven audited source paths; found %d:\n' "${#paths[@]}" >&2
+            printf '  %s\n' "${paths[@]:-}" >&2
             exit 1
           fi
+          printf '%s\n' "${paths[@]}" | tee ../production-paths.txt
+          git checkout "${workbench}" -- "${paths[@]}"
 
-      - name: Install exact developer toolchain
+          # The provenance transformer must inspect the complete class, not its forward declaration.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp')
+          text = path.read_text(encoding='utf-8')
+          needle = '\tclass sqlite_shm_reader_attachment_map_inflight;'
+          if text.count(needle) != 1:
+              raise SystemExit(f'expected one inflight declaration, found {text.count(needle)}')
+          path.write_text(text.replace(needle, '\tclass  sqlite_shm_reader_attachment_map_inflight;', 1), encoding='utf-8')
+          PY
+          timeout --signal=TERM --kill-after=10s 300s \
+            python3 tools/agent/u2a1c_close_observation_provenance.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp')
+          text = path.read_text(encoding='utf-8')
+          needle = '\tclass  sqlite_shm_reader_attachment_map_inflight;'
+          if text.count(needle) != 1:
+              raise SystemExit(f'expected one guarded inflight declaration, found {text.count(needle)}')
+          path.write_text(text.replace(needle, '\tclass sqlite_shm_reader_attachment_map_inflight;', 1), encoding='utf-8')
+          PY
+
+          for script in \
+            tools/agent/u2a1c_fix_mapped_control_destructor_v2.py \
+            tools/agent/u2a1c_fix_mapped_control_destructor_v3.py
+          do
+            [[ ! -f "${script}" ]] || timeout --signal=TERM --kill-after=10s 120s python3 "${script}"
+          done
+
+          # Close the two exact source-export regressions exposed by the Clang 22 build.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          lease = Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp')
+          text = lease.read_text(encoding='utf-8')
+          old = '''\tsqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_post_map_receipt>
+\tsqlite_same_process_shm_mapping_lease_coordinator::
+\t\tvalidate_registry_reader_mapped_attachment_effect(
+\t\t\tconst sqlite_shm_registry_family_pin& family,
+\t\t\tconst sqlite_shm_reader_attachment_map_inflight& inflight,
+\t\t\tsqlite_shm_reader_mapped_effect_identity_validation_capability capability,
+\t\t\tconst int native_status,
+\t\t\tconst volatile void* native_mapping,
+\t\t\tconst int delegated_extend,
+\t\t\tsqlite_backend_opaque_identity observed_shm_object_receipt,
+\t\t\tsqlite_backend_opaque_identity observed_shm_entry_receipt,
+\t\t\tsqlite_backend_opaque_identity observed_device_receipt,
+\t\t\tsqlite_backend_opaque_identity observed_mount_receipt) noexcept
+\t{
+\t\treturn state_->validate_reader_mapped_attachment_effect(family,
+\t\t\tinflight,
+\t\t\tstd::move(capability),
+\t\t\tnative_status,
+\t\t\tnative_mapping,
+\t\t\tdelegated_extend,
+\t\t\tstd::move(observed_shm_object_receipt),
+\t\t\tstd::move(observed_shm_entry_receipt),
+\t\t\tstd::move(observed_device_receipt),
+\t\t\tstd::move(observed_mount_receipt));
+\t}
+'''
+          new = '''\tsqlite_shm_lease_result<sqlite_shm_verified_reader_attachment_post_map_receipt>
+\tsqlite_same_process_shm_mapping_lease_coordinator::
+\t\tvalidate_registry_reader_mapped_attachment_effect(
+\t\t\tconst sqlite_shm_registry_family_pin& family,
+\t\t\tconst sqlite_shm_reader_attachment_map_inflight& inflight,
+\t\t\tsqlite_shm_reader_mapped_effect_identity_validation_capability capability,
+\t\t\tsqlite_shm_reader_mapped_post_native_observation observation) noexcept
+\t{
+\t\treturn state_->validate_reader_mapped_attachment_effect(
+\t\t\tfamily, inflight, std::move(capability), std::move(observation));
+\t}
+'''
+          if new not in text:
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected one legacy mapped wrapper, found {text.count(old)}')
+              text = text.replace(old, new, 1)
+          lease.write_text(text, encoding='utf-8')
+
+          test = Path('tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp')
+          text = test.read_text(encoding='utf-8')
+          old = '''\t\t\t\tauto receipt = sqlite_same_process_shm_reader_receipt_validator::validate(
+\t\t\t\t\t*setup.fixture.registry,
+\t\t\t\t\t*setup.fixture.family_pin,
+\t\t\t\t\t*bound,
+\t\t\t\t\towner.scope,
+\t\t\t\t\towner.callback_identity,
+\t\t\t\t\t*effect,
+\t\t\t\t\t0,
+\t\t\t\t\tsetup.writer_attempt.native_page.get(),
+\t\t\t\t\t0,
+\t\t\t\t\tidentity("test.registry.qualified-mapped-shm-object", 78U),
+\t\t\t\t\tidentity("test.registry.qualified-mapped-shm-entry", 78U),
+\t\t\t\t\tidentity("test.registry.qualified-mapped-device", 78U),
+\t\t\t\t\tidentity("test.registry.qualified-mapped-mount", 78U));
+'''
+          new = '''\t\t\t\tauto observation =
+\t\t\t\t\tsqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+\t\t\t\t\t\t*bound,
+\t\t\t\t\t\trequest,
+\t\t\t\t\t\t0,
+\t\t\t\t\t\tsetup.writer_attempt.native_page.get(),
+\t\t\t\t\t\t0,
+\t\t\t\t\t\tidentity("test.registry.qualified-mapped-shm-object", 78U),
+\t\t\t\t\t\tidentity("test.registry.qualified-mapped-shm-entry", 78U),
+\t\t\t\t\t\tidentity("test.registry.qualified-mapped-device", 78U),
+\t\t\t\t\t\tidentity("test.registry.qualified-mapped-mount", 78U));
+\t\t\t\tauto receipt = sqlite_same_process_shm_reader_receipt_validator::validate(
+\t\t\t\t\t*setup.fixture.registry,
+\t\t\t\t\t*setup.fixture.family_pin,
+\t\t\t\t\t*bound,
+\t\t\t\t\towner.scope,
+\t\t\t\t\towner.callback_identity,
+\t\t\t\t\t*effect,
+\t\t\t\t\tstd::move(observation));
+'''
+          if new not in text:
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected one legacy quarantine test, found {text.count(old)}')
+              text = text.replace(old, new, 1)
+          test.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Remove construction-only content and verify exact source identity
+        working-directory: unit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/workflows/u2a1c-clang22-export.yml \
+            .github/workflows/u2a1c-finalize.yml \
+            .github/workflows/u2a1c-mapped-review-matrix.yml \
+            .github/workflows/u2a1c-qualified-mapped-result-v2.yml \
+            .github/workflows/u2a1c-qualified-mapped-result.yml \
+            .github/workflows/u2a1c-repair-agent.yml \
+            .github/workflows/u2a1c-source-export.yml \
+            tools/agent/u2a1c_add_mapped_review_matrix.py \
+            tools/agent/u2a1c_close_observation_provenance.py \
+            tools/agent/u2a1c_fix_mapped_control_destructor_v2.py \
+            tools/agent/u2a1c_fix_mapped_control_destructor_v3.py \
+            tools/agent/u2a1c_transform_common.py \
+            tools/agent/u2a1c_transform_issuer.py \
+            tools/agent/u2a1c_transform_lease_header.py \
+            tools/agent/u2a1c_transform_lease_state.py \
+            tools/agent/u2a1c_transform_lease_support.py \
+            tools/agent/u2a1c_transform_registry.py \
+            tools/agent/u2a1c_transform_test.py
+
+          cat > ../expected.sha256 <<'EOF'
+          401ae6fab91f82ca6171430a33c9ae249e4f532b3488f19e52e6a62824840cb6  src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp
+          d029b62ed66fd090765d12f5dabed4e3d59a6d20f7cb3e23d6ffce1306139cd3  src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp
+          e545344c2ffb71e5cfffc0c2dd93047f0011a863099fc3af37b6bad1b4fb5e08  src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp
+          25cea1a96511541c42a94fb00882c6e0d549ccfc742139767e42c4c2b423b652  src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp
+          3380fe7b768f805e6ac4922ba5d3f446f10aca16568c148a1022a9d04db062b4  src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp
+          cfb051582c5173f0a0ac558b0981cb921f77ea94bdac48c278541db24e00be8e  src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp
+          e6619b355c43a0e634af497e9b665fe8cb4c6a66acc51ca9ae62dc71e841ddad  tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp
+          EOF
+          sed -i 's/^          //' ../expected.sha256
+          sha256sum -c ../expected.sha256
+          git diff --check "origin/${BASE_BRANCH}"
+          mapfile -t final_paths < <(git diff --name-only "origin/${BASE_BRANCH}")
+          if (( ${#final_paths[@]} != 7 )); then
+            printf 'Expected exactly seven final files; found %d:\n' "${#final_paths[@]}" >&2
+            printf '  %s\n' "${final_paths[@]:-}" >&2
+            exit 1
+          fi
+          for path in "${final_paths[@]}"; do
+            case "${path}" in
+              src/sdk/sqlite_same_process_shm_*|tests/unit/sdk/sqlite_same_process_shm_*) ;;
+              *) echo "Unexpected final path: ${path}" >&2; exit 1 ;;
+            esac
+          done
+
+      - name: Install exact Clang 22 toolchain
         working-directory: unit
         shell: bash
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
 
-      - name: Rebuild and repeatedly falsify the exact published head
+      - name: Clang 22 warning-clean build and repeated focused suite
         working-directory: unit
         shell: bash
         env:
           CXX: clang++-22
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$(cat ../qualified-head.txt)"
-          git diff --check "origin/issue-181-clang22-materialization-runtime"...HEAD
-          cmake --preset ci-quick \
-            -DCXXLENS_CLANG_ADAPTER=ON \
-            -DCXXLENS_BUILD_SHARED=OFF
+          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON -DCXXLENS_BUILD_SHARED=OFF
           cmake --build --preset ci-quick --target \
             cxxlens-unit-sdk-sqlite-shm-identity-issuer \
             cxxlens-unit-sdk-sqlite-shm-mapping-lease \
-            cxxlens-unit-sdk-sqlite-shm-mapping-registry
-          ctest --test-dir build/ci-quick \
-            --output-on-failure \
-            --repeat until-fail:50 \
+            cxxlens-unit-sdk-sqlite-shm-mapping-registry \
+            cxxlens-public-header-cxxlens \
+            cxxlens-public-header-provider-clang22 \
+            cxxlens-public-header-sdk
+          ctest --test-dir build/ci-quick --output-on-failure --repeat until-fail:50 \
             -R 'unit\.sdk-sqlite-(shm-identity-issuer|shm-mapping-lease|shm-mapping-registry)$'
 
-      - name: Merge only the exact independently rebuilt head
+      - name: GCC public-header closure
         working-directory: unit
         shell: bash
         run: |
           set -euo pipefail
-          head_sha=$(cat ../qualified-head.txt)
-          response=$(gh api --method PUT \
-            "repos/${GITHUB_REPOSITORY}/pulls/213/merge" \
-            -f merge_method=merge \
-            -f sha="${head_sha}" \
-            -f commit_title='Merge PR #213: qualify mapped reader result ownership')
-          python3 -c 'import json,sys; data=json.load(sys.stdin); assert data.get("merged") is True, data; print(data.get("sha"))' <<<"${response}" | tee ../integration-sha.txt
+          cmake -S . -B build/u2a1c-gcc -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCXXLENS_CLANG_ADAPTER=OFF \
+            -DCXXLENS_BUILD_SHARED=OFF
+          cmake --build build/u2a1c-gcc --target \
+            cxxlens-public-header-cxxlens \
+            cxxlens-public-header-sdk
 
-      - name: Close the superseded workbench PR and record the unit receipt
+      - name: ASan and UBSan focused qualification
+        working-directory: unit
         shell: bash
         run: |
           set -euo pipefail
-          integration_sha=$(cat integration-sha.txt)
-          head_sha=$(cat qualified-head.txt)
-          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/210" -f state=closed >/dev/null
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/181/comments" \
-            -f body="U2a1c completed and integrated through PR #213. Verified source head: \`${head_sha}\`. Integration commit on \`issue-181-clang22-materialization-runtime\`: \`${integration_sha}\`. Exact final diff: seven bounded production files; temporary workflows/transforms absent. Independent controller rebuilt the three focused Clang 22 targets and passed the ownership/replay/drop/race suites for 50 consecutive repetitions before merge. Known downstream Store CAS/materialization competitor failures remain assigned to the next serial unit. Learning checkpoint: none." >/dev/null
+          cmake -S . -B build/u2a1c-sanitize -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=clang++-22 \
+            -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=OFF \
+            -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
+            -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' \
+            -DCMAKE_SHARED_LINKER_FLAGS='-fsanitize=address,undefined'
+          cmake --build build/u2a1c-sanitize --target \
+            cxxlens-unit-sdk-sqlite-shm-identity-issuer \
+            cxxlens-unit-sdk-sqlite-shm-mapping-lease \
+            cxxlens-unit-sdk-sqlite-shm-mapping-registry
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            ctest --test-dir build/u2a1c-sanitize --output-on-failure --repeat until-fail:10 \
+              -R 'unit\.sdk-sqlite-(shm-identity-issuer|shm-mapping-lease|shm-mapping-registry)$'
 
-      - name: Delete the one-shot controller branch
+      - name: Publish exact source-only head with lease protection
+        working-directory: unit
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            git fetch --no-tags origin "${HEAD_BRANCH}"
+            parent=$(git rev-parse "origin/${HEAD_BRANCH}")
+            # Preserve the verified working tree while parenting the publication to the current tip.
+            git reset --mixed "${parent}"
+            git add -A
+            git diff --cached --check
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix(sqlite): qualify mapped reader result ownership'
+            published=$(git rev-parse HEAD)
+            if git push --force-with-lease="refs/heads/${HEAD_BRANCH}:${parent}" \
+                origin "HEAD:refs/heads/${HEAD_BRANCH}"; then
+              printf '%s\n' "${published}" | tee ../published-head.txt
+              exit 0
+            fi
+            echo "publication race on attempt ${attempt}; retrying from the new branch tip"
+          done
+          exit 1
+
+      - name: Merge exact PR head and close the bounded issue
+        shell: bash
+        run: |
+          set -euo pipefail
+          head_sha=$(cat published-head.txt)
+          response=$(gh api --method PUT "repos/${GITHUB_REPOSITORY}/pulls/213/merge" \
+            -f merge_method=merge \
+            -f sha="${head_sha}" \
+            -f commit_title='Merge PR #213: qualify mapped reader result ownership')
+          merge_sha=$(python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("merged") is True, d; print(d["sha"])' <<<"${response}")
+          printf '%s\n' "${merge_sha}" | tee integration-sha.txt
+
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/210" -f state=closed >/dev/null || true
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/211/comments" \
+            -f body="Completed by source-only PR #213. Published head: \`${head_sha}\`; integration commit on \`${BASE_BRANCH}\`: \`${merge_sha}\`. The final diff is exactly seven production files and matches the independently frozen SHA-256 set. Exact Clang 22 warning-clean builds, the three focused suites repeated 50 times, GCC public-header builds, and ASan+UBSan focused suites repeated 10 times all passed before merge. Construction workflows and transforms are absent. This closes only the production-inert owner-qualified mapped-result adversarial boundary; VFS/Store activation remains under #181/#205. Learning checkpoint: none." >/dev/null
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/211" \
+            -f state=closed -f state_reason=completed >/dev/null
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/181/comments" \
+            -f body="U2a1c owner-qualified mapped-result unit integrated through PR #213 at \`${merge_sha}\` from exact source head \`${head_sha}\`. Seven-file source boundary, Clang 22 repeated suite, GCC public headers, and ASan+UBSan qualification passed. Next serial blocker remains same-process Store/VFS activation under #205. Learning checkpoint: none." >/dev/null
+
+      - name: Delete one-shot controller branch
         if: success()
         shell: bash
         run: git -C unit push origin --delete agent/u2a1c-merge-controller-181
