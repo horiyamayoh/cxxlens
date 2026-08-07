@@ -1,0 +1,56 @@
+name: U2a1c source-finalizer observer
+
+on:
+  push:
+    branches:
+      - agent/u2a1c-finalizer-observer-181
+
+permissions:
+  actions: read
+  issues: write
+  contents: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  SOURCE_BRANCH: agent/u2a1c-qualified-mapped-result-181
+
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Record exact source-branch runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${SOURCE_BRANCH}&per_page=100" \
+            > runs.json
+          python3 - <<'PY' > body.md
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('runs.json').read_text())
+          runs = data.get('workflow_runs', [])[:20]
+          print('U2a1c source-finalizer observer checkpoint:')
+          print()
+          for run in runs:
+              conclusion = run.get('conclusion') or '-'
+              print(
+                  f"- `{run['name']}` run `{run['id']}`: "
+                  f"`{run['status']}/{conclusion}`; event `{run['event']}`; "
+                  f"head `{run['head_sha']}`"
+              )
+          print()
+          print('This comment is operational observation only; source and qualification evidence remain authoritative.')
+          PY
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/211/comments" \
+            -f body="$(cat body.md)" >/dev/null
+
+      - name: Delete the observer branch
+        shell: bash
+        run: |
+          git init observer-cleanup
+          cd observer-cleanup
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin --delete agent/u2a1c-finalizer-observer-181
