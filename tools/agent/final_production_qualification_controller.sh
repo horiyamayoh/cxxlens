@@ -134,6 +134,17 @@ if ! git merge-base --is-ancestor origin/main HEAD; then
   git merge --no-edit origin/main
   git push origin HEAD:"${FEATURE_BRANCH}"
 fi
+
+# The watchdog exists only to drive unfinished serial work.  Remove it from the
+# exact product head before any final qualification or merge receipt is minted.
+rm -f .github/workflows/cxxlens-completion-watchdog.yml \
+  tools/agent/cxxlens_completion_watchdog.sh
+if ! git diff --quiet; then
+  git add -A
+  git diff --cached --check
+  git commit -m 'ci: retire production completion watchdog'
+  git push origin HEAD:"${FEATURE_BRANCH}"
+fi
 feature_head=$(git rev-parse HEAD)
 printf '%s\n' "${feature_head}" > ../prequalification-head.txt
 mkdir -p .agent-final-work
