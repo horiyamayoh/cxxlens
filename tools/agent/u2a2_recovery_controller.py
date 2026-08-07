@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Any
 
 ENDPOINT = "https://models.github.ai/inference/chat/completions"
-MODELS = ("openai/gpt-4.1", "openai/gpt-4o")
+MODELS = ("openai/gpt-4.1", "openai/gpt-4.1-mini")
 BASE_BRANCH = "issue-181-clang22-materialization-runtime"
 UNIT_BRANCH = "agent/u2a2-recovery-205"
 ISSUE = 205
