@@ -137,8 +137,7 @@ fi
 
 # The watchdog exists only to drive unfinished serial work.  Remove it from the
 # exact product head before any final qualification or merge receipt is minted.
-rm -f .github/workflows/cxxlens-completion-watchdog.yml \
-  tools/agent/cxxlens_completion_watchdog.sh
+rm -f .github/workflows/cxxlens-completion-watchdog.yml tools/agent/cxxlens_completion_watchdog.sh
 if ! git diff --quiet; then
   git add -A
   git diff --cached --check
