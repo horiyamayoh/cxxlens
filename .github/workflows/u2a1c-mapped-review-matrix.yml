@@ -1,0 +1,326 @@
+name: U2a1c mapped-result independent review matrix
+
+on:
+  push:
+    branches:
+      - agent/u2a1c-mapped-review-matrix-181
+    paths:
+      - tools/agent/u2a1c_add_mapped_review_matrix.py
+      - .github/workflows/u2a1c-mapped-review-matrix.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: u2a1c-qualified-mapped-result
+  cancel-in-progress: false
+
+jobs:
+  exact-freeze-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Checkout exact review branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/u2a1c-mapped-review-matrix-181
+          fetch-depth: 0
+
+      - name: Verify ancestry and bounded inherited scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 60s git fetch origin issue-181-clang22-materialization-runtime
+          git merge-base --is-ancestor origin/issue-181-clang22-materialization-runtime HEAD
+          git diff --name-only origin/issue-181-clang22-materialization-runtime...HEAD > u2a1c-review-preapply.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          source = {
+              'src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp',
+              'src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp',
+              'src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp',
+              'tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp',
+          }
+          temporary = {
+              'tools/agent/u2a1c_transform_common.py',
+              'tools/agent/u2a1c_transform_issuer.py',
+              'tools/agent/u2a1c_transform_lease_header.py',
+              'tools/agent/u2a1c_transform_lease_support.py',
+              'tools/agent/u2a1c_transform_lease_state.py',
+              'tools/agent/u2a1c_transform_registry.py',
+              'tools/agent/u2a1c_transform_test.py',
+              'tools/agent/u2a1c_fix_mapped_control_destructor_v2.py',
+              'tools/agent/u2a1c_fix_mapped_control_destructor_v3.py',
+              'tools/agent/u2a1c_add_mapped_review_matrix.py',
+              '.github/workflows/u2a1c-qualified-mapped-result.yml',
+              '.github/workflows/u2a1c-qualified-mapped-result-v2.yml',
+              '.github/workflows/u2a1c-mapped-review-matrix.yml',
+          }
+          actual = set(Path('u2a1c-review-preapply.txt').read_text().splitlines())
+          unexpected = actual - source - temporary
+          if unexpected:
+              raise SystemExit(f'unbounded inherited delta: {sorted(unexpected)}')
+          PY
+
+      - name: Apply source and mapped adversarial matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 180s \
+            python3 tools/agent/u2a1c_add_mapped_review_matrix.py
+          git diff --check
+
+      - name: Independent authority-boundary review
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          ih = Path('src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp').read_text()
+          ic = Path('src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp').read_text()
+          lh = Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp').read_text()
+          lc = Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp').read_text()
+          rh = Path('src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp').read_text()
+          rc = Path('src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp').read_text()
+          checks = {
+              'single private mapped capability': ih.count(
+                  'class sqlite_shm_reader_mapped_effect_identity_validation_capability final') == 1,
+              'move-only mapped capability':
+                  'sqlite_shm_reader_mapped_effect_identity_validation_capability(' in ih and
+                  'const sqlite_shm_reader_mapped_effect_identity_validation_capability&) = delete' in ih,
+              'issuer validates mapped role':
+                  'sqlite_shm_reader_effect_identity_role::mapped_result' in ic and
+                  ic.count('validate_mapped_effect_identity_for_registry(') >= 3,
+              'closed mapped validator':
+                  lh.count('class sqlite_same_process_shm_reader_receipt_validator final') == 1,
+              'no raw request overload':
+                  'const sqlite_shm_reader_attachment_map_request& request' not in
+                  lh[lh.index('class sqlite_same_process_shm_reader_receipt_validator final'):
+                     lh.index('class sqlite_same_process_shm_reader_zero_effect_receipt_validator final')],
+              'registry-private entry':
+                  'friend class sqlite_same_process_shm_reader_receipt_validator;' in rh and
+                  'validate_reader_mapped_attachment_effect(' in rh,
+              'exact pointer binding':
+                  'map->expected_mapping.native_mapping == native_mapping' in lc,
+              'exact owner capability bridge':
+                  'detail::validate_mapped_effect_identity_for_registry' in rc,
+          }
+          failed = [name for name, passed in checks.items() if not passed]
+          if failed:
+              raise SystemExit('authority review failed: ' + ', '.join(failed))
+          Path('u2a1c-authority-review.txt').write_text(
+              '\n'.join(f'PASS {name}' for name in checks) + '\n')
+          PY
+
+      - name: Independent concurrency and fail-closed review
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          lc = Path('src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp').read_text()
+          test = Path('tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp').read_text()
+          required_tests = (
+              'verify_qualified_mapped_validator_wrong_role_is_nonmutating',
+              'verify_qualified_mapped_validator_invalid_native_row_is_terminal',
+              'verify_qualified_mapped_validator_receipt_drop_abandons_owner',
+              'verify_qualified_mapped_validator_effect_drop_blocks_commit',
+              'verify_qualified_mapped_commit_rejects_raw_receipt_bypass',
+              'verify_qualified_mapped_validator_duplicate_poisoning_is_one_shot',
+              'verify_qualified_mapped_validator_foreign_proof_is_nonmutating',
+              'verify_qualified_mapped_validator_concurrent_duplicate_is_bounded',
+          )
+          checks = {
+              'five-state lifecycle': all(
+                  f'sqlite_shm_reader_mapped_effect_validation_phase::{phase}' in lc
+                  for phase in ('unclaimed', 'validating', 'sealed', 'terminal_consumed', 'poisoned')),
+              'validation and terminal CAS':
+                  lc.count('mapped_effect_validation_phase.compare_exchange_strong') >= 2,
+              'sealed receipt drop abandons':
+                  'sqlite_shm_reader_mapped_effect_receipt_control::\n\t\t\t~sqlite_shm_reader_mapped_effect_receipt_control() noexcept' in lc and
+                  'exact_owner->abandon();' in lc,
+              'qualified/raw separation':
+                  '(!qualified_owned_terminal && qualified_control)' in lc,
+              'terminal consumes before owner completion':
+                  lc.index('sqlite_shm_reader_mapped_effect_validation_phase::terminal_consumed') <
+                  lc.rindex('claim_reader_map_identity_terminalization_locked(*map_attempt)'),
+              'complete mapped adversarial matrix': all(test.count(name) >= 2 for name in required_tests),
+              'bounded concurrent contender':
+                  'std::atomic_bool start{false};' in test and
+                  'first.join();' in test and 'second.join();' in test,
+          }
+          failed = [name for name, passed in checks.items() if not passed]
+          if failed:
+              raise SystemExit('concurrency review failed: ' + ', '.join(failed))
+          Path('u2a1c-concurrency-review.txt').write_text(
+              '\n'.join(f'PASS {name}' for name in checks) + '\n')
+          PY
+
+      - name: Install exact Clang 22 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=30s 720s \
+            python3 tools/ci/bootstrap_supply_chain.py install --profile developer \
+            > u2a1c-review-toolchain.log 2>&1
+          clang++-22 --version | tee u2a1c-review-compiler.txt
+
+      - name: Configure and build exact Clang 22 tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/u2a1c-review-clang
+          timeout --signal=TERM --kill-after=30s 360s env CXX=clang++-22 \
+            cmake --preset ci-quick -B build/u2a1c-review-clang \
+              -DCXXLENS_CLANG_ADAPTER=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            > u2a1c-review-clang-configure.log 2>&1
+          timeout --signal=TERM --kill-after=30s 720s \
+            cmake --build build/u2a1c-review-clang --parallel 4 \
+            > u2a1c-review-clang-build.log 2>&1
+
+      - name: Discover and run focused tests plus repetition
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir build/u2a1c-review-clang -N > u2a1c-review-test-list.txt
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          names = []
+          for line in Path('u2a1c-review-test-list.txt').read_text().splitlines():
+              match = re.search(r'Test\s+#\d+:\s+(.+)$', line)
+              if not match:
+                  continue
+              name = match.group(1).strip()
+              if any(token in name for token in (
+                  'identity-issuer', 'identity_issuer',
+                  'mapping-lease', 'mapping_lease',
+                  'mapping-registry', 'mapping_registry',
+              )):
+                  names.append(name)
+          registry = [name for name in names if
+                      'mapping-registry' in name or 'mapping_registry' in name]
+          issuer = [name for name in names if
+                    'identity-issuer' in name or 'identity_issuer' in name]
+          lease = [name for name in names if
+                   'mapping-lease' in name or 'mapping_lease' in name]
+          if not registry or not issuer or not lease:
+              raise SystemExit(f'incomplete focused discovery: {names}')
+          esc = lambda value: re.escape(value)
+          Path('u2a1c-review-focused-regex.txt').write_text(
+              '^(' + '|'.join(map(esc, names)) + ')$')
+          Path('u2a1c-review-registry-regex.txt').write_text(
+              '^(' + '|'.join(map(esc, registry)) + ')$')
+          Path('u2a1c-review-selected-tests.txt').write_text('\n'.join(names) + '\n')
+          PY
+          timeout --signal=TERM --kill-after=30s 720s \
+            ctest --test-dir build/u2a1c-review-clang --output-on-failure \
+              -R "$(cat u2a1c-review-focused-regex.txt)" \
+            > u2a1c-review-focused.log 2>&1
+          timeout --signal=TERM --kill-after=30s 900s \
+            ctest --test-dir build/u2a1c-review-clang --output-on-failure \
+              -R "$(cat u2a1c-review-registry-regex.txt)" --repeat until-fail:30 \
+            > u2a1c-review-repeat.log 2>&1
+
+      - name: GCC cross-compiler build and focused tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/u2a1c-review-gcc
+          timeout --signal=TERM --kill-after=30s 360s env CXX=g++ \
+            cmake --preset ci-quick -B build/u2a1c-review-gcc \
+              -DCXXLENS_CLANG_ADAPTER=OFF \
+            > u2a1c-review-gcc-configure.log 2>&1
+          timeout --signal=TERM --kill-after=30s 720s \
+            cmake --build build/u2a1c-review-gcc --parallel 4 \
+            > u2a1c-review-gcc-build.log 2>&1
+          timeout --signal=TERM --kill-after=30s 720s \
+            ctest --test-dir build/u2a1c-review-gcc --output-on-failure \
+              -R "$(cat u2a1c-review-focused-regex.txt)" \
+            > u2a1c-review-gcc-focused.log 2>&1
+
+      - name: Clang ASan and UBSan focused lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/u2a1c-review-sanitized
+          sanitizer_flags='-fsanitize=address,undefined -fno-omit-frame-pointer'
+          timeout --signal=TERM --kill-after=30s 360s env CXX=clang++-22 \
+            cmake --preset ci-quick -B build/u2a1c-review-sanitized \
+              -DCXXLENS_CLANG_ADAPTER=OFF \
+              -DCMAKE_CXX_FLAGS="$sanitizer_flags" \
+              -DCMAKE_EXE_LINKER_FLAGS="$sanitizer_flags" \
+              -DCMAKE_SHARED_LINKER_FLAGS="$sanitizer_flags" \
+            > u2a1c-review-sanitized-configure.log 2>&1
+          timeout --signal=TERM --kill-after=30s 900s \
+            cmake --build build/u2a1c-review-sanitized --parallel 3 \
+            > u2a1c-review-sanitized-build.log 2>&1
+          timeout --signal=TERM --kill-after=30s 900s env \
+            ASAN_OPTIONS=detect_leaks=0:abort_on_error=1 \
+            UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            ctest --test-dir build/u2a1c-review-sanitized --output-on-failure \
+              -R "$(cat u2a1c-review-focused-regex.txt)" \
+            > u2a1c-review-sanitized-focused.log 2>&1
+
+      - name: Commit exact source freeze and remove all workbench files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'cxxlens-u2a1c-review-bot'
+          git config user.email 'cxxlens-u2a1c-review-bot@users.noreply.github.com'
+          source_files=(
+            src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp
+            src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp
+            src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp
+            src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp
+            src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp
+            src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp
+            tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp
+          )
+          git add "${source_files[@]}"
+          if ! git diff --cached --quiet; then
+            git commit -m 'Qualify and harden mapped reader result ownership'
+          fi
+          git rm -f --ignore-unmatch \
+            tools/agent/u2a1c_transform_common.py \
+            tools/agent/u2a1c_transform_issuer.py \
+            tools/agent/u2a1c_transform_lease_header.py \
+            tools/agent/u2a1c_transform_lease_support.py \
+            tools/agent/u2a1c_transform_lease_state.py \
+            tools/agent/u2a1c_transform_registry.py \
+            tools/agent/u2a1c_transform_test.py \
+            tools/agent/u2a1c_fix_mapped_control_destructor_v2.py \
+            tools/agent/u2a1c_fix_mapped_control_destructor_v3.py \
+            tools/agent/u2a1c_add_mapped_review_matrix.py \
+            .github/workflows/u2a1c-qualified-mapped-result.yml \
+            .github/workflows/u2a1c-qualified-mapped-result-v2.yml \
+            .github/workflows/u2a1c-mapped-review-matrix.yml
+          if ! git diff --cached --quiet; then
+            git commit -m 'Remove U2a1c review workbench'
+          fi
+          git diff --check origin/issue-181-clang22-materialization-runtime...HEAD
+          git diff --name-only origin/issue-181-clang22-materialization-runtime...HEAD \
+            > u2a1c-review-final-files.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          expected = {
+              'src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp',
+              'src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp',
+              'src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp',
+              'src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp',
+              'tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp',
+          }
+          actual = set(Path('u2a1c-review-final-files.txt').read_text().splitlines())
+          if actual != expected:
+              raise SystemExit(f'exact freeze polluted or incomplete: {sorted(actual ^ expected)}')
+          PY
+          git rev-parse HEAD | tee u2a1c-review-head.txt
+          git rev-parse HEAD^{tree} | tee u2a1c-review-tree.txt
+          timeout --signal=TERM --kill-after=30s 120s \
+            git push origin HEAD:agent/u2a1c-mapped-review-matrix-181 \
+            > u2a1c-review-push.log 2>&1
