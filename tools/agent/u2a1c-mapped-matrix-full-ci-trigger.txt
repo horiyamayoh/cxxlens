@@ -1,0 +1,2 @@
+qualification=ready-full
+source_tree=three-file-mapped-matrix
