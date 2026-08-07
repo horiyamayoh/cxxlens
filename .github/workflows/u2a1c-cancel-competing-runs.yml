@@ -1,0 +1,40 @@
+name: U2a1c cancel competing branch writers
+
+on:
+  push:
+    branches:
+      - agent/u2a1c-merge-controller-181
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: u2a1c-cancel-competing-runs
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  HEAD_BRANCH: agent/u2a1c-qualified-mapped-result-181
+
+jobs:
+  cancel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Cancel every queued or running writer on the source branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          for status in queued in_progress waiting requested pending; do
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${HEAD_BRANCH}&status=${status}&per_page=100" \
+              --jq '.workflow_runs[].id' 2>/dev/null || true
+          done | sort -u > run-ids.txt
+          while IFS= read -r run_id; do
+            [[ -z "${run_id}" ]] && continue
+            echo "cancelling competing run ${run_id}"
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" >/dev/null || true
+          done < run-ids.txt
