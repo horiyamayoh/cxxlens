@@ -1,0 +1,487 @@
+name: U2a2 exact-owner qualified native-OK agent
+
+on:
+  push:
+    branches:
+      - agent/u2a2-model-controller-205
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  models: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  CMAKE_GENERATOR: Ninja
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+  CTEST_PARALLEL_LEVEL: 1
+  BASE_BRANCH: issue-181-clang22-materialization-runtime
+  UNIT_BRANCH: agent/u2a2-qualified-native-ok-205
+
+jobs:
+  implement-review-qualify-integrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - name: Wait for U2a1c guarded integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          integrated=false
+          for attempt in $(seq 1 120); do
+            if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/pulls/213" --jq '.merged')" == true ]]; then
+              integrated=true
+              break
+            fi
+            echo "attempt ${attempt}: waiting for PR #213"
+            sleep 30
+          done
+          [[ "${integrated}" == true ]]
+
+      - name: Clone the exact serial base and create an isolated implementation branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          git fetch --no-tags origin "${BASE_BRANCH}"
+          git checkout -B "${UNIT_BRANCH}" "origin/${BASE_BRANCH}"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rev-parse HEAD | tee ../base-sha.txt
+
+      - name: Install the exact developer toolchain
+        working-directory: repo
+        shell: bash
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+
+      - name: Reproduce the two release-blocking races and collect bounded source evidence
+        working-directory: repo
+        shell: bash
+        env:
+          CXX: clang++-22
+        run: |
+          set -euo pipefail
+          cmake --preset ci-quick \
+            -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=OFF
+          cmake --build --preset ci-quick
+          set +e
+          ctest --test-dir build/ci-quick --output-on-failure \
+            -R 'unit\.sdk-store$|adapter\.clang22-materialization-store$|unit\.sdk-sqlite-(shm-identity-issuer|shm-mapping-lease|shm-mapping-registry)$' \
+            > ../baseline-tests.log 2>&1
+          baseline_rc=$?
+          set -e
+          cat ../baseline-tests.log
+          if (( baseline_rc == 0 )); then
+            echo 'The release-blocking baseline unexpectedly passed; refusing speculative source mutation.' >&2
+            exit 1
+          fi
+
+          gh api "repos/${GITHUB_REPOSITORY}/issues/205" --jq '{title:.title, body:.body}' > ../issue-205.json
+          gh api "repos/${GITHUB_REPOSITORY}/issues/181" --jq '{title:.title, body:.body}' > ../issue-181.json
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/193" --jq '{title:.title, body:.body}' > ../pr-193.json
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/213" --jq '{title:.title, body:.body, merge_commit_sha:.merge_commit_sha}' > ../pr-213.json
+
+          : > ../source-context.txt
+          for pattern in \
+            'any_native_ok' \
+            'xShmMap|xShmUnmap|xClose' \
+            'owner.?qualified|qualified.?owner' \
+            'mapped.?result|mapping.?result' \
+            'zero.?effect.?identity' \
+            'validation.?capability|presentation|presenter' \
+            'independent SQLite CAS stores unavailable' \
+            'race fixture competitor did not publish' \
+            'same.?process|process.?identity' \
+            'terminal|quarantine|replay|drop'
+          do
+            printf '\n===== RG %s =====\n' "${pattern}" >> ../source-context.txt
+            rg -n -i -C 55 "${pattern}" src/sdk tests docs/qualification docs/architecture 2>/dev/null \
+              | head -n 2200 >> ../source-context.txt || true
+          done
+
+          mapfile -t exact_tests < <(rg -l \
+            'independent SQLite CAS stores unavailable|race fixture competitor did not publish' \
+            tests 2>/dev/null || true)
+          for path in "${exact_tests[@]}"; do
+            printf '\n===== COMPLETE TEST FILE %s =====\n' "${path}" >> ../source-context.txt
+            sed -n '1,2600p' "${path}" >> ../source-context.txt
+          done
+          head -c 700000 ../source-context.txt > ../source-context.bounded.txt
+
+      - name: Install the bounded repository patch agent
+        shell: bash
+        run: |
+          cat > agent.py <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import pathlib
+          import re
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          ENDPOINT = "https://models.github.ai/inference/chat/completions"
+          TOKEN = os.environ["GH_TOKEN"]
+          MODELS = ("openai/gpt-4.1", "openai/gpt-4o")
+
+          SYSTEM = r"""
+          You are the senior C++/SQLite concurrency maintainer for cxxlens. Work from repository evidence only.
+          Produce minimal, production-grade C++20 changes that compile under Clang 22 with -Werror.
+          Never weaken a fail-closed protocol merely to make a test pass. Never invent a public API or status.
+          The only newly admissible native SQLITE_OK path is an exact owner-authenticated, same-process,
+          in-flight mapped-result receipt minted by the accepted issuer/registry/lease authority. Arbitrary,
+          legacy, stale, replayed, cross-owner, cross-process, post-drop, post-unmap, or post-close native OK
+          must remain rejected and terminalized exactly as the accepted design requires.
+          Use deterministic synchronization rather than timing sleeps. Preserve exception and allocation-failure
+          handling, one-shot receipt semantics, explicit cleanup, and SQLite ABI behavior. Do not edit workflows,
+          dependency lockfiles, public headers, release status, generated evidence, or unrelated code.
+          Respond with a single unified git diff and no prose when asked for a patch.
+          """.strip()
+
+          def read(path: str, limit: int = 800000) -> str:
+              data = pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+              return data[-limit:]
+
+          def call_model(prompt: str, max_tokens: int = 24000) -> str:
+              errors: list[str] = []
+              for model in MODELS:
+                  payload = {
+                      "model": model,
+                      "messages": [
+                          {"role": "system", "content": SYSTEM},
+                          {"role": "user", "content": prompt},
+                      ],
+                      "temperature": 0.05,
+                      "max_tokens": max_tokens,
+                  }
+                  request = urllib.request.Request(
+                      ENDPOINT,
+                      data=json.dumps(payload).encode("utf-8"),
+                      headers={
+                          "Accept": "application/vnd.github+json",
+                          "Authorization": f"Bearer {TOKEN}",
+                          "Content-Type": "application/json",
+                          "X-GitHub-Api-Version": "2022-11-28",
+                      },
+                      method="POST",
+                  )
+                  for retry in range(4):
+                      try:
+                          with urllib.request.urlopen(request, timeout=240) as response:
+                              body = json.load(response)
+                          return body["choices"][0]["message"]["content"]
+                      except urllib.error.HTTPError as exc:
+                          detail = exc.read().decode("utf-8", errors="replace")
+                          errors.append(f"{model}: HTTP {exc.code}: {detail[:1000]}")
+                          if exc.code not in (429, 500, 502, 503, 504):
+                              break
+                          time.sleep(15 * (retry + 1))
+                      except Exception as exc:  # noqa: BLE001
+                          errors.append(f"{model}: {type(exc).__name__}: {exc}")
+                          time.sleep(10 * (retry + 1))
+              raise RuntimeError("all GitHub Models calls failed\n" + "\n".join(errors))
+
+          def extract_diff(text: str) -> str:
+              fenced = re.search(r"```(?:diff|patch)?\s*\n(.*?)```", text, re.S)
+              if fenced:
+                  text = fenced.group(1)
+              start = text.find("diff --git ")
+              if start < 0:
+                  raise RuntimeError("model response did not contain a unified git diff")
+              return text[start:].strip() + "\n"
+
+          mode = sys.argv[1]
+          issue = read("issue-205.json", 80000)
+          context = read("source-context.bounded.txt", 700000)
+          baseline = read("baseline-tests.log", 120000)
+
+          if mode == "initial":
+              prompt = f"""
+              Implement GitHub issue #205 as the next serial unit on top of the already integrated PR #213.
+
+              ISSUE:
+              {issue}
+
+              BASELINE FAILURES:
+              {baseline}
+
+              BOUNDED REPOSITORY EVIDENCE:
+              {context}
+
+              Required acceptance:
+              1. Bind the PR #213 owner-qualified mapped-result authority into the production forwarding VFS
+                 xShmMap/xShmUnmap/xClose lifecycle without enabling any legacy any-native-OK shortcut.
+              2. Two simultaneously live Store instances for the same DB may complete the exact SQLite CAS path.
+              3. The Clang 22 materialization competitor may publish through the same exact-owner path.
+              4. Wrong owner/presenter/result, replay, stale epoch, drop, close/unmap, fork/process drift,
+                 allocation failure, exception, and unqualified native OK remain rejected and terminalized.
+              5. Add or strengthen deterministic tests for the production binding and both release blockers.
+              6. Keep the diff private/internal and bounded to SQLite SDK source/tests or directly required
+                 qualification guards. No public/status/promotion edits.
+
+              Return one minimal unified diff against the current tree. No prose.
+              """
+              print(extract_diff(call_model(prompt)))
+          elif mode == "repair":
+              current_diff = read("current.diff", 350000)
+              failure = read("attempt.log", 180000)
+              prompt = f"""
+              Repair the current incremental implementation of issue #205. Return a unified diff against the
+              CURRENT modified tree, not against the original base. Preserve all correct parts and fix only
+              demonstrated defects.
+
+              ISSUE:
+              {issue}
+
+              CURRENT DIFF:
+              {current_diff}
+
+              LATEST BUILD/TEST FAILURE:
+              {failure}
+
+              REPOSITORY EVIDENCE:
+              {context}
+
+              The exact-owner fail-closed constraints in the system message are mandatory. No prose.
+              """
+              print(extract_diff(call_model(prompt)))
+          elif mode == "review":
+              current_diff = read("current.diff", 500000)
+              passed = read("attempt.log", 120000)
+              prompt = f"""
+              Independently review this proposed issue #205 implementation after its focused tests passed.
+              Look specifically for authority broadening, stale/replay acceptance, mismatched result pointer,
+              lifecycle leaks, fork/process drift, ABA, exception/allocation failure, non-deterministic tests,
+              and SQLite ABI mistakes. Also verify the changes actually address both release-blocking failures.
+
+              ISSUE:
+              {issue}
+
+              DIFF:
+              {current_diff}
+
+              PASS LOG:
+              {passed}
+
+              REPOSITORY EVIDENCE:
+              {context}
+
+              Reply exactly with either:
+              APPROVE\n<concise rationale>
+              or
+              CHANGES\n<specific blocker list and precise remediation guidance>
+              """
+              print(call_model(prompt, max_tokens=8000))
+          elif mode == "review-repair":
+              current_diff = read("current.diff", 500000)
+              review = read("review.txt", 100000)
+              prompt = f"""
+              Apply the independent review blockers to the CURRENT modified tree. Return only an incremental
+              unified diff. Do not broaden authority and do not remove valid adversarial tests.
+
+              ISSUE:
+              {issue}
+
+              CURRENT DIFF:
+              {current_diff}
+
+              REVIEW:
+              {review}
+
+              REPOSITORY EVIDENCE:
+              {context}
+              """
+              print(extract_diff(call_model(prompt)))
+          else:
+              raise SystemExit(f"unknown mode: {mode}")
+          PY
+
+      - name: Implement through a compiler-and-test feedback loop
+        working-directory: repo
+        shell: bash
+        env:
+          CXX: clang++-22
+        run: |
+          set -euo pipefail
+          cp ../issue-205.json ../source-context.bounded.txt ../baseline-tests.log .
+          python3 ../agent.py initial > ../candidate.patch
+          git apply --index --3way --whitespace=fix ../candidate.patch
+
+          passed=0
+          for attempt in $(seq 1 5); do
+            git diff --cached --check
+            git diff --cached > ../current.diff
+            set +e
+            {
+              cmake --build --preset ci-quick
+              ctest --test-dir build/ci-quick --output-on-failure \
+                -R 'unit\.sdk-store$|adapter\.clang22-materialization-store$|unit\.sdk-sqlite-(shm-identity-issuer|shm-mapping-lease|shm-mapping-registry)$'
+            } > ../attempt.log 2>&1
+            rc=$?
+            set -e
+            cat ../attempt.log
+            if (( rc == 0 )); then
+              passed=1
+              break
+            fi
+            if (( attempt == 5 )); then
+              break
+            fi
+            cp ../current.diff ../attempt.log .
+            python3 ../agent.py repair > ../repair.patch
+            git apply --index --3way --whitespace=fix ../repair.patch
+          done
+          (( passed == 1 ))
+
+      - name: Obtain an independent authority-focused review and repair blockers once
+        working-directory: repo
+        shell: bash
+        env:
+          CXX: clang++-22
+        run: |
+          set -euo pipefail
+          git diff --cached > ../current.diff
+          cp ../current.diff ../attempt.log .
+          python3 ../agent.py review | tee ../review.txt
+          if ! grep -q '^APPROVE' ../review.txt; then
+            cp ../review.txt .
+            python3 ../agent.py review-repair > ../review-repair.patch
+            git apply --index --3way --whitespace=fix ../review-repair.patch
+            git diff --cached --check
+            cmake --build --preset ci-quick
+            ctest --test-dir build/ci-quick --output-on-failure \
+              -R 'unit\.sdk-store$|adapter\.clang22-materialization-store$|unit\.sdk-sqlite-(shm-identity-issuer|shm-mapping-lease|shm-mapping-registry)$' \
+              > ../attempt.log 2>&1
+            git diff --cached > ../current.diff
+            cp ../current.diff ../attempt.log .
+            python3 ../agent.py review | tee ../review-final.txt
+            grep -q '^APPROVE' ../review-final.txt
+          fi
+
+      - name: Enforce bounded paths and reject authority shortcuts
+        working-directory: repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t paths < <(git diff --cached --name-only)
+          (( ${#paths[@]} > 0 ))
+          (( ${#paths[@]} <= 18 ))
+          for path in "${paths[@]}"; do
+            case "${path}" in
+              src/sdk/sqlite_*|tests/unit/sdk/sqlite_*|tests/unit/sdk/store*|tests/adapter/clang22/*materialization*|docs/qualification/*0205*|tools/ci/*0205*) ;;
+              *) echo "Out-of-scope path: ${path}" >&2; exit 1 ;;
+            esac
+          done
+          if git diff --cached | grep -E '^\+.*(sleep_for|usleep\(|::sleep\(|TODO|FIXME|any_native_ok.*return.*SQLITE_OK)' ; then
+            echo 'Detected a timing sleep, unfinished marker, or broad native-OK shortcut.' >&2
+            exit 1
+          fi
+          git diff --cached --check
+
+      - name: Repeatedly falsify the exact static build
+        working-directory: repo
+        shell: bash
+        env:
+          CXX: clang++-22
+        run: |
+          set -euo pipefail
+          cmake --build --preset ci-quick
+          ctest --test-dir build/ci-quick --output-on-failure \
+            --repeat until-fail:30 \
+            -R 'unit\.sdk-store$|adapter\.clang22-materialization-store$|unit\.sdk-sqlite-(shm-identity-issuer|shm-mapping-lease|shm-mapping-registry)$'
+          ctest --test-dir build/ci-quick --output-on-failure
+
+      - name: Qualify the shared-library build
+        working-directory: repo
+        shell: bash
+        env:
+          CXX: clang++-22
+        run: |
+          set -euo pipefail
+          cmake --preset ci-quick -B build/u2a2-shared \
+            -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=ON
+          cmake --build build/u2a2-shared
+          ctest --test-dir build/u2a2-shared --output-on-failure \
+            -R 'unit\.sdk-store$|adapter\.clang22-materialization-store$|unit\.sdk-sqlite-(shm-identity-issuer|shm-mapping-lease|shm-mapping-registry)$'
+
+      - name: Qualify focused ASan and UBSan behavior
+        working-directory: repo
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          set -euo pipefail
+          cmake -S . -B build/u2a2-sanitize -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=clang++-22 \
+            -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=OFF \
+            -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
+            -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' \
+            -DCMAKE_SHARED_LINKER_FLAGS='-fsanitize=address,undefined'
+          cmake --build build/u2a2-sanitize
+          ctest --test-dir build/u2a2-sanitize --output-on-failure \
+            -R 'unit\.sdk-store$|adapter\.clang22-materialization-store$|unit\.sdk-sqlite-(shm-identity-issuer|shm-mapping-lease|shm-mapping-registry)$'
+
+      - name: Commit and publish the exact reviewed unit
+        working-directory: repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          git commit -m 'fix(sqlite): admit exact-owner same-process mapped results'
+          git push --force-with-lease origin HEAD:"${UNIT_BRANCH}"
+          git rev-parse HEAD | tee ../unit-sha.txt
+
+      - name: Open and atomically integrate the verified serial PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit_sha=$(cat unit-sha.txt)
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=horiyamayoh:${UNIT_BRANCH}&base=${BASE_BRANCH}" --jq '.[0].number // empty')
+          if [[ -n "${existing}" ]]; then
+            pr_number=${existing}
+          else
+            response=$(gh api --method POST "repos/${GITHUB_REPOSITORY}/pulls" \
+              -f title='Fix #205: admit exact-owner same-process mapped results' \
+              -f head="${UNIT_BRANCH}" \
+              -f base="${BASE_BRANCH}" \
+              -f body="Implements the next serial #181 unit after PR #213. Binds only the owner-authenticated, same-process, in-flight mapped-result receipt into the forwarding VFS lifecycle; arbitrary/legacy/stale/replayed/cross-owner/cross-process native OK remains fail-closed. The exact head was independently reviewed, built with Clang 22 as static and shared, passed the complete static test suite, passed the release-blocking Store/materialization and issuer/lease/registry tests for 30 consecutive repetitions, and passed focused ASan/UBSan qualification. Closes #205 after integration. Learning checkpoint: none.")
+            pr_number=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["number"])' <<<"${response}")
+          fi
+          printf '%s\n' "${pr_number}" | tee pr-number.txt
+          merge=$(gh api --method PUT "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/merge" \
+            -f merge_method=merge \
+            -f sha="${unit_sha}" \
+            -f commit_title='Merge exact-owner same-process mapped result authority')
+          python3 -c 'import json,sys; data=json.load(sys.stdin); assert data.get("merged") is True, data; print(data["sha"])' <<<"${merge}" | tee integration-sha.txt
+
+      - name: Close only the completed authority issue and publish receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr_number=$(cat pr-number.txt)
+          unit_sha=$(cat unit-sha.txt)
+          integration_sha=$(cat integration-sha.txt)
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/205/comments" \
+            -f body="Completed by PR #${pr_number}. Verified implementation head: \`${unit_sha}\`; integration commit on \`${BASE_BRANCH}\`: \`${integration_sha}\`. Acceptance receipts: exact-owner-only production binding, complete Clang 22 static suite, shared build focused suite, 30 consecutive release-blocker/adversarial repetitions, focused ASan/UBSan, bounded-path guard, and independent authority review. Arbitrary native \`SQLITE_OK\`, stale/replay/cross-owner/cross-process/drop/close/unmap paths remain rejected. Learning checkpoint: none."
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/205" \
+            -f state=closed -f state_reason=completed >/dev/null
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/181/comments" \
+            -f body="U2a2 / #205 integrated through PR #${pr_number} at \`${integration_sha}\`. The two previously release-blocking tests (independent two-live Store CAS and materialization competitor publish) now pass on the exact head, including 30 repeated runs, static/shared builds, and focused ASan/UBSan. Next serial unit remains public/status/promotion closure and any independent provider/materialization blockers; no such status was advanced here. Learning checkpoint: none."
+
+      - name: Delete one-shot implementation and controller branches
+        if: success()
+        working-directory: repo
+        shell: bash
+        run: |
+          git push origin --delete "${UNIT_BRANCH}" || true
+          git push origin --delete agent/u2a2-model-controller-205 || true
