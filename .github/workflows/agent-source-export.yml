@@ -47,8 +47,12 @@ jobs:
           git diff --check
           python3 tools/quality/check_ng_design_feedback.py issue-ready --issue '#211'
 
-      - name: Install exact Clang 22 toolchain
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+      - name: Install exact Clang 22 toolchain and sanitizer runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+          sudo apt-get install -y --no-install-recommends libclang-rt-22-dev
 
       - name: Exact Clang 22 static qualification
         env:
