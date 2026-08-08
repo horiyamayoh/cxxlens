@@ -230,6 +230,21 @@ set_tests_properties(
              "unit;sdk;store;sqlite;vfs;shm;registry;process;fork;security")
 
 cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration
+  unit/sdk/sqlite_same_process_shm_vfs_alias_registration_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration
+                      PRIVATE cxxlens::kernel)
+target_include_directories(
+  cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration
+  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-shm-vfs-alias-registration
+         COMMAND cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration)
+set_tests_properties(
+  unit.sdk-sqlite-shm-vfs-alias-registration
+  PROPERTIES LABELS
+             "unit;sdk;store;sqlite;vfs;shm;registry;registration;fork;security")
+
+cxxlens_add_test_executable(
   cxxlens-unit-sdk-sqlite-shm-mapping-registry
   unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-shm-mapping-registry

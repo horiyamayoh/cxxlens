@@ -44,6 +44,7 @@ namespace cxxlens::sdk
 
 	class sqlite_same_process_shm_registry_test_peer;
 	class sqlite_same_process_shm_process_port;
+	class sqlite_same_process_shm_vfs_alias_registration_port;
 	class sqlite_shm_process_registry_handle;
 	class sqlite_shm_process_global_identity_issuer;
 	class sqlite_shm_reader_lifecycle_identity_scope;
@@ -211,6 +212,7 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_registry_test_peer;
+		friend class sqlite_same_process_shm_vfs_alias_registration_port;
 
 		sqlite_shm_registry_alias_binding(
 			sqlite_backend_opaque_identity process_instance,
@@ -227,8 +229,9 @@ namespace cxxlens::sdk
 	/**
 	 * Closed proof that one exact alias registration completed and remained discoverable.
 	 *
-	 * This production-inert checkpoint has no producer. Only its focused test peer can mint the
-	 * value; the future VFS validator must be added explicitly before any production binding.
+	 * Only the closed VFS alias lifecycle port and its focused registry test peer can mint this
+	 * value. The port verifies the native registration status and exact post-registration lookup;
+	 * the forwarding-VFS identity sealer and production caller remain a separate follow-on unit.
 	 */
 	class sqlite_shm_verified_alias_registration_receipt
 	{
@@ -245,6 +248,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_same_process_shm_registry_test_peer;
+		friend class sqlite_same_process_shm_vfs_alias_registration_port;
 
 		sqlite_shm_verified_alias_registration_receipt(
 			sqlite_backend_opaque_identity process_instance,
@@ -281,6 +285,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_same_process_shm_registry_test_peer;
+		friend class sqlite_same_process_shm_vfs_alias_registration_port;
 
 		sqlite_shm_verified_alias_unregistration_receipt(
 			sqlite_backend_opaque_identity process_instance,
