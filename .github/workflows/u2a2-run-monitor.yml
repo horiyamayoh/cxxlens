@@ -1,0 +1,50 @@
+name: U2a2 controller run monitor
+
+on:
+  push:
+    branches:
+      - agent/u2a2-model-controller-205
+
+permissions:
+  actions: write
+  issues: write
+
+jobs:
+  publish-controller-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Keep the newest controller run and publish its id
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest=''
+          runs=''
+          for attempt in $(seq 1 12); do
+            runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=agent/u2a2-model-controller-205&per_page=100")
+            latest=$(jq -r --arg sha "${GITHUB_SHA}" '
+              [.workflow_runs[]
+               | select(.name == "U2a2 exact-owner qualified native-OK agent")
+               | select(.head_sha == $sha)]
+              | sort_by(.created_at) | reverse | .[0].id // empty
+            ' <<<"${runs}")
+            [[ -n "${latest}" ]] && break
+            sleep 5
+          done
+          [[ -n "${latest}" ]]
+
+          while IFS= read -r stale; do
+            [[ -z "${stale}" || "${stale}" == "${latest}" ]] && continue
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${stale}/cancel" >/dev/null || true
+          done < <(jq -r --argjson keep "${latest}" '
+            .workflow_runs[]
+            | select(.name == "U2a2 exact-owner qualified native-OK agent")
+            | select((.status == "queued") or (.status == "in_progress"))
+            | select(.id != $keep)
+            | .id
+          ' <<<"${runs}")
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/205/comments" \
+            -f body="U2a2 / #205 controller started from \`${GITHUB_SHA}\`. Observable workflow run: \`${latest}\`. Any older queued/in-progress U2a2 controller run was cancelled so only this exact serial base is allowed to publish."
