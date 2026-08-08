@@ -1345,7 +1345,7 @@ namespace
 	acquire_reader_open(registry_fixture& fixture,
 						const sqlite_shm_reader_pre_sqlite_session_request& request)
 	{
-		auto open = sqlite_same_process_shm_registry_test_peer::reader_open(
+		auto open = sqlite_shm_reader_open_production_factory::acquire(
 			*fixture.registry, *fixture.family_pin, reader_open_binding(request));
 		require(open.has_value(), "acquire exact reader forwarding-file/open authority");
 		return std::move(*open);

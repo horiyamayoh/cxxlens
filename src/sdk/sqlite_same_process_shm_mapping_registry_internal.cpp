@@ -8398,6 +8398,33 @@ namespace cxxlens::sdk
 		return state_->acquire_reader_open(family, binding);
 	}
 
+	sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
+	sqlite_same_process_shm_mapping_registry::acquire_reader_open_for_production(
+		sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_reader_open_binding& binding) noexcept
+	{
+		if (!state_)
+			return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+		try
+		{
+			return state_->acquire_reader_open(family, binding);
+		}
+		catch (...)
+		{
+			return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+		}
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
+	sqlite_shm_reader_open_production_factory::acquire(
+		sqlite_same_process_shm_mapping_registry& registry,
+		sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_reader_open_binding& binding) noexcept
+	{
+		return registry.acquire_reader_open_for_production(family, binding);
+	}
+
 	void sqlite_same_process_shm_mapping_registry::lock_registry_mutex_for_fork_testing()
 	{
 		state_->lock_mutex_for_fork_testing();

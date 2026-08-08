@@ -43,6 +43,7 @@ namespace cxxlens::sdk
 	} // namespace detail
 
 	class sqlite_same_process_shm_registry_test_peer;
+	class sqlite_same_process_shm_mapping_registry;
 	class sqlite_same_process_shm_process_port;
 	class sqlite_same_process_shm_vfs_alias_registration_port;
 	class sqlite_shm_process_registry_handle;
@@ -55,6 +56,7 @@ namespace cxxlens::sdk
 	enum class sqlite_shm_reader_lifecycle_owner_kind : std::uint8_t;
 	class sqlite_shm_registry_activity_pin;
 	class sqlite_shm_reader_open_authority;
+	class sqlite_shm_reader_open_production_factory;
 	class sqlite_shm_reader_attachment_authority;
 	class sqlite_shm_reader_map_predelegate_authority;
 	class sqlite_writer_shm_mapping_epoch_arm;
@@ -454,6 +456,7 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_mapping_registry;
+		friend class sqlite_shm_reader_open_production_factory;
 		friend class sqlite_same_process_shm_registry_test_peer;
 
 		explicit sqlite_shm_reader_open_authority(
@@ -464,6 +467,24 @@ namespace cxxlens::sdk
 
 		std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state_;
 		std::shared_ptr<detail::sqlite_shm_reader_open_control> control_;
+	};
+
+	/**
+	 * Source-private bridge for the exact production reader xOpen admission cut.
+	 *
+	 * The factory does not construct authority from copied fields. It forwards the complete
+	 * source-sealed binding through the registry's locked admission transaction. Reader callback
+	 * binding, grouping, and native SQLITE_OK projection remain separate blocked transitions.
+	 */
+	class sqlite_shm_reader_open_production_factory final
+	{
+	  public:
+		sqlite_shm_reader_open_production_factory() = delete;
+
+		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
+		acquire(sqlite_same_process_shm_mapping_registry& registry,
+				sqlite_shm_registry_family_pin& family,
+				const sqlite_shm_reader_open_binding& binding) noexcept;
 	};
 
 	enum class sqlite_shm_reader_session_admission_kind : std::uint8_t
@@ -1103,6 +1124,7 @@ namespace cxxlens::sdk
 	  private:
 		friend struct detail::sqlite_shm_process_registry_port_state;
 		friend class sqlite_same_process_shm_process_port;
+		friend class sqlite_shm_reader_open_production_factory;
 		friend class sqlite_shm_process_registry_handle;
 		friend class sqlite_same_process_shm_registry_test_peer;
 		friend class sqlite_same_process_shm_reader_receipt_validator;
@@ -1145,6 +1167,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
 		acquire_reader_open_for_testing(sqlite_shm_registry_family_pin& family,
 										const sqlite_shm_reader_open_binding& binding);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
+		acquire_reader_open_for_production(sqlite_shm_registry_family_pin& family,
+										   const sqlite_shm_reader_open_binding& binding) noexcept;
 		void invalidate_process_instance_for_testing() noexcept;
 		void lock_registry_mutex_for_fork_testing();
 		void unlock_registry_mutex_for_fork_testing() noexcept;
