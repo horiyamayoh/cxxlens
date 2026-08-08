@@ -24,6 +24,7 @@
 #include "sqlite_backend_effect_gate_internal.hpp"
 #include "sqlite_default_forwarding_vfs_internal.hpp"
 #include "sqlite_same_process_shm_vfs_alias_registration_internal.hpp"
+#include "sqlite_source_shm_readonly_preflight_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -887,6 +888,8 @@ namespace cxxlens::sdk
 					registered_ = false;
 					return;
 				}
+				source_shm_family_.reset();
+				source_shm_family_binding_.reset();
 				if (!registered_alias_->unregister_alias())
 					std::terminate();
 				registered_alias_.reset();
@@ -990,6 +993,28 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] result<void>
+			ensure_source_shm_family(const sqlite_shm_lease_family_binding& family)
+			{
+				std::scoped_lock lock{source_shm_family_mutex_};
+				if (!registered_alias_ || !registered_alias_->valid())
+					return unexpected(forwarding_error("source-shm-readonly-family"));
+				if (source_shm_family_)
+				{
+					if (!source_shm_family_binding_ || *source_shm_family_binding_ != family)
+						return unexpected(forwarding_error("source-shm-readonly-family"));
+					return {};
+				}
+				auto pinned =
+					sqlite_same_process_shm_vfs_alias_registration_port::install_or_join_family(
+						*registered_alias_, family);
+				if (!pinned)
+					return unexpected(forwarding_error("source-shm-readonly-family"));
+				source_shm_family_.emplace(std::move(*pinned));
+				source_shm_family_binding_ = family;
+				return {};
+			}
+
+			[[nodiscard]] result<void>
 			arm_source_shm_readonly_profile(default_connection_observation& observation,
 											sqlite_source_shm_qualified_open_plan plan)
 			{
@@ -1034,6 +1059,8 @@ namespace cxxlens::sdk
 							plan.delegated_vfs_locator ||
 						plan.qualification.sealed_qualification_token.profile.empty() ||
 						plan.qualification.sealed_qualification_token.bytes.empty() ||
+						plan.qualification.exact_file_family.profile.empty() ||
+						plan.qualification.exact_file_family.bytes.empty() ||
 						!plan.qualification.first_map_nonmutating ||
 						!plan.qualification.later_map_nonmutating ||
 						!plan.qualification.cantinit_heap_wal_index_route_proven ||
@@ -1055,6 +1082,38 @@ namespace cxxlens::sdk
 						*current_shared_memory->directory_entry_identity !=
 							plan.qualification.expected_shared_memory_entry_identity)
 						return unexpected(forwarding_error("source-shm-readonly-arm"));
+					std::array<sqlite_backend_entry_observation, 4U> family_entries;
+					constexpr std::array family_roles{
+						sqlite_backend_file_role::main_database,
+						sqlite_backend_file_role::write_ahead_log,
+						sqlite_backend_file_role::shared_memory,
+						sqlite_backend_file_role::rollback_journal,
+					};
+					for (std::size_t index{}; index < family_roles.size(); ++index)
+					{
+						auto retained = plan.qualification.target_namespace_epoch->retained_entry(
+							family_roles[index]);
+						if (!retained)
+							return unexpected(forwarding_error("source-shm-readonly-arm"));
+						family_entries[index] = std::move(*retained);
+					}
+					auto exact_file_family = seal_sqlite_source_shm_exact_file_family(
+						plan.canonical_vfs_locator,
+						plan.qualification.parent_namespace_identity,
+						source_id,
+						family_entries);
+					if (!exact_file_family ||
+						*exact_file_family != plan.qualification.exact_file_family)
+						return unexpected(forwarding_error("source-shm-readonly-arm"));
+					if (!registered_alias_)
+						return unexpected(forwarding_error("source-shm-readonly-arm"));
+					const sqlite_shm_lease_family_binding family{
+						registered_alias_->process_instance(),
+						registered_alias_->shared_runtime_vfs_cohort(),
+						std::move(*exact_file_family),
+					};
+					if (auto installed = ensure_source_shm_family(family); !installed)
+						return installed;
 					std::scoped_lock lock{observation.mutex};
 					if (observation.invalid || observation.main_claimed ||
 						observation.main_handle_open || observation.source_shm_open_plan ||
@@ -2072,6 +2131,9 @@ namespace cxxlens::sdk
 			std::atomic<std::uint64_t> next_connection_observation_{1U};
 			std::atomic<std::size_t> open_file_count_;
 			std::optional<sqlite_shm_registered_vfs_alias> registered_alias_;
+			std::mutex source_shm_family_mutex_;
+			std::optional<sqlite_shm_registry_family_pin> source_shm_family_;
+			std::optional<sqlite_shm_lease_family_binding> source_shm_family_binding_;
 			bool registered_{};
 		};
 

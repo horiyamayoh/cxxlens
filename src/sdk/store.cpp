@@ -4534,6 +4534,8 @@ namespace cxxlens::sdk
 					qualified->delegated_vfs_locator ||
 				receipt.sealed_qualification_token.profile.empty() ||
 				receipt.sealed_qualification_token.bytes.empty() ||
+				receipt.exact_file_family.profile.empty() ||
+				receipt.exact_file_family.bytes.empty() ||
 				!receipt.first_map_nonmutating || !receipt.later_map_nonmutating ||
 				!receipt.cantinit_heap_wal_index_route_proven ||
 				!receipt.readonly_mapped_wal_index_retry_route_proven)

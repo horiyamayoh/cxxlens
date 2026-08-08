@@ -321,6 +321,8 @@ namespace cxxlens::sdk
 		bool later_map_nonmutating{};
 		bool cantinit_heap_wal_index_route_proven{};
 		bool readonly_mapped_wal_index_retry_route_proven{};
+		/** Stable exact main/WAL/SHM family identity, independent of observation capability/FDs. */
+		sqlite_backend_opaque_identity exact_file_family;
 	};
 
 	/** Exact source URI/open tuple accepted by the qualified forwarding-VFS callback. */

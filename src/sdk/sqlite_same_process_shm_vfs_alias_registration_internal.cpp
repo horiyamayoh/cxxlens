@@ -680,6 +680,18 @@ namespace cxxlens::sdk
 		}
 	}
 
+	sqlite_shm_lease_result<sqlite_shm_registry_family_pin>
+	sqlite_same_process_shm_vfs_alias_registration_port::install_or_join_family(
+		sqlite_shm_registered_vfs_alias& alias, const sqlite_shm_lease_family_binding& family)
+	{
+		if (!alias.valid() || !alias.alias_ || alias.process_.registry() == nullptr)
+			return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+		if (family.process_instance != alias.process_.process_instance() ||
+			family.shared_runtime_vfs_cohort != alias.shared_runtime_vfs_cohort_)
+			return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+		return alias.process_.registry()->install_or_join_family(*alias.alias_, family);
+	}
+
 	sqlite_shm_lease_result<void>
 	sqlite_same_process_shm_vfs_alias_registration_port::unregister_alias(
 		sqlite_shm_registered_vfs_alias& alias) noexcept

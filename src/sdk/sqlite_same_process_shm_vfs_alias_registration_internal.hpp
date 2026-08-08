@@ -76,6 +76,8 @@ namespace cxxlens::sdk
 	 * Runtime/image/source-id and original-VFS identities are kept as separate coordinates. The
 	 * sealer never calls SQLite or accepts a caller-authored cohort/lifetime identity; it derives
 	 * all registry identities from this complete tuple and retains the supplied runtime owner.
+	 * The registration lifecycle itself remains separate from the explicit family coordinator
+	 * bridge below; no callback or outward SQLite status is inferred here.
 	 */
 	struct sqlite_shm_vfs_alias_identity_sealing_input
 	{
@@ -183,8 +185,8 @@ namespace cxxlens::sdk
 	 * mapping-registry mutex across SQLite callbacks, never accepts caller-authored success status or
 	 * discovery evidence, and constructs each closed lifecycle receipt before native effect. Same-thread
 	 * reentry is rejected immediately; other-thread contention waits only at a bounded process-keyed
-	 * gate which resets after fork. This unit does not install a family,
-	 * bind xShmMap/xShmUnmap/xClose, or alter outward SQLite status projection.
+	 * gate which resets after fork. Native alias registration does not bind xShmMap/xShmUnmap/xClose
+	 * or alter outward SQLite status projection; family installation is an explicit owner bridge.
 	 */
 	class sqlite_same_process_shm_vfs_alias_registration_port final
 	{
@@ -193,6 +195,11 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_registered_vfs_alias>
 		register_alias(sqlite_shm_vfs_alias_lifecycle_binding binding) noexcept;
+
+		/** Install or join one exact file-family coordinator through the registered alias owner. */
+		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_registry_family_pin>
+		install_or_join_family(sqlite_shm_registered_vfs_alias& alias,
+							   const sqlite_shm_lease_family_binding& family);
 
 	  private:
 		friend class sqlite_shm_registered_vfs_alias;

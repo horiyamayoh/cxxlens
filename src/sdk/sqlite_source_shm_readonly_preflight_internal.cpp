@@ -1958,6 +1958,14 @@ namespace cxxlens::sdk
 				!target_guard->recheck())
 				return unexpected(
 					qualification_error("source-shm-readonly-qualification-target-census"));
+			auto exact_file_family =
+				seal_sqlite_source_shm_exact_file_family(canonical_locator_,
+														 request.parent_namespace_identity,
+														 source_id,
+														 request.source_census.entries);
+			if (!exact_file_family)
+				return unexpected(
+					qualification_error("source-shm-readonly-qualification-file-family"));
 
 			const std::string anchored_main{target_guard->anchored_main_locator()};
 			const auto anchored_separator = anchored_main.rfind('/');
@@ -2114,6 +2122,7 @@ namespace cxxlens::sdk
 			sealed.bytes.reserve(4096U);
 			append_bytes(sealed.bytes, source_shm_profile);
 			append_bytes(sealed.bytes, source_id);
+			append_opaque(sealed.bytes, *exact_file_family);
 			append_bytes(sealed.bytes, exact_filesystem_profile);
 			append_bytes(sealed.bytes, canonical_locator_);
 			append_bytes(sealed.bytes, registered_vfs_name_);
@@ -2211,6 +2220,7 @@ namespace cxxlens::sdk
 				true,
 				true,
 				true,
+				std::move(*exact_file_family),
 			};
 			return sqlite_source_shm_qualified_open_plan{
 				std::move(request.runtime),
@@ -2224,6 +2234,110 @@ namespace cxxlens::sdk
 		}
 #endif
 	} // namespace
+
+	result<sqlite_backend_opaque_identity> seal_sqlite_source_shm_exact_file_family(
+		const std::string_view canonical_vfs_locator,
+		const sqlite_backend_opaque_identity& parent_namespace_identity,
+		const std::string_view sqlite_source_id,
+		const std::span<const sqlite_backend_entry_observation> entries)
+	{
+		if (canonical_vfs_locator.empty() || canonical_vfs_locator.front() != '/' ||
+			canonical_vfs_locator.contains('\0') || parent_namespace_identity.profile.empty() ||
+			parent_namespace_identity.bytes.empty() || sqlite_source_id.empty() ||
+			sqlite_source_id.contains('\0') || sqlite_source_id.size() > maximum_source_id_bytes ||
+			entries.size() != 4U)
+			return unexpected(qualification_error());
+		try
+		{
+			sqlite_backend_opaque_identity output;
+			output.profile = "sqlite-source-shm-readonly-unix-uri-v1.exact-file-family.v1";
+			output.bytes.reserve(1024U + canonical_vfs_locator.size() + sqlite_source_id.size());
+			append_bytes(output.bytes, canonical_vfs_locator);
+			append_opaque(output.bytes, parent_namespace_identity);
+			append_bytes(output.bytes, sqlite_source_id);
+
+			std::array<const sqlite_backend_entry_observation*, 4U> ordered_entries{};
+			for (const auto& entry : entries)
+			{
+				std::size_t role_index{};
+				switch (entry.role)
+				{
+					case sqlite_backend_file_role::main_database:
+						role_index = 0U;
+						break;
+					case sqlite_backend_file_role::write_ahead_log:
+						role_index = 1U;
+						break;
+					case sqlite_backend_file_role::shared_memory:
+						role_index = 2U;
+						break;
+					case sqlite_backend_file_role::rollback_journal:
+						role_index = 3U;
+						break;
+					default:
+						return unexpected(qualification_error());
+				}
+				if (ordered_entries[role_index] != nullptr)
+					return unexpected(qualification_error());
+				ordered_entries[role_index] = &entry;
+
+				const auto active = role_index != 3U;
+				const auto mount = entry.held_object
+					? entry.held_object->object_mount_identity()
+					: std::optional<sqlite_backend_opaque_identity>{};
+				if (active)
+				{
+					if (entry.state != sqlite_backend_entry_state::held_regular ||
+						!entry.object_identity || !entry.directory_entry_identity ||
+						!entry.object_filesystem_profile || !entry.held_object ||
+						!entry.direct_regular_entry || !mount || mount->profile.empty() ||
+						mount->bytes.empty())
+						return unexpected(qualification_error());
+				}
+				else if (entry.state != sqlite_backend_entry_state::absent ||
+						 entry.object_identity || entry.directory_entry_identity ||
+						 entry.held_object || entry.object_filesystem_profile ||
+						 entry.direct_regular_entry || mount)
+					return unexpected(qualification_error());
+			}
+			if (std::ranges::any_of(ordered_entries,
+									[](const auto* entry)
+									{
+										return entry == nullptr;
+									}))
+				return unexpected(qualification_error());
+			for (const auto* entry : ordered_entries)
+			{
+				const auto mount = entry->held_object
+					? entry->held_object->object_mount_identity()
+					: std::optional<sqlite_backend_opaque_identity>{};
+				append_u64(output.bytes, static_cast<std::uint64_t>(entry->role));
+				append_u64(output.bytes, static_cast<std::uint64_t>(entry->state));
+				append_u64(output.bytes, entry->direct_regular_entry ? 1U : 0U);
+				append_u64(output.bytes, entry->object_identity ? 1U : 0U);
+				if (entry->object_identity)
+					append_opaque(output.bytes, *entry->object_identity);
+				append_u64(output.bytes, entry->directory_entry_identity ? 1U : 0U);
+				if (entry->directory_entry_identity)
+					append_opaque(output.bytes, *entry->directory_entry_identity);
+				append_u64(output.bytes, entry->object_filesystem_profile ? 1U : 0U);
+				if (entry->object_filesystem_profile)
+					append_opaque(output.bytes, *entry->object_filesystem_profile);
+				append_u64(output.bytes, mount ? 1U : 0U);
+				if (mount)
+					append_opaque(output.bytes, *mount);
+			}
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(qualification_error());
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(qualification_error());
+		}
+	}
 
 	result<void> validate_sqlite_source_shm_readonly_origin_probe(
 		const void* pinned_underlying_vfs_identity,

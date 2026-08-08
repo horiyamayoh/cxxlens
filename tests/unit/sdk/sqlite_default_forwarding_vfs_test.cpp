@@ -1905,6 +1905,8 @@ int main()
 	}
 
 	{
+		require(::unlink(journal_path.c_str()) == 0,
+				"remove rollback journal before exact WAL family qualification");
 		auto target_census = bundle->observation->capture_namespace(main_path);
 		require(target_census.has_value(), "qualified target source census");
 		const sqlite_backend_entry_observation* target_shm{};
@@ -1941,6 +1943,13 @@ int main()
 			bundle->forwarding_vfs->backend_lifetime_identity();
 		qualification.observation_capability_token = bundle->observation->capability_token();
 		qualification.parent_namespace_identity = test_receipt("qualified-parent");
+		auto exact_file_family =
+			seal_sqlite_source_shm_exact_file_family(main_path,
+													 qualification.parent_namespace_identity,
+													 fake_runtime_source_id(),
+													 target_census->entries);
+		require(exact_file_family.has_value(), "qualified exact file-family identity");
+		qualification.exact_file_family = std::move(*exact_file_family);
 		qualification.expected_shared_memory_object_identity = *target_shm->object_identity;
 		qualification.expected_shared_memory_entry_identity = *target_shm->directory_entry_identity;
 		qualification.target_namespace_epoch_identity = target_epoch->identity();
@@ -2007,6 +2016,7 @@ int main()
 		shm_map_result = sqlite_ok;
 		return_null_shm_mapping_without_extension = false;
 	}
+	create_file(journal_path);
 	int access_result{};
 	std::array<char, 4097U> path_buffer{};
 	std::array<char, 8U> error_buffer{};

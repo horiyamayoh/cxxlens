@@ -36,6 +36,17 @@ namespace cxxlens::sdk
 		std::string_view scratch_probe_path);
 
 	/**
+	 * Seal the stable exact main/WAL/SHM family identity used by the process-global SHM registry.
+	 * The identity excludes per-observation capability tokens and descriptor anchors, but includes
+	 * the canonical locator and every retained object/entry/filesystem/mount receipt.
+	 */
+	[[nodiscard]] result<sqlite_backend_opaque_identity> seal_sqlite_source_shm_exact_file_family(
+		std::string_view canonical_vfs_locator,
+		const sqlite_backend_opaque_identity& parent_namespace_identity,
+		std::string_view sqlite_source_id,
+		std::span<const sqlite_backend_entry_observation> entries);
+
+	/**
 	 * Construct the Linux/default-filesystem behavioral qualifier retained by one observation
 	 * capability. The qualifier never opens the target locator; it creates and removes an exact
 	 * scratch fixture beneath the already-bound target parent instead.
