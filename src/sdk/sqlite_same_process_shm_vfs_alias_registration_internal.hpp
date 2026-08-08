@@ -146,7 +146,7 @@ namespace cxxlens::sdk
 	 *
 	 * The port owns the exact reserve/begin/native-call/discovery/confirm order. It never carries the
 	 * mapping-registry mutex across SQLite callbacks, never accepts caller-authored success status or
-	 * discovery evidence, and preconstructs every allocating receipt before native effect. Same-thread
+	 * discovery evidence, and constructs each closed lifecycle receipt before native effect. Same-thread
 	 * reentry is rejected immediately; other-thread contention waits only at a bounded process-keyed
 	 * gate which resets after fork. This unit does not install a family,
 	 * bind xShmMap/xShmUnmap/xClose, or alter outward SQLite status projection.
