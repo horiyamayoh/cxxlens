@@ -124,7 +124,8 @@ namespace
 					find_bridge,
 					register_bridge,
 					unregister_bridge,
-					lifetime_};
+					lifetime_,
+					sqlite_source_shm_runtime_binding{}};
 		}
 
 		sqlite_open_function open{};
