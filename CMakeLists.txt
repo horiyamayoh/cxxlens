@@ -167,6 +167,7 @@ add_library(
   src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.cpp
   src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp
   src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp
+  src/sdk/sqlite_writer_gate_outcome_internal.cpp
   src/sdk/sqlite_writer_shm_mapping_epoch_internal.cpp
   src/sdk/sqlite_writer_shm_mapping_semantics_internal.cpp
   src/sdk/sqlite_limit_length_control_internal.cpp

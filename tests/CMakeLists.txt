@@ -216,6 +216,19 @@ set_tests_properties(
   PROPERTIES LABELS "unit;sdk;store;sqlite;vfs;shm;lease;lifecycle;security")
 
 cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-writer-gate-outcome
+  unit/sdk/sqlite_writer_gate_outcome_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-writer-gate-outcome
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-sqlite-writer-gate-outcome
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-writer-gate-outcome
+         COMMAND cxxlens-unit-sdk-sqlite-writer-gate-outcome)
+set_tests_properties(
+  unit.sdk-sqlite-writer-gate-outcome
+  PROPERTIES LABELS "unit;sdk;store;sqlite;vfs;shm;gate;lifecycle;security")
+
+cxxlens_add_test_executable(
   cxxlens-unit-sdk-sqlite-shm-process-port
   unit/sdk/sqlite_same_process_shm_process_port_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-shm-process-port
