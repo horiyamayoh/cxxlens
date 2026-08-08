@@ -245,6 +245,20 @@ set_tests_properties(
              "unit;sdk;store;sqlite;vfs;shm;registry;registration;fork;security")
 
 cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer
+  unit/sdk/sqlite_same_process_shm_vfs_alias_identity_sealer_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer
+                      PRIVATE cxxlens::kernel)
+target_include_directories(
+  cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer
+  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-shm-vfs-alias-identity-sealer
+         COMMAND cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer)
+set_tests_properties(
+  unit.sdk-sqlite-shm-vfs-alias-identity-sealer
+  PROPERTIES LABELS "unit;sdk;store;sqlite;vfs;shm;registry;identity;security")
+
+cxxlens_add_test_executable(
   cxxlens-unit-sdk-sqlite-shm-mapping-registry
   unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-shm-mapping-registry

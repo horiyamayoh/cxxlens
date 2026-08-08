@@ -26,6 +26,7 @@ namespace cxxlens::sdk
 			"cxxlens.sqlite.shm.vfs-alias-registration-epoch.v1";
 		constexpr std::string_view unregistration_epoch_profile =
 			"cxxlens.sqlite.shm.vfs-alias-unregistration-epoch.v1";
+		constexpr std::size_t maximum_sealed_source_id_bytes = 4096U;
 
 		constexpr auto native_alias_lifecycle_wait_limit = std::chrono::milliseconds{100};
 #if defined(__linux__)
@@ -212,10 +213,15 @@ namespace cxxlens::sdk
 		}
 
 		void append_identity(std::vector<std::byte>& output,
-						 const sqlite_backend_opaque_identity& identity)
+							 const sqlite_backend_opaque_identity& identity)
 		{
 			append_string(output, identity.profile);
 			append_bytes(output, identity.bytes);
+		}
+
+		void append_pointer(std::vector<std::byte>& output, const void* value)
+		{
+			append_u64(output, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(value)));
 		}
 
 		template <class Value>
@@ -224,6 +230,25 @@ namespace cxxlens::sdk
 			static_assert(std::is_trivially_copyable_v<Value>);
 			const auto* begin = reinterpret_cast<const std::byte*>(std::addressof(value));
 			append_bytes(output, {begin, sizeof(Value)});
+		}
+
+		template <class Builder>
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity> mint_sealed_identity(
+			const std::string_view profile, Builder&& builder) noexcept
+		{
+			try
+			{
+				sqlite_backend_opaque_identity output;
+				output.profile = std::string{profile};
+				builder(output.bytes);
+				if (!valid_identity(output))
+					return std::nullopt;
+				return output;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
 		}
 
 		[[nodiscard]] std::optional<sqlite_backend_opaque_identity> mint_epoch(
@@ -281,6 +306,134 @@ namespace cxxlens::sdk
 		}
 
 	} // namespace
+
+	sqlite_shm_lease_result<sqlite_shm_vfs_alias_lifecycle_binding>
+	sqlite_same_process_shm_vfs_alias_identity_sealer::seal(
+		sqlite_shm_vfs_alias_identity_sealing_input input) noexcept
+	{
+		if (!input.process.valid() || input.process.registry() == nullptr ||
+			input.runtime.runtime_identity == nullptr ||
+			input.runtime.runtime_image_identity == nullptr ||
+			input.runtime.runtime_lifetime_identity == nullptr ||
+			!input.runtime.runtime_lifetime ||
+			input.runtime.runtime_lifetime_identity != input.runtime.runtime_lifetime.get() ||
+			input.runtime.open_v2 == nullptr || input.runtime.close_v2 == nullptr ||
+			input.runtime.exec == nullptr || input.runtime.errmsg == nullptr ||
+			input.runtime.free_memory == nullptr || input.runtime.source_id == nullptr ||
+			input.runtime.uri_parameter == nullptr || input.runtime.uri_key == nullptr ||
+			input.runtime.vfs_find == nullptr || input.runtime.vfs_register == nullptr ||
+			input.runtime.vfs_unregister == nullptr ||
+			input.pinned_underlying_vfs_identity == nullptr ||
+			input.pinned_underlying_vfs_app_data_identity == nullptr ||
+			input.pinned_underlying_open_callback_address == nullptr ||
+			input.backend_lifetime_identity == nullptr ||
+			!valid_name(input.registered_vfs_name) || input.vfs_implementation == nullptr ||
+			input.vfs_implementation == input.pinned_underlying_vfs_identity)
+			return rejection(sqlite_shm_lease_rejection_reason::invalid_identity);
+
+		try
+		{
+			const auto& process_instance = input.process.process_instance();
+			if (!valid_identity(process_instance))
+				return rejection(sqlite_shm_lease_rejection_reason::invalid_identity);
+			const char* const source_id = input.runtime.source_id();
+			if (source_id == nullptr)
+				return rejection(sqlite_shm_lease_rejection_reason::invalid_identity);
+			std::size_t source_id_size{};
+			while (source_id_size < maximum_sealed_source_id_bytes &&
+				   source_id[source_id_size] != '\0')
+				++source_id_size;
+			if (source_id_size == 0U || source_id_size == maximum_sealed_source_id_bytes)
+				return rejection(sqlite_shm_lease_rejection_reason::invalid_identity);
+			const std::string source_id_value{source_id, source_id_size};
+
+			auto shared_runtime_vfs_cohort = mint_sealed_identity(
+				"cxxlens.sqlite.shm.vfs.shared-runtime-cohort.v1",
+				[&](std::vector<std::byte>& bytes)
+				{
+					append_identity(bytes, process_instance);
+					append_pointer(bytes, input.runtime.runtime_identity);
+					append_pointer(bytes, input.runtime.runtime_image_identity);
+					append_string(bytes, source_id_value);
+					append_pointer(bytes, input.pinned_underlying_vfs_identity);
+					append_pointer(bytes, input.pinned_underlying_vfs_app_data_identity);
+					append_pointer(bytes, input.pinned_underlying_open_callback_address);
+					append_object_representation(bytes, input.runtime.open_v2);
+					append_object_representation(bytes, input.runtime.close_v2);
+					append_object_representation(bytes, input.runtime.exec);
+					append_object_representation(bytes, input.runtime.errmsg);
+					append_object_representation(bytes, input.runtime.free_memory);
+					append_object_representation(bytes, input.runtime.source_id);
+					append_object_representation(bytes, input.runtime.uri_parameter);
+					append_object_representation(bytes, input.runtime.uri_key);
+					append_object_representation(bytes, input.runtime.vfs_find);
+					append_object_representation(bytes, input.runtime.vfs_register);
+					append_object_representation(bytes, input.runtime.vfs_unregister);
+				});
+			if (!shared_runtime_vfs_cohort)
+				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+			auto alias_lifetime = mint_sealed_identity(
+				"cxxlens.sqlite.shm.vfs.alias-lifetime.v1",
+				[&](std::vector<std::byte>& bytes)
+				{
+					append_identity(bytes, *shared_runtime_vfs_cohort);
+					append_pointer(bytes, input.backend_lifetime_identity);
+					append_pointer(bytes, input.vfs_implementation);
+					append_string(bytes, input.registered_vfs_name);
+				});
+			if (!alias_lifetime)
+				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+			auto runtime_lifetime_identity = mint_sealed_identity(
+				"cxxlens.sqlite.shm.vfs.runtime-lifetime.v1",
+				[&](std::vector<std::byte>& bytes)
+				{
+					append_identity(bytes, process_instance);
+					append_identity(bytes, *shared_runtime_vfs_cohort);
+					append_identity(bytes, *alias_lifetime);
+					append_pointer(bytes, input.runtime.runtime_identity);
+					append_pointer(bytes, input.runtime.runtime_image_identity);
+					append_string(bytes, source_id_value);
+					append_pointer(bytes, input.runtime.runtime_lifetime.get());
+				});
+			if (!runtime_lifetime_identity)
+				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+			auto runtime_lifetime_pin_identity = mint_sealed_identity(
+				"cxxlens.sqlite.shm.vfs.runtime-lifetime-pin.v1",
+				[&](std::vector<std::byte>& bytes)
+				{
+					append_identity(bytes, *runtime_lifetime_identity);
+					append_identity(bytes, *alias_lifetime);
+					append_pointer(bytes, input.vfs_implementation);
+				});
+			if (!runtime_lifetime_pin_identity)
+				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+			return sqlite_shm_vfs_alias_lifecycle_binding{
+				std::move(input.process),
+				std::move(*shared_runtime_vfs_cohort),
+				std::move(*alias_lifetime),
+				std::move(*runtime_lifetime_identity),
+				std::move(*runtime_lifetime_pin_identity),
+				std::move(input.runtime.runtime_lifetime),
+				std::move(input.registered_vfs_name),
+				input.vfs_implementation,
+				input.runtime.vfs_find,
+				input.runtime.vfs_register,
+				input.runtime.vfs_unregister,
+			};
+		}
+		catch (...)
+		{
+			return ambiguous_rejection();
+		}
+	}
 
 	sqlite_shm_vfs_alias_lifecycle_binding::sqlite_shm_vfs_alias_lifecycle_binding(
 		sqlite_shm_process_registry_handle process,

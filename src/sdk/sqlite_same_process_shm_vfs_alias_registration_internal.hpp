@@ -13,13 +13,12 @@ namespace cxxlens::sdk
 	class sqlite_same_process_shm_vfs_alias_registration_test_peer;
 
 	/**
-	 * Already-sealed input for one exact owned SQLite VFS alias lifecycle.
+	 * Sealed input produced from one exact owned SQLite VFS alias lifecycle.
 	 *
 	 * This value deliberately does not infer a cohort from a name, pointer, pathname, or runtime
-	 * lifetime identity. A future qualified forwarding-VFS identity sealer must bind the complete
-	 * DF-0205 process/runtime/image/source-id/original-VFS/callback receipt before constructing it.
-	 * The current test peer is the only producer in this source slice, so this port remains
-	 * production-inert.
+	 * lifetime identity. The source-private identity sealer is the only non-test producer and binds
+	 * the complete DF-0205 process/runtime/image/source-id/original-VFS/callback receipt before
+	 * constructing it. The registration port remains callback-family and Store inert.
 	 */
 	class sqlite_shm_vfs_alias_lifecycle_binding
 	{
@@ -69,6 +68,42 @@ namespace cxxlens::sdk
 		find_function find_{};
 		register_function register_vfs_{};
 		unregister_function unregister_vfs_{};
+	};
+
+	/**
+	 * Complete source-private receipt needed to seal one forwarding-VFS alias binding.
+	 *
+	 * Runtime/image/source-id and original-VFS identities are kept as separate coordinates. The
+	 * sealer never calls SQLite or accepts a caller-authored cohort/lifetime identity; it derives
+	 * all registry identities from this complete tuple and retains the supplied runtime owner.
+	 */
+	struct sqlite_shm_vfs_alias_identity_sealing_input
+	{
+		sqlite_shm_process_registry_handle process;
+		sqlite_source_shm_runtime_binding runtime;
+		const void* pinned_underlying_vfs_identity{};
+		const void* pinned_underlying_vfs_app_data_identity{};
+		const void* pinned_underlying_open_callback_address{};
+		const void* backend_lifetime_identity{};
+		std::string registered_vfs_name;
+		void* vfs_implementation{};
+	};
+
+	/**
+	 * Source-private identity/owner bridge for the exact forwarding-VFS lifecycle.
+	 *
+	 * The returned binding is the sole value accepted by the closed registration port. Missing,
+	 * inconsistent, or incomplete receipt coordinates are rejected before any native registration
+	 * attempt. This unit does not install a family, bind xShmMap/xShmUnmap/xClose, or project native
+	 * SQLite status.
+	 */
+	class sqlite_same_process_shm_vfs_alias_identity_sealer final
+	{
+	  public:
+		sqlite_same_process_shm_vfs_alias_identity_sealer() = delete;
+
+		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_vfs_alias_lifecycle_binding>
+		seal(sqlite_shm_vfs_alias_identity_sealing_input input) noexcept;
 	};
 
 	/**
