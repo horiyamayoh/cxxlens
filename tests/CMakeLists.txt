@@ -228,6 +228,15 @@ set_tests_properties(
   unit.sdk-sqlite-shm-mapping-registry
   PROPERTIES LABELS
              "unit;sdk;store;sqlite;vfs;shm;registry;lifecycle;fork;security")
+add_test(
+  NAME unit.sdk-sqlite-shm-mapping-registry-qualified-mapped-acceptance
+  COMMAND cxxlens-unit-sdk-sqlite-shm-mapping-registry)
+set_tests_properties(
+  unit.sdk-sqlite-shm-mapping-registry-qualified-mapped-acceptance
+  PROPERTIES
+    ENVIRONMENT "CXXLENS_SQLITE_MAPPED_ACCEPTANCE_ONLY=1"
+    LABELS
+      "unit;sdk;store;sqlite;vfs;shm;registry;lifecycle;fork;security;mapped;acceptance")
 
 cxxlens_add_test_executable(
   cxxlens-unit-sdk-sqlite-shm-identity-issuer

@@ -1491,8 +1491,9 @@ namespace cxxlens::sdk
 	class sqlite_shm_reader_mapped_post_native_observation final
 	{
 	  public:
+		~sqlite_shm_reader_mapped_post_native_observation() noexcept;
 		sqlite_shm_reader_mapped_post_native_observation(
-			sqlite_shm_reader_mapped_post_native_observation&&) noexcept = default;
+			sqlite_shm_reader_mapped_post_native_observation&&) noexcept;
 		sqlite_shm_reader_mapped_post_native_observation& operator=(
 			sqlite_shm_reader_mapped_post_native_observation&&) = delete;
 		sqlite_shm_reader_mapped_post_native_observation(
@@ -1504,6 +1505,7 @@ namespace cxxlens::sdk
 		friend class detail::sqlite_shm_mapping_lease_state;
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class detail::sqlite_shm_reader_mapped_post_native_observation_minter;
+		friend class sqlite_same_process_shm_reader_receipt_validator;
 		friend class sqlite_same_process_shm_lease_test_peer;
 
 		sqlite_shm_reader_mapped_post_native_observation(
@@ -1516,6 +1518,7 @@ namespace cxxlens::sdk
 			sqlite_backend_opaque_identity observed_shm_entry_receipt,
 			sqlite_backend_opaque_identity observed_device_receipt,
 			sqlite_backend_opaque_identity observed_mount_receipt);
+		void disarm_abandonment() noexcept;
 
 		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 		std::uint64_t token_{};
@@ -1525,6 +1528,9 @@ namespace cxxlens::sdk
 		const volatile void* native_mapping_{};
 		int delegated_extend_{};
 		sqlite_shm_reader_native_attachment_identity observed_attachment_;
+		/** Armed until first validation presentation; an unpresented native result abandons its owner. */
+		std::weak_ptr<detail::sqlite_shm_reader_map_identity_owner_control> abandonment_owner_;
+		bool abandonment_armed_{true};
 	};
 
 	class sqlite_shm_verified_reader_attachment_post_map_receipt

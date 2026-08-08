@@ -1878,8 +1878,28 @@ namespace cxxlens::sdk
 			std::move(observed_shm_object_receipt),
 			std::move(observed_shm_entry_receipt),
 			std::move(observed_device_receipt),
-			std::move(observed_mount_receipt)}
+			std::move(observed_mount_receipt)},
+		  abandonment_owner_{inflight.qualified_owner_control_}
 	{
+	}
+
+	sqlite_shm_reader_mapped_post_native_observation::
+		sqlite_shm_reader_mapped_post_native_observation(
+			sqlite_shm_reader_mapped_post_native_observation&& other) noexcept
+		: state_{std::move(other.state_)}, token_{std::exchange(other.token_, 0U)},
+		  generation_{std::exchange(other.generation_, 0U)}, request_{std::move(other.request_)},
+		  native_status_{other.native_status_}, native_mapping_{other.native_mapping_},
+		  delegated_extend_{other.delegated_extend_},
+		  observed_attachment_{std::move(other.observed_attachment_)},
+		  abandonment_owner_{std::move(other.abandonment_owner_)},
+		  abandonment_armed_{std::exchange(other.abandonment_armed_, false)}
+	{
+	}
+
+	void sqlite_shm_reader_mapped_post_native_observation::disarm_abandonment() noexcept
+	{
+		abandonment_armed_ = false;
+		abandonment_owner_.reset();
 	}
 
 	sqlite_shm_verified_reader_attachment_post_map_receipt::
@@ -1939,6 +1959,7 @@ namespace cxxlens::sdk
 		const sqlite_shm_issued_reader_effect_identity& effect,
 		sqlite_shm_reader_mapped_post_native_observation observation) noexcept
 	{
+		observation.disarm_abandonment();
 		return registry.validate_reader_mapped_attachment_effect(family,
 			inflight,
 			scope,
@@ -8115,6 +8136,7 @@ namespace cxxlens::sdk
 				sqlite_shm_reader_mapped_effect_identity_validation_capability capability,
 				sqlite_shm_reader_mapped_post_native_observation observation) noexcept
 			{
+				observation.disarm_abandonment();
 				std::shared_ptr<sqlite_shm_reader_map_identity_owner_control> exact_owner;
 				bool observation_burned{};
 				try
@@ -22424,6 +22446,15 @@ namespace cxxlens::sdk
 				exact_owner->abandon();
 		}
 	} // namespace detail
+
+	sqlite_shm_reader_mapped_post_native_observation::
+		~sqlite_shm_reader_mapped_post_native_observation() noexcept
+	{
+		if (!abandonment_armed_)
+			return;
+		if (const auto owner = abandonment_owner_.lock())
+			owner->abandon();
+	}
 
 	sqlite_shm_writer_eligibility::sqlite_shm_writer_eligibility(
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
