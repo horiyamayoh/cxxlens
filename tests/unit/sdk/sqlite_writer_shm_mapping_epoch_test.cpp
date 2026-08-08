@@ -152,6 +152,24 @@ namespace
 			std::nullopt,
 			owner);
 		require(!invalid, "production lifetime factory accepted a missing xOpen receipt");
+		auto duplicate_semantic =
+			sqlite_writer_shm_native_lifetime_production_factory::create_source(
+				sqlite_writer_shm_native_lifetime_role::main_database,
+				identity("test.epoch.production-duplicate", 4U),
+				identity("test.epoch.production-duplicate", 4U),
+				identity("test.epoch.production-xopen", 4U),
+				owner);
+		require(!duplicate_semantic,
+				"production lifetime factory accepted a duplicate lifetime/semantic identity");
+		auto duplicate_xopen = sqlite_writer_shm_native_lifetime_production_factory::create_source(
+			sqlite_writer_shm_native_lifetime_role::main_database,
+			identity("test.epoch.production-lifetime", 5U),
+			identity("test.epoch.production-semantic", 5U),
+			identity("test.epoch.production-semantic", 5U),
+			owner);
+		require(
+			!duplicate_xopen,
+			"production lifetime factory accepted an xOpen identity reused as semantic receipt");
 		auto unknown_role = sqlite_writer_shm_native_lifetime_production_factory::create_source(
 			static_cast<sqlite_writer_shm_native_lifetime_role>(0xffU),
 			identity("test.epoch.production-lifetime", 3U),

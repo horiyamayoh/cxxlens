@@ -17,6 +17,12 @@ namespace cxxlens::sdk
 			return !identity.profile.empty() && !identity.bytes.empty();
 		}
 
+		[[nodiscard]] bool distinct_identity(const sqlite_backend_opaque_identity& left,
+											 const sqlite_backend_opaque_identity& right) noexcept
+		{
+			return left != right;
+		}
+
 		[[nodiscard]] bool valid_family(const sqlite_shm_lease_family_binding& family) noexcept
 		{
 			return valid_identity(family.process_instance) &&
@@ -203,14 +209,18 @@ namespace cxxlens::sdk
 			const sqlite_writer_shm_native_lifetime_control& control) noexcept
 		{
 			if (!valid_identity(control.native_lifetime_identity) ||
-				!valid_identity(control.semantic_receipt))
+				!valid_identity(control.semantic_receipt) ||
+				!distinct_identity(control.native_lifetime_identity, control.semantic_receipt))
 				return false;
 			switch (control.role)
 			{
 				case sqlite_writer_shm_native_lifetime_role::main_database:
 				case sqlite_writer_shm_native_lifetime_role::write_ahead_log:
 					return control.native_xopen_receipt &&
-						valid_identity(*control.native_xopen_receipt);
+						valid_identity(*control.native_xopen_receipt) &&
+						distinct_identity(control.native_lifetime_identity,
+										  *control.native_xopen_receipt) &&
+						distinct_identity(control.semantic_receipt, *control.native_xopen_receipt);
 				case sqlite_writer_shm_native_lifetime_role::retained_parent:
 				case sqlite_writer_shm_native_lifetime_role::shared_memory_attachment:
 					return !control.native_xopen_receipt;
@@ -591,7 +601,8 @@ namespace cxxlens::sdk
 					sqlite_shm_lease_recovery_action::deny_before_native_map}};
 		};
 		if (!retained_owner || !valid_identity(native_lifetime_identity) ||
-			!valid_identity(semantic_receipt))
+			!valid_identity(semantic_receipt) ||
+			!distinct_identity(native_lifetime_identity, semantic_receipt))
 			return invalid();
 		switch (role)
 		{
@@ -608,7 +619,10 @@ namespace cxxlens::sdk
 			default:
 				return invalid();
 		}
-		if (native_xopen_receipt && !valid_identity(*native_xopen_receipt))
+		if (native_xopen_receipt &&
+			(!valid_identity(*native_xopen_receipt) ||
+			 !distinct_identity(native_lifetime_identity, *native_xopen_receipt) ||
+			 !distinct_identity(semantic_receipt, *native_xopen_receipt)))
 			return invalid();
 		try
 		{
