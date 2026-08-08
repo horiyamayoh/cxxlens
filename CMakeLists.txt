@@ -151,6 +151,20 @@ function(cxxlens_configure_installed_tool target)
   endif()
 endfunction()
 
+function(cxxlens_configure_installed_clang22_tool target)
+  cxxlens_configure_installed_tool(${target})
+  # The static distribution links the provider worker against the exact external
+  # Clang/LLVM shared runtime. Its installed execution contract unsets ambient
+  # loader variables, so retain the configured exact runtime directory in the
+  # worker only; no adjacent-major or first-found fallback is permitted.
+  if(NOT CXXLENS_BUILD_SHARED AND CXXLENS_CLANG22_AVAILABLE AND
+     CXXLENS_CLANG22_LIBRARY_DIRS)
+    set_target_properties(
+      ${target} PROPERTIES INSTALL_RPATH "${CXXLENS_CLANG22_LIBRARY_DIRS}"
+                           INSTALL_RPATH_USE_LINK_PATH FALSE)
+  endif()
+endfunction()
+
 add_library(cxxlens_base ${CXXLENS_LIBRARY_TYPE} src/sdk/common.cpp)
 add_library(cxxlens::base ALIAS cxxlens_base)
 cxxlens_configure_component(cxxlens_base base)
@@ -429,7 +443,7 @@ target_include_directories(cxxlens-clang-worker-22
 target_compile_features(cxxlens-clang-worker-22 PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-clang-worker-22)
 cxxlens_enable_sanitizers(cxxlens-clang-worker-22)
-cxxlens_configure_installed_tool(cxxlens-clang-worker-22)
+cxxlens_configure_installed_clang22_tool(cxxlens-clang-worker-22)
 
 set(CXXLENS_COMPILED_TARGETS
     cxxlens_base

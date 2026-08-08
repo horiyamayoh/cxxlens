@@ -4,6 +4,9 @@ set(CXXLENS_CLANG_ADAPTER
 set_property(CACHE CXXLENS_CLANG_ADAPTER PROPERTY STRINGS AUTO ON OFF)
 
 function(cxxlens_configure_clang22 target)
+  set(CXXLENS_CLANG22_LIBRARY_DIRS
+      ""
+      CACHE INTERNAL "Exact LLVM/Clang 22 runtime library directories" FORCE)
   if(NOT CXXLENS_CLANG_ADAPTER MATCHES "^(AUTO|ON|OFF)$")
     message(
       FATAL_ERROR
@@ -87,6 +90,20 @@ function(cxxlens_configure_clang22 target)
   set(CXXLENS_CLANG22_EXPLICIT_COMPONENTS
       "${_cxxlens_clang22_components}"
       CACHE INTERNAL "Explicit Clang 22 link closure" FORCE)
+  set(CXXLENS_CLANG22_LIBRARY_DIRS
+      "${LLVM_LIBRARY_DIRS}"
+      CACHE INTERNAL "Exact LLVM/Clang 22 runtime library directories" FORCE)
+  if(UNIX AND LLVM_LIBRARY_DIRS)
+    get_target_property(_cxxlens_existing_install_rpath ${target} INSTALL_RPATH)
+    if(NOT _cxxlens_existing_install_rpath
+       OR _cxxlens_existing_install_rpath STREQUAL "_cxxlens_existing_install_rpath-NOTFOUND")
+      set(_cxxlens_existing_install_rpath)
+    endif()
+    list(APPEND _cxxlens_existing_install_rpath ${LLVM_LIBRARY_DIRS})
+    set_target_properties(
+      ${target} PROPERTIES INSTALL_RPATH "${_cxxlens_existing_install_rpath}"
+                           INSTALL_RPATH_USE_LINK_PATH FALSE)
+  endif()
   set(CXXLENS_CLANG22_AVAILABLE
       TRUE
       CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
