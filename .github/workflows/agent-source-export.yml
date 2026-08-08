@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - agent/u2a1c-observation-abandonment-211
+  pull_request:
+    branches:
+      - issue-181-clang22-materialization-runtime
 
 permissions:
   contents: write
 
 concurrency:
   group: agent-u2a1c-observation-abandonment-211
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: 2
@@ -18,7 +21,10 @@ env:
 
 jobs:
   qualify-and-publish:
-    if: github.repository == 'horiyamayoh/cxxlens'
+    if: >-
+      github.repository == 'horiyamayoh/cxxlens' &&
+      ((github.event_name == 'push' && github.ref_name == 'agent/u2a1c-observation-abandonment-211') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'agent/u2a1c-observation-abandonment-211'))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
