@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include "sqlite_same_process_shm_mapping_lease_internal.hpp"
@@ -15,6 +16,7 @@ namespace cxxlens::sdk
 	namespace detail
 	{
 		class sqlite_shm_process_identity_issuer_state;
+		struct sqlite_shm_process_registry_port_state;
 		struct sqlite_shm_registry_process_owner_seal;
 		struct sqlite_shm_registry_runtime_owner_box;
 		struct sqlite_shm_registry_activity_control;
@@ -42,6 +44,8 @@ namespace cxxlens::sdk
 	} // namespace detail
 
 	class sqlite_same_process_shm_registry_test_peer;
+	class sqlite_same_process_shm_process_port;
+	class sqlite_shm_process_registry_handle;
 	class sqlite_shm_process_global_identity_issuer;
 	class sqlite_shm_reader_lifecycle_identity_scope;
 	class sqlite_shm_issued_reader_callback_identity;
@@ -98,8 +102,8 @@ namespace cxxlens::sdk
 	 * One non-replayable, exact-epoch ownership receipt for the process-global registry and
 	 * generation source.
 	 *
-	 * There is intentionally no production minter in this checkpoint. The future qualified process
-	 * port must mint exactly one owner for one non-reusable process instance.
+	 * The qualified process port is the sole production minter. It consumes exactly one owner for
+	 * one non-reusable process instance when constructing the process-global registry.
 	 */
 	class sqlite_shm_registry_process_owner
 	{
@@ -114,7 +118,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool valid() const noexcept;
 
 	  private:
+		friend struct detail::sqlite_shm_process_registry_port_state;
 		friend class sqlite_same_process_shm_mapping_registry;
+		friend class sqlite_same_process_shm_process_port;
 		friend class sqlite_same_process_shm_registry_test_peer;
 
 		explicit sqlite_shm_registry_process_owner(sqlite_backend_opaque_identity process_instance);
@@ -1084,9 +1090,29 @@ namespace cxxlens::sdk
 		family_snapshot(const sqlite_shm_lease_family_binding& family) const noexcept;
 
 	  private:
+		friend struct detail::sqlite_shm_process_registry_port_state;
+		friend class sqlite_same_process_shm_process_port;
+		friend class sqlite_shm_process_registry_handle;
 		friend class sqlite_same_process_shm_registry_test_peer;
 		friend class sqlite_same_process_shm_reader_receipt_validator;
 		friend class sqlite_same_process_shm_reader_zero_effect_receipt_validator;
+
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
+		adopt_runtime_lifetime_from_process_port(sqlite_backend_opaque_identity identity,
+									 sqlite_backend_opaque_identity pin_identity,
+									 std::shared_ptr<void> owner)
+		{
+			return adopt_runtime_lifetime_for_testing(
+				std::move(identity), std::move(pin_identity), std::move(owner));
+		}
+		void invalidate_process_instance_from_process_port() noexcept
+		{
+			invalidate_process_instance_for_testing();
+		}
+		[[nodiscard]] bool process_instance_live_from_process_port() const noexcept
+		{
+			return snapshot().process_live;
+		}
 
 		sqlite_same_process_shm_mapping_registry(
 			std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state);
