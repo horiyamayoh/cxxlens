@@ -1,0 +1,109 @@
+name: Manual PR 221 hardening publication
+
+on:
+  pull_request:
+    branches:
+      - issue-181-clang22-materialization-runtime
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/manual-221-hardening-publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Publish exact fork-gate hardening
+        shell: bash
+        env:
+          BASE_SHA: 6bdde290a4f299ac6ad872e536625e1a5704d2ce
+          TARGET_BRANCH: agent/issue-181-shm-vfs-alias-registration-port
+          EXPECTED_CPP_BLOB: 24d558a8b1ae95fc850b768af3643fbf5238e200
+          EXPECTED_HPP_BLOB: 70fb3d8d94332c5b666c7e2f4e82f163c2b7fc6a
+          EXPECTED_TREE: 602e321e32ca56816f19e3f8c204bed52839ca8d
+        run: |
+          set -euo pipefail
+          remote_sha="$(git ls-remote origin "refs/heads/${TARGET_BRANCH}" | awk '{print $1}')"
+          test "${remote_sha}" = "${BASE_SHA}"
+          git cat-file -e "${BASE_SHA}^{commit}"
+          git checkout --detach "${BASE_SHA}"
+          git switch -C "${TARGET_BRANCH}"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cpp = Path("src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.cpp")
+          text = cpp.read_text()
+          replacements = [
+              (
+                  "\t\tconstexpr auto native_alias_lifecycle_wait_limit = std::chrono::milliseconds{100};\n"
+                  "\t\tstd::atomic<std::uint64_t> native_alias_lifecycle_gate_state{};\n",
+                  "\t\tconstexpr auto native_alias_lifecycle_wait_limit = std::chrono::milliseconds{100};\n"
+                  "#if defined(__linux__)\n"
+                  "\t\tstatic_assert(std::atomic<std::uint64_t>::is_always_lock_free,\n"
+                  "\t\t\t\t\t  \"fork-safe alias lifecycle gate requires lock-free 64-bit atomics\");\n"
+                  "#endif\n"
+                  "\t\tstd::atomic<std::uint64_t> native_alias_lifecycle_gate_state{};\n",
+              ),
+              (
+                  "\t\t\t\tnative_alias_lifecycle_active_process_key = process_key_;\n"
+                  "\t\t\t\tconst auto deadline =\n"
+                  "\t\t\t\t\tstd::chrono::steady_clock::now() + native_alias_lifecycle_wait_limit;\n"
+                  "\t\t\t\tauto observed =\n",
+                  "\t\t\t\tnative_alias_lifecycle_active_process_key = process_key_;\n"
+                  "\t\t\t\tstd::optional<std::chrono::steady_clock::time_point> deadline;\n"
+                  "\t\t\t\tauto observed =\n",
+              ),
+              (
+                  "\t\t\t\t\tif (std::chrono::steady_clock::now() >= deadline)\n"
+                  "\t\t\t\t\t{\n"
+                  "\t\t\t\t\t\ttimed_out_ = true;\n"
+                  "\t\t\t\t\t\treturn;\n"
+                  "\t\t\t\t\t}\n",
+                  "\t\t\t\t\tconst auto now = std::chrono::steady_clock::now();\n"
+                  "\t\t\t\t\tif (!deadline)\n"
+                  "\t\t\t\t\t\tdeadline = now + native_alias_lifecycle_wait_limit;\n"
+                  "\t\t\t\t\telse if (now >= *deadline)\n"
+                  "\t\t\t\t\t{\n"
+                  "\t\t\t\t\t\ttimed_out_ = true;\n"
+                  "\t\t\t\t\t\treturn;\n"
+                  "\t\t\t\t\t}\n",
+              ),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit("unexpected C++ publication anchor")
+              text = text.replace(old, new, 1)
+          cpp.write_text(text)
+
+          hpp = Path("src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.hpp")
+          text = hpp.read_text()
+          old = "discovery evidence, and preconstructs every allocating receipt before native effect. Same-thread"
+          new = "discovery evidence, and constructs each closed lifecycle receipt before native effect. Same-thread"
+          if text.count(old) != 1:
+              raise SystemExit("unexpected header publication anchor")
+          hpp.write_text(text.replace(old, new, 1))
+          PY
+          test "$(git hash-object src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.cpp)" = "${EXPECTED_CPP_BLOB}"
+          test "$(git hash-object src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.hpp)" = "${EXPECTED_HPP_BLOB}"
+          git add \
+            src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.cpp \
+            src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.hpp
+          cat > "${RUNNER_TEMP}/expected-files" <<'EOF'
+          src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.cpp
+          src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.hpp
+          EOF
+          git diff --cached --name-only | sort > "${RUNNER_TEMP}/actual-files"
+          diff -u "${RUNNER_TEMP}/expected-files" "${RUNNER_TEMP}/actual-files"
+          git diff --cached --check
+          test "$(git write-tree)" = "${EXPECTED_TREE}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(sqlite): harden fork-safe alias lifecycle gate"
+          test "$(git rev-parse 'HEAD^{tree}')" = "${EXPECTED_TREE}"
+          git push origin "HEAD:refs/heads/${TARGET_BRANCH}"
