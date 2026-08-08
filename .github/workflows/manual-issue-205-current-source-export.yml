@@ -1,0 +1,35 @@
+name: Manual issue 205 current source export
+
+on:
+  pull_request:
+    branches:
+      - issue-181-clang22-materialization-runtime
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/manual-205-source-export-current'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Export exact head source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz \
+            --output="${RUNNER_TEMP}/cxxlens-source-${GITHUB_SHA}.tar.gz" \
+            HEAD
+      - name: Upload exact head source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-manual-205-current-source-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/cxxlens-source-${{ github.sha }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
