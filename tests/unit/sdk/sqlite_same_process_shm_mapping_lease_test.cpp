@@ -1323,6 +1323,29 @@ namespace
 			identity("test.complete-current-v3-gate", marker));
 	}
 
+	void verify_production_writer_eligibility_factory_is_exact()
+	{
+		const auto binding = family(1U);
+		const auto connection = identity("test.production-eligibility-connection", 1U);
+		const auto open_epoch = identity("test.production-eligibility-open-epoch", 1U);
+		auto mismatched = sqlite_shm_writer_eligibility_receipt_production_factory::seal(
+			binding,
+			connection,
+			open_epoch,
+			effect_gate(identity("test.other-connection", 1U), 1U));
+		require(!mismatched,
+				"production writer eligibility factory accepted an effect for another connection");
+
+		auto sealed = sqlite_shm_writer_eligibility_receipt_production_factory::seal(
+			binding, connection, open_epoch, effect_gate(connection, 2U));
+		require(sealed.has_value(),
+				"production writer eligibility factory rejected a complete cut");
+		require(sealed->family() == binding && sealed->connection_token() == connection &&
+					sealed->open_epoch() == open_epoch &&
+					sealed->complete_current_v3_gate() == sealed->effect_gate().validation_receipt,
+				"production writer eligibility factory changed the authenticated cut");
+	}
+
 	[[nodiscard]] sqlite_shm_verified_writer_post_map_receipt
 	writer_receipt(const sqlite_shm_writer_map_request& request,
 				   const sqlite_backend_opaque_identity& open_epoch,
@@ -15363,6 +15386,7 @@ int main()
 {
 	try
 	{
+		verify_production_writer_eligibility_factory_is_exact();
 		verify_reader_lifecycle_vocabulary_is_closed();
 		verify_extend_pair_classifier();
 		verify_native_attachment_identity_and_census_groundwork();

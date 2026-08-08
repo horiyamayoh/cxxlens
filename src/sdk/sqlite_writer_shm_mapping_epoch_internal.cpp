@@ -573,6 +573,72 @@ namespace cxxlens::sdk
 		};
 	}
 
+	sqlite_shm_lease_result<std::pair<sqlite_writer_shm_native_lifetime_revoker,
+									  sqlite_writer_shm_native_lifetime_source>>
+	sqlite_writer_shm_native_lifetime_production_factory::create_source(
+		const sqlite_writer_shm_native_lifetime_role role,
+		sqlite_backend_opaque_identity native_lifetime_identity,
+		sqlite_backend_opaque_identity semantic_receipt,
+		std::optional<sqlite_backend_opaque_identity> native_xopen_receipt,
+		const std::shared_ptr<void>& retained_owner) noexcept
+	{
+		const auto invalid = []
+		{
+			return sqlite_shm_lease_result<std::pair<sqlite_writer_shm_native_lifetime_revoker,
+													 sqlite_writer_shm_native_lifetime_source>>{
+				sqlite_shm_lease_rejection{
+					sqlite_shm_lease_rejection_reason::invalid_identity,
+					sqlite_shm_lease_recovery_action::deny_before_native_map}};
+		};
+		if (!retained_owner || !valid_identity(native_lifetime_identity) ||
+			!valid_identity(semantic_receipt))
+			return invalid();
+		switch (role)
+		{
+			case sqlite_writer_shm_native_lifetime_role::main_database:
+			case sqlite_writer_shm_native_lifetime_role::write_ahead_log:
+				if (!native_xopen_receipt)
+					return invalid();
+				break;
+			case sqlite_writer_shm_native_lifetime_role::retained_parent:
+			case sqlite_writer_shm_native_lifetime_role::shared_memory_attachment:
+				if (native_xopen_receipt)
+					return invalid();
+				break;
+			default:
+				return invalid();
+		}
+		if (native_xopen_receipt && !valid_identity(*native_xopen_receipt))
+			return invalid();
+		try
+		{
+			auto control = std::make_shared<detail::sqlite_writer_shm_native_lifetime_control>();
+			control->role = role;
+			control->native_lifetime_identity = std::move(native_lifetime_identity);
+			control->semantic_receipt = std::move(semantic_receipt);
+			control->native_xopen_receipt = std::move(native_xopen_receipt);
+			return std::pair{
+				sqlite_writer_shm_native_lifetime_revoker{control},
+				sqlite_writer_shm_native_lifetime_source{std::move(control), retained_owner}};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sqlite_shm_lease_result<std::pair<sqlite_writer_shm_native_lifetime_revoker,
+													 sqlite_writer_shm_native_lifetime_source>>{
+				sqlite_shm_lease_rejection{
+					sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+					sqlite_shm_lease_recovery_action::deny_before_native_map}};
+		}
+		catch (const std::length_error&)
+		{
+			return sqlite_shm_lease_result<std::pair<sqlite_writer_shm_native_lifetime_revoker,
+													 sqlite_writer_shm_native_lifetime_source>>{
+				sqlite_shm_lease_rejection{
+					sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+					sqlite_shm_lease_recovery_action::deny_before_native_map}};
+		}
+	}
+
 	sqlite_writer_shm_mapping_epoch_arm::sqlite_writer_shm_mapping_epoch_arm(
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state) noexcept
 		: state_{std::move(state)}

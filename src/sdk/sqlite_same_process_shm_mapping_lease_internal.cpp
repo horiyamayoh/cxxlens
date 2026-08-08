@@ -1827,6 +1827,52 @@ namespace cxxlens::sdk
 		return complete_current_v3_gate_;
 	}
 
+	sqlite_shm_lease_result<sqlite_shm_verified_writer_eligibility_receipt>
+	sqlite_shm_writer_eligibility_receipt_production_factory::seal(
+		sqlite_shm_lease_family_binding family,
+		sqlite_backend_opaque_identity connection_token,
+		sqlite_backend_opaque_identity open_epoch,
+		sqlite_backend_effect_arm_receipt effect_gate) noexcept
+	{
+		const auto invalid = []
+		{
+			return sqlite_shm_lease_result<sqlite_shm_verified_writer_eligibility_receipt>{
+				rejection(sqlite_shm_lease_rejection_reason::invalid_identity,
+						  sqlite_shm_lease_recovery_action::deny_before_native_map)};
+		};
+		if (!valid_family(family) || !valid_identity(connection_token) ||
+			!valid_identity(open_epoch) || !valid_identity(effect_gate.capability_token) ||
+			!valid_identity(effect_gate.connection_token) ||
+			!valid_identity(effect_gate.prerequisite_receipt) ||
+			!valid_identity(effect_gate.validation_receipt) ||
+			effect_gate.canonical_vfs_locator.empty() ||
+			effect_gate.stage != sqlite_backend_effect_stage::fully_armed ||
+			effect_gate.sequence == 0U || effect_gate.connection_token != connection_token)
+			return invalid();
+		try
+		{
+			auto complete_current_v3_gate = effect_gate.validation_receipt;
+			return sqlite_shm_verified_writer_eligibility_receipt{
+				std::move(family),
+				std::move(connection_token),
+				std::move(open_epoch),
+				std::move(effect_gate),
+				std::move(complete_current_v3_gate)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sqlite_shm_lease_result<sqlite_shm_verified_writer_eligibility_receipt>{
+				rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+						  sqlite_shm_lease_recovery_action::deny_before_native_map)};
+		}
+		catch (const std::length_error&)
+		{
+			return sqlite_shm_lease_result<sqlite_shm_verified_writer_eligibility_receipt>{
+				rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+						  sqlite_shm_lease_recovery_action::deny_before_native_map)};
+		}
+	}
+
 	sqlite_shm_verified_reader_post_map_receipt::sqlite_shm_verified_reader_post_map_receipt(
 		sqlite_shm_reader_map_request request,
 		const std::uint64_t generation,

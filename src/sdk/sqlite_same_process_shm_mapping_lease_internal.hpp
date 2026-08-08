@@ -500,6 +500,7 @@ namespace cxxlens::sdk
 	class sqlite_writer_shm_native_map_receipt_validator;
 	class sqlite_writer_shm_mapping_receipt_validator;
 	class sqlite_same_process_shm_writer_gate_receipt_validator;
+	class sqlite_shm_writer_eligibility_receipt_production_factory;
 	class sqlite_same_process_shm_reader_receipt_validator;
 	class sqlite_same_process_shm_reader_zero_effect_receipt_validator;
 	class sqlite_same_process_shm_reader_session_terminal_receipt_validator;
@@ -1423,6 +1424,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_same_process_shm_writer_gate_receipt_validator;
+		friend class sqlite_shm_writer_eligibility_receipt_production_factory;
 		friend class sqlite_same_process_shm_lease_test_peer;
 
 		sqlite_shm_verified_writer_eligibility_receipt(
@@ -1437,6 +1439,19 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity open_epoch_;
 		sqlite_backend_effect_arm_receipt effect_gate_;
 		sqlite_backend_opaque_identity complete_current_v3_gate_;
+	};
+
+	/** Source-private producer for the exact post-current-v3 Store eligibility cut. */
+	class sqlite_shm_writer_eligibility_receipt_production_factory final
+	{
+	  public:
+		sqlite_shm_writer_eligibility_receipt_production_factory() = delete;
+
+		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_verified_writer_eligibility_receipt>
+		seal(sqlite_shm_lease_family_binding family,
+			 sqlite_backend_opaque_identity connection_token,
+			 sqlite_backend_opaque_identity open_epoch,
+			 sqlite_backend_effect_arm_receipt effect_gate) noexcept;
 	};
 
 	/** Exact native reader-map post receipt, sealed independently from the lease lookup. */

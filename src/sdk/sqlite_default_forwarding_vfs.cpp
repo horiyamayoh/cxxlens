@@ -25,6 +25,7 @@
 #include "sqlite_default_forwarding_vfs_internal.hpp"
 #include "sqlite_same_process_shm_vfs_alias_registration_internal.hpp"
 #include "sqlite_source_shm_readonly_preflight_internal.hpp"
+#include "sqlite_writer_shm_mapping_epoch_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -349,6 +350,7 @@ namespace cxxlens::sdk
 		}
 
 		class default_forwarding_state;
+		struct native_file_node;
 
 		struct default_connection_observation final : sqlite_backend_connection_observation_scope
 		{
@@ -370,6 +372,10 @@ namespace cxxlens::sdk
 			std::optional<sqlite_source_shm_qualification_fixture_fullpath_plan>
 				source_shm_qualification_fixture_pending_open_plan;
 			std::optional<sqlite_source_shm_open_callback_receipt> source_shm_open_callback_receipt;
+			std::optional<sqlite_backend_opaque_identity> main_native_file_receipt;
+			std::optional<sqlite_backend_opaque_identity> main_native_xopen_receipt;
+			std::optional<sqlite_backend_opaque_identity> main_open_epoch;
+			std::optional<sqlite_shm_writer_eligibility> writer_eligibility;
 			std::weak_ptr<default_forwarding_state> owner;
 			std::string profile;
 			bool complete{};
@@ -422,6 +428,8 @@ namespace cxxlens::sdk
 			{
 				return effect_gate.get();
 			}
+
+			[[nodiscard]] result<void> install_current_v3_writer_eligibility() override;
 
 			[[nodiscard]] result<void>
 			arm_source_shm_readonly_profile(sqlite_source_shm_qualified_open_plan plan) override;
@@ -511,6 +519,13 @@ namespace cxxlens::sdk
 			sqlite3_io_methods trusted_methods{};
 			bool trusted_methods_ready{};
 			int (*trusted_close)(sqlite3_file*){};
+			// The source is deliberately declared before the revoker so destruction revokes the
+			// close epoch before the source's weak owner is released.
+			std::optional<sqlite_writer_shm_native_lifetime_source> writer_lifetime_source;
+			std::optional<sqlite_writer_shm_native_lifetime_revoker> writer_lifetime_revoker;
+			std::optional<sqlite_backend_opaque_identity> writer_native_file_receipt;
+			std::optional<sqlite_backend_opaque_identity> writer_native_xopen_receipt;
+			std::optional<sqlite_backend_opaque_identity> writer_open_epoch;
 			std::shared_ptr<native_file_node> quarantine_self;
 			bool close_attempted{};
 		};
@@ -760,6 +775,33 @@ namespace cxxlens::sdk
 			return left.object == right.object && left.entry == right.entry;
 		}
 
+		void append_opaque_identity(std::vector<std::byte>& output,
+									const sqlite_backend_opaque_identity& identity)
+		{
+			append_bytes(output, identity.profile);
+			append_u64(output, static_cast<std::uint64_t>(identity.bytes.size()));
+			output.insert(output.end(), identity.bytes.begin(), identity.bytes.end());
+		}
+
+		struct native_lifetime_receipts
+		{
+			sqlite_backend_opaque_identity lifetime;
+			sqlite_backend_opaque_identity semantic;
+			sqlite_backend_opaque_identity xopen;
+			sqlite_backend_opaque_identity open_epoch;
+		};
+
+		[[nodiscard]] std::optional<native_lifetime_receipts>
+		make_native_lifetime_receipts(const default_forwarding_state& owner,
+									  const native_file_node& node,
+									  const sqlite_backend_file_role role,
+									  const std::size_t event_index,
+									  const int input_flags,
+									  const int delegated_flags,
+									  const int returned_flags,
+									  const opened_object_identities& identities,
+									  const std::uint64_t lifetime_sequence) noexcept;
+
 		[[nodiscard]] bool source_shm_runtime_receipt_present(
 			const sqlite_source_shm_runtime_binding& runtime) noexcept
 		{
@@ -981,6 +1023,15 @@ namespace cxxlens::sdk
 				return underlying_open_callback_address_;
 			}
 
+			[[nodiscard]] std::optional<std::uint64_t> mint_native_lifetime_sequence() noexcept
+			{
+				const auto sequence =
+					next_native_lifetime_sequence_.fetch_add(1U, std::memory_order_relaxed);
+				if (sequence == 0U || sequence == std::numeric_limits<std::uint64_t>::max())
+					return std::nullopt;
+				return sequence;
+			}
+
 			[[nodiscard]] const sqlite_private_snapshot_registry_binding& registry() const noexcept
 			{
 				return registry_;
@@ -1013,6 +1064,12 @@ namespace cxxlens::sdk
 				source_shm_family_binding_ = family;
 				return {};
 			}
+
+			[[nodiscard]] result<void> install_current_v3_writer_eligibility(
+				default_connection_observation& observation,
+				const sqlite_backend_effect_arm_receipt& effect_receipt);
+			[[nodiscard]] result<void>
+			revoke_writer_eligibility(default_connection_observation& observation) noexcept;
 
 			[[nodiscard]] result<void>
 			arm_source_shm_readonly_profile(default_connection_observation& observation,
@@ -2129,6 +2186,7 @@ namespace cxxlens::sdk
 			std::string canonical_locator_;
 			std::string observation_profile_;
 			std::atomic<std::uint64_t> next_connection_observation_{1U};
+			std::atomic<std::uint64_t> next_native_lifetime_sequence_{1U};
 			std::atomic<std::size_t> open_file_count_;
 			std::optional<sqlite_shm_registered_vfs_alias> registered_alias_;
 			std::mutex source_shm_family_mutex_;
@@ -2136,6 +2194,185 @@ namespace cxxlens::sdk
 			std::optional<sqlite_shm_lease_family_binding> source_shm_family_binding_;
 			bool registered_{};
 		};
+
+		[[nodiscard]] std::optional<native_lifetime_receipts>
+		make_native_lifetime_receipts(const default_forwarding_state& owner,
+									  const native_file_node& node,
+									  const sqlite_backend_file_role role,
+									  const std::size_t event_index,
+									  const int input_flags,
+									  const int delegated_flags,
+									  const int returned_flags,
+									  const opened_object_identities& identities,
+									  const std::uint64_t lifetime_sequence) noexcept
+		{
+			if ((role != sqlite_backend_file_role::main_database &&
+				 role != sqlite_backend_file_role::write_ahead_log) ||
+				lifetime_sequence == 0U)
+				return std::nullopt;
+			try
+			{
+				const auto role_value = static_cast<std::uint8_t>(role);
+				sqlite_backend_opaque_identity lifetime{"cxxlens.sqlite-native-file-lifetime.v1",
+														{}};
+				lifetime.bytes.reserve(256U + identities.object.bytes.size() +
+									   identities.entry.bytes.size());
+				append_u64(lifetime.bytes, lifetime_sequence);
+				append_pointer(lifetime.bytes, owner.vfs_implementation_identity());
+				append_pointer(lifetime.bytes, owner.underlying());
+				append_pointer(lifetime.bytes, owner.underlying_image_identity());
+				append_pointer(lifetime.bytes, owner.underlying_open_callback_address());
+				append_pointer(lifetime.bytes, node.underlying_app_data_identity);
+				append_pointer(lifetime.bytes, &node);
+				append_u64(lifetime.bytes, static_cast<std::uint64_t>(event_index));
+				lifetime.bytes.push_back(std::byte{role_value});
+				append_opaque_identity(lifetime.bytes, identities.object);
+				append_opaque_identity(lifetime.bytes, identities.entry);
+
+				sqlite_backend_opaque_identity semantic{"cxxlens.sqlite-native-file-semantic.v1",
+														{}};
+				semantic.bytes.reserve(128U + identities.object.bytes.size() +
+									   identities.entry.bytes.size());
+				semantic.bytes.push_back(std::byte{role_value});
+				append_u64(semantic.bytes, static_cast<std::uint64_t>(input_flags));
+				append_u64(semantic.bytes, static_cast<std::uint64_t>(returned_flags));
+				append_opaque_identity(semantic.bytes, identities.object);
+				append_opaque_identity(semantic.bytes, identities.entry);
+
+				sqlite_backend_opaque_identity xopen{"cxxlens.sqlite-native-xopen-receipt.v1", {}};
+				xopen.bytes.reserve(160U);
+				append_u64(xopen.bytes, static_cast<std::uint64_t>(event_index));
+				append_u64(xopen.bytes, static_cast<std::uint64_t>(input_flags));
+				append_u64(xopen.bytes, static_cast<std::uint64_t>(delegated_flags));
+				append_u64(xopen.bytes, static_cast<std::uint64_t>(returned_flags));
+				xopen.bytes.push_back(std::byte{role_value});
+				append_pointer(xopen.bytes, owner.underlying());
+				append_pointer(xopen.bytes, owner.underlying_image_identity());
+				append_pointer(xopen.bytes, owner.underlying_open_callback_address());
+				append_pointer(xopen.bytes, node.underlying_app_data_identity);
+
+				sqlite_backend_opaque_identity open_epoch{"cxxlens.sqlite-native-open-epoch.v1",
+														  {}};
+				open_epoch.bytes.reserve(lifetime.bytes.size() + xopen.bytes.size());
+				append_opaque_identity(open_epoch.bytes, lifetime);
+				append_opaque_identity(open_epoch.bytes, xopen);
+				return native_lifetime_receipts{std::move(lifetime),
+												std::move(semantic),
+												std::move(xopen),
+												std::move(open_epoch)};
+			}
+			catch (const std::bad_alloc&)
+			{
+				return std::nullopt;
+			}
+			catch (const std::length_error&)
+			{
+				return std::nullopt;
+			}
+		}
+
+		result<void> default_forwarding_state::install_current_v3_writer_eligibility(
+			default_connection_observation& observation,
+			const sqlite_backend_effect_arm_receipt& effect_receipt)
+		{
+			try
+			{
+				std::scoped_lock family_lock{source_shm_family_mutex_};
+				// A newly-created database has no authenticated four-file family until the
+				// first WAL qualification cut. It remains on the existing fail-closed route;
+				// no synthetic eligibility is installed for it.
+				if (!source_shm_family_ || !source_shm_family_binding_)
+					return {};
+				if (!registered_alias_ || !registered_alias_->valid() ||
+					registered_alias_->registry() == nullptr)
+					return unexpected(forwarding_error("source-shm-writer-eligibility"));
+
+				std::optional<sqlite_backend_opaque_identity> open_epoch;
+				sqlite_backend_opaque_identity connection_token;
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (observation.writer_eligibility)
+						return {};
+					open_epoch = observation.main_open_epoch;
+					connection_token = observation.connection_token_value;
+					if (!open_epoch || connection_token.profile.empty() ||
+						connection_token.bytes.empty())
+						return unexpected(forwarding_error("source-shm-writer-eligibility"));
+				}
+
+				auto sealed = sqlite_shm_writer_eligibility_receipt_production_factory::seal(
+					*source_shm_family_binding_,
+					std::move(connection_token),
+					std::move(*open_epoch),
+					effect_receipt);
+				if (!sealed)
+					return unexpected(forwarding_error("source-shm-writer-eligibility"));
+				auto installed = registered_alias_->registry()->install_writer_eligibility(
+					*source_shm_family_, *sealed);
+				if (!installed)
+					return unexpected(forwarding_error("source-shm-writer-eligibility"));
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (observation.writer_eligibility)
+					{
+						(void)registered_alias_->registry()->revoke_writer_eligibility(
+							*source_shm_family_, *installed);
+						return unexpected(forwarding_error("source-shm-writer-eligibility"));
+					}
+					observation.writer_eligibility.emplace(std::move(*installed));
+				}
+				return {};
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-eligibility"));
+			}
+			catch (const std::length_error&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-eligibility"));
+			}
+		}
+
+		result<void> default_forwarding_state::revoke_writer_eligibility(
+			default_connection_observation& observation) noexcept
+		{
+			try
+			{
+				std::scoped_lock family_lock{source_shm_family_mutex_};
+				std::optional<sqlite_shm_writer_eligibility> eligibility;
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (!observation.writer_eligibility)
+						return {};
+					eligibility.emplace(std::move(*observation.writer_eligibility));
+					observation.writer_eligibility.reset();
+				}
+				if (!source_shm_family_ || !registered_alias_ || !registered_alias_->valid() ||
+					registered_alias_->registry() == nullptr)
+					return unexpected(forwarding_error("source-shm-writer-eligibility-revoke"));
+				auto revoked = registered_alias_->registry()->revoke_writer_eligibility(
+					*source_shm_family_, *eligibility);
+				if (!revoked)
+					return unexpected(forwarding_error("source-shm-writer-eligibility-revoke"));
+				return {};
+			}
+			catch (...)
+			{
+				return unexpected(forwarding_error("source-shm-writer-eligibility-revoke"));
+			}
+		}
+
+		result<void> default_connection_observation::install_current_v3_writer_eligibility()
+		{
+			auto owner_pin = owner.lock();
+			if (!owner_pin || effect_gate == nullptr)
+				return unexpected(forwarding_error("source-shm-writer-eligibility"));
+			auto effect_receipt = effect_gate->latest_receipt();
+			if (!effect_receipt ||
+				effect_receipt->stage != sqlite_backend_effect_stage::fully_armed)
+				return unexpected(forwarding_error("source-shm-writer-eligibility"));
+			return owner_pin->install_current_v3_writer_eligibility(*this, *effect_receipt);
+		}
 
 		qualification_full_path_result default_forwarding_state::preserve_qualified_full_path(
 			const char* name, const int size, char* output) noexcept
@@ -2470,6 +2707,14 @@ namespace cxxlens::sdk
 			node->close_attempted = true;
 			try
 			{
+				if (node->writer_lifetime_revoker && !node->writer_lifetime_revoker->revoke())
+				{
+					// Native close is never entered after the source-private lifetime cut
+					// became ambiguous. The node remains quarantined and cannot be retried.
+					quarantine_native_file(node);
+					return sqlite_io_error;
+				}
+				node->writer_lifetime_source.reset();
 				const auto status = close_callback(node->file());
 				if (status == sqlite_ok)
 				{
@@ -2688,6 +2933,16 @@ namespace cxxlens::sdk
 			auto owner = file->owner;
 			auto observation = file->connection_observation;
 			const auto close_callback = file->native ? file->native->trusted_close : nullptr;
+			if (file->main_handle && owner && observation &&
+				!owner->revoke_writer_eligibility(*observation))
+			{
+				mark_incomplete(observation);
+				quarantine_native_file(file->native);
+				if (owner)
+					owner->decrement_open_file_count();
+				file->~forwarding_file();
+				return sqlite_io_error;
+			}
 			const auto status = close_native_file(file->native, close_callback);
 			if (file->main_handle && observation)
 			{
@@ -3645,6 +3900,7 @@ namespace cxxlens::sdk
 					file->~forwarding_file();
 					return sqlite_io_error;
 				}
+				auto lifetime_identities = identities;
 				if (!record_open_success(association.observation,
 										 event_index,
 										 local_out_flags,
@@ -3653,6 +3909,68 @@ namespace cxxlens::sdk
 					cleanup_failed_forwarding_open(*file);
 					file->~forwarding_file();
 					return sqlite_io_error;
+				}
+				if (lifetime_identities && !association.qualification_fixture &&
+					(association.role == sqlite_backend_file_role::main_database ||
+					 association.role == sqlite_backend_file_role::write_ahead_log))
+				{
+					const auto lifetime_sequence = owner->mint_native_lifetime_sequence();
+					if (!lifetime_sequence)
+					{
+						mark_incomplete(association.observation);
+						record_open_failure(association.observation, event_index);
+						cleanup_failed_forwarding_open(*file);
+						file->~forwarding_file();
+						return sqlite_io_error;
+					}
+					const auto sealed_receipts = make_native_lifetime_receipts(*owner,
+																			   *file->native,
+																			   association.role,
+																			   *event_index,
+																			   flags,
+																			   delegated_flags,
+																			   local_out_flags,
+																			   *lifetime_identities,
+																			   *lifetime_sequence);
+					if (!sealed_receipts)
+					{
+						mark_incomplete(association.observation);
+						record_open_failure(association.observation, event_index);
+						cleanup_failed_forwarding_open(*file);
+						file->~forwarding_file();
+						return sqlite_io_error;
+					}
+					auto produced =
+						sqlite_writer_shm_native_lifetime_production_factory::create_source(
+							association.role == sqlite_backend_file_role::main_database
+								? sqlite_writer_shm_native_lifetime_role::main_database
+								: sqlite_writer_shm_native_lifetime_role::write_ahead_log,
+							sealed_receipts->lifetime,
+							sealed_receipts->semantic,
+							sealed_receipts->xopen,
+							std::static_pointer_cast<void>(file->native));
+					if (!produced)
+					{
+						mark_incomplete(association.observation);
+						record_open_failure(association.observation, event_index);
+						cleanup_failed_forwarding_open(*file);
+						file->~forwarding_file();
+						return sqlite_io_error;
+					}
+					file->native->writer_lifetime_revoker.emplace(std::move(produced->first));
+					file->native->writer_lifetime_source.emplace(std::move(produced->second));
+					file->native->writer_native_file_receipt.emplace(sealed_receipts->semantic);
+					file->native->writer_native_xopen_receipt.emplace(sealed_receipts->xopen);
+					file->native->writer_open_epoch.emplace(sealed_receipts->open_epoch);
+					if (association.main_handle && association.observation)
+					{
+						std::scoped_lock lock{association.observation->mutex};
+						association.observation->main_native_file_receipt =
+							file->native->writer_native_file_receipt;
+						association.observation->main_native_xopen_receipt =
+							file->native->writer_native_xopen_receipt;
+						association.observation->main_open_epoch = file->native->writer_open_epoch;
+					}
 				}
 				if (association.main_handle && association.observation)
 				{

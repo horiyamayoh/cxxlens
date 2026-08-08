@@ -851,6 +851,13 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_family_pin>
 		pin_existing_family(sqlite_shm_registry_alias_pin& alias,
 							const sqlite_shm_lease_family_binding& family);
+		/** Install and revoke the Store eligibility cut for one exact active family. */
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_eligibility>
+		install_writer_eligibility(sqlite_shm_registry_family_pin& family,
+								   const sqlite_shm_verified_writer_eligibility_receipt& receipt);
+		[[nodiscard]] sqlite_shm_lease_result<void>
+		revoke_writer_eligibility(sqlite_shm_registry_family_pin& family,
+								  sqlite_shm_writer_eligibility& eligibility) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_activity_pin>
 		acquire_activity(sqlite_shm_registry_family_pin& family);
 		/**

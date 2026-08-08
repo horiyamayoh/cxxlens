@@ -141,6 +141,52 @@ namespace
 		return std::move(*minted);
 	}
 
+	void verify_production_lifetime_factory_is_complete_and_revocable()
+	{
+		auto destruction_count = std::make_shared<std::atomic_int>();
+		auto owner = std::make_shared<owner_probe>(destruction_count);
+		auto invalid = sqlite_writer_shm_native_lifetime_production_factory::create_source(
+			sqlite_writer_shm_native_lifetime_role::main_database,
+			identity("test.epoch.production-lifetime", 1U),
+			identity("test.epoch.production-semantic", 1U),
+			std::nullopt,
+			owner);
+		require(!invalid, "production lifetime factory accepted a missing xOpen receipt");
+		auto unknown_role = sqlite_writer_shm_native_lifetime_production_factory::create_source(
+			static_cast<sqlite_writer_shm_native_lifetime_role>(0xffU),
+			identity("test.epoch.production-lifetime", 3U),
+			identity("test.epoch.production-semantic", 3U),
+			std::nullopt,
+			owner);
+		require(!unknown_role, "production lifetime factory accepted an unknown role");
+
+		auto produced = sqlite_writer_shm_native_lifetime_production_factory::create_source(
+			sqlite_writer_shm_native_lifetime_role::main_database,
+			identity("test.epoch.production-lifetime", 2U),
+			identity("test.epoch.production-semantic", 2U),
+			identity("test.epoch.production-xopen", 2U),
+			owner);
+		require(produced.has_value(), "production lifetime factory rejected a complete receipt");
+		native_lifetime_fixture fixture{std::move(produced->first),
+										std::move(produced->second),
+										owner,
+										owner,
+										destruction_count};
+		owner.reset();
+		{
+			auto pin = mint_pin(fixture, "production lifetime source did not mint a pin");
+			fixture.retained_owner.reset();
+			// The pin owns the node independently; close revocation only removes authority.
+			require(pin.valid() && !fixture.owner.expired(),
+					"production lifetime pin was not retained before revocation");
+			require(fixture.revoker.revoke(), "production lifetime revocation was not one-shot");
+			require(!fixture.source.valid() && !pin.valid(),
+					"production lifetime revocation did not invalidate all authority");
+		}
+		require(fixture.owner.expired() && destruction_count->load(std::memory_order_relaxed) == 1,
+				"production lifetime pin retained its owner after terminal destruction");
+	}
+
 	struct epoch_resources
 	{
 		sqlite_writer_shm_mapping_epoch_binding binding;
@@ -896,6 +942,7 @@ int main()
 {
 	try
 	{
+		verify_production_lifetime_factory_is_complete_and_revocable();
 		verify_pin_owner_and_close_revocation_are_separate();
 		verify_watch_is_armed_before_pre_stat_and_observation();
 		verify_one_source_revokes_all_pins_and_common_epoch_liveness();

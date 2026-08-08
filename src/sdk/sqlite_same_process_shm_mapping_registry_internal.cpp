@@ -4011,6 +4011,78 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_eligibility>
+			install_writer_eligibility(
+				sqlite_shm_registry_family_pin& pin,
+				const sqlite_shm_verified_writer_eligibility_receipt& receipt)
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+				try
+				{
+					auto prepared = receipt;
+					std::scoped_lock lock{mutex_};
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (pin.state_.get() != this)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+					if (admission_quarantined_locked())
+						return rejection(sqlite_shm_lease_rejection_reason::quarantined,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* alias = find_alias_locked(pin.alias_token_);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || alias == nullptr || family == nullptr ||
+						!family->coordinator)
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+					if (alias->phase != sqlite_shm_registry_alias_phase::registered ||
+						family->phase != sqlite_shm_registry_family_phase::active)
+						return rejection(sqlite_shm_lease_rejection_reason::retiring);
+					if (prepared.family() != family->binding)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+					if (!alias->activity_authority_latch ||
+						!alias->activity_authority_latch->load(std::memory_order_acquire) ||
+						!exact_family_admission_visible_locked(*family))
+						return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					return family->coordinator->install_writer_eligibility(prepared);
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<void>
+			revoke_writer_eligibility(sqlite_shm_registry_family_pin& pin,
+									  sqlite_shm_writer_eligibility& eligibility) noexcept
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					synchronize_activity_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (pin.state_.get() != this)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || family == nullptr || !family->coordinator)
+						return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+					return family->coordinator->revoke_writer_eligibility(eligibility);
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_pending_mapping>
 			install_writer_pending(sqlite_shm_registry_family_pin& pin,
 								   sqlite_shm_writer_post_native_mapping& post_native,
@@ -7818,6 +7890,21 @@ namespace cxxlens::sdk
 		sqlite_shm_registry_alias_pin& alias, const sqlite_shm_lease_family_binding& family)
 	{
 		return state_->pin_existing_family(alias, family);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_writer_eligibility>
+	sqlite_same_process_shm_mapping_registry::install_writer_eligibility(
+		sqlite_shm_registry_family_pin& family,
+		const sqlite_shm_verified_writer_eligibility_receipt& receipt)
+	{
+		return state_->install_writer_eligibility(family, receipt);
+	}
+
+	sqlite_shm_lease_result<void>
+	sqlite_same_process_shm_mapping_registry::revoke_writer_eligibility(
+		sqlite_shm_registry_family_pin& family, sqlite_shm_writer_eligibility& eligibility) noexcept
+	{
+		return state_->revoke_writer_eligibility(family, eligibility);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_registry_activity_pin>

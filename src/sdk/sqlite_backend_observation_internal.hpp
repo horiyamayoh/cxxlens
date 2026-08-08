@@ -554,6 +554,13 @@ namespace cxxlens::sdk
 		{
 			return nullptr;
 		}
+		/** Source-private cut after the exact fully-armed current-v3 receipt. */
+		[[nodiscard]] virtual result<void> install_current_v3_writer_eligibility()
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "writer-eligibility-unavailable"};
+		}
 	};
 
 	/**

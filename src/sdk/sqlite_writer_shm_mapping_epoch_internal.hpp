@@ -19,6 +19,7 @@ namespace cxxlens::sdk
 	class sqlite_writer_shm_mapping_epoch_test_peer;
 	class sqlite_same_process_shm_registry_test_peer;
 	class sqlite_writer_shm_native_lifetime_test_factory;
+	class sqlite_writer_shm_native_lifetime_production_factory;
 	class sqlite_writer_shm_mapping_receipt_validator;
 	class sqlite_writer_shm_mapping_epoch_receipt;
 	class sqlite_shm_writer_member_authority;
@@ -26,10 +27,10 @@ namespace cxxlens::sdk
 	/**
 	 * Closed role of one native lifetime retained across a writer mapping epoch.
 	 *
-	 * These roles are intentionally narrower than a generic filesystem handle. The future
-	 * production port must bind them to the already-open MAIN/WAL native nodes, one retained
-	 * parent directory, and the existing SHM native attachment. This checkpoint has no
-	 * production minter.
+	 * These roles are intentionally narrower than a generic filesystem handle. The production
+	 * forwarding VFS binds MAIN/WAL lifetimes at xOpen. The epoch port still
+	 * requires the separately retained parent directory and SHM native attachment before it can
+	 * arm a writer mapping epoch.
 	 */
 	enum class sqlite_writer_shm_native_lifetime_role : std::uint8_t
 	{
@@ -48,8 +49,8 @@ namespace cxxlens::sdk
 	 * One source may issue several non-reusable pins for concurrent or later map epochs. Revocation
 	 * is monotonic across every pin from that source. It does not release memory owners retained by
 	 * pins, so storage may remain safe to inspect while a closed OS handle never regains authority.
-	 * A production minter must make this revoker inseparable from the exact native close/unmap path
-	 * and defer physical storage release while pins retain the owner.
+	 * The production minter makes this revoker inseparable from the exact native close path and
+	 * defers physical storage release while pins retain the owner.
 	 */
 	class sqlite_writer_shm_native_lifetime_revoker
 	{
@@ -69,6 +70,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_writer_shm_native_lifetime_test_factory;
+		friend class sqlite_writer_shm_native_lifetime_production_factory;
 		friend class sqlite_writer_shm_mapping_epoch_test_peer;
 
 		explicit sqlite_writer_shm_native_lifetime_revoker(
@@ -110,6 +112,7 @@ namespace cxxlens::sdk
 		friend class detail::sqlite_writer_shm_mapping_epoch_state;
 		friend class sqlite_writer_shm_native_lifetime_source;
 		friend class sqlite_writer_shm_native_lifetime_test_factory;
+		friend class sqlite_writer_shm_native_lifetime_production_factory;
 		friend class sqlite_writer_shm_mapping_epoch_port;
 		friend class sqlite_writer_shm_mapping_epoch_test_peer;
 
@@ -128,8 +131,8 @@ namespace cxxlens::sdk
 	/**
 	 * Move-only mint authority for subpins of one exact native close epoch.
 	 *
-	 * The source enforces non-reuse of pin identities. Minting after close revocation fails
-	 * closed. The only current source constructor is test-only; production binding remains absent.
+	 * The source enforces non-reuse of pin identities. Minting after close revocation fails closed.
+	 * Production binding is restricted to the source-private production factory below.
 	 */
 	class sqlite_writer_shm_native_lifetime_source
 	{
@@ -149,6 +152,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_writer_shm_native_lifetime_test_factory;
+		friend class sqlite_writer_shm_native_lifetime_production_factory;
 
 		sqlite_writer_shm_native_lifetime_source(
 			std::shared_ptr<detail::sqlite_writer_shm_native_lifetime_control> control,
@@ -156,6 +160,29 @@ namespace cxxlens::sdk
 
 		std::shared_ptr<detail::sqlite_writer_shm_native_lifetime_control> control_;
 		std::weak_ptr<void> retained_owner_;
+	};
+
+	/**
+	 * Source-private production minter for a real native xOpen lifetime.
+	 *
+	 * The forwarding VFS is the only production caller. It supplies the complete sealed
+	 * close-epoch tuple after native xOpen has returned and retains the native node as the
+	 * owner. Test fixtures use the separate test factory and cannot manufacture a production
+	 * lifetime through this boundary.
+	 */
+	class sqlite_writer_shm_native_lifetime_production_factory final
+	{
+	  public:
+		sqlite_writer_shm_native_lifetime_production_factory() = delete;
+
+		[[nodiscard]] static sqlite_shm_lease_result<
+			std::pair<sqlite_writer_shm_native_lifetime_revoker,
+					  sqlite_writer_shm_native_lifetime_source>>
+		create_source(sqlite_writer_shm_native_lifetime_role role,
+					  sqlite_backend_opaque_identity native_lifetime_identity,
+					  sqlite_backend_opaque_identity semantic_receipt,
+					  std::optional<sqlite_backend_opaque_identity> native_xopen_receipt,
+					  const std::shared_ptr<void>& retained_owner) noexcept;
 	};
 
 	class sqlite_writer_shm_native_lifetime_test_factory final

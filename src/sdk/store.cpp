@@ -6239,8 +6239,12 @@ namespace cxxlens::sdk
 				*coordination);
 			if (!request)
 				return unexpected(std::move(request.error()));
-			if (auto armed = arm_effect_gate_now(*effect, std::move(*request)); !armed)
+			auto armed = arm_effect_gate_now(*effect, std::move(*request));
+			if (!armed)
 				return unexpected(std::move(armed.error()));
+			if (auto eligible = effect->observation->install_current_v3_writer_eligibility();
+				!eligible)
+				return unexpected(std::move(eligible.error()));
 			if (auto wal = require_wal_mode(**database, true); !wal)
 				return unexpected(std::move(wal.error()));
 			return database;
