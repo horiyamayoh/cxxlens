@@ -161,6 +161,15 @@ namespace
 				owner);
 		require(!duplicate_semantic,
 				"production lifetime factory accepted a duplicate lifetime/semantic identity");
+		auto duplicate_lifetime_xopen =
+			sqlite_writer_shm_native_lifetime_production_factory::create_source(
+				sqlite_writer_shm_native_lifetime_role::main_database,
+				identity("test.epoch.production-duplicate-lifetime", 6U),
+				identity("test.epoch.production-semantic", 6U),
+				identity("test.epoch.production-duplicate-lifetime", 6U),
+				owner);
+		require(!duplicate_lifetime_xopen,
+				"production lifetime factory accepted a duplicate lifetime/xOpen identity");
 		auto duplicate_xopen = sqlite_writer_shm_native_lifetime_production_factory::create_source(
 			sqlite_writer_shm_native_lifetime_role::main_database,
 			identity("test.epoch.production-lifetime", 5U),
