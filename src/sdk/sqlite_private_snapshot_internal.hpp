@@ -47,6 +47,8 @@ namespace cxxlens::sdk
 		register_function register_vfs{};
 		unregister_function unregister_vfs{};
 		std::shared_ptr<void> runtime_lifetime;
+		/** Complete source-private runtime receipt used by the forwarding-VFS owner bridge. */
+		sqlite_source_shm_runtime_binding source_shm_runtime;
 	};
 
 	/**

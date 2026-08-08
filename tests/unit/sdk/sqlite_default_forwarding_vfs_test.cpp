@@ -892,13 +892,21 @@ namespace
 
 	cxxlens::sdk::sqlite_private_snapshot_registry_binding registry_binding()
 	{
+		auto runtime_lifetime = std::shared_ptr<void>{std::make_shared<int>(7)};
+		auto runtime = fake_source_shm_runtime(runtime_lifetime);
+		Dl_info image{};
+		require(::dladdr(std::bit_cast<const void*>(original_vfs.open), &image) != 0 &&
+					image.dli_fbase != nullptr,
+				"resolve fake VFS image identity");
+		runtime.runtime_image_identity = image.dli_fbase;
 		return {
 			&runtime_sentinel,
 			&original_vfs,
 			fake_find,
 			fake_register,
 			fake_unregister,
-			std::shared_ptr<void>{std::make_shared<int>(7)},
+			runtime_lifetime,
+			runtime,
 		};
 	}
 
@@ -1040,6 +1048,23 @@ namespace
 						0 &&
 					runtime_image_information.dli_fbase != nullptr,
 				"resolve real SQLite image identity");
+		auto real_runtime = sqlite_source_shm_runtime_binding{
+			raw_library,
+			runtime_image_information.dli_fbase,
+			library.get(),
+			library,
+			source_open,
+			source_close,
+			source_exec,
+			source_errmsg,
+			source_free,
+			source_id,
+			uri_parameter,
+			uri_key,
+			real_find_opaque,
+			real_register_opaque,
+			real_unregister_opaque,
+		};
 		auto* real_default = real_find(nullptr);
 		require(real_default != nullptr, "resolve real default VFS once");
 
@@ -1060,6 +1085,7 @@ namespace
 					real_register_opaque,
 					real_unregister_opaque,
 					library,
+					real_runtime,
 				});
 			require(bundle.has_value(), "real filesystem forwarding bundle");
 			const std::string alias{bundle->forwarding_vfs->registered_vfs_name()};
@@ -1234,26 +1260,9 @@ namespace
 
 			auto source_census = bundle->observation->capture_namespace(path);
 			require(source_census.has_value(), "capture real active WAL source census");
-			auto real_runtime = sqlite_source_shm_runtime_binding{
-				raw_library,
-				runtime_image_information.dli_fbase,
-				library.get(),
-				library,
-				source_open,
-				source_close,
-				source_exec,
-				source_errmsg,
-				source_free,
-				source_id,
-				uri_parameter,
-				uri_key,
-				real_find_opaque,
-				real_register_opaque,
-				real_unregister_opaque,
-			};
 			const auto observation_binding = bundle->observation->binding();
 			auto qualification_request = sqlite_source_shm_qualification_request{
-				std::move(real_runtime),
+				real_runtime,
 				path,
 				*source_census,
 				source_census->parent_namespace_identity,
@@ -1358,6 +1367,13 @@ int main()
 	};
 	registry.emplace(original_vfs.name, &original_vfs);
 	exercise_private_snapshot_digest_binding();
+	{
+		auto incomplete = registry_binding();
+		incomplete.source_shm_runtime.source_id = nullptr;
+		auto rejected = cxxlens::sdk::make_sqlite_default_forwarding_vfs(std::move(incomplete));
+		require(!rejected && registry.size() == 1U,
+				"partial source runtime receipt rejects before native alias registration");
+	}
 
 	const std::string main_path =
 		"/tmp/cxxlens-default-forwarding-smoke-" + std::to_string(::getpid()) + ".sqlite";

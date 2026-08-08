@@ -11200,6 +11200,17 @@ namespace cxxlens::sdk
 			if (default_vfs == nullptr)
 				return unexpected(
 					store_error("store.backend-unavailable", "sqlite", "default-vfs"));
+			sqlite_source_shm_runtime_binding source_shm_runtime;
+			auto source_runtime = bind_source_shm_readonly_runtime(*api);
+			if (!source_runtime)
+			{
+				const auto& failure = source_runtime.error();
+				if (failure.code != "store.backend-unavailable" || failure.field != "sqlite" ||
+					failure.detail != "symbols")
+					return unexpected(std::move(source_runtime.error()));
+			}
+			else
+				source_shm_runtime = std::move(*source_runtime);
 			auto bundle = make_sqlite_default_forwarding_store_bundle(
 				database_path,
 				sqlite_private_snapshot_registry_binding{(*api)->runtime_identity,
@@ -11207,7 +11218,8 @@ namespace cxxlens::sdk
 														 (*api)->vfs_find,
 														 (*api)->vfs_register,
 														 (*api)->vfs_unregister,
-														 *api});
+														 *api,
+														 std::move(source_shm_runtime)});
 			if (!bundle)
 				return unexpected(std::move(bundle.error()));
 			if (bundle->runtime_identity != (*api)->runtime_identity ||
@@ -11235,13 +11247,25 @@ namespace cxxlens::sdk
 		void* default_vfs = (*api)->vfs_find(nullptr);
 		if (default_vfs == nullptr)
 			return unexpected(store_error("store.backend-unavailable", "sqlite", "default-vfs"));
+		sqlite_source_shm_runtime_binding source_shm_runtime;
+		auto source_runtime = bind_source_shm_readonly_runtime(*api);
+		if (!source_runtime)
+		{
+			const auto& failure = source_runtime.error();
+			if (failure.code != "store.backend-unavailable" || failure.field != "sqlite" ||
+				failure.detail != "symbols")
+				return unexpected(std::move(source_runtime.error()));
+		}
+		else
+			source_shm_runtime = std::move(*source_runtime);
 		auto bundle = make_sqlite_default_ephemeral_store_bundle(
 			sqlite_private_snapshot_registry_binding{(*api)->runtime_identity,
 													 default_vfs,
 													 (*api)->vfs_find,
 													 (*api)->vfs_register,
 													 (*api)->vfs_unregister,
-													 *api});
+													 *api,
+													 std::move(source_shm_runtime)});
 		if (!bundle)
 			return unexpected(std::move(bundle.error()));
 		if (bundle->runtime_identity != (*api)->runtime_identity ||

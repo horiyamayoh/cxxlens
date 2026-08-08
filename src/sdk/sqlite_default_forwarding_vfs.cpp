@@ -23,6 +23,7 @@
 
 #include "sqlite_backend_effect_gate_internal.hpp"
 #include "sqlite_default_forwarding_vfs_internal.hpp"
+#include "sqlite_same_process_shm_vfs_alias_registration_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -758,6 +759,35 @@ namespace cxxlens::sdk
 			return left.object == right.object && left.entry == right.entry;
 		}
 
+		[[nodiscard]] bool source_shm_runtime_receipt_present(
+			const sqlite_source_shm_runtime_binding& runtime) noexcept
+		{
+			return runtime.runtime_identity != nullptr ||
+				runtime.runtime_image_identity != nullptr ||
+				runtime.runtime_lifetime_identity != nullptr ||
+				runtime.runtime_lifetime != nullptr || runtime.open_v2 != nullptr ||
+				runtime.close_v2 != nullptr || runtime.exec != nullptr ||
+				runtime.errmsg != nullptr || runtime.free_memory != nullptr ||
+				runtime.source_id != nullptr || runtime.uri_parameter != nullptr ||
+				runtime.uri_key != nullptr || runtime.vfs_find != nullptr ||
+				runtime.vfs_register != nullptr || runtime.vfs_unregister != nullptr;
+		}
+
+		[[nodiscard]] bool complete_source_shm_runtime_receipt(
+			const sqlite_source_shm_runtime_binding& runtime) noexcept
+		{
+			return runtime.runtime_identity != nullptr &&
+				runtime.runtime_image_identity != nullptr &&
+				runtime.runtime_lifetime_identity != nullptr && runtime.runtime_lifetime &&
+				runtime.runtime_lifetime_identity == runtime.runtime_lifetime.get() &&
+				runtime.open_v2 != nullptr && runtime.close_v2 != nullptr &&
+				runtime.exec != nullptr && runtime.errmsg != nullptr &&
+				runtime.free_memory != nullptr && runtime.source_id != nullptr &&
+				runtime.uri_parameter != nullptr && runtime.uri_key != nullptr &&
+				runtime.vfs_find != nullptr && runtime.vfs_register != nullptr &&
+				runtime.vfs_unregister != nullptr;
+		}
+
 		class default_forwarding_state final
 			: public sqlite_default_forwarding_vfs,
 			  public std::enable_shared_from_this<default_forwarding_state>
@@ -766,10 +796,21 @@ namespace cxxlens::sdk
 			static result<std::shared_ptr<default_forwarding_state>>
 			create(sqlite_private_snapshot_registry_binding registry)
 			{
+				const auto source_runtime_present =
+					source_shm_runtime_receipt_present(registry.source_shm_runtime);
 				if (registry.runtime_identity == nullptr ||
 					registry.pinned_default_vfs == nullptr || registry.find == nullptr ||
 					registry.register_vfs == nullptr || registry.unregister_vfs == nullptr ||
-					!registry.runtime_lifetime)
+					!registry.runtime_lifetime ||
+					(source_runtime_present &&
+					 !complete_source_shm_runtime_receipt(registry.source_shm_runtime)) ||
+					(source_runtime_present &&
+					 (registry.source_shm_runtime.runtime_identity != registry.runtime_identity ||
+					  registry.source_shm_runtime.runtime_lifetime.get() !=
+						  registry.runtime_lifetime.get() ||
+					  registry.source_shm_runtime.vfs_find != registry.find ||
+					  registry.source_shm_runtime.vfs_register != registry.register_vfs ||
+					  registry.source_shm_runtime.vfs_unregister != registry.unregister_vfs)))
 					return unexpected(forwarding_error("forwarding-vfs-lifetime"));
 				auto* underlying = static_cast<sqlite3_vfs*>(registry.pinned_default_vfs);
 				if (underlying->version < 1 ||
@@ -782,7 +823,10 @@ namespace cxxlens::sdk
 					return unexpected(forwarding_error("forwarding-vfs-delegate"));
 				Dl_info underlying_image{};
 				if (::dladdr(function_address(underlying->open), &underlying_image) == 0 ||
-					underlying_image.dli_fbase == nullptr)
+					underlying_image.dli_fbase == nullptr ||
+					(source_runtime_present &&
+					 underlying_image.dli_fbase !=
+						 registry.source_shm_runtime.runtime_image_identity))
 					return unexpected(forwarding_error("forwarding-vfs-delegate-image"));
 				const auto file_offset =
 					checked_align_up(sizeof(forwarding_file), alignof(std::max_align_t));
@@ -831,13 +875,21 @@ namespace cxxlens::sdk
 			{
 				if (open_file_count_.load(std::memory_order_acquire) != 0U)
 					std::terminate();
-				if (!registered_)
+				if (!registered_alias_)
+				{
+					if (!registered_)
+						return;
+					std::scoped_lock lock{forwarding_registration_mutex};
+					if (registry_.find(registered_name_.c_str()) != &wrapper_ ||
+						registry_.unregister_vfs(&wrapper_) != sqlite_ok ||
+						registry_.find(registered_name_.c_str()) != nullptr)
+						std::terminate();
+					registered_ = false;
 					return;
-				std::scoped_lock lock{forwarding_registration_mutex};
-				if (registry_.find(registered_name_.c_str()) != &wrapper_ ||
-					registry_.unregister_vfs(&wrapper_) != sqlite_ok ||
-					registry_.find(registered_name_.c_str()) != nullptr)
+				}
+				if (!registered_alias_->unregister_alias())
 					std::terminate();
+				registered_alias_.reset();
 				registered_ = false;
 			}
 
@@ -1718,7 +1770,41 @@ namespace cxxlens::sdk
 
 			[[nodiscard]] result<void> register_alias()
 			{
-				std::scoped_lock lock{forwarding_registration_mutex};
+				const auto source_runtime_present =
+					source_shm_runtime_receipt_present(registry_.source_shm_runtime);
+				if (!source_runtime_present)
+				{
+					std::scoped_lock lock{forwarding_registration_mutex};
+					for (std::size_t attempt{}; attempt < 32U; ++attempt)
+					{
+						const auto value =
+							next_forwarding_name.fetch_add(1U, std::memory_order_relaxed);
+						registered_name_ = "cxxlens-default-forwarding-v1-" +
+							std::to_string(reinterpret_cast<std::uintptr_t>(this)) + "-" +
+							std::to_string(value);
+						wrapper_.name = registered_name_.c_str();
+						if (registry_.find(registered_name_.c_str()) != nullptr)
+							continue;
+						if (registry_.register_vfs(&wrapper_, 0) != sqlite_ok)
+							return unexpected(forwarding_error("forwarding-vfs-register"));
+						if (registry_.find(registered_name_.c_str()) != &wrapper_)
+						{
+							if (registry_.unregister_vfs(&wrapper_) != sqlite_ok ||
+								registry_.find(registered_name_.c_str()) != nullptr)
+								std::terminate();
+							return unexpected(forwarding_error("forwarding-vfs-register"));
+						}
+						registered_ = true;
+						return {};
+					}
+					return unexpected(forwarding_error("forwarding-vfs-name-collision"));
+				}
+				if (registry_.source_shm_runtime.runtime_image_identity !=
+					underlying_image_identity_)
+					return unexpected(forwarding_error("forwarding-vfs-register"));
+				auto process = sqlite_same_process_shm_process_port::acquire();
+				if (!process)
+					return unexpected(forwarding_error("forwarding-vfs-process-registry"));
 				for (std::size_t attempt{}; attempt < 32U; ++attempt)
 				{
 					const auto value =
@@ -1727,17 +1813,30 @@ namespace cxxlens::sdk
 						std::to_string(reinterpret_cast<std::uintptr_t>(this)) + "-" +
 						std::to_string(value);
 					wrapper_.name = registered_name_.c_str();
-					if (registry_.find(registered_name_.c_str()) != nullptr)
-						continue;
-					if (registry_.register_vfs(&wrapper_, 0) != sqlite_ok)
+					auto sealed = sqlite_same_process_shm_vfs_alias_identity_sealer::seal(
+						sqlite_shm_vfs_alias_identity_sealing_input{
+							*process,
+							registry_.source_shm_runtime,
+							underlying_,
+							underlying_app_data_identity_,
+							underlying_open_callback_address_,
+							this,
+							registered_name_,
+							&wrapper_,
+						});
+					if (!sealed)
 						return unexpected(forwarding_error("forwarding-vfs-register"));
-					if (registry_.find(registered_name_.c_str()) != &wrapper_)
+					auto registered =
+						sqlite_same_process_shm_vfs_alias_registration_port::register_alias(
+							std::move(*sealed));
+					if (!registered)
 					{
-						if (registry_.unregister_vfs(&wrapper_) != sqlite_ok ||
-							registry_.find(registered_name_.c_str()) != nullptr)
-							std::terminate();
+						if (registered.error().reason ==
+							sqlite_shm_lease_rejection_reason::invalid_request)
+							continue;
 						return unexpected(forwarding_error("forwarding-vfs-register"));
 					}
+					registered_alias_.emplace(std::move(*registered));
 					registered_ = true;
 					return {};
 				}
@@ -1972,6 +2071,7 @@ namespace cxxlens::sdk
 			std::string observation_profile_;
 			std::atomic<std::uint64_t> next_connection_observation_{1U};
 			std::atomic<std::size_t> open_file_count_;
+			std::optional<sqlite_shm_registered_vfs_alias> registered_alias_;
 			bool registered_{};
 		};
 
