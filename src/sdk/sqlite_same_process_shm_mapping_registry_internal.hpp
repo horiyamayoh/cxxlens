@@ -6,7 +6,6 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <utility>
 #include <vector>
 
 #include "sqlite_same_process_shm_mapping_lease_internal.hpp"
@@ -1100,19 +1099,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
 		adopt_runtime_lifetime_from_process_port(sqlite_backend_opaque_identity identity,
 									 sqlite_backend_opaque_identity pin_identity,
-									 std::shared_ptr<void> owner)
-		{
-			return adopt_runtime_lifetime_for_testing(
-				std::move(identity), std::move(pin_identity), std::move(owner));
-		}
-		void invalidate_process_instance_from_process_port() noexcept
-		{
-			invalidate_process_instance_for_testing();
-		}
-		[[nodiscard]] bool process_instance_live_from_process_port() const noexcept
-		{
-			return snapshot().process_live;
-		}
+									 std::shared_ptr<void> owner);
+		void invalidate_process_instance_from_process_port() noexcept;
+		[[nodiscard]] bool process_instance_live_from_process_port() const noexcept;
 
 		sqlite_same_process_shm_mapping_registry(
 			std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state);

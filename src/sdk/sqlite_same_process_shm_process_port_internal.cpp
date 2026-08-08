@@ -338,7 +338,10 @@ namespace cxxlens::sdk
 			if (globals.fork_epoch == std::numeric_limits<std::uint64_t>::max())
 				globals.exhausted = true;
 			else
+			{
 				++globals.fork_epoch;
+				globals.exhausted = false;
+			}
 			globals.mutex.unlock();
 		}
 
