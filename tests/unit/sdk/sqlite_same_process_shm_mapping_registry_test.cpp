@@ -18504,8 +18504,8 @@ namespace
 		!std::is_copy_assignable_v<sqlite_shm_reader_mapped_post_native_observation>,
 		"mapped observation capability is nonassignable");
 
-	[[nodiscard]] auto validate_qualified_mapped_result(
-		reader_candidate_setup& setup,
+	[[nodiscard]] sqlite_shm_reader_mapped_post_native_observation
+	make_qualified_mapped_observation(
 		const qualified_zero_map_owner& owner,
 		const int native_status,
 		const volatile void* native_mapping,
@@ -18514,17 +18514,28 @@ namespace
 	{
 		auto request = reader_attachment_map_request(
 			owner.identity.request, owner.identity.callback_identity.receipt());
-		auto observation =
-			sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
-				owner.inflight,
-				std::move(request),
-				native_status,
-				native_mapping,
-				delegated_extend,
-				identity("test.registry.qualified-mapped-shm-object", marker),
-				identity("test.registry.qualified-mapped-shm-entry", marker),
-				identity("test.registry.qualified-mapped-device", marker),
-				identity("test.registry.qualified-mapped-mount", marker));
+		return sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+			owner.inflight,
+			std::move(request),
+			native_status,
+			native_mapping,
+			delegated_extend,
+			identity("test.registry.qualified-mapped-shm-object", marker),
+			identity("test.registry.qualified-mapped-shm-entry", marker),
+			identity("test.registry.qualified-mapped-device", marker),
+			identity("test.registry.qualified-mapped-mount", marker));
+	}
+
+	[[nodiscard]] auto validate_qualified_mapped_result(
+		reader_candidate_setup& setup,
+		const qualified_zero_map_owner& owner,
+		const int native_status,
+		const volatile void* native_mapping,
+		const int delegated_extend,
+		const std::uint8_t marker)
+	{
+		auto observation = make_qualified_mapped_observation(
+			owner, native_status, native_mapping, delegated_extend, marker);
 		return sqlite_same_process_shm_reader_receipt_validator::validate(
 			*setup.fixture.registry,
 			*setup.fixture.family_pin,
@@ -18566,6 +18577,161 @@ namespace
 			owner.identity.callback_identity,
 			owner.effect,
 			204U);
+	}
+
+
+	void verify_qualified_mapped_validator_rejects_foreign_proofs_before_claim()
+	{
+		auto exact = make_reader_candidate_setup(41U);
+		auto foreign = make_reader_candidate_setup(42U);
+		auto wrong_role_setup = make_reader_candidate_setup(43U);
+		auto exact_owner = prepare_qualified_map_effect_owner(
+			exact, 44U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto foreign_owner = prepare_qualified_map_effect_owner(
+			foreign, 45U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		auto wrong_role = prepare_qualified_map_effect_owner(
+			wrong_role_setup,
+			46U,
+			sqlite_shm_reader_effect_identity_role::zero_attachment_result);
+		const auto before =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*exact.coordinator);
+		const auto registry_before = exact.fixture.registry->snapshot();
+		std::uint8_t observation_marker = 47U;
+
+		const auto reject = [](const auto& result)
+		{
+			require(!result &&
+					(result.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch ||
+					 result.error().reason ==
+							sqlite_shm_lease_rejection_reason::stale_token),
+				"foreign qualified-mapped proof rejects before observation burn");
+		};
+		const auto observation = [&]
+		{
+			return make_qualified_mapped_observation(exact_owner,
+				0,
+				exact.writer_attempt.native_page.get(),
+				0,
+				observation_marker++);
+		};
+
+		reject(sqlite_same_process_shm_reader_receipt_validator::validate(
+			*foreign.fixture.registry,
+			*foreign.fixture.family_pin,
+			exact_owner.inflight,
+			exact_owner.identity.scope,
+			exact_owner.identity.callback_identity,
+			exact_owner.effect,
+			observation()));
+		reject(sqlite_same_process_shm_reader_receipt_validator::validate(
+			*exact.fixture.registry,
+			*foreign.fixture.family_pin,
+			exact_owner.inflight,
+			exact_owner.identity.scope,
+			exact_owner.identity.callback_identity,
+			exact_owner.effect,
+			observation()));
+		reject(sqlite_same_process_shm_reader_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			foreign_owner.inflight,
+			exact_owner.identity.scope,
+			exact_owner.identity.callback_identity,
+			exact_owner.effect,
+			observation()));
+		reject(sqlite_same_process_shm_reader_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_owner.inflight,
+			foreign_owner.identity.scope,
+			exact_owner.identity.callback_identity,
+			exact_owner.effect,
+			observation()));
+		reject(sqlite_same_process_shm_reader_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_owner.inflight,
+			exact_owner.identity.scope,
+			foreign_owner.identity.callback_identity,
+			exact_owner.effect,
+			observation()));
+		reject(sqlite_same_process_shm_reader_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_owner.inflight,
+			exact_owner.identity.scope,
+			exact_owner.identity.callback_identity,
+			foreign_owner.effect,
+			observation()));
+		reject(sqlite_same_process_shm_reader_receipt_validator::validate(
+			*exact.fixture.registry,
+			*exact.fixture.family_pin,
+			exact_owner.inflight,
+			exact_owner.identity.scope,
+			exact_owner.identity.callback_identity,
+			wrong_role.effect,
+			observation()));
+
+		const auto after =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*exact.coordinator);
+		const auto registry_after = exact.fixture.registry->snapshot();
+		require(exact_owner.inflight.valid() && exact.session.valid() &&
+				exact_owner.identity.scope.valid() &&
+				exact_owner.identity.callback_identity.valid() && exact_owner.effect.valid() &&
+				foreign_owner.inflight.valid() && foreign_owner.effect.valid() &&
+				wrong_role.effect.valid() &&
+				before.last_issued_sequence == after.last_issued_sequence &&
+				before.last_committed_sequence == after.last_committed_sequence &&
+				before.map_attempts.size() == after.map_attempts.size() &&
+				before.terminal_quarantines.size() == after.terminal_quarantines.size() &&
+				registry_before.quarantined_family_count ==
+					registry_after.quarantined_family_count,
+			"wrong registry, family, owner, scope, callback, role, and presenter are nonmutating");
+
+		auto exact_receipt = validate_qualified_mapped_result(exact,
+			exact_owner,
+			0,
+			exact.writer_attempt.native_page.get(),
+			0,
+			observation_marker);
+		require(exact_receipt &&
+				exact.fixture.registry
+					->commit_reader_map(*exact.fixture.family_pin,
+						exact_owner.inflight,
+						*exact_receipt,
+						exact.session)
+					.has_value(),
+			"the exact mapped proof succeeds after every rejected pre-burn presentation");
+	}
+
+	void verify_qualified_mapped_observation_drop_abandons_owner()
+	{
+		auto setup = make_reader_candidate_setup(61U);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 62U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		{
+			auto observation = make_qualified_mapped_observation(
+				owner, 0, setup.writer_attempt.native_page.get(), 0, 63U);
+			(void)observation;
+		}
+		const auto after_drop =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(!owner.inflight.valid() && !setup.session.valid() &&
+				!owner.identity.scope.valid() &&
+				!owner.identity.callback_identity.valid() && !owner.effect.valid() &&
+				setup.coordinator->snapshot().quarantined &&
+				!after_drop.terminal_quarantines.empty(),
+			"dropping an unpresented mapped observation abandons its exact owner once");
+		auto replay = validate_qualified_mapped_result(
+			setup, owner, 0, setup.writer_attempt.native_page.get(), 0, 64U);
+		const auto after_replay =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(!replay &&
+				after_replay.terminal_quarantines.size() ==
+					after_drop.terminal_quarantines.size() &&
+				after_replay.last_committed_sequence == after_drop.last_committed_sequence,
+			"an abandoned mapped observation cannot reconstruct or quarantine authority twice");
 	}
 
 	void verify_qualified_mapped_validator_invalid_native_row_is_terminal()
@@ -19064,6 +19230,450 @@ namespace
 			"a qualified mapped receipt cannot borrow another registry owner's hidden control");
 	}
 
+
+
+
+	void verify_qualified_mapped_validation_terminal_race_matrix()
+	{
+		for (const bool terminal_first : {false, true})
+		{
+			const auto marker = static_cast<std::uint8_t>(131U + (terminal_first ? 10U : 0U));
+			auto setup = make_reader_candidate_setup(marker);
+			auto owner = prepare_qualified_map_effect_owner(
+				setup,
+				static_cast<std::uint8_t>(marker + 1U),
+				sqlite_shm_reader_effect_identity_role::mapped_result);
+			auto receipt = validate_qualified_mapped_result(setup,
+				owner,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				static_cast<std::uint8_t>(marker + 2U));
+			require(receipt.has_value(), "seal validation/terminal race receipt");
+
+			std::optional<sqlite_shm_reader_map_commit> committed;
+			bool terminal_succeeded{};
+			bool duplicate_succeeded{};
+			std::optional<sqlite_shm_lease_rejection_reason> duplicate_reason;
+			std::barrier start{3};
+			std::atomic_bool first_cut_complete{false};
+			std::thread duplicate_thread{[&]
+			{
+				start.arrive_and_wait();
+				if (terminal_first)
+					while (!first_cut_complete.load(std::memory_order_acquire))
+						std::this_thread::yield();
+				auto duplicate = validate_qualified_mapped_result(setup,
+					owner,
+					0,
+					setup.writer_attempt.native_page.get(),
+					0,
+					static_cast<std::uint8_t>(marker + 3U));
+				duplicate_succeeded = duplicate.has_value();
+				if (!duplicate)
+					duplicate_reason = duplicate.error().reason;
+				if (!terminal_first)
+					first_cut_complete.store(true, std::memory_order_release);
+			}};
+			std::thread terminal_thread{[&]
+			{
+				start.arrive_and_wait();
+				if (!terminal_first)
+					while (!first_cut_complete.load(std::memory_order_acquire))
+						std::this_thread::yield();
+				auto result = setup.fixture.registry->commit_reader_map(
+					*setup.fixture.family_pin, owner.inflight, *receipt, setup.session);
+				terminal_succeeded = result.has_value();
+				if (result)
+					committed.emplace(std::move(*result));
+				if (terminal_first)
+					first_cut_complete.store(true, std::memory_order_release);
+			}};
+			start.arrive_and_wait();
+			duplicate_thread.join();
+			terminal_thread.join();
+
+			if (terminal_first)
+			{
+				require(terminal_succeeded && committed && committed->formed_group() &&
+						!duplicate_succeeded && duplicate_reason ==
+							sqlite_shm_lease_rejection_reason::stale_token &&
+						!setup.coordinator->snapshot().quarantined,
+					"terminal-first ordering commits once and makes duplicate validation stale");
+				auto handoff = committed->take_handoff();
+				require(handoff && handoff->valid(),
+					"retain terminal-first race handoff through the assertion boundary");
+			}
+			else
+			{
+				require(!terminal_succeeded && !duplicate_succeeded &&
+						duplicate_reason ==
+							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+						setup.coordinator->snapshot().quarantined &&
+						setup.coordinator->snapshot().reader_attachment_group_count == 0U,
+					"duplicate-validation-first ordering poisons every terminal presenter once");
+			}
+		}
+	}
+
+	void verify_qualified_mapped_presenter_drop_terminal_race_matrix()
+	{
+		for (const bool terminal_first : {false, true})
+		{
+			const auto marker = static_cast<std::uint8_t>(151U + (terminal_first ? 10U : 0U));
+			auto setup = make_reader_candidate_setup(marker);
+			auto owner = prepare_qualified_map_effect_owner(
+				setup,
+				static_cast<std::uint8_t>(marker + 1U),
+				sqlite_shm_reader_effect_identity_role::mapped_result);
+			std::optional<sqlite_shm_issued_reader_effect_identity> presenter;
+			presenter.emplace(std::move(owner.effect));
+			auto observation = make_qualified_mapped_observation(owner,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				static_cast<std::uint8_t>(marker + 2U));
+			auto receipt = sqlite_same_process_shm_reader_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				owner.inflight,
+				owner.identity.scope,
+				owner.identity.callback_identity,
+				*presenter,
+				std::move(observation));
+			require(receipt.has_value(), "seal presenter-drop/terminal race receipt");
+
+			std::optional<sqlite_shm_reader_map_commit> committed;
+			bool terminal_succeeded{};
+			std::barrier start{3};
+			std::atomic_bool first_cut_complete{false};
+			std::thread drop_thread{[&]
+			{
+				start.arrive_and_wait();
+				if (terminal_first)
+					while (!first_cut_complete.load(std::memory_order_acquire))
+						std::this_thread::yield();
+				presenter.reset();
+				if (!terminal_first)
+					first_cut_complete.store(true, std::memory_order_release);
+			}};
+			std::thread terminal_thread{[&]
+			{
+				start.arrive_and_wait();
+				if (!terminal_first)
+					while (!first_cut_complete.load(std::memory_order_acquire))
+						std::this_thread::yield();
+				auto result = setup.fixture.registry->commit_reader_map(
+					*setup.fixture.family_pin, owner.inflight, *receipt, setup.session);
+				terminal_succeeded = result.has_value();
+				if (result)
+					committed.emplace(std::move(*result));
+				if (terminal_first)
+					first_cut_complete.store(true, std::memory_order_release);
+			}};
+			start.arrive_and_wait();
+			drop_thread.join();
+			terminal_thread.join();
+
+			if (terminal_first)
+			{
+				require(terminal_succeeded && committed && committed->formed_group() &&
+						!setup.coordinator->snapshot().quarantined,
+					"terminal-first ordering consumes the effect before presenter destruction");
+				auto handoff = committed->take_handoff();
+				require(handoff && handoff->valid(),
+					"retain presenter-race terminal handoff through the assertion boundary");
+			}
+			else
+			{
+				require(!terminal_succeeded && setup.coordinator->snapshot().quarantined &&
+						setup.coordinator->snapshot().reader_attachment_group_count == 0U,
+					"presenter-drop-first ordering abandons the owner and blocks terminal commit");
+			}
+		}
+	}
+
+	void verify_qualified_mapped_family_retire_terminal_race_matrix()
+	{
+		for (const bool terminal_first : {false, true})
+		{
+			const auto marker = static_cast<std::uint8_t>(171U + (terminal_first ? 10U : 0U));
+			auto setup = make_reader_candidate_setup(marker);
+			auto owner = prepare_qualified_map_effect_owner(
+				setup,
+				static_cast<std::uint8_t>(marker + 1U),
+				sqlite_shm_reader_effect_identity_role::mapped_result);
+			auto receipt = validate_qualified_mapped_result(setup,
+				owner,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				static_cast<std::uint8_t>(marker + 2U));
+			require(receipt.has_value(), "seal family-retire/terminal race receipt");
+
+			std::optional<sqlite_shm_reader_map_commit> committed;
+			bool terminal_succeeded{};
+			bool retirement_succeeded{};
+			std::optional<sqlite_shm_lease_rejection_reason> retirement_reason;
+			std::barrier start{3};
+			std::atomic_bool first_cut_complete{false};
+			std::thread retire_thread{[&]
+			{
+				start.arrive_and_wait();
+				if (terminal_first)
+					while (!first_cut_complete.load(std::memory_order_acquire))
+						std::this_thread::yield();
+				auto result = setup.fixture.registry->release_family(*setup.fixture.family_pin);
+				retirement_succeeded = result.has_value();
+				if (!result)
+					retirement_reason = result.error().reason;
+				if (!terminal_first)
+					first_cut_complete.store(true, std::memory_order_release);
+			}};
+			std::thread terminal_thread{[&]
+			{
+				start.arrive_and_wait();
+				if (!terminal_first)
+					while (!first_cut_complete.load(std::memory_order_acquire))
+						std::this_thread::yield();
+				auto result = setup.fixture.registry->commit_reader_map(
+					*setup.fixture.family_pin, owner.inflight, *receipt, setup.session);
+				terminal_succeeded = result.has_value();
+				if (result)
+					committed.emplace(std::move(*result));
+				if (terminal_first)
+					first_cut_complete.store(true, std::memory_order_release);
+			}};
+			start.arrive_and_wait();
+			retire_thread.join();
+			terminal_thread.join();
+
+			require(terminal_succeeded && committed && committed->formed_group() &&
+					!retirement_succeeded &&
+					retirement_reason == sqlite_shm_lease_rejection_reason::retiring &&
+					setup.fixture.family_pin->valid() &&
+					!setup.coordinator->snapshot().quarantined,
+				terminal_first
+					? "terminal-first ordering leaves family retirement retryable"
+					: "retirement-first ordering is nonmutating and preserves terminal authority");
+			auto handoff = committed->take_handoff();
+			require(handoff && handoff->valid(),
+				"retain family-retire race handoff through the assertion boundary");
+		}
+	}
+
+	void verify_qualified_mapped_fork_stale_observation_and_owner_abandonment_are_lock_free()
+	{
+		auto setup = make_reader_candidate_setup(111U);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 112U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		std::optional<sqlite_shm_reader_mapped_post_native_observation> presented;
+		std::optional<sqlite_shm_reader_mapped_post_native_observation> abandoned;
+		presented.emplace(make_qualified_mapped_observation(
+			owner, 0, setup.writer_attempt.native_page.get(), 0, 113U));
+		abandoned.emplace(make_qualified_mapped_observation(
+			owner, 0, setup.writer_attempt.native_page.get(), 0, 114U));
+
+		sqlite_same_process_shm_registry_test_peer::lock_registry_mutex(*setup.fixture.registry);
+		sqlite_same_process_shm_lease_test_peer::lock_state_mutex_for_fork_testing(
+			*setup.coordinator);
+		const auto child = ::fork();
+		require(child >= 0, "fork qualified mapped observations with both mutexes held");
+		if (child == 0)
+		{
+			::alarm(5U);
+			sqlite_same_process_shm_registry_test_peer::invalidate_process_instance(
+				*setup.fixture.registry);
+			auto rejected = sqlite_same_process_shm_reader_receipt_validator::validate(
+				*setup.fixture.registry,
+				*setup.fixture.family_pin,
+				owner.inflight,
+				owner.identity.scope,
+				owner.identity.callback_identity,
+				owner.effect,
+				std::move(*presented));
+			presented.reset();
+			abandoned.reset();
+			const auto stale = !rejected &&
+				rejected.error().reason == sqlite_shm_lease_rejection_reason::stale_token &&
+				!owner.inflight.valid() && !owner.identity.scope.valid() &&
+				!owner.identity.callback_identity.valid() && !owner.effect.valid();
+			{
+				std::optional<qualified_zero_map_owner> stale_owner;
+				stale_owner.emplace(std::move(owner));
+				stale_owner.reset();
+			}
+			::alarm(0U);
+			::_exit(stale ? 0 : 1);
+		}
+		int status{};
+		require(::waitpid(child, &status, 0) == child,
+			"wait qualified mapped stale-observation child");
+		sqlite_same_process_shm_lease_test_peer::unlock_state_mutex_for_fork_testing(
+			*setup.coordinator);
+		sqlite_same_process_shm_registry_test_peer::unlock_registry_mutex(
+			*setup.fixture.registry);
+		require(WIFEXITED(status) && WEXITSTATUS(status) == 0 && presented && abandoned &&
+				owner.inflight.valid() && owner.identity.scope.valid() &&
+				owner.identity.callback_identity.valid() && owner.effect.valid(),
+			"stale child validation and abandonment avoid inherited locks and preserve parent state");
+
+		auto validated = sqlite_same_process_shm_reader_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
+			owner.inflight,
+			owner.identity.scope,
+			owner.identity.callback_identity,
+			owner.effect,
+			std::move(*presented));
+		presented.reset();
+		require(validated.has_value(),
+			"parent retains the exact mapped observation after child invalidation");
+		auto committed = setup.fixture.registry->commit_reader_map(
+			*setup.fixture.family_pin, owner.inflight, *validated, setup.session);
+		require(committed && committed->formed_group(),
+			"parent commits the exact mapped observation after child invalidation");
+		auto handoff = committed->take_handoff();
+		require(handoff && handoff->valid(),
+			"parent retains the mapped terminal handoff while checking stale observation drop");
+		const auto before_stale_drop = setup.coordinator->snapshot();
+		abandoned.reset();
+		const auto after_stale_drop = setup.coordinator->snapshot();
+		require(!after_stale_drop.quarantined &&
+				after_stale_drop.reader_attachment_group_count ==
+					before_stale_drop.reader_attachment_group_count &&
+				after_stale_drop.reader_attachment_audit_count ==
+					before_stale_drop.reader_attachment_audit_count,
+			"dropping the parent's stale pre-fork observation cannot poison its terminal winner");
+	}
+
+	void verify_qualified_mapped_compact_tombstone_retains_replay_identity()
+	{
+		for (std::size_t index = 0U; index < 2U; ++index)
+		{
+			const auto marker = static_cast<std::uint8_t>(70U + index * 20U);
+			auto setup = make_reader_candidate_setup(marker);
+			auto owner = prepare_qualified_map_effect_owner(
+				setup,
+				static_cast<std::uint8_t>(marker + 1U),
+				sqlite_shm_reader_effect_identity_role::mapped_result);
+			const auto map_callback = owner.identity.callback_identity.receipt();
+			const auto map_effect = owner.effect.identity();
+			auto receipt = validate_qualified_mapped_result(setup,
+				owner,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				static_cast<std::uint8_t>(marker + 2U));
+			require(receipt.has_value(), "validate qualified mapped compact-tombstone fixture");
+			auto committed = setup.fixture.registry->commit_reader_map(
+				*setup.fixture.family_pin, owner.inflight, *receipt, setup.session);
+			require(committed && committed->formed_group(),
+				"commit qualified mapped group before compact retention");
+			auto handoff = committed->take_handoff();
+			require(handoff && handoff->valid(),
+				"take qualified mapped group handoff before retirement");
+
+			const auto session_terminal =
+				sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
+					setup.session_request,
+					sqlite_shm_reader_session_terminal_kind::success,
+					identity("test.registry.qualified-mapped-session-terminal",
+						static_cast<std::uint8_t>(marker + 3U)));
+			require(setup.fixture.registry
+					->complete_reader_session(
+						*setup.fixture.family_pin, setup.session, session_terminal)
+					.has_value(),
+				"complete qualified mapped session before unmap");
+			const auto unmap_callback = callback(static_cast<std::uint8_t>(marker + 4U));
+			const auto unmap_effect = identity("test.registry.qualified-mapped-unmap-effect",
+				static_cast<std::uint8_t>(marker + 4U));
+			const auto latch_reset = identity("test.registry.qualified-mapped-latch-reset",
+				static_cast<std::uint8_t>(marker + 4U));
+			auto unmap = setup.fixture.registry->begin_reader_unmap(
+				*setup.fixture.family_pin, *handoff, unmap_callback);
+			require(unmap && unmap->valid(), "begin qualified mapped unmap");
+			const auto unmap_receipt =
+				sqlite_same_process_shm_lease_test_peer::reader_unmap_terminal(
+					*unmap,
+					unmap_callback,
+					sqlite_shm_reader_unmap_evidence_kind::exact_native_result,
+					sqlite_ok_status,
+					0,
+					0,
+					unmap_effect,
+					latch_reset);
+			require(setup.fixture.registry
+					->complete_reader_unmap(*setup.fixture.family_pin, *unmap, unmap_receipt)
+					.has_value(),
+				"complete qualified mapped unmap");
+			close_and_release_reader_open(setup.fixture,
+				setup.open,
+				static_cast<std::uint8_t>(marker + 5U),
+				sqlite_shm_reader_close_route::close_after_confirmed_unmap);
+			retire_writer(*setup.coordinator,
+				setup.holder,
+				static_cast<std::uint8_t>(marker + 6U));
+			require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
+				"revoke qualified mapped writer eligibility");
+
+			auto local = sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+				*setup.coordinator);
+			require(local && local->size() == 1U &&
+					local->front().phase ==
+						detail::sqlite_shm_reader_attachment_reservation_phase::retired_confirmed &&
+					local->front().replay_identities.callback_invocation_tokens ==
+						std::vector{map_callback.invocation_token,
+							unmap_callback.invocation_token} &&
+					local->front().replay_identities.effect_receipts ==
+						std::vector{map_effect, unmap_effect, latch_reset},
+				"qualified mapped compact tombstone retains map/unmap callbacks and effects exactly");
+
+			auto* active = setup.coordinator;
+			if (index == 1U)
+			{
+				auto released = setup.fixture.registry->release_family(*setup.fixture.family_pin);
+				require(released.has_value() && !setup.fixture.family_pin->valid(),
+					"retire qualified mapped compact source family");
+				setup.fixture.family_pin.reset();
+				auto successor = setup.fixture.registry->install_or_join_family(
+					*setup.fixture.alias, setup.fixture.family);
+				require(successor.has_value(),
+					"recreate qualified mapped family with compact tombstone");
+				setup.fixture.family_pin.emplace(std::move(*successor));
+				active = sqlite_same_process_shm_registry_test_peer::coordinator(
+					*setup.fixture.registry, setup.fixture.family);
+				require(active != nullptr, "resolve recreated qualified mapped coordinator");
+				auto imported =
+					sqlite_same_process_shm_lease_test_peer::export_reader_lifecycle_tombstones(
+						*active);
+				require(imported && *imported == *local,
+					"recreated qualified mapped tombstone is byte-for-byte exact");
+			}
+
+			if (index == 0U)
+			{
+				require_compact_reader_identity_rejected_by_fresh_close(
+					setup.fixture,
+					*active,
+					map_callback.invocation_token,
+					true,
+					static_cast<std::uint8_t>(marker + 10U),
+					"local qualified mapped callback replay cannot authorize a fresh close");
+			}
+			else
+			{
+				require_compact_reader_identity_rejected_by_fresh_close(
+					setup.fixture,
+					*active,
+					map_effect,
+					false,
+					static_cast<std::uint8_t>(marker + 10U),
+					"imported qualified mapped effect replay cannot authorize a fresh close");
+			}
+		}
+	}
+
 	void verify_qualified_mapped_terminal_failure_injections_are_one_shot()
 	{
 		{
@@ -19105,10 +19715,17 @@ int main()
 {
 	try
 	{
+		verify_qualified_mapped_validator_rejects_foreign_proofs_before_claim();
+		verify_qualified_mapped_observation_drop_abandons_owner();
 		verify_qualified_mapped_validator_burns_each_native_observation_drift();
 		verify_qualified_mapped_validation_allocation_failure_is_terminal();
 		verify_qualified_mapped_terminal_drift_matrix_is_fail_closed();
 		verify_qualified_mapped_terminal_rejects_foreign_hidden_control();
+		verify_qualified_mapped_validation_terminal_race_matrix();
+		verify_qualified_mapped_presenter_drop_terminal_race_matrix();
+		verify_qualified_mapped_family_retire_terminal_race_matrix();
+		verify_qualified_mapped_fork_stale_observation_and_owner_abandonment_are_lock_free();
+		verify_qualified_mapped_compact_tombstone_retains_replay_identity();
 		verify_qualified_mapped_terminal_failure_injections_are_one_shot();
 		verify_qualified_mapped_validator_wrong_role_is_nonmutating();
 		verify_qualified_mapped_validator_invalid_native_row_is_terminal();
@@ -19119,6 +19736,8 @@ int main()
 		verify_qualified_mapped_validator_wrong_source_observation_is_nonmutating();
 		verify_qualified_mapped_validator_foreign_proof_is_nonmutating();
 		verify_qualified_mapped_validator_concurrent_duplicate_is_bounded();
+		if (std::getenv("CXXLENS_SQLITE_MAPPED_ACCEPTANCE_ONLY") != nullptr)
+			return 0;
 		verify_callback_free_reader_identity_prepare_claim_bind_and_registry_collision();
 		verify_callback_free_reader_identity_scope_claim_is_exactly_once();
 		verify_callback_free_reader_identity_drop_stages_fail_closed();
