@@ -1,35 +1,116 @@
-name: Agent source export
+name: Agent exact Clang 22 qualification and publish
 
 on:
-  pull_request:
+  push:
     branches:
-      - issue-181-clang22-materialization-runtime
+      - agent/u2a1c-observation-abandonment-211
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: agent-u2a1c-observation-abandonment-211
+  cancel-in-progress: false
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: 2
+  CTEST_PARALLEL_LEVEL: 1
 
 jobs:
-  export-source:
-    if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'agent/u2a1c-observation-abandonment-211'
+  qualify-and-publish:
+    if: github.repository == 'horiyamayoh/cxxlens'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Export exact head source
+          ref: agent/u2a1c-observation-abandonment-211
+          fetch-depth: 0
+
+      - name: Reconstruct and apply the bounded source patch
         shell: bash
         run: |
           set -euo pipefail
-          git archive --format=tar.gz \
-            --output="${RUNNER_TEMP}/cxxlens-source-${GITHUB_SHA}.tar.gz" \
-            HEAD
-      - name: Upload exact head source
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
-        with:
-          name: cxxlens-agent-source-${{ github.event.pull_request.head.sha }}
-          path: ${{ runner.temp }}/cxxlens-source-${{ github.sha }}.tar.gz
-          if-no-files-found: error
-          retention-days: 1
+          base64 --decode .github/agent/issue-211.patch.gz.b64 \
+            | gzip --decompress > "${RUNNER_TEMP}/issue-211.patch"
+          printf '%s  %s\n' \
+            e251e5aa835efce0d7737d11a15c371ca306ae1aa4f8d71883120c446400c070 \
+            "${RUNNER_TEMP}/issue-211.patch" | sha256sum --check --strict -
+          git apply --check "${RUNNER_TEMP}/issue-211.patch"
+          git apply "${RUNNER_TEMP}/issue-211.patch"
+          git diff --check
+          python3 tools/quality/check_ng_design_feedback.py issue-ready --issue '#211'
+
+      - name: Install exact Clang 22 toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+
+      - name: Exact Clang 22 static qualification
+        env:
+          CXX: clang++-22
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --preset ci-quick -B build/agent-static \
+            -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=OFF
+          cmake --build build/agent-static --target \
+            cxxlens-unit-sdk-sqlite-shm-mapping-registry
+          ctest --test-dir build/agent-static --output-on-failure \
+            -R '^unit\.sdk-sqlite-shm-mapping-registry$'
+          ctest --test-dir build/agent-static --output-on-failure \
+            -R '^unit\.sdk-sqlite-shm-mapping-registry-qualified-mapped-acceptance$' \
+            --repeat until-fail:100
+
+      - name: Exact Clang 22 shared qualification
+        env:
+          CXX: clang++-22
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --preset ci-quick -B build/agent-shared \
+            -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=ON
+          cmake --build build/agent-shared --target \
+            cxxlens-unit-sdk-sqlite-shm-mapping-registry
+          ctest --test-dir build/agent-shared --output-on-failure \
+            -R '^unit\.sdk-sqlite-shm-mapping-registry$'
+          ctest --test-dir build/agent-shared --output-on-failure \
+            -R '^unit\.sdk-sqlite-shm-mapping-registry-qualified-mapped-acceptance$' \
+            --repeat until-fail:20
+
+      - name: Exact Clang 22 ASan and UBSan repetition
+        env:
+          CXX: clang++-22
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1:symbolize=1
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
+          cmake --preset asan-ubsan -B build/agent-asan \
+            -DCXXLENS_CLANG_ADAPTER=OFF
+          cmake --build build/agent-asan --target \
+            cxxlens-unit-sdk-sqlite-shm-mapping-registry
+          for run in $(seq 1 50); do
+            CXXLENS_SQLITE_MAPPED_ACCEPTANCE_ONLY=1 \
+              build/agent-asan/tests/cxxlens-unit-sdk-sqlite-shm-mapping-registry
+          done
+
+      - name: Publish only the qualified source and test changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/agent/issue-211.patch.gz.b64 \
+            .github/workflows/agent-source-export.yml
+          git add \
+            src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp \
+            src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp \
+            tests/CMakeLists.txt \
+            tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp
+          git diff --cached --check
+          test "$(git diff --cached --name-only | sort | tr '\n' ' ')" = \
+            ".github/agent/issue-211.patch.gz.b64 .github/workflows/agent-source-export.yml src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp tests/CMakeLists.txt tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp "
+          git commit -m 'test(sqlite): close mapped-result lifecycle acceptance'
+          git push origin HEAD:refs/heads/agent/u2a1c-observation-abandonment-211
