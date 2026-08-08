@@ -163,6 +163,7 @@ add_library(
   src/sdk/store.cpp
   src/sdk/sqlite_connection_lifecycle_internal.cpp
   src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp
+  src/sdk/sqlite_same_process_shm_process_port_internal.cpp
   src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp
   src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp
   src/sdk/sqlite_writer_shm_mapping_epoch_internal.cpp

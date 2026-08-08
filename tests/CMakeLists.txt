@@ -216,6 +216,20 @@ set_tests_properties(
   PROPERTIES LABELS "unit;sdk;store;sqlite;vfs;shm;lease;lifecycle;security")
 
 cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-shm-process-port
+  unit/sdk/sqlite_same_process_shm_process_port_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-shm-process-port
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-sqlite-shm-process-port
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-shm-process-port
+         COMMAND cxxlens-unit-sdk-sqlite-shm-process-port)
+set_tests_properties(
+  unit.sdk-sqlite-shm-process-port
+  PROPERTIES LABELS
+             "unit;sdk;store;sqlite;vfs;shm;registry;process;fork;security")
+
+cxxlens_add_test_executable(
   cxxlens-unit-sdk-sqlite-shm-mapping-registry
   unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-shm-mapping-registry

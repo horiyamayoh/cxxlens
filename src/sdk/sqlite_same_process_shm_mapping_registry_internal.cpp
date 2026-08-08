@@ -807,6 +807,11 @@ namespace cxxlens::sdk
 					seal_->process_epoch->load(std::memory_order_acquire) == process_epoch_;
 			}
 
+			[[nodiscard]] bool process_instance_live_from_process_port() const noexcept
+			{
+				return current(process_epoch_);
+			}
+
 			[[nodiscard]] const std::shared_ptr<std::atomic<std::uint64_t>>&
 			process_epoch_latch_for_identity_issuer() const noexcept
 			{
@@ -8265,6 +8270,31 @@ namespace cxxlens::sdk
 	{
 		return state_ ? state_->family_snapshot(family)
 					  : sqlite_shm_mapping_registry_family_snapshot{};
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
+	sqlite_same_process_shm_mapping_registry::adopt_runtime_lifetime_from_process_port(
+		sqlite_backend_opaque_identity identity,
+		sqlite_backend_opaque_identity pin_identity,
+		std::shared_ptr<void> owner)
+	{
+		if (!state_)
+			return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+		return state_->adopt_runtime_lifetime(
+			std::move(identity), std::move(pin_identity), std::move(owner));
+	}
+
+	void sqlite_same_process_shm_mapping_registry::
+		invalidate_process_instance_from_process_port() noexcept
+	{
+		if (state_)
+			state_->invalidate_process_instance();
+	}
+
+	bool sqlite_same_process_shm_mapping_registry::process_instance_live_from_process_port() const
+		noexcept
+	{
+		return state_ && state_->process_instance_live_from_process_port();
 	}
 
 	void
