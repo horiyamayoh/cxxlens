@@ -209,6 +209,11 @@ namespace
 		{
 			return identity_;
 		}
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		parent_namespace_identity() const noexcept override
+		{
+			return census_.parent_namespace_identity;
+		}
 		[[nodiscard]] result<sqlite_backend_entry_observation>
 		retained_entry(const sqlite_backend_file_role role) const override
 		{

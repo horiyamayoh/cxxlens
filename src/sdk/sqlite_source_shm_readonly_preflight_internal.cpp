@@ -935,11 +935,12 @@ namespace cxxlens::sdk
 					append_opaque(identity.bytes, census.parent_namespace_identity);
 					append_opaque(identity.bytes, guard->identity());
 
-					auto output = std::shared_ptr<default_source_shm_target_namespace_epoch>(
+						auto output = std::shared_ptr<default_source_shm_target_namespace_epoch>(
 						new default_source_shm_target_namespace_epoch(
 							std::move(guard),
 							std::string{logical_main_locator},
 							std::string{census.source_shm_guard->anchored_main_locator()},
+							census.parent_namespace_identity,
 							std::move(identity)));
 					if (auto checked = output->recheck(); !checked)
 						return unexpected(std::move(checked.error()));
@@ -969,6 +970,11 @@ namespace cxxlens::sdk
 			[[nodiscard]] const sqlite_backend_opaque_identity& identity() const noexcept override
 			{
 				return identity_;
+			}
+			[[nodiscard]] const sqlite_backend_opaque_identity&
+			parent_namespace_identity() const noexcept override
+			{
+				return parent_namespace_identity_;
 			}
 			[[nodiscard]] result<sqlite_backend_entry_observation>
 			retained_entry(const sqlite_backend_file_role role) const override
@@ -1001,9 +1007,11 @@ namespace cxxlens::sdk
 				std::shared_ptr<sqlite_source_shm_namespace_guard> guard,
 				std::string logical_main_locator,
 				std::string anchored_main_locator,
+				sqlite_backend_opaque_identity parent_namespace_identity,
 				sqlite_backend_opaque_identity identity)
 				: guard_{std::move(guard)}, logical_main_locator_{std::move(logical_main_locator)},
 				  anchored_main_locator_{std::move(anchored_main_locator)},
+				  parent_namespace_identity_{std::move(parent_namespace_identity)},
 				  identity_{std::move(identity)}
 			{
 			}
@@ -1018,6 +1026,7 @@ namespace cxxlens::sdk
 			std::shared_ptr<sqlite_source_shm_namespace_guard> guard_;
 			std::string logical_main_locator_;
 			std::string anchored_main_locator_;
+			sqlite_backend_opaque_identity parent_namespace_identity_;
 			sqlite_backend_opaque_identity identity_;
 			mutable std::mutex mutex_;
 			mutable bool finished_{};

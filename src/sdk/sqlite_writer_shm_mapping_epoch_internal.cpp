@@ -5,6 +5,8 @@
 #include <limits>
 #include <mutex>
 #include <new>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -164,6 +166,214 @@ namespace cxxlens::sdk
 		{
 			return {reason, action};
 		}
+
+		void append_u64(std::vector<std::byte>& output, const std::uint64_t value)
+		{
+			for (auto shift = 56U;; shift -= 8U)
+			{
+				output.push_back(static_cast<std::byte>((value >> shift) & 0xffU));
+				if (shift == 0U)
+					break;
+			}
+		}
+
+		void append_identity(std::vector<std::byte>& output,
+							 const sqlite_backend_opaque_identity& identity)
+		{
+			append_u64(output, static_cast<std::uint64_t>(identity.profile.size()));
+			for (const auto character : identity.profile)
+				output.push_back(static_cast<std::byte>(static_cast<unsigned char>(character)));
+			append_u64(output, static_cast<std::uint64_t>(identity.bytes.size()));
+			output.insert(output.end(), identity.bytes.begin(), identity.bytes.end());
+		}
+
+		[[nodiscard]] bool valid_platform_binding(
+			const sqlite_writer_shm_mapping_epoch_platform_binding& binding) noexcept
+		{
+			if (!binding.target_namespace_epoch ||
+				!valid_identity(binding.target_namespace_epoch->identity()) ||
+				!valid_identity(binding.parent_namespace_identity) ||
+				!valid_identity(binding.target_namespace_epoch->parent_namespace_identity()) ||
+				binding.parent_namespace_identity !=
+					binding.target_namespace_epoch->parent_namespace_identity() ||
+				!valid_identity(binding.sqlite_source_id) ||
+				!valid_identity(binding.wal_write_lock_receipt) ||
+				!valid_identity(binding.effect_gate_receipt) ||
+				!valid_identity(binding.effect_receipt))
+				return false;
+			return binding.sqlite_source_id != binding.wal_write_lock_receipt &&
+				binding.sqlite_source_id != binding.effect_gate_receipt &&
+				binding.sqlite_source_id != binding.effect_receipt &&
+				binding.wal_write_lock_receipt != binding.effect_gate_receipt &&
+				binding.wal_write_lock_receipt != binding.effect_receipt &&
+				binding.effect_gate_receipt != binding.effect_receipt;
+		}
+
+		[[nodiscard]] sqlite_backend_opaque_identity retained_epoch_receipt(
+			const std::string_view label,
+			const sqlite_writer_shm_mapping_epoch_platform_binding& platform,
+			const sqlite_writer_shm_mapping_epoch_binding& binding,
+			const std::uint64_t sequence)
+		{
+			sqlite_backend_opaque_identity output;
+			output.profile = "sqlite-source-shm-retained-writer-epoch.v1.";
+			output.profile += label;
+			append_identity(output.bytes, platform.target_namespace_epoch->identity());
+			append_identity(output.bytes, platform.parent_namespace_identity);
+			append_identity(output.bytes, binding.expected_shm_leaf);
+			append_identity(output.bytes, binding.map_request.family.process_instance);
+			append_identity(output.bytes, binding.map_request.family.shared_runtime_vfs_cohort);
+			append_identity(output.bytes, binding.map_request.family.exact_file_family);
+			append_identity(output.bytes, binding.map_request.alias_lifetime);
+			append_identity(output.bytes, binding.map_request.connection_token);
+			append_identity(output.bytes,
+							binding.map_request.attachment.attachment_epoch());
+			append_identity(output.bytes, binding.map_request.callback.invocation_token);
+			append_u64(output.bytes, sequence);
+			return output;
+		}
+
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_stat_census>
+		observe_retained_shm(
+			const sqlite_writer_shm_mapping_epoch_platform_binding& platform) noexcept
+		{
+			try
+			{
+				if (!valid_platform_binding(platform))
+					return rejection(sqlite_shm_lease_rejection_reason::invalid_identity,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				if (auto checked = platform.target_namespace_epoch->recheck(); !checked)
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				auto retained = platform.target_namespace_epoch->retained_entry(
+					sqlite_backend_file_role::shared_memory);
+				if (!retained)
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+
+				const auto& entry = *retained;
+				const auto& held = entry.held_object;
+				if (entry.role != sqlite_backend_file_role::shared_memory ||
+					entry.state != sqlite_backend_entry_state::held_regular ||
+					!entry.direct_regular_entry || !entry.object_identity ||
+					!entry.directory_entry_identity || !entry.object_filesystem_profile || !held ||
+					held->role() != sqlite_backend_file_role::shared_memory ||
+					held->object_identity() != *entry.object_identity ||
+					held->directory_entry_identity() != *entry.directory_entry_identity ||
+					held->object_filesystem_profile() != entry.object_filesystem_profile ||
+					!held->object_mount_identity())
+					return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									 sqlite_shm_lease_recovery_action::
+										 attempt_nonremoving_unmap_then_outer_ioerr);
+				if (auto checked = held->recheck_retained_object(); !checked)
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				auto size = held->size();
+				if (!size)
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				sqlite_writer_shm_stat_census output{
+					sqlite_writer_shm_entry_state::direct_regular,
+					platform.parent_namespace_identity,
+					*entry.object_filesystem_profile,
+					*held->object_mount_identity(),
+					entry.object_identity,
+					entry.directory_entry_identity,
+					*size};
+				if (!valid_stat_census(output))
+					return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									 sqlite_shm_lease_recovery_action::
+										 attempt_nonremoving_unmap_then_outer_ioerr);
+				return output;
+			}
+			catch (...)
+			{
+				return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+			}
+		}
+
+		class retained_namespace_writer_shm_mapping_epoch_observation final
+			: public sqlite_writer_shm_mapping_epoch_observation_port
+		{
+		  public:
+			retained_namespace_writer_shm_mapping_epoch_observation(
+				sqlite_writer_shm_mapping_epoch_platform_binding platform,
+				sqlite_writer_shm_mapping_epoch_binding binding,
+				sqlite_writer_shm_stat_census pre_stat,
+				sqlite_backend_opaque_identity watch_receipt)
+				: platform_{std::move(platform)}, binding_{std::move(binding)},
+				  pre_stat_{std::move(pre_stat)}, watch_receipt_{std::move(watch_receipt)}
+			{
+			}
+
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_mapping_epoch_post_observation>
+			observe_after_native_map(const sqlite_writer_shm_mapping_epoch_binding& binding,
+									 const sqlite_writer_shm_stat_census& pre_stat,
+									 const volatile void* native_mapping) override
+			{
+				try
+				{
+					if (native_mapping == nullptr || binding != binding_ || pre_stat != pre_stat_ ||
+						!valid_platform_binding(platform_))
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										 sqlite_shm_lease_recovery_action::
+											 attempt_nonremoving_unmap_then_outer_ioerr);
+					auto post_stat = observe_retained_shm(platform_);
+					if (!post_stat)
+						return post_stat.error();
+					if (*post_stat != pre_stat_ ||
+						!checked_mapping_range(binding.map_request.page_number,
+											  binding.map_request.page_size))
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										 sqlite_shm_lease_recovery_action::
+											 attempt_nonremoving_unmap_then_outer_ioerr);
+
+					const auto page = static_cast<std::uint64_t>(binding.map_request.page_number);
+					const auto page_size = static_cast<std::uint64_t>(binding.map_request.page_size);
+					const auto offset = page * page_size;
+					const auto range_end = offset + page_size;
+					if (range_end > post_stat->byte_count)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										 sqlite_shm_lease_recovery_action::
+											 attempt_nonremoving_unmap_then_outer_ioerr);
+
+					sqlite_writer_shm_namespace_event_census namespace_events;
+					namespace_events.watch_epoch = watch_receipt_;
+					namespace_events.expected_shm_leaf = binding.expected_shm_leaf;
+					namespace_events.trusted_stat_watch_profile = true;
+
+					sqlite_writer_shm_effect_census effects;
+					effects.sqlite_source_id = platform_.sqlite_source_id;
+					effects.callback_transcript = binding.map_request.callback.invocation_token;
+					effects.wal_write_lock_receipt = platform_.wal_write_lock_receipt;
+					effects.effect_gate_receipt = platform_.effect_gate_receipt;
+					effects.effect_receipt = platform_.effect_receipt;
+					effects.size_before = pre_stat_.byte_count;
+					effects.size_after = post_stat->byte_count;
+					effects.requested_range_end = range_end;
+					effects.complete = true;
+					effects.result_confirmed_success = true;
+
+					return sqlite_writer_shm_mapping_epoch_post_observation{
+						*post_stat,
+						std::move(namespace_events),
+						std::move(effects),
+						sqlite_writer_shm_observed_transition::preexisting_unchanged};
+				}
+				catch (...)
+				{
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+		  private:
+			sqlite_writer_shm_mapping_epoch_platform_binding platform_;
+			sqlite_writer_shm_mapping_epoch_binding binding_;
+			sqlite_writer_shm_stat_census pre_stat_;
+			sqlite_backend_opaque_identity watch_receipt_;
+		};
 	} // namespace
 
 	namespace detail
@@ -884,6 +1094,68 @@ namespace cxxlens::sdk
 			return sqlite_writer_shm_mapping_epoch_activation{
 				sqlite_writer_shm_mapping_epoch_arm{state},
 				sqlite_writer_shm_mapping_epoch_observer{state}};
+		}
+		catch (...)
+		{
+			return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							 sqlite_shm_lease_recovery_action::deny_before_native_map);
+		}
+	}
+
+	sqlite_retained_namespace_writer_shm_mapping_epoch_port::
+		sqlite_retained_namespace_writer_shm_mapping_epoch_port(
+			sqlite_writer_shm_mapping_epoch_platform_binding binding) noexcept
+		: binding_{std::move(binding)}
+	{
+	}
+
+	sqlite_shm_lease_result<sqlite_writer_shm_mapping_epoch_preparation>
+	sqlite_retained_namespace_writer_shm_mapping_epoch_port::arm_watch_before_pre_stat(
+		const sqlite_writer_shm_mapping_epoch_request& request)
+	{
+		try
+		{
+			if (!valid_platform_binding(binding_))
+				return rejection(sqlite_shm_lease_rejection_reason::invalid_identity,
+								 sqlite_shm_lease_recovery_action::deny_before_native_map);
+			if (request.binding.delegated_extend != 0 ||
+				request.binding.map_request.caller_extend != 0)
+				return rejection(sqlite_shm_lease_rejection_reason::invalid_request,
+								 sqlite_shm_lease_recovery_action::deny_before_native_map);
+
+			const auto sequence = next_arm_sequence_.fetch_add(1U, std::memory_order_relaxed);
+			if (sequence == 0U)
+				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
+								 sqlite_shm_lease_recovery_action::deny_before_native_map);
+
+			// The target epoch owns the retained parent ancestry watch. Rechecking it here is the
+			// watch-arm boundary; no pathname resolution or duplicate descriptor is permitted.
+			if (auto checked = binding_.target_namespace_epoch->recheck(); !checked)
+				return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								 sqlite_shm_lease_recovery_action::deny_before_native_map);
+			auto epoch_identity = retained_epoch_receipt(
+				"epoch", binding_, request.binding, sequence);
+			auto watch_receipt = retained_epoch_receipt(
+				"watch", binding_, request.binding, sequence);
+			if (!valid_identity(epoch_identity) || !valid_identity(watch_receipt) ||
+				epoch_identity == watch_receipt)
+				return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+								 sqlite_shm_lease_recovery_action::deny_before_native_map);
+
+			auto pre_stat = observe_retained_shm(binding_);
+			if (!pre_stat)
+				return pre_stat.error();
+			if (pre_stat->state != sqlite_writer_shm_entry_state::direct_regular)
+				return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+								 sqlite_shm_lease_recovery_action::deny_before_native_map);
+
+			auto observer = std::make_shared<retained_namespace_writer_shm_mapping_epoch_observation>(
+				binding_, request.binding, *pre_stat, watch_receipt);
+			return sqlite_writer_shm_mapping_epoch_preparation{
+				std::move(epoch_identity),
+				std::move(watch_receipt),
+				std::move(*pre_stat),
+				std::move(observer)};
 		}
 		catch (...)
 		{

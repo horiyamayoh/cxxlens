@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -526,6 +527,55 @@ namespace cxxlens::sdk
 	  protected:
 		[[nodiscard]] virtual sqlite_shm_lease_result<sqlite_writer_shm_mapping_epoch_preparation>
 		arm_watch_before_pre_stat(const sqlite_writer_shm_mapping_epoch_request& request) = 0;
+	};
+
+	/**
+	 * Exact source-private inputs for the retained-namespace writer epoch port.
+	 *
+	 * This binding deliberately contains no pathname or native descriptor. The target epoch and
+	 * its held SHM object are the only observation authority. The remaining receipts are supplied
+	 * by their owning writer/callback layers; this port never infers them from a pointer or from a
+	 * successful native SQLite return code.
+	 */
+	struct sqlite_writer_shm_mapping_epoch_platform_binding
+	{
+		std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch;
+		sqlite_backend_opaque_identity parent_namespace_identity;
+		sqlite_backend_opaque_identity sqlite_source_id;
+		sqlite_backend_opaque_identity wal_write_lock_receipt;
+		sqlite_backend_opaque_identity effect_gate_receipt;
+		sqlite_backend_opaque_identity effect_receipt;
+	};
+
+	/**
+	 * Source-private Linux-compatible slice for a writer epoch over an already-held regular SHM
+	 * entry. It accepts only the pre-existing `{caller_extend, delegated_extend} == {0, 0}` route.
+	 * Creation, growth, native status projection, and duplicate target opens remain outside this
+	 * port and therefore fail closed at its boundary.
+	 */
+	class sqlite_retained_namespace_writer_shm_mapping_epoch_port final
+		: public sqlite_writer_shm_mapping_epoch_port
+	{
+	  public:
+		explicit sqlite_retained_namespace_writer_shm_mapping_epoch_port(
+			sqlite_writer_shm_mapping_epoch_platform_binding binding) noexcept;
+		~sqlite_retained_namespace_writer_shm_mapping_epoch_port() override = default;
+		sqlite_retained_namespace_writer_shm_mapping_epoch_port(
+			const sqlite_retained_namespace_writer_shm_mapping_epoch_port&) = delete;
+		sqlite_retained_namespace_writer_shm_mapping_epoch_port&
+		operator=(const sqlite_retained_namespace_writer_shm_mapping_epoch_port&) = delete;
+		sqlite_retained_namespace_writer_shm_mapping_epoch_port(
+			sqlite_retained_namespace_writer_shm_mapping_epoch_port&&) = delete;
+		sqlite_retained_namespace_writer_shm_mapping_epoch_port&
+		operator=(sqlite_retained_namespace_writer_shm_mapping_epoch_port&&) = delete;
+
+	  protected:
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_mapping_epoch_preparation>
+		arm_watch_before_pre_stat(const sqlite_writer_shm_mapping_epoch_request& request) override;
+
+	  private:
+		sqlite_writer_shm_mapping_epoch_platform_binding binding_;
+		std::atomic<std::uint64_t> next_arm_sequence_{1U};
 	};
 
 	/**

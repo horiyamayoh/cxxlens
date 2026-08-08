@@ -290,6 +290,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] virtual std::string_view logical_main_locator() const noexcept = 0;
 		[[nodiscard]] virtual std::string_view anchored_main_locator() const noexcept = 0;
 		[[nodiscard]] virtual const sqlite_backend_opaque_identity& identity() const noexcept = 0;
+		/** Exact parent namespace identity retained by this target epoch. */
+		[[nodiscard]] virtual const sqlite_backend_opaque_identity&
+		parent_namespace_identity() const noexcept = 0;
 		[[nodiscard]] virtual result<sqlite_backend_entry_observation>
 		retained_entry(sqlite_backend_file_role role) const = 0;
 		[[nodiscard]] virtual result<void> recheck() const = 0;
