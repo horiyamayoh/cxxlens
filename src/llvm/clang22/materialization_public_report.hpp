@@ -62,6 +62,7 @@ namespace cxxlens::detail::clang22::materialization
 	struct public_materialization_success_report_input
 	{
 		const validated_materialization_request_v2_1* request{};
+		const json_document* request_globals{};
 		const raw_input_observation* raw_input{};
 		const materialization_occurrence_manifest* occurrence_manifest{};
 		const materialization_occurrence_receipt* occurrence_receipt{};

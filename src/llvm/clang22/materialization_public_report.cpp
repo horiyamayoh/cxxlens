@@ -1,5 +1,6 @@
 #include "materialization_public_report.hpp"
 
+#include <algorithm>
 #include <array>
 #include <utility>
 
@@ -320,6 +321,39 @@ namespace cxxlens::detail::clang22::materialization
 			});
 		}
 
+		[[nodiscard]] sdk::result<json_value>
+		authority_digests_json(const materialization_occurrence_receipt& receipt)
+		{
+			constexpr std::array<std::string_view, 5U> paths{
+				"schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
+				"schemas/cxxlens_ng_clang22_materialization_contract.yaml",
+				"schemas/cxxlens_ng_clang22_materialization_report.schema.yaml",
+				"schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
+				"schemas/cxxlens_ng_relation_registry.yaml"};
+			json_value::array_type values;
+			values.reserve(paths.size());
+			for (const auto path : paths)
+			{
+				const auto found =
+					std::ranges::find(receipt.files,
+									  path,
+									  [](const auto& file)
+									  {
+										  return std::string_view{file.authority.path};
+									  });
+				if (found == receipt.files.end() || found->authority.digest.empty())
+					return sdk::unexpected(
+						{"materialization.report-invalid", "authority_digests", "missing"});
+				values.push_back(
+					make_object({
+									{"path", string(std::string{path}).value()},
+									{"digest", string(found->authority.digest).value()},
+								})
+						.value());
+			}
+			return json_value::array(std::move(values));
+		}
+
 		constexpr std::array<std::pair<std::string_view, bool>, 15U> required_supplemental{
 			{{"registry", true},
 			 {"engine", true},
@@ -383,7 +417,11 @@ namespace cxxlens::detail::clang22::materialization
 		if (input.generated_at.empty())
 			missing.emplace_back("generated_at");
 		for (const auto& [name, _] : required_supplemental)
-			if (!input.projections.values.contains(std::string{name}))
+			if (!input.projections.values.contains(std::string{name}) &&
+				!(input.request_globals != nullptr &&
+				  (name == "registry" || name == "engine" || name == "interpretation_policy" ||
+				   name == "trust_policy")) &&
+				!(name == "authority_digests" && input.occurrence_receipt != nullptr))
 				missing.emplace_back(std::string{name});
 		if (!missing.empty())
 			return sdk::unexpected(
@@ -471,6 +509,61 @@ namespace cxxlens::detail::clang22::materialization
 		fields.emplace("installation", std::move(*installation));
 		fields.emplace("provider", std::move(*provider));
 		fields.emplace("project", std::move(*project));
+		if (input.request_globals != nullptr)
+		{
+			const auto& globals = input.request_globals->root();
+			const auto copy_member = [&](const std::string_view name,
+										 const std::string_view field) -> sdk::result<void>
+			{
+				const auto* value = member(globals, name);
+				if (value == nullptr)
+					return sdk::unexpected(
+						{"materialization.report-invalid", std::string{field}, "missing"});
+				if (!fields.emplace(std::string{name}, *value).second)
+					return sdk::unexpected({"materialization.report-invalid",
+											std::string{name},
+											"duplicate-derived-field"});
+				return {};
+			};
+			const auto* registry = member(globals, "registry");
+			if (registry == nullptr || !is_object(registry))
+				return sdk::unexpected(
+					{"materialization.report-invalid", "registry", "missing-or-not-object"});
+			object registry_projection;
+			for (const auto name : {std::string_view{"authority_registry_digest"},
+									std::string_view{"base_descriptors"},
+									std::string_view{"descriptors"}})
+			{
+				const auto* value = member(*registry, name);
+				if (value == nullptr)
+					return sdk::unexpected(
+						{"materialization.report-invalid", "registry", "missing-member"});
+				registry_projection.emplace(std::string{name}, *value);
+			}
+			auto registry_value = json_value::object(std::move(registry_projection));
+			if (!registry_value || !fields.emplace("registry", std::move(*registry_value)).second)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "registry", "invalid-projection"});
+			for (const auto name : {std::string_view{"engine"},
+									std::string_view{"interpretation_policy"},
+									std::string_view{"trust_policy"}})
+			{
+				if (auto copied = copy_member(name, name); !copied)
+					return sdk::unexpected(std::move(copied.error()));
+			}
+		}
+		auto authority_digests = authority_digests_json(*input.occurrence_receipt);
+		if (!authority_digests)
+			return sdk::unexpected(std::move(authority_digests.error()));
+		if (const auto supplied = input.projections.values.find("authority_digests");
+			supplied != input.projections.values.end())
+		{
+			if (supplied->second != *authority_digests)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "authority_digests", "authority-mismatch"});
+		}
+		else
+			fields.emplace("authority_digests", std::move(*authority_digests));
 		for (const auto& [name, value] : input.projections.values)
 			if (!fields.emplace(name, value).second)
 				return sdk::unexpected(

@@ -370,6 +370,9 @@ int main(const int argc, char**)
 			{"materialization.identity-mismatch", "claims-bridge", "runtime-contract"});
 	if (auto completed = journal->complete_installation_binding(); !completed)
 		return no_response();
+	auto request_globals = request->replay_global_authority();
+	if (!request_globals)
+		return no_response();
 	auto& claim_request = claim_context->request;
 	const auto request_subject = request->identity().materialization_request_id;
 	const detailed_report_limits report_limits{};
@@ -528,6 +531,7 @@ int main(const int argc, char**)
 		return no_response();
 	public_materialization_success_report_input public_input;
 	public_input.request = &*request;
+	public_input.request_globals = &*request_globals;
 	public_input.raw_input = &*observed;
 	public_input.occurrence_manifest = &occurrence->manifest();
 	public_input.occurrence_receipt = &occurrence->receipt();

@@ -237,6 +237,8 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] const prevalidated_materialization_request_v2_1& request() const noexcept;
 		[[nodiscard]] const streamed_materialization_request_identity& identity() const noexcept;
+		/** Replay only the authenticated, source-independent global request authority. */
+		[[nodiscard]] sdk::result<json_document> replay_global_authority();
 		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_receipt>
 		task_metadata(std::uint64_t task_index);
 		/** Replay one fully bound task without materializing its source or task.v3 bytes. */

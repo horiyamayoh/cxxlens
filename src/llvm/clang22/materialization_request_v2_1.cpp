@@ -3413,6 +3413,14 @@ namespace cxxlens::detail::clang22::materialization
 		return identity_;
 	}
 
+	sdk::result<json_document> validated_materialization_request_v2_1::replay_global_authority()
+	{
+		if (!request_.raw_request_ || !request_.raw_request_->sealed() || !request_.task_index_ ||
+			!request_.task_index_->sealed())
+			return sdk::unexpected(invalid("request", "global-authority-spool"));
+		return replay_materialization_request_globals(*request_.raw_request_, request_.envelope_);
+	}
+
 	sdk::result<materialization_v2_1_task_metadata_receipt>
 	validated_materialization_request_v2_1::task_metadata(const std::uint64_t index)
 	{

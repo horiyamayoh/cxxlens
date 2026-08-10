@@ -804,6 +804,12 @@ namespace
 					accepted->identity().materialization_request_id.starts_with(
 						"materialization:semantic-v2:sha256:"),
 				"source-dependent admission did not retain exact request authority");
+		auto globals = accepted->replay_global_authority();
+		require(globals && globals->root().member("registry") != nullptr &&
+					globals->root().member("tasks") != nullptr &&
+					globals->root().member("tasks")->as_array() != nullptr &&
+					globals->root().member("tasks")->as_array()->empty(),
+				"global authority replay retained task occurrences or lost registry authority");
 		auto first = accepted->task_metadata(0U);
 		require(first && first->task_input_digest.starts_with("sha256:") &&
 					first->provider_execution_id.starts_with("provider-execution:"),
