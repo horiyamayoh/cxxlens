@@ -215,9 +215,8 @@ set_tests_properties(
   unit.sdk-sqlite-shm-mapping-lease
   PROPERTIES LABELS "unit;sdk;store;sqlite;vfs;shm;lease;lifecycle;security")
 
-cxxlens_add_test_executable(
-  cxxlens-unit-sdk-sqlite-writer-gate-outcome
-  unit/sdk/sqlite_writer_gate_outcome_test.cpp)
+cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-writer-gate-outcome
+                            unit/sdk/sqlite_writer_gate_outcome_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-writer-gate-outcome
                       PRIVATE cxxlens::kernel)
 target_include_directories(cxxlens-unit-sdk-sqlite-writer-gate-outcome
@@ -247,24 +246,23 @@ cxxlens_add_test_executable(
   unit/sdk/sqlite_same_process_shm_vfs_alias_registration_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration
                       PRIVATE cxxlens::kernel)
-target_include_directories(
-  cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration
-  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-sqlite-shm-vfs-alias-registration
          COMMAND cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration)
 set_tests_properties(
   unit.sdk-sqlite-shm-vfs-alias-registration
   PROPERTIES LABELS
-             "unit;sdk;store;sqlite;vfs;shm;registry;registration;fork;security")
+             "unit;sdk;store;sqlite;vfs;shm;registry;registration;fork;security"
+)
 
 cxxlens_add_test_executable(
   cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer
   unit/sdk/sqlite_same_process_shm_vfs_alias_identity_sealer_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer
                       PRIVATE cxxlens::kernel)
-target_include_directories(
-  cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer
-  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-sqlite-shm-vfs-alias-identity-sealer
          COMMAND cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer)
 set_tests_properties(
@@ -284,15 +282,16 @@ set_tests_properties(
   unit.sdk-sqlite-shm-mapping-registry
   PROPERTIES LABELS
              "unit;sdk;store;sqlite;vfs;shm;registry;lifecycle;fork;security")
-add_test(
-  NAME unit.sdk-sqlite-shm-mapping-registry-qualified-mapped-acceptance
-  COMMAND cxxlens-unit-sdk-sqlite-shm-mapping-registry)
+add_test(NAME unit.sdk-sqlite-shm-mapping-registry-qualified-mapped-acceptance
+         COMMAND cxxlens-unit-sdk-sqlite-shm-mapping-registry)
 set_tests_properties(
   unit.sdk-sqlite-shm-mapping-registry-qualified-mapped-acceptance
   PROPERTIES
-    ENVIRONMENT "CXXLENS_SQLITE_MAPPED_ACCEPTANCE_ONLY=1"
+    ENVIRONMENT
+    "CXXLENS_SQLITE_MAPPED_ACCEPTANCE_ONLY=1"
     LABELS
-      "unit;sdk;store;sqlite;vfs;shm;registry;lifecycle;fork;security;mapped;acceptance")
+    "unit;sdk;store;sqlite;vfs;shm;registry;lifecycle;fork;security;mapped;acceptance"
+)
 
 cxxlens_add_test_executable(
   cxxlens-unit-sdk-sqlite-shm-identity-issuer
@@ -305,8 +304,9 @@ add_test(NAME unit.sdk-sqlite-shm-identity-issuer
          COMMAND cxxlens-unit-sdk-sqlite-shm-identity-issuer)
 set_tests_properties(
   unit.sdk-sqlite-shm-identity-issuer
-  PROPERTIES LABELS
-             "unit;sdk;store;sqlite;vfs;shm;identity;issuer;lifecycle;fork;security")
+  PROPERTIES
+    LABELS
+    "unit;sdk;store;sqlite;vfs;shm;identity;issuer;lifecycle;fork;security")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-writer-shm-mapping-epoch
                             unit/sdk/sqlite_writer_shm_mapping_epoch_test.cpp)
@@ -409,6 +409,9 @@ endif()
 add_test(NAME unit.sdk-provider-runtime
          COMMAND cxxlens-unit-sdk-provider-runtime
                  "$<TARGET_FILE:cxxlens-provider-process-fixture>")
+add_test(NAME unit.sdk-provider-runtime-timeout
+         COMMAND cxxlens-unit-sdk-provider-runtime --timeout-regression
+                 "$<TARGET_FILE:cxxlens-provider-process-fixture>")
 add_test(NAME unit.sdk-provider-runtime-sealed
          COMMAND cxxlens-unit-sdk-provider-runtime --sealed-only)
 add_test(NAME unit.sdk-provider-runtime-host-streaming
@@ -423,6 +426,10 @@ set_tests_properties(
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     PROCESSORS 2)
+set_tests_properties(
+  unit.sdk-provider-runtime-timeout
+  PROPERTIES LABELS "unit;sdk;provider;process;budget;cancellation;regression"
+             TIMEOUT 30)
 set_tests_properties(unit.sdk-provider-runtime-sealed
                      PROPERTIES LABELS "unit;sdk;provider;sealed;adoption")
 set_tests_properties(

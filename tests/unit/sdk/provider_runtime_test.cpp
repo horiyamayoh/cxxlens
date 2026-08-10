@@ -269,6 +269,14 @@ namespace
 		return content_digest(std::as_bytes(std::span{bytes}));
 	}
 
+	[[nodiscard]] std::string selection_fixture_digest(const std::string& executable)
+	{
+		static std::optional<std::pair<std::string, std::string>> cached;
+		if (!cached || cached->first != executable)
+			cached.emplace(executable, executable_digest(executable));
+		return cached->second;
+	}
+
 	[[nodiscard]] relation_descriptor snapshot_test_descriptor()
 	{
 		relation_descriptor value;
@@ -389,7 +397,7 @@ namespace
 			  const discovery_source source = discovery_source::explicit_path,
 			  const sandbox_assurance achieved = sandbox_assurance::enforced)
 	{
-		return {make_manifest({1U, 0U, 0U}, executable_digest(executable)),
+		return {make_manifest({1U, 0U, 0U}, selection_fixture_digest(executable)),
 				source,
 				{executable, mode},
 				true,
@@ -404,7 +412,7 @@ namespace
 	{
 		return {"company.test.process-provider",
 				{1U, 0U, 0U},
-				executable_digest(executable),
+				selection_fixture_digest(executable),
 				std::string{fixture_contract_digest},
 				{sandbox_assurance::enforced, baseline_policy().policy_digest()},
 				true,
@@ -887,7 +895,7 @@ namespace
 					"selection token replay accepted invalid sandbox assurance");
 
 			auto evidence = sandbox_evidence_digest(
-				policy, budget, invalid, policy.mechanisms, executable_digest(executable));
+				policy, budget, invalid, policy.mechanisms, selection_fixture_digest(executable));
 			require(!evidence && evidence.error().code == "provider.sandbox-report-invalid" &&
 						evidence.error().field == "achieved",
 					"evidence digest canonicalized an invalid sandbox assurance");
@@ -900,8 +908,11 @@ namespace
 					"custom process port bypassed runtime sandbox enum validation");
 		}
 		for (const auto achieved : levels)
-			require(sandbox_evidence_digest(
-						policy, budget, achieved, policy.mechanisms, executable_digest(executable))
+			require(sandbox_evidence_digest(policy,
+											budget,
+											achieved,
+											policy.mechanisms,
+											selection_fixture_digest(executable))
 						.has_value(),
 					"valid sandbox assurance failed evidence binding");
 		auto unmeasured = sandbox_evidence_digest(
@@ -1382,6 +1393,17 @@ namespace
 											  report->sandbox.mechanisms,
 											  report->provider.provider_binary_digest)
 					: result<std::string>{unexpected(error{"sdk.test-setup", "evidence", {}})};
+				std::string failure_detail{"successful process provider failed: "};
+				failure_detail += mode;
+				failure_detail += " terminal=";
+				failure_detail += report ? report->terminal : report.error().code;
+				if (report)
+				{
+					failure_detail += " exit=" + std::to_string(report->exit_code);
+					failure_detail += " signal=" + std::to_string(report->termination_signal);
+					for (const auto& diagnostic : report->diagnostics)
+						failure_detail += " [" + diagnostic.code + ":" + diagnostic.detail + "]";
+				}
 				require(
 					report && report->succeeded() &&
 						report->measured_executable_digest ==
@@ -1402,8 +1424,7 @@ namespace
 						report->sandbox.evidence_digest == *evidence &&
 						report->canonical_form().contains("cxxlens.provider-execution-report.v1") &&
 						reference && reference->accepted,
-					std::string{"successful process provider failed: "} + mode +
-						" terminal=" + (report ? report->terminal : report.error().code));
+					failure_detail);
 			}
 		}
 
@@ -1418,11 +1439,26 @@ namespace
 		receipt_request.limits.minimum_minor = 1U;
 		receipt_request.limits.maximum_minor = 1U;
 		auto sealed_execution = detail::execute_provider_process(*processes, receipt_request);
-		require(
-			sealed_execution && sealed_execution->succeeded() && sealed_execution->input_seal &&
-				sealed_execution->sealed && sealed_execution->provider_identity &&
-				sealed_execution->runtime_receipt,
-			"successful process did not retain input/output seals, identity, and runtime receipt");
+		std::string receipt_failure{
+			"successful process did not retain input/output seals, identity, and runtime receipt"};
+		if (sealed_execution)
+		{
+			receipt_failure += " terminal=" + sealed_execution->terminal;
+			receipt_failure += " exit=" + std::to_string(sealed_execution->exit_code);
+			receipt_failure += " signal=" + std::to_string(sealed_execution->termination_signal);
+			for (const auto& diagnostic : sealed_execution->diagnostics)
+				receipt_failure += " [" + diagnostic.code + ":" + diagnostic.detail + "]";
+		}
+		else
+			receipt_failure += " error=" + sealed_execution.error().code;
+		require(sealed_execution && sealed_execution->succeeded() && sealed_execution->input_seal &&
+					sealed_execution->sealed && sealed_execution->provider_identity &&
+					sealed_execution->runtime_receipt,
+				receipt_failure);
+		auto missing_runtime_receipt = *sealed_execution;
+		missing_runtime_receipt.runtime_receipt.reset();
+		require(!missing_runtime_receipt.succeeded(),
+				"successful transcript without runtime receipt escaped the adoption boundary");
 		const auto& input_seal = *sealed_execution->input_seal;
 		const auto& sealed_identity = *sealed_execution->provider_identity;
 		const auto& receipt = *sealed_execution->runtime_receipt;
@@ -1968,6 +2004,22 @@ namespace
 				"diagnostic record budget diverged by framing or execution surface");
 	}
 
+	void check_timeout_regression(const std::string& executable)
+	{
+		auto processes = make_system_provider_process_port();
+		require(processes != nullptr, "system provider process port unavailable");
+		process_provider_runtime runtime{*processes};
+		auto request = task(select(executable, "timeout"));
+		request.budget.wall_ms = 25U;
+		const auto started = std::chrono::steady_clock::now();
+		auto report = runtime.execute(request);
+		const auto elapsed = std::chrono::steady_clock::now() - started;
+		require(report && report->terminal == "provider.timeout",
+				"provider timeout regression lost the typed timeout terminal");
+		require(elapsed < std::chrono::seconds{10},
+				"provider timeout regression exceeded the hard anti-hang bound");
+	}
+
 	void check_prior_snapshot_preserved(const std::string& executable)
 	{
 		relation_registry registry;
@@ -2026,6 +2078,11 @@ int main(const int argument_count, const char* const* arguments)
 	if (argument_count == 2 && std::string_view{arguments[1]} == "--sealed-only")
 	{
 		check_sealed_provider_validation();
+		return 0;
+	}
+	if (argument_count == 3 && std::string_view{arguments[1]} == "--timeout-regression")
+	{
+		check_timeout_regression(arguments[2]);
 		return 0;
 	}
 	require(argument_count == 2, "provider process fixture path missing");
