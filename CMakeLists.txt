@@ -413,6 +413,7 @@ add_library(
   src/llvm/clang22/materialization_occurrence.cpp
   src/llvm/clang22/materialization_execution_journal.cpp
   src/llvm/clang22/materialization_report.cpp
+  src/llvm/clang22/materialization_public_report.cpp
   src/llvm/clang22/materialization_pipeline.cpp)
 target_link_libraries(
   cxxlens_clang22_materializer_core

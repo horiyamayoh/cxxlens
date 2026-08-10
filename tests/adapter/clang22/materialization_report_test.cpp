@@ -17,6 +17,7 @@
 #include <cxxlens/sdk.hpp>
 
 #include "llvm/clang22/materialization_json.hpp"
+#include "llvm/clang22/materialization_public_report.hpp"
 
 namespace
 {
@@ -708,6 +709,17 @@ namespace
 								   "limit-exceeded:count"},
 				"task evidence accumulator exceeded its task limit");
 	}
+
+	void public_success_report_requires_all_authority_inputs()
+	{
+		public_materialization_success_report_input input;
+		auto rejected = build_public_materialization_success_report(input);
+		require(!rejected && rejected.error().code == "materialization.report-invalid" &&
+					rejected.error().field == "report" &&
+					rejected.error().detail.find("missing=request") != std::string::npos &&
+					rejected.error().detail.find(",raw_input_observation") != std::string::npos,
+				"public success report accepted absent execution authority");
+	}
 } // namespace
 
 int main(const int argument_count, const char* const* arguments)
@@ -768,6 +780,7 @@ int main(const int argument_count, const char* const* arguments)
 	static_cast<void>(failed_head_observation_is_four_state_and_path_bound());
 	store_stage_and_publication_boundary_are_closed();
 	bounded_detailed_projection_never_promotes_unverified_store();
+	public_success_report_requires_all_authority_inputs();
 
 	return 0;
 }

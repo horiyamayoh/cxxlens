@@ -18,6 +18,7 @@
 #include "llvm/clang22/materialization_io.hpp"
 #include "llvm/clang22/materialization_occurrence.hpp"
 #include "llvm/clang22/materialization_pipeline.hpp"
+#include "llvm/clang22/materialization_public_report.hpp"
 #include "llvm/clang22/materialization_report.hpp"
 #include "llvm/clang22/materialization_request_identity.hpp"
 #include "llvm/clang22/materialization_request_stream.hpp"
@@ -52,7 +53,9 @@ namespace
 	class task_input_replay final : public replayable_host_input
 	{
 	  public:
-		explicit task_input_replay(const clang22_task_input_replay& input) noexcept : input_{input} {}
+		explicit task_input_replay(const clang22_task_input_replay& input) noexcept : input_{input}
+		{
+		}
 
 		[[nodiscard]] sdk::result<std::uint64_t> size() const override
 		{
@@ -96,7 +99,7 @@ namespace
 	}
 
 	[[nodiscard]] int emit_failure(materialization_execution_journal journal,
-								 compact_report_error error)
+								   compact_report_error error)
 	{
 		auto authority = std::move(journal).issue_compact_failure(std::move(error));
 		if (!authority)
@@ -108,22 +111,24 @@ namespace
 		return 1;
 	}
 
-	[[nodiscard]] std::optional<std::string> role_digest(
-		const materialization_occurrence_receipt& receipt, const std::string_view role)
+	[[nodiscard]] std::optional<std::string>
+	role_digest(const materialization_occurrence_receipt& receipt, const std::string_view role)
 	{
-		const auto found = std::ranges::find(receipt.files, role,
-			[](const materialization_measured_file& file) -> std::string_view
-			{
-				return file.authority.role;
-			});
+		const auto found =
+			std::ranges::find(receipt.files,
+							  role,
+							  [](const materialization_measured_file& file) -> std::string_view
+							  {
+								  return file.authority.role;
+							  });
 		if (found == receipt.files.end())
 			return std::nullopt;
 		return found->authority.digest;
 	}
 
-	[[nodiscard]] sdk::result<sdk::provider::manifest> make_worker_manifest(
-		const materialization_v2_1_worker_authority& worker,
-		const std::string_view worker_digest)
+	[[nodiscard]] sdk::result<sdk::provider::manifest>
+	make_worker_manifest(const materialization_v2_1_worker_authority& worker,
+						 const std::string_view worker_digest)
 	{
 		if (worker.provider_id != "cxxlens.clang22.reference" ||
 			worker.provider_version != "1.0.0" || worker.protocol_major != 1U ||
@@ -164,8 +169,8 @@ namespace
 		return manifest;
 	}
 
-	[[nodiscard]] sdk::result<sdk::provider::sandbox_policy> worker_policy(
-		const materialization_v2_1_worker_authority& worker)
+	[[nodiscard]] sdk::result<sdk::provider::sandbox_policy>
+	worker_policy(const materialization_v2_1_worker_authority& worker)
 	{
 		auto policy = sdk::provider::resolve_sandbox_policy(worker.sandbox_policy_digest);
 		if (!policy)
@@ -173,18 +178,18 @@ namespace
 		return std::move(*policy);
 	}
 
-	[[nodiscard]] sdk::result<sdk::provider::provider_selection> select_worker(
-		const sdk::provider::manifest& manifest,
-		const sdk::provider::sandbox_policy& policy,
-		std::string executable_path,
-		const std::string_view worker_digest)
+	[[nodiscard]] sdk::result<sdk::provider::provider_selection>
+	select_worker(const sdk::provider::manifest& manifest,
+				  const sdk::provider::sandbox_policy& policy,
+				  std::string executable_path,
+				  const std::string_view worker_digest)
 	{
-		auto evidence = sdk::provider::sandbox_evidence_digest(
-			policy,
-			sdk::provider::execution_budget{},
-			sdk::provider::sandbox_assurance::enforced,
-			policy.mechanisms,
-			worker_digest);
+		auto evidence =
+			sdk::provider::sandbox_evidence_digest(policy,
+												   sdk::provider::execution_budget{},
+												   sdk::provider::sandbox_assurance::enforced,
+												   policy.mechanisms,
+												   worker_digest);
 		if (!evidence)
 			return sdk::unexpected(std::move(evidence.error()));
 		sdk::provider::sandbox_report sandbox{
@@ -217,16 +222,16 @@ namespace
 		return sdk::provider::select_provider(request, std::span{&candidate, 1U});
 	}
 
-	[[nodiscard]] sdk::provider::sandbox_requirement task_sandbox(
-		const materialization_v2_1_task_metadata_receipt& metadata)
+	[[nodiscard]] sdk::provider::sandbox_requirement
+	task_sandbox(const materialization_v2_1_task_metadata_receipt& metadata)
 	{
 		return metadata.sandbox;
 	}
 
-	[[nodiscard]] sdk::result<sdk::provider::process_task_request> make_process_request(
-		const materialization_v2_1_task_execution& execution,
-		const sdk::provider::provider_selection& selection,
-		std::vector<sdk::relation_descriptor> output_descriptors)
+	[[nodiscard]] sdk::result<sdk::provider::process_task_request>
+	make_process_request(const materialization_v2_1_task_execution& execution,
+						 const sdk::provider::provider_selection& selection,
+						 std::vector<sdk::relation_descriptor> output_descriptors)
 	{
 		if (!execution.task_input || !execution.task_input->sealed())
 			return sdk::unexpected(
@@ -276,18 +281,18 @@ int main(const int argc, char**)
 		return no_response();
 	if (!observed->complete)
 		return emit_failure(std::move(*journal),
-			{"materialization.request-invalid", "input-limit", "maximum-bytes"});
+							{"materialization.request-invalid", "input-limit", "maximum-bytes"});
 	if (auto passed = journal->pass_input_limit(); !passed)
 		return no_response();
 
 	auto task_index = make_materialization_request_task_index((*raw_request)->size_bytes());
 	if (!task_index)
 		return emit_failure(std::move(*journal),
-			{"materialization.spool-failure", "task-index", "create"});
+							{"materialization.spool-failure", "task-index", "create"});
 	auto envelope = scan_materialization_request_envelope(**raw_request, {}, task_index->get());
 	if (!envelope)
 		return emit_failure(std::move(*journal),
-			{"materialization.request-invalid", "request-envelope", "strict-json"});
+							{"materialization.request-invalid", "request-envelope", "strict-json"});
 	if (auto passed = journal->pass_json_decode(); !passed)
 		return no_response();
 	if (auto passed = journal->pass_request_envelope(); !passed)
@@ -298,15 +303,17 @@ int main(const int argc, char**)
 	auto request = validate_materialization_request_v2_1(
 		std::move(*raw_request), std::move(*envelope), std::move(*task_index));
 	if (!request)
-		return emit_failure(std::move(*journal),
+		return emit_failure(
+			std::move(*journal),
 			{"materialization.request-invalid", "request-schema", "selected-contract"});
 	if (auto passed = journal->pass_request_schema(); !passed)
 		return no_response();
 
 	const auto& identity = request->identity();
-	if (auto bound = journal->authenticate_request(
-			{identity.materialization_request_id, identity.request_digest, identity.semantic_request_digest},
-			request->request().task_count());
+	if (auto bound = journal->authenticate_request({identity.materialization_request_id,
+													identity.request_digest,
+													identity.semantic_request_digest},
+												   request->request().task_count());
 		!bound)
 		return no_response();
 
@@ -323,40 +330,43 @@ int main(const int argc, char**)
 	auto occurrence = measure_materialization_occurrence(occurrence_expectation);
 	if (!occurrence)
 		return emit_failure(std::move(*journal),
-			{"materialization.identity-mismatch", "installation", "occurrence"});
+							{"materialization.identity-mismatch", "installation", "occurrence"});
 	auto worker_digest = role_digest(occurrence->receipt(), "worker-executable");
 	if (!worker_digest)
 		return emit_failure(std::move(*journal),
-			{"materialization.identity-mismatch", "worker-executable", "digest"});
+							{"materialization.identity-mismatch", "worker-executable", "digest"});
 	auto worker_fd = occurrence->open_role("worker-executable");
 	if (!worker_fd)
-		return emit_failure(std::move(*journal),
+		return emit_failure(
+			std::move(*journal),
 			{"materialization.identity-mismatch", "worker-executable", "sealed-fd"});
 	auto manifest = make_worker_manifest(worker, *worker_digest);
 	if (!manifest)
-		return emit_failure(std::move(*journal),
+		return emit_failure(
+			std::move(*journal),
 			{"materialization.identity-mismatch", "worker-manifest", "runtime-contract"});
 	auto policy = worker_policy(worker);
 	if (!policy)
 		return emit_failure(std::move(*journal),
-			{"materialization.identity-mismatch", "worker-sandbox", "policy"});
-	const auto executable_path =
-		std::string{"/proc/self/fd/"} + std::to_string(worker_fd->get());
+							{"materialization.identity-mismatch", "worker-sandbox", "policy"});
+	const auto executable_path = std::string{"/proc/self/fd/"} + std::to_string(worker_fd->get());
 	auto selection = select_worker(*manifest, *policy, executable_path, *worker_digest);
 	if (!selection)
-		return emit_failure(std::move(*journal),
+		return emit_failure(
+			std::move(*journal),
 			{"materialization.identity-mismatch", "worker-selection", "exact-provider"});
 	auto processes = sdk::provider::detail::make_system_replayable_provider_process_port();
 	if (!processes)
 		return emit_failure(std::move(*journal),
-			{"materialization.identity-mismatch", "process-port", "unavailable"});
+							{"materialization.identity-mismatch", "process-port", "unavailable"});
 
 	// The v2.1 request remains the source authority.  This private context retains only bounded
 	// task metadata and sealed source receipts; claims construction receives one live result from
 	// the loader below and never gets a request-wide resident task.v3/source representation.
 	auto claim_context = make_materialization_v2_1_claim_context(*request, occurrence->receipt());
 	if (!claim_context)
-		return emit_failure(std::move(*journal),
+		return emit_failure(
+			std::move(*journal),
 			{"materialization.identity-mismatch", "claims-bridge", "runtime-contract"});
 	if (auto completed = journal->complete_installation_binding(); !completed)
 		return no_response();
@@ -364,7 +374,8 @@ int main(const int argc, char**)
 	const auto request_subject = request->identity().materialization_request_id;
 	const detailed_report_limits report_limits{};
 	if (claim_request.tasks.size() > report_limits.max_tasks)
-		return emit_failure(std::move(*journal),
+		return emit_failure(
+			std::move(*journal),
 			{"materialization.report-invalid", request_subject, "task-evidence-limit"});
 	detailed_task_report_accumulator task_reports{report_limits};
 	std::optional<sealed_materialization_result> live_result;
@@ -372,11 +383,11 @@ int main(const int argc, char**)
 	bool launch_in_flight{};
 
 	const auto execute_one = [&](const std::size_t index,
-								const bool retain_result) -> sdk::result<void>
+								 const bool retain_result) -> sdk::result<void>
 	{
 		if (index != next_task_index || index >= claim_request.tasks.size())
-			return sdk::unexpected(
-				sdk::error{"materialization.execution-journal-invalid", "task", "noncanonical-order"});
+			return sdk::unexpected(sdk::error{
+				"materialization.execution-journal-invalid", "task", "noncanonical-order"});
 		next_task_index = index + 1U;
 		live_result.reset();
 		if (auto attempted = journal->record_worker_launch_attempt(); !attempted)
@@ -386,18 +397,18 @@ int main(const int argc, char**)
 		if (!execution)
 			return sdk::unexpected(
 				sdk::error{"materialization.worker-failure", request_subject, "task-replay"});
-		auto process_request = make_process_request(
-			*execution, *selection, request->request().output_descriptors());
+		auto process_request =
+			make_process_request(*execution, *selection, request->request().output_descriptors());
 		if (!process_request)
 			return sdk::unexpected(
 				sdk::error{"materialization.worker-failure", request_subject, "process-request"});
 		task_input_replay replay{*execution->task_input};
 		auto outcome = sdk::provider::detail::execute_provider_process_replayable(
 			*processes, *process_request, replay);
-		if (!outcome || !outcome->succeeded() || !outcome->sealed ||
-			!outcome->runtime_receipt)
-			return sdk::unexpected(sdk::error{
-				"materialization.worker-failure", execution->metadata.provider_task_id, "execution"});
+		if (!outcome || !outcome->succeeded() || !outcome->sealed || !outcome->runtime_receipt)
+			return sdk::unexpected(sdk::error{"materialization.worker-failure",
+											  execution->metadata.provider_task_id,
+											  "execution"});
 		if (auto launched = journal->record_worker_launch_success(); !launched)
 			return sdk::unexpected(std::move(launched.error()));
 		launch_in_flight = false;
@@ -411,8 +422,8 @@ int main(const int argc, char**)
 			std::move(execution->metadata.sandbox),
 			std::move(execution->task_input),
 		};
-		auto sealed = validate_and_seal_materialization(
-			std::move(seal_request), std::move(*outcome->sealed));
+		auto sealed =
+			validate_and_seal_materialization(std::move(seal_request), std::move(*outcome->sealed));
 		if (!sealed)
 			return sdk::unexpected(std::move(sealed.error()));
 		// Capture the bounded, source-private task evidence before claims adoption.  The
@@ -428,16 +439,15 @@ int main(const int argc, char**)
 		return {};
 	};
 
-	const materialization_task_result_loader load =
-		[&](const std::size_t index)
+	const materialization_task_result_loader load = [&](const std::size_t index)
 		-> sdk::result<std::reference_wrapper<const sealed_materialization_result>>
 	{
 		auto executed = execute_one(index, true);
 		if (!executed)
 			return sdk::unexpected(std::move(executed.error()));
 		if (!live_result)
-			return sdk::unexpected(
-				sdk::error{"materialization.claim-invalid", request_subject, "missing-live-result"});
+			return sdk::unexpected(sdk::error{
+				"materialization.claim-invalid", request_subject, "missing-live-result"});
 		return std::cref(*live_result);
 	};
 
@@ -456,7 +466,7 @@ int main(const int argc, char**)
 		}
 		if (launch_in_flight)
 			return emit_failure(std::move(*journal),
-				{"materialization.worker-failure", request_subject, "execution"});
+								{"materialization.worker-failure", request_subject, "execution"});
 		if (next_task_index != claim_request.tasks.size())
 			return no_response();
 		if (auto completed = journal->complete_worker_launches(); !completed)
@@ -466,9 +476,10 @@ int main(const int argc, char**)
 		const auto code = claims.error().code == "materialization.span-invalid"
 			? "materialization.span-invalid"
 			: claims.error().code == "materialization.coverage-incomplete"
-				? "materialization.coverage-incomplete"
-				: "materialization.claim-invalid";
-		return emit_failure(std::move(*journal),
+			? "materialization.coverage-incomplete"
+			: "materialization.claim-invalid";
+		return emit_failure(
+			std::move(*journal),
 			{code, request_subject, claims.error().field.empty() ? "claims" : "claims"});
 	}
 	if (launch_in_flight || next_task_index != claim_request.tasks.size())
@@ -480,24 +491,56 @@ int main(const int argc, char**)
 
 	auto transaction = make_materialization_store_transaction(claim_request, *claims);
 	if (!transaction)
-		return emit_failure(std::move(*journal),
+		return emit_failure(
+			std::move(*journal),
 			{"materialization.claim-invalid", request_subject, "store-transaction"});
 	if (auto completed = journal->complete_materialization_validation(); !completed)
 		return no_response();
-	auto preparation = prepare_materialization_store(
-		claim_request.engine, claim_request.publication, std::move(*transaction));
+	std::unique_ptr<materialization_rooted_store_opener> rooted_opener;
+	if (claim_request.publication.backend == "sqlite")
+	{
+		auto created_rooted_opener = materialization_rooted_store_opener::create(*effect_root);
+		if (!created_rooted_opener)
+			return no_response();
+		rooted_opener = std::move(*created_rooted_opener);
+	}
+	materialization_store_preparation preparation = rooted_opener
+		? prepare_materialization_store(claim_request.engine,
+										claim_request.publication,
+										std::move(*transaction),
+										*rooted_opener)
+		: prepare_materialization_store(
+			  claim_request.engine, claim_request.publication, std::move(*transaction));
 	const bool ready_for_publish = preparation.ready_for_publish();
 	if (auto recorded = journal->record_store_preparation(std::move(preparation)); !recorded)
 		return no_response();
 	if (!ready_for_publish)
 		return emit_failure(std::move(*journal),
-			{"materialization.store-failure", request_subject, "prepublication"});
+							{"materialization.store-failure", request_subject, "prepublication"});
 	if (!journal->complete_store_preparation())
 		return no_response();
 
-	// A detailed success report must bind the post-publication record, reopen receipts, physical
-	// generation, and the independent execution/claim census.  Until that encoder is present, do
-	// not cross the irreversible Store publication boundary or emit a success response.
-	return emit_failure(std::move(*journal),
-		{"materialization.report-invalid", request_subject, "success-report-not-installed"});
+	// The report encoder consumes only post-publication observations.  This keeps the irreversible
+	// Store boundary ahead of success-report construction: a report allocation/encoding failure
+	// after publication is a no-response condition, never a fabricated compact failure.
+	auto postpublication = std::move(*journal).begin_publication();
+	if (!postpublication)
+		return no_response();
+	public_materialization_success_report_input public_input;
+	public_input.request = &*request;
+	public_input.raw_input = &*observed;
+	public_input.occurrence_manifest = &occurrence->manifest();
+	public_input.occurrence_receipt = &occurrence->receipt();
+	public_input.claims = &*claims;
+	public_input.store = &postpublication->store_observation();
+	public_input.generated_at = utc_now();
+	public_input.maximum_report_bytes = report_limits.max_projection_bytes;
+	auto public_model = build_public_materialization_success_report(public_input);
+	if (!public_model)
+		return no_response();
+	auto report = encode_public_materialization_success_report(std::move(*public_model));
+	if (!report)
+		return no_response();
+	std::cout << *report;
+	return 0;
 }
