@@ -1042,6 +1042,8 @@ namespace
 			auto scope = observation_->begin_connection_observation(rooted_path);
 			require(scope.has_value(), "rooted SQLite fixture observation scope failed");
 			main_scope_ = std::move(*scope);
+			require(!main_scope_->requires_source_shm_writer_mapping_epoch(),
+					"rooted source-private VFS unexpectedly entered forwarding SHM epoch route");
 			main_gate_ = main_scope_->effect_gate_port();
 			require(main_gate_ != nullptr && main_gate_->enforcement_active() &&
 						main_gate_->stage() == sdk::sqlite_backend_effect_stage::denied,
@@ -1262,19 +1264,17 @@ namespace
 		auto opener = materialization_rooted_store_opener::create(*root);
 		require(opener.has_value(), "namespace identity rooted VFS registration failed");
 		auto& observation = (*opener)->observation_capability();
-		constexpr std::string_view locator{
-			"/cxxlens-rooted-vfs-v1/safe/identity.sqlite"};
+		constexpr std::string_view locator{"/cxxlens-rooted-vfs-v1/safe/identity.sqlite"};
 
 		auto absent = observation.capture_namespace(locator);
 		require(absent.has_value() &&
-				absent->entries.front().state == sdk::sqlite_backend_entry_state::absent,
+					absent->entries.front().state == sdk::sqlite_backend_entry_state::absent,
 				"namespace identity absent census failed");
 		const auto stable_parent = absent->parent_namespace_identity;
-		require(::chmod("safe", 0750) == 0,
-				"namespace identity parent metadata mutation failed");
+		require(::chmod("safe", 0750) == 0, "namespace identity parent metadata mutation failed");
 		auto metadata_changed = observation.capture_namespace(locator);
 		require(metadata_changed.has_value() &&
-				metadata_changed->parent_namespace_identity == stable_parent,
+					metadata_changed->parent_namespace_identity == stable_parent,
 				"parent metadata epoch changed stable namespace identity");
 
 		auto created = observation.exclusive_create_sync_zero_main(locator);
@@ -1282,24 +1282,26 @@ namespace
 				"zero-main receipt did not retain stable parent namespace identity");
 		auto after_create = observation.capture_namespace(locator);
 		require(after_create.has_value() &&
-				after_create->parent_namespace_identity == stable_parent,
+					after_create->parent_namespace_identity == stable_parent,
 				"child creation changed stable parent namespace identity");
 		const auto& main_after_create = after_create->entries.front();
 		require(main_after_create.state == sdk::sqlite_backend_entry_state::held_regular &&
-				main_after_create.directory_entry_identity == created->directory_entry_identity &&
-				main_after_create.object_identity == created->object_identity,
+					main_after_create.directory_entry_identity ==
+						created->directory_entry_identity &&
+					main_after_create.object_identity == created->object_identity,
 				"zero-main receipt did not bind the created leaf epoch");
 
 		create_regular_file(directory.path() + "/safe/identity.sqlite-wal");
 		auto after_sibling = observation.capture_namespace(locator);
 		require(after_sibling.has_value() &&
-				after_sibling->parent_namespace_identity == stable_parent &&
-				after_sibling->entries.front().directory_entry_identity ==
-					main_after_create.directory_entry_identity,
+					after_sibling->parent_namespace_identity == stable_parent &&
+					after_sibling->entries.front().directory_entry_identity ==
+						main_after_create.directory_entry_identity,
 				"sibling creation changed the existing main entry identity");
 		auto same_entry = created->held_main->recheck_current_entry();
 		require(same_entry.has_value() &&
-				*same_entry == sdk::sqlite_backend_replacement_state::exact_same_entry_and_object,
+					*same_entry ==
+						sdk::sqlite_backend_replacement_state::exact_same_entry_and_object,
 				"sibling creation falsely replaced the held main entry");
 
 		require(::chmod((directory.path() + "/safe/identity.sqlite").c_str(), 0640) == 0,
@@ -1307,7 +1309,7 @@ namespace
 		auto leaf_changed = observation.observe_entry_state_without_open(
 			locator, sdk::sqlite_backend_file_role::main_database);
 		require(leaf_changed.has_value() && leaf_changed->directory_entry_identity &&
-				*leaf_changed->directory_entry_identity != created->directory_entry_identity,
+					*leaf_changed->directory_entry_identity != created->directory_entry_identity,
 				"main leaf metadata epoch was omitted from directory-entry identity");
 
 		require(::fchdir(original) == 0, "namespace identity cwd restore failed");
@@ -1626,7 +1628,11 @@ namespace
 			auto opener = materialization_rooted_store_opener::create(*root);
 			require(opener.has_value(), "VFS lifetime opener creation failed");
 			auto opened = (*opener)->open_sqlite("lifetime.sqlite", engine());
-			require(opened.has_value(), "VFS lifetime Store open failed");
+			require(opened.has_value(),
+					"VFS lifetime Store open failed: " +
+						(opened ? std::string{}
+								: opened.error().code + ":" + opened.error().field + ":" +
+								 opened.error().detail));
 			retained_store.emplace(std::move(*opened));
 		}
 		bool compacted{};

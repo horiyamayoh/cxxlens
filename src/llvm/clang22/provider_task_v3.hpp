@@ -173,6 +173,9 @@ namespace cxxlens::detail::clang22
 								clang22_task_input_sink& output);
 	[[nodiscard]] sdk::result<clang22_task_input>
 	decode_task_input(std::span<const std::byte> input);
+	/** Bounded replay overload of decode_task_input; the source is sealed before success. */
+	[[nodiscard]] sdk::result<clang22_task_v3_stream_decoded>
+	decode_task_input(clang22_task_input_replay& input, clang22_task_source_spool& source);
 	/**
 	 * Decode one sealed task.v3 replay without materializing its complete logical byte vector.
 	 * The unique canonical `source.content_base64` spelling is validated incrementally and decoded

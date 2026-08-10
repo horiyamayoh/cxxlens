@@ -63,7 +63,6 @@ namespace cxxlens::detail::clang22::materialization
 		struct final_occurrence
 		{
 			std::string claim_ref;
-			sdk::claim value;
 			materialization_semantic_task_context context;
 			bool base{};
 		};
@@ -459,6 +458,29 @@ namespace cxxlens::detail::clang22::materialization
 				json_text(*worker, "semantic_contract_digest", "worker.semantic_contract_digest");
 			auto protocol_major = json_integer(*worker, "protocol_major", "worker.protocol_major");
 			auto protocol_minor = json_integer(*worker, "protocol_minor", "worker.protocol_minor");
+			std::optional<std::vector<std::string>> required_features;
+			if (const auto* features_value = worker->member("required_features");
+				features_value != nullptr)
+			{
+				const auto* features = features_value->as_array();
+				if (features == nullptr)
+					return sdk::unexpected(claim_error(
+						"materialization.identity-mismatch", "worker.required_features", "array"));
+				required_features.emplace();
+				required_features->reserve(features->size());
+				for (const auto& feature : *features)
+				{
+					if (feature.as_string() == nullptr)
+						return sdk::unexpected(claim_error("materialization.identity-mismatch",
+														   "worker.required_features",
+														   "string"));
+					required_features->push_back(*feature.as_string());
+				}
+				if (!sorted_unique(*required_features))
+					return sdk::unexpected(claim_error("materialization.identity-mismatch",
+													   "worker.required_features",
+													   "canonical-sorted-unique"));
+			}
 			if (!provider_id || !provider_version || !worker_semantics || !protocol_major ||
 				!protocol_minor)
 				return sdk::unexpected(!provider_id			   ? std::move(provider_id.error())
@@ -490,32 +512,43 @@ namespace cxxlens::detail::clang22::materialization
 					{context_object(context), text(context.task_input_digest)}));
 			}
 
+			std::vector<sdk::canonical_value> worker_projection{
+				text(std::string{*provider_id}),
+				text(std::string{*provider_version}),
+				text(std::string{*worker_semantics}),
+				sdk::canonical_value::from_integer(*protocol_major),
+				sdk::canonical_value::from_integer(*protocol_minor),
+			};
+			if (required_features)
+			{
+				std::vector<sdk::canonical_value> feature_values;
+				feature_values.reserve(required_features->size());
+				for (const auto& feature : *required_features)
+					feature_values.push_back(text(feature));
+				worker_projection.push_back(
+					sdk::canonical_value::from_tuple(std::move(feature_values)));
+			}
+
 			const auto& first = request.tasks.front().worker_input;
-			auto basis =
-				digest_projection("cxxlens.clang22-direct-materialization-basis.v1",
-								  sdk::canonical_value::from_tuple({
-									  text("cxxlens.clang22-direct-materialization-basis.v1"),
-									  text(*materializer),
-									  sdk::canonical_value::from_tuple({
-										  text(std::string{*provider_id}),
-										  text(std::string{*provider_version}),
-										  text(std::string{*worker_semantics}),
-										  sdk::canonical_value::from_integer(*protocol_major),
-										  sdk::canonical_value::from_integer(*protocol_minor),
-									  }),
-									  sdk::canonical_value::from_tuple({
-										  text(first.project),
-										  text(first.project_catalog.catalog_id),
-										  text(first.project_catalog.catalog_digest),
-									  }),
-									  sdk::canonical_value::from_tuple({
-										  text(std::string{engine_generation_contract}),
-										  text(std::string{request.engine.generation()}),
-										  text(std::string{request.engine.registry_digest()}),
-										  sdk::canonical_value::from_tuple(std::move(descriptors)),
-									  }),
-									  sdk::canonical_value::from_tuple(std::move(semantic_tasks)),
-								  }));
+			auto basis = digest_projection(
+				"cxxlens.clang22-direct-materialization-basis.v1",
+				sdk::canonical_value::from_tuple({
+					text("cxxlens.clang22-direct-materialization-basis.v1"),
+					text(*materializer),
+					sdk::canonical_value::from_tuple(std::move(worker_projection)),
+					sdk::canonical_value::from_tuple({
+						text(first.project),
+						text(first.project_catalog.catalog_id),
+						text(first.project_catalog.catalog_digest),
+					}),
+					sdk::canonical_value::from_tuple({
+						text(std::string{engine_generation_contract}),
+						text(std::string{request.engine.generation()}),
+						text(std::string{request.engine.registry_digest()}),
+						sdk::canonical_value::from_tuple(std::move(descriptors)),
+					}),
+					sdk::canonical_value::from_tuple(std::move(semantic_tasks)),
+				}));
 			if (!basis)
 				return sdk::unexpected(std::move(basis.error()));
 			const auto transform = [&](const std::string_view domain)
@@ -915,15 +948,15 @@ namespace cxxlens::detail::clang22::materialization
 		return partitions_;
 	}
 
-	sdk::result<sealed_materialization_claims> construct_materialization_claims(
+	sdk::result<sealed_materialization_claims> construct_materialization_claims_from_loader(
 		const validated_materialization_request& request,
-		const std::span<const sealed_materialization_result> task_results,
+		const materialization_task_result_loader& load,
 		const materialization_producer_authority& producer_authority,
 		const materialization_guarantee_authority& guarantee_authority)
 	{
-		if (request.tasks.empty() || task_results.size() != request.tasks.size())
-			return sdk::unexpected(claim_error(
-				"materialization.task-binding-mismatch", "task-results", "exact-request-census"));
+		if (request.tasks.empty() || !load)
+			return sdk::unexpected(
+				claim_error("materialization.task-binding-mismatch", "task-results", "loader"));
 
 		std::vector<materialization_semantic_task_context> contexts;
 		contexts.reserve(request.tasks.size());
@@ -931,28 +964,33 @@ namespace cxxlens::detail::clang22::materialization
 		for (std::size_t index{}; index < request.tasks.size(); ++index)
 		{
 			const auto& task = request.tasks[index];
-			const auto& result = task_results[index];
-			if (auto valid = task.worker_input.validate(); !valid)
-				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
-												   "task.v3",
-												   nested_error(valid.error())));
-			auto encoded_task = encode_task_input(task.worker_input);
-			if (!encoded_task || *encoded_task != task.worker_payload ||
-				sdk::content_digest(task.worker_payload) != task.task_input_digest)
-				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
-												   "task.v3",
-												   "payload-or-digest-rebinding"));
-			if (result.provider_task_id() != task.provider_task_id ||
-				result.task_input_digest() != task.task_input_digest ||
-				result.provider_execution_id() != task.provider_execution_id ||
-				result.selected_catalog_compile_unit_id() !=
-					task.worker_input.selected_catalog_compile_unit ||
-				result.final_relation_compile_unit_id() != task.worker_input.compile_unit)
-				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
-												   "task-results",
-												   "canonical-order-or-execution-binding"));
-			if (auto valid = validate_task_side_channels(task, result); !valid)
-				return sdk::unexpected(std::move(valid.error()));
+			if (task.source_receipt)
+			{
+				if (!task.worker_payload.empty() || !task.worker_input.source.empty() ||
+					!task.worker_input.source_content_base64.empty())
+					return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+													   "task.v3",
+													   "streaming-residency-violation"));
+				if (auto valid =
+						task.worker_input.validate_with_source_receipt(*task.source_receipt);
+					!valid)
+					return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+													   "task.v3",
+													   nested_error(valid.error())));
+			}
+			else
+			{
+				if (auto valid = task.worker_input.validate(); !valid)
+					return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+													   "task.v3",
+													   nested_error(valid.error())));
+				auto encoded_task = encode_task_input(task.worker_input);
+				if (!encoded_task || *encoded_task != task.worker_payload ||
+					sdk::content_digest(task.worker_payload) != task.task_input_digest)
+					return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+													   "task.v3",
+													   "payload-or-digest-rebinding"));
+			}
 			auto context = task_context(task);
 			if (!unique_contexts.insert(context_tuple(context)).second)
 				return sdk::unexpected(claim_error(
@@ -1077,14 +1115,31 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(claim_error("materialization.claim-invalid",
 												   row.descriptor_id,
 												   nested_error(added.error())));
-			occurrences.push_back({std::move(final_ref), std::move(final), context, base});
+			// Keep only the identity/context needed to replay the occurrence into its
+			// partition; retaining one full sdk::claim per occurrence would duplicate the
+			// complete task result set before Store publication.
+			occurrences.push_back({std::move(final_ref), context, base});
 			return {};
 		};
 
 		for (std::size_t task_index{}; task_index < request.tasks.size(); ++task_index)
 		{
 			const auto& task = request.tasks[task_index];
-			const auto& result = task_results[task_index];
+			auto loaded = load(task_index);
+			if (!loaded)
+				return sdk::unexpected(std::move(loaded.error()));
+			const auto& result = loaded->get();
+			if (result.provider_task_id() != task.provider_task_id ||
+				result.task_input_digest() != task.task_input_digest ||
+				result.provider_execution_id() != task.provider_execution_id ||
+				result.selected_catalog_compile_unit_id() !=
+					task.worker_input.selected_catalog_compile_unit ||
+				result.final_relation_compile_unit_id() != task.worker_input.compile_unit)
+				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+												   "task-results",
+												   "canonical-order-or-execution-binding"));
+			if (auto valid = validate_task_side_channels(task, result); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 			const auto& context = contexts[task_index];
 			const auto batches = result.provider_seal().batches();
 			for (std::size_t batch_index{}; batch_index < batches.size(); ++batch_index)
@@ -1236,6 +1291,19 @@ namespace cxxlens::detail::clang22::materialization
 											   "complete-final-claim-batch",
 											   "nonzero-unresolved-conflict-or-differential"));
 
+		std::map<std::string, const sdk::claim*, std::less<>> committed_claims_by_ref;
+		for (const auto& claim : committed->claims)
+		{
+			auto envelope = make_envelope("stored_final", claim);
+			if (!envelope)
+				return sdk::unexpected(std::move(envelope.error()));
+			auto [entry, inserted] = committed_claims_by_ref.emplace(envelope->claim_ref, &claim);
+			if (!inserted && entry->second != &claim)
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "complete-final-claim-batch",
+												   "duplicate-claim-ref"));
+		}
+
 		std::map<partition_key, partition_accumulator> partition_groups;
 		const auto partition_for = [&](const std::string_view descriptor_id,
 									   const materialization_semantic_task_context& context,
@@ -1286,26 +1354,32 @@ namespace cxxlens::detail::clang22::materialization
 
 		for (const auto& occurrence : occurrences)
 		{
-			auto producer_basis = sdk::claim_input_basis_digest(occurrence.value.input_basis);
+			const auto committed_claim = committed_claims_by_ref.find(occurrence.claim_ref);
+			if (committed_claim == committed_claims_by_ref.end())
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "complete-final-claim-batch",
+												   "occurrence-union"));
+			const auto& claim_value = *committed_claim->second;
+			auto producer_basis = sdk::claim_input_basis_digest(claim_value.input_basis);
 			if (!producer_basis)
 				return sdk::unexpected(claim_error("materialization.claim-invalid",
-												   occurrence.value.descriptor,
+												   claim_value.descriptor,
 												   nested_error(producer_basis.error())));
-			auto partition = partition_for(occurrence.value.descriptor,
+			auto partition = partition_for(claim_value.descriptor,
 										   occurrence.context,
-										   occurrence.value.producer.semantic_contract,
+										   claim_value.producer.semantic_contract,
 										   std::move(*producer_basis),
 										   false,
 										   occurrence.base);
 			if (!partition)
 				return sdk::unexpected(std::move(partition.error()));
 			auto [claim, inserted] =
-				(*partition)->claims_by_ref.emplace(occurrence.claim_ref, occurrence.value);
-			if (!inserted && !same_claim(claim->second, occurrence.value))
+				(*partition)->claims_by_ref.emplace(occurrence.claim_ref, claim_value);
+			if (!inserted && !same_claim(claim->second, claim_value))
 				return sdk::unexpected(claim_error("materialization.claim-invalid",
 												   "partition.claim-ref",
 												   "aliases-different-occurrence"));
-			(*partition)->claim_contents.insert(occurrence.value.content);
+			(*partition)->claim_contents.insert(claim_value.content);
 		}
 
 		for (std::size_t task_index{}; task_index < contexts.size(); ++task_index)
@@ -1514,5 +1588,27 @@ namespace cxxlens::detail::clang22::materialization
 											 std::move(edge_values),
 											 std::move(association_values),
 											 std::move(partitions)};
+	}
+
+	sdk::result<sealed_materialization_claims> construct_materialization_claims(
+		const validated_materialization_request& request,
+		const std::span<const sealed_materialization_result> task_results,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority)
+	{
+		if (task_results.size() != request.tasks.size())
+			return sdk::unexpected(claim_error(
+				"materialization.task-binding-mismatch", "task-results", "exact-request-census"));
+		const materialization_task_result_loader load = [task_results](const std::size_t index)
+			-> sdk::result<std::reference_wrapper<const sealed_materialization_result>>
+		{
+			if (index >= task_results.size())
+				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+												   "task-results",
+												   "exact-request-census"));
+			return std::cref(task_results[index]);
+		};
+		return construct_materialization_claims_from_loader(
+			request, load, producer_authority, guarantee_authority);
 	}
 } // namespace cxxlens::detail::clang22::materialization

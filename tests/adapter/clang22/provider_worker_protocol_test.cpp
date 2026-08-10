@@ -68,7 +68,7 @@ int main(const int argument_count, const char* const* arguments)
 	description.package_identity = "cxxlens.clang22.reference.package";
 	description.publisher = "cxxlens";
 	description.license = "Apache-2.0";
-	description.protocol = {1U, 0U, 0U, {"credit-backpressure"}, {}};
+	description.protocol = {1U, 1U, 1U, {"credit-backpressure", "task-input-chunks-v1"}, {}};
 	description.platform_tuples = {"linux-glibc"};
 	description.provider_binary_digest = executable_digest(executable);
 	description.provider_semantic_contract_digest = semantic_contract_digest;
@@ -129,7 +129,9 @@ int main(const int argument_count, const char* const* arguments)
 		cxxlens::cc::relations::entity::descriptor(),
 	};
 	request.task_id = "clang22-malformed-input-" + std::string(300U, 'x');
-	request.payload = {std::byte{0x01}, std::byte{0x02}};
+	request.payload.assign(1024U * 1024U + 1U, std::byte{0x01});
+	request.limits.minimum_minor = 1U;
+	request.limits.maximum_minor = 1U;
 	request.task_input_digest = content_digest(request.payload);
 	request.normalized_invocation_digest =
 		"sha256:abababababababababababababababababababababababababababababababab";

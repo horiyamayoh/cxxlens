@@ -1082,7 +1082,8 @@ namespace cxxlens::detail::clang22::materialization
 										  std::move(*supplied_execution),
 										  std::move(*supplied_input_digest),
 										  std::move(sandbox),
-										  std::move(*payload)};
+										  std::move(*payload),
+										  std::nullopt};
 		}
 
 		[[nodiscard]] sdk::result<sdk::project_catalog>

@@ -20,6 +20,13 @@ namespace cxxlens::detail::clang22::materialization
 		std::string task_input_digest;
 		sdk::provider::sandbox_requirement sandbox;
 		std::vector<std::byte> worker_payload;
+		/**
+		 * Source-private v2.1 binding.  When present, the task.v3 bytes and decoded source stay in
+		 * their sealed spools; claims validation must use this receipt instead of reconstructing a
+		 * resident worker payload.  The legacy v2 path leaves this empty and retains its exact
+		 * payload check.
+		 */
+		std::optional<clang22_task_source_receipt> source_receipt;
 	};
 
 	struct validated_publication_request

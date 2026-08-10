@@ -499,6 +499,17 @@ set_tests_properties(
   PROPERTIES
     LABELS "adapter;provider;clang22;materialization;request;identity;security")
 
+add_test(
+  NAME adapter.clang22-materialization-cli-phase
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/adapter/clang22/materialization_cli_phase_test.py"
+    --driver "$<TARGET_FILE:cxxlens-clang22-materialize>")
+set_tests_properties(
+  adapter.clang22-materialization-cli-phase
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;request;failure;phase")
+
 cxxlens_add_test_executable(cxxlens-clang22-materialization-io
                             adapter/clang22/materialization_io_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-io

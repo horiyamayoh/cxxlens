@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -103,6 +104,15 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
+	 * Source-private streaming adoption boundary. The loader exposes at most one live sealed
+	 * result; the coordinator resets that owner before requesting the next task and after claim
+	 * adoption.
+	 */
+	using materialization_task_result_loader =
+		std::function<sdk::result<std::reference_wrapper<const sealed_materialization_result>>(
+			std::size_t)>;
+
+	/**
 	 * Immutable, move-only output of complete claim construction and one atomic batch commit.
 	 * Partitions are in deterministic manifest order and contain final claims only.
 	 */
@@ -159,12 +169,25 @@ namespace cxxlens::detail::clang22::materialization
 			std::span<const sealed_materialization_result> task_results,
 			const materialization_producer_authority& producer_authority,
 			const materialization_guarantee_authority& guarantee_authority);
+		friend sdk::result<sealed_materialization_claims>
+		construct_materialization_claims_from_loader(
+			const validated_materialization_request& request,
+			const materialization_task_result_loader& load,
+			const materialization_producer_authority& producer_authority,
+			const materialization_guarantee_authority& guarantee_authority);
 	};
 
 	/** Construct, globally validate, and partition every final occurrence exactly once. */
 	[[nodiscard]] sdk::result<sealed_materialization_claims> construct_materialization_claims(
 		const validated_materialization_request& request,
 		std::span<const sealed_materialization_result> task_results,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority);
+
+	[[nodiscard]] sdk::result<sealed_materialization_claims>
+	construct_materialization_claims_from_loader(
+		const validated_materialization_request& request,
+		const materialization_task_result_loader& load,
 		const materialization_producer_authority& producer_authority,
 		const materialization_guarantee_authority& guarantee_authority);
 } // namespace cxxlens::detail::clang22::materialization

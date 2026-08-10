@@ -4,8 +4,11 @@
 #include <array>
 #include <charconv>
 #include <cstdlib>
+#include <istream>
+#include <limits>
 #include <map>
 #include <memory>
+#include <new>
 #include <ostream>
 #include <ranges>
 #include <sstream>
@@ -18,6 +21,9 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/sdk/provider.hpp>
+
+#include "materialization_task_spool.hpp"
+#include "sdk/provider_validation_internal.hpp"
 
 #if CXXLENS_HAS_CLANG22
 #include <clang/AST/DeclCXX.h>
@@ -1411,8 +1417,84 @@ namespace cxxlens::detail::clang22
 		return output;
 	}
 
-	int run_provider_worker(const std::span<const std::byte> input, std::ostream& output)
+	int run_provider_worker(std::istream& input, std::ostream& output)
 	{
+		class stream_source final : public sdk::provider::detail::host_input_byte_source
+		{
+		  public:
+			explicit stream_source(std::istream& input) : input_{input} {}
+
+			sdk::result<std::size_t> read(const std::span<std::byte> output) override
+			{
+				if (output.empty())
+					return std::size_t{};
+				input_.read(reinterpret_cast<char*>(output.data()),
+							static_cast<std::streamsize>(output.size()));
+				const auto count = input_.gcount();
+				if (input_.bad() || (input_.fail() && !input_.eof()) || count < 0 ||
+					static_cast<std::uintmax_t>(count) > output.size())
+					return sdk::unexpected({"provider.input-read-failed", "stdin", "bounded-read"});
+				return static_cast<std::size_t>(count);
+			}
+
+		  private:
+			std::istream& input_;
+		};
+
+		class task_input_sink final : public sdk::provider::detail::host_input_chunk_sink
+		{
+		  public:
+			explicit task_input_sink(materialization::clang22_task_input_spool& spool)
+				: spool_{spool}
+			{
+			}
+
+			sdk::result<void> append(const std::span<const std::byte> bytes) override
+			{
+				if (bytes.empty())
+					return {};
+				auto appended = spool_.append(bytes);
+				if (!appended)
+					return sdk::unexpected(std::move(appended.error()));
+				return {};
+			}
+
+		  private:
+			materialization::clang22_task_input_spool& spool_;
+		};
+
+		const auto replay_source =
+			[](clang22_task_source_replay& source) -> sdk::result<std::string>
+		{
+			try
+			{
+				if (!source.sealed() || source.size_bytes() == 0U ||
+					source.size_bytes() > materialization::maximum_clang22_task_source_bytes ||
+					source.size_bytes() > std::numeric_limits<std::size_t>::max())
+					return sdk::unexpected(
+						{"provider.frontend-request-invalid", "source", "sealed-size"});
+				std::string bytes(static_cast<std::size_t>(source.size_bytes()), '\0');
+				std::uint64_t offset{};
+				while (offset < source.size_bytes())
+				{
+					auto read = source.read_at(offset,
+											   std::as_writable_bytes(std::span{bytes}.subspan(
+												   static_cast<std::size_t>(offset))));
+					if (!read || *read == 0U ||
+						static_cast<std::uint64_t>(*read) > source.size_bytes() - offset)
+						return sdk::unexpected(
+							{"provider.frontend-request-invalid", "source", "replay"});
+					offset += static_cast<std::uint64_t>(*read);
+				}
+				return bytes;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return sdk::unexpected(
+					{"provider.frontend-request-invalid", "source", "allocation"});
+			}
+		};
+
 		const auto environment = [](const char* name) -> std::optional<std::string>
 		{
 			const auto* value = std::getenv(name);
@@ -1445,28 +1527,38 @@ namespace cxxlens::detail::clang22
 			!parse_version(*expected_minor, input_limits.maximum_minor))
 			return EXIT_FAILURE;
 		input_limits.minimum_minor = input_limits.maximum_minor;
-		auto frames = sdk::provider::decode_frame_stream(input, input_limits);
-		if (!frames)
+		stream_source source{input};
+		auto task_input = materialization::make_materialization_task_input_spool();
+		if (!task_input)
 			return EXIT_FAILURE;
-		auto validated = sdk::provider::validate_host_transcript(*frames,
-																 {*expected_manifest,
-																  {*expected_task_id,
-																   *expected_task_digest,
-																   *expected_invocation,
-																   *expected_toolchain,
-																   *expected_environment},
-																  input_limits});
-		if (!validated)
+		task_input_sink input_sink{**task_input};
+		auto validated = sdk::provider::detail::validate_host_transcript_stream(
+			source,
+			{{*expected_manifest,
+			  {*expected_task_id,
+			   *expected_task_digest,
+			   *expected_invocation,
+			   *expected_toolchain,
+			   *expected_environment},
+			  input_limits},
+			 input_limits.maximum_minor == 1U},
+			input_sink);
+		if (!validated || !(*task_input)->seal())
 			return EXIT_FAILURE;
 
 		stream_sink sink{output};
-		sdk::provider::protocol_writer writer{sink};
-		writer.grant_credit(validated->credit);
-		if (!writer.send(message_type::hello, frames->at(0U).control))
+		sdk::provider::protocol_writer writer{sink, input_limits};
+		writer.grant_credit(validated->credit());
+		auto hello = sdk::provider::encode_control_text(*expected_manifest);
+		auto schema = sdk::provider::encode_schema_negotiate_metadata(
+			{"cxxlens.provider-protocol.v1", input_limits.maximum_minor});
+		if (!hello || !schema)
 			return EXIT_FAILURE;
-		if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
+		if (!writer.send(message_type::hello, *hello))
 			return EXIT_FAILURE;
-		const auto& task_control = validated->task;
+		if (!writer.send(message_type::schema_negotiate, *schema))
+			return EXIT_FAILURE;
+		const auto& task_control = validated->task();
 		const std::string task_id{task_control.task_id};
 		const auto send_frontend_failure = [&](const std::string_view field)
 		{
@@ -1476,17 +1568,29 @@ namespace cxxlens::detail::clang22
 				(void)writer.send(message_type::task_failed, *control);
 		};
 
-		auto request = decode_task_input(validated->payload);
-		if (!request)
+		auto source_spool = materialization::make_materialization_task_source_spool();
+		if (!source_spool)
+			return EXIT_FAILURE;
+		auto decoded = decode_task_input(**task_input, **source_spool);
+		if (!decoded)
 		{
 			send_frontend_failure("payload");
 			return EXIT_SUCCESS;
 		}
+		auto source_bytes = replay_source(**source_spool);
+		if (!source_bytes ||
+			sdk::content_digest(std::as_bytes(std::span{*source_bytes})) !=
+				decoded->input.source_content_digest)
+		{
+			send_frontend_failure("source");
+			return EXIT_SUCCESS;
+		}
 		const std::string toolchain_digest{task_control.toolchain_digest};
 		const std::string environment_digest{task_control.environment_digest};
-		if (request->normalized_invocation_digest != task_control.normalized_invocation_digest ||
-			request->toolchain_digest != toolchain_digest ||
-			request->environment_digest != environment_digest)
+		if (decoded->input.normalized_invocation_digest !=
+				task_control.normalized_invocation_digest ||
+			decoded->input.toolchain_digest != toolchain_digest ||
+			decoded->input.environment_digest != environment_digest)
 		{
 			send_frontend_failure("task-binding");
 			return EXIT_SUCCESS;
@@ -1509,17 +1613,18 @@ namespace cxxlens::detail::clang22
 			}
 			outputs.push_back(std::move(*descriptor));
 		}
-		auto task =
-			reconstruct_provider_task(*request, std::move(outputs), *expected_semantic_contract);
+		auto task = reconstruct_provider_task(
+			decoded->input, decoded->source, std::move(outputs), *expected_semantic_contract);
 		if (!task || task->task_id != task_id)
 		{
 			send_frontend_failure("task-id");
 			return EXIT_SUCCESS;
 		}
+		decoded->input.source = std::move(*source_bytes);
 		auto execution = sdk::provider::execution_context{};
-		execution.budget = request->budget;
+		execution.budget = decoded->input.budget;
 		canonical_provider provider{
-			std::move(*request), toolchain_digest, *expected_semantic_contract};
+			std::move(decoded->input), toolchain_digest, *expected_semantic_contract};
 		(void)sdk::provider::run_worker(provider, *task, writer, std::move(execution));
 		return EXIT_SUCCESS;
 	}

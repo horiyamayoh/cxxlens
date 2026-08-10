@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -327,6 +328,16 @@ namespace
 			selector_value, "sqlite", genesis_record.publication_id, "positive.sqlite");
 		auto append = execute_materialization_store(
 			value, append_request, plan(value, append_request, "item:two"), opener);
+		if (append.first_issue)
+		{
+			if (const auto* failure =
+					std::get_if<materialization_store_sdk_failure>(&*append.first_issue))
+				std::cerr << "append sdk failure operation=" << static_cast<int>(failure->operation)
+						  << " code=" << failure->error.code << " field=" << failure->error.field
+						  << " detail=" << failure->error.detail << '\n';
+			else
+				std::cerr << "append mismatch\n";
+		}
 		require(!append.first_issue && append.publish_call_count == 1U &&
 					append.publish_returned_record &&
 					append.publish_returned_record->sequence == 2U &&
@@ -367,6 +378,15 @@ namespace
 			publication_request(selector_value, "sqlite", std::nullopt, "race.sqlite");
 		auto genesis = execute_materialization_store(
 			value, genesis_request, plan(value, genesis_request, "item:genesis"));
+		if (genesis.first_issue)
+		{
+			if (const auto* failure =
+					std::get_if<materialization_store_sdk_failure>(&*genesis.first_issue))
+				std::cerr << "genesis sdk failure operation="
+						  << static_cast<int>(failure->operation) << " code=" << failure->error.code
+						  << " field=" << failure->error.field
+						  << " detail=" << failure->error.detail << '\n';
+		}
 		require(!genesis.first_issue && genesis.publish_returned_record,
 				"race fixture genesis failed");
 		const auto genesis_record = *genesis.publish_returned_record;
@@ -385,6 +405,17 @@ namespace
 
 		auto competitor = execute_materialization_store(
 			value, append_request, plan(value, append_request, "item:competing-winner"));
+		if (competitor.first_issue)
+		{
+			if (const auto* failure =
+					std::get_if<materialization_store_sdk_failure>(&*competitor.first_issue))
+				std::cerr << "competitor sdk failure operation="
+						  << static_cast<int>(failure->operation) << " code=" << failure->error.code
+						  << " field=" << failure->error.field
+						  << " detail=" << failure->error.detail << '\n';
+			else
+				std::cerr << "competitor mismatch\n";
+		}
 		require(!competitor.first_issue && competitor.publish_returned_record,
 				"race fixture competitor did not publish");
 		const auto competitor_record = *competitor.publish_returned_record;
@@ -527,6 +558,17 @@ namespace
 			publication_request(selector_value, "sqlite", std::nullopt, path.string());
 		auto genesis = execute_materialization_store(
 			value, genesis_request, plan(value, genesis_request, "item:v2-genesis"));
+		if (genesis.first_issue)
+		{
+			if (const auto* failure =
+					std::get_if<materialization_store_sdk_failure>(&*genesis.first_issue))
+				std::cerr << "v2 genesis sdk failure operation="
+						  << static_cast<int>(failure->operation) << " code=" << failure->error.code
+						  << " field=" << failure->error.field
+						  << " detail=" << failure->error.detail << '\n';
+			else
+				std::cerr << "v2 genesis non-sdk issue\n";
+		}
 		require(!genesis.first_issue && genesis.publish_returned_record &&
 					genesis.verification_store,
 				"materializer v2 fixture genesis failed");

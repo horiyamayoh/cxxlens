@@ -2950,15 +2950,15 @@ namespace cxxlens::detail::clang22::materialization
 			std::uint64_t source_size_bytes{};
 		};
 
-		[[nodiscard]] sdk::result<source_dependent_task_binding> validate_source_dependent_task(
-			materialization_replayable_spool& raw_request,
-			materialization_request_task_index& task_index,
-			const std::uint64_t index,
-			const sdk::project_catalog& catalog,
-			const std::string_view project_id,
-			const std::span<const relation_descriptor> outputs,
-			const materialization_v2_1_worker_authority& worker,
-			materialization_v2_1_auxiliary_spool_factory& auxiliary_spools)
+		[[nodiscard]] sdk::result<materialization_v2_1_task_execution>
+		replay_source_dependent_task(materialization_replayable_spool& raw_request,
+									 materialization_request_task_index& task_index,
+									 const std::uint64_t index,
+									 const sdk::project_catalog& catalog,
+									 const std::string_view project_id,
+									 const std::span<const relation_descriptor> outputs,
+									 const materialization_v2_1_worker_authority& worker,
+									 materialization_v2_1_auxiliary_spool_factory& auxiliary_spools)
 		{
 			auto metadata = replay_task_metadata(raw_request,
 												 task_index,
@@ -3050,10 +3050,39 @@ namespace cxxlens::detail::clang22::materialization
 			if (*execution != metadata->provider_execution_id)
 				return sdk::unexpected(mismatch("task.provider_execution_id"));
 
-			return source_dependent_task_binding{std::move(metadata->provider_task_id),
-												 std::move(metadata->task_input_digest),
-												 std::move(metadata->provider_execution_id),
-												 source_receipt->size_bytes};
+			auto metadata_value = metadata_receipt(*metadata, index);
+			return materialization_v2_1_task_execution{std::move(metadata->input),
+													   std::move(metadata_value),
+													   *source_receipt,
+													   std::move(*source),
+													   std::move(*task_input)};
+		}
+
+		[[nodiscard]] sdk::result<source_dependent_task_binding> validate_source_dependent_task(
+			materialization_replayable_spool& raw_request,
+			materialization_request_task_index& task_index,
+			const std::uint64_t index,
+			const sdk::project_catalog& catalog,
+			const std::string_view project_id,
+			const std::span<const relation_descriptor> outputs,
+			const materialization_v2_1_worker_authority& worker,
+			materialization_v2_1_auxiliary_spool_factory& auxiliary_spools)
+		{
+			auto execution = replay_source_dependent_task(raw_request,
+														  task_index,
+														  index,
+														  catalog,
+														  project_id,
+														  outputs,
+														  worker,
+														  auxiliary_spools);
+			if (!execution)
+				return sdk::unexpected(std::move(execution.error()));
+			return source_dependent_task_binding{
+				std::move(execution->metadata.provider_task_id),
+				std::move(execution->metadata.task_input_digest),
+				std::move(execution->metadata.provider_execution_id),
+				execution->source_receipt.size_bytes};
 		}
 	} // namespace
 
@@ -3388,6 +3417,22 @@ namespace cxxlens::detail::clang22::materialization
 	validated_materialization_request_v2_1::task_metadata(const std::uint64_t index)
 	{
 		return request_.task_metadata(index);
+	}
+
+	sdk::result<materialization_v2_1_task_execution>
+	validated_materialization_request_v2_1::task_execution(const std::uint64_t index)
+	{
+		if (!request_.raw_request_ || !request_.task_index_ || index >= request_.task_count_)
+			return sdk::unexpected(invalid("task", "index"));
+		production_auxiliary_spool_factory auxiliary_spools;
+		return replay_source_dependent_task(*request_.raw_request_,
+											*request_.task_index_,
+											index,
+											request_.catalog_,
+											request_.project_id_,
+											request_.output_descriptors_,
+											request_.worker_,
+											auxiliary_spools);
 	}
 
 	sdk::result<validated_materialization_request_v2_1> admit_materialization_request_v2_1(

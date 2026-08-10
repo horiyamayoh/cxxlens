@@ -182,6 +182,13 @@ namespace cxxlens::detail::clang22::materialization
 			{
 				return effect_gate.get();
 			}
+
+			[[nodiscard]] bool requires_source_shm_writer_mapping_epoch() const noexcept override
+			{
+				// rooted-vfs-v1 owns its authenticated SHM file, mapping, and lock callbacks. It
+				// does not delegate a source database through the default forwarding VFS epoch.
+				return false;
+			}
 		};
 
 		struct rooted_mapping
@@ -757,12 +764,11 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		void append_stable_object_identity(std::vector<std::byte>& output,
-									  const materialization_file_identity& value)
+										   const materialization_file_identity& value)
 		{
 			append_identity_u64(output, value.device);
 			append_identity_u64(output, value.inode);
-			append_identity_u64(
-				output, value.mode & static_cast<std::uint64_t>(S_IFMT));
+			append_identity_u64(output, value.mode & static_cast<std::uint64_t>(S_IFMT));
 		}
 
 		[[nodiscard]] sdk::result<sdk::sqlite_backend_opaque_identity>
@@ -1867,9 +1873,8 @@ namespace cxxlens::detail::clang22::materialization
 				return authority.failure;
 			if (level <= file->lock_level)
 			{
-				return level >= sqlite_lock_exclusive
-					? apply_rooted_pending_effect_arm(*file)
-					: sqlite_ok;
+				return level >= sqlite_lock_exclusive ? apply_rooted_pending_effect_arm(*file)
+													  : sqlite_ok;
 			}
 			if (level < sqlite_lock_shared || level > sqlite_lock_exclusive)
 				return sqlite_io_error;
@@ -1914,7 +1919,8 @@ namespace cxxlens::detail::clang22::materialization
 					return locked;
 				file->lock_level = sqlite_lock_exclusive;
 			}
-			return level >= sqlite_lock_exclusive ? apply_rooted_pending_effect_arm(*file) : sqlite_ok;
+			return level >= sqlite_lock_exclusive ? apply_rooted_pending_effect_arm(*file)
+												  : sqlite_ok;
 		}
 
 		int rooted_unlock(sqlite3_file* base, const int level) noexcept

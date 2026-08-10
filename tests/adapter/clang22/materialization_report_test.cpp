@@ -613,6 +613,101 @@ namespace
 					postpublication->store_observation().publish_returned_record,
 				"journal did not cross exactly one irreversible publication boundary");
 	}
+
+	void bounded_detailed_projection_never_promotes_unverified_store()
+	{
+		detailed_success_report_model model;
+		model.generated_at = "2026-08-10T12:34:56Z";
+		model.store.backend = "memory";
+		model.store.series_id = "series:test";
+		model.store.selector_id = "selector:test";
+		model.store.published_record = detailed_publication_projection{
+			"publication:test", "series:test", "snapshot:test", 1U, 1U, std::nullopt};
+		model.store.candidate_identity = detailed_publication_projection{
+			"publication:test", "series:test", "snapshot:test", 1U, 0U, std::nullopt};
+		model.store.verification = {
+			{"current-selector", "present", std::nullopt, std::nullopt},
+			{"open-publication", "present", std::nullopt, std::nullopt},
+			{"open-snapshot", "present", std::nullopt, std::nullopt},
+		};
+		model.store.prior_history_retained = true;
+		model.store.verified = false;
+
+		detailed_task_report_capture task;
+		task.provider_task_id = "task:test";
+		task.provider_execution_id = "execution:test";
+		task.selected_catalog_compile_unit_id = "compile-unit:selected";
+		task.compile_unit_id = "compile-unit:final";
+		task.task_input_digest =
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111";
+		task.input_protocol_major = 1U;
+		task.input_protocol_minor = 1U;
+		task.logical_input_bytes = 1U;
+		task.canonical_chunk_bytes = 1U;
+		task.input_chunk_count = 0U;
+		task.ordered_chunk_payload_digest_set_digest =
+			"sha256:2222222222222222222222222222222222222222222222222222222222222222";
+		task.raw_frame_stream_bytes = 1U;
+		task.raw_frame_stream_digest =
+			"sha256:3333333333333333333333333333333333333333333333333333333333333333";
+		task.frame_count = 1U;
+		task.frame_transcript_digest =
+			"sha256:4444444444444444444444444444444444444444444444444444444444444444";
+		task.sealed_transcript_digest =
+			"sha256:5555555555555555555555555555555555555555555555555555555555555555";
+		task.batches.push_back(
+			{"task:test",
+			 "descriptor:test",
+			 "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+			 "dependency:test",
+			 "atomic:test",
+			 "batch:test",
+			 "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+			 {},
+			 0U,
+			 "sha256:8888888888888888888888888888888888888888888888888888888888888888"});
+		model.tasks.push_back(std::move(task));
+
+		auto rejected = encode_detailed_success_report(model);
+		require(!rejected &&
+					rejected.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "publication",
+								   "publication-unverified:committed-verified-required"},
+				"bounded detailed projection promoted an unverified Store observation");
+	}
+
+	void task_evidence_accumulator_is_bounded()
+	{
+		detailed_task_report_capture capture;
+		capture.provider_task_id = "task:test";
+		capture.provider_execution_id = "execution:test";
+
+		detailed_report_limits byte_limits;
+		byte_limits.max_projection_bytes = 128U;
+		detailed_task_report_accumulator byte_limited{byte_limits};
+		auto rejected = byte_limited.append(capture);
+		require(!rejected &&
+					rejected.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "task_results",
+								   "limit-exceeded:projection-bytes"},
+				"task evidence accumulator ignored its byte limit");
+
+		detailed_report_limits count_limits;
+		count_limits.max_tasks = 1U;
+		count_limits.max_projection_bytes = 4096U;
+		detailed_task_report_accumulator count_limited{count_limits};
+		require(count_limited.append(capture).has_value() && count_limited.tasks().size() == 1U,
+				"task evidence accumulator rejected its first bounded task");
+		auto count_rejected = count_limited.append(capture);
+		require(!count_rejected &&
+					count_rejected.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "task_results",
+								   "limit-exceeded:count"},
+				"task evidence accumulator exceeded its task limit");
+	}
 } // namespace
 
 int main(const int argument_count, const char* const* arguments)
@@ -628,6 +723,7 @@ int main(const int argument_count, const char* const* arguments)
 		std::cout << typed_store_cause_preserves_exact_detail();
 		return 0;
 	}
+	task_evidence_accumulator_is_bounded();
 	auto journal = materialization_execution_journal::begin(complete_input());
 	require(journal.has_value() && journal->pass_input_limit().has_value(),
 			"raw execution journal did not authenticate the input-limit boundary");
@@ -671,6 +767,7 @@ int main(const int argument_count, const char* const* arguments)
 	static_cast<void>(typed_store_cause_preserves_exact_detail());
 	static_cast<void>(failed_head_observation_is_four_state_and_path_bound());
 	store_stage_and_publication_boundary_are_closed();
+	bounded_detailed_projection_never_promotes_unverified_store();
 
 	return 0;
 }

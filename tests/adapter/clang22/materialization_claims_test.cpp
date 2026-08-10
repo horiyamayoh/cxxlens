@@ -5,9 +5,11 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <set>
 #include <span>
 #include <string>
@@ -20,13 +22,19 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 
+#include "llvm/clang22/materialization_incremental_coordinator.hpp"
+#include "llvm/clang22/materialization_incremental_ingress.hpp"
+#include "llvm/clang22/materialization_incremental_receipt.hpp"
+#include "llvm/clang22/materialization_partition_event_stream.hpp"
 #include "llvm/clang22/materialization_pipeline.hpp"
+#include "sdk/provider_runtime_internal.hpp"
 
 namespace
 {
 	using namespace cxxlens;
 	using namespace cxxlens::detail::clang22;
 	using namespace cxxlens::detail::clang22::materialization;
+	namespace incremental = cxxlens::sdk::incremental;
 
 	constexpr std::string_view worker_semantics =
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -636,6 +644,30 @@ namespace
 					std::to_string(coverage_only));
 	}
 
+	void streaming_source_receipts_replace_resident_payloads(const std::filesystem::path& root)
+	{
+		auto request = request_fixture();
+		auto producer = producer_authority(root);
+		auto seals = seal_all(request);
+		for (auto& task : request.tasks)
+		{
+			task.source_receipt = clang22_task_source_receipt{
+				task.worker_input.source_size_bytes,
+				task.worker_input.source_content_digest,
+				task.worker_input.line_index,
+			};
+			task.worker_input.source.clear();
+			task.worker_input.source_content_base64.clear();
+			task.worker_payload.clear();
+		}
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		auto claims = construct_materialization_claims(request, seals, producer, guarantee);
+		require(claims.has_value(),
+				"sealed source receipt path rejected claims: " +
+					(claims ? std::string{} : failure(claims.error())));
+	}
+
 	void
 	negative_authority_guarantee_order_and_coverage(validated_materialization_request& request,
 													materialization_producer_authority producer)
@@ -720,6 +752,1610 @@ namespace
 		require(!hard_reference && hard_reference.error().code == "materialization.claim-invalid",
 				"missing direct-target/call-site hard reference crossed the seal boundary");
 	}
+
+	[[nodiscard]] std::vector<std::byte> event_tuple(std::vector<sdk::canonical_value> values)
+	{
+		auto encoded = sdk::canonical_binary(sdk::canonical_value::from_tuple(std::move(values)));
+		require(encoded.has_value(), "event fixture canonical tuple encoding failed");
+		return std::move(*encoded);
+	}
+
+	void check_partition_event_stream()
+	{
+		const auto request_id =
+			std::string{"materialization:semantic-v2:sha256:"
+						"09a36429bc4dc0f74ef0bf23a6751837d8b0277c06392c9ac5e64c9dab66f95a"};
+		struct fixture_event
+		{
+			materialization_partition_event_kind kind;
+			std::vector<std::byte> key;
+			std::vector<std::byte> payload;
+		};
+		const auto make_texts = [](const std::initializer_list<std::string_view> values)
+		{
+			std::vector<sdk::canonical_value> output;
+			output.reserve(values.size());
+			for (const auto value : values)
+				output.push_back(sdk::canonical_value::from_string(std::string{value}));
+			return output;
+		};
+		const auto canonical_bytes = [](sdk::canonical_value value)
+		{
+			auto encoded = sdk::canonical_binary(value);
+			require(encoded.has_value(), "event fixture canonical bytes encoding failed");
+			return sdk::canonical_value::from_bytes(std::move(*encoded));
+		};
+		const auto u64_canonical_bytes = [&](const std::uint64_t value)
+		{
+			std::vector<std::byte> raw(sizeof(value));
+			for (std::size_t index{}; index < raw.size(); ++index)
+				raw[index] = static_cast<std::byte>(
+					(value >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
+			return sdk::canonical_value::from_bytes(std::move(raw));
+		};
+		const std::vector<fixture_event> events{
+			{materialization_partition_event_kind::partition_begin,
+			 event_tuple(make_texts({"task", "partition"})),
+			 event_tuple(make_texts({"source.span.v1",
+									 "project",
+									 "condition",
+									 "cc",
+									 "producer",
+									 "basis",
+									 "exact",
+									 "assumptions"}))},
+			{materialization_partition_event_kind::claim_occurrence,
+			 event_tuple({sdk::canonical_value::from_string("task"),
+						  sdk::canonical_value::from_string("partition"),
+						  canonical_bytes(sdk::canonical_value::from_string("claim")),
+						  canonical_bytes(sdk::canonical_value::from_string("occurrence"))}),
+			 event_tuple({canonical_bytes(sdk::canonical_value::from_string("claim-content")),
+						  canonical_bytes(sdk::canonical_value::from_string("occurrence-metadata")),
+						  sdk::canonical_value::from_tuple(
+							  {canonical_bytes(sdk::canonical_value::from_string("hard"))}),
+						  sdk::canonical_value::from_tuple(
+							  {canonical_bytes(sdk::canonical_value::from_string("soft"))}),
+						  sdk::canonical_value::from_tuple(
+							  {canonical_bytes(sdk::canonical_value::from_string("functional"))}),
+						  sdk::canonical_value::from_tuple({canonical_bytes(
+							  sdk::canonical_value::from_string("differential"))})})},
+			{materialization_partition_event_kind::detached_row,
+			 event_tuple({sdk::canonical_value::from_string("task"),
+						  sdk::canonical_value::from_string("partition"),
+						  sdk::canonical_value::from_string("source.span.v1"),
+						  canonical_bytes(sdk::canonical_value::from_string("row"))}),
+			 event_tuple({canonical_bytes(sdk::canonical_value::from_string("row-bytes"))})},
+			{materialization_partition_event_kind::claim_annotation,
+			 event_tuple({sdk::canonical_value::from_string("task"),
+						  sdk::canonical_value::from_string("partition"),
+						  sdk::canonical_value::from_string("claim-content"),
+						  canonical_bytes(sdk::canonical_value::from_string("annotation"))}),
+			 event_tuple({canonical_bytes(sdk::canonical_value::from_string("annotation-bytes"))})},
+			{materialization_partition_event_kind::coverage,
+			 event_tuple({sdk::canonical_value::from_string("task"),
+						  sdk::canonical_value::from_string("partition"),
+						  canonical_bytes(sdk::canonical_value::from_string("coverage"))}),
+			 event_tuple({canonical_bytes(sdk::canonical_value::from_string("coverage-bytes"))})},
+			{materialization_partition_event_kind::unresolved,
+			 event_tuple({sdk::canonical_value::from_string("task"),
+						  sdk::canonical_value::from_string("partition"),
+						  canonical_bytes(sdk::canonical_value::from_string("unresolved"))}),
+			 event_tuple({canonical_bytes(sdk::canonical_value::from_string("unresolved-bytes"))})},
+			{materialization_partition_event_kind::partition_end,
+			 event_tuple(make_texts({"task", "partition"})),
+			 event_tuple({u64_canonical_bytes(7U),
+						  u64_canonical_bytes(1U),
+						  u64_canonical_bytes(1U),
+						  u64_canonical_bytes(1U),
+						  u64_canonical_bytes(0U),
+						  sdk::canonical_value::from_string("event"),
+						  sdk::canonical_value::from_string("claim"),
+						  sdk::canonical_value::from_string("row"),
+						  sdk::canonical_value::from_string("coverage"),
+						  sdk::canonical_value::from_string("unresolved"),
+						  sdk::canonical_value::from_string("partition")})},
+		};
+		std::uint64_t body_bytes{};
+		for (const auto& event : events)
+		{
+			auto size = materialization_partition_event_frame_size(event.key, event.payload);
+			require(size.has_value(), "event fixture frame size failed");
+			body_bytes += *size;
+		}
+		auto stream = materialization_partition_event_stream::begin(
+			request_id, 7U, {0U, 41U}, events.size(), body_bytes);
+		require(stream.has_value(), "event stream begin failed");
+		for (const auto& event : events)
+			require(stream->append(event.kind, event.key, event.payload).has_value(),
+					"event stream append failed");
+		auto receipt = std::move(*stream).finalize();
+		require(receipt.has_value(), "event stream finalize failed");
+		auto spool = std::move(*stream).release_spool();
+		require(spool != nullptr, "event stream did not release sealed spool");
+		auto replayed = validate_materialization_partition_event_stream(*spool, request_id);
+		require(replayed && *replayed == *receipt,
+				"event stream replay receipt differs from encoder receipt");
+		std::uint64_t replay_count{};
+		auto replay = replay_materialization_partition_event_stream(
+			*spool,
+			request_id,
+			[&](const std::uint64_t ordinal,
+				const materialization_partition_event_kind,
+				const std::span<const std::byte> key,
+				const std::span<const std::byte> payload) -> sdk::result<void>
+			{
+				require(ordinal == replay_count && !key.empty() && !payload.empty(),
+						"event replay callback lost exact bounded frame view");
+				++replay_count;
+				return {};
+			});
+		require(replay && replay_count == events.size(),
+				"event stream bounded replay did not visit the exact frame census");
+		const auto typed_invalid_key =
+			event_tuple(make_texts({"task", "partition", "claim", "occurrence"}));
+		const auto typed_invalid_frame_size =
+			*materialization_partition_event_frame_size(typed_invalid_key, events[1].payload);
+		auto typed_invalid = materialization_partition_event_stream::begin(
+			request_id, 8U, {0U, 0U}, 1U, typed_invalid_frame_size);
+		require(typed_invalid.has_value(), "typed event negative setup failed");
+		require(!typed_invalid->append(materialization_partition_event_kind::claim_occurrence,
+									   typed_invalid_key,
+									   events[1].payload),
+				"event stream accepted a typed field projection mismatch");
+
+		const auto begin_key = events.front().key;
+		const auto begin_payload = events.front().payload;
+		auto missing_begin = materialization_partition_event_stream::begin(
+			request_id,
+			8U,
+			{0U, 0U},
+			1U,
+			*materialization_partition_event_frame_size(begin_key, begin_payload));
+		require(missing_begin.has_value(), "negative event stream setup failed");
+		require(!missing_begin->append(materialization_partition_event_kind::claim_occurrence,
+									   begin_key,
+									   begin_payload),
+				"event stream accepted a missing partition begin");
+		const std::vector<std::byte> noncanonical{std::byte{0x04}};
+		auto invalid_tuple =
+			materialization_partition_event_stream::begin(request_id, 9U, {0U, 0U}, 1U, 0U);
+		require(invalid_tuple.has_value(), "negative tuple stream setup failed");
+		require(!invalid_tuple->append(materialization_partition_event_kind::partition_begin,
+									   noncanonical,
+									   begin_payload),
+				"event stream accepted a noncanonical key");
+		const auto one_frame =
+			*materialization_partition_event_frame_size(begin_key, begin_payload);
+		auto census_mismatch = materialization_partition_event_stream::begin(
+			request_id, 10U, {0U, 0U}, 1U, one_frame + 1U);
+		require(census_mismatch &&
+					census_mismatch->append(materialization_partition_event_kind::partition_begin,
+											begin_key,
+											begin_payload),
+				"event stream census negative setup failed");
+		auto rejected_finalize = std::move(*census_mismatch).finalize();
+		require(!rejected_finalize, "event stream accepted a declared body mismatch");
+	}
+
+	[[nodiscard]] std::string incremental_digest(const char digit)
+	{
+		return "sha256:" + std::string(64U, digit);
+	}
+
+	[[nodiscard]] sdk::canonical_value receipt_canonical_bytes(sdk::canonical_value value)
+	{
+		auto encoded = sdk::canonical_binary(value);
+		require(encoded.has_value(), "receipt fixture canonical bytes encoding failed");
+		return sdk::canonical_value::from_bytes(std::move(*encoded));
+	}
+
+	[[nodiscard]] sdk::canonical_value receipt_u64_bytes(const std::uint64_t value)
+	{
+		std::vector<std::byte> raw(sizeof(value));
+		for (std::size_t index{}; index < raw.size(); ++index)
+			raw[index] = static_cast<std::byte>(
+				(value >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
+		return sdk::canonical_value::from_bytes(std::move(raw));
+	}
+
+	[[nodiscard]] std::vector<sdk::canonical_value>
+	receipt_texts(const std::initializer_list<std::string_view> values)
+	{
+		std::vector<sdk::canonical_value> output;
+		output.reserve(values.size());
+		for (const auto value : values)
+			output.push_back(sdk::canonical_value::from_string(std::string{value}));
+		return output;
+	}
+
+	[[nodiscard]] std::vector<materialization_incremental_event_projection>
+	receipt_events(const std::string_view task_id, const std::string_view partition_id)
+	{
+		const auto task = std::string{task_id};
+		const auto partition = std::string{partition_id};
+		return {
+			{task,
+			 partition,
+			 materialization_partition_event_kind::partition_begin,
+			 event_tuple(receipt_texts({task_id, partition_id})),
+			 event_tuple(receipt_texts({"source.span.v1",
+										"project",
+										"condition",
+										"cc",
+										"producer",
+										"basis",
+										"exact",
+										"assumptions"}))},
+			{task,
+			 partition,
+			 materialization_partition_event_kind::claim_occurrence,
+			 event_tuple(
+				 {sdk::canonical_value::from_string(task),
+				  sdk::canonical_value::from_string(partition),
+				  receipt_canonical_bytes(sdk::canonical_value::from_string("claim")),
+				  receipt_canonical_bytes(sdk::canonical_value::from_string("occurrence"))}),
+			 event_tuple(
+				 {receipt_canonical_bytes(sdk::canonical_value::from_string("claim-content")),
+				  receipt_canonical_bytes(sdk::canonical_value::from_string("occurrence-metadata")),
+				  sdk::canonical_value::from_tuple(
+					  {receipt_canonical_bytes(sdk::canonical_value::from_string("hard"))}),
+				  sdk::canonical_value::from_tuple(
+					  {receipt_canonical_bytes(sdk::canonical_value::from_string("soft"))}),
+				  sdk::canonical_value::from_tuple(
+					  {receipt_canonical_bytes(sdk::canonical_value::from_string("functional"))}),
+				  sdk::canonical_value::from_tuple({receipt_canonical_bytes(
+					  sdk::canonical_value::from_string("differential"))})})},
+			{task,
+			 partition,
+			 materialization_partition_event_kind::detached_row,
+			 event_tuple({sdk::canonical_value::from_string(task),
+						  sdk::canonical_value::from_string(partition),
+						  sdk::canonical_value::from_string("source.span.v1"),
+						  receipt_canonical_bytes(sdk::canonical_value::from_string("row"))}),
+			 event_tuple(
+				 {receipt_canonical_bytes(sdk::canonical_value::from_string("row-bytes"))})},
+			{task,
+			 partition,
+			 materialization_partition_event_kind::claim_annotation,
+			 event_tuple(
+				 {sdk::canonical_value::from_string(task),
+				  sdk::canonical_value::from_string(partition),
+				  sdk::canonical_value::from_string("claim-content"),
+				  receipt_canonical_bytes(sdk::canonical_value::from_string("annotation"))}),
+			 event_tuple(
+				 {receipt_canonical_bytes(sdk::canonical_value::from_string("annotation-bytes"))})},
+			{task,
+			 partition,
+			 materialization_partition_event_kind::coverage,
+			 event_tuple({sdk::canonical_value::from_string(task),
+						  sdk::canonical_value::from_string(partition),
+						  receipt_canonical_bytes(sdk::canonical_value::from_string("coverage"))}),
+			 event_tuple(
+				 {receipt_canonical_bytes(sdk::canonical_value::from_string("coverage-bytes"))})},
+			{task,
+			 partition,
+			 materialization_partition_event_kind::unresolved,
+			 event_tuple(
+				 {sdk::canonical_value::from_string(task),
+				  sdk::canonical_value::from_string(partition),
+				  receipt_canonical_bytes(sdk::canonical_value::from_string("unresolved"))}),
+			 event_tuple(
+				 {receipt_canonical_bytes(sdk::canonical_value::from_string("unresolved-bytes"))})},
+			{task,
+			 partition,
+			 materialization_partition_event_kind::partition_end,
+			 event_tuple(receipt_texts({task_id, partition_id})),
+			 event_tuple({receipt_u64_bytes(7U),
+						  receipt_u64_bytes(1U),
+						  receipt_u64_bytes(1U),
+						  receipt_u64_bytes(1U),
+						  receipt_u64_bytes(0U),
+						  sdk::canonical_value::from_string("event"),
+						  sdk::canonical_value::from_string("claim"),
+						  sdk::canonical_value::from_string("row"),
+						  sdk::canonical_value::from_string("coverage"),
+						  sdk::canonical_value::from_string("unresolved"),
+						  sdk::canonical_value::from_string("partition")})},
+		};
+	}
+
+	[[nodiscard]] std::unique_ptr<materialization_replayable_spool> make_fixture_partition_spool(
+		const std::string_view request_id,
+		const std::uint64_t spool_index,
+		const std::vector<materialization_incremental_event_projection>& events)
+	{
+		std::uint64_t body_bytes{};
+		for (const auto& event : events)
+		{
+			auto frame_size = materialization_partition_event_frame_size(event.key, event.payload);
+			require(frame_size.has_value(), "ingress fixture frame size failed");
+			body_bytes += *frame_size;
+		}
+		auto stream = materialization_partition_event_stream::begin(
+			std::string{request_id}, spool_index, {0U, spool_index}, events.size(), body_bytes);
+		require(stream.has_value(), "ingress fixture stream begin failed");
+		for (const auto& event : events)
+		{
+			auto appended = stream->append(event.kind, event.key, event.payload);
+			require(appended.has_value(),
+					"ingress fixture stream append failed: " +
+						(appended ? std::string{}
+								  : std::to_string(static_cast<unsigned>(event.kind)) + "/" +
+								 failure(appended.error())));
+		}
+		auto finalized = std::move(*stream).finalize();
+		require(finalized.has_value(), "ingress fixture stream finalize failed");
+		auto spool = std::move(*stream).release_spool();
+		require(spool != nullptr, "ingress fixture stream release failed");
+		return spool;
+	}
+
+	[[nodiscard]] sdk::result<materialization_incremental_task_receipt>
+	fixture_completeness_receipt(const validated_materialization_request& request,
+								 const std::size_t task_index,
+								 const materialization_incremental_task_binding& binding,
+								 const sealed_materialization_result& result,
+								 std::string provider_sealed_transcript_digest = {})
+	{
+		if (provider_sealed_transcript_digest.empty())
+		{
+			auto derived = sdk::provider::detail::provider_sealed_transcript_receipt_digest(
+				result.provider_task_id(), "provider.success", result.provider_seal());
+			require(derived.has_value(), "incremental fixture provider seal failed");
+			provider_sealed_transcript_digest = std::move(*derived);
+		}
+		std::vector<std::string> partition_ids;
+		partition_ids.reserve(binding.partitions.size());
+		for (const auto& partition : binding.partitions)
+			partition_ids.push_back(partition.partition_id);
+		auto events = materialization_incremental_result_event_projections(
+			result, std::span<const std::string>{partition_ids});
+		if (!events)
+			return sdk::unexpected(std::move(events.error()));
+		return make_materialization_incremental_task_receipt(
+			request,
+			task_index,
+			16U,
+			incremental_digest('1'),
+			static_cast<std::uint64_t>(events->size()),
+			"semantic-v2:sha256:" + std::string(64U, '2'),
+			std::move(provider_sealed_transcript_digest),
+			std::span<const materialization_incremental_event_projection>{*events});
+	}
+
+	[[nodiscard]] std::vector<std::unique_ptr<materialization_replayable_spool>>
+	fixture_partition_spools(const validated_materialization_request& request,
+							 const std::size_t task_index,
+							 const materialization_incremental_task_binding& binding,
+							 const sealed_materialization_result& result)
+	{
+		auto request_id = materialization_incremental_request_id(request);
+		require(request_id.has_value(), "incremental fixture request identity failed");
+		std::vector<std::unique_ptr<materialization_replayable_spool>> output;
+		output.reserve(binding.partitions.size());
+		for (std::size_t partition_index{}; partition_index < binding.partitions.size();
+			 ++partition_index)
+		{
+			const auto& partition_id = binding.partitions[partition_index].partition_id;
+			auto events = materialization_incremental_result_event_projections(
+				result, std::span<const std::string>{&partition_id, 1U});
+			require(events.has_value(), "incremental fixture oracle projection failed");
+			output.push_back(make_fixture_partition_spool(
+				*request_id,
+				static_cast<std::uint64_t>(task_index * 10U + partition_index),
+				*events));
+		}
+		return output;
+	}
+
+	[[nodiscard]] materialization_incremental_task_identity
+	incremental_identity(const validated_materialization_request& request, std::size_t index);
+
+	void check_incremental_receipts(const validated_materialization_request& request)
+	{
+		require(request.tasks.size() >= 2U, "receipt fixture needs two selected tasks");
+		std::vector<materialization_incremental_task_receipt> receipts;
+		receipts.reserve(request.tasks.size());
+		for (std::size_t index{}; index < request.tasks.size(); ++index)
+		{
+			auto events = receipt_events(request.tasks[index].provider_task_id,
+										 "partition:receipt-" + std::to_string(index));
+			auto receipt = make_materialization_incremental_task_receipt(
+				request,
+				index,
+				16U,
+				incremental_digest('1'),
+				7U,
+				"semantic-v2:sha256:" + std::string(64U, '2'),
+				"semantic-v2:sha256:" + std::string(64U, '3'),
+				std::span<const materialization_incremental_event_projection>{events});
+			require(receipt.has_value(),
+					"incremental receipt construction failed: " +
+						(receipt ? std::string{} : failure(receipt.error())));
+			auto valid =
+				validate_materialization_incremental_task_receipt(request, index, *receipt);
+			require(valid.has_value(), "incremental receipt self-validation failed");
+			receipts.push_back(std::move(*receipt));
+		}
+
+		auto request_id = materialization_incremental_request_id(request);
+		require(request_id.has_value(), "incremental receipt request identity failed");
+		auto journal = seal_materialization_incremental_execution_journal(
+			*request_id, std::span<const materialization_incremental_task_receipt>{receipts});
+		require(journal.has_value() && journal->exact_task_count == request.tasks.size() &&
+					journal->canonical_task_ids.size() == request.tasks.size() &&
+					journal->ordered_task_receipt_seal_digests.size() == request.tasks.size(),
+				"incremental execution journal seal failed");
+
+		auto duplicate_events =
+			receipt_events(request.tasks.front().provider_task_id, "partition:receipt-duplicate");
+		duplicate_events.push_back(duplicate_events.front());
+		auto duplicate = make_materialization_incremental_task_receipt(
+			request,
+			0U,
+			16U,
+			incremental_digest('1'),
+			7U,
+			"semantic-v2:sha256:" + std::string(64U, '2'),
+			"semantic-v2:sha256:" + std::string(64U, '3'),
+			std::span<const materialization_incremental_event_projection>{duplicate_events});
+		require(!duplicate, "incremental receipt accepted duplicate final event");
+
+		auto missing_boundary =
+			receipt_events(request.tasks.front().provider_task_id, "partition:receipt-missing");
+		missing_boundary.pop_back();
+		auto missing = make_materialization_incremental_task_receipt(
+			request,
+			0U,
+			16U,
+			incremental_digest('1'),
+			7U,
+			"semantic-v2:sha256:" + std::string(64U, '2'),
+			"semantic-v2:sha256:" + std::string(64U, '3'),
+			std::span<const materialization_incremental_event_projection>{missing_boundary});
+		require(!missing, "incremental receipt accepted a whole-partition drop");
+
+		auto wrong_task =
+			receipt_events(request.tasks.front().provider_task_id, "partition:receipt-wrong-task");
+		wrong_task.front().task_id = "task:receipt-wrong";
+		auto wrong = make_materialization_incremental_task_receipt(
+			request,
+			0U,
+			16U,
+			incremental_digest('1'),
+			7U,
+			"semantic-v2:sha256:" + std::string(64U, '2'),
+			"semantic-v2:sha256:" + std::string(64U, '3'),
+			std::span<const materialization_incremental_event_projection>{wrong_task});
+		require(!wrong, "incremental receipt accepted a task identity mismatch");
+
+		auto tampered = receipts.front();
+		++tampered.provider_stdout_byte_count;
+		auto tampered_validation =
+			validate_materialization_incremental_task_receipt(request, 0U, tampered);
+		require(!tampered_validation, "incremental receipt accepted a seal mutation");
+		std::swap(receipts[0U], receipts[1U]);
+		auto reordered_journal = seal_materialization_incremental_execution_journal(
+			*request_id, std::span<const materialization_incremental_task_receipt>{receipts});
+		require(!reordered_journal, "incremental journal accepted reordered task receipts");
+	}
+
+	void check_incremental_ingress(const validated_materialization_request& request)
+	{
+		auto request_id = materialization_incremental_request_id(request);
+		require(request_id.has_value(), "ingress fixture request identity failed");
+		std::vector<std::vector<std::string>> expected_partitions{
+			{"partition:a", "partition:b"},
+			{"partition:c"},
+		};
+		auto ingress = materialization_incremental_ingress::begin(request, expected_partitions);
+		require(ingress.has_value(), "incremental ingress begin failed");
+		for (std::size_t index{}; index < expected_partitions.size(); ++index)
+		{
+			std::vector<materialization_incremental_partition_binding> partition_bindings;
+			partition_bindings.reserve(expected_partitions[index].size());
+			for (const auto& partition_id : expected_partitions[index])
+				partition_bindings.emplace_back(partition_id);
+			const auto binding = materialization_incremental_task_binding{
+				incremental_identity(request, index), std::move(partition_bindings)};
+			auto result = seal_task(request, index);
+			require(result.has_value(), "ingress fixture task seal failed");
+			auto receipt = fixture_completeness_receipt(request, index, binding, *result);
+			require(receipt.has_value(), "ingress fixture receipt failed");
+			auto spools = fixture_partition_spools(request, index, binding, *result);
+			materialization_incremental_task_ingress input{
+				std::move(*result), std::move(*receipt), std::move(spools)};
+			auto consumed = std::move(*ingress).consume_task(std::move(input));
+			require(consumed.has_value(),
+					"incremental ingress task consumption failed: " +
+						(consumed ? std::string{} : failure(consumed.error())));
+		}
+		auto journal = std::move(*ingress).finalize();
+		require(journal && journal->exact_task_count == request.tasks.size() &&
+					journal->ordered_task_receipt_seal_digests.size() == request.tasks.size(),
+				"incremental ingress journal finalization failed");
+
+		auto tampered = materialization_incremental_ingress::begin(
+			request, std::vector<std::vector<std::string>>{{"partition:a"}, {"partition:b"}});
+		require(tampered.has_value(), "ingress stream-tamper setup failed");
+		const auto tampered_binding = materialization_incremental_task_binding{
+			incremental_identity(request, 0U),
+			std::vector<materialization_incremental_partition_binding>{
+				materialization_incremental_partition_binding{"partition:a"},
+			}};
+		auto tampered_result = seal_task(request, 0U);
+		require(tampered_result.has_value(), "ingress stream-tamper result failed");
+		auto tampered_receipt =
+			fixture_completeness_receipt(request, 0U, tampered_binding, *tampered_result);
+		const auto& tampered_partition_id = tampered_binding.partitions.front().partition_id;
+		auto tampered_events_result = materialization_incremental_result_event_projections(
+			*tampered_result, std::span<const std::string>{&tampered_partition_id, 1U});
+		require(tampered_events_result.has_value(), "ingress stream-tamper oracle failed");
+		auto tampered_events = std::move(*tampered_events_result);
+		auto tampered_payload = sdk::canonical_binary_decode(tampered_events[2U].payload);
+		require(tampered_payload.has_value() &&
+					tampered_payload->type == sdk::canonical_value::kind::ordered_tuple &&
+					tampered_payload->tuple.size() == 6U,
+				"ingress stream-tamper claim payload decode failed");
+		tampered_payload->tuple.front() =
+			receipt_canonical_bytes(sdk::canonical_value::from_string("drift"));
+		tampered_events[2U].payload = event_tuple(std::move(tampered_payload->tuple));
+		std::vector<std::unique_ptr<materialization_replayable_spool>> tampered_spools;
+		tampered_spools.push_back(make_fixture_partition_spool(*request_id, 0U, tampered_events));
+		require(tampered_receipt.has_value(), "ingress stream-tamper fixture failed");
+		materialization_incremental_task_ingress tampered_input{
+			std::move(*tampered_result), std::move(*tampered_receipt), std::move(tampered_spools)};
+		require(!std::move(*tampered).consume_task(std::move(tampered_input)),
+				"incremental ingress accepted an edited event stream");
+
+		auto out_of_order = materialization_incremental_ingress::begin(
+			request, std::vector<std::vector<std::string>>{{"partition:a"}, {"partition:b"}});
+		require(out_of_order.has_value(), "ingress negative setup failed");
+		const auto binding = materialization_incremental_task_binding{
+			incremental_identity(request, 1U),
+			std::vector<materialization_incremental_partition_binding>{
+				materialization_incremental_partition_binding{"partition:b"},
+			}};
+		auto wrong_result = seal_task(request, 1U);
+		require(wrong_result.has_value(), "ingress out-of-order result failed");
+		auto wrong_receipt = fixture_completeness_receipt(request, 1U, binding, *wrong_result);
+		const auto& wrong_partition_id = binding.partitions.front().partition_id;
+		auto wrong_events_result = materialization_incremental_result_event_projections(
+			*wrong_result, std::span<const std::string>{&wrong_partition_id, 1U});
+		require(wrong_receipt && wrong_events_result, "ingress out-of-order fixture failed");
+		std::vector<std::unique_ptr<materialization_replayable_spool>> wrong_spools;
+		wrong_spools.push_back(make_fixture_partition_spool(*request_id, 1U, *wrong_events_result));
+		materialization_incremental_task_ingress wrong_input{
+			std::move(*wrong_result), std::move(*wrong_receipt), std::move(wrong_spools)};
+		require(!std::move(*out_of_order).consume_task(std::move(wrong_input)),
+				"incremental ingress accepted an out-of-order task");
+
+		auto dropped = materialization_incremental_ingress::begin(
+			request, std::vector<std::vector<std::string>>{{"partition:a"}, {"partition:b"}});
+		require(dropped.has_value(), "ingress drop setup failed");
+		const auto dropped_binding = materialization_incremental_task_binding{
+			incremental_identity(request, 0U),
+			std::vector<materialization_incremental_partition_binding>{
+				materialization_incremental_partition_binding{"partition:a"},
+			}};
+		auto dropped_result = seal_task(request, 0U);
+		auto dropped_receipt =
+			fixture_completeness_receipt(request, 0U, dropped_binding, *dropped_result);
+		require(dropped_receipt && dropped_result, "ingress drop receipt setup failed");
+		materialization_incremental_task_ingress dropped_input{
+			std::move(*dropped_result),
+			std::move(*dropped_receipt),
+			{},
+		};
+		require(!std::move(*dropped).consume_task(std::move(dropped_input)),
+				"incremental ingress accepted a whole-partition drop");
+	}
+
+	[[nodiscard]] incremental::input_fingerprint incremental_fingerprint()
+	{
+		return {incremental_digest('1'),
+				incremental_digest('2'),
+				incremental_digest('3'),
+				incremental_digest('4'),
+				incremental_digest('5'),
+				incremental_digest('6'),
+				incremental_digest('7'),
+				incremental_digest('8'),
+				incremental_digest('9'),
+				incremental_digest('a'),
+				incremental_digest('6'),
+				incremental_digest('7'),
+				incremental_digest('8'),
+				incremental_digest('9'),
+				"normalizer-v1",
+				incremental_digest('a'),
+				incremental_digest('b'),
+				"exact"};
+	}
+
+	[[nodiscard]] incremental::partition_state incremental_state(std::string id)
+	{
+		return {std::move(id),
+				incremental_fingerprint(),
+				incremental_digest('c'),
+				incremental_digest('d'),
+				false};
+	}
+
+	[[nodiscard]] materialization_incremental_task_identity
+	incremental_identity(const validated_materialization_request& request, const std::size_t index)
+	{
+		const auto& task = request.tasks[index];
+		return {index,
+				task.provider_task_id,
+				task.task_input_digest,
+				task.worker_input.selected_catalog_compile_unit,
+				task.worker_input.compile_unit};
+	}
+
+	[[nodiscard]] materialization_incremental_task_binding incremental_binding(
+		const validated_materialization_request& request,
+		std::string partition_id,
+		const std::size_t index,
+		incremental::partition_state current,
+		std::optional<incremental::partition_state> prior_state,
+		std::optional<materialization_incremental_prior_artifact> prior_artifact = std::nullopt)
+	{
+		if (prior_artifact)
+			require(prior_state.has_value(), "incremental fixture prior state missing");
+		return {std::move(partition_id),
+				incremental_identity(request, index),
+				std::optional<incremental::partition_state>{std::move(current)},
+				std::move(prior_artifact)};
+	}
+
+	[[nodiscard]] materialization_incremental_prior_artifact
+	incremental_prior_artifact(incremental::partition_state state,
+							   const sealed_materialization_result& result)
+	{
+		auto digest = seal_materialization_incremental_artifact_digest(result);
+		require(digest.has_value(), "incremental fixture prior digest failed");
+		return {std::move(state), std::move(*digest)};
+	}
+
+	class fixture_incremental_executor final : public materialization_incremental_task_executor
+	{
+	  public:
+		fixture_incremental_executor(const validated_materialization_request& request,
+									 bool cancelled = false,
+									 bool fail = false,
+									 bool return_wrong_task = false,
+									 std::uint64_t reported_provider_calls = 1U,
+									 bool wrong_receipt_digest = false,
+									 std::vector<sealed_materialization_result> reusable = {},
+									 std::uint64_t reported_reuse_provider_calls = 0U,
+									 bool omit_partition_spools = false,
+									 coverage_mode coverage = coverage_mode::exact,
+									 bool tamper_provider_sealed_transcript_digest = false)
+			: request_{request}, cancelled_{cancelled}, fail_{fail},
+			  return_wrong_task_{return_wrong_task},
+			  reported_provider_calls_{reported_provider_calls},
+			  wrong_receipt_digest_{wrong_receipt_digest},
+			  reported_reuse_provider_calls_{reported_reuse_provider_calls},
+			  omit_partition_spools_{omit_partition_spools}, coverage_{coverage},
+			  tamper_provider_sealed_transcript_digest_{tamper_provider_sealed_transcript_digest}
+		{
+			for (auto& result : reusable)
+				reusable_.push_back(std::move(result));
+		}
+
+		[[nodiscard]] sdk::result<materialization_incremental_task_execution>
+		execute(const std::size_t request_task_index,
+				const validated_task_request&,
+				const materialization_incremental_task_binding& binding) override
+		{
+			++calls;
+			called_indices.push_back(request_task_index);
+			if (fail_)
+				return sdk::unexpected(
+					sdk::error{"fixture.incremental-provider-failure", "executor", "deliberate"});
+			const auto index = return_wrong_task_
+				? (request_task_index + 1U) % request_.tasks.size()
+				: request_task_index;
+			auto result = seal_task(request_, index, false, coverage_);
+			if (!result)
+				return sdk::unexpected(std::move(result.error()));
+			auto digest = seal_materialization_incremental_artifact_digest(*result);
+			if (!digest)
+				return sdk::unexpected(std::move(digest.error()));
+			const auto provider_task_id = std::string{result->provider_task_id()};
+			const auto provider_execution_id = std::string{result->provider_execution_id()};
+			std::vector<std::string> partition_ids;
+			partition_ids.reserve(binding.partitions.size());
+			for (const auto& partition : binding.partitions)
+				partition_ids.push_back(partition.partition_id);
+			auto partition_set_digest =
+				seal_materialization_incremental_task_partition_set_digest(partition_ids);
+			if (!partition_set_digest)
+				return sdk::unexpected(std::move(partition_set_digest.error()));
+			auto sealed_transcript_digest =
+				sdk::provider::detail::provider_sealed_transcript_receipt_digest(
+					result->provider_task_id(), "provider.success", result->provider_seal());
+			if (!sealed_transcript_digest)
+				return sdk::unexpected(std::move(sealed_transcript_digest.error()));
+			if (tamper_provider_sealed_transcript_digest_)
+				*sealed_transcript_digest = "semantic-v2:sha256:" + std::string(64U, 'f');
+			auto completeness = fixture_completeness_receipt(request_,
+															 request_task_index,
+															 binding,
+															 *result,
+															 std::move(*sealed_transcript_digest));
+			if (!completeness)
+				return sdk::unexpected(std::move(completeness.error()));
+			const auto result_artifact_digest = *digest;
+			if (wrong_receipt_digest_)
+				*digest = incremental_digest('f');
+			auto pre_encoder_seal =
+				materialization_incremental_pre_encoder_seal{std::move(*completeness),
+															 result_artifact_digest,
+															 *partition_set_digest,
+															 partition_ids};
+			auto encode_partition_spools = delayed_encoder(request_task_index, partition_ids);
+			return materialization_incremental_task_execution{
+				std::move(*result),
+				{
+					reported_provider_calls_,
+					provider_task_id,
+					provider_execution_id,
+					std::move(*digest),
+					std::move(partition_ids),
+					std::move(*partition_set_digest),
+					std::optional<materialization_incremental_pre_encoder_seal>{
+						std::move(pre_encoder_seal)},
+				},
+				std::move(encode_partition_spools)};
+		}
+
+		[[nodiscard]] sdk::result<materialization_incremental_task_reuse>
+		load_reusable(const std::size_t request_task_index,
+					  const validated_task_request&,
+					  const materialization_incremental_task_binding& binding) override
+		{
+			if (request_task_index >= reusable_.size() || !reusable_[request_task_index])
+				return sdk::unexpected(
+					sdk::error{"fixture.incremental-prior-missing", "cache", "deliberate"});
+			auto result = std::move(*reusable_[request_task_index]);
+			const auto provider_task_id = std::string{result.provider_task_id()};
+			const auto provider_execution_id = std::string{result.provider_execution_id()};
+			reusable_[request_task_index].reset();
+			auto digest = seal_materialization_incremental_artifact_digest(result);
+			if (!digest)
+				return sdk::unexpected(std::move(digest.error()));
+			std::vector<std::string> partition_ids;
+			partition_ids.reserve(binding.partitions.size());
+			for (const auto& partition : binding.partitions)
+				partition_ids.push_back(partition.partition_id);
+			auto partition_set_digest =
+				seal_materialization_incremental_task_partition_set_digest(partition_ids);
+			if (!partition_set_digest)
+				return sdk::unexpected(std::move(partition_set_digest.error()));
+			auto sealed_transcript_digest =
+				sdk::provider::detail::provider_sealed_transcript_receipt_digest(
+					result.provider_task_id(), "provider.success", result.provider_seal());
+			if (!sealed_transcript_digest)
+				return sdk::unexpected(std::move(sealed_transcript_digest.error()));
+			if (tamper_provider_sealed_transcript_digest_)
+				*sealed_transcript_digest = "semantic-v2:sha256:" + std::string(64U, 'f');
+			auto completeness = fixture_completeness_receipt(request_,
+															 request_task_index,
+															 binding,
+															 result,
+															 std::move(*sealed_transcript_digest));
+			if (!completeness)
+				return sdk::unexpected(std::move(completeness.error()));
+			auto pre_encoder_seal = materialization_incremental_pre_encoder_seal{
+				std::move(*completeness), *digest, *partition_set_digest, partition_ids};
+			auto encode_partition_spools = delayed_encoder(request_task_index, partition_ids);
+			return materialization_incremental_task_reuse{
+				std::move(result),
+				{
+					reported_reuse_provider_calls_,
+					std::move(provider_task_id),
+					std::move(provider_execution_id),
+					std::move(*digest),
+					std::move(partition_ids),
+					std::move(*partition_set_digest),
+					std::optional<materialization_incremental_pre_encoder_seal>{
+						std::move(pre_encoder_seal)},
+				},
+				std::move(encode_partition_spools)};
+		}
+
+		[[nodiscard]] bool cancellation_requested() const noexcept override
+		{
+			return cancelled_;
+		}
+
+		std::size_t calls{};
+		std::vector<std::size_t> called_indices;
+
+	  private:
+		[[nodiscard]] materialization_incremental_partition_spool_encoder
+		delayed_encoder(const std::size_t task_index,
+						std::vector<std::string> expected_partition_ids) const
+		{
+			return
+				[this, task_index, expected_partition_ids = std::move(expected_partition_ids)](
+					const sealed_materialization_result& result,
+					const materialization_incremental_pre_encoder_seal& seal)
+					-> sdk::result<std::vector<std::unique_ptr<materialization_replayable_spool>>>
+			{
+				if (seal.partition_ids != expected_partition_ids)
+					return sdk::unexpected(sdk::error{
+						"fixture.incremental-encoder", "partition-set", "changed-after-receipt"});
+				std::vector<materialization_incremental_partition_binding> partition_bindings;
+				partition_bindings.reserve(expected_partition_ids.size());
+				for (const auto& partition_id : expected_partition_ids)
+					partition_bindings.emplace_back(partition_id);
+				const materialization_incremental_task_binding binding{
+					incremental_identity(request_, task_index), std::move(partition_bindings)};
+				auto spools = fixture_partition_spools(request_, task_index, binding, result);
+				if (omit_partition_spools_)
+					spools.clear();
+				return spools;
+			};
+		}
+
+		const validated_materialization_request& request_;
+		bool cancelled_{};
+		bool fail_{};
+		bool return_wrong_task_{};
+		std::uint64_t reported_provider_calls_{1U};
+		bool wrong_receipt_digest_{};
+		std::uint64_t reported_reuse_provider_calls_{};
+		bool omit_partition_spools_{};
+		coverage_mode coverage_{coverage_mode::exact};
+		bool tamper_provider_sealed_transcript_digest_{};
+		std::vector<std::optional<sealed_materialization_result>> reusable_;
+	};
+
+	void check_incremental_coordinator(const validated_materialization_request& request,
+									   const materialization_producer_authority& producer)
+	{
+		require(request.tasks.size() == 2U, "incremental fixture task census changed");
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		auto first = incremental_state("partition:a");
+		auto second = incremental_state("partition:b");
+		const auto make_warm_plan = [&]
+		{
+			const std::array candidates{
+				incremental::partition_candidate{second, second},
+				incremental::partition_candidate{first, first},
+			};
+			return incremental::make_materialization_plan(candidates);
+		}();
+		require(make_warm_plan && make_warm_plan->warm_zero,
+				"incremental fixture did not produce warm-zero plan");
+
+		auto prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> warm_bindings;
+		warm_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								second,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		warm_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								first,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor warm_executor{
+			request, false, false, false, 1U, false, std::move(prior)};
+		auto warm = run_materialization_incremental_coordinator(
+			request, *make_warm_plan, std::move(warm_bindings), warm_executor, producer, guarantee);
+		require(warm && warm->execution_census().planned_provider_executions == 0U &&
+					warm->execution_census().actual_provider_executions == 0U &&
+					warm->execution_census().executed_partition_ids.empty() &&
+					warm->execution_census().executed_provider_task_ids.empty() &&
+					warm->execution_census().executed_provider_execution_ids.empty() &&
+					warm->execution_census().executed_artifact_digests.empty() &&
+					warm_executor.calls == 0U && !warm->claims().partitions().empty(),
+				"warm-zero coordinator executed a provider or lost claims");
+		auto full_reference_seals = seal_all(request);
+		auto full_reference =
+			construct_materialization_claims(request, full_reference_seals, producer, guarantee);
+		require(full_reference.has_value(), "full recomputation reference failed");
+		require(warm->claims().final_claim_batch().content_digest ==
+						full_reference->final_claim_batch().content_digest &&
+					warm->claims().final_claim_batch().claims.size() ==
+						full_reference->final_claim_batch().claims.size() &&
+					warm->claims().partitions().size() == full_reference->partitions().size(),
+				"warm-zero claims differ from the independent full recomputation");
+		for (std::size_t index{}; index < warm->claims().partitions().size(); ++index)
+		{
+			const auto& incremental_partition = warm->claims().partitions()[index];
+			const auto& full_partition = full_reference->partitions()[index];
+			require(
+				incremental_partition.manifest == full_partition.manifest &&
+					incremental_partition.binding == full_partition.binding &&
+					incremental_partition.stored_claim_refs == full_partition.stored_claim_refs &&
+					incremental_partition.claim_content_ids == full_partition.claim_content_ids &&
+					incremental_partition.sdk_claim_occurrence_count ==
+						full_partition.sdk_claim_occurrence_count &&
+					incremental_partition.origin_association_count ==
+						full_partition.origin_association_count &&
+					incremental_partition.empty_partition == full_partition.empty_partition,
+				"warm-zero partition differs from the independent full recomputation");
+		}
+
+		{
+			const auto third = incremental_state("partition:c");
+			const std::array candidates{
+				incremental::partition_candidate{third, third},
+				incremental::partition_candidate{second, second},
+				incremental::partition_candidate{first, first},
+			};
+			auto multi_plan = incremental::make_materialization_plan(candidates);
+			require(multi_plan && multi_plan->entries.size() == 3U && multi_plan->warm_zero,
+					"multi-partition fixture did not produce an exact warm-zero plan");
+			auto multi_prior = seal_all(request);
+			std::vector<materialization_incremental_task_binding> multi_bindings;
+			multi_bindings.emplace_back(materialization_incremental_task_binding{
+				incremental_identity(request, 0U),
+				{materialization_incremental_partition_binding{
+					 "partition:a",
+					 std::optional<incremental::partition_state>{first},
+					 std::optional<materialization_incremental_prior_artifact>{
+						 incremental_prior_artifact(first, multi_prior[0U])}},
+				 materialization_incremental_partition_binding{
+					 "partition:c",
+					 std::optional<incremental::partition_state>{third},
+					 std::optional<materialization_incremental_prior_artifact>{
+						 incremental_prior_artifact(third, multi_prior[0U])}}}});
+			multi_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:b",
+									1U,
+									second,
+									second,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(second, multi_prior[1U])}));
+			fixture_incremental_executor multi_executor{
+				request, false, false, false, 1U, false, std::move(multi_prior)};
+			auto multi_warm = run_materialization_incremental_coordinator(request,
+																		  *multi_plan,
+																		  std::move(multi_bindings),
+																		  multi_executor,
+																		  producer,
+																		  guarantee);
+			require(multi_warm &&
+						multi_warm->execution_census().planned_provider_executions == 0U &&
+						multi_warm->execution_census().actual_provider_executions == 0U &&
+						multi_executor.calls == 0U,
+					"multi-partition exact reuse crossed the provider boundary");
+
+			auto changed_first = first;
+			changed_first.input.source_digest = incremental_digest('e');
+			auto changed_third = third;
+			changed_third.input.source_digest = incremental_digest('f');
+			const std::array affected_candidates{
+				incremental::partition_candidate{changed_third, third},
+				incremental::partition_candidate{second, second},
+				incremental::partition_candidate{changed_first, first},
+			};
+			auto multi_affected_plan = incremental::make_materialization_plan(affected_candidates);
+			require(multi_affected_plan && multi_affected_plan->frontend_provider_executions == 2U,
+					"multi-partition fixture did not isolate two affected partitions");
+			auto affected_prior = seal_all(request);
+			std::vector<materialization_incremental_task_binding> affected_multi_bindings;
+			affected_multi_bindings.emplace_back(materialization_incremental_task_binding{
+				incremental_identity(request, 0U),
+				{materialization_incremental_partition_binding{
+					 "partition:a",
+					 std::optional<incremental::partition_state>{changed_first},
+					 std::optional<materialization_incremental_prior_artifact>{
+						 incremental_prior_artifact(first, affected_prior[0U])}},
+				 materialization_incremental_partition_binding{
+					 "partition:c",
+					 std::optional<incremental::partition_state>{changed_third},
+					 std::optional<materialization_incremental_prior_artifact>{
+						 incremental_prior_artifact(third, affected_prior[0U])}}}});
+			affected_multi_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:b",
+									1U,
+									second,
+									second,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(second, affected_prior[1U])}));
+			fixture_incremental_executor affected_multi_executor{
+				request, false, false, false, 1U, false, std::move(affected_prior)};
+			auto affected_multi =
+				run_materialization_incremental_coordinator(request,
+															*multi_affected_plan,
+															std::move(affected_multi_bindings),
+															affected_multi_executor,
+															producer,
+															guarantee);
+			require(affected_multi &&
+						affected_multi->execution_census().planned_provider_executions == 2U &&
+						affected_multi->execution_census().planned_provider_task_executions == 1U &&
+						affected_multi->execution_census().actual_provider_executions == 1U &&
+						affected_multi->execution_census().actual_recomputed_partition_count ==
+							2U &&
+						affected_multi->execution_census().executed_partition_ids ==
+							std::vector<std::string>{"partition:a", "partition:c"} &&
+						affected_multi_executor.calls == 1U &&
+						affected_multi_executor.called_indices == std::vector<std::size_t>{0U},
+					"multi-partition execution receipt did not bind exact affected coverage");
+
+			auto mixed_candidates = std::array{
+				incremental::partition_candidate{changed_first, first},
+				incremental::partition_candidate{second, second},
+				incremental::partition_candidate{third, third},
+			};
+			auto mixed_plan = incremental::make_materialization_plan(mixed_candidates);
+			require(mixed_plan && mixed_plan->frontend_provider_executions == 1U,
+					"mixed-task fixture did not isolate one recompute partition");
+			auto mixed_prior = seal_all(request);
+			std::vector<materialization_incremental_task_binding> mixed_bindings;
+			mixed_bindings.emplace_back(materialization_incremental_task_binding{
+				incremental_identity(request, 0U),
+				{materialization_incremental_partition_binding{
+					 "partition:a",
+					 std::optional<incremental::partition_state>{changed_first},
+					 std::optional<materialization_incremental_prior_artifact>{
+						 incremental_prior_artifact(first, mixed_prior[0U])}},
+				 materialization_incremental_partition_binding{
+					 "partition:c",
+					 std::optional<incremental::partition_state>{third},
+					 std::optional<materialization_incremental_prior_artifact>{
+						 incremental_prior_artifact(third, mixed_prior[0U])}}}});
+			mixed_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:b",
+									1U,
+									second,
+									second,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(second, mixed_prior[1U])}));
+			fixture_incremental_executor mixed_executor{
+				request, false, false, false, 1U, false, std::move(mixed_prior)};
+			auto mixed = run_materialization_incremental_coordinator(request,
+																	 *mixed_plan,
+																	 std::move(mixed_bindings),
+																	 mixed_executor,
+																	 producer,
+																	 guarantee);
+			require(!mixed && mixed.error().code == "materialization.incremental-invalid" &&
+						mixed_executor.calls == 0U,
+					"mixed recompute/reuse task crossed the provider boundary");
+		}
+
+		{
+			auto bad_reuse_prior = seal_all(request);
+			std::vector<materialization_incremental_task_binding> bad_reuse_bindings;
+			bad_reuse_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:b",
+									1U,
+									second,
+									second,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(second, bad_reuse_prior[1U])}));
+			bad_reuse_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:a",
+									0U,
+									first,
+									first,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(first, bad_reuse_prior[0U])}));
+			fixture_incremental_executor bad_reuse_executor{
+				request, false, false, false, 1U, false, std::move(bad_reuse_prior), 1U};
+			auto bad_reuse =
+				run_materialization_incremental_coordinator(request,
+															*make_warm_plan,
+															std::move(bad_reuse_bindings),
+															bad_reuse_executor,
+															producer,
+															guarantee);
+			require(!bad_reuse && bad_reuse.error().code == "materialization.incremental-invalid" &&
+						bad_reuse_executor.calls == 0U,
+					"nonzero reuse provider-call receipt was accepted");
+		}
+
+		auto changed = first;
+		changed.input.source_digest = incremental_digest('e');
+		auto unchanged = second;
+		const std::array affected_candidates{
+			incremental::partition_candidate{changed, incremental_state("partition:a")},
+			incremental::partition_candidate{unchanged, unchanged},
+		};
+		auto affected_plan = incremental::make_materialization_plan(affected_candidates);
+		require(affected_plan && affected_plan->frontend_provider_executions == 1U,
+				"incremental fixture did not isolate one changed partition");
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> affected_bindings;
+		affected_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		affected_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor affected_executor{
+			request, false, false, false, 1U, false, std::move(prior)};
+		auto affected = run_materialization_incremental_coordinator(request,
+																	*affected_plan,
+																	std::move(affected_bindings),
+																	affected_executor,
+																	producer,
+																	guarantee);
+		require(affected && affected->execution_census().actual_provider_executions == 1U &&
+					affected->execution_census().executed_partition_ids ==
+						std::vector<std::string>{"partition:a"} &&
+					affected->execution_census().executed_provider_task_ids ==
+						std::vector<std::string>{request.tasks[0].provider_task_id} &&
+					affected->execution_census().executed_provider_execution_ids ==
+						std::vector<std::string>{request.tasks[0].provider_execution_id} &&
+					affected->execution_census().executed_artifact_digests.size() == 1U &&
+					affected_executor.calls == 1U &&
+					affected_executor.called_indices == std::vector<std::size_t>{0U},
+				"incremental coordinator executed an unrelated partition or lost order");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> missing_prior;
+		missing_prior.emplace_back(
+			incremental_binding(request, "partition:a", 0U, first, std::nullopt));
+		missing_prior.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								second,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		fixture_incremental_executor missing_executor{
+			request, false, false, false, 1U, false, std::move(prior)};
+		auto missing = run_materialization_incremental_coordinator(request,
+																   *make_warm_plan,
+																   std::move(missing_prior),
+																   missing_executor,
+																   producer,
+																   guarantee);
+		require(!missing && missing.error().code == "materialization.incremental-invalid" &&
+					missing_executor.calls == 0U,
+				"missing sealed prior artifact was not rejected before execution");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> cancelled_bindings;
+		cancelled_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		cancelled_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor cancelled_executor{
+			request, true, false, false, 1U, false, std::move(prior)};
+		auto cancelled = run_materialization_incremental_coordinator(request,
+																	 *affected_plan,
+																	 std::move(cancelled_bindings),
+																	 cancelled_executor,
+																	 producer,
+																	 guarantee);
+		require(!cancelled && cancelled.error().code == "materialization.incremental-invalid" &&
+					cancelled_executor.calls == 0U,
+				"cancelled incremental execution crossed the provider boundary");
+
+		std::vector<materialization_incremental_task_binding> duplicate_bindings;
+		duplicate_bindings.emplace_back(
+			incremental_binding(request, "partition:a", 0U, first, std::nullopt));
+		duplicate_bindings.emplace_back(incremental_binding(
+			request, "partition:a", 1U, incremental_state("partition:a"), std::nullopt));
+		fixture_incremental_executor duplicate_executor{request};
+		auto duplicate = run_materialization_incremental_coordinator(request,
+																	 *make_warm_plan,
+																	 std::move(duplicate_bindings),
+																	 duplicate_executor,
+																	 producer,
+																	 guarantee);
+		require(!duplicate && duplicate.error().code == "materialization.incremental-invalid" &&
+					duplicate_executor.calls == 0U,
+				"duplicate/missing incremental binding crossed validation");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> failed_bindings;
+		failed_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		failed_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor failed_executor{
+			request, false, true, false, 1U, false, std::move(prior)};
+		auto failed = run_materialization_incremental_coordinator(request,
+																  *affected_plan,
+																  std::move(failed_bindings),
+																  failed_executor,
+																  producer,
+																  guarantee);
+		require(!failed && failed.error().code == "fixture.incremental-provider-failure" &&
+					failed_executor.calls == 1U,
+				"provider failure was converted into a successful incremental result");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> wrong_bindings;
+		wrong_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		wrong_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor wrong_executor{
+			request, false, false, true, 1U, false, std::move(prior)};
+		auto wrong = run_materialization_incremental_coordinator(request,
+																 *affected_plan,
+																 std::move(wrong_bindings),
+																 wrong_executor,
+																 producer,
+																 guarantee);
+		require(!wrong && wrong.error().code == "materialization.incremental-invalid" &&
+					wrong_executor.calls == 1U,
+				"wrong-task sealed output crossed the coordinator binding boundary");
+
+		prior = seal_all(request);
+		auto swapped_b =
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								second,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])});
+		swapped_b.task_identity = incremental_identity(request, 0U);
+		std::vector<materialization_incremental_task_binding> swapped_bindings;
+		swapped_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								first,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		swapped_bindings.emplace_back(std::move(swapped_b));
+		fixture_incremental_executor swapped_executor{
+			request, false, false, false, 1U, false, std::move(prior)};
+		auto swapped = run_materialization_incremental_coordinator(request,
+																   *make_warm_plan,
+																   std::move(swapped_bindings),
+																   swapped_executor,
+																   producer,
+																   guarantee);
+		require(!swapped && swapped.error().code == "materialization.incremental-invalid" &&
+					swapped_executor.calls == 0U,
+				"swapped typed task identity crossed the coordinator boundary");
+
+		prior = seal_all(request);
+		auto corrupt_b =
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								second,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])});
+		corrupt_b.partitions.front().prior_artifact->state.corruption_detected = true;
+		std::vector<materialization_incremental_task_binding> corrupt_bindings;
+		corrupt_bindings.emplace_back(std::move(corrupt_b));
+		corrupt_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								first,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor corrupt_executor{
+			request, false, false, false, 1U, false, std::move(prior)};
+		auto corrupt = run_materialization_incremental_coordinator(request,
+																   *make_warm_plan,
+																   std::move(corrupt_bindings),
+																   corrupt_executor,
+																   producer,
+																   guarantee);
+		require(!corrupt && corrupt.error().code == "materialization.incremental-invalid" &&
+					corrupt_executor.calls == 0U,
+				"corrupt prior artifact was reused");
+
+		prior = seal_all(request);
+		auto stale_b =
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								second,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])});
+		stale_b.partitions.front().prior_artifact->state.input.source_digest =
+			incremental_digest('f');
+		std::vector<materialization_incremental_task_binding> stale_bindings;
+		stale_bindings.emplace_back(std::move(stale_b));
+		stale_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								first,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor stale_executor{
+			request, false, false, false, 1U, false, std::move(prior)};
+		auto stale = run_materialization_incremental_coordinator(request,
+																 *make_warm_plan,
+																 std::move(stale_bindings),
+																 stale_executor,
+																 producer,
+																 guarantee);
+		require(!stale && stale.error().code == "materialization.incremental-invalid" &&
+					stale_executor.calls == 0U,
+				"stale prior input was reused");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> receipt_bindings;
+		receipt_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		receipt_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor zero_receipt_executor{
+			request, false, false, false, 0U, false, std::move(prior)};
+		auto zero_receipt = run_materialization_incremental_coordinator(request,
+																		*affected_plan,
+																		std::move(receipt_bindings),
+																		zero_receipt_executor,
+																		producer,
+																		guarantee);
+		require(!zero_receipt &&
+					zero_receipt.error().code == "materialization.incremental-invalid" &&
+					zero_receipt_executor.calls == 1U,
+				"zero provider-call receipt was accepted");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> multi_receipt_bindings;
+		multi_receipt_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		multi_receipt_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor multi_receipt_executor{
+			request, false, false, false, 2U, false, std::move(prior)};
+		auto multi_receipt =
+			run_materialization_incremental_coordinator(request,
+														*affected_plan,
+														std::move(multi_receipt_bindings),
+														multi_receipt_executor,
+														producer,
+														guarantee);
+		require(!multi_receipt &&
+					multi_receipt.error().code == "materialization.incremental-invalid" &&
+					multi_receipt_executor.calls == 1U,
+				"multiple provider-call receipt was accepted");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> streamless_bindings;
+		streamless_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		streamless_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor streamless_executor{
+			request, false, false, false, 1U, false, std::move(prior), 0U, true};
+		auto streamless =
+			run_materialization_incremental_coordinator(request,
+														*affected_plan,
+														std::move(streamless_bindings),
+														streamless_executor,
+														producer,
+														guarantee);
+		require(!streamless && streamless.error().code == "materialization.incremental-invalid" &&
+					streamless.error().field == "ingress" && streamless_executor.calls == 1U,
+				"coordinator bypassed the external event-stream ingress");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> post_load_failure_bindings;
+		post_load_failure_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		post_load_failure_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor post_load_failure_executor{request,
+																false,
+																false,
+																false,
+																1U,
+																false,
+																std::move(prior),
+																0U,
+																false,
+																coverage_mode::incomplete};
+		auto post_load_failure =
+			run_materialization_incremental_coordinator(request,
+														*affected_plan,
+														std::move(post_load_failure_bindings),
+														post_load_failure_executor,
+														producer,
+														guarantee);
+		require(!post_load_failure &&
+					post_load_failure.error().code == "materialization.coverage-incomplete" &&
+					post_load_failure.error().field == "provider.coverage" &&
+					post_load_failure_executor.calls == 1U,
+				"claim construction failure after load was not preserved as a typed rejection");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> mismatched_provider_receipt_bindings;
+		mismatched_provider_receipt_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		mismatched_provider_receipt_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor mismatched_provider_receipt_executor{request,
+																		  false,
+																		  false,
+																		  false,
+																		  1U,
+																		  false,
+																		  std::move(prior),
+																		  0U,
+																		  false,
+																		  coverage_mode::exact,
+																		  true};
+		auto mismatched_provider_receipt = run_materialization_incremental_coordinator(
+			request,
+			*affected_plan,
+			std::move(mismatched_provider_receipt_bindings),
+			mismatched_provider_receipt_executor,
+			producer,
+			guarantee);
+		require(!mismatched_provider_receipt &&
+					mismatched_provider_receipt.error().code ==
+						"materialization.incremental-invalid" &&
+					mismatched_provider_receipt.error().field == "receipt" &&
+					mismatched_provider_receipt.error().detail == "sealed-transcript-mismatch" &&
+					mismatched_provider_receipt_executor.calls == 1U,
+				"provider sealed transcript receipt was not bound to the task result");
+
+		prior = seal_all(request);
+		std::vector<materialization_incremental_task_binding> publish_bindings;
+		publish_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:b",
+								1U,
+								unchanged,
+								second,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(second, prior[1U])}));
+		publish_bindings.emplace_back(
+			incremental_binding(request,
+								"partition:a",
+								0U,
+								changed,
+								first,
+								std::optional<materialization_incremental_prior_artifact>{
+									incremental_prior_artifact(first, prior[0U])}));
+		fixture_incremental_executor publish_executor{
+			request, false, false, false, 1U, false, std::move(prior)};
+		auto published =
+			run_materialization_incremental_coordinator_and_publish(request,
+																	*affected_plan,
+																	std::move(publish_bindings),
+																	publish_executor,
+																	producer,
+																	guarantee);
+		require(published && published->store().publication_attempted &&
+					published->publication_verified() &&
+					published->store().publish_call_count == 1U &&
+					published->store().publish_returned_record.has_value() &&
+					published->store().verification_store.has_value() &&
+					!published->store().first_issue.has_value(),
+				"incremental coordinator did not retain a successful Store publication receipt");
+	}
 } // namespace
 
 int main(const int argc, char** argv)
@@ -731,6 +2367,11 @@ int main(const int argc, char** argv)
 	const std::filesystem::path root = argc > 1 ? argv[1] : ".";
 	auto request = request_fixture();
 	auto producer = producer_authority(root);
+	check_partition_event_stream();
+	check_incremental_receipts(request);
+	check_incremental_ingress(request);
 	positive_and_zero_partitions(request, producer);
+	streaming_source_receipts_replace_resident_payloads(root);
+	check_incremental_coordinator(request, producer);
 	negative_authority_guarantee_order_and_coverage(request, std::move(producer));
 }

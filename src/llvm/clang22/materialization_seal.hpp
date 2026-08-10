@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "materialization_request.hpp"
+#include "materialization_task_spool.hpp"
 #include "observation_v2.hpp"
 #include "sdk/provider_validation_internal.hpp"
 
@@ -18,6 +19,21 @@ namespace cxxlens::detail::clang22::materialization
 		std::size_t batch_index{};
 		std::size_t row_index{};
 		decoded_observation_v2_row observation;
+	};
+
+	/**
+	 * Source-private v2.1 task authority passed to the streaming seal boundary. The task.v3
+	 * occurrence is retained in one sealed spool and is consumed exactly once by validation.
+	 */
+	struct streamed_validated_materialization_task_request
+	{
+		clang22_task_input worker_input;
+		clang22_task_source_receipt source_receipt;
+		std::string provider_task_id;
+		std::string provider_execution_id;
+		std::string task_input_digest;
+		sdk::provider::sandbox_requirement sandbox;
+		std::unique_ptr<clang22_task_input_spool> worker_payload;
 	};
 
 	/**
@@ -77,10 +93,21 @@ namespace cxxlens::detail::clang22::materialization
 		friend sdk::result<sealed_materialization_result> validate_and_seal_materialization(
 			const validated_task_request& request,
 			sdk::provider::detail::sealed_provider_transcript&& provider_seal);
+		friend sdk::result<sealed_materialization_result> seal_validated_provider_result(
+			const clang22_task_input& worker_input,
+			std::string_view provider_task_id,
+			std::string_view task_input_digest,
+			std::string_view provider_execution_id,
+			sdk::provider::detail::sealed_provider_transcript&& provider_seal);
 	};
 
 	/** Consume one generic immutable seal and independently establish the higher task seal. */
 	[[nodiscard]] sdk::result<sealed_materialization_result> validate_and_seal_materialization(
 		const validated_task_request& request,
+		sdk::provider::detail::sealed_provider_transcript&& provider_seal);
+
+	/** Consume one v2.1 task.v3 spool without constructing a resident payload vector. */
+	[[nodiscard]] sdk::result<sealed_materialization_result> validate_and_seal_materialization(
+		streamed_validated_materialization_task_request request,
 		sdk::provider::detail::sealed_provider_transcript&& provider_seal);
 } // namespace cxxlens::detail::clang22::materialization

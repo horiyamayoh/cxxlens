@@ -1791,6 +1791,12 @@ namespace cxxlens::detail::clang22
 		}
 	}
 
+	sdk::result<clang22_task_v3_stream_decoded> decode_task_input(clang22_task_input_replay& input,
+																  clang22_task_source_spool& source)
+	{
+		return decode_task_input_streaming(input, source);
+	}
+
 	namespace
 	{
 		[[nodiscard]] sdk::result<std::string>

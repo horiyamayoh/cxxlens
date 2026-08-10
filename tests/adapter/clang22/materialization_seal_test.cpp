@@ -519,6 +519,7 @@ namespace
 			.task_input_digest = sdk::content_digest(*payload),
 			.sandbox = {sdk::provider::sandbox_assurance::enforced, input.sandbox.policy_digest},
 			.worker_payload = *payload,
+			.source_receipt = std::nullopt,
 		};
 
 		fixture_provider provider{fixture_rows(input, mode), mode};

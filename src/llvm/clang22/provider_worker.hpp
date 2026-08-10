@@ -128,5 +128,6 @@ namespace cxxlens::detail::clang22
 								bool invocation_exact,
 								std::vector<std::string> invocation_limitations = {});
 
-	[[nodiscard]] int run_provider_worker(std::span<const std::byte> input, std::ostream& output);
+	/** Run the worker from a bounded-read host stream; the stream is never materialized. */
+	[[nodiscard]] int run_provider_worker(std::istream& input, std::ostream& output);
 } // namespace cxxlens::detail::clang22

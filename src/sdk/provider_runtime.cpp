@@ -954,6 +954,14 @@ namespace cxxlens::sdk::provider
 		{
 		}
 
+		result<std::string>
+		provider_sealed_transcript_receipt_digest(const std::string_view task_id,
+												  const std::string_view terminal,
+												  const detail::sealed_provider_transcript& sealed)
+		{
+			return sealed_transcript_receipt_digest(task_id, terminal, sealed);
+		}
+
 		std::uint64_t provider_runtime_receipt::raw_stdout_byte_count() const noexcept
 		{
 			return raw_stdout_byte_count_;

@@ -54,6 +54,12 @@ namespace cxxlens::sdk::provider::detail
 								  std::string_view terminal,
 								  const sealed_provider_transcript& sealed);
 
+	/** Recompute the sealed-transcript receipt projection for a source-private consumer. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
+	provider_sealed_transcript_receipt_digest(std::string_view task_id,
+											  std::string_view terminal,
+											  const sealed_provider_transcript& sealed);
+
 	/**
 	 * Source-private process extension that lets the runtime write a replayed transcript directly
 	 * into a sealed process-input occurrence. Implementations must not retain the writer callback.
@@ -103,7 +109,8 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] bool succeeded() const noexcept
 		{
 			return validated_transcript_success && terminal == "provider.success" && sealed &&
-				!frames.empty() && frames.back().type == message_type::task_complete;
+				runtime_receipt && !frames.empty() &&
+				frames.back().type == message_type::task_complete;
 		}
 	};
 

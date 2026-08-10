@@ -10,6 +10,7 @@
 #include "materialization_request.hpp"
 #include "materialization_request_identity.hpp"
 #include "materialization_request_stream.hpp"
+#include "materialization_task_spool.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -88,6 +89,22 @@ namespace cxxlens::detail::clang22::materialization
 		std::string provider_execution_id;
 		std::string task_input_digest;
 		sdk::provider::sandbox_requirement sandbox;
+	};
+
+	/**
+	 * One source-dependent task replay issued only after complete v2.1 admission.
+	 *
+	 * The logical task.v3 bytes and decoded source remain in independent sealed private spools;
+	 * neither is converted to a resident request-wide vector.  The token is source-private and is
+	 * consumed by the installed materializer execution boundary.
+	 */
+	struct materialization_v2_1_task_execution
+	{
+		clang22_task_input input;
+		materialization_v2_1_task_metadata_receipt metadata;
+		clang22_task_source_receipt source_receipt;
+		std::unique_ptr<clang22_task_source_spool> source;
+		std::unique_ptr<clang22_task_input_spool> task_input;
 	};
 
 	class validated_materialization_request_v2_1;
@@ -174,6 +191,7 @@ namespace cxxlens::detail::clang22::materialization
 		friend sdk::result<validated_materialization_request_v2_1>
 		admit_materialization_request_v2_1(prevalidated_materialization_request_v2_1,
 										   materialization_v2_1_auxiliary_spool_factory&);
+		friend class validated_materialization_request_v2_1;
 	};
 
 	/**
@@ -221,6 +239,9 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] const streamed_materialization_request_identity& identity() const noexcept;
 		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_receipt>
 		task_metadata(std::uint64_t task_index);
+		/** Replay one fully bound task without materializing its source or task.v3 bytes. */
+		[[nodiscard]] sdk::result<materialization_v2_1_task_execution>
+		task_execution(std::uint64_t task_index);
 
 	  private:
 		validated_materialization_request_v2_1(prevalidated_materialization_request_v2_1 request,

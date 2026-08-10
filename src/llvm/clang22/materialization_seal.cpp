@@ -1,5 +1,6 @@
 #include "materialization_seal.hpp"
 
+#include <algorithm>
 #include <array>
 #include <map>
 #include <set>
@@ -36,6 +37,83 @@ namespace cxxlens::detail::clang22::materialization
 			if (!error.detail.empty())
 				output += ":" + error.detail;
 			return output;
+		}
+
+		[[nodiscard]] bool same_project_catalog(const sdk::project_catalog& left,
+												const sdk::project_catalog& right)
+		{
+			if (left.catalog_id != right.catalog_id ||
+				left.catalog_digest != right.catalog_digest ||
+				left.logical_root != right.logical_root ||
+				left.environment_digest != right.environment_digest ||
+				left.compile_units.size() != right.compile_units.size())
+				return false;
+			return std::ranges::equal(left.compile_units,
+									  right.compile_units,
+									  [](const sdk::catalog_compile_unit& left_unit,
+										 const sdk::catalog_compile_unit& right_unit)
+									  {
+										  return left_unit == right_unit;
+									  });
+		}
+
+		[[nodiscard]] bool same_execution_budget(const sdk::provider::execution_budget& left,
+												 const sdk::provider::execution_budget& right)
+		{
+			return left.wall_ms == right.wall_ms && left.cpu_ms == right.cpu_ms &&
+				left.address_space_bytes == right.address_space_bytes &&
+				left.transport_bytes == right.transport_bytes &&
+				left.output_bytes == right.output_bytes && left.rows == right.rows &&
+				left.diagnostics == right.diagnostics && left.open_files == right.open_files &&
+				left.subprocesses == right.subprocesses;
+		}
+
+		[[nodiscard]] bool same_task_input(const clang22_task_input& left,
+										   const clang22_task_input& right)
+		{
+			return same_project_catalog(left.project_catalog, right.project_catalog) &&
+				left.selected_catalog_compile_unit == right.selected_catalog_compile_unit &&
+				left.compile_unit == right.compile_unit && left.project == right.project &&
+				left.variant == right.variant &&
+				left.toolchain_context == right.toolchain_context &&
+				left.toolchain_digest == right.toolchain_digest &&
+				left.toolchain.family == right.toolchain.family &&
+				left.toolchain.exact_version == right.toolchain.exact_version &&
+				left.toolchain.target_triple == right.toolchain.target_triple &&
+				left.toolchain.builtin_headers_digest == right.toolchain.builtin_headers_digest &&
+				left.toolchain.sysroot == right.toolchain.sysroot &&
+				left.toolchain.abi_digest == right.toolchain.abi_digest &&
+				left.toolchain.plugin_spec_digest == right.toolchain.plugin_spec_digest &&
+				left.variant_authority.language == right.variant_authority.language &&
+				left.variant_authority.language_standard ==
+				right.variant_authority.language_standard &&
+				left.variant_authority.target_triple == right.variant_authority.target_triple &&
+				left.variant_authority.predefined_macros_digest ==
+				right.variant_authority.predefined_macros_digest &&
+				left.variant_authority.include_search_digest ==
+				right.variant_authority.include_search_digest &&
+				left.variant_authority.semantic_flags_digest ==
+				right.variant_authority.semantic_flags_digest &&
+				left.normalized_invocation_digest == right.normalized_invocation_digest &&
+				left.environment_digest == right.environment_digest &&
+				left.language == right.language &&
+				left.working_directory == right.working_directory &&
+				left.condition_universe == right.condition_universe &&
+				left.condition == right.condition && left.interpretation == right.interpretation &&
+				left.source_snapshot == right.source_snapshot && left.file == right.file &&
+				left.logical_path == right.logical_path &&
+				left.source_content_digest == right.source_content_digest &&
+				left.source_content_base64 == right.source_content_base64 &&
+				left.source_size_bytes == right.source_size_bytes &&
+				left.source_encoding == right.source_encoding &&
+				left.line_index == right.line_index &&
+				left.source_read_only == right.source_read_only && left.source == right.source &&
+				left.arguments == right.arguments &&
+				left.requested_descriptors == right.requested_descriptors &&
+				left.dependency_groups == right.dependency_groups &&
+				same_execution_budget(left.budget, right.budget) &&
+				left.sandbox.minimum == right.sandbox.minimum &&
+				left.sandbox.policy_digest == right.sandbox.policy_digest;
 		}
 
 		[[nodiscard]] std::array<const sdk::relation_descriptor*, 6U> output_descriptors()
@@ -416,7 +494,148 @@ namespace cxxlens::detail::clang22::materialization
 			}
 			return {};
 		}
+
 	} // namespace
+
+	[[nodiscard]] sdk::result<sealed_materialization_result> seal_validated_provider_result(
+		const clang22_task_input& worker_input,
+		const std::string_view provider_task_id,
+		const std::string_view task_input_digest,
+		const std::string_view provider_execution_id,
+		sdk::provider::detail::sealed_provider_transcript&& provider_seal)
+	{
+		const auto expected_descriptors = output_descriptors();
+		const auto batches = provider_seal.batches();
+		if (batches.size() != expected_descriptors.size())
+			return sdk::unexpected(
+				seal_error("materialization.group-incomplete", "batches", "exact-six"));
+		for (std::size_t index{}; index < expected_descriptors.size(); ++index)
+		{
+			const auto& expected = *expected_descriptors[index];
+			const auto& batch = batches[index];
+			if (batch.descriptor_id() != expected.id)
+				return sdk::unexpected(
+					seal_error("materialization.group-incomplete", "batches", "descriptor-order"));
+			if (batch.descriptor_digest() != expected.descriptor_digest)
+				return sdk::unexpected(seal_error(
+					"materialization.descriptor-binding-mismatch", expected.id, "runtime-digest"));
+			const std::string_view expected_group = index < 3U ? "canonical" : "observation";
+			if (batch.task_id() != provider_task_id)
+				return sdk::unexpected(seal_error(
+					"materialization.task-binding-mismatch", expected.id, "provider-task-id"));
+			if (batch.dependency_group_id() != expected_group ||
+				batch.atomic_output_group_id() != atomic_output_group_id ||
+				batch.batch_id() != expected.id + "-batch")
+				return sdk::unexpected(seal_error(
+					"materialization.group-incomplete", expected.id, "group-or-batch-binding"));
+			for (const auto& row : batch.rows())
+			{
+				if (auto valid = sdk::validate_row(expected, row); !valid)
+					return sdk::unexpected(seal_error(
+						"materialization.claim-invalid", expected.id, nested_error(valid.error())));
+				if (expected.domain_identity.result_column)
+					if (auto valid = sdk::validate_domain_identity(expected, row); !valid)
+						return sdk::unexpected(seal_error("materialization.claim-invalid",
+														  expected.id,
+														  nested_error(valid.error())));
+			}
+		}
+
+		const observation_v2_task_authority task_authority{
+			.final_relation_compile_unit_id = worker_input.compile_unit,
+			.source_snapshot_id = worker_input.source_snapshot,
+			.source_file_id = worker_input.file,
+			.source_size_bytes = worker_input.source_size_bytes,
+		};
+		std::vector<sealed_observation_v2_row> observations;
+		std::map<std::string, observation_v2_primary_span, std::less<>> spans;
+		for (std::size_t batch_index = 3U; batch_index < batches.size(); ++batch_index)
+		{
+			const auto rows = batches[batch_index].rows();
+			for (std::size_t row_index{}; row_index < rows.size(); ++row_index)
+			{
+				auto decoded = decode_observation_v2_row(rows[row_index], task_authority);
+				if (!decoded)
+				{
+					if (decoded.error().field == "final_relation_compile_unit_id")
+						return sdk::unexpected(seal_error("materialization.task-binding-mismatch",
+														  "final_relation_compile_unit_id",
+														  decoded.error().detail));
+					return sdk::unexpected(std::move(decoded.error()));
+				}
+				if (decoded->primary_span)
+				{
+					auto [found, inserted] =
+						spans.emplace(decoded->primary_span->span_id, *decoded->primary_span);
+					if (!inserted && found->second != *decoded->primary_span)
+						return sdk::unexpected(seal_error("materialization.span-invalid",
+														  "source.span.v1.span",
+														  "conflicting-full-bundle"));
+				}
+				observations.push_back({batch_index, row_index, std::move(*decoded)});
+			}
+		}
+
+		if (auto valid = validate_canonical_hard_references(batches, worker_input, spans); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		auto base_rows = base_claim_rows(worker_input);
+		if (!base_rows)
+			return sdk::unexpected(std::move(base_rows.error()));
+		std::vector<sdk::detached_row> span_rows;
+		span_rows.reserve(spans.size());
+		for (const auto& [span_id, span] : spans)
+		{
+			(void)span_id;
+			auto row = source_span_row(span);
+			if (!row)
+				return sdk::unexpected(std::move(row.error()));
+			span_rows.push_back(std::move(*row));
+		}
+
+		return sealed_materialization_result{std::string{provider_task_id},
+											 std::string{task_input_digest},
+											 std::string{provider_execution_id},
+											 worker_input.selected_catalog_compile_unit,
+											 worker_input.compile_unit,
+											 std::move(provider_seal),
+											 std::move(*base_rows),
+											 std::move(span_rows),
+											 std::move(observations)};
+	}
+
+	[[nodiscard]] sdk::result<std::string>
+	digest_task_input_replay(clang22_task_input_replay& input)
+	{
+		if (!input.sealed() || input.size_bytes() > maximum_clang22_task_input_bytes)
+			return sdk::unexpected(
+				seal_error("materialization.task-binding-mismatch", "task.v3", "spool"));
+		auto digest = make_materialization_sha256_accumulator();
+		if (!digest)
+			return sdk::unexpected(
+				seal_error("materialization.spool-failure", "task-input", "digest-create"));
+		std::array<std::byte, default_stream_chunk_bytes> buffer{};
+		std::uint64_t offset{};
+		while (offset < input.size_bytes())
+		{
+			const auto remaining = input.size_bytes() - offset;
+			const auto count =
+				static_cast<std::size_t>(std::min<std::uint64_t>(remaining, buffer.size()));
+			auto read = input.read_at(offset, std::span{buffer}.first(count));
+			if (!read || *read == 0U || *read > count)
+				return sdk::unexpected(
+					seal_error("materialization.spool-failure", "task-input", "read"));
+			auto updated = digest->update(std::span{buffer}.first(*read));
+			if (!updated)
+				return sdk::unexpected(
+					seal_error("materialization.spool-failure", "task-input", "digest-update"));
+			offset += static_cast<std::uint64_t>(*read);
+		}
+		auto finished = digest->finish();
+		if (!finished)
+			return sdk::unexpected(
+				seal_error("materialization.spool-failure", "task-input", "digest-finalize"));
+		return std::move(*finished);
+	}
 
 	sealed_materialization_result::sealed_materialization_result(
 		std::string provider_task_id,
@@ -618,5 +837,50 @@ namespace cxxlens::detail::clang22::materialization
 			std::move(span_rows),
 			std::move(observations),
 		};
+	}
+
+	sdk::result<sealed_materialization_result> validate_and_seal_materialization(
+		streamed_validated_materialization_task_request request,
+		sdk::provider::detail::sealed_provider_transcript&& provider_seal)
+	{
+		if (!request.worker_payload || !sdk::validate_strong_id(request.provider_task_id) ||
+			!sdk::validate_strong_id(request.provider_execution_id))
+			return sdk::unexpected(
+				seal_error("materialization.task-binding-mismatch", "execution-key", "authority"));
+		if (auto valid = request.worker_input.validate_with_source_receipt(request.source_receipt);
+			!valid)
+			return sdk::unexpected(seal_error(
+				"materialization.task-binding-mismatch", "task.v3", nested_error(valid.error())));
+		if (auto valid = request.sandbox.validate(); !valid)
+			return sdk::unexpected(seal_error(
+				"materialization.task-binding-mismatch", "sandbox", nested_error(valid.error())));
+		const auto expected_minimum = request.worker_input.sandbox.minimum == "certified"
+			? sdk::provider::sandbox_assurance::certified
+			: sdk::provider::sandbox_assurance::enforced;
+		if (request.sandbox.minimum != expected_minimum ||
+			request.sandbox.policy_digest != request.worker_input.sandbox.policy_digest)
+			return sdk::unexpected(
+				seal_error("materialization.task-binding-mismatch", "sandbox", "task-authority"));
+
+		auto source = make_materialization_task_source_spool();
+		if (!source)
+			return sdk::unexpected(seal_error("materialization.spool-failure", "source", "create"));
+		auto decoded = decode_task_input_streaming(*request.worker_payload, **source);
+		if (!decoded)
+			return sdk::unexpected(seal_error(
+				"materialization.task-binding-mismatch", "task.v3", nested_error(decoded.error())));
+		if (decoded->source != request.source_receipt ||
+			!same_task_input(decoded->input, request.worker_input))
+			return sdk::unexpected(seal_error(
+				"materialization.task-binding-mismatch", "task.v3", "request-rebinding"));
+		auto task_digest = digest_task_input_replay(*request.worker_payload);
+		if (!task_digest || *task_digest != request.task_input_digest)
+			return sdk::unexpected(
+				seal_error("materialization.task-binding-mismatch", "task_input_digest", "spool"));
+		return seal_validated_provider_result(request.worker_input,
+											  request.provider_task_id,
+											  request.task_input_digest,
+											  request.provider_execution_id,
+											  std::move(provider_seal));
 	}
 } // namespace cxxlens::detail::clang22::materialization

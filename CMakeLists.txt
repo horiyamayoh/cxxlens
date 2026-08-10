@@ -157,8 +157,9 @@ function(cxxlens_configure_installed_clang22_tool target)
   # Clang/LLVM shared runtime. Its installed execution contract unsets ambient
   # loader variables, so retain the configured exact runtime directory in the
   # worker only; no adjacent-major or first-found fallback is permitted.
-  if(NOT CXXLENS_BUILD_SHARED AND CXXLENS_CLANG22_AVAILABLE AND
-     CXXLENS_CLANG22_LIBRARY_DIRS)
+  if(NOT CXXLENS_BUILD_SHARED
+     AND CXXLENS_CLANG22_AVAILABLE
+     AND CXXLENS_CLANG22_LIBRARY_DIRS)
     set_target_properties(
       ${target} PROPERTIES INSTALL_RPATH "${CXXLENS_CLANG22_LIBRARY_DIRS}"
                            INSTALL_RPATH_USE_LINK_PATH FALSE)
@@ -208,7 +209,8 @@ if(BUILD_TESTING)
   # excluded from production components, installation, and export sets.
   add_library(
     cxxlens-sqlite-disposable-qualification-internal STATIC EXCLUDE_FROM_ALL
-    src/sdk/sqlite_disposable_qualification_internal.cpp)
+    src/sdk/sqlite_disposable_qualification_internal.cpp
+    src/sdk/sqlite_disposable_normalization_internal.cpp)
   target_compile_features(cxxlens-sqlite-disposable-qualification-internal
                           PRIVATE cxx_std_23)
   target_include_directories(
@@ -371,8 +373,10 @@ cxxlens_enable_sanitizers(cxxlens_clang22_materialization_codecs)
 
 # Worker/parser implementation stays out of the installed Clang 22 SDK DSO. It
 # is linked only by provider-owned executables and source-private tests.
-add_library(cxxlens_clang22_worker_core STATIC
-            src/llvm/clang22/provider_worker.cpp)
+add_library(
+  cxxlens_clang22_worker_core STATIC
+  src/llvm/clang22/provider_worker.cpp src/llvm/clang22/materialization_io.cpp
+  src/llvm/clang22/materialization_task_spool.cpp)
 target_link_libraries(
   cxxlens_clang22_worker_core
   PUBLIC cxxlens::clang22_provider_sdk
@@ -393,12 +397,17 @@ add_library(
   src/llvm/clang22/materialization_identity.cpp
   src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_claims.cpp
+  src/llvm/clang22/materialization_streaming_claims.cpp
   src/llvm/clang22/materialization_request.cpp
   src/llvm/clang22/materialization_request_identity.cpp
   src/llvm/clang22/materialization_request_stream.cpp
   src/llvm/clang22/materialization_request_v2_1.cpp
   src/llvm/clang22/materialization_task_spool.cpp
   src/llvm/clang22/materialization_seal.cpp
+  src/llvm/clang22/materialization_partition_event_stream.cpp
+  src/llvm/clang22/materialization_incremental_coordinator.cpp
+  src/llvm/clang22/materialization_incremental_receipt.cpp
+  src/llvm/clang22/materialization_incremental_ingress.cpp
   src/llvm/clang22/materialization_store.cpp
   src/llvm/clang22/materialization_rooted_vfs.cpp
   src/llvm/clang22/materialization_occurrence.cpp
@@ -444,6 +453,16 @@ target_compile_features(cxxlens-clang-worker-22 PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-clang-worker-22)
 cxxlens_enable_sanitizers(cxxlens-clang-worker-22)
 cxxlens_configure_installed_clang22_tool(cxxlens-clang-worker-22)
+
+add_executable(cxxlens-clang22-materialize tools/clang22/materialize_main.cpp)
+target_link_libraries(cxxlens-clang22-materialize
+                      PRIVATE cxxlens_clang22_materializer_core)
+target_include_directories(cxxlens-clang22-materialize
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-clang22-materialize PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-clang22-materialize)
+cxxlens_enable_sanitizers(cxxlens-clang22-materialize)
+cxxlens_configure_installed_clang22_tool(cxxlens-clang22-materialize)
 
 set(CXXLENS_COMPILED_TARGETS
     cxxlens_base
@@ -504,7 +523,7 @@ install(
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(TARGETS cxxlens-provider-scaffold cxxlens-sdk-doctor
-                cxxlens-clang-worker-22
+                cxxlens-clang-worker-22 cxxlens-clang22-materialize
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(
   PROGRAMS tools/sdk/relation_idl_compiler.py
