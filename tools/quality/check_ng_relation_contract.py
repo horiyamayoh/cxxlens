@@ -86,11 +86,18 @@ REQUIRED_VECTOR_IDS = {
     "envelope-containing-snapshot-forbidden",
     "hard-reference-resolved",
     "hard-reference-missing",
+    "container-hard-reference-elements-resolved",
+    "container-hard-reference-empty-vacuous",
+    "container-hard-reference-element-missing",
     "soft-reference-missing-accounted",
     "soft-reference-missing-unaccounted",
     "open-symbol-unknown-preserved",
     "closed-symbol-unknown-rejected",
     "canonical-digest-scalar",
+    "canonical-content-digest-scalar",
+    "canonical-content-digest-semantic-scalar",
+    "malformed-content-digest-domain",
+    "malformed-content-digest-hex",
     "canonical-stable-unit-key-scalar",
     "malformed-digest-scalar",
     "noncanonical-semver-scalar",
@@ -132,6 +139,10 @@ class RelationContractError(ValueError):
 
 def fail(code: str, message: str) -> None:
     raise RelationContractError(code, message)
+
+
+def reference_scalar_type(value: str) -> str:
+    return value[9:-1] if value.startswith("optional<") and value.endswith(">") else value
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
@@ -180,6 +191,7 @@ def canonical_relation_projection(relation: dict[str, Any]) -> dict[str, Any]:
             str(reference["strength"]),
             str(reference["target_relation"]),
             tuple(reference["target_columns"]),
+            bool(reference.get("container_elements", False)),
         )
     )
     canonical["merge"].setdefault("conflict_columns", []).sort()
@@ -688,6 +700,29 @@ def validate_registry(
                     "relation.reference-column-unknown",
                     f"{name} reference target column is unknown",
                 )
+            if reference.get("container_elements", False):
+                if len(reference["source_columns"]) != 1 or len(reference["target_columns"]) != 1:
+                    fail("relation.reference-container-shape", f"{name} container reference is not unary")
+                source = columns[reference["source_columns"][0]]
+                target = target_columns[reference["target_columns"][0]]
+                if (
+                    source["type"].startswith("optional<")
+                    or not source["type"].startswith("set<")
+                    or not source["type"].endswith(">")
+                ):
+                    fail("relation.reference-container-source", f"{name} container source is not a set")
+                parameter = source["type"][4:-1]
+                if target["type"].startswith("optional<") or target["type"] not in (
+                    parameter,
+                    f"typed_id<{parameter}>",
+                ):
+                    fail("relation.reference-container-target", f"{name} container target type differs")
+            elif any(
+                reference_scalar_type(columns[source_id]["type"])
+                != reference_scalar_type(target_columns[target_id]["type"])
+                for source_id, target_id in zip(reference["source_columns"], reference["target_columns"])
+            ):
+                fail("relation.reference-type-mismatch", f"{name} reference types differ")
             if reference["strength"] == "hard":
                 if reference["on_missing"] != "reject_batch":
                     fail("relation.hard-reference-policy", f"{name} hard reference is not rejecting")
@@ -775,7 +810,12 @@ def resolve_reference(
     if len(matches) != 1:
         fail("relation.vector-invalid", "reference vector does not select exactly one reference")
     reference = matches[0]
-    if input_value["source_value"] in input_value["available_target_values"]:
+    source_values = (
+        input_value.get("source_values", [])
+        if reference.get("container_elements", False)
+        else [input_value["source_value"]]
+    )
+    if all(value in input_value["available_target_values"] for value in source_values):
         return "accepted", "relation.reference-resolved"
     if reference["strength"] == "hard":
         return "rejected", "relation.hard-reference-missing"
@@ -812,6 +852,10 @@ def validate_scalar(input_value: dict[str, Any]) -> tuple[str, str]:
     if scalar_type == "digest":
         valid = re.fullmatch(
             r"(?:sha256|semantic-v2:sha256):[0-9a-f]{64}", value
+        ) is not None
+    elif scalar_type == "content_digest":
+        valid = re.fullmatch(
+            r"(?:sha256|[a-z][a-z0-9_.-]*:sha256):[0-9a-f]{64}", value
         ) is not None
     elif scalar_type == "semantic_version":
         match = re.fullmatch(
@@ -862,6 +906,13 @@ def validate_scalar(input_value: dict[str, Any]) -> tuple[str, str]:
             ):
                 valid = False
                 break
+            inner = scalar_type[4:-1]
+            if inner == "content_digest":
+                valid = re.fullmatch(
+                    r"(?:sha256|[a-z][a-z0-9_.-]*:sha256):[0-9a-f]{64}", text
+                ) is not None
+            elif inner == "digest":
+                valid = re.fullmatch(r"(?:sha256|semantic-v2:sha256):[0-9a-f]{64}", text) is not None
             previous = element
     return (
         ("accepted", "relation.scalar-valid")

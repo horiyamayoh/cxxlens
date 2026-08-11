@@ -1730,7 +1730,7 @@ allocator:
   - fully_qualified_name: cxxlens::source::relations::span::span_column::ref
     callable_kind: static
     next_overload_slot: 1
-inventory_digest: sha256:b8a196db5aae727eb0a313a81271ad91a5b09b88a6aec89460819997a32a23c8
+inventory_digest: sha256:d853ddbb68981c93976816b812bde9be911a8519e7f5e6723b224bf144814794
 callables:
 - id: cpp.callable.00100ca7a0bda4b73503b24a4e6f6d33be47b954c7553cab8f70e85f9e77f492
   identity:
@@ -1769,7 +1769,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -1819,7 +1819,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -1920,7 +1920,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2033,7 +2033,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2136,7 +2136,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2237,7 +2237,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2546,7 +2546,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2595,7 +2595,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2651,7 +2651,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2659,10 +2659,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: validate_domain_identity'
     source_anchor:
       ast:
-        line: 284
+        line: 286
         column: 29
       doxygen:
-        line: 284
+        line: 286
         column: 9
 - id: cpp.callable.09d03261226f78231d7d0fdbbf535b5d41f49260b862b9d70dcabd23740c577a
   identity:
@@ -2701,7 +2701,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2751,7 +2751,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2801,7 +2801,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2850,7 +2850,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -2908,10 +2908,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_engine :: descriptors'
     source_anchor:
       ast:
-        line: 201
+        line: 203
         column: 50
       doxygen:
-        line: 201
+        line: 203
         column: 14
 - id: cpp.callable.0b4246f52bc963a5b2cf080c4e292e95f8dddb8cb513215f3f6cb828c2624cad
   identity:
@@ -2950,7 +2950,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -3048,7 +3048,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -3056,10 +3056,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: row_builder :: finish'
     source_anchor:
       ast:
-        line: 268
+        line: 270
         column: 38
       doxygen:
-        line: 268
+        line: 270
         column: 9
 - id: cpp.callable.0c2689c8579c7a9e1516af61c9ced11559feeabb9bad5555a3d037a1937c4173
   identity:
@@ -3098,7 +3098,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -3148,7 +3148,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -3197,7 +3197,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -3352,7 +3352,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -3402,7 +3402,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -3806,7 +3806,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -3856,7 +3856,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -3906,7 +3906,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -4009,7 +4009,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -4059,7 +4059,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -4161,7 +4161,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -4169,10 +4169,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_descriptor :: column'
     source_anchor:
       ast:
-        line: 150
+        line: 152
         column: 43
       doxygen:
-        line: 150
+        line: 152
         column: 9
 - id: cpp.callable.180a0b29a127cf70ded9bd79c61f85298eae55aa79b5c557bc4fb9dc76ef2017
   identity:
@@ -4210,7 +4210,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -4571,7 +4571,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -4782,7 +4782,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -4790,10 +4790,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: derive_domain_identity'
     source_anchor:
       ast:
-        line: 280
+        line: 282
         column: 36
       doxygen:
-        line: 280
+        line: 282
         column: 9
 - id: cpp.callable.1c911fd36a8578853b2314d42a400f5eff2c600644eaa3031471825fb33e54d0
   identity:
@@ -4845,7 +4845,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -5110,7 +5110,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -5209,7 +5209,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -5536,7 +5536,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -5804,7 +5804,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -5812,10 +5812,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: static_row_builder :: set'
     source_anchor:
       ast:
-        line: 299
+        line: 301
         column: 30
       doxygen:
-        line: 299
+        line: 301
         column: 9
 - id: cpp.callable.2251b3ac3fa390d2300214a5808277e3802364f48d7c53effcbba2e2e37f9779
   identity:
@@ -5865,10 +5865,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_registry :: build'
     source_anchor:
       ast:
-        line: 186
+        line: 188
         column: 47
       doxygen:
-        line: 186
+        line: 188
         column: 9
 - id: cpp.callable.23855302e87f04393953d0af2d4111cf42ecea1dd209c84259e5b89c0cc4e711
   identity:
@@ -5906,7 +5906,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -5956,7 +5956,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -6126,7 +6126,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -6334,7 +6334,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -6433,7 +6433,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -6490,10 +6490,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: catalog_compile_unit :: validate'
     source_anchor:
       ast:
-        line: 368
+        line: 370
         column: 30
       doxygen:
-        line: 368
+        line: 370
         column: 9
 - id: cpp.callable.27f20ab185f8f5c424eb3b33dbcb3ce54b21d335ca22923bd76372b8365b31b0
   identity:
@@ -6584,7 +6584,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -6641,10 +6641,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: project_catalog :: validate'
     source_anchor:
       ast:
-        line: 393
+        line: 395
         column: 30
       doxygen:
-        line: 393
+        line: 395
         column: 9
 - id: cpp.callable.2987de6aedb715b1012bf7ac6cd8d01c7791ec8ee292d33cc4d06227e977438d
   identity:
@@ -6685,7 +6685,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -6802,10 +6802,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_registry :: require'
     source_anchor:
       ast:
-        line: 183
+        line: 185
         column: 42
       doxygen:
-        line: 183
+        line: 185
         column: 9
 - id: cpp.callable.2a8181dbbfa3d983db23c96fdddb3bdaf2b90a9e216854a1672d9b3febcaa913
   identity:
@@ -6843,7 +6843,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -6851,10 +6851,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_descriptor :: validate'
     source_anchor:
       ast:
-        line: 149
+        line: 151
         column: 30
       doxygen:
-        line: 149
+        line: 151
         column: 9
 - id: cpp.callable.2aedc96ab1eff27d5b90483ba8e2869a3bb01b280adedf6bff98de7fbd9a4fb5
   identity:
@@ -6893,7 +6893,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -7263,7 +7263,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -7425,7 +7425,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -7674,7 +7674,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -7881,7 +7881,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -8038,7 +8038,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -8046,10 +8046,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: static_row_view :: get'
     source_anchor:
       ast:
-        line: 321
+        line: 323
         column: 39
       doxygen:
-        line: 321
+        line: 323
         column: 9
 - id: cpp.callable.38edcb06a757ed283bbc22663fa59d6ccbf9ca540232248ddb07a0afa73e0bd2
   identity:
@@ -8143,7 +8143,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -8193,7 +8193,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -8503,7 +8503,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -8602,7 +8602,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -8863,7 +8863,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -8871,10 +8871,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: bytes'
     source_anchor:
       ast:
-        line: 246
+        line: 248
         column: 38
       doxygen:
-        line: 246
+        line: 248
         column: 23
 - id: cpp.callable.3fb4ac7fca3f7060c7f01ba096a7fc8b3f3563feeb4b400df2f3d89cc0c1dec0
   identity:
@@ -9120,7 +9120,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -9526,7 +9526,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -9576,7 +9576,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -9675,7 +9675,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10037,7 +10037,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10045,10 +10045,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: column_ref :: operator =='
     source_anchor:
       ast:
-        line: 163
+        line: 165
         column: 22
       doxygen:
-        line: 163
+        line: 165
         column: 7
 - id: cpp.callable.483dcde464c00f56f48e795f1891d9c786410caa79f022ba4d23b856ca741643
   identity:
@@ -10098,10 +10098,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: catalog_compile_unit :: operator =='
     source_anchor:
       ast:
-        line: 369
+        line: 371
         column: 22
       doxygen:
-        line: 369
+        line: 371
         column: 7
 - id: cpp.callable.4842af008600f9f6c9af598e3131b57742e28bd7c7de0daf308f9c82087389e3
   identity:
@@ -10246,7 +10246,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10254,10 +10254,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: row_builder :: row_builder'
     source_anchor:
       ast:
-        line: 266
+        line: 268
         column: 12
       doxygen:
-        line: 266
+        line: 268
         column: 10
 - id: cpp.callable.48bb4762ec322ee6c6c5bd0cad2ab37de08a4c36b347387c35b6971e8d3adecc
   identity:
@@ -10298,7 +10298,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10306,10 +10306,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: utf8'
     source_anchor:
       ast:
-        line: 245
+        line: 247
         column: 38
       doxygen:
-        line: 245
+        line: 247
         column: 23
 - id: cpp.callable.48dac8650c56afd534d265f8c4b7fea0327ae5487bf1e8742a1f8a748ed7062f
   identity:
@@ -10396,7 +10396,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10446,7 +10446,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10496,7 +10496,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10755,7 +10755,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10804,7 +10804,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10854,7 +10854,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10903,7 +10903,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -10953,7 +10953,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -11002,7 +11002,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -11154,7 +11154,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -11204,7 +11204,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -11254,7 +11254,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -11355,7 +11355,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -11420,7 +11420,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -11476,7 +11476,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -11526,7 +11526,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -11683,7 +11683,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -11691,10 +11691,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: static_row_builder :: finish'
     source_anchor:
       ast:
-        line: 303
+        line: 305
         column: 38
       doxygen:
-        line: 303
+        line: 305
         column: 9
 - id: cpp.callable.53cc0179026c11e6681d826c6162d5d5f43e9260013fe2beb1a2b2f89c9a09aa
   identity:
@@ -12155,7 +12155,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -12205,7 +12205,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -12303,7 +12303,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -12452,7 +12452,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -12460,10 +12460,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: static_row_builder :: static_row_builder'
     source_anchor:
       ast:
-        line: 292
+        line: 294
         column: 3
       doxygen:
-        line: 292
+        line: 294
         column: 1
 - id: cpp.callable.5c8811ebfb1efc9c710d662e36975417042488f136d176754fd39e0571441ffc
   identity:
@@ -12613,7 +12613,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -12621,10 +12621,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: static_row_builder :: set'
     source_anchor:
       ast:
-        line: 294
+        line: 296
         column: 30
       doxygen:
-        line: 294
+        line: 296
         column: 9
 - id: cpp.callable.5dc293fbd39ef4cf4e759a1631a6415dd0241e13beb594950bd27244de53aba0
   identity:
@@ -12663,7 +12663,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -12823,7 +12823,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -13087,7 +13087,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -13136,7 +13136,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -13241,7 +13241,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -13290,7 +13290,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -13340,7 +13340,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -13401,10 +13401,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_registry :: add'
     source_anchor:
       ast:
-        line: 182
+        line: 184
         column: 30
       doxygen:
-        line: 182
+        line: 184
         column: 9
 - id: cpp.callable.6469d2b059fc7c129ae4376fb1b9ad60e2bc380c7a549a1de723fc423b83c82a
   identity:
@@ -13550,7 +13550,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -13558,10 +13558,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: absent'
     source_anchor:
       ast:
-        line: 248
+        line: 250
         column: 38
       doxygen:
-        line: 248
+        line: 250
         column: 23
 - id: cpp.callable.65287d77aebb39ba88603c71c064bbdf0b9bc0acf653d44389356698ecc7b334
   identity:
@@ -13804,7 +13804,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -14316,7 +14316,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -14465,7 +14465,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -14616,7 +14616,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -14672,7 +14672,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -14680,10 +14680,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: typed'
     source_anchor:
       ast:
-        line: 247
+        line: 249
         column: 38
       doxygen:
-        line: 247
+        line: 249
         column: 23
 - id: cpp.callable.6da28ffaee26928db3e92a934baf84c0b83e60fffe3375b056d8fb4ed7df0802
   identity:
@@ -14833,7 +14833,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -14883,7 +14883,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -14933,7 +14933,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -15032,7 +15032,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -15093,10 +15093,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: dynamic_relation :: dynamic_relation'
     source_anchor:
       ast:
-        line: 170
+        line: 172
         column: 12
       doxygen:
-        line: 170
+        line: 172
         column: 10
 - id: cpp.callable.70674ca5321e371395f01bc51046ad58e6b3054fd8a849209ec51a116a817c0d
   identity:
@@ -15240,7 +15240,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -15396,7 +15396,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -15457,10 +15457,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_engine :: require_id'
     source_anchor:
       ast:
-        line: 200
+        line: 202
         column: 42
       doxygen:
-        line: 200
+        line: 202
         column: 9
 - id: cpp.callable.71f8cf389db99980c03e979d5906fea0a5762b96733a163094b30a1b599bdf46
   identity:
@@ -15617,7 +15617,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -16133,7 +16133,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -16182,7 +16182,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -16190,10 +16190,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: canonical_form'
     source_anchor:
       ast:
-        line: 251
+        line: 253
         column: 29
       doxygen:
-        line: 251
+        line: 253
         column: 14
 - id: cpp.callable.750109c46fe230e05dcc16e879463a63f3aff2115fc37e91292660e279474fa8
   identity:
@@ -16232,7 +16232,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -16281,7 +16281,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -16331,7 +16331,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -16695,7 +16695,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -16745,7 +16745,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -17048,7 +17048,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -17150,7 +17150,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -17422,7 +17422,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -17471,7 +17471,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -17636,7 +17636,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -17689,7 +17689,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -17697,10 +17697,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_reference_descriptor :: operator =='
     source_anchor:
       ast:
-        line: 117
+        line: 119
         column: 22
       doxygen:
-        line: 117
+        line: 119
         column: 7
 - id: cpp.callable.7dada7683788a5357b2c691b226d3ac6b528aba66ab425e5e542591681e7ba49
   identity:
@@ -17890,7 +17890,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -17996,7 +17996,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -18152,10 +18152,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_registry :: frozen'
     source_anchor:
       ast:
-        line: 187
+        line: 189
         column: 22
       doxygen:
-        line: 187
+        line: 189
         column: 7
 - id: cpp.callable.7fb84b0a29a01446ea53066d2f8fe35f5ae323a4a81c18fe1eb33d114e5f9aca
   identity:
@@ -18196,7 +18196,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -18246,7 +18246,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -18300,7 +18300,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -18308,10 +18308,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: static_row_view :: static_row_view'
     source_anchor:
       ast:
-        line: 318
+        line: 320
         column: 12
       doxygen:
-        line: 318
+        line: 320
         column: 10
 - id: cpp.callable.808c0d60e17a18fcf86fba1e7d7ae4e3c5d21da54cf0b3ce6638a18dfc96f2c4
   identity:
@@ -18398,7 +18398,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -18447,7 +18447,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -18497,7 +18497,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -18605,7 +18605,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -18655,7 +18655,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -18708,7 +18708,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -18716,10 +18716,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_descriptor :: operator =='
     source_anchor:
       ast:
-        line: 152
+        line: 154
         column: 22
       doxygen:
-        line: 152
+        line: 154
         column: 7
 - id: cpp.callable.84279cfb8b9cdc36bda458fc01a0e4551d7b35ca426551d39cebacbd9e251853
   identity:
@@ -18814,7 +18814,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -19026,7 +19026,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -19076,7 +19076,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -19284,7 +19284,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -19334,7 +19334,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -19690,7 +19690,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -19898,7 +19898,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20057,7 +20057,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20107,7 +20107,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20358,7 +20358,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20566,7 +20566,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20668,7 +20668,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20717,7 +20717,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20770,7 +20770,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20778,10 +20778,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: unsigned_integer'
     source_anchor:
       ast:
-        line: 244
+        line: 246
         column: 38
       doxygen:
-        line: 244
+        line: 246
         column: 23
 - id: cpp.callable.96459d3df1cf77b79668d3449079af5318225c386e9737eb4439a471ee3d55be
   identity:
@@ -20820,7 +20820,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20869,7 +20869,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20918,7 +20918,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -20968,7 +20968,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -21017,7 +21017,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -21025,10 +21025,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: validate'
     source_anchor:
       ast:
-        line: 250
+        line: 252
         column: 30
       doxygen:
-        line: 250
+        line: 252
         column: 9
 - id: cpp.callable.9819220de226d503afa154b0e19dd426ab042bb3e13ad9184fd17df2a273c8c2
   identity:
@@ -21172,7 +21172,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -21377,7 +21377,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -21430,7 +21430,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -21479,7 +21479,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -21685,10 +21685,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_registry :: descriptors'
     source_anchor:
       ast:
-        line: 185
+        line: 187
         column: 50
       doxygen:
-        line: 185
+        line: 187
         column: 14
 - id: cpp.callable.9b679bbcd7ecdcd846504e883dc045591252c9d19bc2eb6ca750ccf5e36acf2e
   identity:
@@ -21726,7 +21726,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -21878,7 +21878,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -21979,7 +21979,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -22142,10 +22142,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: dynamic_relation :: column'
     source_anchor:
       ast:
-        line: 172
+        line: 174
         column: 36
       doxygen:
-        line: 172
+        line: 174
         column: 9
 - id: cpp.callable.a0466b480b18e187565faeb802c54fca2530c032f2fb076afac9f38bfb1814f6
   identity:
@@ -22183,7 +22183,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -22289,7 +22289,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -22297,10 +22297,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: signed_integer'
     source_anchor:
       ast:
-        line: 243
+        line: 245
         column: 38
       doxygen:
-        line: 243
+        line: 245
         column: 23
 - id: cpp.callable.a116f79001ca3d39012e53dd45161050c478bce8fa992f75862110ceacfe875e
   identity:
@@ -22339,7 +22339,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -22489,7 +22489,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -22544,7 +22544,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -22695,7 +22695,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -22844,7 +22844,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -22893,7 +22893,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -22943,7 +22943,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -22993,7 +22993,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -23243,7 +23243,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -23292,7 +23292,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -23341,7 +23341,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -23391,7 +23391,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -23490,7 +23490,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -23697,7 +23697,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -23916,10 +23916,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_engine :: generation'
     source_anchor:
       ast:
-        line: 203
+        line: 205
         column: 34
       doxygen:
-        line: 203
+        line: 205
         column: 19
 - id: cpp.callable.b281267813e20dbb222f4317a70b2004e443eea340d1df040666fdffb3051283
   identity:
@@ -24008,7 +24008,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -24365,7 +24365,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -24477,7 +24477,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -24485,10 +24485,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: boolean'
     source_anchor:
       ast:
-        line: 242
+        line: 244
         column: 38
       doxygen:
-        line: 242
+        line: 244
         column: 23
 - id: cpp.callable.b9a5010244d0cf35ebf7b47daaacf818334e120671c3e540b0c5d020eb2603b4
   identity:
@@ -24533,7 +24533,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -24541,10 +24541,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: validate_row'
     source_anchor:
       ast:
-        line: 276
+        line: 278
         column: 29
       doxygen:
-        line: 276
+        line: 278
         column: 9
 - id: cpp.callable.ba41b63f042bac564b505a36a29c389cdd257ee950e9dd0f9000f579e817429d
   identity:
@@ -24638,7 +24638,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -24687,7 +24687,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -24884,7 +24884,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -24933,7 +24933,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -25085,7 +25085,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -25353,7 +25353,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -25756,7 +25756,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -25964,7 +25964,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -26225,7 +26225,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -26584,7 +26584,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -26634,7 +26634,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -26684,7 +26684,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -26910,10 +26910,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: project_catalog :: make'
     source_anchor:
       ast:
-        line: 387
+        line: 389
         column: 3
       doxygen:
-        line: 387
+        line: 389
         column: 1
 - id: cpp.callable.cddfb68e3171e159b660ef322e3a01f08af17a3a8db4249d814396a5d14da6cf
   identity:
@@ -26966,10 +26966,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_engine :: require'
     source_anchor:
       ast:
-        line: 198
+        line: 200
         column: 42
       doxygen:
-        line: 198
+        line: 200
         column: 9
 - id: cpp.callable.ce1e21fb6af9556a6a6c08a78735ae2df176b866e75ebc94fd9fb0c8d5f6c657
   identity:
@@ -27113,7 +27113,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -27276,10 +27276,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: project_catalog :: canonical_projection'
     source_anchor:
       ast:
-        line: 391
+        line: 393
         column: 48
       doxygen:
-        line: 391
+        line: 393
         column: 9
 - id: cpp.callable.d1627958deca767d6fc3221b39cb4f8e2499c855231de55886a544ff19c8776e
   identity:
@@ -27728,7 +27728,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -27778,7 +27778,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -27827,7 +27827,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -27879,7 +27879,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -27928,7 +27928,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -27936,10 +27936,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_descriptor :: canonical_form'
     source_anchor:
       ast:
-        line: 151
+        line: 153
         column: 29
       doxygen:
-        line: 151
+        line: 153
         column: 14
 - id: cpp.callable.d6cd341fb9cd41f019c500df1b2721d1ae17401664caf609e6f0cf942b70620f
   identity:
@@ -28135,7 +28135,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -28612,7 +28612,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -28675,7 +28675,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -28783,7 +28783,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -29047,7 +29047,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -29202,7 +29202,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -29210,10 +29210,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_cell :: unknown'
     source_anchor:
       ast:
-        line: 249
+        line: 251
         column: 38
       doxygen:
-        line: 249
+        line: 251
         column: 23
 - id: cpp.callable.e3df72c5e144e3e85eb982d028607834ee36f82c011d1aac578fc5bb72391e67
   identity:
@@ -29405,7 +29405,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -29561,7 +29561,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -29762,7 +29762,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -29862,7 +29862,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -30112,7 +30112,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -30271,7 +30271,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -30373,7 +30373,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -30381,10 +30381,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: domain_identity_descriptor :: operator =='
     source_anchor:
       ast:
-        line: 126
+        line: 128
         column: 22
       doxygen:
-        line: 126
+        line: 128
         column: 7
 - id: cpp.callable.ee72ab86f294d00fe98f9584e7999711f665017a4da5b0b20d2a6b5a23b29458
   identity:
@@ -30480,10 +30480,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: dynamic_relation :: descriptor'
     source_anchor:
       ast:
-        line: 171
+        line: 173
         column: 44
       doxygen:
-        line: 171
+        line: 173
         column: 28
 - id: cpp.callable.efb5be3ce63557e76fc315b3c35da496e023cfe78b854e596e4bfee5849ba742
   identity:
@@ -30675,7 +30675,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -30780,7 +30780,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -30830,7 +30830,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -30997,7 +30997,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -31005,10 +31005,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: row_builder :: set'
     source_anchor:
       ast:
-        line: 267
+        line: 269
         column: 30
       doxygen:
-        line: 267
+        line: 269
         column: 9
 - id: cpp.callable.f34f303ba828ec2cf4ebcd83a6461338b5299322b719485c5fe2a1ba7a6ba7d4
   identity:
@@ -31046,7 +31046,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -31054,10 +31054,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: detached_row :: canonical_form'
     source_anchor:
       ast:
-        line: 259
+        line: 261
         column: 29
       doxygen:
-        line: 259
+        line: 261
         column: 14
 - id: cpp.callable.f373ec460d47d2fa15f207c35c06d51041347e8ce4734c98875d7f36b517a344
   identity:
@@ -31254,7 +31254,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -31417,10 +31417,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: relation_engine :: registry_digest'
     source_anchor:
       ast:
-        line: 202
+        line: 204
         column: 34
       doxygen:
-        line: 202
+        line: 204
         column: 19
 - id: cpp.callable.f6022c665d400ba54412b31fabac0f07022af25787b54aeddb6db509eb71b942
   identity:
@@ -31624,7 +31624,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -31776,7 +31776,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -31989,7 +31989,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -32110,7 +32110,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -32212,7 +32212,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -32220,10 +32220,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: is_valid'
     source_anchor:
       ast:
-        line: 225
+        line: 227
         column: 31
       doxygen:
-        line: 225
+        line: 227
         column: 17
 - id: cpp.callable.fb50604c518425d04bd19e76c52c46136a22f67f5e163acd4520ca97524cd15f
   identity:
@@ -32411,7 +32411,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -32460,7 +32460,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp
@@ -32509,7 +32509,7 @@ callables:
   qualification: NG0
   owner: '#94'
   evidence:
-    catalog_digest: sha256:2a45fcbbb6bd033da1f66d67ccb8357d6e9d2408bad631681a302d841f7bce37
+    catalog_digest: sha256:51a650f09f13a9bc563cecc53f11c6d20cc237b54e3c8c10eab5f857945b8365
     implementation: src/sdk/claim.cpp
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/relation_claim_batch.cpp
@@ -32816,7 +32816,7 @@ callables:
   qualification: NG0
   owner: '#154'
   evidence:
-    catalog_digest: sha256:2935257f1917074a819e5f363656fe898be4510800ede9788f89f7d0ca965591
+    catalog_digest: sha256:f534024a9c7dbc080908b3fb4ded88be96370fcf22c7dc8b63ded3a5ba0765dd
     implementation: tools/sdk/relation_idl_compiler.py
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/typed_query.cpp

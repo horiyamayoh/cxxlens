@@ -20,6 +20,7 @@ set(cxxlens_sdk_cases
     static-row-view-validation
     static-dynamic-query
     admitted-static-relation-apis
+    container-reference-adoption
     snapshot-lifetime
     frame-native-escape
     columnar-wire-codec

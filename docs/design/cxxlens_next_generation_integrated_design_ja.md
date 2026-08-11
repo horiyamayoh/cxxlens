@@ -1087,6 +1087,12 @@ descriptor collection のうち `columns`、`references`、`conflict_columns` �
 各 reference 内の source/target column list は位置対応を持つ sequence なので順序を保持する。reference の比較が equivalent
 となるのは serialized reference が同一の場合だけでなければならない。
 
+reference は通常 source/target の exact `value_type` を位置ごとに対応させる。`container_elements: true` は
+一つの `set<T>` source と一つの scalar canonical name `T` target だけに許可され、canonical length-prefixed
+set の各 element が、同じ interpretation/presence 条件を満たす target scalar value にそれぞれ解決するときだけ
+reference は解決する。empty set は vacuously resolved とし、hard reference の一つでも欠けた element は batch 全体を
+atomic に reject する。
+
 ### 9.4 Column types
 
 NG0 scalar:
@@ -1121,8 +1127,9 @@ set は canonical sorted unique。`detached_cell` の byte-backed `set<T>` は e
 各 element は nested `T` の scalar contract で再検証し、truncated length、empty element、重複、逆順、invalid UTF-8、invalid
 digest/ID/symbol を拒否する。list は order が semantics の一部である場合だけ使う。
 
-present scalar は `detached-cell-value-v2` を共通 authority とする。digest は `sha256:` または
-`semantic-v2:sha256:` と lowercase 64 hex、semantic version は leading zero のない u32 `major.minor.patch`、typed ID は canonical
+present scalar は `detached-cell-value-v2` を共通 authority とする。`digest` は `sha256:` または
+`semantic-v2:sha256:` と lowercase 64 hex、`content_digest` はそれらに加えて
+`[a-z][a-z0-9_.-]*:sha256:` と lowercase 64 hex の typed domain spelling を受理する。semantic version は leading zero のない u32 `major.minor.patch`、typed ID は canonical
 `*_id` parameter と nonempty/control-free UTF-8 value、unknown reason も nonempty/control-free UTF-8 を要求する。general
 `utf8_string` は strict Unicode scalar sequence を要求するが、JSON codec が表現できる control code 自体の意味制約は column
 schema が所有する。この検査は row builder、dynamic row、Logical Query literal、provider decode、store reopen で同一である。

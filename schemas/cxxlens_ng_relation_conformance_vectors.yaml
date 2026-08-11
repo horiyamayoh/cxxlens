@@ -122,6 +122,36 @@ vectors:
     source_value: source-snapshot-missing
     available_target_values: []
     unresolved_accounted: true
+- id: container-hard-reference-elements-resolved
+  class: positive
+  operation: resolve_reference
+  expected: {decision: accepted, reason_code: relation.reference-resolved}
+  input:
+    relation: source.origin
+    source_column: source.origin.v1.sources
+    source_values: [source-span-a, source-span-b]
+    available_target_values: [source-span-a, source-span-b]
+    unresolved_accounted: false
+- id: container-hard-reference-empty-vacuous
+  class: positive
+  operation: resolve_reference
+  expected: {decision: accepted, reason_code: relation.reference-resolved}
+  input:
+    relation: source.origin
+    source_column: source.origin.v1.sources
+    source_values: []
+    available_target_values: []
+    unresolved_accounted: false
+- id: container-hard-reference-element-missing
+  class: negative
+  operation: resolve_reference
+  expected: {decision: rejected, reason_code: relation.hard-reference-missing}
+  input:
+    relation: source.origin
+    source_column: source.origin.v1.sources
+    source_values: [source-span-a, source-span-missing]
+    available_target_values: [source-span-a]
+    unresolved_accounted: false
 - id: soft-reference-missing-accounted
   class: positive
   operation: resolve_reference
@@ -171,6 +201,34 @@ vectors:
   input:
     type: digest
     value: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: canonical-content-digest-scalar
+  class: positive
+  operation: validate_scalar
+  expected: {decision: accepted, reason_code: relation.scalar-valid}
+  input:
+    type: content_digest
+    value: claim-content:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: canonical-content-digest-semantic-scalar
+  class: positive
+  operation: validate_scalar
+  expected: {decision: accepted, reason_code: relation.scalar-valid}
+  input:
+    type: content_digest
+    value: semantic-v2:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: malformed-content-digest-domain
+  class: negative
+  operation: validate_scalar
+  expected: {decision: rejected, reason_code: relation.scalar-invalid}
+  input:
+    type: content_digest
+    value: Claim-content:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: malformed-content-digest-hex
+  class: negative
+  operation: validate_scalar
+  expected: {decision: rejected, reason_code: relation.scalar-invalid}
+  input:
+    type: content_digest
+    value: claim-content:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeF
 - id: canonical-stable-unit-key-scalar
   class: positive
   operation: validate_scalar

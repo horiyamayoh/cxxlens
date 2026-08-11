@@ -1,16 +1,14 @@
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 find_program(CXXLENS_PUBLIC_CALLABLE_CLANG NAMES clang++-22 REQUIRED)
 
-find_program(CXXLENS_CLANG_FORMAT NAMES clang-format-22 clang-format)
-if(CXXLENS_CLANG_FORMAT)
-  add_custom_target(
-    cxxlens-format-check
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_format.py" --clang-format
-      "${CXXLENS_CLANG_FORMAT}" --root "${CMAKE_CURRENT_SOURCE_DIR}"
-    VERBATIM)
-endif()
+find_program(CXXLENS_CLANG_FORMAT NAMES clang-format-22 REQUIRED)
+add_custom_target(
+  cxxlens-format-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_format.py" --clang-format
+    "${CXXLENS_CLANG_FORMAT}" --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
 
 add_custom_target(
   cxxlens-text-lint
