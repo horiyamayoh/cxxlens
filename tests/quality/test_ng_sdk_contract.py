@@ -79,7 +79,7 @@ class NgSdkContractTest(unittest.TestCase):
         self.assertEqual(
             {relative.as_posix() for _, relative in generated}, admitted
         )
-        self.assertEqual(len(generated), 11)
+        self.assertEqual(len(generated), 18)
         for relation, relative in generated:
             self.assertEqual(relation.get("cpp_projection"), "installed-static")
             validate_generated_relation_header(
@@ -164,6 +164,18 @@ class NgSdkContractTest(unittest.TestCase):
             SdkContractError, "tag/projection classification differs"
         ):
             admitted_generated_relations(self.catalog, registry)
+
+    def test_sdk_binding_rejects_unadmitted_installed_static_relation(self) -> None:
+        catalog = copy.deepcopy(self.catalog)
+        header = "include/cxxlens/relations/source_origin.hpp"
+        entry = next(
+            row for row in catalog["entries"] if row["id"] == "public.relation-static"
+        )
+        entry["headers"].remove(header)
+        with self.assertRaisesRegex(
+            SdkContractError, "installed-static registry headers lack catalog admission"
+        ):
+            admitted_generated_relations(catalog, self.registry)
 
     def test_manual_edit_of_generated_header_is_rejected(self) -> None:
         relation, relative = next(

@@ -48,7 +48,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
         }
         for relative in sorted(schema_files):
             shutil.copy2(ROOT / relative, root / relative)
-        os.symlink(ROOT / "docs", root / "docs", target_is_directory=True)
+        shutil.copytree(ROOT / "docs", root / "docs")
         os.symlink(ROOT / "tests", root / "tests", target_is_directory=True)
         return temporary, root
 
@@ -189,14 +189,14 @@ class ProductionScopeClosureTest(unittest.TestCase):
     def test_repository_check_closes_exact_30_domains(self) -> None:
         self.assertEqual(tuple(sorted({key.domain for key in self.model.nodes})), tuple(sorted(closure.DOMAINS)))
         self.assertEqual(self.model.summary["domain_count"], 30)
-        self.assertEqual(self.model.summary["assignable_count"], 231)
-        self.assertEqual(self.model.summary["expanded_count"], 781)
+        self.assertEqual(self.model.summary["assignable_count"], 238)
+        self.assertEqual(self.model.summary["expanded_count"], 856)
         self.assertEqual(self.model.summary["aggregate_count"], 14)
         self.assertEqual(self.model.closure_status, "classified-with-gaps")
 
     def test_callable_rows_inherit_exact_catalog_assignment(self) -> None:
         callable_rows = [row for row in self.model.expanded if row["domain"] == "public.callable"]
-        self.assertEqual(len(callable_rows), 536)
+        self.assertEqual(len(callable_rows), 604)
         self.assertTrue(all(row["inherited_from"]["domain"] == "public.catalog-entry" for row in callable_rows))
         incremental = [row for row in callable_rows if row["inherited_from"]["id"] == "public.incremental"]
         self.assertTrue(incremental)
@@ -237,10 +237,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "sanitizer.tsan",
             },
         )
-        self.assertEqual(
-            self.model.blocking_feedback,
-            ("DF-0174",),
-        )
+        self.assertEqual(self.model.blocking_feedback, ())
 
     def test_materialization_authority_is_bound_to_the_typed_census(self) -> None:
         temporary, root = self.clone_contract_root()
@@ -629,14 +626,13 @@ class ProductionScopeClosureTest(unittest.TestCase):
     def test_unmapped_active_blocking_feedback_fails_closed(self) -> None:
         temporary, root = self.clone_contract_root()
         self.addCleanup(temporary.cleanup)
-        manifest = self.read_manifest(root)
-        static_blocker = next(
-            row
-            for row in manifest["assignments"]
-            if row["id"] == "scope.static-admission-authority-blocker"
+        record = root / "docs/development/implementation-learning/records/df-0174-generated-relation-static-admission.md"
+        text = record.read_text(encoding="utf-8")
+        record.write_text(
+            text.replace("status: accepted", "status: proposed", 1)
+            .replace("implementation_disposition: may-proceed", "implementation_disposition: blocked", 1),
+            encoding="utf-8",
         )
-        static_blocker["feedback"] = ["DF-0182"]
-        self.write_manifest(root, manifest)
         with self.assertRaisesRegex(closure.ContractError, r"not mapped: \['DF-0174'\]"):
             closure.validate_repository(root)
 

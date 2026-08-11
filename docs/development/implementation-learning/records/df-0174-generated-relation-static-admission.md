@@ -119,3 +119,34 @@ inventory, examples, or installed qualification are activated.
 `332fdca68df26ef316a9f675ce6ae84f7e468710` with no P0/P1. ADR 0098 is accepted and this record
 is `may-proceed`; installed-package qualification remains blocked until the seven public artifact
 families and their exact catalog/inventory/tests are implemented and reviewed.
+
+2026-08-12: Issue #174 implementation admitted and generated all seven accepted
+`installed-static` relation headers, while the three frontend observation relations remain
+`dynamic-only`. The Public API Catalog and registry now bind exactly eighteen static relation
+headers; the Clang 22 and Doxygen-derived callable inventory contains 604 rows. Learning
+checkpoint: DF-0174 remains the governing resolved feedback record; independent implementation
+review and installed-package qualification evidence remain required before terminal release
+qualification.
+
+2026-08-12: Static activation exposed a runtime/IDL parity gap: the accepted
+`cc.type_component` canonical claim key includes optional projection members, whose absence is
+represented as canonical null. Accepted ADR 0018 requires `key_columns` to equal the complete
+claim-key role set; it does not require every key member to be non-optional. The runtime validator
+now enforces that accepted rule, preserving the registry descriptor and digest. Regression evidence
+is `relation-schema-parity` in `tests/unit/sdk/sdk_test.cpp`.
+
+2026-08-12: Static activation also exposed an accepted scalar spelling outside the runtime's
+generic `_id` suffix rule: `core.unresolved.scope` is `typed_id<stable_unit_key>`. The runtime
+validator now recognizes that exact accepted identity spelling without admitting arbitrary
+`typed_id` parameters; the registry descriptor and digest remain unchanged. Positive
+`canonical-stable-unit-key-scalar` and negative non-identity conformance vectors preserve the
+boundary.
+
+2026-08-12: Independent implementation review found two further activation-only parity gaps. The
+Store wire decoder still bounded `scalar_kind` at the former `set` ordinal, and the query validator
+and reference executor omitted the five newly admitted scalar spellings. The decoder now accepts
+through the appended `interpretation_domain_id` ordinal while preserving every legacy ordinal; the
+query paths map all five exact canonical names. Store reopen and typed/dynamic query execution tests
+exercise the last ordinal and every new spelling. The same review cycle exposed a quality-fixture
+isolation defect: a negative scope test wrote through a symlink into the repository's DF record.
+Its temporary root now owns a real docs copy, so fail-closed mutation cannot alter source evidence.

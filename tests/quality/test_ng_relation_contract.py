@@ -55,7 +55,7 @@ class NgRelationContractTest(unittest.TestCase):
         self.assertEqual(registry["document_version"], "1.5.0")
         self.assertEqual(registry["compatibility"]["current"], "1.5.0")
         self.assertEqual(len(registry["relations"]), 21)
-        self.assertEqual(len(results), 39)
+        self.assertEqual(len(results), 40)
         self.assertEqual({row["decision"] for row in results}, {"accepted", "rejected"})
 
     def test_static_projection_excludes_dynamic_only_relations(self) -> None:

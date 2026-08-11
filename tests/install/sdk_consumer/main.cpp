@@ -2,6 +2,13 @@
 #include <utility>
 
 #include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_declaration.hpp>
+#include <cxxlens/relations/cc_type_component.hpp>
+#include <cxxlens/relations/core_claim_conflict.hpp>
+#include <cxxlens/relations/core_differential_disagreement.hpp>
+#include <cxxlens/relations/core_provider_execution.hpp>
+#include <cxxlens/relations/core_unresolved.hpp>
+#include <cxxlens/relations/source_origin.hpp>
 #include <cxxlens/sdk.hpp>
 
 namespace
@@ -106,6 +113,14 @@ namespace
 int main()
 {
 	auto query = cxxlens::sdk::query::from<cxxlens::cc::relations::call_site>();
+	auto declaration = cxxlens::sdk::query::from<cxxlens::cc::relations::declaration>();
+	auto component = cxxlens::sdk::query::from<cxxlens::cc::relations::type_component>();
+	auto execution = cxxlens::sdk::query::from<cxxlens::core::relations::provider_execution>();
+	auto unresolved = cxxlens::sdk::query::from<cxxlens::core::relations::unresolved>();
+	auto conflict = cxxlens::sdk::query::from<cxxlens::core::relations::claim_conflict>();
+	auto disagreement =
+		cxxlens::sdk::query::from<cxxlens::core::relations::differential_disagreement>();
+	auto origin = cxxlens::sdk::query::from<cxxlens::source::relations::origin>();
 	cxxlens::sdk::relation_registry registry;
 	if (!registry.add(store_descriptor()))
 		return 2;
@@ -114,7 +129,8 @@ int main()
 		return 3;
 	auto memory = cxxlens::sdk::make_in_memory_snapshot_store(*engine);
 	auto sqlite = cxxlens::sdk::open_sqlite_snapshot_store(":memory:", *engine);
-	if (!query || !query->ir().validate())
+	if (!query || !declaration || !component || !execution || !unresolved || !conflict ||
+		!disagreement || !origin || !query->ir().validate())
 		return 4;
 	if (!memory || memory->compatibility().backend != "memory")
 		return 5;

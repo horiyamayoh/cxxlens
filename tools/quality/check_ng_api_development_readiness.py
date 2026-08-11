@@ -168,6 +168,9 @@ def public_header_inventory(root: pathlib.Path) -> tuple[list[str], list[str]]:
     unbound = sorted(admitted_relation_headers - registry_relation_headers)
     if unbound:
         fail(f"catalog relation headers lack registry binding: {unbound}")
+    unadmitted = sorted(registry_relation_headers - admitted_relation_headers)
+    if unadmitted:
+        fail(f"installed-static registry headers lack catalog admission: {unadmitted}")
     return sorted(actual), sorted(admitted_relation_headers)
 
 

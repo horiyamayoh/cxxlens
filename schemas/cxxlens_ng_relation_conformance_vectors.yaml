@@ -171,6 +171,15 @@ vectors:
   input:
     type: digest
     value: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: canonical-stable-unit-key-scalar
+  class: positive
+  operation: validate_scalar
+  expected:
+    decision: accepted
+    reason_code: relation.scalar-valid
+  input:
+    type: typed_id<stable_unit_key>
+    value: compile-unit:primary
 - id: malformed-digest-scalar
   class: negative
   operation: validate_scalar

@@ -81,6 +81,11 @@ def parse_type(value: str) -> tuple[str, str, bool]:
         "condition_ref": "condition_ref",
         "source_span_id": "source_span_id",
         "evidence_id": "evidence_id",
+        "relation_name": "relation_name",
+        "semantic_key_id": "semantic_key_id",
+        "assertion_id": "assertion_id",
+        "content_digest": "content_digest",
+        "interpretation_domain_id": "interpretation_domain_id",
         "closed_symbol": "closed_symbol",
         "set": "set",
     }

@@ -293,6 +293,90 @@ namespace
 		return value;
 	}
 
+	[[nodiscard]] relation_descriptor extended_text_scalar_relation()
+	{
+		relation_descriptor value;
+		value.id = "company.query.extended_scalar.v1";
+		value.name = "company.query.extended_scalar";
+		value.version = {1U, 0U, 0U};
+		value.semantic_major = 1U;
+		value.semantics = "company.query.extended-scalar/1";
+		value.owner_namespace = "company.query";
+		value.columns = {
+			{value.id + ".key",
+			 "key",
+			 {scalar_kind::typed_id, "query_key_id", false},
+			 true,
+			 column_role::claim_key},
+			{value.id + ".relation",
+			 "relation",
+			 {scalar_kind::relation_name, {}, false},
+			 true,
+			 column_role::authoritative_payload},
+			{value.id + ".semantic_key",
+			 "semantic_key",
+			 {scalar_kind::semantic_key_id, {}, false},
+			 true,
+			 column_role::authoritative_payload},
+			{value.id + ".assertion",
+			 "assertion",
+			 {scalar_kind::assertion_id, {}, false},
+			 true,
+			 column_role::authoritative_payload},
+			{value.id + ".content",
+			 "content",
+			 {scalar_kind::content_digest, {}, false},
+			 true,
+			 column_role::authoritative_payload},
+			{value.id + ".domain",
+			 "domain",
+			 {scalar_kind::interpretation_domain_id, {}, false},
+			 true,
+			 column_role::authoritative_payload},
+		};
+		value.key_columns = {value.columns.front().id};
+		value.merge = merge_mode::set;
+		value.descriptor_digest =
+			*semantic_digest("cxxlens.relation-descriptor-binding.v2",
+							 value.contract_digest + "\n" + value.canonical_form());
+		require(value.validate().has_value(), "extended scalar descriptor rejected");
+		return value;
+	}
+
+	[[nodiscard]] detached_row extended_text_scalar_row(const relation_descriptor& descriptor)
+	{
+		static const std::array<std::string, 5U> values{
+			"core.unresolved",
+			"semantic-key:1",
+			"assertion:1",
+			"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"company.query.domain",
+		};
+		row_builder builder{descriptor};
+		require(
+			builder
+				.set(
+					{descriptor.id, descriptor.columns.front().id, descriptor.columns.front().type},
+					detached_cell::typed("query_key_id", "key:extended"))
+				.has_value(),
+			"extended scalar key rejected");
+		for (std::size_t index = 0U; index < values.size(); ++index)
+		{
+			const auto& column = descriptor.columns[index + 1U];
+			require(builder
+						.set({descriptor.id, column.id, column.type},
+							 {column.type,
+							  cell_state::present,
+							  scalar_value{values[index]},
+							  std::nullopt})
+						.has_value(),
+					"extended scalar value rejected");
+		}
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "extended scalar row did not finish");
+		return std::move(*row);
+	}
+
 	[[nodiscard]] detached_row set_row(const relation_descriptor& descriptor,
 									   std::vector<std::byte> qualifiers)
 	{
@@ -1292,6 +1376,50 @@ namespace
 						  std::string_view{"open_symbol<cc.type-qualifier/1>"}.size(),
 						  "open_symbol<cc.attribute/1>");
 		require(!wrong_parameter.validate(), "mismatched set type parameter was accepted");
+	}
+
+	void check_extended_text_scalar_literal_round_trip()
+	{
+		static const std::array<std::string, 5U> values{
+			"core.unresolved",
+			"semantic-key:1",
+			"assertion:1",
+			"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"company.query.domain",
+		};
+		const auto descriptor = extended_text_scalar_relation();
+		relation_registry registry;
+		require(registry.add(descriptor).has_value(), "extended scalar relation rejected");
+		auto relation_engine = registry.build("query-extended-scalar-generation");
+		require(relation_engine.has_value(), "extended scalar engine failed");
+		auto store = make_in_memory_snapshot_store(*relation_engine);
+		require(store.has_value(), "extended scalar store failed");
+		auto writer = store->begin(draft(*relation_engine));
+		require(writer.has_value(), "extended scalar writer failed");
+		auto value = assertion(*relation_engine, extended_text_scalar_row(descriptor), {"release"});
+		require(writer->stage(partition(value, 0U)).has_value() && writer->validate().has_value(),
+				"extended scalar publication rejected");
+		auto snapshot = writer->publish();
+		require(snapshot.has_value(), "extended scalar publication failed");
+		auto reference = query::reference_engine::bind(*snapshot);
+		require(reference.has_value(), "extended scalar reference engine bind failed");
+
+		for (std::size_t index = 0U; index < values.size(); ++index)
+		{
+			const auto& column = descriptor.columns[index + 1U];
+			auto predicate = query::equals_present(
+				column_ref{descriptor.id, column.id, column.type},
+				query::literal::exact(column.type, scalar_value{values[index]}));
+			auto source = query::builder::from(descriptor);
+			require(predicate && source, "extended scalar typed query setup failed");
+			auto filtered = std::move(*source).where(*predicate);
+			require(filtered.has_value(), "extended scalar filter failed");
+			auto logical = std::move(*filtered).finish();
+			require(logical.validate().has_value(), "extended scalar dynamic IR rejected");
+			auto result = reference->execute(logical);
+			require(result.has_value() && rows(*result).size() == 1U,
+					"extended scalar literal did not round-trip through execution");
+		}
 	}
 
 	void check_runtime_matrix(const fixture& data,
@@ -2901,6 +3029,7 @@ int main()
 
 	check_ir_validation(data);
 	check_set_literal_round_trip();
+	check_extended_text_scalar_literal_round_trip();
 	check_canonical_json_encoding(data);
 	check_snapshot_schema_compatibility();
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);
