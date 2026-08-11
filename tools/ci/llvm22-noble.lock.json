@@ -10,7 +10,7 @@
     "issue": "#141",
     "owner": "steward.ci-supply-chain"
   },
-  "document_version": "1.2.0",
+  "document_version": "1.3.0",
   "documentation": {
     "architecture": "amd64",
     "expected_release": "1.9.8",
@@ -24,20 +24,20 @@
     "component": "main",
     "expected_release": "22.1.8",
     "package_sha256": {
-      "clang-22": "c35ae50ecf7704b3dd0278837c4c223e72318e15de6869e3c73b58fbc64b547d",
-      "clang-tidy-22": "1e5917c1cd027548aff5cd35ee4f781a867d5daf03d9eb92611fc838ae9fa3dc",
-      "libclang-22-dev": "f723058ab97299f8088cd2319a947570d76381ab9d428219950429a5c5bc5e9d",
-      "libclang-rt-22-dev": "ec0cb91cfef7d9d439c7123a880f4f4108d5bd3ff70e54193b19fba3630c1c1e",
-      "llvm-22": "fa5e184d012d2b17312ee4cd1d90e6adb8da3be78aa15cb0aa66438220effa10",
-      "llvm-22-dev": "e5fddde34244e489b351e40daedc952afdd7948fab85ba33290df458faa03490"
+      "clang-22": "e969e7f97a6e71326bae2cec6d76059cb9bf6562bfe89d03bcb65c3cee1aac05",
+      "clang-tidy-22": "cebba8e3d25f9dc23eb679ee53914802937910257fe54c072795f2ad4f6ecf38",
+      "libclang-22-dev": "b3b06e531261a8a994b155e4b19592225d1dd97ce860fef521280a233e49cb55",
+      "libclang-rt-22-dev": "5ec77bbfbdae76a6eda76ef9fff0cfd983d6b9c7ea72335a7fed9c99c423a7fb",
+      "llvm-22": "402a671415ac47810b4e581c06fa6e29110e51efae697647f7072e0528a1718e",
+      "llvm-22-dev": "08347ec1de9b2b9d9e5a0574afe4931841652b9ef39fa16c2cde85e15b5b2f0f"
     },
     "packages": {
-      "clang-22": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
-      "clang-tidy-22": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
-      "libclang-22-dev": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
-      "libclang-rt-22-dev": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
-      "llvm-22": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
-      "llvm-22-dev": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78"
+      "clang-22": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
+      "clang-tidy-22": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
+      "libclang-22-dev": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
+      "libclang-rt-22-dev": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
+      "llvm-22": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
+      "llvm-22-dev": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80"
     },
     "profiles": {
       "compiler": [
