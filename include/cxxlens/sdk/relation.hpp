@@ -114,6 +114,8 @@ namespace cxxlens::sdk
 		std::string target_relation;
 		std::vector<std::string> target_columns;
 		reference_strength strength{reference_strength::soft_semantic};
+		/** @brief Match each canonical set element against one target scalar value. */
+		bool container_elements{false};
 		[[nodiscard]] bool operator==(const relation_reference_descriptor&) const = default;
 	};
 

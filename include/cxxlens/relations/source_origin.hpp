@@ -43,8 +43,8 @@ namespace cxxlens::source::relations
 					"source.origin.v1.origin",
 				};
 				output.references = {
-					{{"source.origin.v1.sources"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
-					{{"source.origin.v1.targets"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
+					{{"source.origin.v1.sources"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard, true},
+					{{"source.origin.v1.targets"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard, true},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {

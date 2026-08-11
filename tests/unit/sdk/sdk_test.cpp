@@ -13,18 +13,24 @@
 #include <vector>
 
 #include <cxxlens/provider/clang22.hpp>
+#include <cxxlens/relations/build_compile_unit.hpp>
 #include <cxxlens/relations/build_project.hpp>
+#include <cxxlens/relations/build_toolchain_context.hpp>
+#include <cxxlens/relations/build_variant.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/cc_type.hpp>
 #include <cxxlens/relations/cc_type_component.hpp>
 #include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/relations/core_claim_conflict.hpp>
 #include <cxxlens/relations/core_differential_disagreement.hpp>
 #include <cxxlens/relations/core_provider_execution.hpp>
 #include <cxxlens/relations/core_unresolved.hpp>
+#include <cxxlens/relations/source_file.hpp>
 #include <cxxlens/relations/source_origin.hpp>
+#include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/sdk.hpp>
 
 namespace
@@ -559,6 +565,71 @@ namespace
 				{"exact", "project", "assumptions:none", {"schema_validated"}}};
 	}
 
+	[[nodiscard]] std::vector<std::byte>
+	canonical_set(std::initializer_list<std::string_view> values)
+	{
+		std::vector<std::byte> output;
+		for (const auto value : values)
+		{
+			const auto length = static_cast<std::uint32_t>(value.size());
+			for (std::size_t byte{}; byte < sizeof(length); ++byte)
+				output.push_back(std::byte{static_cast<unsigned char>(length >> (byte * 8U))});
+			for (const auto byte : value)
+				output.push_back(std::byte{static_cast<unsigned char>(byte)});
+		}
+		return output;
+	}
+
+	[[nodiscard]] cxxlens::sdk::detached_row make_source_span_row(std::string id)
+	{
+		using relation = cxxlens::source::relations::span;
+		relation::builder builder;
+		require(
+			builder.set<relation::span_column>(
+				cxxlens::sdk::detached_cell::typed("source_span_id", std::move(id))) &&
+				builder.set<relation::snapshot>(
+					cxxlens::sdk::detached_cell::typed("source_snapshot_id", "snapshot:1")) &&
+				builder.set<relation::file>(
+					cxxlens::sdk::detached_cell::typed("file_id", "file:1")) &&
+				builder.set<relation::begin>(cxxlens::sdk::detached_cell::unsigned_integer(0U)) &&
+				builder.set<relation::end>(cxxlens::sdk::detached_cell::unsigned_integer(1U)) &&
+				builder.set<relation::role>(string_cell(
+					{cxxlens::sdk::scalar_kind::open_symbol, "source.range-role/1", false},
+					"token")) &&
+				builder.set<relation::read_only>(cxxlens::sdk::detached_cell::boolean(true)),
+			"source span fixture rejected");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "source span fixture did not finish");
+		return std::move(*row);
+	}
+
+	[[nodiscard]] cxxlens::sdk::detached_row
+	make_source_origin_row(std::initializer_list<std::string_view> values)
+	{
+		using relation = cxxlens::source::relations::origin;
+		relation::builder builder;
+		const auto set = canonical_set(values);
+		require(builder.set<relation::origin_column>(
+					cxxlens::sdk::detached_cell::typed("origin_id", "origin:1")) &&
+					builder.set<relation::kind>(string_cell(
+						{cxxlens::sdk::scalar_kind::open_symbol, "source.origin-kind/1", false},
+						"included_from")) &&
+					builder.set<relation::sources>(
+						{{cxxlens::sdk::scalar_kind::set, "source_span_id", false},
+						 cxxlens::sdk::cell_state::present,
+						 cxxlens::sdk::scalar_value{set},
+						 std::nullopt}) &&
+					builder.set<relation::targets>(
+						{{cxxlens::sdk::scalar_kind::set, "source_span_id", false},
+						 cxxlens::sdk::cell_state::present,
+						 cxxlens::sdk::scalar_value{set},
+						 std::nullopt}),
+				"source origin fixture rejected");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "source origin fixture did not finish");
+		return std::move(*row);
+	}
+
 	[[nodiscard]] cxxlens::sdk::detached_row make_direct_target_row(std::string target)
 	{
 		using relation = cxxlens::cc::relations::call_direct_target;
@@ -656,9 +727,48 @@ namespace
 			require(present_text(kind, {}, "identity:1").validate().has_value() &&
 						!present_text(kind, {}, "identity\n1").validate(),
 					"identity scalar control validation diverged");
-		require(present_text(scalar_kind::content_digest, {}, sha).validate().has_value() &&
-					!present_text(scalar_kind::content_digest, {}, "not-a-digest").validate(),
-				"content digest scalar validation diverged");
+		const auto typed_content =
+			"claim-content:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+		require(
+			present_text(scalar_kind::content_digest, {}, sha).validate().has_value() &&
+				present_text(scalar_kind::content_digest, {}, typed_content)
+					.validate()
+					.has_value() &&
+				present_text(scalar_kind::content_digest,
+							 {},
+							 "semantic-v2:sha256:"
+							 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+					.validate()
+					.has_value() &&
+				!present_text(scalar_kind::content_digest,
+							  {},
+							  "Claim-content:sha256:"
+							  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+					 .validate() &&
+				!present_text(scalar_kind::content_digest, {}, "not-a-digest").validate(),
+			"content digest scalar validation diverged");
+		const auto content_set = [](std::vector<std::byte> value)
+		{
+			return detached_cell{{scalar_kind::set, "content_digest", false},
+								 cell_state::present,
+								 scalar_value{std::move(value)},
+								 std::nullopt};
+		};
+		require(content_set(canonical_set({typed_content})).validate().has_value(),
+				"canonical set<content_digest> rejected claim-content");
+		for (const auto& invalid : std::array<std::string, 6U>{
+				 std::string{},
+				 ":sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				 "claim@content:sha256:"
+				 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				 "claim-content:sha256:"
+				 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeF",
+				 "claim-content:sha256:"
+				 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
+				 "claim-content:sha256:"
+				 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0"})
+			require(!content_set(canonical_set({invalid})).validate(),
+					"invalid set<content_digest> element was accepted");
 		require(!detached_cell::unknown({scalar_kind::utf8_string, {}, true}, "reason\nnext")
 					 .validate(),
 				"control-containing unknown reason was accepted");
@@ -1485,6 +1595,136 @@ namespace
 					unresolved->ir().validate() && conflict->ir().validate() &&
 					disagreement->ir().validate(),
 				"admitted static relation query IR is invalid");
+
+		cxxlens::sdk::relation_registry registry;
+		const std::array descriptors{
+			cxxlens::build::relations::project::descriptor(),
+			cxxlens::build::relations::compile_unit::descriptor(),
+			cxxlens::build::relations::variant::descriptor(),
+			cxxlens::build::relations::toolchain_context::descriptor(),
+			cxxlens::source::relations::file::descriptor(),
+			cxxlens::source::relations::span::descriptor(),
+			cxxlens::source::relations::origin::descriptor(),
+			cxxlens::cc::relations::entity::descriptor(),
+			cxxlens::cc::relations::declaration::descriptor(),
+			cxxlens::cc::relations::type::descriptor(),
+			cxxlens::cc::relations::type_component::descriptor(),
+			cxxlens::cc::relations::call_site::descriptor(),
+			cxxlens::cc::relations::call_direct_target::descriptor(),
+			cxxlens::core::relations::provider_execution::descriptor(),
+			cxxlens::core::relations::unresolved::descriptor(),
+			cxxlens::core::relations::claim_conflict::descriptor(),
+			cxxlens::core::relations::differential_disagreement::descriptor(),
+			cxxlens::company::relations::lock_acquire::descriptor(),
+		};
+		for (const auto& descriptor : descriptors)
+			require(registry.add(descriptor).has_value(), "installed static descriptor rejected");
+		auto engine = registry.build("all-installed-static");
+		require(engine && engine->descriptors().size() == descriptors.size(),
+				"all installed static descriptors did not build together");
+	}
+
+	void check_container_reference_adoption()
+	{
+		const auto rebind = [](cxxlens::sdk::relation_descriptor& descriptor)
+		{
+			descriptor.contract_canonical.clear();
+			descriptor.contract_digest.clear();
+			descriptor.descriptor_digest = *cxxlens::sdk::semantic_digest(
+				"cxxlens.relation-descriptor-binding.v2", "\n" + descriptor.canonical_form());
+		};
+		auto malformed = cxxlens::source::relations::origin::descriptor();
+		malformed.references.front().source_columns.push_back(
+			malformed.references.front().source_columns.front());
+		malformed.references.front().target_columns.push_back(
+			malformed.references.front().target_columns.front());
+		rebind(malformed);
+		require(!malformed.validate(), "multi-column container reference was accepted");
+		malformed = cxxlens::source::relations::origin::descriptor();
+		malformed.columns[2].type.optional = true;
+		rebind(malformed);
+		require(!malformed.validate(), "optional container source was accepted");
+		malformed = cxxlens::source::relations::origin::descriptor();
+		malformed.columns[2].type.scalar = cxxlens::sdk::scalar_kind::typed_id;
+		rebind(malformed);
+		require(!malformed.validate(), "non-set container source was accepted");
+		auto span = cxxlens::source::relations::span::descriptor();
+		span.contract_canonical.clear();
+		span.contract_digest.clear();
+		span.references.clear();
+		span.descriptor_digest = *cxxlens::sdk::semantic_digest(
+			"cxxlens.relation-descriptor-binding.v2", "\n" + span.canonical_form());
+		cxxlens::sdk::relation_registry registry;
+		require(registry.add(span) &&
+					registry.add(cxxlens::source::relations::origin::descriptor()),
+				"container reference fixtures rejected");
+		auto engine = registry.build("container-reference");
+		require(engine.has_value(), "container reference engine failed");
+		for (const auto mutate_target : {false, true})
+		{
+			auto target = span;
+			if (mutate_target)
+				target.columns.front().type.parameter = "different_span_id";
+			else
+				target.columns.front().type.optional = true;
+			rebind(target);
+			cxxlens::sdk::relation_registry invalid_target_registry;
+			require(
+				invalid_target_registry.add(target).has_value() &&
+					invalid_target_registry.add(cxxlens::source::relations::origin::descriptor())
+						.has_value(),
+				"invalid container target fixture rejected before build");
+			auto invalid_target = invalid_target_registry.build("invalid-container-target");
+			require(!invalid_target && invalid_target.error().code == "sdk.reference-invalid",
+					"invalid container target type was accepted");
+		}
+		require(
+			!cxxlens::source::relations::span::descriptor().references.front().container_elements,
+			"ordinary optional reference unexpectedly became container-valued");
+		const auto make_span = [&](std::string id, std::vector<std::string> fragments = {"all"})
+		{
+			return cxxlens::sdk::make_assertion(
+				*engine, observe(make_source_span_row(std::move(id)), std::move(fragments)));
+		};
+		const auto make_origin = [&](std::initializer_list<std::string_view> values,
+									 std::vector<std::string> fragments = {"all"},
+									 std::string interpretation = "company.test.domain")
+		{
+			return cxxlens::sdk::make_assertion(*engine,
+												observe(make_source_origin_row(values),
+														std::move(fragments),
+														std::move(interpretation)));
+		};
+		auto span_a = make_span("span:a");
+		auto span_b = make_span("span:b");
+		auto origin = make_origin({"span:a", "span:b"});
+		require(span_a && span_b && origin, "container reference claims could not be built");
+		const std::array resolved_targets{*span_a, *span_b};
+		cxxlens::sdk::claim_batch resolved_batch;
+		require(resolved_batch.add(*origin).has_value(), "resolved container origin rejected");
+		auto resolved = std::move(resolved_batch).commit(*engine, resolved_targets);
+		require(resolved && resolved->claims.size() == 1U,
+				"two-element container reference did not resolve");
+		cxxlens::sdk::claim_batch missing_batch;
+		require(missing_batch.add(*origin).has_value(), "missing container origin rejected early");
+		const std::array one_target{*span_a};
+		auto missing = std::move(missing_batch).commit(*engine, one_target);
+		require(!missing && missing.error().code == "sdk.hard-reference-missing",
+				"missing container element did not atomically reject");
+		auto empty = make_origin({});
+		require(empty.has_value(), "empty container origin could not be built");
+		cxxlens::sdk::claim_batch empty_batch;
+		require(empty_batch.add(*empty).has_value(), "empty container origin rejected early");
+		auto empty_result = std::move(empty_batch).commit(*engine);
+		require(empty_result.has_value(), "empty container reference was not vacuously resolved");
+		auto mismatch = make_origin({"span:a"}, {"debug"});
+		require(mismatch.has_value(), "mismatched container origin could not be built");
+		cxxlens::sdk::claim_batch mismatch_batch;
+		require(mismatch_batch.add(*mismatch).has_value(),
+				"mismatched container origin rejected early");
+		auto mismatch_result = std::move(mismatch_batch).commit(*engine, one_target);
+		require(!mismatch_result && mismatch_result.error().code == "sdk.hard-reference-missing",
+				"condition mismatch resolved a container reference");
 	}
 
 	void check_snapshot_lifetime()
@@ -2951,6 +3191,7 @@ int main(const int argc, const char* const argv[])
 		test_case{"static-row-view-validation", check_static_row_view_validation},
 		test_case{"static-dynamic-query", check_static_dynamic_query},
 		test_case{"admitted-static-relation-apis", check_admitted_static_relation_apis},
+		test_case{"container-reference-adoption", check_container_reference_adoption},
 		test_case{"snapshot-lifetime", check_snapshot_lifetime},
 		test_case{"frame-native-escape", check_frame_and_native_escape},
 		test_case{"columnar-wire-codec", check_columnar_wire_codec},

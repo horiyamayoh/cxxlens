@@ -150,3 +150,13 @@ query paths map all five exact canonical names. Store reopen and typed/dynamic q
 exercise the last ordinal and every new spelling. The same review cycle exposed a quality-fixture
 isolation defect: a negative scope test wrote through a symlink into the repository's DF record.
 Its temporary root now owns a real docs copy, so fail-closed mutation cannot alter source evidence.
+
+2026-08-12: Independent review P1 follow-up found that `source.origin` had accepted
+`container_elements: true` relation-IDL metadata but the public runtime descriptor and generated
+tag projection omitted it. ADR 0017 therefore did not bind the element-wise reference law, and
+claim adoption compared the encoded set as one scalar. The runtime projection now binds the flag,
+requires unary `set<T>` to exact scalar `T` targets, and resolves every canonical set element under
+the existing interpretation/presence law; the all-static registry and missing-element regressions
+are required evidence. The same review clarified `content_digest` as the conceptual strong type
+for claim content: raw, semantic-v2, and lowercase typed-domain SHA-256 spellings are accepted
+recursively for `set<content_digest>`, while generic `digest` remains narrower.

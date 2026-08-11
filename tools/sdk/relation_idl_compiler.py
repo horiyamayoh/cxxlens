@@ -39,6 +39,7 @@ def canonical_relation(relation: dict[str, object]) -> dict[str, object]:
             str(reference["strength"]),
             str(reference["target_relation"]),
             tuple(reference["target_columns"]),
+            bool(reference.get("container_elements", False)),
         )
     )
     merge = canonical["merge"]
@@ -218,9 +219,10 @@ def render(relation: dict[str, object]) -> str:
         assert isinstance(reference, dict)
         source = ", ".join(f'"{string(str(value))}"' for value in reference["source_columns"])
         target = ", ".join(f'"{string(str(value))}"' for value in reference["target_columns"])
+        container = ", true" if reference.get("container_elements", False) else ""
         lines.append(
             f'\t\t\t\t\t{{{{{source}}}, "{string(str(reference["target_relation"]))}", '
-            f'{{{target}}}, sdk::reference_strength::{reference["strength"]}}},'
+            f'{{{target}}}, sdk::reference_strength::{reference["strength"]}{container}}},'
         )
     conflict_columns = merge.get("conflict_columns", [])
     assert isinstance(conflict_columns, list)

@@ -317,6 +317,11 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     )
     if quality_job is None or "fetch-depth: 2" not in quality_job.group("body"):
         fail("public callable stable-ID check requires parent history in CI")
+    if not re.search(
+        r"set -o pipefail\s+cmake --build --preset ci-quick --target cxxlens-quality\s+\\\s*2>&1 \| tee build/ci-quick/quality-production\.log",
+        quality_job.group("body"),
+    ):
+        fail("quality evidence pipeline must preserve cxxlens-quality failure status")
     production_contract = manifest["production_scope_closure"]
     for marker in (
         production_contract["checker"],

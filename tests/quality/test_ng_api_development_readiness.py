@@ -825,6 +825,18 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(ReadinessError, "workflow triggers"):
                 validate_documents(root)
 
+    def test_quality_evidence_pipeline_requires_pipefail(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            self.assertIn("          set -o pipefail\n", text)
+            workflow.write_text(
+                text.replace("          set -o pipefail\n", "", 1), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ReadinessError, "pipeline must preserve"):
+                validate_documents(root)
+
     def test_callable_inventory_semantic_digest_drift_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
