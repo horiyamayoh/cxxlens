@@ -36,6 +36,12 @@ namespace cxxlens::sdk
 			return true;
 		}
 
+		[[nodiscard]] bool typed_identity_parameter(const std::string_view value)
+		{
+			return lower_identifier(value) &&
+				(value.ends_with("_id") || value == "stable_unit_key");
+		}
+
 		[[nodiscard]] bool relation_name(const std::string_view value)
 		{
 			std::size_t begin = 0U;
@@ -117,6 +123,11 @@ namespace cxxlens::sdk
 				case scalar_kind::condition_ref:
 				case scalar_kind::source_span_id:
 				case scalar_kind::evidence_id:
+				case scalar_kind::relation_name:
+				case scalar_kind::semantic_key_id:
+				case scalar_kind::assertion_id:
+				case scalar_kind::content_digest:
+				case scalar_kind::interpretation_domain_id:
 				case scalar_kind::closed_symbol:
 					return std::holds_alternative<std::string>(value);
 			}
@@ -268,7 +279,7 @@ namespace cxxlens::sdk
 			switch (type.scalar)
 			{
 				case scalar_kind::typed_id:
-					return lower_identifier(type.parameter) && type.parameter.ends_with("_id");
+					return typed_identity_parameter(type.parameter);
 				case scalar_kind::open_symbol:
 					return semantics_id(type.parameter);
 				case scalar_kind::closed_symbol:
@@ -286,6 +297,11 @@ namespace cxxlens::sdk
 				case scalar_kind::condition_ref:
 				case scalar_kind::source_span_id:
 				case scalar_kind::evidence_id:
+				case scalar_kind::relation_name:
+				case scalar_kind::semantic_key_id:
+				case scalar_kind::assertion_id:
+				case scalar_kind::content_digest:
+				case scalar_kind::interpretation_domain_id:
 					return type.parameter.empty();
 			}
 			return false;
@@ -313,16 +329,27 @@ namespace cxxlens::sdk
 						? std::nullopt
 						: std::optional<std::string_view>{"semantic-version"};
 				case scalar_kind::typed_id:
-					if (!lower_identifier(type.parameter) || !type.parameter.ends_with("_id"))
+					if (!typed_identity_parameter(type.parameter))
 						return "typed-id-parameter";
 					return control_free_text(*text) ? std::nullopt
 													: std::optional<std::string_view>{"identity"};
 				case scalar_kind::condition_ref:
 				case scalar_kind::source_span_id:
 				case scalar_kind::evidence_id:
+				case scalar_kind::semantic_key_id:
+				case scalar_kind::assertion_id:
+				case scalar_kind::interpretation_domain_id:
 					return type.parameter.empty() && control_free_text(*text)
 						? std::nullopt
 						: std::optional<std::string_view>{"identity"};
+				case scalar_kind::relation_name:
+					return type.parameter.empty() && relation_name(*text)
+						? std::nullopt
+						: std::optional<std::string_view>{"relation-name"};
+				case scalar_kind::content_digest:
+					return type.parameter.empty() && canonical_digest_value(*text)
+						? std::nullopt
+						: std::optional<std::string_view>{"digest"};
 				case scalar_kind::open_symbol:
 					return semantics_id(type.parameter) && control_free_text(*text)
 						? std::nullopt
@@ -528,6 +555,21 @@ namespace cxxlens::sdk
 			case scalar_kind::evidence_id:
 				output = "evidence_id";
 				break;
+			case scalar_kind::relation_name:
+				output = "relation_name";
+				break;
+			case scalar_kind::semantic_key_id:
+				output = "semantic_key_id";
+				break;
+			case scalar_kind::assertion_id:
+				output = "assertion_id";
+				break;
+			case scalar_kind::content_digest:
+				output = "content_digest";
+				break;
+			case scalar_kind::interpretation_domain_id:
+				output = "interpretation_domain_id";
+				break;
 			case scalar_kind::closed_symbol:
 				output = "closed_symbol";
 				break;
@@ -662,7 +704,7 @@ namespace cxxlens::sdk
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.relation-invalid", key, "claim-key-pattern"));
 			auto found = column(key);
-			if (!found || found->role != column_role::claim_key || !found->required)
+			if (!found || found->role != column_role::claim_key)
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.relation-invalid", key, "claim-key"));
 		}

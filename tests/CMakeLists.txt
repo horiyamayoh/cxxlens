@@ -19,6 +19,7 @@ set(cxxlens_sdk_cases
     relation-schema-parity
     static-row-view-validation
     static-dynamic-query
+    admitted-static-relation-apis
     snapshot-lifetime
     frame-native-escape
     columnar-wire-codec

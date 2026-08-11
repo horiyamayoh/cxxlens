@@ -13,7 +13,7 @@ distribution 1.0 の既存 checker は Public API Catalog、callable inventory�
 Logical Query、security、Wave 0、G5、GR を各 domain 内で検証する。しかし release root から全 surface を列挙し、
 各 item を一度だけ production-required、evidence、明示的 non-1.0 のいずれかへ分類する契約がない。
 
-#173 の read-only audit は catalog 14 entry、public callable 536 件、relation 18 descriptor という局所 census が正しい一方、
+\#173 の read-only audit は catalog 14 entry、public callable 536 件、relation 18 descriptor という局所 census が正しい一方、
 release migration/gate、installed package matrix、provider NG1、query/closure、security/compatibility、Nightly と NG2/NG3 の
 明示的除外がその census から欠落することを確認した。また Relation Registry の全 18 descriptor は generated tag を持つが、
 Public API Catalog が static header を admit するのは 11 件だけであり、残る 7 件は DF-0174 が authority 未確定として block している。

@@ -91,6 +91,7 @@ REQUIRED_VECTOR_IDS = {
     "open-symbol-unknown-preserved",
     "closed-symbol-unknown-rejected",
     "canonical-digest-scalar",
+    "canonical-stable-unit-key-scalar",
     "malformed-digest-scalar",
     "noncanonical-semver-scalar",
     "empty-typed-id-scalar",
@@ -820,7 +821,9 @@ def validate_scalar(input_value: dict[str, Any]) -> tuple[str, str]:
         valid = match is not None and all(
             int(component) <= 0xFFFFFFFF for component in match.groups()
         )
-    elif re.fullmatch(r"typed_id<[a-z][a-z0-9_]*_id>", scalar_type):
+    elif re.fullmatch(
+        r"typed_id<(?:[a-z][a-z0-9_]*_id|stable_unit_key)>", scalar_type
+    ):
         valid = bool(value) and all(
             ord(character) >= 0x20 and ord(character) != 0x7F
             for character in value

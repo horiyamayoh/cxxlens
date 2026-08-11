@@ -34,11 +34,16 @@ namespace cxxlens::sdk
 		evidence_id,
 		closed_symbol,
 		set,
+		relation_name,
+		semantic_key_id,
+		assertion_id,
+		content_digest,
+		interpretation_domain_id,
 	};
 	/** @brief Test exact membership in the closed scalar kind enum. */
 	[[nodiscard]] constexpr bool is_valid(const scalar_kind value) noexcept
 	{
-		return value >= scalar_kind::boolean && value <= scalar_kind::set;
+		return value >= scalar_kind::boolean && value <= scalar_kind::interpretation_domain_id;
 	}
 
 	/** @brief Semantic role of a column in stable claim identity. */

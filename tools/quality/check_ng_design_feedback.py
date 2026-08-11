@@ -346,7 +346,7 @@ def load_records(root: pathlib.Path) -> list[Record]:
 def index_table(records: list[Record]) -> list[str]:
     rows = [
         "| ID | Status | Implementation | Scope | Title |",
-        "|---|---|---|---|---|",
+        "| --- | --- | --- | --- | --- |",
     ]
     for record in sorted(records, key=lambda item: item.metadata["id"]):
         metadata = record.metadata

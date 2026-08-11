@@ -1256,6 +1256,9 @@ def canonical_relation(relation: dict[str, Any]) -> dict[str, Any]:
     """Canonicalize Registry collections whose schema semantics are unordered."""
 
     value = copy.deepcopy(relation)
+    projection = value.pop("cpp_projection", None)
+    if projection == "dynamic-only":
+        value["api_surface"] = "dynamic_only"
     value.setdefault("references", []).sort(
         key=lambda reference: (
             tuple(reference["source_columns"]),

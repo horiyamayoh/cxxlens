@@ -13,7 +13,7 @@ None.
 ## Resolved
 
 | ID | Status | Implementation | Scope | Title |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | [DF-0174](df-0174-generated-relation-static-admission.md) | accepted | may-proceed | `public-api.generated-relation-admission`, `relation-registry.static-api-projection` | Clarify generated relation tags versus installed static API admission |
 | [DF-0177](df-0177-standing-authorization-boundary.md) | accepted | may-proceed | `agent-goal.standing-authorization`, `agent-goal.protected-main-workflow`, `api-development-readiness.authorization-binding` | Bind delegated goal execution to a risk-tiered approval boundary |
 | [DF-0180](df-0180-production-scope-closure.md) | accepted | may-proceed | `production.scope-closure`, `release.qualification-rollout`, `readiness.cross-authority-binding` | Close the distribution 1.0 production surface exactly once |

@@ -16,8 +16,15 @@
 #include <cxxlens/relations/build_project.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/cc_type_component.hpp>
 #include <cxxlens/relations/company_lock_acquire.hpp>
+#include <cxxlens/relations/core_claim_conflict.hpp>
+#include <cxxlens/relations/core_differential_disagreement.hpp>
+#include <cxxlens/relations/core_provider_execution.hpp>
+#include <cxxlens/relations/core_unresolved.hpp>
+#include <cxxlens/relations/source_origin.hpp>
 #include <cxxlens/sdk.hpp>
 
 namespace
@@ -31,6 +38,30 @@ namespace
 				  "claim evidence occurrence must remain structurally self-contained");
 	static_assert(!has_detached_evidence_references<cxxlens::sdk::claim_batch_result>,
 				  "claim batch must not expose orphanable detached evidence records");
+	static_assert(static_cast<std::uint8_t>(cxxlens::sdk::scalar_kind::closed_symbol) == 12U);
+	static_assert(static_cast<std::uint8_t>(cxxlens::sdk::scalar_kind::set) == 13U);
+	static_assert(static_cast<std::uint8_t>(cxxlens::sdk::scalar_kind::relation_name) == 14U);
+	static_assert(
+		std::same_as<cxxlens::source::relations::origin::builder,
+					 cxxlens::sdk::static_row_builder<cxxlens::source::relations::origin>>);
+	static_assert(std::same_as<cxxlens::cc::relations::declaration::view,
+							   cxxlens::sdk::static_row_view<cxxlens::cc::relations::declaration>>);
+	static_assert(
+		std::same_as<cxxlens::cc::relations::type_component::builder,
+					 cxxlens::sdk::static_row_builder<cxxlens::cc::relations::type_component>>);
+	static_assert(
+		std::same_as<cxxlens::core::relations::provider_execution::view,
+					 cxxlens::sdk::static_row_view<cxxlens::core::relations::provider_execution>>);
+	static_assert(
+		std::same_as<cxxlens::core::relations::unresolved::builder,
+					 cxxlens::sdk::static_row_builder<cxxlens::core::relations::unresolved>>);
+	static_assert(
+		std::same_as<cxxlens::core::relations::claim_conflict::view,
+					 cxxlens::sdk::static_row_view<cxxlens::core::relations::claim_conflict>>);
+	static_assert(
+		std::same_as<
+			cxxlens::core::relations::differential_disagreement::builder,
+			cxxlens::sdk::static_row_builder<cxxlens::core::relations::differential_disagreement>>);
 
 	constexpr std::string_view provider_contract_digest{
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
@@ -614,6 +645,20 @@ namespace
 					"empty/control-containing typed ID was accepted");
 		require(!detached_cell::typed("not_an_identity_type", "entity:1").validate(),
 				"typed ID parameter without _id was accepted");
+		require(
+			present_text(scalar_kind::relation_name, {}, "core.unresolved").validate().has_value(),
+			"canonical relation name was rejected");
+		require(!present_text(scalar_kind::relation_name, {}, "core/unresolved").validate(),
+				"invalid relation name was accepted");
+		for (const auto kind : {scalar_kind::semantic_key_id,
+								scalar_kind::assertion_id,
+								scalar_kind::interpretation_domain_id})
+			require(present_text(kind, {}, "identity:1").validate().has_value() &&
+						!present_text(kind, {}, "identity\n1").validate(),
+					"identity scalar control validation diverged");
+		require(present_text(scalar_kind::content_digest, {}, sha).validate().has_value() &&
+					!present_text(scalar_kind::content_digest, {}, "not-a-digest").validate(),
+				"content digest scalar validation diverged");
 		require(!detached_cell::unknown({scalar_kind::utf8_string, {}, true}, "reason\nnext")
 					 .validate(),
 				"control-containing unknown reason was accepted");
@@ -706,7 +751,7 @@ namespace
 		};
 
 		rejects_out_of_range(canonical_value::kind::ordered_tuple, "canonical_value::kind");
-		rejects_out_of_range(scalar_kind::set, "scalar_kind");
+		rejects_out_of_range(scalar_kind::interpretation_domain_id, "scalar_kind");
 		rejects_out_of_range(column_role::auxiliary, "column_role");
 		rejects_out_of_range(merge_mode::keyed_union, "merge_mode");
 		rejects_out_of_range(reference_strength::soft_semantic, "reference_strength");
@@ -1179,8 +1224,21 @@ namespace
 
 		auto valid = make_merge_descriptor("company.schema.valid", merge_mode::set);
 		require(valid.validate().has_value(), "schema-valid dynamic descriptor was rejected");
+		require(cxxlens::sdk::detached_cell::typed("stable_unit_key", "compile-unit:primary")
+					.validate()
+					.has_value(),
+				"accepted stable_unit_key typed identity was rejected");
 		require(cxxlens::cc::relations::call_site::descriptor().validate().has_value(),
 				"schema-valid generated descriptor was rejected");
+
+		auto optional_key = valid;
+		optional_key.columns.front().required = false;
+		optional_key.columns.front().type.optional = true;
+		optional_key.descriptor_digest = *cxxlens::sdk::semantic_digest(
+			"cxxlens.relation-descriptor-binding.v2",
+			optional_key.contract_digest + "\n" + optional_key.canonical_form());
+		require(optional_key.validate().has_value(),
+				"schema-valid optional claim-key column was rejected");
 
 		for (const auto name : {"", "company..item", "company.1item", "company.bad-item"})
 		{
@@ -1391,6 +1449,42 @@ namespace
 		auto unordered = std::move(*typed).limit(1U);
 		require(!unordered && unordered.error().code == "sdk.query-limit-requires-order",
 				"unordered limit was accepted");
+	}
+
+	void check_admitted_static_relation_apis()
+	{
+		using cxxlens::sdk::query::from;
+		const auto require_descriptor = [](const auto& descriptor)
+		{
+			auto valid = descriptor.validate();
+			if (!valid)
+				require(false,
+						descriptor.name + " static descriptor is invalid: " + valid.error().code +
+							"/" + valid.error().field + "/" + valid.error().detail);
+		};
+		require_descriptor(cxxlens::source::relations::origin::descriptor());
+		require_descriptor(cxxlens::cc::relations::declaration::descriptor());
+		require_descriptor(cxxlens::cc::relations::type_component::descriptor());
+		require_descriptor(cxxlens::core::relations::provider_execution::descriptor());
+		require_descriptor(cxxlens::core::relations::unresolved::descriptor());
+		require_descriptor(cxxlens::core::relations::claim_conflict::descriptor());
+		require_descriptor(cxxlens::core::relations::differential_disagreement::descriptor());
+
+		auto origin = from<cxxlens::source::relations::origin>();
+		auto declaration = from<cxxlens::cc::relations::declaration>();
+		auto component = from<cxxlens::cc::relations::type_component>();
+		auto execution = from<cxxlens::core::relations::provider_execution>();
+		auto unresolved = from<cxxlens::core::relations::unresolved>();
+		auto conflict = from<cxxlens::core::relations::claim_conflict>();
+		auto disagreement = from<cxxlens::core::relations::differential_disagreement>();
+		require(origin && declaration && component && execution && unresolved && conflict &&
+					disagreement,
+				"admitted static relation query construction failed");
+		require(origin->ir().validate() && declaration->ir().validate() &&
+					component->ir().validate() && execution->ir().validate() &&
+					unresolved->ir().validate() && conflict->ir().validate() &&
+					disagreement->ir().validate(),
+				"admitted static relation query IR is invalid");
 	}
 
 	void check_snapshot_lifetime()
@@ -2856,6 +2950,7 @@ int main(const int argc, const char* const argv[])
 		test_case{"relation-schema-parity", check_relation_schema_parity},
 		test_case{"static-row-view-validation", check_static_row_view_validation},
 		test_case{"static-dynamic-query", check_static_dynamic_query},
+		test_case{"admitted-static-relation-apis", check_admitted_static_relation_apis},
 		test_case{"snapshot-lifetime", check_snapshot_lifetime},
 		test_case{"frame-native-escape", check_frame_and_native_escape},
 		test_case{"columnar-wire-codec", check_columnar_wire_codec},

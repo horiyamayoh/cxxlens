@@ -340,7 +340,7 @@ exact zero state を typed `tracked-gap-empty` として受理する。この状
 schema、worker、他の required file は除外しない。zero state に一件でも request/report が混じる、または exact four-pair evidence が先行する場合も
 assignment と evidence が一致しないため拒否する。
 
-#181 が同 assignment を `included` / `qualified` として完了させた後は、他の assignment に tracked gap が残り全体の scope closure が
+\#181 が同 assignment を `included` / `qualified` として完了させた後は、他の assignment に tracked gap が残り全体の scope closure が
 `classified-with-gaps` であっても、この例外を解除する。materializer executable と exact four co-located request/report pairs、two report-set
 digests を必須とし、それらがない evaluation は `not-qualified` とする。owner、feedback、scope、qualification がこの二状態のどちらにも exact に
 一致しない中間状態は fail closed に拒否する。
