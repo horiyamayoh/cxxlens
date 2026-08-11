@@ -2972,9 +2972,8 @@ namespace cxxlens::sdk
 					!source_shm_family_->valid())
 					return unexpected(forwarding_error("source-shm-reader-open"));
 				const auto registration_epoch = registered_alias_->registration_epoch();
-				if (node.registration_epoch && *node.registration_epoch != registration_epoch)
+				if (!node.registration_epoch || *node.registration_epoch != registration_epoch)
 					return unexpected(forwarding_error("source-shm-reader-open"));
-				node.registration_epoch = registration_epoch;
 
 				sqlite_shm_reader_open_binding binding;
 				{
@@ -3386,7 +3385,9 @@ namespace cxxlens::sdk
 		 * registration, or callback replacement.  A changed raw methods pointer is likewise a
 		 * terminal identity drift even when its replacement happens to point into the same image.
 		 */
-		[[nodiscard]] bool native_shm_callback_identity_valid(native_file_node& node) noexcept
+		[[nodiscard]] bool
+		native_shm_callback_identity_valid(native_file_node& node,
+										   const bool allow_closed_file = false) noexcept
 		{
 			try
 			{
@@ -3466,10 +3467,13 @@ namespace cxxlens::sdk
 					return false;
 
 				const auto* raw = const_cast<native_file_node&>(node).file();
-				const auto* methods = raw != nullptr ? raw->methods : nullptr;
+				if (raw == nullptr)
+					return false;
+				const auto* methods = raw->methods;
+				if (methods == nullptr)
+					return allow_closed_file;
 				const auto inspected = inspect_native_methods(node);
-				if (raw == nullptr || methods == nullptr ||
-					methods != node.underlying_methods_identity ||
+				if (methods != node.underlying_methods_identity ||
 					methods->version != node.underlying_methods_version ||
 					methods->close != node.trusted_methods.close ||
 					methods->close != node.trusted_close ||
@@ -6847,6 +6851,11 @@ namespace cxxlens::sdk
 					{
 						native_close_known = false;
 					}
+					if (!native_shm_callback_identity_valid(*node, true))
+					{
+						(void)quarantine_live_close();
+						return sqlite_io_error;
+					}
 					std::optional<sqlite_shm_issued_reader_effect_identity> close_effect;
 					if (native_close_known)
 					{
@@ -7002,6 +7011,11 @@ namespace cxxlens::sdk
 				catch (...)
 				{
 					native_known = false;
+				}
+				if (!native_shm_callback_identity_valid(*node, true))
+				{
+					(void)quarantine_close();
+					return sqlite_io_error;
 				}
 				std::optional<sqlite_shm_issued_reader_effect_identity> effect_identity;
 				if (native_known)
@@ -7642,8 +7656,18 @@ namespace cxxlens::sdk
 					owner->pinned_underlying_vfs_app_data_identity(),
 					owner->underlying_image_identity(),
 					owner->underlying_open_callback_address());
-				if (const auto registration_epoch = owner->source_shm_registration_epoch())
+				if (file->source_shm_readonly_qualified)
+				{
+					const auto registration_epoch = owner->source_shm_registration_epoch();
+					if (!registration_epoch)
+					{
+						mark_incomplete(association.observation);
+						record_open_failure(association.observation, event_index);
+						file->~forwarding_file();
+						return sqlite_cannot_open;
+					}
 					file->native->registration_epoch = *registration_epoch;
+				}
 				if (association.observation && association.main_handle)
 				{
 					std::scoped_lock lock{association.observation->mutex};
