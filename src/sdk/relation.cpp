@@ -36,6 +36,12 @@ namespace cxxlens::sdk
 			return true;
 		}
 
+		[[nodiscard]] bool typed_identity_parameter(const std::string_view value)
+		{
+			return lower_identifier(value) &&
+				(value.ends_with("_id") || value == "stable_unit_key");
+		}
+
 		[[nodiscard]] bool relation_name(const std::string_view value)
 		{
 			std::size_t begin = 0U;
@@ -117,6 +123,11 @@ namespace cxxlens::sdk
 				case scalar_kind::condition_ref:
 				case scalar_kind::source_span_id:
 				case scalar_kind::evidence_id:
+				case scalar_kind::relation_name:
+				case scalar_kind::semantic_key_id:
+				case scalar_kind::assertion_id:
+				case scalar_kind::content_digest:
+				case scalar_kind::interpretation_domain_id:
 				case scalar_kind::closed_symbol:
 					return std::holds_alternative<std::string>(value);
 			}
@@ -129,6 +140,32 @@ namespace cxxlens::sdk
 				: value.starts_with("semantic-v2:sha256:") ? value.substr(19U)
 														   : std::string_view{};
 			return hex.size() == 64U &&
+				std::ranges::all_of(hex,
+									[](const char byte)
+									{
+										return (byte >= '0' && byte <= '9') ||
+											(byte >= 'a' && byte <= 'f');
+									});
+		}
+
+		[[nodiscard]] bool canonical_content_digest_value(const std::string_view value)
+		{
+			if (canonical_digest_value(value))
+				return true;
+			const auto separator = value.find(":sha256:");
+			if (separator == std::string_view::npos)
+				return false;
+			const auto domain = value.substr(0U, separator);
+			const auto hex = value.substr(separator + 8U);
+			return !domain.empty() && domain.front() >= 'a' && domain.front() <= 'z' &&
+				std::ranges::all_of(domain,
+									[](const char byte)
+									{
+										return (byte >= 'a' && byte <= 'z') ||
+											(byte >= '0' && byte <= '9') || byte == '_' ||
+											byte == '.' || byte == '-';
+									}) &&
+				hex.size() == 64U &&
 				std::ranges::all_of(hex,
 									[](const char byte)
 									{
@@ -211,7 +248,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool set_element_value(const std::string_view type,
 											 const std::string_view value)
 		{
-			if (type == "content_digest" || type == "digest")
+			if (type == "content_digest")
+				return canonical_content_digest_value(value);
+			if (type == "digest")
 				return canonical_digest_value(value);
 			if (type == "assertion_id" || type == "source_span_id" || type == "evidence_id" ||
 				type == "condition_ref" || type.ends_with("_id"))
@@ -268,7 +307,7 @@ namespace cxxlens::sdk
 			switch (type.scalar)
 			{
 				case scalar_kind::typed_id:
-					return lower_identifier(type.parameter) && type.parameter.ends_with("_id");
+					return typed_identity_parameter(type.parameter);
 				case scalar_kind::open_symbol:
 					return semantics_id(type.parameter);
 				case scalar_kind::closed_symbol:
@@ -286,6 +325,11 @@ namespace cxxlens::sdk
 				case scalar_kind::condition_ref:
 				case scalar_kind::source_span_id:
 				case scalar_kind::evidence_id:
+				case scalar_kind::relation_name:
+				case scalar_kind::semantic_key_id:
+				case scalar_kind::assertion_id:
+				case scalar_kind::content_digest:
+				case scalar_kind::interpretation_domain_id:
 					return type.parameter.empty();
 			}
 			return false;
@@ -313,16 +357,27 @@ namespace cxxlens::sdk
 						? std::nullopt
 						: std::optional<std::string_view>{"semantic-version"};
 				case scalar_kind::typed_id:
-					if (!lower_identifier(type.parameter) || !type.parameter.ends_with("_id"))
+					if (!typed_identity_parameter(type.parameter))
 						return "typed-id-parameter";
 					return control_free_text(*text) ? std::nullopt
 													: std::optional<std::string_view>{"identity"};
 				case scalar_kind::condition_ref:
 				case scalar_kind::source_span_id:
 				case scalar_kind::evidence_id:
+				case scalar_kind::semantic_key_id:
+				case scalar_kind::assertion_id:
+				case scalar_kind::interpretation_domain_id:
 					return type.parameter.empty() && control_free_text(*text)
 						? std::nullopt
 						: std::optional<std::string_view>{"identity"};
+				case scalar_kind::relation_name:
+					return type.parameter.empty() && relation_name(*text)
+						? std::nullopt
+						: std::optional<std::string_view>{"relation-name"};
+				case scalar_kind::content_digest:
+					return type.parameter.empty() && canonical_content_digest_value(*text)
+						? std::nullopt
+						: std::optional<std::string_view>{"digest"};
 				case scalar_kind::open_symbol:
 					return semantics_id(type.parameter) && control_free_text(*text)
 						? std::nullopt
@@ -426,10 +481,21 @@ namespace cxxlens::sdk
 			return std::tie(left.source_columns,
 							left.strength,
 							left.target_relation,
-							left.target_columns) < std::tie(right.source_columns,
-															right.strength,
-															right.target_relation,
-															right.target_columns);
+							left.target_columns,
+							left.container_elements) < std::tie(right.source_columns,
+																right.strength,
+																right.target_relation,
+																right.target_columns,
+																right.container_elements);
+		}
+
+		[[nodiscard]] bool container_target_type_matches(const value_type& source,
+														 const value_type& target)
+		{
+			return source.scalar == scalar_kind::set && !source.optional && !target.optional &&
+				(target.scalar == scalar_kind::typed_id
+					 ? target.parameter == source.parameter
+					 : target.canonical_name() == source.parameter);
 		}
 
 		[[nodiscard]] result<std::string> descriptor_binding(const relation_descriptor& descriptor)
@@ -527,6 +593,21 @@ namespace cxxlens::sdk
 				break;
 			case scalar_kind::evidence_id:
 				output = "evidence_id";
+				break;
+			case scalar_kind::relation_name:
+				output = "relation_name";
+				break;
+			case scalar_kind::semantic_key_id:
+				output = "semantic_key_id";
+				break;
+			case scalar_kind::assertion_id:
+				output = "assertion_id";
+				break;
+			case scalar_kind::content_digest:
+				output = "content_digest";
+				break;
+			case scalar_kind::interpretation_domain_id:
+				output = "interpretation_domain_id";
 				break;
 			case scalar_kind::closed_symbol:
 				output = "closed_symbol";
@@ -662,7 +743,7 @@ namespace cxxlens::sdk
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.relation-invalid", key, "claim-key-pattern"));
 			auto found = column(key);
-			if (!found || found->role != column_role::claim_key || !found->required)
+			if (!found || found->role != column_role::claim_key)
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.relation-invalid", key, "claim-key"));
 		}
@@ -712,6 +793,16 @@ namespace cxxlens::sdk
 									}))
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.reference-invalid", name, "target-column-pattern"));
+			if (reference.container_elements)
+			{
+				if (reference.source_columns.size() != 1U || reference.target_columns.size() != 1U)
+					return cxxlens::sdk::unexpected(
+						relation_error("sdk.reference-invalid", name, "container-shape"));
+				auto source = column(reference.source_columns.front());
+				if (!source || source->type.scalar != scalar_kind::set || source->type.optional)
+					return cxxlens::sdk::unexpected(
+						relation_error("sdk.reference-invalid", name, "container-source-type"));
+			}
 		}
 		if (contract_canonical.empty())
 		{
@@ -791,7 +882,10 @@ namespace cxxlens::sdk
 			if (index != 0U)
 				output << ',';
 			const auto& reference = ordered_references[index];
-			output << R"({"source":[)";
+			output << '{';
+			if (reference.container_elements)
+				output << R"("container_elements":true,)";
+			output << R"("source":[)";
 			for (std::size_t column = 0U; column < reference.source_columns.size(); ++column)
 			{
 				if (column != 0U)
@@ -923,8 +1017,11 @@ namespace cxxlens::sdk
 					auto source_column = descriptor->column(reference.source_columns[index]);
 					auto target_column = target->second->column(reference.target_columns[index]);
 					if (!source_column || !target_column ||
-						source_column->type.scalar != target_column->type.scalar ||
-						source_column->type.parameter != target_column->type.parameter)
+						(reference.container_elements
+							 ? !container_target_type_matches(source_column->type,
+															  target_column->type)
+							 : source_column->type.scalar != target_column->type.scalar ||
+								 source_column->type.parameter != target_column->type.parameter))
 						return cxxlens::sdk::unexpected(relation_error(
 							"sdk.reference-invalid", name, reference.target_relation));
 				}

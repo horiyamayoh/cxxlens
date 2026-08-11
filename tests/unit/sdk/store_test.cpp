@@ -114,7 +114,7 @@ namespace
 			 cxxlens::sdk::column_role::claim_key},
 			{"company.test.item.v1.value",
 			 "value",
-			 {cxxlens::sdk::scalar_kind::utf8_string, {}, false},
+			 {cxxlens::sdk::scalar_kind::interpretation_domain_id, {}, false},
 			 true,
 			 cxxlens::sdk::column_role::authoritative_payload},
 		};
@@ -168,7 +168,10 @@ namespace
 				"store row key rejected");
 		require(builder
 					.set({relation.id, relation.columns[1].id, relation.columns[1].type},
-						 cxxlens::sdk::detached_cell::utf8(std::move(payload)))
+						 {relation.columns[1].type,
+						  cxxlens::sdk::cell_state::present,
+						  cxxlens::sdk::scalar_value{std::move(payload)},
+						  std::nullopt})
 					.has_value(),
 				"store row payload rejected");
 		auto finished = std::move(builder).finish();

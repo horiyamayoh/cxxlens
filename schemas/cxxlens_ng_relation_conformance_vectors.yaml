@@ -1,5 +1,5 @@
 schema: cxxlens.relation-conformance-vectors.v1
-document_version: 1.4.0
+document_version: 1.5.0
 authority:
   owner_issue: '#182'
   decision_adr: docs/design/adr/0096-clang22-installed-materialization-boundary.md
@@ -122,6 +122,36 @@ vectors:
     source_value: source-snapshot-missing
     available_target_values: []
     unresolved_accounted: true
+- id: container-hard-reference-elements-resolved
+  class: positive
+  operation: resolve_reference
+  expected: {decision: accepted, reason_code: relation.reference-resolved}
+  input:
+    relation: source.origin
+    source_column: source.origin.v1.sources
+    source_values: [source-span-a, source-span-b]
+    available_target_values: [source-span-a, source-span-b]
+    unresolved_accounted: false
+- id: container-hard-reference-empty-vacuous
+  class: positive
+  operation: resolve_reference
+  expected: {decision: accepted, reason_code: relation.reference-resolved}
+  input:
+    relation: source.origin
+    source_column: source.origin.v1.sources
+    source_values: []
+    available_target_values: []
+    unresolved_accounted: false
+- id: container-hard-reference-element-missing
+  class: negative
+  operation: resolve_reference
+  expected: {decision: rejected, reason_code: relation.hard-reference-missing}
+  input:
+    relation: source.origin
+    source_column: source.origin.v1.sources
+    source_values: [source-span-a, source-span-missing]
+    available_target_values: [source-span-a]
+    unresolved_accounted: false
 - id: soft-reference-missing-accounted
   class: positive
   operation: resolve_reference
@@ -171,6 +201,43 @@ vectors:
   input:
     type: digest
     value: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: canonical-content-digest-scalar
+  class: positive
+  operation: validate_scalar
+  expected: {decision: accepted, reason_code: relation.scalar-valid}
+  input:
+    type: content_digest
+    value: claim-content:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: canonical-content-digest-semantic-scalar
+  class: positive
+  operation: validate_scalar
+  expected: {decision: accepted, reason_code: relation.scalar-valid}
+  input:
+    type: content_digest
+    value: semantic-v2:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: malformed-content-digest-domain
+  class: negative
+  operation: validate_scalar
+  expected: {decision: rejected, reason_code: relation.scalar-invalid}
+  input:
+    type: content_digest
+    value: Claim-content:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: malformed-content-digest-hex
+  class: negative
+  operation: validate_scalar
+  expected: {decision: rejected, reason_code: relation.scalar-invalid}
+  input:
+    type: content_digest
+    value: claim-content:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeF
+- id: canonical-stable-unit-key-scalar
+  class: positive
+  operation: validate_scalar
+  expected:
+    decision: accepted
+    reason_code: relation.scalar-valid
+  input:
+    type: typed_id<stable_unit_key>
+    value: compile-unit:primary
 - id: malformed-digest-scalar
   class: negative
   operation: validate_scalar
@@ -425,4 +492,47 @@ vectors:
     patches:
     - op: replace
       path: /api_projection/static/descriptor_source
-      value: relations[].descriptor_id
+      value: relations[generated_cpp_tag!=null].descriptor_id
+- id: legacy-api-surface-forbidden
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.schema-invalid
+  input:
+    patches:
+    - op: add
+      path: /relations/18/api_surface
+      value: dynamic_only
+- id: missing-cpp-projection
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.schema-invalid
+  input:
+    patches:
+    - op: remove
+      path: /relations/18/cpp_projection
+- id: installed-static-null-tag
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.schema-invalid
+  input:
+    patches:
+    - op: replace
+      path: /relations/0/generated_cpp_tag
+      value: null
+- id: dynamic-only-string-tag
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.schema-invalid
+  input:
+    patches:
+    - op: replace
+      path: /relations/18/generated_cpp_tag
+      value: cxxlens::frontend::clang22::entity_observation

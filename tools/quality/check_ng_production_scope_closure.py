@@ -429,7 +429,7 @@ def validate_clang22_materialization_census(
     }
     for descriptor in CLANG22_OBSERVATION_DESCRIPTORS:
         row = registry_rows.get(descriptor)
-        if row is None or row.get("api_surface") != "dynamic_only":
+        if row is None or row.get("cpp_projection") != "dynamic-only":
             fail(
                 "Clang 22 observation descriptor must be registered dynamic-only: "
                 f"{descriptor}"
@@ -551,7 +551,7 @@ def derive_inventory(root: Path) -> dict[SurfaceKey, SourceNode]:
         add_node(nodes, "relation.descriptor", descriptor, "production-required")
         stem = relation["name"].replace(".", "_")
         links = [relation_key]
-        if relation.get("api_surface") == "dynamic_only":
+        if relation.get("cpp_projection") == "dynamic-only":
             disposition = "explicit-non-1.0"
         elif stem in static_headers:
             header = f"include/cxxlens/relations/{stem}.hpp"

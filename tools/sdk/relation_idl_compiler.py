@@ -19,8 +19,18 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 def canonical_relation(relation: dict[str, object]) -> dict[str, object]:
-    """Canonicalize only descriptor collections whose schema semantics are unordered."""
+    """Canonicalize descriptor semantics, excluding installed-header admission metadata."""
     canonical = copy.deepcopy(relation)
+    # `cpp_projection` controls the public admission workflow, not the descriptor
+    # semantics bound into a tag or snapshot. Keeping it outside this canonical
+    # projection lets an authority-only admission proposal avoid silently changing
+    # the already installed eleven descriptor bindings.
+    projection = canonical.pop("cpp_projection", None)
+    # Registry 1.4 included this spelling in the three dynamic observation
+    # descriptor digests. Keep the published binding stable while 1.5 moves
+    # admission to `cpp_projection`.
+    if projection == "dynamic-only":
+        canonical["api_surface"] = "dynamic_only"
     references = canonical.get("references", [])
     assert isinstance(references, list)
     references.sort(
@@ -29,6 +39,7 @@ def canonical_relation(relation: dict[str, object]) -> dict[str, object]:
             str(reference["strength"]),
             str(reference["target_relation"]),
             tuple(reference["target_columns"]),
+            bool(reference.get("container_elements", False)),
         )
     )
     merge = canonical["merge"]
@@ -71,6 +82,11 @@ def parse_type(value: str) -> tuple[str, str, bool]:
         "condition_ref": "condition_ref",
         "source_span_id": "source_span_id",
         "evidence_id": "evidence_id",
+        "relation_name": "relation_name",
+        "semantic_key_id": "semantic_key_id",
+        "assertion_id": "assertion_id",
+        "content_digest": "content_digest",
+        "interpretation_domain_id": "interpretation_domain_id",
         "closed_symbol": "closed_symbol",
         "set": "set",
     }
@@ -92,11 +108,11 @@ def type_expr(value: str) -> str:
 
 
 def render(relation: dict[str, object]) -> str:
-    relation = canonical_relation(relation)
-    if relation.get("api_surface") == "dynamic_only":
+    if relation.get("cpp_projection") == "dynamic-only":
         raise ValueError(
             f"dynamic-only relation has no generated C++ tag: {relation['name']}"
         )
+    relation = canonical_relation(relation)
     qualified_value = relation.get("generated_cpp_tag")
     if not isinstance(qualified_value, str):
         raise ValueError(f"relation has no generated_cpp_tag: {relation['name']}")
@@ -203,9 +219,10 @@ def render(relation: dict[str, object]) -> str:
         assert isinstance(reference, dict)
         source = ", ".join(f'"{string(str(value))}"' for value in reference["source_columns"])
         target = ", ".join(f'"{string(str(value))}"' for value in reference["target_columns"])
+        container = ", true" if reference.get("container_elements", False) else ""
         lines.append(
             f'\t\t\t\t\t{{{{{source}}}, "{string(str(reference["target_relation"]))}", '
-            f'{{{target}}}, sdk::reference_strength::{reference["strength"]}}},'
+            f'{{{target}}}, sdk::reference_strength::{reference["strength"]}{container}}},'
         )
     conflict_columns = merge.get("conflict_columns", [])
     assert isinstance(conflict_columns, list)
@@ -291,7 +308,7 @@ def main() -> int:
     if relation is None:
         print(f"relation not found: {args.relation}", file=sys.stderr)
         return 2
-    if relation.get("api_surface") == "dynamic_only":
+    if relation.get("cpp_projection") == "dynamic-only":
         print(
             f"dynamic-only relation has no generated C++ tag: {args.relation}",
             file=sys.stderr,

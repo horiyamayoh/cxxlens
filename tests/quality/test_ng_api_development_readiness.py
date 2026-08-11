@@ -262,6 +262,24 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(ReadinessError, "lack registry binding"):
                 validate_documents(root)
 
+    def test_registry_installed_static_relation_without_catalog_admission_is_rejected(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            catalog_path = root / "schemas/cxxlens_ng_public_api_catalog.yaml"
+            catalog = load_document(catalog_path)
+            entry = next(
+                row for row in catalog["entries"] if row["id"] == "public.relation-static"
+            )
+            entry["headers"].remove("include/cxxlens/relations/source_origin.hpp")
+            self.write_yaml(catalog_path, catalog)
+            (root / "include/cxxlens/relations/source_origin.hpp").unlink()
+            with self.assertRaisesRegex(
+                ReadinessError, "installed-static registry headers lack catalog admission"
+            ):
+                validate_documents(root)
+
     def test_multiple_active_write_units_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -822,6 +840,18 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             self.assertIn("  push:\n", text)
             workflow.write_text(text.replace("  push:\n", "", 1), encoding="utf-8")
             with self.assertRaisesRegex(ReadinessError, "workflow triggers"):
+                validate_documents(root)
+
+    def test_quality_evidence_pipeline_requires_pipefail(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            self.assertIn("          set -o pipefail\n", text)
+            workflow.write_text(
+                text.replace("          set -o pipefail\n", "", 1), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ReadinessError, "pipeline must preserve"):
                 validate_documents(root)
 
     def test_callable_inventory_semantic_digest_drift_is_rejected(self) -> None:

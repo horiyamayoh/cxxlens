@@ -181,6 +181,9 @@ def public_header_inventory(root: pathlib.Path) -> tuple[list[str], list[str]]:
     unbound = sorted(admitted_relation_headers - registry_relation_headers)
     if unbound:
         fail(f"catalog relation headers lack registry binding: {unbound}")
+    unadmitted = sorted(registry_relation_headers - admitted_relation_headers)
+    if unadmitted:
+        fail(f"installed-static registry headers lack catalog admission: {unadmitted}")
     return sorted(actual), sorted(admitted_relation_headers)
 
 
@@ -327,6 +330,11 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     )
     if quality_job is None or "fetch-depth: 2" not in quality_job.group("body"):
         fail("public callable stable-ID check requires parent history in CI")
+    if not re.search(
+        r"set -o pipefail\s+cmake --build --preset ci-quick --target cxxlens-quality\s+\\\s*2>&1 \| tee build/ci-quick/quality-production\.log",
+        quality_job.group("body"),
+    ):
+        fail("quality evidence pipeline must preserve cxxlens-quality failure status")
     production_contract = manifest["production_scope_closure"]
     for marker in (
         production_contract["checker"],

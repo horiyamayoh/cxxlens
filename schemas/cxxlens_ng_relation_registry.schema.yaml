@@ -102,6 +102,7 @@ properties:
     - validator
     - boundaries
     - digest_grammar
+    - content_digest_grammar
     - semantic_version_grammar
     - utf8_policy
     - identity_policy
@@ -114,6 +115,7 @@ properties:
       boundaries:
         const: [row-builder, dynamic-row, logical-query-literal, provider-decode, store-reopen]
       digest_grammar: {const: canonical-sha256-or-semantic-v2-sha256-lowercase-64hex}
+      content_digest_grammar: {const: raw-or-typed-domain-sha256-lowercase-64hex}
       semantic_version_grammar: {const: canonical-u32-major-minor-patch-no-leading-zero}
       utf8_policy: {const: strict-unicode-scalar-sequences}
       identity_policy: {const: nonempty-control-free-utf8-and-canonical-type-parameter}
@@ -200,9 +202,9 @@ properties:
         - column_source
         properties:
           descriptor_source:
-            const: relations[generated_cpp_tag!=null].descriptor_id
+            const: relations[cpp_projection=installed-static].descriptor_id
           column_source:
-            const: relations[generated_cpp_tag!=null].columns[].id
+            const: relations[cpp_projection=installed-static].columns[].id
       dynamic:
         type: object
         additionalProperties: false
@@ -440,15 +442,13 @@ $defs:
     additionalProperties: false
     oneOf:
     - properties:
+        cpp_projection: {const: installed-static}
         generated_cpp_tag:
           type: string
           pattern: ^cxxlens::[a-z][a-z0-9_:]*$
-      not:
-        required: [api_surface]
     - properties:
-        api_surface: {const: dynamic_only}
+        cpp_projection: {const: dynamic-only}
         generated_cpp_tag: {type: 'null'}
-      required: [api_surface]
     required:
     - descriptor_id
     - name
@@ -459,6 +459,7 @@ $defs:
     - stability
     - profile
     - summary
+    - cpp_projection
     - generated_cpp_tag
     - claim
     - columns
@@ -495,8 +496,8 @@ $defs:
       summary:
         type: string
         minLength: 1
-      api_surface:
-        const: dynamic_only
+      cpp_projection:
+        enum: [installed-static, dynamic-only]
       generated_cpp_tag:
         oneOf:
         - type: string

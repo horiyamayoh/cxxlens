@@ -144,6 +144,7 @@ jobs:
           ctest --preset ci-quick --parallel "${CTEST_PARALLEL_LEVEL}" \
             --label-regex quality \
             --output-junit ctest-quality.xml
+          set -o pipefail
           cmake --build --preset ci-quick --target cxxlens-quality \
             2>&1 | tee build/ci-quick/quality-production.log
           python tools/quality/collect_toolchain_provenance.py \

@@ -275,9 +275,41 @@ namespace cxxlens::sdk
 			return {};
 		}
 
-		[[nodiscard]] bool reference_match(const claim& source,
-										   const relation_reference_descriptor& reference,
-										   const claim& target)
+		[[nodiscard]] std::optional<std::vector<std::string>>
+		canonical_set_elements(const detached_cell& cell)
+		{
+			if (!cell.value)
+				return std::nullopt;
+			const auto* encoded = std::get_if<std::vector<std::byte>>(&*cell.value);
+			if (encoded == nullptr)
+				return std::nullopt;
+			std::vector<std::string> output;
+			for (std::size_t offset{}; offset < encoded->size();)
+			{
+				if (encoded->size() - offset < sizeof(std::uint32_t))
+					return std::nullopt;
+				std::uint32_t length{};
+				for (std::size_t byte{}; byte < sizeof(length); ++byte)
+					length |= std::to_integer<std::uint32_t>((*encoded)[offset + byte])
+						<< (byte * 8U);
+				offset += sizeof(length);
+				if (length == 0U || length > encoded->size() - offset)
+					return std::nullopt;
+				std::string element;
+				element.reserve(length);
+				for (std::size_t byte{}; byte < length; ++byte)
+					element.push_back(static_cast<char>((*encoded)[offset + byte]));
+				offset += length;
+				output.push_back(std::move(element));
+			}
+			return output;
+		}
+
+		[[nodiscard]] bool
+		reference_match(const claim& source,
+						const relation_reference_descriptor& reference,
+						const claim& target,
+						const std::optional<std::string_view> container_element = std::nullopt)
 		{
 			if (source.interpretation != target.interpretation ||
 				source.presence.universe != target.presence.universe ||
@@ -290,7 +322,16 @@ namespace cxxlens::sdk
 				if (left == source.row.cells.end() || right == target.row.cells.end() ||
 					left->second.state != cell_state::present ||
 					right->second.state != cell_state::present || !left->second.value ||
-					!right->second.value || left->second.value != right->second.value)
+					!right->second.value)
+					return false;
+				if (reference.container_elements)
+				{
+					const auto* target_value = std::get_if<std::string>(&*right->second.value);
+					if (!container_element || target_value == nullptr ||
+						*target_value != *container_element)
+						return false;
+				}
+				else if (left->second.value != right->second.value)
 					return false;
 			}
 			return true;
@@ -848,15 +889,34 @@ namespace cxxlens::sdk
 			{
 				if (reference_absent(value, reference))
 					continue;
-				const bool resolved = std::ranges::any_of(
-					reference_space,
-					[&](const claim* target)
-					{
-						auto target_descriptor = descriptor_for(engine, *target);
-						return target_descriptor &&
-							target_descriptor->name == reference.target_relation &&
-							reference_match(value, reference, *target);
-					});
+				const auto target_resolves = [&](const std::optional<std::string_view> element)
+				{
+					return std::ranges::any_of(
+						reference_space,
+						[&](const claim* target)
+						{
+							auto target_descriptor = descriptor_for(engine, *target);
+							return target_descriptor &&
+								target_descriptor->name == reference.target_relation &&
+								reference_match(value, reference, *target, element);
+						});
+				};
+				bool resolved{};
+				if (reference.container_elements)
+				{
+					const auto source = value.row.cells.find(reference.source_columns.front());
+					const auto elements = source == value.row.cells.end()
+						? std::optional<std::vector<std::string>>{}
+						: canonical_set_elements(source->second);
+					resolved = elements &&
+						std::ranges::all_of(*elements,
+											[&](const std::string& element)
+											{
+												return target_resolves(element);
+											});
+				}
+				else
+					resolved = target_resolves(std::nullopt);
 				if (!resolved && reference.strength == reference_strength::hard)
 					return unexpected(claim_error(
 						"sdk.hard-reference-missing", value.assertion, reference.target_relation));

@@ -487,7 +487,7 @@ namespace cxxlens::sdk
 			auto state = reader.unsigned_value();
 			auto has_value = reader.boolean();
 			if (!scalar || !parameter || !optional || !state || !has_value ||
-				*scalar > static_cast<std::uint8_t>(scalar_kind::set) ||
+				*scalar > static_cast<std::uint8_t>(scalar_kind::interpretation_domain_id) ||
 				*state > static_cast<std::uint8_t>(cell_state::unknown))
 				return unexpected(store_error("store.corrupt", "cell", "invalid-header"));
 			detached_cell output;

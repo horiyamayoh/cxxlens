@@ -86,11 +86,19 @@ REQUIRED_VECTOR_IDS = {
     "envelope-containing-snapshot-forbidden",
     "hard-reference-resolved",
     "hard-reference-missing",
+    "container-hard-reference-elements-resolved",
+    "container-hard-reference-empty-vacuous",
+    "container-hard-reference-element-missing",
     "soft-reference-missing-accounted",
     "soft-reference-missing-unaccounted",
     "open-symbol-unknown-preserved",
     "closed-symbol-unknown-rejected",
     "canonical-digest-scalar",
+    "canonical-content-digest-scalar",
+    "canonical-content-digest-semantic-scalar",
+    "malformed-content-digest-domain",
+    "malformed-content-digest-hex",
+    "canonical-stable-unit-key-scalar",
     "malformed-digest-scalar",
     "noncanonical-semver-scalar",
     "empty-typed-id-scalar",
@@ -114,6 +122,10 @@ REQUIRED_VECTOR_IDS = {
     "clang22-span-reference-mismatch",
     "clang22-hard-reference-unknown",
     "dynamic-only-static-projection",
+    "legacy-api-surface-forbidden",
+    "missing-cpp-projection",
+    "installed-static-null-tag",
+    "dynamic-only-string-tag",
 }
 
 
@@ -127,6 +139,10 @@ class RelationContractError(ValueError):
 
 def fail(code: str, message: str) -> None:
     raise RelationContractError(code, message)
+
+
+def reference_scalar_type(value: str) -> str:
+    return value[9:-1] if value.startswith("optional<") and value.endswith(">") else value
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
@@ -158,8 +174,16 @@ def digest(value: Any) -> str:
 
 
 def canonical_relation_projection(relation: dict[str, Any]) -> dict[str, Any]:
-    """Canonicalize registry collections whose insertion order is non-semantic."""
+    """Canonicalize descriptor semantics, excluding C++ admission metadata."""
     canonical = copy.deepcopy(relation)
+    projection = canonical.pop("cpp_projection", None)
+    # Registry 1.4 encoded the three dynamic observations with
+    # `api_surface: dynamic_only`, and that spelling entered their published
+    # descriptor digests. Preserve those bindings while moving admission to the
+    # explicit 1.5 projection field; installed-static rows previously had no
+    # corresponding descriptor member.
+    if projection == "dynamic-only":
+        canonical["api_surface"] = "dynamic_only"
     references = canonical.setdefault("references", [])
     references.sort(
         key=lambda reference: (
@@ -167,6 +191,7 @@ def canonical_relation_projection(relation: dict[str, Any]) -> dict[str, Any]:
             str(reference["strength"]),
             str(reference["target_relation"]),
             tuple(reference["target_columns"]),
+            bool(reference.get("container_elements", False)),
         )
     )
     canonical["merge"].setdefault("conflict_columns", []).sort()
@@ -294,7 +319,7 @@ def _validate_clang22_observation_relations(
     dynamic = {
         name
         for name, relation in relations.items()
-        if relation.get("api_surface") == "dynamic_only"
+        if relation.get("cpp_projection") == "dynamic-only"
     }
     if dynamic != CLANG22_OBSERVATION_RELATIONS:
         fail(
@@ -348,7 +373,7 @@ def _validate_clang22_observation_relations(
             or relation["semantics"] != f"{name}/2"
             or relation["owner_namespace"] != "cxxlens.clang22.reference"
             or relation["stability"] != "versioned"
-            or relation.get("api_surface") != "dynamic_only"
+            or relation.get("cpp_projection") != "dynamic-only"
             or relation.get("generated_cpp_tag") is not None
         ):
             fail(
@@ -513,8 +538,8 @@ def validate_registry(
 ) -> dict[str, dict[str, Any]]:
     static_projection = registry.get("api_projection", {}).get("static")
     if static_projection != {
-        "descriptor_source": "relations[generated_cpp_tag!=null].descriptor_id",
-        "column_source": "relations[generated_cpp_tag!=null].columns[].id",
+        "descriptor_source": "relations[cpp_projection=installed-static].descriptor_id",
+        "column_source": "relations[cpp_projection=installed-static].columns[].id",
     }:
         fail(
             "relation.static-projection-includes-dynamic",
@@ -533,15 +558,15 @@ def validate_registry(
     generated_tags: list[str] = []
     for name, relation in relations.items():
         tag = relation.get("generated_cpp_tag")
-        surface = relation.get("api_surface")
-        if surface is None and isinstance(tag, str):
+        projection = relation.get("cpp_projection")
+        if projection == "installed-static" and isinstance(tag, str):
             generated_tags.append(tag)
-        elif surface == "dynamic_only" and tag is None:
+        elif projection == "dynamic-only" and tag is None:
             pass
         else:
             fail(
-                "relation.api-surface-invalid",
-                f"{name} generated C++ tag/dynamic-only classification differs",
+                "relation.cpp-projection-invalid",
+                f"{name} generated C++ tag/projection classification differs",
             )
     duplicate_tags = sorted(
         tag for tag in set(generated_tags) if generated_tags.count(tag) != 1
@@ -675,6 +700,29 @@ def validate_registry(
                     "relation.reference-column-unknown",
                     f"{name} reference target column is unknown",
                 )
+            if reference.get("container_elements", False):
+                if len(reference["source_columns"]) != 1 or len(reference["target_columns"]) != 1:
+                    fail("relation.reference-container-shape", f"{name} container reference is not unary")
+                source = columns[reference["source_columns"][0]]
+                target = target_columns[reference["target_columns"][0]]
+                if (
+                    source["type"].startswith("optional<")
+                    or not source["type"].startswith("set<")
+                    or not source["type"].endswith(">")
+                ):
+                    fail("relation.reference-container-source", f"{name} container source is not a set")
+                parameter = source["type"][4:-1]
+                if target["type"].startswith("optional<") or target["type"] not in (
+                    parameter,
+                    f"typed_id<{parameter}>",
+                ):
+                    fail("relation.reference-container-target", f"{name} container target type differs")
+            elif any(
+                reference_scalar_type(columns[source_id]["type"])
+                != reference_scalar_type(target_columns[target_id]["type"])
+                for source_id, target_id in zip(reference["source_columns"], reference["target_columns"])
+            ):
+                fail("relation.reference-type-mismatch", f"{name} reference types differ")
             if reference["strength"] == "hard":
                 if reference["on_missing"] != "reject_batch":
                     fail("relation.hard-reference-policy", f"{name} hard reference is not rejecting")
@@ -762,7 +810,12 @@ def resolve_reference(
     if len(matches) != 1:
         fail("relation.vector-invalid", "reference vector does not select exactly one reference")
     reference = matches[0]
-    if input_value["source_value"] in input_value["available_target_values"]:
+    source_values = (
+        input_value.get("source_values", [])
+        if reference.get("container_elements", False)
+        else [input_value["source_value"]]
+    )
+    if all(value in input_value["available_target_values"] for value in source_values):
         return "accepted", "relation.reference-resolved"
     if reference["strength"] == "hard":
         return "rejected", "relation.hard-reference-missing"
@@ -800,6 +853,10 @@ def validate_scalar(input_value: dict[str, Any]) -> tuple[str, str]:
         valid = re.fullmatch(
             r"(?:sha256|semantic-v2:sha256):[0-9a-f]{64}", value
         ) is not None
+    elif scalar_type == "content_digest":
+        valid = re.fullmatch(
+            r"(?:sha256|[a-z][a-z0-9_.-]*:sha256):[0-9a-f]{64}", value
+        ) is not None
     elif scalar_type == "semantic_version":
         match = re.fullmatch(
             r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)",
@@ -808,7 +865,9 @@ def validate_scalar(input_value: dict[str, Any]) -> tuple[str, str]:
         valid = match is not None and all(
             int(component) <= 0xFFFFFFFF for component in match.groups()
         )
-    elif re.fullmatch(r"typed_id<[a-z][a-z0-9_]*_id>", scalar_type):
+    elif re.fullmatch(
+        r"typed_id<(?:[a-z][a-z0-9_]*_id|stable_unit_key)>", scalar_type
+    ):
         valid = bool(value) and all(
             ord(character) >= 0x20 and ord(character) != 0x7F
             for character in value
@@ -847,6 +906,13 @@ def validate_scalar(input_value: dict[str, Any]) -> tuple[str, str]:
             ):
                 valid = False
                 break
+            inner = scalar_type[4:-1]
+            if inner == "content_digest":
+                valid = re.fullmatch(
+                    r"(?:sha256|[a-z][a-z0-9_.-]*:sha256):[0-9a-f]{64}", text
+                ) is not None
+            elif inner == "digest":
+                valid = re.fullmatch(r"(?:sha256|semantic-v2:sha256):[0-9a-f]{64}", text) is not None
             previous = element
     return (
         ("accepted", "relation.scalar-valid")

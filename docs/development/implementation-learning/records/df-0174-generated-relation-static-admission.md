@@ -1,11 +1,11 @@
 ---
 id: DF-0174
 title: Clarify generated relation tags versus installed static API admission
-status: investigating
+status: accepted
 kind: missing-assumption
 impact: irreversible
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - public-api.generated-relation-admission
   - relation-registry.static-api-projection
@@ -20,13 +20,16 @@ authority_refs:
 tracking_issue: '#174'
 implementation_issues:
   - '#173'
-resolution_refs: []
+  - '#174'
+resolution_refs:
+  - docs/design/adr/0098-explicit-static-relation-projection.md
 review:
   mode: independent
-  status: pending
+  status: complete
   author: codex-agent-root
-  reviewer: null
-  refs: []
+  reviewer: codex-agent-u0-static-admission-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/174#issuecomment-5255918605
 created: '2026-07-19'
 ---
 
@@ -48,11 +51,10 @@ The seven descriptors without an admitted generated header are `source.origin.v1
 ## Working mental model
 
 The Public API Catalog intentionally owns installed header admission, while the Relation
-Registry owns derivation and identity for an admitted generated header. This record does not
-change the dynamic or system semantics of accepted descriptors; it isolates only their installed
-static-header admission. The unresolved point is whether a `generated_cpp_tag` on a non-admitted
-descriptor is a reserved future name, a required installed projection, or metadata that should
-not exist until admission.
+Registry owns derivation and identity for an admitted generated header. Accepted ADR 0098 adds an
+explicit `cpp_projection` field so this record no longer relies on tag nullability as admission
+metadata. It classifies the seven standard descriptors as `installed-static`; the implementation
+must now admit their public artifacts exactly, without changing descriptor semantics or digests.
 
 ## Mismatch or opportunity
 
@@ -99,12 +101,62 @@ explicit.
 
 ## Recommendation
 
-Prefer an explicit registry projection/admission classification owned by an accepted authority,
-then decide each of the seven relations individually. Preserve the current catalog-admitted 11
-headers until that authority change has independent adversarial review. Do not add or remove the
-seven public headers based on this record alone.
+Implement accepted ADR 0098 by making the catalog/header/callable/example sets exactly match all
+eighteen `installed-static` relations. Preserve descriptor digests and keep all three
+`dynamic-only` observation relations excluded from generated static API admission.
 
 ## Disposition
 
 2026-07-19: Investigation opened from production-completion audit issue #173. The static public
 admission unit is blocked. Dynamic/system relation implementation and unrelated units may proceed.
+
+2026-08-12: ADR 0098 and the registry/checker proposal classify every relation explicitly and
+identify the seven target installed-static descriptors. This record remains proposed/blocked:
+independent review must accept ADR 0098 before catalog admission, generated headers, callable
+inventory, examples, or installed qualification are activated.
+
+2026-08-12: Independent adversarial review accepted exact proposal commit
+`332fdca68df26ef316a9f675ce6ae84f7e468710` with no P0/P1. ADR 0098 is accepted and this record
+is `may-proceed`; installed-package qualification remains blocked until the seven public artifact
+families and their exact catalog/inventory/tests are implemented and reviewed.
+
+2026-08-12: Issue #174 implementation admitted and generated all seven accepted
+`installed-static` relation headers, while the three frontend observation relations remain
+`dynamic-only`. The Public API Catalog and registry now bind exactly eighteen static relation
+headers; the Clang 22 and Doxygen-derived callable inventory contains 604 rows. Learning
+checkpoint: DF-0174 remains the governing resolved feedback record; independent implementation
+review and installed-package qualification evidence remain required before terminal release
+qualification.
+
+2026-08-12: Static activation exposed a runtime/IDL parity gap: the accepted
+`cc.type_component` canonical claim key includes optional projection members, whose absence is
+represented as canonical null. Accepted ADR 0018 requires `key_columns` to equal the complete
+claim-key role set; it does not require every key member to be non-optional. The runtime validator
+now enforces that accepted rule, preserving the registry descriptor and digest. Regression evidence
+is `relation-schema-parity` in `tests/unit/sdk/sdk_test.cpp`.
+
+2026-08-12: Static activation also exposed an accepted scalar spelling outside the runtime's
+generic `_id` suffix rule: `core.unresolved.scope` is `typed_id<stable_unit_key>`. The runtime
+validator now recognizes that exact accepted identity spelling without admitting arbitrary
+`typed_id` parameters; the registry descriptor and digest remain unchanged. Positive
+`canonical-stable-unit-key-scalar` and negative non-identity conformance vectors preserve the
+boundary.
+
+2026-08-12: Independent implementation review found two further activation-only parity gaps. The
+Store wire decoder still bounded `scalar_kind` at the former `set` ordinal, and the query validator
+and reference executor omitted the five newly admitted scalar spellings. The decoder now accepts
+through the appended `interpretation_domain_id` ordinal while preserving every legacy ordinal; the
+query paths map all five exact canonical names. Store reopen and typed/dynamic query execution tests
+exercise the last ordinal and every new spelling. The same review cycle exposed a quality-fixture
+isolation defect: a negative scope test wrote through a symlink into the repository's DF record.
+Its temporary root now owns a real docs copy, so fail-closed mutation cannot alter source evidence.
+
+2026-08-12: Independent review P1 follow-up found that `source.origin` had accepted
+`container_elements: true` relation-IDL metadata but the public runtime descriptor and generated
+tag projection omitted it. ADR 0017 therefore did not bind the element-wise reference law, and
+claim adoption compared the encoded set as one scalar. The runtime projection now binds the flag,
+requires unary `set<T>` to exact scalar `T` targets, and resolves every canonical set element under
+the existing interpretation/presence law; the all-static registry and missing-element regressions
+are required evidence. The same review clarified `content_digest` as the conceptual strong type
+for claim content: raw, semantic-v2, and lowercase typed-domain SHA-256 spellings are accepted
+recursively for `set<content_digest>`, while generic `digest` remains narrower.

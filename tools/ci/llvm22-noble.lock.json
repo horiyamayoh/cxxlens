@@ -25,6 +25,7 @@
     "expected_release": "22.1.8",
     "package_sha256": {
       "clang-22": "e969e7f97a6e71326bae2cec6d76059cb9bf6562bfe89d03bcb65c3cee1aac05",
+      "clang-format-22": "db5bbb134276fdfe42188df4502a33d51e2889282134c8e76cdb4f19f4f628ad",
       "clang-tidy-22": "cebba8e3d25f9dc23eb679ee53914802937910257fe54c072795f2ad4f6ecf38",
       "libclang-22-dev": "b3b06e531261a8a994b155e4b19592225d1dd97ce860fef521280a233e49cb55",
       "libclang-rt-22-dev": "5ec77bbfbdae76a6eda76ef9fff0cfd983d6b9c7ea72335a7fed9c99c423a7fb",
@@ -33,6 +34,7 @@
     },
     "packages": {
       "clang-22": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
+      "clang-format-22": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
       "clang-tidy-22": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
       "libclang-22-dev": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
       "libclang-rt-22-dev": "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80",
@@ -47,6 +49,7 @@
       ],
       "developer": [
         "clang-22",
+        "clang-format-22",
         "libclang-22-dev",
         "llvm-22",
         "llvm-22-dev"

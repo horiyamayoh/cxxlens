@@ -21,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:eea20387b23ddae1554fbc5ad4f41fa2ac00c305aa2b3db87e15a59f9d16d167
+authority_census_digest: sha256:1eeb35454666edff992ed66de7452eac97fb7c71aeaafeadb140648044ab5b72
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
@@ -132,10 +132,17 @@ assignments:
       - {domain: public.header, id: include/cxxlens/relations/build_variant.hpp}
       - {domain: public.header, id: include/cxxlens/relations/cc_call_direct_target.hpp}
       - {domain: public.header, id: include/cxxlens/relations/cc_call_site.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/cc_declaration.hpp}
       - {domain: public.header, id: include/cxxlens/relations/cc_entity.hpp}
       - {domain: public.header, id: include/cxxlens/relations/cc_type.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/cc_type_component.hpp}
       - {domain: public.header, id: include/cxxlens/relations/company_lock_acquire.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/core_claim_conflict.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/core_differential_disagreement.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/core_provider_execution.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/core_unresolved.hpp}
       - {domain: public.header, id: include/cxxlens/relations/source_file.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/source_origin.hpp}
       - {domain: public.header, id: include/cxxlens/relations/source_span.hpp}
       - {domain: public.header, id: include/cxxlens/sdk.hpp}
       - {domain: public.header, id: include/cxxlens/sdk/claim.hpp}
@@ -196,10 +203,17 @@ assignments:
       - {domain: relation.static-admission, id: build.variant.v1}
       - {domain: relation.static-admission, id: cc.call_direct_target.v1}
       - {domain: relation.static-admission, id: cc.call_site.v1}
+      - {domain: relation.static-admission, id: cc.declaration.v1}
       - {domain: relation.static-admission, id: cc.entity.v1}
       - {domain: relation.static-admission, id: cc.type.v1}
+      - {domain: relation.static-admission, id: cc.type_component.v1}
       - {domain: relation.static-admission, id: company.lock.acquire.v1}
+      - {domain: relation.static-admission, id: core.claim_conflict.v1}
+      - {domain: relation.static-admission, id: core.differential_disagreement.v1}
+      - {domain: relation.static-admission, id: core.provider_execution.v1}
+      - {domain: relation.static-admission, id: core.unresolved.v1}
       - {domain: relation.static-admission, id: source.file.v1}
+      - {domain: relation.static-admission, id: source.origin.v1}
       - {domain: relation.static-admission, id: source.span.v1}
       - {domain: release.migration, id: R0}
       - {domain: release.migration, id: R1}
@@ -332,20 +346,4 @@ assignments:
       - {domain: provider.support-tuple, id: support.clang22-entity-linux}
       - {domain: provider.support-tuple, id: support.company-lock-conformance}
       - {domain: provider.support-tuple, id: support.kernel-build-project-linux}
-  - id: scope.static-admission-authority-blocker
-    owner_issue: '#174'
-    scope: unresolved
-    qualification: blocked
-    gap:
-      finding: scope.blocked.static-admission-authority
-      remediation: Resolve the seven generated-tag static admission decisions in accepted authority.
-    feedback: [DF-0174]
-    surfaces:
-      - {domain: relation.static-admission, id: cc.declaration.v1}
-      - {domain: relation.static-admission, id: cc.type_component.v1}
-      - {domain: relation.static-admission, id: core.claim_conflict.v1}
-      - {domain: relation.static-admission, id: core.differential_disagreement.v1}
-      - {domain: relation.static-admission, id: core.provider_execution.v1}
-      - {domain: relation.static-admission, id: core.unresolved.v1}
-      - {domain: relation.static-admission, id: source.origin.v1}
 feedback_exclusions: []

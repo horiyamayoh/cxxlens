@@ -1,5 +1,5 @@
 {
-  "asset_count": 620,
+  "asset_count": 628,
   "assets": [
     {
       "authority": "active",
@@ -1151,6 +1151,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0098-explicit-static-relation-projection.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1578,6 +1585,13 @@
     },
     {
       "authority": "active",
+      "path": "include/cxxlens/relations/cc_declaration.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "include/cxxlens/relations/cc_entity.hpp",
       "removal_issue": null,
       "replacement": null,
@@ -1592,6 +1606,13 @@
     },
     {
       "authority": "active",
+      "path": "include/cxxlens/relations/cc_type_component.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "include/cxxlens/relations/company_lock_acquire.hpp",
       "removal_issue": null,
       "replacement": null,
@@ -1599,7 +1620,42 @@
     },
     {
       "authority": "active",
+      "path": "include/cxxlens/relations/core_claim_conflict.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "include/cxxlens/relations/core_differential_disagreement.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "include/cxxlens/relations/core_provider_execution.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "include/cxxlens/relations/core_unresolved.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "include/cxxlens/relations/source_file.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "include/cxxlens/relations/source_origin.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4343,7 +4399,7 @@
     }
   ],
   "classifications": {
-    "active": 584,
+    "active": 592,
     "archived": 35,
     "generated": 1
   },

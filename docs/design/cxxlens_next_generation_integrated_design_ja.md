@@ -1036,6 +1036,14 @@ using R = cxxlens::cc::relations::call_site;
 auto q = query::from<R>();
 ```
 
+Relation Registry の各 descriptor は `cpp_projection` を `installed-static` または
+`dynamic-only` として明示する。`installed-static` は non-null な generated C++ tag を
+要求し、static projection はその descriptor/column ID だけから導出する。
+`dynamic-only` は null tag を要求し、static header を持たない。Public API Catalog は
+installed header admission を所有し、accepted static admission では catalog header set と
+`installed-static` set が exact に一致しなければならない。proposal/review 中は catalog
+admission を先取りせず、production scope で blocked として扱う。
+
 #### Dynamic API
 
 runtime-discovered schema は descriptor/column stable ID から操作する。
@@ -1071,12 +1079,19 @@ coverage domain
 closure kinds
 provenance minimum
 evolution policy
+cpp projection
 ```
 
 descriptor collection のうち `columns`、`references`、`conflict_columns` は投入順に意味を持たず、canonical form では
 各 serialized record の全 field を含む strict total order へ整列する。一方、`key_columns`、domain identity projection、
 各 reference 内の source/target column list は位置対応を持つ sequence なので順序を保持する。reference の比較が equivalent
 となるのは serialized reference が同一の場合だけでなければならない。
+
+reference は通常 source/target の exact `value_type` を位置ごとに対応させる。`container_elements: true` は
+一つの `set<T>` source と一つの scalar canonical name `T` target だけに許可され、canonical length-prefixed
+set の各 element が、同じ interpretation/presence 条件を満たす target scalar value にそれぞれ解決するときだけ
+reference は解決する。empty set は vacuously resolved とし、hard reference の一つでも欠けた element は batch 全体を
+atomic に reject する。
 
 ### 9.4 Column types
 
@@ -1112,8 +1127,9 @@ set は canonical sorted unique。`detached_cell` の byte-backed `set<T>` は e
 各 element は nested `T` の scalar contract で再検証し、truncated length、empty element、重複、逆順、invalid UTF-8、invalid
 digest/ID/symbol を拒否する。list は order が semantics の一部である場合だけ使う。
 
-present scalar は `detached-cell-value-v2` を共通 authority とする。digest は `sha256:` または
-`semantic-v2:sha256:` と lowercase 64 hex、semantic version は leading zero のない u32 `major.minor.patch`、typed ID は canonical
+present scalar は `detached-cell-value-v2` を共通 authority とする。`digest` は `sha256:` または
+`semantic-v2:sha256:` と lowercase 64 hex、`content_digest` はそれらに加えて
+`[a-z][a-z0-9_.-]*:sha256:` と lowercase 64 hex の typed domain spelling を受理する。semantic version は leading zero のない u32 `major.minor.patch`、typed ID は canonical
 `*_id` parameter と nonempty/control-free UTF-8 value、unknown reason も nonempty/control-free UTF-8 を要求する。general
 `utf8_string` は strict Unicode scalar sequence を要求するが、JSON codec が表現できる control code 自体の意味制約は column
 schema が所有する。この検査は row builder、dynamic row、Logical Query literal、provider decode、store reopen で同一である。
