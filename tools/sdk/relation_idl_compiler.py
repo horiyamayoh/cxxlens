@@ -19,8 +19,18 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 def canonical_relation(relation: dict[str, object]) -> dict[str, object]:
-    """Canonicalize only descriptor collections whose schema semantics are unordered."""
+    """Canonicalize descriptor semantics, excluding installed-header admission metadata."""
     canonical = copy.deepcopy(relation)
+    # `cpp_projection` controls the public admission workflow, not the descriptor
+    # semantics bound into a tag or snapshot. Keeping it outside this canonical
+    # projection lets an authority-only admission proposal avoid silently changing
+    # the already installed eleven descriptor bindings.
+    projection = canonical.pop("cpp_projection", None)
+    # Registry 1.4 included this spelling in the three dynamic observation
+    # descriptor digests. Keep the published binding stable while 1.5 moves
+    # admission to `cpp_projection`.
+    if projection == "dynamic-only":
+        canonical["api_surface"] = "dynamic_only"
     references = canonical.get("references", [])
     assert isinstance(references, list)
     references.sort(
@@ -92,11 +102,11 @@ def type_expr(value: str) -> str:
 
 
 def render(relation: dict[str, object]) -> str:
-    relation = canonical_relation(relation)
-    if relation.get("api_surface") == "dynamic_only":
+    if relation.get("cpp_projection") == "dynamic-only":
         raise ValueError(
             f"dynamic-only relation has no generated C++ tag: {relation['name']}"
         )
+    relation = canonical_relation(relation)
     qualified_value = relation.get("generated_cpp_tag")
     if not isinstance(qualified_value, str):
         raise ValueError(f"relation has no generated_cpp_tag: {relation['name']}")
@@ -291,7 +301,7 @@ def main() -> int:
     if relation is None:
         print(f"relation not found: {args.relation}", file=sys.stderr)
         return 2
-    if relation.get("api_surface") == "dynamic_only":
+    if relation.get("cpp_projection") == "dynamic-only":
         print(
             f"dynamic-only relation has no generated C++ tag: {args.relation}",
             file=sys.stderr,

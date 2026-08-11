@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -80,7 +81,7 @@ class NgSdkContractTest(unittest.TestCase):
         )
         self.assertEqual(len(generated), 11)
         for relation, relative in generated:
-            self.assertNotEqual(relation.get("api_surface"), "dynamic_only")
+            self.assertEqual(relation.get("cpp_projection"), "installed-static")
             validate_generated_relation_header(
                 relation, ROOT / relative, label=relative.as_posix()
             )
@@ -91,7 +92,7 @@ class NgSdkContractTest(unittest.TestCase):
             for row in self.registry["relations"]
             if row["name"] == "frontend.clang22.entity_observation"
         )
-        self.assertEqual(dynamic["api_surface"], "dynamic_only")
+        self.assertEqual(dynamic["cpp_projection"], "dynamic-only")
         self.assertIsNone(dynamic["generated_cpp_tag"])
         with self.assertRaisesRegex(ValueError, "dynamic-only relation"):
             render(dynamic)
@@ -129,6 +130,28 @@ class NgSdkContractTest(unittest.TestCase):
         right["row_constraints"]["all_or_none"][0].reverse()
         self.assertEqual(canonical_relation(left), canonical_relation(right))
 
+    def test_dynamic_descriptor_digests_preserve_registry_1_4_bindings(self) -> None:
+        expected = {
+            "frontend.clang22.call_observation":
+                "07ea48a7f00e80972ba59c14ee96f916772ad9ed57fc84e313e3958f08fa548a",
+            "frontend.clang22.entity_observation":
+                "4a5012801fcde26110a9f6350177d74d7d6975edde96337d4d3918ca7a004d51",
+            "frontend.clang22.type_observation":
+                "53c54f967eb041e75ea98463c212d259fed0d3a310038ac9c93209749e72387f",
+        }
+        actual = {}
+        for relation in self.registry["relations"]:
+            if relation["name"] not in expected:
+                continue
+            payload = json.dumps(
+                canonical_relation(relation),
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            actual[relation["name"]] = hashlib.sha256(payload).hexdigest()
+        self.assertEqual(actual, expected)
+
     def test_sdk_binding_rejects_unclassified_null_generated_tag(self) -> None:
         registry = copy.deepcopy(self.registry)
         dynamic = next(
@@ -136,9 +159,9 @@ class NgSdkContractTest(unittest.TestCase):
             for row in registry["relations"]
             if row["name"] == "frontend.clang22.entity_observation"
         )
-        dynamic.pop("api_surface")
+        dynamic.pop("cpp_projection")
         with self.assertRaisesRegex(
-            SdkContractError, "tag/dynamic-only classification differs"
+            SdkContractError, "tag/projection classification differs"
         ):
             admitted_generated_relations(self.catalog, registry)
 
