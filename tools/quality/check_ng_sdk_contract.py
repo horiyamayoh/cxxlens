@@ -88,12 +88,12 @@ def admitted_generated_relations(
     registry_by_header: dict[pathlib.Path, dict[str, Any]] = {}
     for relation in registry["relations"]:
         tag = relation.get("generated_cpp_tag")
-        surface = relation.get("api_surface")
-        if surface == "dynamic_only" and tag is None:
+        projection = relation.get("cpp_projection")
+        if projection == "dynamic-only" and tag is None:
             continue
-        if surface is not None or not isinstance(tag, str):
+        if projection != "installed-static" or not isinstance(tag, str):
             fail(
-                "relation generated C++ tag/dynamic-only classification differs: "
+                "relation generated C++ tag/projection classification differs: "
                 f"{relation['name']}"
             )
         header = pathlib.Path(

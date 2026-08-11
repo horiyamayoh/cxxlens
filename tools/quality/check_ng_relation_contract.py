@@ -114,6 +114,10 @@ REQUIRED_VECTOR_IDS = {
     "clang22-span-reference-mismatch",
     "clang22-hard-reference-unknown",
     "dynamic-only-static-projection",
+    "legacy-api-surface-forbidden",
+    "missing-cpp-projection",
+    "installed-static-null-tag",
+    "dynamic-only-string-tag",
 }
 
 
@@ -158,8 +162,16 @@ def digest(value: Any) -> str:
 
 
 def canonical_relation_projection(relation: dict[str, Any]) -> dict[str, Any]:
-    """Canonicalize registry collections whose insertion order is non-semantic."""
+    """Canonicalize descriptor semantics, excluding C++ admission metadata."""
     canonical = copy.deepcopy(relation)
+    projection = canonical.pop("cpp_projection", None)
+    # Registry 1.4 encoded the three dynamic observations with
+    # `api_surface: dynamic_only`, and that spelling entered their published
+    # descriptor digests. Preserve those bindings while moving admission to the
+    # explicit 1.5 projection field; installed-static rows previously had no
+    # corresponding descriptor member.
+    if projection == "dynamic-only":
+        canonical["api_surface"] = "dynamic_only"
     references = canonical.setdefault("references", [])
     references.sort(
         key=lambda reference: (
@@ -294,7 +306,7 @@ def _validate_clang22_observation_relations(
     dynamic = {
         name
         for name, relation in relations.items()
-        if relation.get("api_surface") == "dynamic_only"
+        if relation.get("cpp_projection") == "dynamic-only"
     }
     if dynamic != CLANG22_OBSERVATION_RELATIONS:
         fail(
@@ -348,7 +360,7 @@ def _validate_clang22_observation_relations(
             or relation["semantics"] != f"{name}/2"
             or relation["owner_namespace"] != "cxxlens.clang22.reference"
             or relation["stability"] != "versioned"
-            or relation.get("api_surface") != "dynamic_only"
+            or relation.get("cpp_projection") != "dynamic-only"
             or relation.get("generated_cpp_tag") is not None
         ):
             fail(
@@ -513,8 +525,8 @@ def validate_registry(
 ) -> dict[str, dict[str, Any]]:
     static_projection = registry.get("api_projection", {}).get("static")
     if static_projection != {
-        "descriptor_source": "relations[generated_cpp_tag!=null].descriptor_id",
-        "column_source": "relations[generated_cpp_tag!=null].columns[].id",
+        "descriptor_source": "relations[cpp_projection=installed-static].descriptor_id",
+        "column_source": "relations[cpp_projection=installed-static].columns[].id",
     }:
         fail(
             "relation.static-projection-includes-dynamic",
@@ -533,15 +545,15 @@ def validate_registry(
     generated_tags: list[str] = []
     for name, relation in relations.items():
         tag = relation.get("generated_cpp_tag")
-        surface = relation.get("api_surface")
-        if surface is None and isinstance(tag, str):
+        projection = relation.get("cpp_projection")
+        if projection == "installed-static" and isinstance(tag, str):
             generated_tags.append(tag)
-        elif surface == "dynamic_only" and tag is None:
+        elif projection == "dynamic-only" and tag is None:
             pass
         else:
             fail(
-                "relation.api-surface-invalid",
-                f"{name} generated C++ tag/dynamic-only classification differs",
+                "relation.cpp-projection-invalid",
+                f"{name} generated C++ tag/projection classification differs",
             )
     duplicate_tags = sorted(
         tag for tag in set(generated_tags) if generated_tags.count(tag) != 1

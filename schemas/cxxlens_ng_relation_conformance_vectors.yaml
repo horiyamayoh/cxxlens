@@ -1,5 +1,5 @@
 schema: cxxlens.relation-conformance-vectors.v1
-document_version: 1.4.0
+document_version: 1.5.0
 authority:
   owner_issue: '#182'
   decision_adr: docs/design/adr/0096-clang22-installed-materialization-boundary.md
@@ -425,4 +425,47 @@ vectors:
     patches:
     - op: replace
       path: /api_projection/static/descriptor_source
-      value: relations[].descriptor_id
+      value: relations[generated_cpp_tag!=null].descriptor_id
+- id: legacy-api-surface-forbidden
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.schema-invalid
+  input:
+    patches:
+    - op: add
+      path: /relations/18/api_surface
+      value: dynamic_only
+- id: missing-cpp-projection
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.schema-invalid
+  input:
+    patches:
+    - op: remove
+      path: /relations/18/cpp_projection
+- id: installed-static-null-tag
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.schema-invalid
+  input:
+    patches:
+    - op: replace
+      path: /relations/0/generated_cpp_tag
+      value: null
+- id: dynamic-only-string-tag
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.schema-invalid
+  input:
+    patches:
+    - op: replace
+      path: /relations/18/generated_cpp_tag
+      value: cxxlens::frontend::clang22::entity_observation

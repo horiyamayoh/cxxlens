@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.4.0
+document_version: 1.5.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -10,7 +10,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.4.0
+  current: 1.5.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -116,8 +116,8 @@ system_claim_envelope:
     semantic_role: guarantee
 api_projection:
   static:
-    descriptor_source: relations[generated_cpp_tag!=null].descriptor_id
-    column_source: relations[generated_cpp_tag!=null].columns[].id
+    descriptor_source: relations[cpp_projection=installed-static].descriptor_id
+    column_source: relations[cpp_projection=installed-static].columns[].id
   dynamic:
     relation_lookup:
     - name
@@ -201,6 +201,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Immutable project and catalog authority.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::build::relations::project
   claim:
     cardinality: functional_assertion
@@ -273,6 +274,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Main source and one effective invocation under an exact variant.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::build::relations::compile_unit
   claim:
     cardinality: functional_assertion
@@ -393,6 +395,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Product semantic build context independent of analysis provider identity.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::build::relations::variant
   claim:
     cardinality: functional_assertion
@@ -509,6 +512,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Production toolchain semantics separated from analysis provider identity.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::build::relations::toolchain_context
   claim:
     cardinality: functional_assertion
@@ -603,6 +607,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Immutable source bytes and logical file identity.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::source::relations::file
   claim:
     cardinality: functional_assertion
@@ -707,6 +712,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Snapshot-bound half-open byte range with origin reference.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::source::relations::span
   claim:
     cardinality: functional_assertion
@@ -815,6 +821,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Acyclic many-to-many source origin mapping.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::source::relations::origin
   claim:
     cardinality: functional_assertion
@@ -896,6 +903,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Canonical, provider-local, or ambiguous C/C++ semantic entity.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::cc::relations::entity
   claim:
     cardinality: functional_assertion
@@ -1016,6 +1024,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Conditioned declaration surface for a semantic entity.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::cc::relations::declaration
   claim:
     cardinality: functional_assertion
@@ -1145,6 +1154,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Structural type identity with nominal entities breaking recursive cycles.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::cc::relations::type
   claim:
     cardinality: functional_assertion
@@ -1238,6 +1248,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Ordered or named structural component of a type.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::cc::relations::type_component
   claim:
     cardinality: multivalued
@@ -1341,6 +1352,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: A call occurrence; direct targets are represented only by cc.call_direct_target.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::cc::relations::call_site
   claim:
     cardinality: functional_assertion
@@ -1457,6 +1469,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Functional syntactic direct target separated from the call occurrence.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::cc::relations::call_direct_target
   claim:
     cardinality: functional_assertion
@@ -1529,6 +1542,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Semantic provider execution identity and outcome accounting.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::core::relations::provider_execution
   claim:
     cardinality: functional_assertion
@@ -1658,6 +1672,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Stable unresolved state that cannot be represented as empty success.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::core::relations::unresolved
   claim:
     cardinality: functional_assertion
@@ -1772,6 +1787,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Overlapping same-domain functional payload disagreement.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::core::relations::claim_conflict
   claim:
     cardinality: functional_assertion
@@ -1857,6 +1873,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Cross-domain semantic disagreement retained independently of claim conflict.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::core::relations::differential_disagreement
   claim:
     cardinality: functional_assertion
@@ -1963,6 +1980,7 @@ relations:
   stability: external-versioned
   profile: NG0
   summary: External lock acquisition exemplar proving core-independent relation extension.
+  cpp_projection: installed-static
   generated_cpp_tag: cxxlens::company::relations::lock_acquire
   claim:
     cardinality: functional_assertion
@@ -2059,7 +2077,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Provider-owned Clang 22 entity occurrence with revalidatable primary source authority.
-  api_surface: dynamic_only
+  cpp_projection: dynamic-only
   generated_cpp_tag: null
   claim:
     cardinality: functional_assertion
@@ -2240,7 +2258,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Provider-owned Clang 22 structural type observation without source authority.
-  api_surface: dynamic_only
+  cpp_projection: dynamic-only
   generated_cpp_tag: null
   claim:
     cardinality: functional_assertion
@@ -2328,7 +2346,7 @@ relations:
   stability: versioned
   profile: NG0
   summary: Provider-owned Clang 22 call occurrence with revalidatable primary source authority.
-  api_surface: dynamic_only
+  cpp_projection: dynamic-only
   generated_cpp_tag: null
   claim:
     cardinality: functional_assertion

@@ -1,7 +1,7 @@
 ---
 id: DF-0174
 title: Clarify generated relation tags versus installed static API admission
-status: investigating
+status: proposed
 kind: missing-assumption
 impact: irreversible
 confidence: high
@@ -20,7 +20,9 @@ authority_refs:
 tracking_issue: '#174'
 implementation_issues:
   - '#173'
-resolution_refs: []
+  - '#174'
+resolution_refs:
+  - docs/design/adr/0098-explicit-static-relation-projection.md
 review:
   mode: independent
   status: pending
@@ -48,11 +50,10 @@ The seven descriptors without an admitted generated header are `source.origin.v1
 ## Working mental model
 
 The Public API Catalog intentionally owns installed header admission, while the Relation
-Registry owns derivation and identity for an admitted generated header. This record does not
-change the dynamic or system semantics of accepted descriptors; it isolates only their installed
-static-header admission. The unresolved point is whether a `generated_cpp_tag` on a non-admitted
-descriptor is a reserved future name, a required installed projection, or metadata that should
-not exist until admission.
+Registry owns derivation and identity for an admitted generated header. ADR 0098 proposes an
+explicit `cpp_projection` field so this record no longer relies on tag nullability as admission
+metadata. The proposal classifies the seven standard descriptors as `installed-static`, but does
+not activate public headers while independent review remains pending.
 
 ## Mismatch or opportunity
 
@@ -99,12 +100,16 @@ explicit.
 
 ## Recommendation
 
-Prefer an explicit registry projection/admission classification owned by an accepted authority,
-then decide each of the seven relations individually. Preserve the current catalog-admitted 11
-headers until that authority change has independent adversarial review. Do not add or remove the
-seven public headers based on this record alone.
+ADR 0098 is the proposed authority change. Preserve the current catalog-admitted eleven headers
+until its independent review is recorded. Do not add or remove the seven public headers, callable
+inventory rows, examples, or installed-package claims based on this record alone.
 
 ## Disposition
 
 2026-07-19: Investigation opened from production-completion audit issue #173. The static public
 admission unit is blocked. Dynamic/system relation implementation and unrelated units may proceed.
+
+2026-08-12: ADR 0098 and the registry/checker proposal classify every relation explicitly and
+identify the seven target installed-static descriptors. This record remains proposed/blocked:
+independent review must accept ADR 0098 before catalog admission, generated headers, callable
+inventory, examples, or installed qualification are activated.

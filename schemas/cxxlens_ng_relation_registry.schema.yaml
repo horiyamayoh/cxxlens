@@ -200,9 +200,9 @@ properties:
         - column_source
         properties:
           descriptor_source:
-            const: relations[generated_cpp_tag!=null].descriptor_id
+            const: relations[cpp_projection=installed-static].descriptor_id
           column_source:
-            const: relations[generated_cpp_tag!=null].columns[].id
+            const: relations[cpp_projection=installed-static].columns[].id
       dynamic:
         type: object
         additionalProperties: false
@@ -440,15 +440,13 @@ $defs:
     additionalProperties: false
     oneOf:
     - properties:
+        cpp_projection: {const: installed-static}
         generated_cpp_tag:
           type: string
           pattern: ^cxxlens::[a-z][a-z0-9_:]*$
-      not:
-        required: [api_surface]
     - properties:
-        api_surface: {const: dynamic_only}
+        cpp_projection: {const: dynamic-only}
         generated_cpp_tag: {type: 'null'}
-      required: [api_surface]
     required:
     - descriptor_id
     - name
@@ -459,6 +457,7 @@ $defs:
     - stability
     - profile
     - summary
+    - cpp_projection
     - generated_cpp_tag
     - claim
     - columns
@@ -495,8 +494,8 @@ $defs:
       summary:
         type: string
         minLength: 1
-      api_surface:
-        const: dynamic_only
+      cpp_projection:
+        enum: [installed-static, dynamic-only]
       generated_cpp_tag:
         oneOf:
         - type: string

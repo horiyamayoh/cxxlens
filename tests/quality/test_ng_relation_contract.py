@@ -52,24 +52,54 @@ class NgRelationContractTest(unittest.TestCase):
 
     def test_exact_registry_has_all_ng0_relations_and_valid_vectors(self) -> None:
         registry, results = validate_contract(ROOT)
-        self.assertEqual(registry["document_version"], "1.4.0")
-        self.assertEqual(registry["compatibility"]["current"], "1.4.0")
+        self.assertEqual(registry["document_version"], "1.5.0")
+        self.assertEqual(registry["compatibility"]["current"], "1.5.0")
         self.assertEqual(len(registry["relations"]), 21)
-        self.assertEqual(len(results), 35)
+        self.assertEqual(len(results), 39)
         self.assertEqual({row["decision"] for row in results}, {"accepted", "rejected"})
 
     def test_static_projection_excludes_dynamic_only_relations(self) -> None:
         self.assertEqual(
             self.registry["api_projection"]["static"],
             {
-                "descriptor_source": "relations[generated_cpp_tag!=null].descriptor_id",
-                "column_source": "relations[generated_cpp_tag!=null].columns[].id",
+                "descriptor_source": "relations[cpp_projection=installed-static].descriptor_id",
+                "column_source": "relations[cpp_projection=installed-static].columns[].id",
             },
         )
         vector = self.vector("dynamic-only-static-projection")
         self.assertEqual(
             execute_vector(self.registry, self.registry_schema, vector),
             ("rejected", "relation.static-projection-includes-dynamic"),
+        )
+        projections = {
+            row["name"]: row["cpp_projection"] for row in self.registry["relations"]
+        }
+        self.assertEqual(
+            {
+                name
+                for name, projection in projections.items()
+                if projection == "installed-static"
+            },
+            {
+                "build.project",
+                "build.compile_unit",
+                "build.variant",
+                "build.toolchain_context",
+                "source.file",
+                "source.span",
+                "source.origin",
+                "cc.entity",
+                "cc.declaration",
+                "cc.type",
+                "cc.type_component",
+                "cc.call_site",
+                "cc.call_direct_target",
+                "core.provider_execution",
+                "core.unresolved",
+                "core.claim_conflict",
+                "core.differential_disagreement",
+                "company.lock.acquire",
+            },
         )
 
     def test_clang22_installed_outputs_bind_exact_dynamic_v2_family(self) -> None:
@@ -87,7 +117,7 @@ class NgRelationContractTest(unittest.TestCase):
         dynamic = {
             name
             for name, relation in relations.items()
-            if relation.get("api_surface") == "dynamic_only"
+            if relation.get("cpp_projection") == "dynamic-only"
         }
         self.assertEqual(dynamic, CLANG22_OBSERVATION_RELATIONS)
         for name in dynamic:
@@ -133,7 +163,7 @@ class NgRelationContractTest(unittest.TestCase):
         )
         dynamic_index = self.registry["relations"].index(dynamic)
         candidate = copy.deepcopy(self.registry)
-        candidate["relations"][dynamic_index].pop("api_surface")
+        candidate["relations"][dynamic_index].pop("cpp_projection")
         with self.assertRaisesRegex(RelationContractError, "relation.schema-invalid"):
             validate_registry(candidate, schema=self.registry_schema)
 
@@ -145,7 +175,7 @@ class NgRelationContractTest(unittest.TestCase):
             validate_registry(candidate, schema=self.registry_schema)
 
         candidate = copy.deepcopy(self.registry)
-        candidate["relations"][0]["api_surface"] = "dynamic_only"
+        candidate["relations"][0]["cpp_projection"] = "dynamic-only"
         with self.assertRaisesRegex(RelationContractError, "relation.schema-invalid"):
             validate_registry(candidate, schema=self.registry_schema)
 

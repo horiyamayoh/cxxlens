@@ -327,7 +327,7 @@ assignments:
     qualification: blocked
     gap:
       finding: scope.blocked.static-admission-authority
-      remediation: Resolve the seven generated-tag static admission decisions in accepted authority.
+      remediation: Obtain independent review and accept ADR 0098, then admit the seven generated headers, inventory their callables, and qualify the installed package.
     feedback: [DF-0174]
     surfaces:
       - {domain: relation.static-admission, id: cc.declaration.v1}

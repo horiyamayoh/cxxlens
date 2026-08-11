@@ -1036,6 +1036,14 @@ using R = cxxlens::cc::relations::call_site;
 auto q = query::from<R>();
 ```
 
+Relation Registry の各 descriptor は `cpp_projection` を `installed-static` または
+`dynamic-only` として明示する。`installed-static` は non-null な generated C++ tag を
+要求し、static projection はその descriptor/column ID だけから導出する。
+`dynamic-only` は null tag を要求し、static header を持たない。Public API Catalog は
+installed header admission を所有し、accepted static admission では catalog header set と
+`installed-static` set が exact に一致しなければならない。proposal/review 中は catalog
+admission を先取りせず、production scope で blocked として扱う。
+
 #### Dynamic API
 
 runtime-discovered schema は descriptor/column stable ID から操作する。
@@ -1071,6 +1079,7 @@ coverage domain
 closure kinds
 provenance minimum
 evolution policy
+cpp projection
 ```
 
 descriptor collection のうち `columns`、`references`、`conflict_columns` は投入順に意味を持たず、canonical form では
