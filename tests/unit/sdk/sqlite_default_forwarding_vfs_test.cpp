@@ -107,7 +107,12 @@ namespace
 	bool replace_open_path_on_next_open{};
 	bool replace_shm_path_on_next_map{};
 	bool mutate_vfs_identity_on_next_shm_map{};
+	bool mutate_full_pathname_on_next_shm_map{};
+	bool mutate_registry_lookup_on_next_shm_map{};
+	bool mutate_close_callback_on_next_shm_map{};
 	bool mutate_io_methods_on_next_shm_map{};
+	const sqlite3_io_methods* replacement_io_methods_on_next_shm_map{};
+	sqlite3_vfs* registry_find_override{};
 	bool return_null_shm_mapping_without_extension{};
 	bool replacement_succeeded{};
 	std::string replacement_path;
@@ -116,6 +121,8 @@ namespace
 		sqlite_open_full_mutex | sqlite_open_private_cache;
 	constexpr int source_shm_main_xopen_flags =
 		sqlite_open_read_only | sqlite_open_uri | sqlite_open_main_database;
+	int fake_replacement_close(sqlite3_file* base);
+	void mutate_full_methods_close();
 
 	void require(const bool condition, const std::string_view message)
 	{
@@ -325,6 +332,13 @@ namespace
 		return fake_close_result;
 	}
 
+	int fake_replacement_close(sqlite3_file* base)
+	{
+		++close_calls;
+		base->methods = nullptr;
+		return fake_close_result;
+	}
+
 	int fake_read(sqlite3_file*, void* output, const int count, long long)
 	{
 		++read_calls;
@@ -386,6 +400,7 @@ namespace
 	{
 		return 0;
 	}
+	int fake_replacement_full_path(sqlite3_vfs* vfs, const char* name, int size, char* output);
 	int fake_shm_map(sqlite3_file* base, int, int, const int extend, volatile void** output)
 	{
 		++shm_map_calls;
@@ -403,13 +418,29 @@ namespace
 			mutate_vfs_identity_on_next_shm_map = false;
 			original_vfs.app_data = &runtime_sentinel;
 		}
+		if (mutate_full_pathname_on_next_shm_map)
+		{
+			mutate_full_pathname_on_next_shm_map = false;
+			original_vfs.full_pathname = fake_replacement_full_path;
+		}
+		if (mutate_registry_lookup_on_next_shm_map)
+		{
+			mutate_registry_lookup_on_next_shm_map = false;
+			registry_find_override = &original_vfs;
+		}
+		if (mutate_close_callback_on_next_shm_map)
+		{
+			mutate_close_callback_on_next_shm_map = false;
+			mutate_full_methods_close();
+		}
 		if (mutate_io_methods_on_next_shm_map)
 		{
 			mutate_io_methods_on_next_shm_map = false;
 			// A native callback that replaces the live table after returning is an identity drift,
 			// even when the forwarding VFS retained a previously inspected trusted copy.
 			// The production guard must reject before publishing the native pointer.
-			base->methods = nullptr;
+			base->methods = replacement_io_methods_on_next_shm_map;
+			replacement_io_methods_on_next_shm_map = nullptr;
 		}
 		return shm_map_result;
 	}
@@ -455,25 +486,29 @@ namespace
 		return sqlite_ok;
 	}
 
-	const sqlite3_io_methods full_methods{3,
-										  fake_close,
-										  fake_read,
-										  fake_write,
-										  fake_truncate,
-										  fake_sync,
-										  fake_size,
-										  fake_lock,
-										  fake_unlock,
-										  fake_reserved,
-										  fake_control,
-										  fake_sector,
-										  fake_characteristics,
-										  fake_shm_map,
-										  fake_shm_lock,
-										  fake_shm_barrier,
-										  fake_shm_unmap,
-										  fake_fetch,
-										  fake_unfetch};
+	sqlite3_io_methods full_methods{3,
+									fake_close,
+									fake_read,
+									fake_write,
+									fake_truncate,
+									fake_sync,
+									fake_size,
+									fake_lock,
+									fake_unlock,
+									fake_reserved,
+									fake_control,
+									fake_sector,
+									fake_characteristics,
+									fake_shm_map,
+									fake_shm_lock,
+									fake_shm_barrier,
+									fake_shm_unmap,
+									fake_fetch,
+									fake_unfetch};
+	void mutate_full_methods_close()
+	{
+		full_methods.close = fake_replacement_close;
+	}
 	const sqlite3_io_methods journal_methods{3,
 											 fake_close,
 											 fake_read,
@@ -657,6 +692,10 @@ namespace
 		std::memcpy(output, name, std::strlen(name) + 1U);
 		return sqlite_ok;
 	}
+	int fake_replacement_full_path(sqlite3_vfs* vfs, const char* name, const int size, char* output)
+	{
+		return fake_full_path(vfs, name, size, output);
+	}
 	void* fake_dl_open(sqlite3_vfs* vfs, const char*)
 	{
 		check_original(vfs);
@@ -725,6 +764,12 @@ namespace
 
 	void* fake_find(const char* name)
 	{
+		if (registry_find_override != nullptr)
+		{
+			auto* result = registry_find_override;
+			registry_find_override = nullptr;
+			return result;
+		}
 		if (name == nullptr)
 		{
 			++null_find_calls;
@@ -1610,6 +1655,103 @@ int main()
 	}
 
 	{
+		const std::string full_path_drift_path{"/proc/self/fd/713/active/main.db"};
+		auto full_path_drift_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				full_path_drift_path, bundle->observation->capability_token());
+		require(full_path_drift_scope.has_value() &&
+					(*full_path_drift_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(full_path_drift_path))
+						.has_value(),
+				"qualified full-path callback drift scope and arm");
+		std::array<char, 256U> full_path_drift_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   full_path_drift_path.c_str(),
+									   static_cast<int>(full_path_drift_full_path.size()),
+									   full_path_drift_full_path.data()) == sqlite_ok,
+				"qualified full-path callback drift xFullPathname");
+		auto full_path_drift_storage = file_storage(*wrapper);
+		auto* full_path_drift_file =
+			reinterpret_cast<sqlite3_file*>(full_path_drift_storage.data());
+		int full_path_drift_out{};
+		auto full_path_drift_filename =
+			sqlite_uri_filename(full_path_drift_path, exact_uri_parameters);
+		require(wrapper->open(wrapper,
+							  full_path_drift_filename.data(),
+							  full_path_drift_file,
+							  source_shm_main_xopen_flags,
+							  &full_path_drift_out) == sqlite_ok,
+				"qualified full-path callback drift open");
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+		mutate_full_pathname_on_next_shm_map = true;
+		volatile void* full_path_drift_mapping = shm_page.data();
+		const auto full_path_drift_maps_before = shm_map_calls;
+		const auto full_path_drift_unmaps_before = shm_unmap_calls;
+		require(full_path_drift_file->methods->shm_map(
+					full_path_drift_file, 0, 4096, 1, &full_path_drift_mapping) ==
+						sqlite_io_error &&
+					full_path_drift_mapping == nullptr &&
+					shm_map_calls == full_path_drift_maps_before + 1 &&
+					shm_unmap_calls == full_path_drift_unmaps_before + 1,
+				"qualified full-path callback drift is rejected after native map and unmapped");
+		original_vfs.full_pathname = fake_full_path;
+		auto full_path_drift_snapshot = (*full_path_drift_scope)->snapshot();
+		require(full_path_drift_snapshot.has_value() && !full_path_drift_snapshot->complete,
+				"qualified full-path callback drift invalidates the observation receipt");
+		require(full_path_drift_file->methods->close(full_path_drift_file) == sqlite_ok,
+				"qualified full-path callback drift handle closes through trusted close");
+	}
+
+	{
+		const std::string registry_drift_path{"/proc/self/fd/714/active/main.db"};
+		auto registry_drift_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				registry_drift_path, bundle->observation->capability_token());
+		require(registry_drift_scope.has_value() &&
+					(*registry_drift_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(registry_drift_path))
+						.has_value(),
+				"qualified registry lookup drift scope and arm");
+		std::array<char, 256U> registry_drift_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   registry_drift_path.c_str(),
+									   static_cast<int>(registry_drift_full_path.size()),
+									   registry_drift_full_path.data()) == sqlite_ok,
+				"qualified registry lookup drift xFullPathname");
+		auto registry_drift_storage = file_storage(*wrapper);
+		auto* registry_drift_file = reinterpret_cast<sqlite3_file*>(registry_drift_storage.data());
+		int registry_drift_out{};
+		auto registry_drift_filename =
+			sqlite_uri_filename(registry_drift_path, exact_uri_parameters);
+		require(wrapper->open(wrapper,
+							  registry_drift_filename.data(),
+							  registry_drift_file,
+							  source_shm_main_xopen_flags,
+							  &registry_drift_out) == sqlite_ok,
+				"qualified registry lookup drift open");
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+		mutate_registry_lookup_on_next_shm_map = true;
+		volatile void* registry_drift_mapping = shm_page.data();
+		const auto registry_drift_maps_before = shm_map_calls;
+		const auto registry_drift_unmaps_before = shm_unmap_calls;
+		require(registry_drift_file->methods->shm_map(
+					registry_drift_file, 0, 4096, 1, &registry_drift_mapping) == sqlite_io_error &&
+					registry_drift_mapping == nullptr &&
+					shm_map_calls == registry_drift_maps_before + 1 &&
+					shm_unmap_calls == registry_drift_unmaps_before + 1,
+				"qualified registry lookup drift is rejected after native map and unmapped");
+		auto registry_drift_snapshot = (*registry_drift_scope)->snapshot();
+		require(registry_drift_snapshot.has_value() && !registry_drift_snapshot->complete,
+				"qualified registry lookup drift invalidates the observation receipt");
+		require(registry_drift_file->methods->close(registry_drift_file) == sqlite_ok,
+				"qualified registry lookup drift handle closes through trusted close");
+	}
+
+	{
 		const std::string ok_null_path{"/proc/self/fd/708/active/main.db"};
 		auto ok_null_scope =
 			bundle->connection_observation_port->begin_source_shm_qualification_observation(
@@ -1744,6 +1886,7 @@ int main()
 				"qualified io-method identity drift open");
 		shm_map_result = sqlite_ok;
 		return_null_shm_mapping_without_extension = false;
+		replacement_io_methods_on_next_shm_map = &journal_methods;
 		mutate_io_methods_on_next_shm_map = true;
 		volatile void* methods_drift_mapping = shm_page.data();
 		const auto methods_drift_maps_before = shm_map_calls;
@@ -1761,6 +1904,53 @@ int main()
 				"qualified io-method identity drift handle closes through trusted close");
 		shm_map_result = sqlite_ok;
 		return_null_shm_mapping_without_extension = false;
+	}
+
+	{
+		const std::string close_drift_path{"/proc/self/fd/715/active/main.db"};
+		auto close_drift_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				close_drift_path, bundle->observation->capability_token());
+		require(close_drift_scope.has_value() &&
+					(*close_drift_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(close_drift_path))
+						.has_value(),
+				"qualified close callback drift scope and arm");
+		std::array<char, 256U> close_drift_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   close_drift_path.c_str(),
+									   static_cast<int>(close_drift_full_path.size()),
+									   close_drift_full_path.data()) == sqlite_ok,
+				"qualified close callback drift xFullPathname");
+		auto close_drift_storage = file_storage(*wrapper);
+		auto* close_drift_file = reinterpret_cast<sqlite3_file*>(close_drift_storage.data());
+		int close_drift_out{};
+		auto close_drift_filename = sqlite_uri_filename(close_drift_path, exact_uri_parameters);
+		require(wrapper->open(wrapper,
+							  close_drift_filename.data(),
+							  close_drift_file,
+							  source_shm_main_xopen_flags,
+							  &close_drift_out) == sqlite_ok,
+				"qualified close callback drift open");
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+		mutate_close_callback_on_next_shm_map = true;
+		volatile void* close_drift_mapping = shm_page.data();
+		const auto close_drift_maps_before = shm_map_calls;
+		const auto close_drift_unmaps_before = shm_unmap_calls;
+		require(close_drift_file->methods->shm_map(
+					close_drift_file, 0, 4096, 1, &close_drift_mapping) == sqlite_io_error &&
+					close_drift_mapping == nullptr &&
+					shm_map_calls == close_drift_maps_before + 1 &&
+					shm_unmap_calls == close_drift_unmaps_before + 1,
+				"qualified close callback drift is rejected after native map and unmapped");
+		full_methods.close = fake_close;
+		auto close_drift_snapshot = (*close_drift_scope)->snapshot();
+		require(close_drift_snapshot.has_value() && !close_drift_snapshot->complete,
+				"qualified close callback drift invalidates the observation receipt");
+		require(close_drift_file->methods->close(close_drift_file) == sqlite_ok,
+				"qualified close callback drift handle closes through trusted close");
 	}
 
 	{

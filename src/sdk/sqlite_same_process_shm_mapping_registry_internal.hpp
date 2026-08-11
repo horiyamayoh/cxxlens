@@ -400,6 +400,8 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity decode_attempt;
 		sqlite_backend_opaque_identity authority_read_receipt;
 		std::optional<sqlite_shm_reader_attachment_target_identity> target_identity;
+		/** Exact alias registration epoch captured before the SQLite reader session. */
+		sqlite_backend_opaque_identity registration_epoch;
 
 		[[nodiscard]] bool
 		operator==(const sqlite_shm_reader_pre_sqlite_session_request&) const = default;
@@ -416,6 +418,8 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity open_epoch;
 		sqlite_backend_opaque_identity callback_cohort;
 		std::optional<sqlite_shm_reader_attachment_target_identity> target_identity;
+		/** Exact alias registration epoch captured at reader xOpen. */
+		sqlite_backend_opaque_identity registration_epoch;
 
 		[[nodiscard]] bool operator==(const sqlite_shm_reader_open_binding&) const = default;
 	};

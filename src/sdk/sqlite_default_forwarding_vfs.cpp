@@ -486,6 +486,7 @@ namespace cxxlens::sdk
 			sqlite_shm_registry_family_pin* family{};
 			const sqlite_shm_lease_family_binding* family_binding{};
 			const sqlite_backend_opaque_identity* alias_lifetime{};
+			const sqlite_backend_opaque_identity* registration_epoch{};
 		};
 
 		struct native_file_node
@@ -527,6 +528,7 @@ namespace cxxlens::sdk
 			std::shared_ptr<void> runtime_lifetime;
 			std::shared_ptr<default_connection_observation> observation;
 			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch;
+			std::optional<sqlite_backend_opaque_identity> registration_epoch;
 			bool writer_target_namespace_epoch_owner{};
 			sqlite3_vfs* underlying{};
 			const void* underlying_vfs_identity{};
@@ -1208,10 +1210,28 @@ namespace cxxlens::sdk
 						!registered_alias_->valid() || registered_alias_->registry() == nullptr ||
 						!source_shm_family_->valid())
 						return std::nullopt;
-					return source_shm_reader_registry_context{registered_alias_->registry(),
-															  &*source_shm_family_,
-															  &*source_shm_family_binding_,
-															  &registered_alias_->alias_lifetime()};
+					return source_shm_reader_registry_context{
+						registered_alias_->registry(),
+						&*source_shm_family_,
+						&*source_shm_family_binding_,
+						&registered_alias_->alias_lifetime(),
+						&registered_alias_->registration_epoch()};
+				}
+				catch (...)
+				{
+					return std::nullopt;
+				}
+			}
+
+			[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+			source_shm_registration_epoch() noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{source_shm_family_mutex_};
+					if (!registered_alias_ || !registered_alias_->valid())
+						return std::nullopt;
+					return registered_alias_->registration_epoch();
 				}
 				catch (...)
 				{
@@ -2951,6 +2971,10 @@ namespace cxxlens::sdk
 					!registered_alias_->valid() || registered_alias_->registry() == nullptr ||
 					!source_shm_family_->valid())
 					return unexpected(forwarding_error("source-shm-reader-open"));
+				const auto registration_epoch = registered_alias_->registration_epoch();
+				if (node.registration_epoch && *node.registration_epoch != registration_epoch)
+					return unexpected(forwarding_error("source-shm-reader-open"));
+				node.registration_epoch = registration_epoch;
 
 				sqlite_shm_reader_open_binding binding;
 				{
@@ -2962,7 +2986,8 @@ namespace cxxlens::sdk
 							   *observation.main_native_xopen_receipt,
 							   *observation.main_open_epoch,
 							   *observation.main_callback_cohort,
-							   std::move(target_identity)};
+							   std::move(target_identity),
+							   registration_epoch};
 				}
 				auto acquired = sqlite_shm_reader_open_production_factory::acquire(
 					*registered_alias_->registry(), *source_shm_family_, binding);
@@ -3361,12 +3386,19 @@ namespace cxxlens::sdk
 		 * registration, or callback replacement.  A changed raw methods pointer is likewise a
 		 * terminal identity drift even when its replacement happens to point into the same image.
 		 */
-		[[nodiscard]] bool native_shm_callback_identity_valid(const native_file_node& node) noexcept
+		[[nodiscard]] bool native_shm_callback_identity_valid(native_file_node& node) noexcept
 		{
 			try
 			{
-				if (!node.owner || !node.trusted_methods_ready || node.underlying == nullptr ||
-					node.underlying_vfs_identity != node.underlying ||
+				if (!node.owner || !node.trusted_methods_ready || node.underlying == nullptr)
+					return false;
+				const auto current_registration_epoch = node.owner->source_shm_registration_epoch();
+				if (!current_registration_epoch)
+					return false;
+				if (!node.registration_epoch ||
+					*node.registration_epoch != *current_registration_epoch)
+					return false;
+				if (node.underlying_vfs_identity != node.underlying ||
 					node.underlying != node.owner->underlying() ||
 					node.underlying->version != node.underlying_vfs_version ||
 					node.underlying->app_data != node.underlying_app_data_identity ||
@@ -3439,6 +3471,8 @@ namespace cxxlens::sdk
 				if (raw == nullptr || methods == nullptr ||
 					methods != node.underlying_methods_identity ||
 					methods->version != node.underlying_methods_version ||
+					methods->close != node.trusted_methods.close ||
+					methods->close != node.trusted_close ||
 					inspected.forwarding_methods == nullptr ||
 					methods->shm_map != node.trusted_methods.shm_map ||
 					methods->shm_lock != node.trusted_methods.shm_lock ||
@@ -4221,7 +4255,8 @@ namespace cxxlens::sdk
 				const auto authority =
 					make_source_reader_identity(owner, node, "reader-authority-read");
 				if (!callback || !transaction || !decode || !authority ||
-					context.family_binding == nullptr || context.alias_lifetime == nullptr)
+					context.family_binding == nullptr || context.alias_lifetime == nullptr ||
+					context.registration_epoch == nullptr)
 					return std::nullopt;
 				sqlite_shm_reader_pre_sqlite_session_request pre_request;
 				{
@@ -4243,7 +4278,8 @@ namespace cxxlens::sdk
 								   std::move(*transaction),
 								   std::move(*decode),
 								   std::move(*authority),
-								   std::move(target_identity)};
+								   std::move(target_identity),
+								   *context.registration_epoch};
 				}
 				return pre_request;
 			}
@@ -6628,6 +6664,38 @@ namespace cxxlens::sdk
 						return sqlite_io_error;
 					node->reader_handoff.reset();
 					auto live_close = std::move(*begun);
+					const auto quarantine_live_close_unmap = [&]() noexcept
+					{
+						auto terminal = sqlite_shm_reader_lifecycle_production_factory::
+							make_live_close_unmap_terminal(
+								live_close,
+								unmap_callback->receipt(),
+								sqlite_shm_reader_unmap_evidence_kind::throw_or_unknown,
+								std::nullopt,
+								0,
+								0,
+								std::nullopt,
+								std::nullopt);
+						auto unmapped = context->registry->complete_reader_live_close_unmap(
+							*context->family, *node->reader_open_authority, live_close, terminal);
+						if (!unmapped)
+							return false;
+						const auto retired_unmap =
+							static_cast<bool>(issuer.retire_callback(
+								unmap_scope,
+								*unmap_callback,
+								sqlite_shm_reader_callback_identity_role::attachment_unmap)) &&
+							static_cast<bool>(issuer.retire_scope(unmap_scope));
+						const auto retired_close =
+							static_cast<bool>(issuer.retire_callback(
+								close_scope,
+								*close_callback_identity,
+								sqlite_shm_reader_callback_identity_role::close)) &&
+							static_cast<bool>(issuer.retire_scope(close_scope));
+						return retired_unmap && retired_close &&
+							unmapped->kind() ==
+							sqlite_shm_reader_unmap_terminal_kind::terminal_quarantined;
+					};
 					auto cut = context->registry->poll_reader_live_close_unmap_cut(
 						*context->family,
 						*node->reader_open_authority,
@@ -6649,7 +6717,10 @@ namespace cxxlens::sdk
 					const auto& methods = node->trusted_methods;
 					if (raw == nullptr || methods.shm_unmap == nullptr ||
 						!native_shm_callback_identity_valid(*node))
+					{
+						(void)quarantine_live_close_unmap();
 						return sqlite_io_error;
+					}
 					int native_unmap_status{};
 					bool native_unmap_known{};
 					try
@@ -6660,6 +6731,11 @@ namespace cxxlens::sdk
 					catch (...)
 					{
 						native_unmap_known = false;
+					}
+					if (!native_shm_callback_identity_valid(*node))
+					{
+						(void)quarantine_live_close_unmap();
+						return sqlite_io_error;
 					}
 					std::optional<sqlite_shm_issued_reader_effect_identity> unmap_effect;
 					std::optional<sqlite_shm_issued_reader_effect_identity> unmap_latch;
@@ -6731,6 +6807,34 @@ namespace cxxlens::sdk
 						unmapped->kind() !=
 							sqlite_shm_reader_unmap_terminal_kind::retired_confirmed)
 						return sqlite_io_error;
+					const auto quarantine_live_close = [&]() noexcept
+					{
+						auto terminal = sqlite_shm_reader_lifecycle_production_factory::
+							make_live_close_terminal(
+								live_close,
+								close_callback_identity->receipt(),
+								sqlite_shm_reader_close_evidence_kind::throw_or_unknown,
+								std::nullopt,
+								std::nullopt);
+						auto closed = context->registry->complete_reader_live_close(
+							*context->family, *node->reader_open_authority, live_close, terminal);
+						if (!closed)
+							return false;
+						const auto retired =
+							static_cast<bool>(issuer.retire_callback(
+								close_scope,
+								*close_callback_identity,
+								sqlite_shm_reader_callback_identity_role::close)) &&
+							static_cast<bool>(issuer.retire_scope(close_scope));
+						return retired &&
+							closed->kind() ==
+							sqlite_shm_reader_close_terminal_kind::terminal_quarantined;
+					};
+					if (!native_shm_callback_identity_valid(*node))
+					{
+						(void)quarantine_live_close();
+						return sqlite_io_error;
+					}
 
 					int native_close_status{};
 					bool native_close_known{};
@@ -6835,6 +6939,33 @@ namespace cxxlens::sdk
 				if (!begun)
 					return sqlite_io_error;
 				auto close = std::move(*begun);
+				const auto quarantine_close = [&]() noexcept
+				{
+					auto terminal =
+						sqlite_shm_reader_lifecycle_production_factory::make_close_terminal(
+							close,
+							close_callback_identity->receipt(),
+							sqlite_shm_reader_close_evidence_kind::throw_or_unknown,
+							std::nullopt,
+							std::nullopt);
+					auto closed = context->registry->complete_reader_close(
+						*context->family, *node->reader_open_authority, close, terminal);
+					if (!closed)
+						return false;
+					const auto retired = static_cast<bool>(issuer.retire_callback(
+											 close_scope,
+											 *close_callback_identity,
+											 sqlite_shm_reader_callback_identity_role::close)) &&
+						static_cast<bool>(issuer.retire_scope(close_scope));
+					return retired &&
+						closed->kind() ==
+						sqlite_shm_reader_close_terminal_kind::terminal_quarantined;
+				};
+				if (!native_shm_callback_identity_valid(*node))
+				{
+					(void)quarantine_close();
+					return sqlite_io_error;
+				}
 				if (!close.native_effect_ready())
 				{
 					auto cut = context->registry->poll_reader_close_cut(
@@ -6855,6 +6986,11 @@ namespace cxxlens::sdk
 								sqlite_shm_retirement_wait_failure::timeout);
 						return sqlite_io_error;
 					}
+				}
+				if (!native_shm_callback_identity_valid(*node))
+				{
+					(void)quarantine_close();
+					return sqlite_io_error;
 				}
 				int native_status{};
 				bool native_known{};
@@ -7019,6 +7155,32 @@ namespace cxxlens::sdk
 				}
 				file.native->reader_handoff.reset();
 				auto unmap = std::move(*begun);
+				const auto quarantine_unmap = [&]() noexcept
+				{
+					auto terminal =
+						sqlite_shm_reader_lifecycle_production_factory::make_unmap_terminal(
+							unmap,
+							callback.receipt(),
+							sqlite_shm_reader_unmap_evidence_kind::throw_or_unknown,
+							std::nullopt,
+							0,
+							0,
+							std::nullopt,
+							std::nullopt);
+					auto completed =
+						context->registry->complete_reader_unmap(*context->family, unmap, terminal);
+					if (!completed)
+						return false;
+					const auto retired =
+						static_cast<bool>(issuer.retire_callback(
+							scope,
+							callback,
+							sqlite_shm_reader_callback_identity_role::attachment_unmap)) &&
+						static_cast<bool>(issuer.retire_scope(scope));
+					return retired &&
+						completed->kind() ==
+						sqlite_shm_reader_unmap_terminal_kind::terminal_quarantined;
+				};
 				auto cut = context->registry->poll_reader_unmap_cut(
 					*context->family, unmap, callback.receipt());
 				if (!cut ||
@@ -7039,6 +7201,7 @@ namespace cxxlens::sdk
 				if (raw == nullptr || methods == nullptr || methods->shm_unmap == nullptr ||
 					!file.native || !native_shm_callback_identity_valid(*file.native))
 				{
+					(void)quarantine_unmap();
 					mark_source_shm_terminal_failure(file);
 					return sqlite_io_error;
 				}
@@ -7052,6 +7215,12 @@ namespace cxxlens::sdk
 				catch (...)
 				{
 					native_known = false;
+				}
+				if (!native_shm_callback_identity_valid(*file.native))
+				{
+					(void)quarantine_unmap();
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
 				}
 				std::optional<sqlite_shm_issued_reader_effect_identity> native_effect;
 				std::optional<sqlite_shm_issued_reader_effect_identity> latch_reset;
@@ -7170,13 +7339,21 @@ namespace cxxlens::sdk
 					const auto* methods = underlying_methods(*file);
 					if (raw == nullptr || methods == nullptr || methods->shm_unmap == nullptr ||
 						!file->native || !native_shm_callback_identity_valid(*file->native))
+					{
+						mark_source_shm_terminal_failure(*file);
 						return sqlite_io_error;
+					}
 					int status{};
 					try
 					{
 						status = methods->shm_unmap(raw, 0);
 					}
 					catch (...)
+					{
+						mark_source_shm_terminal_failure(*file);
+						return sqlite_io_error;
+					}
+					if (!native_shm_callback_identity_valid(*file->native))
 					{
 						mark_source_shm_terminal_failure(*file);
 						return sqlite_io_error;
@@ -7465,6 +7642,8 @@ namespace cxxlens::sdk
 					owner->pinned_underlying_vfs_app_data_identity(),
 					owner->underlying_image_identity(),
 					owner->underlying_open_callback_address());
+				if (const auto registration_epoch = owner->source_shm_registration_epoch())
+					file->native->registration_epoch = *registration_epoch;
 				if (association.observation && association.main_handle)
 				{
 					std::scoped_lock lock{association.observation->mutex};

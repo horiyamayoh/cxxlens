@@ -378,6 +378,7 @@ namespace cxxlens::sdk
 									  sqlite_backend_opaque_identity open_epoch,
 									  const std::uint64_t writer_mapping_generation,
 									  sqlite_backend_opaque_identity callback_cohort,
+									  sqlite_backend_opaque_identity registration_epoch,
 									  sqlite_backend_opaque_identity attachment_epoch)
 		{
 			return sqlite_shm_reader_attachment_reservation_identity::bind(
@@ -390,6 +391,7 @@ namespace cxxlens::sdk
 				std::move(open_epoch),
 				writer_mapping_generation,
 				std::move(callback_cohort),
+				std::move(registration_epoch),
 				std::move(attachment_epoch));
 		}
 
@@ -1347,6 +1349,7 @@ namespace
 			identity("test.registry.reader-decode-attempt", marker),
 			identity("test.registry.reader-authority-read", marker),
 			std::nullopt,
+			fixture.registration_epoch,
 		};
 	}
 
@@ -1362,6 +1365,7 @@ namespace
 			request.open_epoch,
 			request.callback_cohort,
 			request.target_identity,
+			request.registration_epoch,
 		};
 	}
 
@@ -2456,7 +2460,10 @@ namespace
 		}
 		auto& reader_family_pin = reader_alias ? *reader_alias->family_pin : *fixture.family_pin;
 		if (reader_alias)
+		{
 			pre_sqlite.alias_lifetime = reader_alias->alias_lifetime;
+			pre_sqlite.registration_epoch = reader_alias->registration_epoch;
+		}
 		pre_sqlite.target_identity = std::move(target_identity);
 		auto open_result = sqlite_shm_reader_open_production_factory::acquire(
 			*fixture.registry, reader_family_pin, reader_open_binding(pre_sqlite));
@@ -7942,6 +7949,7 @@ namespace
 			identity("test.registry.reader-open-direct-open", marker),
 			setup.holder.generation(),
 			identity("test.registry.reader-open-direct-cohort", marker),
+			setup.fixture.registration_epoch,
 			identity("test.registry.reader-open-direct-attachment", marker));
 		require(attachment.has_value(), "bind open-lineage direct reader attachment");
 		return {
@@ -8131,6 +8139,7 @@ namespace
 				writer.attachment.open_epoch(),
 				holder->generation(),
 				writer.attachment.callback_cohort(),
+				fixture.registration_epoch,
 				identity("test.registry.reader-direct-attachment-epoch", 151U));
 		require(direct_attachment.has_value(), "bind test-only direct reader identity");
 		const auto direct_request = sqlite_shm_reader_session_request{
@@ -13607,6 +13616,7 @@ namespace
 		second_owner.reset();
 		auto second_request = setup.pre_sqlite;
 		second_request.alias_lifetime = second.alias_lifetime;
+		second_request.registration_epoch = second.registration_epoch;
 		second_request.connection_token =
 			identity("test.registry.reader-cross-alias-connection", 201U);
 		second_request.main_native_file_receipt =
@@ -13615,6 +13625,16 @@ namespace
 			identity("test.registry.reader-cross-alias-main-xopen", 201U);
 		second_request.open_epoch = identity("test.registry.reader-cross-alias-open", 201U);
 		second_request.callback_cohort = identity("test.registry.reader-cross-alias-cohort", 201U);
+		auto stale_registration_request = second_request;
+		stale_registration_request.registration_epoch = setup.pre_sqlite.registration_epoch;
+		auto stale_registration_open = sqlite_same_process_shm_registry_test_peer::reader_open(
+			*setup.fixture.registry,
+			*second.family_pin,
+			reader_open_binding(stale_registration_request));
+		require(!stale_registration_open &&
+					stale_registration_open.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch,
+				"reader xOpen rejects an alias registration epoch from its predecessor");
 		auto second_open_result = sqlite_same_process_shm_registry_test_peer::reader_open(
 			*setup.fixture.registry, *second.family_pin, reader_open_binding(second_request));
 		require(second_open_result.has_value(), "acquire second-alias reader open");
@@ -13675,6 +13695,7 @@ namespace
 				identity("test.registry.reader-lineage-direct-open", 205U),
 				setup.holder.generation(),
 				identity("test.registry.reader-lineage-direct-cohort", 205U),
+				setup.fixture.registration_epoch,
 				identity("test.registry.reader-lineage-direct-epoch", 205U));
 		require(direct_attachment.has_value(), "bind distinct legacy reader attachment");
 		const auto direct_request = sqlite_shm_reader_session_request{

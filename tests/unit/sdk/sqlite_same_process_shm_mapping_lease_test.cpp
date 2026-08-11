@@ -469,6 +469,7 @@ namespace cxxlens::sdk
 									  sqlite_backend_opaque_identity open_epoch,
 									  const std::uint64_t writer_mapping_generation,
 									  sqlite_backend_opaque_identity callback_cohort,
+									  sqlite_backend_opaque_identity registration_epoch,
 									  sqlite_backend_opaque_identity attachment_epoch,
 									  const std::uint64_t registry_open_token = 0U,
 									  std::optional<sqlite_shm_reader_attachment_target_identity>
@@ -484,6 +485,7 @@ namespace cxxlens::sdk
 				std::move(open_epoch),
 				writer_mapping_generation,
 				std::move(callback_cohort),
+				std::move(registration_epoch),
 				std::move(attachment_epoch),
 				registry_open_token,
 				std::move(target_identity));
@@ -1224,6 +1226,7 @@ namespace
 			identity("test.reader-open-epoch", alias),
 			writer_generation,
 			identity("test.reader-callback-cohort", alias),
+			identity("test.reader-registration-epoch", alias),
 			attachment_epoch ? std::move(*attachment_epoch)
 							 : identity("test.reader-attachment-epoch", alias),
 			registry_open_token);
@@ -1251,6 +1254,7 @@ namespace
 			attachment.open_epoch(),
 			attachment.callback_cohort(),
 			attachment.target_identity(),
+			attachment.registration_epoch(),
 		};
 	}
 
@@ -1268,6 +1272,7 @@ namespace
 			identity("test.reader-open-epoch", marker),
 			identity("test.reader-callback-cohort", marker),
 			std::nullopt,
+			identity("test.reader-registration-epoch", marker),
 		};
 	}
 
@@ -1287,6 +1292,7 @@ namespace
 			binding.open_epoch,
 			writer_generation,
 			binding.callback_cohort,
+			binding.registration_epoch,
 			attachment_epoch,
 			registry_open_token,
 			binding.target_identity);
@@ -1860,6 +1866,7 @@ namespace
 	{
 		sqlite_shm_lease_family_binding family;
 		sqlite_backend_opaque_identity alias_lifetime;
+		sqlite_backend_opaque_identity registration_epoch;
 		std::shared_ptr<void> runtime_owner;
 		std::unique_ptr<sqlite_same_process_shm_mapping_registry> registry;
 		std::optional<sqlite_shm_registry_alias_pin> alias;
@@ -1872,6 +1879,7 @@ namespace
 	{
 		auto binding = family(marker);
 		auto alias_lifetime = identity("test.alias-lifetime", marker);
+		auto registration_epoch = identity("test.phase2.registration-epoch", marker);
 		auto runtime_identity = identity("test.phase2.runtime-lifetime", marker);
 		auto runtime_pin_identity = identity("test.phase2.runtime-pin", marker);
 		auto runtime_owner = std::make_shared<int>(marker);
@@ -1899,7 +1907,7 @@ namespace
 			alias_lifetime,
 			runtime_identity,
 			runtime_pin_identity,
-			identity("test.phase2.registration-epoch", marker));
+			registration_epoch);
 		require(registry->confirm_alias_registered(*alias, registration).has_value(),
 				"confirm unpublished-cleanup alias registration");
 		auto pinned = registry->install_or_join_family(*alias, binding);
@@ -1911,6 +1919,7 @@ namespace
 		return {
 			std::move(binding),
 			std::move(alias_lifetime),
+			std::move(registration_epoch),
 			std::move(runtime_owner),
 			std::move(registry),
 			std::move(alias),
@@ -1936,6 +1945,7 @@ namespace
 			identity("test.phase2.reader-decode", marker),
 			identity("test.phase2.reader-authority-read", marker),
 			std::nullopt,
+			fixture.registration_epoch,
 		};
 	}
 
@@ -1951,6 +1961,7 @@ namespace
 			request.open_epoch,
 			request.callback_cohort,
 			request.target_identity,
+			request.registration_epoch,
 		};
 	}
 
@@ -12411,6 +12422,7 @@ namespace
 					identity("test.reader-open-epoch", marker),
 					1U,
 					identity("test.reader-callback-cohort", marker),
+					identity("test.reader-registration-epoch", marker),
 					identity("test.reader-forged-attachment-epoch", marker),
 					open_token);
 			require(attachment.has_value(), "bind forged registry-token reader attachment");

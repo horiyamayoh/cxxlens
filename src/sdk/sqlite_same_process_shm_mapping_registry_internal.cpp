@@ -112,6 +112,7 @@ namespace cxxlens::sdk
 				valid_identity(request.read_transaction_epoch) &&
 				valid_identity(request.decode_attempt) &&
 				valid_identity(request.authority_read_receipt) &&
+				valid_identity(request.registration_epoch) &&
 				(!request.target_identity ||
 				 valid_reader_attachment_target_identity(*request.target_identity));
 		}
@@ -124,6 +125,7 @@ namespace cxxlens::sdk
 				valid_identity(binding.main_native_file_receipt) &&
 				valid_identity(binding.main_xopen_receipt) && valid_identity(binding.open_epoch) &&
 				valid_identity(binding.callback_cohort) &&
+				valid_identity(binding.registration_epoch) &&
 				(!binding.target_identity ||
 				 valid_reader_attachment_target_identity(*binding.target_identity));
 		}
@@ -139,6 +141,7 @@ namespace cxxlens::sdk
 				binding.main_xopen_receipt == request.main_xopen_receipt &&
 				binding.open_epoch == request.open_epoch &&
 				binding.callback_cohort == request.callback_cohort &&
+				binding.registration_epoch == request.registration_epoch &&
 				binding.target_identity == request.target_identity;
 		}
 
@@ -156,6 +159,7 @@ namespace cxxlens::sdk
 				binding.open_epoch,
 				binding.callback_cohort,
 				binding.target_identity,
+				binding.registration_epoch,
 			};
 		}
 
@@ -168,6 +172,7 @@ namespace cxxlens::sdk
 				valid_identity(binding.main_native_file_receipt) &&
 				valid_identity(binding.main_xopen_receipt) && valid_identity(binding.open_epoch) &&
 				valid_identity(binding.callback_cohort) &&
+				valid_identity(binding.registration_epoch) &&
 				(!binding.target_identity ||
 				 valid_reader_attachment_target_identity(*binding.target_identity));
 		}
@@ -184,6 +189,7 @@ namespace cxxlens::sdk
 				attachment.main_xopen_receipt() == binding.main_xopen_receipt &&
 				attachment.open_epoch() == binding.open_epoch &&
 				attachment.callback_cohort() == binding.callback_cohort &&
+				attachment.registration_epoch() == binding.registration_epoch &&
 				attachment.target_identity() == binding.target_identity;
 		}
 
@@ -1184,7 +1190,8 @@ namespace cxxlens::sdk
 						family->phase != sqlite_shm_registry_family_phase::active)
 						return rejection(sqlite_shm_lease_rejection_reason::retiring);
 					if (binding.family != family->binding ||
-						binding.alias_lifetime != alias->alias_lifetime)
+						binding.alias_lifetime != alias->alias_lifetime ||
+						binding.registration_epoch != alias->registration_epoch)
 						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
 					if (!alias->runtime_lifetime.valid() || !alias->activity_authority_latch ||
 						!alias->activity_authority_latch->load(std::memory_order_acquire) ||
@@ -1567,7 +1574,8 @@ namespace cxxlens::sdk
 						!family->coordinator)
 						return rejected(rejection(sqlite_shm_lease_rejection_reason::retiring));
 					if (request.family != family->binding ||
-						request.alias_lifetime != alias->alias_lifetime)
+						request.alias_lifetime != alias->alias_lifetime ||
+						request.registration_epoch != alias->registration_epoch)
 						return rejected(
 							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch));
 					if (reader_open->alias_token != alias->token ||
@@ -1699,6 +1707,8 @@ namespace cxxlens::sdk
 						return rejection(sqlite_shm_lease_rejection_reason::retiring);
 					if (request.family != family->binding ||
 						request.alias_lifetime != alias->alias_lifetime ||
+						request.expected_attachment.registration_epoch() !=
+							alias->registration_epoch ||
 						request.expected_attachment.runtime_lifetime_pin() !=
 							alias->runtime_lifetime.pin_identity())
 						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch);
@@ -1757,6 +1767,7 @@ namespace cxxlens::sdk
 					family->phase != sqlite_shm_registry_family_phase::active ||
 					!family->coordinator || request.family != family->binding ||
 					request.alias_lifetime != alias->alias_lifetime ||
+					request.expected_attachment.registration_epoch() != alias->registration_epoch ||
 					request.connection_token != request.expected_attachment.connection_token() ||
 					request.expected_attachment.runtime_lifetime_pin() !=
 						alias->runtime_lifetime.pin_identity() ||
@@ -1781,6 +1792,8 @@ namespace cxxlens::sdk
 					open->control->binding.open_epoch != request.expected_attachment.open_epoch() ||
 					open->control->binding.callback_cohort !=
 						request.expected_attachment.callback_cohort() ||
+					open->control->binding.registration_epoch !=
+						request.expected_attachment.registration_epoch() ||
 					open->control->binding.target_identity !=
 						request.expected_attachment.target_identity())
 					return false;
@@ -5936,6 +5949,7 @@ namespace cxxlens::sdk
 					request.open_epoch,
 					writer_generation,
 					request.callback_cohort,
+					request.registration_epoch,
 					reader_attachment_epoch_identity(epoch_value),
 					reader_open->token,
 					request.target_identity);

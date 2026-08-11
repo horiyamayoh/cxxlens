@@ -149,6 +149,8 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity open_epoch;
 		sqlite_backend_opaque_identity callback_cohort;
 		std::optional<sqlite_shm_reader_attachment_target_identity> target_identity;
+		/** Immutable alias registration epoch carried through the reader open lease. */
+		sqlite_backend_opaque_identity registration_epoch;
 
 		[[nodiscard]] bool operator==(const sqlite_shm_reader_open_epoch_binding&) const = default;
 	};
@@ -231,6 +233,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] const sqlite_backend_opaque_identity& open_epoch() const noexcept;
 		[[nodiscard]] std::uint64_t writer_mapping_generation() const noexcept;
 		[[nodiscard]] const sqlite_backend_opaque_identity& callback_cohort() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& registration_epoch() const noexcept;
 		[[nodiscard]] const sqlite_backend_opaque_identity& attachment_epoch() const noexcept;
 		[[nodiscard]] const std::optional<sqlite_shm_reader_attachment_target_identity>&
 		target_identity() const noexcept;
@@ -254,6 +257,7 @@ namespace cxxlens::sdk
 			 sqlite_backend_opaque_identity open_epoch,
 			 std::uint64_t writer_mapping_generation,
 			 sqlite_backend_opaque_identity callback_cohort,
+			 sqlite_backend_opaque_identity registration_epoch,
 			 sqlite_backend_opaque_identity attachment_epoch,
 			 std::uint64_t registry_open_token = 0U,
 			 std::optional<sqlite_shm_reader_attachment_target_identity> target_identity =
@@ -269,6 +273,7 @@ namespace cxxlens::sdk
 			sqlite_backend_opaque_identity open_epoch,
 			std::uint64_t writer_mapping_generation,
 			sqlite_backend_opaque_identity callback_cohort,
+			sqlite_backend_opaque_identity registration_epoch,
 			sqlite_backend_opaque_identity attachment_epoch,
 			std::uint64_t registry_open_token,
 			std::optional<sqlite_shm_reader_attachment_target_identity> target_identity);
@@ -282,6 +287,7 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity open_epoch_;
 		std::uint64_t writer_mapping_generation_{};
 		sqlite_backend_opaque_identity callback_cohort_;
+		sqlite_backend_opaque_identity registration_epoch_;
 		sqlite_backend_opaque_identity attachment_epoch_;
 		std::uint64_t registry_open_token_{};
 		std::optional<sqlite_shm_reader_attachment_target_identity> target_identity_;

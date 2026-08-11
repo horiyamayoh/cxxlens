@@ -55,6 +55,7 @@ namespace cxxlens::sdk
 				valid_identity(binding.main_native_file_receipt) &&
 				valid_identity(binding.main_xopen_receipt) && valid_identity(binding.open_epoch) &&
 				valid_identity(binding.callback_cohort) &&
+				valid_identity(binding.registration_epoch) &&
 				(!binding.target_identity ||
 				 valid_reader_attachment_target_identity(*binding.target_identity));
 		}
@@ -93,6 +94,7 @@ namespace cxxlens::sdk
 				valid_identity(attachment.open_epoch()) &&
 				attachment.writer_mapping_generation() != 0U &&
 				valid_identity(attachment.callback_cohort()) &&
+				valid_identity(attachment.registration_epoch()) &&
 				valid_identity(attachment.attachment_epoch()) &&
 				(!attachment.target_identity() ||
 				 valid_reader_attachment_target_identity(*attachment.target_identity()));
@@ -474,6 +476,7 @@ namespace cxxlens::sdk
 				valid_identity(request.read_transaction_epoch) &&
 				valid_identity(request.decode_attempt) &&
 				valid_identity(request.authority_read_receipt) &&
+				valid_identity(request.registration_epoch) &&
 				(!request.target_identity ||
 				 valid_reader_attachment_target_identity(*request.target_identity));
 		}
@@ -489,6 +492,7 @@ namespace cxxlens::sdk
 				attachment.main_xopen_receipt() == request.main_xopen_receipt &&
 				attachment.open_epoch() == request.open_epoch &&
 				attachment.callback_cohort() == request.callback_cohort &&
+				attachment.registration_epoch() == request.registration_epoch &&
 				attachment.target_identity() == request.target_identity;
 		}
 
@@ -502,6 +506,7 @@ namespace cxxlens::sdk
 				open.main_xopen_receipt == request.main_xopen_receipt &&
 				open.open_epoch == request.open_epoch &&
 				open.callback_cohort == request.callback_cohort &&
+				open.registration_epoch == request.registration_epoch &&
 				open.target_identity == request.target_identity;
 		}
 
@@ -675,6 +680,7 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity open_epoch,
 		const std::uint64_t writer_mapping_generation,
 		sqlite_backend_opaque_identity callback_cohort,
+		sqlite_backend_opaque_identity registration_epoch,
 		sqlite_backend_opaque_identity attachment_epoch,
 		const std::uint64_t registry_open_token,
 		std::optional<sqlite_shm_reader_attachment_target_identity> target_identity)
@@ -683,7 +689,8 @@ namespace cxxlens::sdk
 			!valid_identity(alias_lifetime) || !valid_identity(connection_token) ||
 			!valid_identity(main_native_file_receipt) || !valid_identity(main_xopen_receipt) ||
 			!valid_identity(open_epoch) || writer_mapping_generation == 0U ||
-			!valid_identity(callback_cohort) || !valid_identity(attachment_epoch) ||
+			!valid_identity(callback_cohort) || !valid_identity(registration_epoch) ||
+			!valid_identity(attachment_epoch) ||
 			(target_identity && !valid_reader_attachment_target_identity(*target_identity)))
 			return std::nullopt;
 		return sqlite_shm_reader_attachment_reservation_identity{
@@ -696,6 +703,7 @@ namespace cxxlens::sdk
 			std::move(open_epoch),
 			writer_mapping_generation,
 			std::move(callback_cohort),
+			std::move(registration_epoch),
 			std::move(attachment_epoch),
 			registry_open_token,
 			std::move(target_identity)};
@@ -712,6 +720,7 @@ namespace cxxlens::sdk
 			sqlite_backend_opaque_identity open_epoch,
 			const std::uint64_t writer_mapping_generation,
 			sqlite_backend_opaque_identity callback_cohort,
+			sqlite_backend_opaque_identity registration_epoch,
 			sqlite_backend_opaque_identity attachment_epoch,
 			const std::uint64_t registry_open_token,
 			std::optional<sqlite_shm_reader_attachment_target_identity> target_identity)
@@ -722,6 +731,7 @@ namespace cxxlens::sdk
 		  main_xopen_receipt_{std::move(main_xopen_receipt)}, open_epoch_{std::move(open_epoch)},
 		  writer_mapping_generation_{writer_mapping_generation},
 		  callback_cohort_{std::move(callback_cohort)},
+		  registration_epoch_{std::move(registration_epoch)},
 		  attachment_epoch_{std::move(attachment_epoch)}, registry_open_token_{registry_open_token},
 		  target_identity_{std::move(target_identity)}
 	{
@@ -779,6 +789,12 @@ namespace cxxlens::sdk
 	sqlite_shm_reader_attachment_reservation_identity::callback_cohort() const noexcept
 	{
 		return callback_cohort_;
+	}
+
+	const sqlite_backend_opaque_identity&
+	sqlite_shm_reader_attachment_reservation_identity::registration_epoch() const noexcept
+	{
+		return registration_epoch_;
 	}
 
 	const sqlite_backend_opaque_identity&
