@@ -381,6 +381,10 @@ target_link_libraries(
   cxxlens_clang22_worker_core
   PUBLIC cxxlens::clang22_provider_sdk
   PRIVATE cxxlens_clang22_materialization_codecs)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens_clang22_worker_core
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 target_include_directories(cxxlens_clang22_worker_core
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)

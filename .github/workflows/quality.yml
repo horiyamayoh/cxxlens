@@ -219,7 +219,8 @@ jobs:
           cmake --preset install-check -DCXXLENS_CLANG_ADAPTER=ON \
             -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
           cmake --build --preset install-check --target \
-            cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
+            cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22 \
+            cxxlens-clang22-materialize
           ctest --preset install-check --parallel "${CTEST_PARALLEL_LEVEL}" \
             --label-regex install \
             --output-junit "ctest-install-${{ matrix.shared }}.xml"

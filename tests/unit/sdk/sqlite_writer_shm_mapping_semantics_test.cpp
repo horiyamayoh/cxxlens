@@ -312,6 +312,7 @@ namespace
 				identity("test.mapping-semantics.wal-native", marker),
 				identity("test.mapping-semantics.wal-xopen", marker),
 				identity("test.mapping-semantics.shm-attachment", marker),
+				identity("test.mapping-semantics.target-namespace-epoch", marker),
 			},
 			identity("test.mapping-semantics.epoch", marker),
 			watch_receipt,

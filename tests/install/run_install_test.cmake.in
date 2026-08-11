@@ -40,6 +40,9 @@ if(PHASE STREQUAL "prepare")
   set(staging_prefix "${test_root}/prefix")
   set(install_prefix "${staging_prefix}")
   execute_process(
+    COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+            cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
 
@@ -71,7 +74,8 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/share/doc/cxxlens/NOTICE"
       "${install_prefix}/bin/cxxlens-provider-scaffold"
       "${install_prefix}/bin/cxxlens-sdk-doctor"
-      "${install_prefix}/bin/cxxlens-clang-worker-22")
+      "${install_prefix}/bin/cxxlens-clang-worker-22"
+      "${install_prefix}/bin/cxxlens-clang22-materialize")
     if(NOT EXISTS "${required}")
       message(
         FATAL_ERROR "installed next-generation artifact is missing: ${required}"

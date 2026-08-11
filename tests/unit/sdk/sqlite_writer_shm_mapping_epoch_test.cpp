@@ -291,7 +291,8 @@ namespace
 			parent_receipt,
 			wal_receipt,
 			identity("test.epoch.wal-xopen", marker),
-			shm_receipt};
+			shm_receipt,
+			identity("test.epoch.target-namespace-epoch", marker)};
 
 		return {
 			epoch_binding,

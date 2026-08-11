@@ -64,6 +64,14 @@ INTEGRATED_DESIGN = pathlib.Path(
     "docs/design/cxxlens_next_generation_integrated_design_ja.md"
 )
 ROOT_CMAKE = pathlib.Path("CMakeLists.txt")
+QUALITY_WORKFLOW = pathlib.Path(".github/workflows/quality.yml")
+INSTALL_TEST = pathlib.Path("tests/install/run_install_test.cmake.in")
+MAPPING_SEMANTICS_TEST = pathlib.Path(
+    "tests/unit/sdk/sqlite_writer_shm_mapping_semantics_test.cpp"
+)
+MAPPING_EPOCH_TEST = pathlib.Path(
+    "tests/unit/sdk/sqlite_writer_shm_mapping_epoch_test.cpp"
+)
 OCCURRENCE_GENERATOR_CMAKE = pathlib.Path(
     "cmake/GenerateClang22OccurrenceManifest.cmake.in"
 )
@@ -16798,6 +16806,94 @@ def validate_occurrence_build_provenance(
                 )
 
 
+def validate_baseline_recovery_source_bindings(
+    root_cmake: str,
+    quality_workflow: str,
+    install_test: str,
+    mapping_semantics_test: str,
+    mapping_epoch_test: str,
+) -> None:
+    """Keep installed materializer recovery owned by the exact build paths."""
+
+    worker_runtime_objects = (
+        "if(CXXLENS_BUILD_SHARED)\n"
+        "  target_sources(cxxlens_clang22_worker_core\n"
+        "                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)\n"
+        "endif()"
+    )
+    if worker_runtime_objects not in root_cmake:
+        fail(
+            "materialization.installed-surface-invalid",
+            "shared worker lacks private runtime-object linkage",
+        )
+
+    install_job = re.search(
+        r"(?ms)^  install-consumer:\n(?P<body>.*?)(?=^  [a-z0-9_-]+:\n|\Z)",
+        quality_workflow,
+    )
+    expected_build = (
+        "cmake --build --preset install-check --target \\\n"
+        "            cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22 \\\n"
+        "            cxxlens-clang22-materialize"
+    )
+    if install_job is None or expected_build not in install_job.group("body"):
+        fail(
+            "materialization.installed-surface-invalid",
+            "install-consumer build omits cxxlens-clang22-materialize",
+        )
+
+    prepare_fixture = re.search(
+        r'(?ms)if\(PHASE STREQUAL "prepare"\)(?P<body>.*?)(?=^endif\(\))',
+        install_test,
+    )
+    fixture_build = (
+        'execute_process(\n'
+        '    COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target\n'
+        '            cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)'
+    )
+    fixture_install = (
+        'execute_process(\n'
+        '    COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix'
+    )
+    if (
+        prepare_fixture is None
+        or fixture_build not in prepare_fixture.group("body")
+        or fixture_install not in prepare_fixture.group("body")
+        or prepare_fixture.group("body").index(fixture_build)
+        >= prepare_fixture.group("body").index(fixture_install)
+    ):
+        fail(
+            "materialization.installed-surface-invalid",
+            "install prepare fixture must build materializer before installation",
+        )
+
+    required_artifacts = re.search(
+        r"(?ms)  foreach\(\s*required IN.*?  endforeach\(\)", install_test
+    )
+    materializer_path = '"${install_prefix}/bin/cxxlens-clang22-materialize"'
+    if (
+        required_artifacts is None
+        or materializer_path not in required_artifacts.group(0)
+    ):
+        fail(
+            "materialization.installed-surface-invalid",
+            "install required-artifact census omits cxxlens-clang22-materialize",
+        )
+
+    target_epoch = 'identity("test.mapping-semantics.target-namespace-epoch", marker)'
+    if target_epoch not in mapping_semantics_test:
+        fail(
+            "materialization.sqlite-effect-root-invalid",
+            "mapping semantics fixture omits target namespace epoch identity",
+        )
+    epoch_target = 'identity("test.epoch.target-namespace-epoch", marker)'
+    if epoch_target not in mapping_epoch_test:
+        fail(
+            "materialization.sqlite-effect-root-invalid",
+            "mapping epoch fixture omits target namespace epoch identity",
+        )
+
+
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     contract_text = (root / CONTRACT).read_text(encoding="utf-8")
     design_text = (root / INTEGRATED_DESIGN).read_text(encoding="utf-8")
@@ -16843,6 +16939,13 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         (root / ROOT_CMAKE).read_text(encoding="utf-8"),
         (root / OCCURRENCE_GENERATOR_CMAKE).read_text(encoding="utf-8"),
         (root / SOURCE_PROVENANCE_CMAKE).read_text(encoding="utf-8"),
+    )
+    validate_baseline_recovery_source_bindings(
+        (root / ROOT_CMAKE).read_text(encoding="utf-8"),
+        (root / QUALITY_WORKFLOW).read_text(encoding="utf-8"),
+        (root / INSTALL_TEST).read_text(encoding="utf-8"),
+        (root / MAPPING_SEMANTICS_TEST).read_text(encoding="utf-8"),
+        (root / MAPPING_EPOCH_TEST).read_text(encoding="utf-8"),
     )
     contract = load(root / CONTRACT)
     contract_schema = load(root / CONTRACT_SCHEMA)
