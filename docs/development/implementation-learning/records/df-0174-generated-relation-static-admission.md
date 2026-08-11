@@ -1,11 +1,11 @@
 ---
 id: DF-0174
 title: Clarify generated relation tags versus installed static API admission
-status: proposed
+status: accepted
 kind: missing-assumption
 impact: irreversible
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - public-api.generated-relation-admission
   - relation-registry.static-api-projection
@@ -25,10 +25,11 @@ resolution_refs:
   - docs/design/adr/0098-explicit-static-relation-projection.md
 review:
   mode: independent
-  status: pending
+  status: complete
   author: codex-agent-root
-  reviewer: null
-  refs: []
+  reviewer: codex-agent-u0-static-admission-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/174#issuecomment-5255918605
 created: '2026-07-19'
 ---
 
@@ -50,10 +51,10 @@ The seven descriptors without an admitted generated header are `source.origin.v1
 ## Working mental model
 
 The Public API Catalog intentionally owns installed header admission, while the Relation
-Registry owns derivation and identity for an admitted generated header. ADR 0098 proposes an
+Registry owns derivation and identity for an admitted generated header. Accepted ADR 0098 adds an
 explicit `cpp_projection` field so this record no longer relies on tag nullability as admission
-metadata. The proposal classifies the seven standard descriptors as `installed-static`, but does
-not activate public headers while independent review remains pending.
+metadata. It classifies the seven standard descriptors as `installed-static`; the implementation
+must now admit their public artifacts exactly, without changing descriptor semantics or digests.
 
 ## Mismatch or opportunity
 
@@ -100,9 +101,9 @@ explicit.
 
 ## Recommendation
 
-ADR 0098 is the proposed authority change. Preserve the current catalog-admitted eleven headers
-until its independent review is recorded. Do not add or remove the seven public headers, callable
-inventory rows, examples, or installed-package claims based on this record alone.
+Implement accepted ADR 0098 by making the catalog/header/callable/example sets exactly match all
+eighteen `installed-static` relations. Preserve descriptor digests and keep all three
+`dynamic-only` observation relations excluded from generated static API admission.
 
 ## Disposition
 
@@ -113,3 +114,8 @@ admission unit is blocked. Dynamic/system relation implementation and unrelated 
 identify the seven target installed-static descriptors. This record remains proposed/blocked:
 independent review must accept ADR 0098 before catalog admission, generated headers, callable
 inventory, examples, or installed qualification are activated.
+
+2026-08-12: Independent adversarial review accepted exact proposal commit
+`332fdca68df26ef316a9f675ce6ae84f7e468710` with no P0/P1. ADR 0098 is accepted and this record
+is `may-proceed`; installed-package qualification remains blocked until the seven public artifact
+families and their exact catalog/inventory/tests are implemented and reviewed.

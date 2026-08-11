@@ -35,6 +35,7 @@ PACKAGE_PATHS = (
     "docs/design/adr/0094-risk-tiered-goal-authorization.md",
     "docs/design/adr/0095-production-scope-closure.md",
     "docs/design/adr/0096-clang22-installed-materialization-boundary.md",
+    "docs/design/adr/0098-explicit-static-relation-projection.md",
     "docs/design/catalogs/README.md",
     "schemas/cxxlens_ng_claim_envelope.schema.yaml",
     "schemas/cxxlens_ng_relation_registry.yaml",
