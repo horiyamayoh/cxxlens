@@ -2020,6 +2020,28 @@ namespace
 				"provider timeout regression exceeded the hard anti-hang bound");
 	}
 
+	void check_semantic_input_digests(const std::string& executable)
+	{
+		auto request = task(select(executable, "success"));
+		const auto invocation =
+			semantic_digest("cxxlens.test.provider-invocation.v1", "semantic-invocation");
+		const auto toolchain =
+			semantic_digest("cxxlens.test.provider-toolchain.v1", "semantic-toolchain");
+		const auto environment =
+			semantic_digest("cxxlens.test.provider-environment.v1", "semantic-environment");
+		require(invocation && toolchain && environment,
+				"semantic provider input digest setup failed");
+		request.normalized_invocation_digest = *invocation;
+		request.toolchain_digest = *toolchain;
+		request.environment_digest = *environment;
+		auto processes = make_system_provider_process_port();
+		require(processes != nullptr, "system provider process port unavailable");
+		process_provider_runtime runtime{*processes};
+		auto report = runtime.execute(request);
+		require(report && report->succeeded(),
+				"semantic provider input digests were rejected by the process runtime");
+	}
+
 	void check_prior_snapshot_preserved(const std::string& executable)
 	{
 		relation_registry registry;
@@ -2092,6 +2114,7 @@ int main(const int argument_count, const char* const* arguments)
 	check_sandbox_closed_enum(executable);
 	check_host_transcript_validator(executable);
 	check_sealed_provider_validation();
+	check_semantic_input_digests(executable);
 	check_process_faults(executable);
 	check_prior_snapshot_preserved(executable);
 }

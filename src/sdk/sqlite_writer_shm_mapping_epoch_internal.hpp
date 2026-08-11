@@ -330,6 +330,8 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity wal_native_file_receipt;
 		sqlite_backend_opaque_identity wal_xopen_receipt;
 		sqlite_backend_opaque_identity shm_native_attachment_receipt;
+		/** Exact target namespace epoch retained by the production writer route. */
+		std::optional<sqlite_backend_opaque_identity> target_namespace_epoch_identity;
 
 		[[nodiscard]] bool
 		operator==(const sqlite_writer_shm_mapping_epoch_binding&) const = default;
@@ -395,6 +397,9 @@ namespace cxxlens::sdk
 		valid_for_predelegation(const sqlite_shm_writer_map_request& request) const noexcept;
 		[[nodiscard]] bool
 		retains_exact_lifetimes(const sqlite_shm_writer_map_request& request) const noexcept;
+		[[nodiscard]] bool target_identity_matches(
+			const sqlite_shm_reader_attachment_target_identity& target,
+			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
 		[[nodiscard]] bool matches_validated_receipt(
 			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
 		[[nodiscard]] bool retains_exact_validated_receipt(
@@ -512,9 +517,10 @@ namespace cxxlens::sdk
 	/**
 	 * Closed platform boundary for watch-before-pre-stat writer mapping epochs.
 	 *
-	 * No production implementation exists in this checkpoint. A future Linux implementation must
-	 * retain the exact already-owned native resources and must not open or close duplicate target
-	 * descriptors while SQLite locks may be live.
+	 * The generic boundary has no native-VFS activation or status projection. The
+	 * source-private retained-namespace implementation below supplies exact pre-existing
+	 * `{0, 0}` and same-process `{1, 1}` preallocated/growth/create observations. It never opens a
+	 * duplicate target descriptor while SQLite locks may be live.
 	 */
 	class sqlite_writer_shm_mapping_epoch_port
 	{
@@ -545,13 +551,16 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity wal_write_lock_receipt;
 		sqlite_backend_opaque_identity effect_gate_receipt;
 		sqlite_backend_opaque_identity effect_receipt;
+		/** Filesystem/mount proof inherited from the retained main/parent for an absent SHM leaf.
+		 */
+		std::optional<sqlite_backend_opaque_identity> absent_filesystem_profile;
+		std::optional<sqlite_backend_opaque_identity> absent_mount_identity;
 	};
 
 	/**
 	 * Source-private Linux-compatible slice for a writer epoch over an already-held regular SHM
-	 * entry. It accepts only the pre-existing `{caller_extend, delegated_extend} == {0, 0}` route.
-	 * Creation, growth, native status projection, and duplicate target opens remain outside this
-	 * port and therefore fail closed at its boundary.
+	 * entry or an absent leaf whose parent filesystem/mount proof is retained by the caller. It
+	 * accepts only `{0,0}` and `{1,1}`; mixed extend pairs fail closed.
 	 */
 	class sqlite_retained_namespace_writer_shm_mapping_epoch_port final
 		: public sqlite_writer_shm_mapping_epoch_port

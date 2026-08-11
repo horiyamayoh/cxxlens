@@ -595,10 +595,10 @@ namespace cxxlens::sdk::provider
 			const auto minor = expected.limits.maximum_minor;
 			if (expected.provider_manifest.empty() || expected.task.task_id.empty() ||
 				expected.task.task_id.contains('\0') ||
-				!canonical_digest(expected.task.task_input_digest) ||
-				!canonical_digest(expected.task.normalized_invocation_digest) ||
-				!canonical_digest(expected.task.toolchain_digest) ||
-				!canonical_digest(expected.task.environment_digest) ||
+				!protocol_digest(expected.task.task_input_digest) ||
+				!protocol_digest(expected.task.normalized_invocation_digest) ||
+				!protocol_digest(expected.task.toolchain_digest) ||
+				!protocol_digest(expected.task.environment_digest) ||
 				expected.limits.protocol_major != 1U || minor > 1U ||
 				expected.limits.minimum_minor > minor ||
 				profile.task_input_chunks_v1 != (minor == 1U) ||
@@ -2212,10 +2212,10 @@ namespace cxxlens::sdk::provider
 			if (request.task_id.empty() || request.task_id.contains('\0') ||
 				request.selection.selected_candidate().executable_argv.empty() ||
 				request.selection.selected_candidate().executable_argv.front().empty() ||
-				!canonical_digest(request.task_input_digest) ||
-				!canonical_digest(request.normalized_invocation_digest) ||
-				!canonical_digest(request.toolchain_digest) ||
-				!canonical_digest(request.environment_digest))
+				!protocol_digest(request.task_input_digest) ||
+				!protocol_digest(request.normalized_invocation_digest) ||
+				!protocol_digest(request.toolchain_digest) ||
+				!protocol_digest(request.environment_digest))
 				return cxxlens::sdk::unexpected(
 					runtime_error("provider.task-invalid", request.task_id));
 			const auto& selected = request.selection.selected_candidate();

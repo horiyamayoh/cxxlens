@@ -15,6 +15,7 @@
 #include "materialization_occurrence.hpp"
 #include "materialization_report.hpp"
 #include "materialization_request_v2_1.hpp"
+#include "materialization_rooted_vfs.hpp"
 #include "materialization_store.hpp"
 
 namespace cxxlens::detail::clang22::materialization
@@ -63,11 +64,14 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		const validated_materialization_request_v2_1* request{};
 		const json_document* request_globals{};
+		const detailed_task_report_accumulator* task_reports{};
 		const raw_input_observation* raw_input{};
 		const materialization_occurrence_manifest* occurrence_manifest{};
 		const materialization_occurrence_receipt* occurrence_receipt{};
 		const sealed_materialization_claims* claims{};
 		const materialization_store_observation* store{};
+		/** Exact rooted-VFS receipt retained by the SQLite opener, when the backend is SQLite. */
+		const materialization_rooted_vfs_receipt* rooted_vfs_receipt{};
 		std::string generated_at;
 		public_materialization_authority_projections projections;
 		std::size_t maximum_report_bytes{64U * 1024U * 1024U};

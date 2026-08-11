@@ -2135,7 +2135,7 @@ bytes と identity/entry だけから次の有限 family の candidate または
 の再解決を classifier authority にしない。
 
 | Family | exact cold topology |
-|---|---|
+| --- | --- |
 | `F0` | byte-exact current pre-form main（WAL header 2/2）+ sidecar absent |
 | `FZ` | byte-exact current pre-form または post-form main + size-zero WAL、SHM/journal absent |
 | `FP` | pre-form main + derived normalization journal の exact non-hot callback-boundary prefix、WAL/SHM absent |

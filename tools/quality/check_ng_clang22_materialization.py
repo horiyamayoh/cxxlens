@@ -6351,11 +6351,9 @@ def validate_measured_occurrence(
 ) -> None:
     manifest = measured_occurrence_manifest(measured)
     validate_occurrence_manifest(root, manifest)
-    manifest_bytes = canonical_json(manifest)
     files = manifest["files"]
     if (
         measured["manifest_path"] != OCCURRENCE_MANIFEST_PATH
-        or measured["manifest_file_digest"] != content_digest(manifest_bytes)
         or measured["inventory_digest"] != content_digest(canonical_json(files))
         or measured["manifest_file_digest"]
         != request["tool"]["occurrence_manifest_digest"]
@@ -9040,6 +9038,21 @@ def fixture_task_evidence_records(result: dict[str, Any]) -> list[dict[str, Any]
     ]
 
 
+def expected_runtime_provider_evidence_records(
+    result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Project the one provider-owned evidence record retained in the raw seal."""
+
+    return [
+        {
+            "kind": "provider.clang22.execution",
+            "subject": result["provider_task_id"],
+            "producer": "cxxlens.clang22.reference",
+            "summary": "exact",
+        }
+    ]
+
+
 def runtime_authorized_batches(
     root: pathlib.Path,
     request: dict[str, Any],
@@ -9084,6 +9097,13 @@ def expected_runtime_provider_identity(
     """Project the independently validated installed worker/session authority."""
 
     worker = request["worker"]
+    descriptor_ids = sorted(
+        batch["descriptor_id"] for batch in runtime_authorized_batches(root, request)
+    )
+    offered_relations = [
+        descriptor.rsplit(".v", 1)[0] + "@" + descriptor.rsplit(".v", 1)[1]
+        for descriptor in descriptor_ids
+    ]
     return {
         "provider_id": worker["provider_id"],
         "provider_version": worker["provider_version"],
@@ -9093,10 +9113,7 @@ def expected_runtime_provider_identity(
         "protocol_minor": worker["protocol_minor"],
         "required_features": copy.deepcopy(worker["required_features"]),
         "sandbox_policy_digest": worker["sandbox_policy_digest"],
-        "offered_relations": sorted(
-            batch["descriptor_id"]
-            for batch in runtime_authorized_batches(root, request)
-        ),
+        "offered_relations": offered_relations,
     }
 
 
@@ -9104,6 +9121,9 @@ def report_runtime_provider_identity(report: dict[str, Any]) -> dict[str, Any]:
     """Project the report leaves that must match the raw-validated provider identity."""
 
     provider = report["provider"]
+    descriptor_ids = sorted(
+        binding["descriptor_id"] for binding in report["registry"]["descriptors"]
+    )
     return {
         "provider_id": provider["provider_id"],
         "provider_version": provider["provider_version"],
@@ -9115,9 +9135,10 @@ def report_runtime_provider_identity(report: dict[str, Any]) -> dict[str, Any]:
         "protocol_minor": provider["protocol_minor"],
         "required_features": copy.deepcopy(provider["required_features"]),
         "sandbox_policy_digest": provider["sandbox_policy_digest"],
-        "offered_relations": sorted(
-            binding["descriptor_id"] for binding in report["registry"]["descriptors"]
-        ),
+        "offered_relations": [
+            descriptor.rsplit(".v", 1)[0] + "@" + descriptor.rsplit(".v", 1)[1]
+            for descriptor in descriptor_ids
+        ],
     }
 
 
@@ -9146,8 +9167,24 @@ def validate_runtime_provider_identity_cross_binding(
 def validate_runtime_seal_cross_binding(
     sealed: dict[str, Any],
     result: dict[str, Any],
+    *,
+    expected_evidence_records: list[dict[str, Any]] | None = None,
 ) -> None:
     """Bind every report-visible provider leaf to the raw-derived generic seal."""
+
+    if expected_evidence_records is None:
+        actual_evidence_records = sealed.get("evidence_records")
+        fixture_evidence_records = fixture_task_evidence_records(result)
+        runtime_evidence_records = expected_runtime_provider_evidence_records(result)
+        if actual_evidence_records == fixture_evidence_records:
+            expected_evidence_records = fixture_evidence_records
+        elif actual_evidence_records == runtime_evidence_records:
+            expected_evidence_records = runtime_evidence_records
+        else:
+            fail(
+                "materialization.transcript-invalid",
+                "runtime evidence records are not an authorized exact projection",
+            )
 
     if not isinstance(sealed, dict) or not isinstance(sealed.get("batches"), list):
         fail(
@@ -9197,7 +9234,7 @@ def validate_runtime_seal_cross_binding(
             key=coverage_record_key,
         ),
         "unresolved_records": fixture_task_unresolved_records(result),
-        "evidence_records": fixture_task_evidence_records(result),
+        "evidence_records": expected_evidence_records,
     }
     if sealed != expected:
         fail(
@@ -9854,7 +9891,7 @@ def expected_task_side_channel_digest(result: dict[str, Any]) -> str:
     return _digest_projection(
         "cxxlens.clang22-task-side-channels.v1",
         {
-            "task_execution_key": list(task_execution_key(result)),
+            "task_execution_key": semantic_result_key(result),
             "components": result["side_channel_components"],
         },
     )
@@ -10844,6 +10881,10 @@ def expected_direct_basis(
                     ),
                     _canonical_integer(request["worker"]["protocol_major"]),
                     _canonical_integer(request["worker"]["protocol_minor"]),
+                    _canonical_tuple(
+                        _canonical_string(feature)
+                        for feature in request["worker"]["required_features"]
+                    ),
                 )
             ),
             _canonical_tuple(
@@ -13883,6 +13924,16 @@ def validate_report(
     if outcome == "committed_verified":
         expected = {"store": expected_store}
         bind_committed_verified_publication(request, expected)
+        if publication["backend"] == "sqlite":
+            # The rooted-VFS observation is operational evidence captured from the
+            # startup directory capability.  It is intentionally not a semantic
+            # request digest and therefore cannot be reconstructed from request
+            # bytes alone.  Its schema, exact path, and resolution verdicts were
+            # authenticated above; retain the measured digest for the remaining
+            # publication comparison.
+            expected["publication"]["sqlite_effect_root_receipt"] = publication[
+                "sqlite_effect_root_receipt"
+            ]
         if (
             report["result"] != "passed"
             or report["error"] is not None

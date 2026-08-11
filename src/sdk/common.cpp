@@ -248,18 +248,18 @@ namespace cxxlens::sdk
 				for (std::size_t index = 0U; index < 16U; ++index)
 				{
 					const auto byte = offset + index * 4U;
-					words.at(index) = (static_cast<std::uint32_t>(bytes[byte]) << 24U) |
+					words[index] = (static_cast<std::uint32_t>(bytes[byte]) << 24U) |
 						(static_cast<std::uint32_t>(bytes[byte + 1U]) << 16U) |
 						(static_cast<std::uint32_t>(bytes[byte + 2U]) << 8U) |
 						static_cast<std::uint32_t>(bytes[byte + 3U]);
 				}
 				for (std::size_t index = 16U; index < words.size(); ++index)
 				{
-					const auto s0 = std::rotr(words.at(index - 15U), 7) ^
-						std::rotr(words.at(index - 15U), 18) ^ (words.at(index - 15U) >> 3U);
-					const auto s1 = std::rotr(words.at(index - 2U), 17) ^
-						std::rotr(words.at(index - 2U), 19) ^ (words.at(index - 2U) >> 10U);
-					words.at(index) = words.at(index - 16U) + s0 + words.at(index - 7U) + s1;
+					const auto s0 = std::rotr(words[index - 15U], 7) ^
+						std::rotr(words[index - 15U], 18) ^ (words[index - 15U] >> 3U);
+					const auto s1 = std::rotr(words[index - 2U], 17) ^
+						std::rotr(words[index - 2U], 19) ^ (words[index - 2U] >> 10U);
+					words[index] = words[index - 16U] + s0 + words[index - 7U] + s1;
 				}
 
 				auto [a, b, c, d, e, f, g, h] = state;
@@ -269,8 +269,7 @@ namespace cxxlens::sdk
 					const auto majority = (a & b) ^ (a & c) ^ (b & c);
 					const auto upper_a = std::rotr(a, 2) ^ std::rotr(a, 13) ^ std::rotr(a, 22);
 					const auto upper_e = std::rotr(e, 6) ^ std::rotr(e, 11) ^ std::rotr(e, 25);
-					const auto first =
-						h + upper_e + choose + round_constants.at(index) + words.at(index);
+					const auto first = h + upper_e + choose + round_constants[index] + words[index];
 					const auto second = upper_a + majority;
 					h = g;
 					g = f;

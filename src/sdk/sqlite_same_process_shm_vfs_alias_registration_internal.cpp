@@ -1,7 +1,6 @@
 #include "sqlite_same_process_shm_vfs_alias_registration_internal.hpp"
 
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -28,7 +27,7 @@ namespace cxxlens::sdk
 			"cxxlens.sqlite.shm.vfs-alias-unregistration-epoch.v1";
 		constexpr std::size_t maximum_sealed_source_id_bytes = 4096U;
 
-		constexpr auto native_alias_lifecycle_wait_limit = std::chrono::milliseconds{100};
+		constexpr std::uint32_t native_alias_lifecycle_wait_iteration_limit = 100000U;
 #if defined(__linux__)
 		static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
 					  "fork-safe alias lifecycle gate requires lock-free 64-bit atomics");
@@ -38,10 +37,10 @@ namespace cxxlens::sdk
 		std::atomic<std::uint64_t> next_alias_lifecycle_sequence{1U};
 		thread_local std::uint64_t native_alias_lifecycle_active_process_key{};
 
-		[[nodiscard]] sqlite_shm_lease_rejection rejection(
-			const sqlite_shm_lease_rejection_reason reason,
-			const sqlite_shm_lease_recovery_action action =
-				sqlite_shm_lease_recovery_action::deny_before_native_map) noexcept
+		[[nodiscard]] sqlite_shm_lease_rejection
+		rejection(const sqlite_shm_lease_rejection_reason reason,
+				  const sqlite_shm_lease_recovery_action action =
+					  sqlite_shm_lease_recovery_action::deny_before_native_map) noexcept
 		{
 			return {reason, action};
 		}
@@ -49,7 +48,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_rejection ambiguous_rejection() noexcept
 		{
 			return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
-						 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 		}
 
 		[[nodiscard]] bool valid_identity(const sqlite_backend_opaque_identity& identity) noexcept
@@ -82,9 +81,8 @@ namespace cxxlens::sdk
 					return;
 				}
 				native_alias_lifecycle_active_process_key = process_key_;
-				std::optional<std::chrono::steady_clock::time_point> deadline;
-				auto observed =
-					native_alias_lifecycle_gate_state.load(std::memory_order_acquire);
+				std::uint32_t wait_iterations{};
+				auto observed = native_alias_lifecycle_gate_state.load(std::memory_order_acquire);
 				for (;;)
 				{
 					const auto observed_process = observed >> 1U;
@@ -104,25 +102,21 @@ namespace cxxlens::sdk
 						}
 						continue;
 					}
-					const auto now = std::chrono::steady_clock::now();
-					if (!deadline)
-						deadline = now + native_alias_lifecycle_wait_limit;
-					else if (now >= *deadline)
+					if (wait_iterations++ >= native_alias_lifecycle_wait_iteration_limit)
 					{
 						timed_out_ = true;
 						return;
 					}
 					std::this_thread::yield();
-					observed =
-						native_alias_lifecycle_gate_state.load(std::memory_order_acquire);
+					observed = native_alias_lifecycle_gate_state.load(std::memory_order_acquire);
 				}
 			}
 
 			~native_alias_lifecycle_scope() noexcept
 			{
 				if (acquired_)
-					native_alias_lifecycle_gate_state.store(
-						process_key_ << 1U, std::memory_order_release);
+					native_alias_lifecycle_gate_state.store(process_key_ << 1U,
+															std::memory_order_release);
 				if (!reentrant_)
 					native_alias_lifecycle_active_process_key = 0U;
 			}
@@ -145,13 +139,12 @@ namespace cxxlens::sdk
 		  private:
 			void prepare_sequence_source() const noexcept
 			{
-				const auto prior = alias_lifecycle_sequence_process_key.load(
-					std::memory_order_acquire);
+				const auto prior =
+					alias_lifecycle_sequence_process_key.load(std::memory_order_acquire);
 				if (prior == process_key_)
 					return;
 				next_alias_lifecycle_sequence.store(1U, std::memory_order_relaxed);
-				alias_lifecycle_sequence_process_key.store(
-					process_key_, std::memory_order_release);
+				alias_lifecycle_sequence_process_key.store(process_key_, std::memory_order_release);
 			}
 
 			std::uint64_t process_key_{};
@@ -160,16 +153,15 @@ namespace cxxlens::sdk
 			bool timed_out_{};
 		};
 
-		[[nodiscard]] sqlite_shm_lease_rejection gate_rejection(
-			const native_alias_lifecycle_scope& scope) noexcept
+		[[nodiscard]] sqlite_shm_lease_rejection
+		gate_rejection(const native_alias_lifecycle_scope& scope) noexcept
 		{
 			if (scope.reentrant())
 				return rejection(sqlite_shm_lease_rejection_reason::invalid_request);
 			if (scope.timed_out())
 				return rejection(
 					sqlite_shm_lease_rejection_reason::retiring,
-					sqlite_shm_lease_recovery_action::
-						await_complete_attachment_gate_boundary);
+					sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary);
 			return ambiguous_rejection();
 		}
 
@@ -180,11 +172,10 @@ namespace cxxlens::sdk
 			{
 				if (current == std::numeric_limits<std::uint64_t>::max())
 					return 0U;
-				if (next_alias_lifecycle_sequence.compare_exchange_weak(
-						current,
-						current + 1U,
-						std::memory_order_acq_rel,
-						std::memory_order_relaxed))
+				if (next_alias_lifecycle_sequence.compare_exchange_weak(current,
+																		current + 1U,
+																		std::memory_order_acq_rel,
+																		std::memory_order_relaxed))
 					return current;
 			}
 		}
@@ -233,8 +224,8 @@ namespace cxxlens::sdk
 		}
 
 		template <class Builder>
-		[[nodiscard]] std::optional<sqlite_backend_opaque_identity> mint_sealed_identity(
-			const std::string_view profile, Builder&& builder) noexcept
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		mint_sealed_identity(const std::string_view profile, Builder&& builder) noexcept
 		{
 			try
 			{
@@ -251,19 +242,20 @@ namespace cxxlens::sdk
 			}
 		}
 
-		[[nodiscard]] std::optional<sqlite_backend_opaque_identity> mint_epoch(
-			const std::string_view profile,
-			const sqlite_backend_opaque_identity& process_instance,
-			const sqlite_backend_opaque_identity& shared_runtime_vfs_cohort,
-			const sqlite_backend_opaque_identity& alias_lifetime,
-			const sqlite_backend_opaque_identity& runtime_lifetime_identity,
-			const sqlite_backend_opaque_identity& runtime_lifetime_pin_identity,
-			const sqlite_backend_opaque_identity* registration_epoch,
-			const std::string_view registered_vfs_name,
-			void* const vfs_implementation,
-			const sqlite_shm_vfs_alias_lifecycle_binding::find_function find,
-			const sqlite_shm_vfs_alias_lifecycle_binding::register_function register_vfs,
-			const sqlite_shm_vfs_alias_lifecycle_binding::unregister_function unregister_vfs) noexcept
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		mint_epoch(const std::string_view profile,
+				   const sqlite_backend_opaque_identity& process_instance,
+				   const sqlite_backend_opaque_identity& shared_runtime_vfs_cohort,
+				   const sqlite_backend_opaque_identity& alias_lifetime,
+				   const sqlite_backend_opaque_identity& runtime_lifetime_identity,
+				   const sqlite_backend_opaque_identity& runtime_lifetime_pin_identity,
+				   const sqlite_backend_opaque_identity* registration_epoch,
+				   const std::string_view registered_vfs_name,
+				   void* const vfs_implementation,
+				   const sqlite_shm_vfs_alias_lifecycle_binding::find_function find,
+				   const sqlite_shm_vfs_alias_lifecycle_binding::register_function register_vfs,
+				   const sqlite_shm_vfs_alias_lifecycle_binding::unregister_function
+					   unregister_vfs) noexcept
 		{
 			const auto sequence = reserve_lifecycle_sequence();
 			if (sequence == 0U)
@@ -272,16 +264,14 @@ namespace cxxlens::sdk
 			{
 				sqlite_backend_opaque_identity output;
 				output.profile = std::string{profile};
-				output.bytes.reserve(256U + process_instance.profile.size() +
-									 process_instance.bytes.size() +
-									 shared_runtime_vfs_cohort.profile.size() +
-									 shared_runtime_vfs_cohort.bytes.size() +
-									 alias_lifetime.profile.size() + alias_lifetime.bytes.size() +
-									 runtime_lifetime_identity.profile.size() +
-									 runtime_lifetime_identity.bytes.size() +
-									 runtime_lifetime_pin_identity.profile.size() +
-									 runtime_lifetime_pin_identity.bytes.size() +
-									 registered_vfs_name.size());
+				output.bytes.reserve(
+					256U + process_instance.profile.size() + process_instance.bytes.size() +
+					shared_runtime_vfs_cohort.profile.size() +
+					shared_runtime_vfs_cohort.bytes.size() + alias_lifetime.profile.size() +
+					alias_lifetime.bytes.size() + runtime_lifetime_identity.profile.size() +
+					runtime_lifetime_identity.bytes.size() +
+					runtime_lifetime_pin_identity.profile.size() +
+					runtime_lifetime_pin_identity.bytes.size() + registered_vfs_name.size());
 				append_u64(output.bytes, sequence);
 				append_identity(output.bytes, process_instance);
 				append_identity(output.bytes, shared_runtime_vfs_cohort);
@@ -314,8 +304,7 @@ namespace cxxlens::sdk
 		if (!input.process.valid() || input.process.registry() == nullptr ||
 			input.runtime.runtime_identity == nullptr ||
 			input.runtime.runtime_image_identity == nullptr ||
-			input.runtime.runtime_lifetime_identity == nullptr ||
-			!input.runtime.runtime_lifetime ||
+			input.runtime.runtime_lifetime_identity == nullptr || !input.runtime.runtime_lifetime ||
 			input.runtime.runtime_lifetime_identity != input.runtime.runtime_lifetime.get() ||
 			input.runtime.open_v2 == nullptr || input.runtime.close_v2 == nullptr ||
 			input.runtime.exec == nullptr || input.runtime.errmsg == nullptr ||
@@ -326,8 +315,8 @@ namespace cxxlens::sdk
 			input.pinned_underlying_vfs_identity == nullptr ||
 			input.pinned_underlying_vfs_app_data_identity == nullptr ||
 			input.pinned_underlying_open_callback_address == nullptr ||
-			input.backend_lifetime_identity == nullptr ||
-			!valid_name(input.registered_vfs_name) || input.vfs_implementation == nullptr ||
+			input.backend_lifetime_identity == nullptr || !valid_name(input.registered_vfs_name) ||
+			input.vfs_implementation == nullptr ||
 			input.vfs_implementation == input.pinned_underlying_vfs_identity)
 			return rejection(sqlite_shm_lease_rejection_reason::invalid_identity);
 
@@ -374,15 +363,15 @@ namespace cxxlens::sdk
 				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
 								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 
-			auto alias_lifetime = mint_sealed_identity(
-				"cxxlens.sqlite.shm.vfs.alias-lifetime.v1",
-				[&](std::vector<std::byte>& bytes)
-				{
-					append_identity(bytes, *shared_runtime_vfs_cohort);
-					append_pointer(bytes, input.backend_lifetime_identity);
-					append_pointer(bytes, input.vfs_implementation);
-					append_string(bytes, input.registered_vfs_name);
-				});
+			auto alias_lifetime =
+				mint_sealed_identity("cxxlens.sqlite.shm.vfs.alias-lifetime.v1",
+									 [&](std::vector<std::byte>& bytes)
+									 {
+										 append_identity(bytes, *shared_runtime_vfs_cohort);
+										 append_pointer(bytes, input.backend_lifetime_identity);
+										 append_pointer(bytes, input.vfs_implementation);
+										 append_string(bytes, input.registered_vfs_name);
+									 });
 			if (!alias_lifetime)
 				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
 								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
@@ -403,14 +392,14 @@ namespace cxxlens::sdk
 				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
 								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 
-			auto runtime_lifetime_pin_identity = mint_sealed_identity(
-				"cxxlens.sqlite.shm.vfs.runtime-lifetime-pin.v1",
-				[&](std::vector<std::byte>& bytes)
-				{
-					append_identity(bytes, *runtime_lifetime_identity);
-					append_identity(bytes, *alias_lifetime);
-					append_pointer(bytes, input.vfs_implementation);
-				});
+			auto runtime_lifetime_pin_identity =
+				mint_sealed_identity("cxxlens.sqlite.shm.vfs.runtime-lifetime-pin.v1",
+									 [&](std::vector<std::byte>& bytes)
+									 {
+										 append_identity(bytes, *runtime_lifetime_identity);
+										 append_identity(bytes, *alias_lifetime);
+										 append_pointer(bytes, input.vfs_implementation);
+									 });
 			if (!runtime_lifetime_pin_identity)
 				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
 								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
@@ -555,8 +544,7 @@ namespace cxxlens::sdk
 		return process_.registry();
 	}
 
-	sqlite_shm_lease_result<void>
-	sqlite_shm_registered_vfs_alias::unregister_alias() noexcept
+	sqlite_shm_lease_result<void> sqlite_shm_registered_vfs_alias::unregister_alias() noexcept
 	{
 		return sqlite_same_process_shm_vfs_alias_registration_port::unregister_alias(*this);
 	}
@@ -596,20 +584,20 @@ namespace cxxlens::sdk
 				return rejection(sqlite_shm_lease_rejection_reason::invalid_request);
 
 			auto registration_epoch = mint_epoch(registration_epoch_profile,
-				binding.process_.process_instance(),
-				binding.shared_runtime_vfs_cohort_,
-				binding.alias_lifetime_,
-				binding.runtime_lifetime_identity_,
-				binding.runtime_lifetime_pin_identity_,
-				nullptr,
-				binding.registered_vfs_name_,
-				binding.vfs_implementation_,
-				binding.find_,
-				binding.register_vfs_,
-				binding.unregister_vfs_);
+												 binding.process_.process_instance(),
+												 binding.shared_runtime_vfs_cohort_,
+												 binding.alias_lifetime_,
+												 binding.runtime_lifetime_identity_,
+												 binding.runtime_lifetime_pin_identity_,
+												 nullptr,
+												 binding.registered_vfs_name_,
+												 binding.vfs_implementation_,
+												 binding.find_,
+												 binding.register_vfs_,
+												 binding.unregister_vfs_);
 			if (!registration_epoch)
 				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
-							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 
 			const auto receipt = sqlite_shm_verified_alias_registration_receipt{
 				binding.process_.process_instance(),
@@ -620,10 +608,10 @@ namespace cxxlens::sdk
 				*registration_epoch,
 			};
 
-			auto runtime_lifetime = binding.process_.adopt_runtime_lifetime(
-				binding.runtime_lifetime_identity_,
-				binding.runtime_lifetime_pin_identity_,
-				binding.runtime_lifetime_owner_);
+			auto runtime_lifetime =
+				binding.process_.adopt_runtime_lifetime(binding.runtime_lifetime_identity_,
+														binding.runtime_lifetime_pin_identity_,
+														binding.runtime_lifetime_owner_);
 			if (!runtime_lifetime)
 				return runtime_lifetime.error();
 
@@ -701,12 +689,12 @@ namespace cxxlens::sdk
 			return gate_rejection(lifecycle_scope);
 		if (alias.terminal_failure_ || !alias.alias_ || alias.native_unregister_started_)
 			return rejection(sqlite_shm_lease_rejection_reason::stale_token,
-						 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 		if (!alias.process_.valid() || !alias.alias_->valid())
 		{
 			alias.quarantine_owner();
 			return rejection(sqlite_shm_lease_rejection_reason::stale_token,
-						 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 		}
 
 		try
@@ -716,7 +704,7 @@ namespace cxxlens::sdk
 			{
 				alias.quarantine_owner();
 				return rejection(sqlite_shm_lease_rejection_reason::stale_token,
-							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 			}
 			if (!alias.unregistering_)
 			{
@@ -731,22 +719,22 @@ namespace cxxlens::sdk
 				return quiescent.error();
 
 			auto unregistration_epoch = mint_epoch(unregistration_epoch_profile,
-				alias.process_.process_instance(),
-				alias.shared_runtime_vfs_cohort_,
-				alias.alias_lifetime_,
-				alias.runtime_lifetime_identity_,
-				alias.runtime_lifetime_pin_identity_,
-				&alias.registration_epoch_,
-				alias.registered_vfs_name_,
-				alias.vfs_implementation_,
-				alias.find_,
-				nullptr,
-				alias.unregister_vfs_);
+												   alias.process_.process_instance(),
+												   alias.shared_runtime_vfs_cohort_,
+												   alias.alias_lifetime_,
+												   alias.runtime_lifetime_identity_,
+												   alias.runtime_lifetime_pin_identity_,
+												   &alias.registration_epoch_,
+												   alias.registered_vfs_name_,
+												   alias.vfs_implementation_,
+												   alias.find_,
+												   nullptr,
+												   alias.unregister_vfs_);
 			if (!unregistration_epoch)
 			{
 				alias.quarantine_owner();
 				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
-							 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 			}
 			const auto receipt = sqlite_shm_verified_alias_unregistration_receipt{
 				alias.process_.process_instance(),
@@ -794,11 +782,11 @@ namespace cxxlens::sdk
 	}
 
 	void sqlite_same_process_shm_vfs_alias_registration_port::
-	exhaust_lifecycle_sequence_for_testing() noexcept
+		exhaust_lifecycle_sequence_for_testing() noexcept
 	{
-		alias_lifecycle_sequence_process_key.store(
-			current_process_key(), std::memory_order_release);
-		next_alias_lifecycle_sequence.store(
-			std::numeric_limits<std::uint64_t>::max(), std::memory_order_release);
+		alias_lifecycle_sequence_process_key.store(current_process_key(),
+												   std::memory_order_release);
+		next_alias_lifecycle_sequence.store(std::numeric_limits<std::uint64_t>::max(),
+											std::memory_order_release);
 	}
 } // namespace cxxlens::sdk

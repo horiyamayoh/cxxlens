@@ -529,7 +529,6 @@ namespace cxxlens::detail::clang22::materialization
 					sdk::canonical_value::from_tuple(std::move(feature_values)));
 			}
 
-			const auto& first = request.tasks.front().worker_input;
 			auto basis = digest_projection(
 				"cxxlens.clang22-direct-materialization-basis.v1",
 				sdk::canonical_value::from_tuple({
@@ -537,9 +536,9 @@ namespace cxxlens::detail::clang22::materialization
 					text(*materializer),
 					sdk::canonical_value::from_tuple(std::move(worker_projection)),
 					sdk::canonical_value::from_tuple({
-						text(first.project),
-						text(first.project_catalog.catalog_id),
-						text(first.project_catalog.catalog_digest),
+						text(request.tasks.front().worker_input.project),
+						text(request.catalog.catalog_id),
+						text(request.catalog.catalog_digest),
 					}),
 					sdk::canonical_value::from_tuple({
 						text(std::string{engine_generation_contract}),
@@ -733,12 +732,13 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<std::string>
-		catalog_entry_evidence(const validated_task_request& task)
+		catalog_entry_evidence(const validated_materialization_request& request,
+							   const validated_task_request& task)
 		{
-			const auto found = std::ranges::find(task.worker_input.project_catalog.compile_units,
+			const auto found = std::ranges::find(request.catalog.compile_units,
 												 task.worker_input.selected_catalog_compile_unit,
 												 &sdk::catalog_compile_unit::compile_unit_id);
-			if (found == task.worker_input.project_catalog.compile_units.end())
+			if (found == request.catalog.compile_units.end())
 				return sdk::unexpected(claim_error(
 					"materialization.task-binding-mismatch", "catalog-entry", "selected-missing"));
 			return digest_projection(
@@ -749,13 +749,14 @@ namespace cxxlens::detail::clang22::materialization
 						{"environment_digest", text(found->environment_digest)}}));
 		}
 
-		[[nodiscard]] sdk::result<std::string> base_evidence_for(const validated_task_request& task,
-																 const sdk::detached_row& row,
-																 const std::string_view row_digest)
+		[[nodiscard]] sdk::result<std::string>
+		base_evidence_for(const validated_materialization_request& request,
+						  const validated_task_request& task,
+						  const sdk::detached_row& row,
+						  const std::string_view row_digest)
 		{
 			if (row.descriptor_id == "build.project.v1")
-				return base_source_evidence(
-					{{"compile_context", task.worker_input.project_catalog.catalog_digest}});
+				return base_source_evidence({{"compile_context", request.catalog.catalog_digest}});
 			if (row.descriptor_id == "build.toolchain_context.v1")
 				return base_source_evidence(
 					{{"compile_context", task.worker_input.toolchain_digest}});
@@ -766,7 +767,7 @@ namespace cxxlens::detail::clang22::materialization
 					{{"source_observation", task.worker_input.source_content_digest}});
 			if (row.descriptor_id == "build.compile_unit.v1")
 			{
-				auto catalog = catalog_entry_evidence(task);
+				auto catalog = catalog_entry_evidence(request, task);
 				if (!catalog)
 					return sdk::unexpected(std::move(catalog.error()));
 				return base_source_evidence({{"compile_context", std::move(*catalog)}});
@@ -957,6 +958,9 @@ namespace cxxlens::detail::clang22::materialization
 		if (request.tasks.empty() || !load)
 			return sdk::unexpected(
 				claim_error("materialization.task-binding-mismatch", "task-results", "loader"));
+		if (auto valid = request.catalog.validate(); !valid)
+			return sdk::unexpected(claim_error(
+				"materialization.claim-invalid", "project-catalog", nested_error(valid.error())));
 
 		std::vector<materialization_semantic_task_context> contexts;
 		contexts.reserve(request.tasks.size());
@@ -971,8 +975,8 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
 													   "task.v3",
 													   "streaming-residency-violation"));
-				if (auto valid =
-						task.worker_input.validate_with_source_receipt(*task.source_receipt);
+				if (auto valid = task.worker_input.validate_with_catalog(request.catalog,
+																		 *task.source_receipt);
 					!valid)
 					return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
 													   "task.v3",
@@ -1206,7 +1210,7 @@ namespace cxxlens::detail::clang22::materialization
 				auto row_digest = base_row_digest(request.engine, row);
 				if (!row_digest)
 					return sdk::unexpected(std::move(row_digest.error()));
-				auto evidence = base_evidence_for(task, row, *row_digest);
+				auto evidence = base_evidence_for(request, task, row, *row_digest);
 				if (!evidence)
 					return sdk::unexpected(std::move(evidence.error()));
 				if (auto recorded = record_claim(row,
@@ -1287,9 +1291,11 @@ namespace cxxlens::detail::clang22::materialization
 											   nested_error(committed.error())));
 		if (!committed->unresolved.empty() || !committed->conflicts.empty() ||
 			!committed->differential_disagreements.empty())
+		{
 			return sdk::unexpected(claim_error("materialization.claim-invalid",
 											   "complete-final-claim-batch",
 											   "nonzero-unresolved-conflict-or-differential"));
+		}
 
 		std::map<std::string, const sdk::claim*, std::less<>> committed_claims_by_ref;
 		for (const auto& claim : committed->claims)

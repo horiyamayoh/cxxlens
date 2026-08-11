@@ -34,8 +34,8 @@ namespace cxxlens::sdk
 namespace
 {
 	using cxxlens::sdk::sqlite_backend_opaque_identity;
-	using cxxlens::sdk::sqlite_same_process_shm_registry_test_peer;
 	using cxxlens::sdk::sqlite_same_process_shm_process_port;
+	using cxxlens::sdk::sqlite_same_process_shm_registry_test_peer;
 
 	void require(const bool condition, const std::string_view message)
 	{
@@ -44,7 +44,7 @@ namespace
 	}
 
 	[[nodiscard]] sqlite_backend_opaque_identity identity(const std::string_view profile,
-												 const std::uint64_t value)
+														  const std::uint64_t value)
 	{
 		sqlite_backend_opaque_identity output;
 		output.profile = std::string{profile};
@@ -112,10 +112,10 @@ namespace
 		}
 
 		auto runtime_owner = std::make_shared<std::uint64_t>(7U);
-		auto adopted = first_handle.adopt_runtime_lifetime(
-			identity("test.process-port.runtime", 1U),
-			identity("test.process-port.runtime-pin", 1U),
-			runtime_owner);
+		auto adopted =
+			first_handle.adopt_runtime_lifetime(identity("test.process-port.runtime", 1U),
+												identity("test.process-port.runtime-pin", 1U),
+												runtime_owner);
 		require(adopted.has_value(), "qualified process handle adopts runtime lifetime");
 		require(adopted.value().valid(), "adopted runtime lifetime pin valid");
 		runtime_owner.reset();
@@ -139,8 +139,8 @@ namespace
 		{
 			(void)::close(pipe_descriptors[0]);
 			std::uint8_t verdict{};
-			const bool inherited_stale = !parent_handle.valid() && parent_handle.registry() == nullptr &&
-				!parent_registry->snapshot().process_live;
+			const bool inherited_stale = !parent_handle.valid() &&
+				parent_handle.registry() == nullptr && !parent_registry->snapshot().process_live;
 			auto acquired = sqlite_same_process_shm_process_port::acquire();
 			const bool fresh = acquired.has_value() && acquired.value().valid() &&
 				acquired.value().registry() != nullptr &&
@@ -187,9 +187,9 @@ namespace
 		require(!first_retry && !second_retry,
 				"same process never replaces a lost process-global registry");
 		require(first_retry.error().action ==
-				cxxlens::sdk::sqlite_shm_lease_recovery_action::quarantine_no_retry &&
-				second_retry.error().action ==
-					cxxlens::sdk::sqlite_shm_lease_recovery_action::quarantine_no_retry,
+						cxxlens::sdk::sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+					second_retry.error().action ==
+						cxxlens::sdk::sqlite_shm_lease_recovery_action::quarantine_no_retry,
 				"same-process epoch loss remains sticky quarantine");
 
 		int pipe_descriptors[2]{-1, -1};
@@ -223,8 +223,9 @@ namespace
 				"quarantined-process child exits successfully");
 
 		auto parent_retry = sqlite_same_process_shm_process_port::acquire();
-		require(!parent_retry && parent_retry.error().action ==
-				cxxlens::sdk::sqlite_shm_lease_recovery_action::quarantine_no_retry,
+		require(!parent_retry &&
+					parent_retry.error().action ==
+						cxxlens::sdk::sqlite_shm_lease_recovery_action::quarantine_no_retry,
 				"fork child recovery does not clear parent quarantine");
 #endif
 	}

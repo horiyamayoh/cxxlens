@@ -10,6 +10,7 @@
 #include <cxxlens/sdk/common.hpp>
 
 #include "materialization_execution_journal.hpp"
+#include "materialization_request_v2_1.hpp"
 #include "materialization_seal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 
@@ -60,6 +61,15 @@ namespace cxxlens::detail::clang22::materialization
 
 	struct detailed_provider_batch_projection
 	{
+		/** One bounded row binding precursor; claim refs are intentionally not representable here.
+		 */
+		struct row_projection
+		{
+			std::size_t row_index{};
+			std::string row_canonical_form;
+			std::string row_digest;
+		};
+
 		std::string task_id;
 		std::string descriptor_id;
 		std::string descriptor_digest;
@@ -70,6 +80,19 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<std::string> ordered_chunk_digests;
 		std::uint64_t row_count{};
 		std::string row_set_digest;
+		std::vector<row_projection> rows;
+	};
+
+	/** Bounded observation metadata rebound to one sealed provider row. */
+	struct detailed_observation_row_projection
+	{
+		std::size_t batch_index{};
+		std::size_t row_index{};
+		std::string observation_row_digest;
+		bool exact_equivalence{};
+		std::optional<std::string> limitation;
+		/** Exact seven-field source.span bundle, when the sealed observation carried one. */
+		std::optional<observation_v2_primary_span> primary_span;
 	};
 
 	struct detailed_coverage_projection
@@ -103,9 +126,26 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		std::string provider_task_id;
 		std::string provider_execution_id;
+		std::string project_id;
+		std::string catalog_id;
+		std::string catalog_digest;
 		std::string selected_catalog_compile_unit_id;
 		std::string compile_unit_id;
+		std::string variant_id;
+		std::string toolchain_context_id;
+		std::string toolchain_digest;
+		std::string source_snapshot_id;
+		std::string source_file_id;
+		std::string source_logical_path;
+		std::string source_content_digest;
+		std::uint64_t source_size_bytes{};
+		std::string source_encoding;
+		std::string source_line_index_id;
+		bool source_read_only{};
 		std::string task_input_digest;
+		std::string condition_universe_id;
+		std::string condition_id;
+		std::string interpretation_domain;
 
 		std::uint16_t input_protocol_major{};
 		std::uint16_t input_protocol_minor{};
@@ -125,6 +165,11 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<detailed_unresolved_projection> unresolved;
 		std::vector<detailed_evidence_projection> evidence;
 		std::vector<detailed_provider_batch_projection> batches;
+		std::vector<detailed_observation_row_projection> observation_rows;
+		/** Exact dependency-ordered base rows retained from the sealed task authority. */
+		std::vector<sdk::detached_row> base_claim_rows;
+		/** Exact deduplicated source.span rows retained from the sealed task authority. */
+		std::vector<sdk::detached_row> source_span_claim_rows;
 	};
 
 	/**
@@ -184,6 +229,13 @@ namespace cxxlens::detail::clang22::materialization
 	[[nodiscard]] sdk::result<detailed_task_report_capture> capture_detailed_task_report(
 		const sdk::provider::detail::provider_process_validation_outcome& outcome,
 		const sealed_materialization_result& materialized,
+		const detailed_report_limits& limits = {});
+
+	/** Capture with the authenticated v2.1 semantic task context used by claim origins. */
+	[[nodiscard]] sdk::result<detailed_task_report_capture> capture_detailed_task_report(
+		const sdk::provider::detail::provider_process_validation_outcome& outcome,
+		const sealed_materialization_result& materialized,
+		const materialization_v2_1_task_metadata_receipt& metadata,
 		const detailed_report_limits& limits = {});
 
 	/** Capture only value-owned facts from the post-publication observation. */

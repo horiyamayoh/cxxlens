@@ -145,7 +145,9 @@ namespace
 													  seen_before,
 													  true,
 													  &vfs_identity,
-													  &app_data_identity};
+													  &app_data_identity,
+													  nullptr,
+													  std::nullopt};
 		};
 		const std::array exact_cold{event(0, cant_initialize, false, false)};
 		require(validate_sqlite_source_shm_readonly_map_sequence(

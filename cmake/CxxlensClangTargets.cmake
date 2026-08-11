@@ -84,6 +84,12 @@ function(cxxlens_configure_clang22 target)
   target_compile_definitions(
     ${target} PRIVATE __STDC_CONSTANT_MACROS __STDC_FORMAT_MACROS
                       __STDC_LIMIT_MACROS)
+  # LLVM/Clang 22 release archives are built with RTTI disabled.  Match that ABI
+  # at every exact-adapter compilation boundary so provider-owned classes do not
+  # introduce unresolved base-class typeinfo into the static worker.
+  if(NOT LLVM_ENABLE_RTTI)
+    target_compile_options(${target} PRIVATE -fno-rtti)
+  endif()
   target_include_directories(${target} SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS}
                                                       ${CLANG_INCLUDE_DIRS})
   target_link_libraries(${target} PRIVATE ${_cxxlens_clang22_components})
@@ -96,7 +102,8 @@ function(cxxlens_configure_clang22 target)
   if(UNIX AND LLVM_LIBRARY_DIRS)
     get_target_property(_cxxlens_existing_install_rpath ${target} INSTALL_RPATH)
     if(NOT _cxxlens_existing_install_rpath
-       OR _cxxlens_existing_install_rpath STREQUAL "_cxxlens_existing_install_rpath-NOTFOUND")
+       OR _cxxlens_existing_install_rpath STREQUAL
+          "_cxxlens_existing_install_rpath-NOTFOUND")
       set(_cxxlens_existing_install_rpath)
     endif()
     list(APPEND _cxxlens_existing_install_rpath ${LLVM_LIBRARY_DIRS})

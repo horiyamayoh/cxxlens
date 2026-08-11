@@ -233,7 +233,9 @@ namespace cxxlens::sdk
 	 *
 	 * Only the closed VFS alias lifecycle port and its focused registry test peer can mint this
 	 * value. The port verifies the native registration status and exact post-registration lookup;
-	 * the forwarding-VFS identity sealer and production caller remain a separate follow-on unit.
+	 * the forwarding-VFS identity sealer is a separate source-private boundary. The production
+	 * VFS may retain this receipt for fail-closed identity binding, but this receipt alone does
+	 * not authorize native SQLITE_OK projection or production qualification.
 	 */
 	class sqlite_shm_verified_alias_registration_receipt
 	{
@@ -397,6 +399,7 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity read_transaction_epoch;
 		sqlite_backend_opaque_identity decode_attempt;
 		sqlite_backend_opaque_identity authority_read_receipt;
+		std::optional<sqlite_shm_reader_attachment_target_identity> target_identity;
 
 		[[nodiscard]] bool
 		operator==(const sqlite_shm_reader_pre_sqlite_session_request&) const = default;
@@ -412,6 +415,7 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity main_xopen_receipt;
 		sqlite_backend_opaque_identity open_epoch;
 		sqlite_backend_opaque_identity callback_cohort;
+		std::optional<sqlite_shm_reader_attachment_target_identity> target_identity;
 
 		[[nodiscard]] bool operator==(const sqlite_shm_reader_open_binding&) const = default;
 	};
@@ -485,6 +489,136 @@ namespace cxxlens::sdk
 		acquire(sqlite_same_process_shm_mapping_registry& registry,
 				sqlite_shm_registry_family_pin& family,
 				const sqlite_shm_reader_open_binding& binding) noexcept;
+	};
+
+	/**
+	 * Source-private production bridge for the qualified reader callback lifecycle.
+	 *
+	 * This factory is intentionally the only VFS-facing producer for the issuer facade and the
+	 * move-only terminal evidence types. It does not infer authority from copied fields: the
+	 * registry scope methods below still bind the exact family pin and owner coordinates, while
+	 * the lease coordinator validates the corresponding move-only owner at each terminal cut.
+	 */
+	class sqlite_shm_reader_lifecycle_production_factory final
+	{
+	  public:
+		sqlite_shm_reader_lifecycle_production_factory() = delete;
+
+		[[nodiscard]] static sqlite_shm_process_global_identity_issuer
+		identity_issuer(sqlite_same_process_shm_mapping_registry& registry) noexcept;
+		[[nodiscard]] static sqlite_shm_reader_lifecycle_identity_scope
+		seal_scope(sqlite_same_process_shm_mapping_registry& registry,
+				   const sqlite_shm_registry_family_pin& family,
+				   const sqlite_backend_opaque_identity& callback_cohort,
+				   const sqlite_backend_opaque_identity& request_seal,
+				   std::uint64_t registry_open_token,
+				   sqlite_shm_reader_lifecycle_owner_kind owner_kind,
+				   std::uint64_t lifecycle_owner_token,
+				   std::uint64_t writer_mapping_generation);
+
+		[[nodiscard]] static sqlite_shm_reader_lifecycle_identity_scope
+		seal_session_scope(sqlite_same_process_shm_mapping_registry& registry,
+						   const sqlite_shm_registry_family_pin& family,
+						   const sqlite_shm_reader_session& session,
+						   const sqlite_shm_reader_session_request& request,
+						   const sqlite_backend_opaque_identity& request_seal);
+		[[nodiscard]] static sqlite_shm_reader_lifecycle_identity_scope
+		seal_unmap_scope(sqlite_same_process_shm_mapping_registry& registry,
+						 const sqlite_shm_registry_family_pin& family,
+						 const sqlite_shm_reader_unmap_obligation& unmap,
+						 std::uint64_t registry_open_token,
+						 const sqlite_backend_opaque_identity& callback_cohort,
+						 const sqlite_backend_opaque_identity& request_seal);
+		[[nodiscard]] static sqlite_shm_reader_lifecycle_identity_scope
+		seal_handoff_scope(sqlite_same_process_shm_mapping_registry& registry,
+						   const sqlite_shm_registry_family_pin& family,
+						   const sqlite_shm_reader_handoff& handoff,
+						   std::uint64_t registry_open_token,
+						   const sqlite_backend_opaque_identity& callback_cohort,
+						   const sqlite_backend_opaque_identity& request_seal);
+		[[nodiscard]] static std::optional<sqlite_shm_reader_open_epoch_test_view>
+		open_epoch_view(sqlite_same_process_shm_mapping_registry& registry,
+						const sqlite_shm_reader_open_authority& open) noexcept;
+		[[nodiscard]] static sqlite_shm_reader_lifecycle_identity_scope
+		seal_close_scope(sqlite_same_process_shm_mapping_registry& registry,
+						 const sqlite_shm_registry_family_pin& family,
+						 const sqlite_shm_reader_close_obligation& close,
+						 const sqlite_backend_opaque_identity& callback_cohort,
+						 const sqlite_backend_opaque_identity& request_seal);
+
+		[[nodiscard]] static std::optional<sqlite_shm_reader_mapped_post_native_observation>
+		make_mapped_observation(const sqlite_shm_reader_attachment_map_inflight& inflight,
+								sqlite_shm_reader_attachment_map_request request,
+								int native_status,
+								const volatile void* native_mapping,
+								int delegated_extend,
+								sqlite_backend_opaque_identity observed_shm_object_receipt,
+								sqlite_backend_opaque_identity observed_shm_entry_receipt,
+								sqlite_backend_opaque_identity observed_device_receipt,
+								sqlite_backend_opaque_identity observed_mount_receipt,
+								sqlite_backend_opaque_identity observed_namespace_epoch = {},
+								sqlite_backend_opaque_identity observed_parent_namespace = {},
+								std::uint64_t observed_shm_size = 0U) noexcept;
+
+		[[nodiscard]] static sqlite_shm_reader_session_terminal_receipt
+		make_session_terminal(sqlite_shm_reader_session_request request,
+							  sqlite_shm_reader_session_terminal_kind kind,
+							  sqlite_backend_opaque_identity terminal_receipt,
+							  bool authority_read_closed,
+							  bool no_live_shm_lock) noexcept;
+		[[nodiscard]] static sqlite_shm_verified_reader_unmap_terminal_receipt
+		make_unmap_terminal(const sqlite_shm_reader_unmap_obligation& unmap,
+							sqlite_shm_callback_execution_receipt callback,
+							sqlite_shm_reader_unmap_evidence_kind evidence_kind,
+							std::optional<int> native_status,
+							int caller_delete_flag,
+							int delegated_delete_flag,
+							std::optional<sqlite_backend_opaque_identity> native_effect_receipt,
+							std::optional<sqlite_backend_opaque_identity> latch_reset_receipt);
+		[[nodiscard]] static sqlite_shm_verified_reader_unmap_terminal_receipt
+		make_live_close_unmap_terminal(
+			const sqlite_shm_reader_live_close_obligation& close,
+			sqlite_shm_callback_execution_receipt callback,
+			sqlite_shm_reader_unmap_evidence_kind evidence_kind,
+			std::optional<int> native_status,
+			int caller_delete_flag,
+			int delegated_delete_flag,
+			std::optional<sqlite_backend_opaque_identity> native_effect_receipt,
+			std::optional<sqlite_backend_opaque_identity> latch_reset_receipt);
+		[[nodiscard]] static sqlite_shm_verified_reader_close_terminal_receipt
+		make_close_terminal(const sqlite_shm_reader_close_obligation& close,
+							sqlite_shm_callback_execution_receipt callback,
+							sqlite_shm_reader_close_evidence_kind evidence_kind,
+							std::optional<int> native_status,
+							std::optional<sqlite_backend_opaque_identity> native_effect_receipt);
+		[[nodiscard]] static sqlite_shm_verified_reader_close_terminal_receipt
+		make_live_close_terminal(
+			const sqlite_shm_reader_live_close_obligation& close,
+			sqlite_shm_callback_execution_receipt callback,
+			sqlite_shm_reader_close_evidence_kind evidence_kind,
+			std::optional<int> native_status,
+			std::optional<sqlite_backend_opaque_identity> native_effect_receipt);
+		[[nodiscard]] static sqlite_shm_lease_result<
+			sqlite_shm_verified_reader_attachment_zero_effect_receipt>
+		validate_zero_attachment_effect(sqlite_same_process_shm_mapping_registry& registry,
+										sqlite_shm_registry_family_pin& family,
+										const sqlite_shm_reader_attachment_map_inflight& inflight,
+										const sqlite_shm_reader_lifecycle_identity_scope& scope,
+										const sqlite_shm_issued_reader_callback_identity& callback,
+										const sqlite_shm_issued_reader_effect_identity& effect,
+										int native_status,
+										const volatile void* native_mapping,
+										int delegated_extend) noexcept;
+		[[nodiscard]] static sqlite_shm_lease_result<
+			sqlite_shm_verified_reader_attachment_post_map_receipt>
+		validate_mapped_attachment_effect(
+			sqlite_same_process_shm_mapping_registry& registry,
+			sqlite_shm_registry_family_pin& family,
+			const sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_reader_lifecycle_identity_scope& scope,
+			const sqlite_shm_issued_reader_callback_identity& callback,
+			const sqlite_shm_issued_reader_effect_identity& effect,
+			sqlite_shm_reader_mapped_post_native_observation observation) noexcept;
 	};
 
 	enum class sqlite_shm_reader_session_admission_kind : std::uint8_t
@@ -691,6 +825,9 @@ namespace cxxlens::sdk
 			const sqlite_shm_registry_family_pin& family,
 			const sqlite_shm_writer_map_request& request,
 			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
+		[[nodiscard]] bool target_identity_matches(
+			const sqlite_shm_reader_attachment_target_identity& target,
+			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
 		void invalidate_epoch_for_testing() noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
 
@@ -884,14 +1021,23 @@ namespace cxxlens::sdk
 		/**
 		 * Atomically predelegates one exact registry member into its family coordinator.
 		 *
-		 * This source-private checkpoint has no production caller. The strong mapping-epoch arm
-		 * is consumed on every outcome, and the registry lock remains held through the lease begin
-		 * visibility point in registry-to-lease lock order.
+		 * The production VFS is a source-private caller of this checkpoint. The strong
+		 * mapping-epoch arm is consumed on every outcome, and the registry lock remains held
+		 * through the lease begin visibility point in registry-to-lease lock order. This checkpoint
+		 * still does not authorize the separately fenced native SQLITE_OK projection.
 		 */
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_map_inflight>
 		begin_writer_map(sqlite_shm_registry_family_pin& family,
 						 sqlite_writer_shm_mapping_epoch_arm arm,
 						 const sqlite_shm_writer_map_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_post_native_mapping>
+		record_writer_native_mapping(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_writer_map_inflight& inflight,
+			const sqlite_shm_verified_writer_native_map_receipt& receipt) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void>
+		resolve_writer_map_failure(sqlite_shm_registry_family_pin& family,
+								   sqlite_shm_writer_map_inflight& inflight) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_session_admission>
 		admit_reader_session_before_sqlite(
 			sqlite_shm_registry_family_pin& family,
@@ -913,22 +1059,29 @@ namespace cxxlens::sdk
 						 sqlite_shm_reader_session& session,
 						 const sqlite_shm_reader_attachment_map_request& request);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_prepared>
-		prepare_reader_map_identity(
-			sqlite_shm_registry_family_pin& family,
-			sqlite_shm_reader_session& session,
-			const sqlite_shm_reader_attachment_map_pre_request& request);
+		prepare_reader_map_identity(sqlite_shm_registry_family_pin& family,
+									sqlite_shm_reader_session& session,
+									const sqlite_shm_reader_attachment_map_pre_request& request);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_lifecycle_identity_scope>
 		claim_reader_map_identity_scope(
 			sqlite_shm_registry_family_pin& family,
 			const sqlite_shm_reader_attachment_map_prepared& prepared,
 			const sqlite_shm_reader_attachment_map_pre_request& request);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
-		bind_reader_map_identity(
+		bind_reader_map_identity(sqlite_shm_registry_family_pin& family,
+								 sqlite_shm_reader_session& session,
+								 sqlite_shm_reader_attachment_map_prepared& prepared,
+								 const sqlite_shm_reader_lifecycle_identity_scope& scope,
+								 const sqlite_shm_issued_reader_callback_identity& callback);
+		/**
+		 * Reserve the exact live-writer support used by the qualified reader native-OK exception.
+		 * The reservation is minted after reader identity binding and before the native callback.
+		 */
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
+		reserve_reader_native_ok_projection(
 			sqlite_shm_registry_family_pin& family,
-			sqlite_shm_reader_session& session,
-			sqlite_shm_reader_attachment_map_prepared& prepared,
-			const sqlite_shm_reader_lifecycle_identity_scope& scope,
-			const sqlite_shm_issued_reader_callback_identity& callback);
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_reader_attachment_map_request& request);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_late_close_outer_unwind_authority>
 		mint_reader_late_close_outer_unwind_authority(
 			sqlite_shm_registry_family_pin& family,
@@ -945,6 +1098,13 @@ namespace cxxlens::sdk
 						  sqlite_shm_reader_attachment_map_inflight& inflight,
 						  const sqlite_shm_verified_reader_attachment_post_map_receipt& receipt,
 						  sqlite_shm_reader_session& session);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_map_commit>
+		commit_reader_map_with_native_ok_projection(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_verified_reader_attachment_post_map_receipt& receipt,
+			sqlite_shm_reader_session& session,
+			sqlite_shm_reader_native_ok_projection_permit& permit);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_zero_effect_result>
 		complete_reader_zero_attachment_map(
 			sqlite_shm_registry_family_pin& family,
@@ -1102,6 +1262,32 @@ namespace cxxlens::sdk
 			sqlite_shm_registry_family_pin& family,
 			sqlite_shm_writer_post_native_mapping& post_native,
 			const sqlite_shm_verified_writer_post_map_receipt& receipt);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>
+		begin_writer_cleanup(sqlite_shm_registry_family_pin& family,
+							 sqlite_shm_writer_post_native_mapping& post_native,
+							 const sqlite_shm_callback_execution_receipt& callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>
+		begin_writer_cleanup(sqlite_shm_registry_family_pin& family,
+							 sqlite_shm_pending_mapping& pending,
+							 const sqlite_shm_callback_execution_receipt& callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void>
+		complete_writer_cleanup(sqlite_shm_registry_family_pin& family,
+								sqlite_shm_writer_attachment_cleanup& cleanup,
+								const sqlite_shm_callback_execution_receipt& callback,
+								sqlite_shm_native_cleanup_outcome outcome) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_release>
+		release_writer_holder(sqlite_shm_registry_family_pin& family,
+							  sqlite_shm_writer_holder& holder,
+							  const sqlite_shm_callback_execution_receipt& callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_retirement_result>
+		poll_writer_retirement(sqlite_shm_registry_family_pin& family,
+							   const sqlite_shm_writer_attachment_cleanup& cleanup,
+							   const sqlite_shm_callback_execution_receipt& callback) noexcept;
+		[[nodiscard]] sqlite_shm_lease_result<void>
+		fail_writer_retirement_wait(sqlite_shm_registry_family_pin& family,
+									const sqlite_shm_writer_attachment_cleanup& cleanup,
+									const sqlite_shm_callback_execution_receipt& callback,
+									sqlite_shm_retirement_wait_failure failure) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		release_activity(sqlite_shm_registry_activity_pin& activity) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void>
@@ -1125,6 +1311,7 @@ namespace cxxlens::sdk
 		friend struct detail::sqlite_shm_process_registry_port_state;
 		friend class sqlite_same_process_shm_process_port;
 		friend class sqlite_shm_reader_open_production_factory;
+		friend class sqlite_shm_reader_lifecycle_production_factory;
 		friend class sqlite_shm_process_registry_handle;
 		friend class sqlite_same_process_shm_registry_test_peer;
 		friend class sqlite_same_process_shm_reader_receipt_validator;
@@ -1132,8 +1319,8 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
 		adopt_runtime_lifetime_from_process_port(sqlite_backend_opaque_identity identity,
-									 sqlite_backend_opaque_identity pin_identity,
-									 std::shared_ptr<void> owner);
+												 sqlite_backend_opaque_identity pin_identity,
+												 std::shared_ptr<void> owner);
 		void invalidate_process_instance_from_process_port() noexcept;
 		[[nodiscard]] bool process_instance_live_from_process_port() const noexcept;
 
@@ -1216,6 +1403,20 @@ namespace cxxlens::sdk
 		void unlock_state_mutex_for_testing();
 		[[nodiscard]] sqlite_shm_process_global_identity_issuer
 		identity_issuer_for_testing() const noexcept;
+		[[nodiscard]] sqlite_shm_process_global_identity_issuer
+		identity_issuer_for_production() const noexcept;
+		[[nodiscard]] sqlite_shm_reader_lifecycle_identity_scope
+		seal_reader_lifecycle_identity_scope_for_production(
+			const sqlite_shm_registry_family_pin& family,
+			const sqlite_backend_opaque_identity& callback_cohort,
+			const sqlite_backend_opaque_identity& request_seal,
+			std::uint64_t registry_open_token,
+			sqlite_shm_reader_lifecycle_owner_kind owner_kind,
+			std::uint64_t lifecycle_owner_token,
+			std::uint64_t writer_mapping_generation) const;
+		[[nodiscard]] sqlite_shm_registry_reader_open_epoch_test_view
+		reader_open_epoch_view_for_production(
+			const sqlite_shm_reader_open_authority& open) const noexcept;
 		[[nodiscard]] sqlite_shm_reader_lifecycle_identity_scope
 		seal_reader_lifecycle_identity_scope_for_testing(
 			const sqlite_shm_registry_family_pin& family,
@@ -1231,7 +1432,6 @@ namespace cxxlens::sdk
 
 		std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state_;
 		std::shared_ptr<std::atomic_bool> identity_issuer_owner_latch_;
-		std::shared_ptr<detail::sqlite_shm_process_identity_issuer_state>
-			identity_issuer_state_;
+		std::shared_ptr<detail::sqlite_shm_process_identity_issuer_state> identity_issuer_state_;
 	};
 } // namespace cxxlens::sdk

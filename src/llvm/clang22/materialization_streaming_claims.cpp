@@ -199,6 +199,7 @@ namespace cxxlens::detail::clang22::materialization
 			};
 			validated_materialization_request legacy{
 				std::move(*document),
+				admitted.catalog(),
 				admitted.engine(),
 				admitted.output_descriptors(),
 				std::move(tasks),

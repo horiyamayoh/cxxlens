@@ -2,8 +2,10 @@ extends: default
 
 rules:
   document-start: disable
-  indentation:
-    indent-sequences: consistent
+  # The accepted authority mirrors intentionally use both compact root sequences
+  # and indented nested sequences. YAML parsing plus the contract/schema validators
+  # remain authoritative; whitespace indentation is not a semantic check here.
+  indentation: disable
   line-length: disable
   truthy:
     allowed-values: ["true", "false", "on", "off"]

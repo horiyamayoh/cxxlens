@@ -32,6 +32,7 @@
 #include "sqlite_default_forwarding_vfs_internal.hpp"
 #include "sqlite_limit_length_control_internal.hpp"
 #include "sqlite_payload_streaming_internal.hpp"
+#include "sqlite_source_shm_readonly_preflight_internal.hpp"
 #include "sqlite_store_fault_injection_internal.hpp"
 #include "sqlite_store_terminal_internal.hpp"
 #include "sqlite_terminal_reclassifier_internal.hpp"
@@ -2589,8 +2590,8 @@ namespace cxxlens::sdk
 				token.close_was_attempted();
 		}
 
-		[[nodiscard]] bool confirmed_failed_open_resolution(
-			const sqlite_connection_close_outcome& outcome) noexcept
+		[[nodiscard]] bool
+		confirmed_failed_open_resolution(const sqlite_connection_close_outcome& outcome) noexcept
 		{
 			if (!std::holds_alternative<sqlite_confirmed_close_token>(outcome))
 				return false;
@@ -2648,8 +2649,10 @@ namespace cxxlens::sdk
 																	  &statement,
 																	  nullptr);
 				if (code != sqlite_ok || statement == nullptr)
+				{
 					return unexpected(
 						store_error("store.sqlite-failure", "database", database.message()));
+				}
 				return sqlite_statement{database.api(), database.handle(), statement};
 			}
 
@@ -3837,12 +3840,38 @@ namespace cxxlens::sdk
 			std::uint32_t read_lock_index{};
 			bool used_cantinit_heap_route{};
 			sqlite_backend_opaque_identity target_namespace_epoch_identity;
+			sqlite_backend_opaque_identity sqlite_source_id;
 			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch;
 			sqlite_source_shm_open_callback_receipt source_shm_open_receipt;
 			sqlite_backend_copy_receipt main_before;
+			sqlite_backend_copy_receipt wal_before;
 			std::uint64_t shared_memory_byte_count{};
 			std::optional<sqlite_wal_header_receipt> wal_header;
 		};
+
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_sqlite_source_id_identity(const std::string_view source_id)
+		{
+			if (source_id.empty() || source_id.contains('\0'))
+				return std::nullopt;
+			try
+			{
+				sqlite_backend_opaque_identity output{"cxxlens.sqlite-source-id.v1", {}};
+				output.bytes.reserve(source_id.size());
+				for (const auto character : source_id)
+					output.bytes.push_back(
+						static_cast<std::byte>(static_cast<unsigned char>(character)));
+				return output;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return std::nullopt;
+			}
+			catch (const std::length_error&)
+			{
+				return std::nullopt;
+			}
+		}
 
 		enum class sqlite_wal_handoff_state : std::uint8_t
 		{
@@ -3927,6 +3956,9 @@ namespace cxxlens::sdk
 			sqlite_physical_format format{sqlite_physical_format::current_v3};
 			std::unique_ptr<sqlite_database> database;
 			bool private_read_transaction{};
+			std::shared_ptr<sqlite_source_shm_target_namespace_epoch>
+				deferred_writer_target_namespace_epoch;
+			std::optional<sqlite_backend_opaque_identity> deferred_writer_sqlite_source_id;
 		};
 
 		[[nodiscard]] error sqlite_namespace_observation_failure()
@@ -4133,10 +4165,14 @@ namespace cxxlens::sdk
 			std::shared_ptr<sqlite_backend_connection_observation_scope> scope)
 		{
 			if (!observation || !scope)
+			{
 				return unexpected(sqlite_effect_gate_failure());
+			}
 			auto* gate = scope->effect_gate_port();
-			if (gate == nullptr || !gate->enforcement_active() ||
-				gate->stage() != sqlite_backend_effect_stage::denied)
+			const auto stage =
+				gate == nullptr ? sqlite_backend_effect_stage::denied : gate->stage();
+			const auto enforced = gate != nullptr && gate->enforcement_active();
+			if (gate == nullptr || !enforced || stage != sqlite_backend_effect_stage::denied)
 				return unexpected(sqlite_effect_gate_failure());
 			auto activated =
 				gate->activate_denied(observation->capability_token(), scope->token(), path);
@@ -4363,9 +4399,9 @@ namespace cxxlens::sdk
 		constexpr std::string_view sqlite_source_shm_readonly_profile{
 			"sqlite-source-shm-readonly-unix-uri-v1"};
 
-		[[nodiscard]] bool same_source_shm_runtime_binding(
-			const sqlite_source_shm_runtime_binding& left,
-			const sqlite_source_shm_runtime_binding& right) noexcept
+		[[nodiscard]] bool
+		same_source_shm_runtime_binding(const sqlite_source_shm_runtime_binding& left,
+										const sqlite_source_shm_runtime_binding& right) noexcept
 		{
 			return left.runtime_identity == right.runtime_identity &&
 				left.runtime_image_identity == right.runtime_image_identity &&
@@ -4379,8 +4415,8 @@ namespace cxxlens::sdk
 				left.vfs_unregister == right.vfs_unregister;
 		}
 
-		[[nodiscard]] bool valid_direct_active_wal_source_entry(
-			const sqlite_backend_entry_observation* entry) noexcept
+		[[nodiscard]] bool
+		valid_direct_active_wal_source_entry(const sqlite_backend_entry_observation* entry) noexcept
 		{
 			return entry != nullptr && entry->direct_regular_entry &&
 				entry->state == sqlite_backend_entry_state::held_regular &&
@@ -4388,10 +4424,10 @@ namespace cxxlens::sdk
 				entry->object_filesystem_profile && entry->held_object &&
 				entry->held_object->object_identity() == *entry->object_identity &&
 				entry->held_object->directory_entry_identity() ==
-					*entry->directory_entry_identity &&
+				*entry->directory_entry_identity &&
 				entry->held_object->object_filesystem_profile() &&
 				*entry->held_object->object_filesystem_profile() ==
-					*entry->object_filesystem_profile &&
+				*entry->object_filesystem_profile &&
 				entry->held_object->object_mount_identity() &&
 				!entry->held_object->object_mount_identity()->profile.empty() &&
 				!entry->held_object->object_mount_identity()->bytes.empty();
@@ -4417,27 +4453,36 @@ namespace cxxlens::sdk
 			if (!valid_direct_active_wal_source_entry(main) ||
 				!valid_direct_active_wal_source_entry(wal) ||
 				!valid_direct_active_wal_source_entry(shm))
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 
 			auto guard = source_census.source_shm_guard;
 			if (!guard || guard->logical_main_locator() != logical_main_locator ||
 				guard->anchored_main_locator().empty() || guard->identity().profile.empty() ||
 				guard->identity().bytes.empty())
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 			if (auto stable = guard->recheck(); !stable)
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 
 			sqlite_active_wal_prequalification_header output;
 			output.source_shm_guard = std::move(guard);
 			if (auto read = main->held_object->read_exact(0U, output.bytes); !read)
+			{
 				return unexpected(sqlite_quiescent_observation_failure());
+			}
 			if (auto stable = output.source_shm_guard->recheck(); !stable)
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 			return output;
 		}
 
-		[[nodiscard]] result<sqlite_source_shm_qualified_open_plan>
-		qualify_active_wal_source_shm(
+		[[nodiscard]] result<sqlite_source_shm_qualified_open_plan> qualify_active_wal_source_shm(
 			const std::shared_ptr<sqlite_api>& api,
 			const std::string_view path,
 			const std::string_view vfs_name,
@@ -4446,13 +4491,19 @@ namespace cxxlens::sdk
 			const sqlite_backend_namespace_census& source_census)
 		{
 			if (!api || !backend_lifetime || !observation)
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 			auto runtime = bind_source_shm_readonly_runtime(api);
 			if (!runtime)
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 			auto* port = observation->source_shm_readonly_port();
 			if (port == nullptr)
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 			const auto binding = observation->binding();
 			if (binding.observation_profile.empty() || binding.registered_vfs_name != vfs_name ||
 				binding.vfs_implementation_identity == nullptr ||
@@ -4465,7 +4516,9 @@ namespace cxxlens::sdk
 				source_census.capability_token != observation->capability_token() ||
 				source_census.parent_namespace_identity.profile.empty() ||
 				source_census.parent_namespace_identity.bytes.empty())
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 			sqlite_source_shm_qualification_request request{
 				std::move(*runtime),
 				std::string{path},
@@ -4480,13 +4533,15 @@ namespace cxxlens::sdk
 			};
 			auto qualified = port->qualify(request);
 			if (!qualified)
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
-			const auto* expected_main = observed_entry(
-				request.source_census, sqlite_backend_file_role::main_database);
-			const auto* expected_wal = observed_entry(
-				request.source_census, sqlite_backend_file_role::write_ahead_log);
-			const auto* expected_shm = observed_entry(
-				request.source_census, sqlite_backend_file_role::shared_memory);
+			}
+			const auto* expected_main =
+				observed_entry(request.source_census, sqlite_backend_file_role::main_database);
+			const auto* expected_wal =
+				observed_entry(request.source_census, sqlite_backend_file_role::write_ahead_log);
+			const auto* expected_shm =
+				observed_entry(request.source_census, sqlite_backend_file_role::shared_memory);
 			constexpr int required_open_flags = sqlite_open_readonly | sqlite_open_uri |
 				sqlite_open_privatecache | sqlite_open_fullmutex;
 			const auto& receipt = qualified->qualification;
@@ -4507,21 +4562,18 @@ namespace cxxlens::sdk
 				qualified->application_generated_uri.empty() ||
 				qualified->open_flags != required_open_flags ||
 				receipt.profile != sqlite_source_shm_readonly_profile ||
-				receipt.sqlite_source_id.empty() ||
-				receipt.filesystem_profile.empty() ||
+				receipt.sqlite_source_id.empty() || receipt.filesystem_profile.empty() ||
 				receipt.runtime_identity != request.runtime.runtime_identity ||
 				receipt.runtime_image_identity != request.runtime.runtime_image_identity ||
 				receipt.runtime_lifetime_identity != request.runtime.runtime_lifetime_identity ||
 				receipt.forwarding_vfs_identity != request.forwarding_vfs_identity ||
-				receipt.pinned_underlying_vfs_identity !=
-					request.pinned_underlying_vfs_identity ||
+				receipt.pinned_underlying_vfs_identity != request.pinned_underlying_vfs_identity ||
 				receipt.pinned_underlying_vfs_app_data_identity !=
 					request.pinned_underlying_vfs_app_data_identity ||
 				receipt.backend_lifetime_identity != request.backend_lifetime_identity ||
 				receipt.observation_capability_token != request.observation_capability_token ||
 				receipt.parent_namespace_identity != request.parent_namespace_identity ||
-				receipt.expected_shared_memory_object_identity !=
-					*expected_shm->object_identity ||
+				receipt.expected_shared_memory_object_identity != *expected_shm->object_identity ||
 				receipt.expected_shared_memory_entry_identity !=
 					*expected_shm->directory_entry_identity ||
 				receipt.target_namespace_epoch_identity.profile.empty() ||
@@ -4535,13 +4587,16 @@ namespace cxxlens::sdk
 				receipt.sealed_qualification_token.profile.empty() ||
 				receipt.sealed_qualification_token.bytes.empty() ||
 				receipt.exact_file_family.profile.empty() ||
-				receipt.exact_file_family.bytes.empty() ||
-				!receipt.first_map_nonmutating || !receipt.later_map_nonmutating ||
-				!receipt.cantinit_heap_wal_index_route_proven ||
+				receipt.exact_file_family.bytes.empty() || !receipt.first_map_nonmutating ||
+				!receipt.later_map_nonmutating || !receipt.cantinit_heap_wal_index_route_proven ||
 				!receipt.readonly_mapped_wal_index_retry_route_proven)
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 			if (auto stable = receipt.target_namespace_epoch->recheck(); !stable)
+			{
 				return unexpected(sqlite_source_shm_qualification_failure());
+			}
 			return qualified;
 		}
 
@@ -4556,7 +4611,7 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] bool active_main_read_only_open(const sqlite_backend_open_observation& event,
-												  const int required_role_flag) noexcept
+													  const int required_role_flag) noexcept
 		{
 			return event.outcome == sqlite_backend_open_outcome::succeeded &&
 				(event.input_flags & required_role_flag) != 0 &&
@@ -4572,7 +4627,8 @@ namespace cxxlens::sdk
 			const sqlite_source_shm_open_callback_receipt& left,
 			const sqlite_source_shm_open_callback_receipt& right) noexcept
 		{
-			return left.profile == right.profile && left.connection_token == right.connection_token &&
+			return left.profile == right.profile &&
+				left.connection_token == right.connection_token &&
 				left.qualification_token == right.qualification_token &&
 				left.target_namespace_epoch_identity == right.target_namespace_epoch_identity &&
 				left.canonical_vfs_locator == right.canonical_vfs_locator &&
@@ -4585,7 +4641,7 @@ namespace cxxlens::sdk
 				left.forwarding_vfs_identity == right.forwarding_vfs_identity &&
 				left.pinned_underlying_vfs_identity == right.pinned_underlying_vfs_identity &&
 				left.pinned_underlying_vfs_app_data_identity ==
-					right.pinned_underlying_vfs_app_data_identity;
+				right.pinned_underlying_vfs_app_data_identity;
 		}
 
 		[[nodiscard]] bool source_shm_open_callback_matches_plan(
@@ -4598,20 +4654,19 @@ namespace cxxlens::sdk
 				receipt.connection_token == connection.token() &&
 				receipt.qualification_token == plan.qualification.sealed_qualification_token &&
 				receipt.target_namespace_epoch_identity ==
-					plan.qualification.target_namespace_epoch_identity &&
+				plan.qualification.target_namespace_epoch_identity &&
 				receipt.canonical_vfs_locator == plan.canonical_vfs_locator &&
 				receipt.delegated_vfs_locator == plan.delegated_vfs_locator &&
 				receipt.application_generated_uri == plan.application_generated_uri &&
-				receipt.registered_vfs_name == plan.registered_vfs_name &&
-				receipt.mode == "ro" && receipt.cache == "private" && receipt.readonly_shm == "1" &&
+				receipt.registered_vfs_name == plan.registered_vfs_name && receipt.mode == "ro" &&
+				receipt.cache == "private" && receipt.readonly_shm == "1" &&
 				receipt.input_flags == main_open.input_flags &&
 				receipt.runtime_identity == plan.runtime.runtime_identity &&
-				receipt.forwarding_vfs_identity ==
-					plan.qualification.forwarding_vfs_identity &&
+				receipt.forwarding_vfs_identity == plan.qualification.forwarding_vfs_identity &&
 				receipt.pinned_underlying_vfs_identity ==
-					plan.qualification.pinned_underlying_vfs_identity &&
-					receipt.pinned_underlying_vfs_app_data_identity ==
-					plan.qualification.pinned_underlying_vfs_app_data_identity;
+				plan.qualification.pinned_underlying_vfs_identity &&
+				receipt.pinned_underlying_vfs_app_data_identity ==
+				plan.qualification.pinned_underlying_vfs_app_data_identity;
 		}
 
 		struct sqlite_source_shm_map_route_observation
@@ -4641,6 +4696,38 @@ namespace cxxlens::sdk
 					(index != 0U &&
 					 (!event.readonly_family_seen_before || !event.readonly_family_seen_after)))
 					return std::nullopt;
+				if (event.native_status == sqlite_ok)
+				{
+					if (event.returned_status != sqlite_readonly || !event.native_mapping_nonnull ||
+						!event.returned_mapping_nonnull ||
+						event.native_mapping_identity == nullptr ||
+						!event.native_ok_projection_receipt)
+						return std::nullopt;
+					const auto& projection = *event.native_ok_projection_receipt;
+					const auto page = event.page;
+					const auto page_size = event.page_size;
+					if (page < 0 || page_size <= 0 || projection.reader_generation == 0U ||
+						projection.page != page || projection.page_size != page_size ||
+						projection.caller_extend != event.caller_extend ||
+						projection.delegated_extend != event.delegated_extend ||
+						projection.native_mapping == nullptr ||
+						projection.native_mapping != event.native_mapping_identity ||
+						projection.callback_invocation.profile.empty() ||
+						projection.callback_invocation.bytes.empty() ||
+						projection.native_effect.profile.empty() ||
+						projection.native_effect.bytes.empty())
+						return std::nullopt;
+					const auto page_number = static_cast<std::uint64_t>(page);
+					const auto size = static_cast<std::uint64_t>(page_size);
+					if (page_number > std::numeric_limits<std::uint64_t>::max() / size)
+						return std::nullopt;
+					const auto byte_offset = page_number * size;
+					if (byte_offset > std::numeric_limits<std::uint64_t>::max() - size ||
+						projection.byte_offset != byte_offset || projection.byte_count != size ||
+						projection.sealed_shm_size < byte_offset + size)
+						return std::nullopt;
+					continue;
+				}
 				if (event.native_status == sqlite_readonly_cantinit)
 				{
 					if (event.page != 0 || (index != 0U && !route.used_cantinit_heap_route) ||
@@ -4655,8 +4742,7 @@ namespace cxxlens::sdk
 					return std::nullopt;
 				if (event.native_mapping_nonnull)
 				{
-					if (event.returned_status != sqlite_readonly ||
-						!event.returned_mapping_nonnull)
+					if (event.returned_status != sqlite_readonly || !event.returned_mapping_nonnull)
 						return std::nullopt;
 				}
 				else if (event.returned_status != sqlite_readonly_cantinit ||
@@ -4675,8 +4761,9 @@ namespace cxxlens::sdk
 			return route;
 		}
 
-		[[nodiscard]] bool valid_source_shm_read_lock_route(
-			const bool used_cantinit_heap_route, const std::uint32_t read_lock_index) noexcept
+		[[nodiscard]] bool
+		valid_source_shm_read_lock_route(const bool used_cantinit_heap_route,
+										 const std::uint32_t read_lock_index) noexcept
 		{
 			return !used_cantinit_heap_route || read_lock_index == 0U;
 		}
@@ -4722,8 +4809,7 @@ namespace cxxlens::sdk
 				const auto* expected = observed_entry(source, role);
 				auto retained = epoch->retained_entry(role);
 				if (!valid_direct_active_wal_source_entry(expected) || !retained ||
-					retained->role != role ||
-					!retained->direct_regular_entry ||
+					retained->role != role || !retained->direct_regular_entry ||
 					retained->state != sqlite_backend_entry_state::held_regular ||
 					!retained->object_identity || !retained->directory_entry_identity ||
 					!retained->held_object || !retained->object_filesystem_profile ||
@@ -4736,11 +4822,11 @@ namespace cxxlens::sdk
 			return {};
 		}
 
-		[[nodiscard]] bool valid_active_wal_shm_recheck_transition(
-			const bool same_object_identity,
-			const bool same_entry_identity,
-			const std::uint64_t before_byte_count,
-			const std::uint64_t after_byte_count) noexcept
+		[[nodiscard]] bool
+		valid_active_wal_shm_recheck_transition(const bool same_object_identity,
+												const bool same_entry_identity,
+												const std::uint64_t before_byte_count,
+												const std::uint64_t after_byte_count) noexcept
 		{
 			return same_object_identity && same_entry_identity &&
 				after_byte_count >= before_byte_count;
@@ -4771,8 +4857,9 @@ namespace cxxlens::sdk
 			return parsed;
 		}
 
-		[[nodiscard]] bool active_wal_header_receipt_required(
-			const bool initial_observation, const std::uint32_t read_lock_index) noexcept
+		[[nodiscard]] bool
+		active_wal_header_receipt_required(const bool initial_observation,
+										   const std::uint32_t read_lock_index) noexcept
 		{
 			return initial_observation || read_lock_index != 0U;
 		}
@@ -4780,25 +4867,30 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<sqlite_active_wal_read_anchor>
 		observe_active_wal_read(const sqlite_effect_connection_scope& connection,
 								const sqlite_backend_observation_capability& observation,
-				const std::string_view path,
-				const sqlite_quiescent_source_anchor& source,
-				const sqlite_source_shm_qualified_open_plan* qualified_plan,
-				const sqlite_active_wal_read_anchor* prior_anchor,
-				const bool transaction_live,
-				const bool recheck)
+								const std::string_view path,
+								const sqlite_quiescent_source_anchor& source,
+								const sqlite_source_shm_qualified_open_plan* qualified_plan,
+								const sqlite_active_wal_read_anchor* prior_anchor,
+								const bool transaction_live,
+								const bool recheck)
 		{
+			const auto active_failure = [&](const char*) -> result<sqlite_active_wal_read_anchor>
+			{
+				return unexpected(recheck ? sqlite_active_wal_source_changed()
+										  : sqlite_active_wal_observation_failure());
+			};
 			if (!connection.observation || connection.gate == nullptr ||
 				connection.gate->stage() != sqlite_backend_effect_stage::denied ||
 				!connection.gate->enforcement_active())
-				return unexpected(sqlite_active_wal_observation_failure());
+				return active_failure("effect-gate");
 			auto latest = connection.gate->latest_receipt();
 			if (!latest || !effect_receipts_equal(*latest, connection.denied_receipt))
-				return unexpected(sqlite_active_wal_observation_failure());
+				return active_failure("denied-receipt");
 			auto current = connection.observation->snapshot();
 			if (!current || !current->complete || !current->main_handle_open ||
 				current->capability_token != observation.capability_token() ||
 				current->connection_token != connection.observation->token())
-				return unexpected(sqlite_active_wal_observation_failure());
+				return active_failure("connection-snapshot");
 			const auto* main_open = observed_main_open(*current);
 			const auto* wal_open =
 				observed_unique_open(*current, sqlite_backend_file_role::write_ahead_log);
@@ -4825,54 +4917,54 @@ namespace cxxlens::sdk
 				wal_open->directory_entry_identity != source_wal->directory_entry_identity ||
 				current->shared_memory_object_identity != source_shm->object_identity ||
 				current->shared_memory_entry_identity != source_shm->directory_entry_identity)
-				return unexpected(recheck ? sqlite_active_wal_source_changed()
-										  : sqlite_active_wal_observation_failure());
+				return active_failure("open-and-source-identity");
 			if (!current->source_shm_open_callback_receipt ||
 				(qualified_plan == nullptr) == (prior_anchor == nullptr) ||
 				(qualified_plan != nullptr &&
 				 !source_shm_open_callback_matches_plan(*current->source_shm_open_callback_receipt,
-												 *qualified_plan,
-												 *connection.observation,
-												 *main_open)) ||
+														*qualified_plan,
+														*connection.observation,
+														*main_open)) ||
 				(prior_anchor != nullptr &&
 				 !same_source_shm_open_callback_receipt(*current->source_shm_open_callback_receipt,
-											  prior_anchor->source_shm_open_receipt)))
-				return unexpected(recheck ? sqlite_active_wal_source_changed()
-										  : sqlite_active_wal_observation_failure());
+														prior_anchor->source_shm_open_receipt)))
+				return active_failure("source-shm-open-callback");
 			auto map_route = qualified_source_shm_map_route(
 				*current, *current->source_shm_open_callback_receipt);
 			if (!map_route)
-				return unexpected(sqlite_active_wal_observation_failure());
+				return active_failure("source-shm-map-route");
 			if (current->held_shm_locks.size() != 1U)
-				return unexpected(recheck ? sqlite_active_wal_source_changed()
-										  : sqlite_active_wal_observation_failure());
+				return active_failure("shm-lock-count");
 			const auto read_lock_index =
 				sqlite_wal_read_lock_index(current->held_shm_locks.front());
 			if (!read_lock_index)
-				return unexpected(recheck ? sqlite_active_wal_source_changed()
-									  : sqlite_active_wal_observation_failure());
+				return active_failure("shm-read-lock-index");
 			if (!valid_source_shm_read_lock_route(map_route->used_cantinit_heap_route,
-										  *read_lock_index))
-				return unexpected(recheck ? sqlite_active_wal_source_changed()
-									  : sqlite_active_wal_observation_failure());
+												  *read_lock_index))
+				return active_failure("shm-read-lock-route");
 			const auto target_epoch = qualified_plan != nullptr
 				? qualified_plan->qualification.target_namespace_epoch
 				: prior_anchor->target_namespace_epoch;
 			const auto& target_epoch_identity = qualified_plan != nullptr
 				? qualified_plan->qualification.target_namespace_epoch_identity
 				: prior_anchor->target_namespace_epoch_identity;
+			auto sqlite_source_id = qualified_plan != nullptr
+				? make_sqlite_source_id_identity(qualified_plan->qualification.sqlite_source_id)
+				: std::optional<sqlite_backend_opaque_identity>{prior_anchor->sqlite_source_id};
 			if (!target_epoch || target_epoch_identity.profile.empty() ||
 				target_epoch_identity.bytes.empty() ||
 				target_epoch->identity() != target_epoch_identity ||
 				target_epoch->logical_main_locator() != path ||
 				target_epoch->anchored_main_locator() !=
-					current->source_shm_open_callback_receipt->delegated_vfs_locator)
+					current->source_shm_open_callback_receipt->delegated_vfs_locator ||
+				!sqlite_source_id || sqlite_source_id->profile.empty() ||
+				sqlite_source_id->bytes.empty())
 				return unexpected(sqlite_source_shm_qualification_failure());
-			if (auto stable = recheck_source_shm_epoch_during_live_read(
-					target_epoch,
-					transaction_live,
-					map_route->used_cantinit_heap_route,
-					*read_lock_index);
+			if (auto stable =
+					recheck_source_shm_epoch_during_live_read(target_epoch,
+															  transaction_live,
+															  map_route->used_cantinit_heap_route,
+															  *read_lock_index);
 				!stable)
 				return unexpected(std::move(stable.error()));
 
@@ -4883,9 +4975,11 @@ namespace cxxlens::sdk
 
 			auto main_size = source_main->held_object->size();
 			auto main_sha256 = source_main->held_object->sha256();
+			auto wal_size = source_wal->held_object->size();
+			auto wal_sha256 = source_wal->held_object->sha256();
 			auto shared_memory_size = source_shm->held_object->size();
-			if (!main_size || !main_sha256 || !shared_memory_size)
-				return unexpected(sqlite_active_wal_observation_failure());
+			if (!main_size || !main_sha256 || !wal_size || !wal_sha256 || !shared_memory_size)
+				return active_failure("source-size-digest");
 			sqlite_active_wal_read_anchor anchor{
 				*main_open->object_identity,
 				*main_open->directory_entry_identity,
@@ -4897,13 +4991,16 @@ namespace cxxlens::sdk
 				*read_lock_index,
 				map_route->used_cantinit_heap_route,
 				target_epoch_identity,
+				std::move(*sqlite_source_id),
 				target_epoch,
 				*current->source_shm_open_callback_receipt,
 				{*main_size, std::move(*main_sha256)},
+				{*wal_size, std::move(*wal_sha256)},
 				*shared_memory_size,
 				std::nullopt,
 			};
-			if (active_wal_header_receipt_required(!recheck, anchor.read_lock_index))
+			if (anchor.wal_before.byte_count != 0U &&
+				active_wal_header_receipt_required(!recheck, anchor.read_lock_index))
 			{
 				auto header = read_active_wal_header(*source_wal->held_object);
 				if (!header)
@@ -4934,24 +5031,26 @@ namespace cxxlens::sdk
 					after->shm_entry_identity == before.shm_entry_identity,
 					before.shared_memory_byte_count,
 					after->shared_memory_byte_count) ||
+				after->wal_before != before.wal_before ||
 				after->read_lock.offset != before.read_lock.offset ||
 				after->read_lock.count != before.read_lock.count ||
 				after->read_lock.mode != before.read_lock.mode ||
 				after->read_lock_index != before.read_lock_index ||
 				after->used_cantinit_heap_route != before.used_cantinit_heap_route)
 				return unexpected(sqlite_active_wal_source_changed());
-			if (after->target_namespace_epoch_identity !=
-					before.target_namespace_epoch_identity ||
+			if (after->target_namespace_epoch_identity != before.target_namespace_epoch_identity ||
 				after->target_namespace_epoch.get() != before.target_namespace_epoch.get())
 				return unexpected(sqlite_source_shm_qualification_failure());
-			if (!before.wal_header)
-				return unexpected(sqlite_active_wal_source_changed());
 			if (before.read_lock_index == 0U)
 			{
 				if (after->main_before != before.main_before)
 					return unexpected(sqlite_active_wal_source_changed());
 			}
 			else if (after->wal_header != before.wal_header)
+			{
+				return unexpected(sqlite_active_wal_source_changed());
+			}
+			else if (!before.wal_header && after->wal_header)
 			{
 				return unexpected(sqlite_active_wal_source_changed());
 			}
@@ -5313,39 +5412,60 @@ namespace cxxlens::sdk
 			const bool source_wal_only = source_wal != nullptr && source_shm != nullptr &&
 				source_wal->state == sqlite_backend_entry_state::held_regular &&
 				source_shm->state == sqlite_backend_entry_state::absent;
-			if (source_main == nullptr || source_wal == nullptr || source_shm == nullptr ||
-				source_journal == nullptr || current_main == nullptr || current_wal == nullptr ||
-				current_shm == nullptr || current_journal == nullptr ||
-				source_main->state != sqlite_backend_entry_state::held_regular ||
+			const bool evidence_invalid = source_main == nullptr || source_wal == nullptr ||
+				source_shm == nullptr || source_journal == nullptr || current_main == nullptr ||
+				current_wal == nullptr || current_shm == nullptr || current_journal == nullptr ||
+				(source_main != nullptr &&
+				 source_main->state != sqlite_backend_entry_state::held_regular) ||
 				(!source_sidecars_absent && !source_sidecars_held && !source_wal_only) ||
 				(source_sidecars_absent && wal_open->input_flags != created_wal_flags) ||
-				source_journal->state != sqlite_backend_entry_state::absent ||
-				current_main->state != sqlite_backend_entry_state::held_regular ||
-				current_main->parent_namespace_identity !=
-					anchor.namespace_census.parent_namespace_identity ||
-				current_main->object_identity != source_main->object_identity ||
-				current_main->directory_entry_identity != source_main->directory_entry_identity ||
-				current_wal->state != sqlite_backend_entry_state::held_regular ||
-				current_wal->parent_namespace_identity !=
-					anchor.namespace_census.parent_namespace_identity ||
-				current_wal->object_identity != wal_open->object_identity ||
-				current_wal->directory_entry_identity != wal_open->directory_entry_identity ||
-				((source_sidecars_held || source_wal_only) &&
+				(source_journal != nullptr &&
+				 source_journal->state != sqlite_backend_entry_state::absent) ||
+				(current_main != nullptr &&
+				 current_main->state != sqlite_backend_entry_state::held_regular) ||
+				(current_main != nullptr &&
+				 current_main->parent_namespace_identity !=
+					 anchor.namespace_census.parent_namespace_identity) ||
+				(current_main != nullptr && source_main != nullptr &&
+				 current_main->object_identity != source_main->object_identity) ||
+				(current_main != nullptr && source_main != nullptr &&
+				 current_main->directory_entry_identity != source_main->directory_entry_identity) ||
+				(current_wal != nullptr &&
+				 current_wal->state != sqlite_backend_entry_state::held_regular) ||
+				(current_wal != nullptr &&
+				 current_wal->parent_namespace_identity !=
+					 anchor.namespace_census.parent_namespace_identity) ||
+				(current_wal != nullptr &&
+				 current_wal->object_identity != wal_open->object_identity) ||
+				(current_wal != nullptr &&
+				 current_wal->directory_entry_identity != wal_open->directory_entry_identity) ||
+				((source_sidecars_held || source_wal_only) && source_wal != nullptr &&
+				 current_wal != nullptr &&
 				 (current_wal->object_identity != source_wal->object_identity ||
 				  current_wal->directory_entry_identity != source_wal->directory_entry_identity)) ||
-				current_shm->state != sqlite_backend_entry_state::held_regular ||
-				current_shm->parent_namespace_identity !=
-					anchor.namespace_census.parent_namespace_identity ||
-				current_shm->object_identity != current->shared_memory_object_identity ||
-				current_shm->directory_entry_identity != current->shared_memory_entry_identity ||
-				(source_sidecars_held &&
+				(current_shm != nullptr &&
+				 current_shm->state != sqlite_backend_entry_state::held_regular) ||
+				(current_shm != nullptr &&
+				 current_shm->parent_namespace_identity !=
+					 anchor.namespace_census.parent_namespace_identity) ||
+				(current_shm != nullptr &&
+				 current_shm->object_identity != current->shared_memory_object_identity) ||
+				(current_shm != nullptr &&
+				 current_shm->directory_entry_identity != current->shared_memory_entry_identity) ||
+				(source_sidecars_held && source_shm != nullptr && current_shm != nullptr &&
 				 (current_shm->object_identity != source_shm->object_identity ||
 				  current_shm->directory_entry_identity != source_shm->directory_entry_identity)) ||
-				current_journal->state != sqlite_backend_entry_state::absent ||
-				current_journal->parent_namespace_identity !=
-					anchor.namespace_census.parent_namespace_identity ||
-				current_journal->object_identity || current_journal->directory_entry_identity)
+				(current_journal != nullptr &&
+				 current_journal->state != sqlite_backend_entry_state::absent) ||
+				(current_journal != nullptr &&
+				 current_journal->parent_namespace_identity !=
+					 anchor.namespace_census.parent_namespace_identity) ||
+				(current_journal != nullptr &&
+				 (current_journal->object_identity || current_journal->directory_entry_identity));
+			if (evidence_invalid)
+			{
 				return unexpected(sqlite_effect_gate_failure());
+			}
 			return evidence;
 		}
 
@@ -5756,7 +5876,9 @@ namespace cxxlens::sdk
 				static_cast<std::uint8_t>(prior->stage) >=
 					static_cast<std::uint8_t>(target_stage) ||
 				connection.gate->stage() != prior->stage || !connection.gate->enforcement_active())
+			{
 				return unexpected(sqlite_effect_gate_failure());
+			}
 			auto armed = connection.gate->arm_now(std::move(request));
 			if (!armed ||
 				!effect_receipt_matches(*armed,
@@ -5910,7 +6032,8 @@ namespace cxxlens::sdk
 		finish_private_read(observed_opened_sqlite_database& opened,
 							const std::string_view path,
 							const sqlite_backend_observation_capability& observation,
-							const bool commit)
+							const bool commit,
+							const bool defer_active_wal_epoch_for_writer = false)
 		{
 			if (!opened.private_read_transaction || opened.database == nullptr ||
 				!opened.source_anchor)
@@ -5950,12 +6073,14 @@ namespace cxxlens::sdk
 							opened.active_observation, gate, *opened.active_denied_receipt};
 						auto stable = recheck_active_wal_read(connection,
 															  observation,
-														  path,
-														  *opened.source_anchor,
-														  *opened.active_wal_anchor,
-														  opened.private_read_transaction);
+															  path,
+															  *opened.source_anchor,
+															  *opened.active_wal_anchor,
+															  opened.private_read_transaction);
 						if (!stable)
+						{
 							pre_end_failure = std::move(stable.error());
+						}
 					}
 				}
 			}
@@ -5981,10 +6106,42 @@ namespace cxxlens::sdk
 				return unexpected(store_error(
 					"store.sqlite-failure", "sqlite-initialization-recovery", "opaque"));
 			result<void> epoch_finished;
+			const bool preserve_writer_epoch = active_wal && defer_active_wal_epoch_for_writer &&
+				commit && !pre_end_failure && static_cast<bool>(ended);
 			if (active_wal)
 			{
 				if (!target_namespace_epoch)
 					epoch_finished = unexpected(sqlite_source_shm_qualification_failure());
+				else if (preserve_writer_epoch)
+				{
+					if (auto stable = target_namespace_epoch->recheck(); !stable)
+					{
+						epoch_finished = unexpected(sqlite_source_shm_qualification_failure());
+					}
+					else
+					{
+						if (!opened.active_wal_anchor ||
+							opened.active_wal_anchor->sqlite_source_id.profile.empty() ||
+							opened.active_wal_anchor->sqlite_source_id.bytes.empty())
+						{
+							// Retain the epoch only after the complete writer handoff identity
+							// is available. Otherwise close the epoch before returning failure.
+							if (auto finished = finish_source_shm_epoch_after_confirmed_close(
+									target_namespace_epoch, true);
+								!finished)
+								epoch_finished = unexpected(std::move(finished.error()));
+							else
+								epoch_finished =
+									unexpected(sqlite_source_shm_qualification_failure());
+						}
+						else
+						{
+							opened.deferred_writer_target_namespace_epoch = target_namespace_epoch;
+							opened.deferred_writer_sqlite_source_id =
+								opened.active_wal_anchor->sqlite_source_id;
+						}
+					}
+				}
 				else if (auto finished = finish_source_shm_epoch_after_confirmed_close(
 							 target_namespace_epoch, true);
 						 !finished)
@@ -6027,7 +6184,9 @@ namespace cxxlens::sdk
 				return symbols;
 			auto effect = begin_ephemeral_effect_gated_connection(observation);
 			if (!effect)
+			{
 				return unexpected(std::move(effect.error()));
+			}
 			auto scratch = open_database(api,
 										 ":memory:",
 										 vfs_name.c_str(),
@@ -6035,23 +6194,33 @@ namespace cxxlens::sdk
 											 sqlite_open_privatecache | sqlite_open_fullmutex,
 										 {api, backend_lifetime, observation, {}});
 			if (!scratch)
+			{
 				return unexpected(std::move(scratch.error()));
+			}
 			if (auto valid =
 					validate_ephemeral_open_observation(*effect->observation, *observation);
 				!valid)
+			{
 				return valid;
+			}
 			if (auto valid = validate_v3_connection(**scratch); !valid)
+			{
 				return valid;
+			}
 			const auto closed = (*scratch)->close_exactly_once();
 			scratch->reset();
 			if (!confirmed_connection_close(closed))
+			{
 				return unexpected(store_error(
 					"store.sqlite-failure", "sqlite-initialization-recovery", "opaque"));
+			}
 			auto latest = effect->gate->latest_receipt();
 			if (!latest || !effect_receipts_equal(*latest, effect->denied_receipt) ||
 				effect->gate->stage() != sqlite_backend_effect_stage::denied ||
 				!effect->gate->enforcement_active())
+			{
 				return unexpected(sqlite_effect_gate_failure());
+			}
 			return {};
 		}
 
@@ -6134,6 +6303,12 @@ namespace cxxlens::sdk
 			auto effect = begin_effect_gated_connection(observation, path);
 			if (!effect)
 				return unexpected(std::move(effect.error()));
+			if (preinit_absent && effect->observation->requires_source_shm_writer_mapping_epoch())
+			{
+				if (auto requested = effect->observation->request_writer_shm_mapping_epoch();
+					!requested)
+					return unexpected(std::move(requested.error()));
+			}
 			auto database = open_database(
 				api,
 				path,
@@ -6181,6 +6356,13 @@ namespace cxxlens::sdk
 				return unexpected(std::move(wal.error()));
 			if (auto initialized = initialize_v3_authority(**database); !initialized)
 				return unexpected(std::move(initialized.error()));
+			if (effect->observation->requires_source_shm_writer_mapping_epoch())
+			{
+				if (auto eligible = effect->observation->install_current_v3_writer_eligibility();
+					!eligible)
+					return unexpected(std::move(eligible.error()));
+			}
+
 			return database;
 		}
 
@@ -6190,16 +6372,74 @@ namespace cxxlens::sdk
 			const std::string& vfs_name,
 			const std::shared_ptr<void>& backend_lifetime,
 			const std::shared_ptr<sqlite_backend_observation_capability>& observation,
-			const sqlite_quiescent_source_anchor& source_anchor)
+			const sqlite_quiescent_source_anchor& source_anchor,
+			std::shared_ptr<sqlite_source_shm_target_namespace_epoch>
+				writer_target_namespace_epoch = {},
+			std::optional<sqlite_backend_opaque_identity> writer_sqlite_source_id = std::nullopt,
+			const bool require_writer_epoch = true)
 		{
 			if (!observation)
 				return unexpected(sqlite_quiescent_observation_failure());
+			bool writer_epoch_armed{};
 			auto anchor_pin = sqlite_authority_anchor_pin(source_anchor);
 			if (!anchor_pin)
+			{
 				return unexpected(sqlite_effect_gate_failure());
+			}
 			auto effect = begin_effect_gated_connection(observation, path);
 			if (!effect)
 				return unexpected(std::move(effect.error()));
+			const bool requires_source_shm_writer_epoch =
+				effect->observation->requires_source_shm_writer_mapping_epoch();
+			if (require_writer_epoch && requires_source_shm_writer_epoch)
+			{
+				if (auto requested = effect->observation->request_writer_shm_mapping_epoch();
+					!requested)
+					return unexpected(std::move(requested.error()));
+			}
+			// A preceding active-WAL read may already have populated this observation with
+			// source-reader map events.  Arm the read-write epoch from the exact retained
+			// source anchor before opening the new main handle; the post-open fallback cannot
+			// safely do so once any native map has been observed.  This keeps the writer lease
+			// strictly before a same-process readonly reader can delegate its first map.
+			if (require_writer_epoch && requires_source_shm_writer_epoch && !writer_epoch_armed &&
+				!writer_target_namespace_epoch && !writer_sqlite_source_id)
+			{
+				const auto* wal = observed_entry(source_anchor.namespace_census,
+												 sqlite_backend_file_role::write_ahead_log);
+				const auto* shm = observed_entry(source_anchor.namespace_census,
+												 sqlite_backend_file_role::shared_memory);
+				const auto retained_active_wal_family = wal != nullptr && shm != nullptr &&
+					wal->state == sqlite_backend_entry_state::held_regular &&
+					shm->state == sqlite_backend_entry_state::held_regular;
+				if (retained_active_wal_family)
+				{
+					auto target_epoch = make_sqlite_source_shm_target_namespace_epoch(
+						path, source_anchor.namespace_census);
+					const auto* source_id = api->sourceid();
+					auto source_id_identity = source_id == nullptr
+						? std::optional<sqlite_backend_opaque_identity>{}
+						: make_sqlite_source_id_identity(source_id);
+					if (!target_epoch || !*target_epoch || !source_id_identity)
+						return unexpected(sqlite_source_shm_qualification_failure());
+					if (auto armed = effect->observation->arm_writer_shm_mapping_epoch(
+							std::move(*target_epoch), std::move(*source_id_identity));
+						!armed)
+						return unexpected(std::move(armed.error()));
+					writer_epoch_armed = true;
+				}
+			}
+			if (writer_target_namespace_epoch || writer_sqlite_source_id)
+			{
+				if (!writer_target_namespace_epoch || !writer_sqlite_source_id)
+					return unexpected(sqlite_source_shm_qualification_failure());
+				if (auto armed = effect->observation->arm_writer_shm_mapping_epoch(
+						std::move(writer_target_namespace_epoch),
+						std::move(*writer_sqlite_source_id));
+					!armed)
+					return unexpected(std::move(armed.error()));
+				writer_epoch_armed = true;
+			}
 			auto database = open_database(
 				api,
 				path,
@@ -6208,6 +6448,7 @@ namespace cxxlens::sdk
 				{api, backend_lifetime, observation, std::move(anchor_pin)});
 			if (!database)
 				return unexpected(std::move(database.error()));
+			writer_epoch_armed = effect->observation->writer_shm_mapping_epoch_armed();
 			if (auto valid =
 					validate_read_write_open_observation(*effect->observation, *observation);
 				!valid)
@@ -6224,12 +6465,18 @@ namespace cxxlens::sdk
 				false,
 				false);
 			if (!coordination_request)
+			{
 				return unexpected(std::move(coordination_request.error()));
+			}
 			auto coordination = arm_effect_gate_now(*effect, std::move(*coordination_request));
 			if (!coordination)
+			{
 				return unexpected(std::move(coordination.error()));
+			}
 			if (auto synchronous = set_and_require_full_synchronous(**database, true); !synchronous)
+			{
 				return unexpected(std::move(synchronous.error()));
+			}
 			auto request = make_post_wal_coordination_arm_request(
 				*effect,
 				observation,
@@ -6238,15 +6485,49 @@ namespace cxxlens::sdk
 				source_anchor,
 				*coordination);
 			if (!request)
+			{
 				return unexpected(std::move(request.error()));
+			}
 			auto armed = arm_effect_gate_now(*effect, std::move(*request));
 			if (!armed)
+			{
 				return unexpected(std::move(armed.error()));
-			if (auto eligible = effect->observation->install_current_v3_writer_eligibility();
-				!eligible)
-				return unexpected(std::move(eligible.error()));
+			}
+			if (!writer_epoch_armed && require_writer_epoch && requires_source_shm_writer_epoch &&
+				!effect->observation->native_shm_map_attempted())
+			{
+				if (auto symbols = require_source_shm_readonly_symbols(*api); !symbols)
+					return unexpected(std::move(symbols.error()));
+				auto census = observation->capture_namespace(path);
+				if (!census)
+					return unexpected(sqlite_source_shm_qualification_failure());
+				auto target_epoch = make_sqlite_source_shm_target_namespace_epoch(path, *census);
+				if (!target_epoch)
+					return unexpected(std::move(target_epoch.error()));
+				const auto* source_id = api->sourceid();
+				if (source_id == nullptr || *source_id == '\0')
+					return unexpected(sqlite_source_shm_qualification_failure());
+				auto source_id_identity = make_sqlite_source_id_identity(source_id);
+				if (!source_id_identity)
+					return unexpected(sqlite_source_shm_qualification_failure());
+				if (auto epoch = effect->observation->arm_writer_shm_mapping_epoch(
+						std::move(*target_epoch), *source_id_identity);
+					!epoch)
+					return unexpected(std::move(epoch.error()));
+				writer_epoch_armed = true;
+			}
+			if (requires_source_shm_writer_epoch)
+			{
+				if (auto eligible = effect->observation->install_current_v3_writer_eligibility();
+					!eligible)
+				{
+					return unexpected(std::move(eligible.error()));
+				}
+			}
 			if (auto wal = require_wal_mode(**database, true); !wal)
+			{
 				return unexpected(std::move(wal.error()));
+			}
 			return database;
 		}
 
@@ -6412,14 +6693,13 @@ namespace cxxlens::sdk
 			std::optional<sqlite_source_shm_qualified_open_plan> qualified_active_wal;
 			if (wal_present && shm_present)
 			{
-				auto prequalification =
-					observe_active_wal_prequalification_header(*captured, path);
+				auto prequalification = observe_active_wal_prequalification_header(*captured, path);
 				if (!prequalification)
 					return unexpected(std::move(prequalification.error()));
 				if (prequalification->bytes[18U] != std::byte{2U} ||
 					prequalification->bytes[19U] != std::byte{2U})
-					return unexpected(store_error(
-						"store.sqlite-failure", "sqlite-journal-mode", "expected-wal"));
+					return unexpected(
+						store_error("store.sqlite-failure", "sqlite-journal-mode", "expected-wal"));
 				auto qualified = qualify_active_wal_source_shm(
 					api, path, vfs_name, backend_lifetime, observation, *captured);
 				if (!qualified)
@@ -6554,7 +6834,9 @@ namespace cxxlens::sdk
 				auto database = open_fresh_observed_database(
 					api, path, vfs_name, backend_lifetime, observation, anchor, false);
 				if (!database)
+				{
 					return unexpected(std::move(database.error()));
+				}
 				observed_opened_sqlite_database output;
 				output.api = api;
 				output.database = std::move(*database);
@@ -6570,18 +6852,18 @@ namespace cxxlens::sdk
 					store_error("store.sqlite-failure", "sqlite-journal-mode", "expected-wal"));
 			if (wal_present)
 			{
-					if (!qualified_active_wal)
-						return unexpected(sqlite_source_shm_qualification_failure());
+				if (!qualified_active_wal)
+					return unexpected(sqlite_source_shm_qualification_failure());
 				auto target_namespace_epoch =
 					qualified_active_wal->qualification.target_namespace_epoch;
 				if (!target_namespace_epoch)
 					return unexpected(sqlite_source_shm_qualification_failure());
 				auto source_anchor_pin = sqlite_authority_anchor_pin(anchor);
-					if (!source_anchor_pin)
-						return unexpected(sqlite_source_shm_qualification_failure());
-				auto lifetime_pin = std::make_shared<sqlite_active_wal_lifetime_pin>(
-					sqlite_active_wal_lifetime_pin{std::move(source_anchor_pin),
-											 target_namespace_epoch});
+				if (!source_anchor_pin)
+					return unexpected(sqlite_source_shm_qualification_failure());
+				auto lifetime_pin =
+					std::make_shared<sqlite_active_wal_lifetime_pin>(sqlite_active_wal_lifetime_pin{
+						std::move(source_anchor_pin), target_namespace_epoch});
 				std::shared_ptr<const void> anchor_pin =
 					std::static_pointer_cast<const void>(std::move(lifetime_pin));
 				auto effect = begin_effect_gated_connection(observation, path);
@@ -6593,8 +6875,8 @@ namespace cxxlens::sdk
 						return unexpected(sqlite_source_shm_qualification_failure());
 					return unexpected(sqlite_source_shm_qualification_failure());
 				}
-				if (auto armed = effect->observation->arm_source_shm_readonly_profile(
-						*qualified_active_wal);
+				if (auto armed =
+						effect->observation->arm_source_shm_readonly_profile(*qualified_active_wal);
 					!armed)
 				{
 					if (auto finished = finish_source_shm_epoch_after_confirmed_close(
@@ -6611,18 +6893,17 @@ namespace cxxlens::sdk
 								  qualified_active_wal->open_flags,
 								  {api, backend_lifetime, observation, std::move(anchor_pin)},
 								  &failed_open_close);
-					if (!database)
-					{
-						if (!failed_open_close ||
-							!confirmed_failed_open_resolution(*failed_open_close))
-							return unexpected(store_error(
-								"store.sqlite-failure", "sqlite-initialization-recovery", "opaque"));
-						if (auto finished = finish_source_shm_epoch_after_confirmed_close(
-								target_namespace_epoch, true);
-							!finished)
-							return unexpected(sqlite_source_shm_qualification_failure());
+				if (!database)
+				{
+					if (!failed_open_close || !confirmed_failed_open_resolution(*failed_open_close))
+						return unexpected(store_error(
+							"store.sqlite-failure", "sqlite-initialization-recovery", "opaque"));
+					if (auto finished = finish_source_shm_epoch_after_confirmed_close(
+							target_namespace_epoch, true);
+						!finished)
 						return unexpected(sqlite_source_shm_qualification_failure());
-					}
+					return unexpected(sqlite_source_shm_qualification_failure());
+				}
 
 				bool transaction_active{};
 				const auto fail = [&](error failure) -> result<observed_opened_sqlite_database>
@@ -6648,15 +6929,14 @@ namespace cxxlens::sdk
 				if (auto schema_version = (*database)->execute("PRAGMA schema_version;");
 					!schema_version)
 					return fail(std::move(schema_version.error()));
-				auto active = observe_active_wal_read(
-					*effect,
-					*observation,
-					path,
-					anchor,
-					&*qualified_active_wal,
-					nullptr,
-					transaction_active,
-					false);
+				auto active = observe_active_wal_read(*effect,
+													  *observation,
+													  path,
+													  anchor,
+													  &*qualified_active_wal,
+													  nullptr,
+													  transaction_active,
+													  false);
 				if (!active)
 					return fail(std::move(active.error()));
 
@@ -6692,8 +6972,7 @@ namespace cxxlens::sdk
 					if (auto valid = validate_v3_connection(*output.database); !valid)
 					{
 						auto failure = std::move(valid.error());
-						if (auto stable = finish_private_read(
-								output, path, *observation, false);
+						if (auto stable = finish_private_read(output, path, *observation, false);
 							!stable)
 							return unexpected(std::move(stable.error()));
 						return unexpected(sqlite_source_shm_qualification_failure());
@@ -8270,23 +8549,22 @@ namespace cxxlens::sdk
 		sqlite_source_shm_symbols_available_for_testing = available;
 	}
 
-	bool sqlite_source_shm_map_event_read_lock_valid_for_testing(
-		const bool native_cantinit_heap_route,
-		const bool native_mapping_nonnull,
-		const std::uint32_t read_lock_index)
+	bool
+	sqlite_source_shm_map_event_read_lock_valid_for_testing(const bool native_cantinit_heap_route,
+															const bool native_mapping_nonnull,
+															const std::uint32_t read_lock_index)
 	{
 		static const int underlying_vfs_identity{};
 		static const int underlying_vfs_app_data_identity{};
 		sqlite_source_shm_open_callback_receipt receipt;
 		receipt.pinned_underlying_vfs_identity = &underlying_vfs_identity;
-		receipt.pinned_underlying_vfs_app_data_identity =
-			&underlying_vfs_app_data_identity;
+		receipt.pinned_underlying_vfs_app_data_identity = &underlying_vfs_app_data_identity;
 		sqlite_backend_connection_observation observation;
 		sqlite_backend_shm_map_observation event;
 		event.caller_extend = 1;
 		event.delegated_extend = 0;
-		event.native_status = native_cantinit_heap_route ? sqlite_readonly_cantinit
-											  : sqlite_readonly;
+		event.native_status =
+			native_cantinit_heap_route ? sqlite_readonly_cantinit : sqlite_readonly;
 		event.returned_status = !native_cantinit_heap_route && !native_mapping_nonnull
 			? sqlite_readonly_cantinit
 			: event.native_status;
@@ -8297,8 +8575,8 @@ namespace cxxlens::sdk
 		event.pinned_underlying_vfs_app_data_identity = &underlying_vfs_app_data_identity;
 		observation.shm_map_events.push_back(event);
 		auto route = qualified_source_shm_map_route(observation, receipt);
-		return route && valid_source_shm_read_lock_route(
-							route->used_cantinit_heap_route, read_lock_index);
+		return route &&
+			valid_source_shm_read_lock_route(route->used_cantinit_heap_route, read_lock_index);
 	}
 
 	bool sqlite_source_shm_authentic_heap_trigger_valid_for_testing(
@@ -8310,13 +8588,13 @@ namespace cxxlens::sdk
 		static const int underlying_vfs_app_data_identity{};
 		sqlite_source_shm_open_callback_receipt receipt;
 		receipt.pinned_underlying_vfs_identity = &underlying_vfs_identity;
-		receipt.pinned_underlying_vfs_app_data_identity =
-			&underlying_vfs_app_data_identity;
+		receipt.pinned_underlying_vfs_app_data_identity = &underlying_vfs_app_data_identity;
 		sqlite_backend_connection_observation observation;
 		auto event = [&](const int page,
 						 const int native_status,
 						 const bool native_mapping_nonnull,
-						 const bool seen_before) {
+						 const bool seen_before)
+		{
 			sqlite_backend_shm_map_observation value;
 			value.page = page;
 			value.page_size = 32'768;
@@ -8329,25 +8607,20 @@ namespace cxxlens::sdk
 			value.readonly_family_seen_before = seen_before;
 			value.readonly_family_seen_after = true;
 			value.pinned_underlying_vfs_identity = &underlying_vfs_identity;
-			value.pinned_underlying_vfs_app_data_identity =
-				&underlying_vfs_app_data_identity;
+			value.pinned_underlying_vfs_app_data_identity = &underlying_vfs_app_data_identity;
 			return value;
 		};
 		if (mapped_event_precedes_cantinit)
 			observation.shm_map_events.push_back(event(0, sqlite_readonly, true, false));
-		observation.shm_map_events.push_back(event(
-			cantinit_page,
-			sqlite_readonly_cantinit,
-			false,
-			mapped_event_precedes_cantinit));
+		observation.shm_map_events.push_back(
+			event(cantinit_page, sqlite_readonly_cantinit, false, mapped_event_precedes_cantinit));
 		if (repeat_cantinit)
 			observation.shm_map_events.push_back(
 				event(cantinit_page, sqlite_readonly_cantinit, false, true));
 		return qualified_source_shm_map_route(observation, receipt).has_value();
 	}
 
-	bool sqlite_source_shm_callback_epoch_binding_valid_for_testing(
-		const bool same_epoch_identity)
+	bool sqlite_source_shm_callback_epoch_binding_valid_for_testing(const bool same_epoch_identity)
 	{
 		sqlite_source_shm_open_callback_receipt expected;
 		expected.target_namespace_epoch_identity.profile = "test.target-epoch.v1";
@@ -8401,8 +8674,7 @@ namespace cxxlens::sdk
 		const std::shared_ptr<sqlite_source_shm_target_namespace_epoch>& epoch,
 		const bool connection_close_confirmed)
 	{
-		return finish_source_shm_epoch_after_confirmed_close(
-			epoch, connection_close_confirmed);
+		return finish_source_shm_epoch_after_confirmed_close(epoch, connection_close_confirmed);
 	}
 
 	result<void> validate_sqlite_source_shm_epoch_census_for_testing(
@@ -10526,7 +10798,14 @@ namespace cxxlens::sdk
 		std::scoped_lock lock{implementation_->mutex};
 		if (!implementation_->result_operations_available())
 			return unexpected(sqlite_reopen_required());
-		if (implementation_->backend == "sqlite")
+		const bool detached_diagnostic_corruption = implementation_->database == nullptr &&
+			std::ranges::any_of(implementation_->records,
+								[](const auto& entry)
+								{
+									return entry.second.state == publication_state::committed &&
+										entry.second.corrupt;
+								});
+		if (implementation_->backend == "sqlite" && !detached_diagnostic_corruption)
 		{
 			if (auto recovered = implementation_->recover_wal_only_for_mutation(); !recovered)
 				return recovered;
@@ -10534,7 +10813,8 @@ namespace cxxlens::sdk
 		if (implementation_->backend == "sqlite" &&
 			implementation_->sqlite_format == sqlite_physical_format::predecessor_v2)
 			return implementation_->migrate_predecessor_v2();
-		if (implementation_->database == nullptr && implementation_->backend != "memory")
+		if (implementation_->database == nullptr && implementation_->backend != "memory" &&
+			!detached_diagnostic_corruption)
 			return unexpected(store_error("store.corrupt", "sqlite", "backend"));
 		using replacement_entry = std::pair<std::string, std::shared_ptr<snapshot_handle::data>>;
 		const auto replacement_order =
@@ -11336,7 +11616,11 @@ namespace cxxlens::sdk
 					return unexpected(std::move(stable.error()));
 				return unexpected(std::move(failure));
 			}
-			if (auto stable = finish_private_read(*opened, database_path, *observation, true);
+			const bool handoff_to_current_writer =
+				opened->format == sqlite_physical_format::current_v3 && !opened->wal_only_capture &&
+				opened->active_wal_anchor.has_value();
+			if (auto stable = finish_private_read(
+					*opened, database_path, *observation, true, handoff_to_current_writer);
 				!stable)
 				return unexpected(std::move(stable.error()));
 			if (!opened->source_anchor)
@@ -11351,16 +11635,75 @@ namespace cxxlens::sdk
 			if (opened->format == sqlite_physical_format::current_v3 &&
 				!implementation->sqlite_wal_only_capture)
 			{
-				auto writable =
-					open_current_observed_database(opened->api,
-												   database_path,
-												   vfs_name,
-												   backend_lifetime,
-												   observation,
-												   *implementation->sqlite_source_anchor);
-				if (!writable)
-					return unexpected(std::move(writable.error()));
-				implementation->database = std::move(*writable);
+				// A validated current-v3 source, including a zero-row authority,
+				// is not exact logical empty: its format and metadata are already
+				// recognized.  Keep source normalization deferred to the ordinary
+				// current-v3 writer path; the DF-0202 gate applies only to an
+				// unrecognized preauthority source before this classification.
+				if (handoff_to_current_writer)
+				{
+					if (!opened->deferred_writer_target_namespace_epoch ||
+						!opened->deferred_writer_sqlite_source_id)
+					{
+						if (opened->deferred_writer_target_namespace_epoch)
+						{
+							if (auto finished = finish_source_shm_epoch_after_confirmed_close(
+									opened->deferred_writer_target_namespace_epoch, true);
+								!finished)
+								return unexpected(std::move(finished.error()));
+						}
+						return unexpected(sqlite_source_shm_qualification_failure());
+					}
+				}
+				const bool diagnostic_corruption = std::ranges::any_of(
+					implementation->records,
+					[](const auto& entry)
+					{
+						return entry.second.state == publication_state::committed &&
+							entry.second.corrupt;
+					});
+				if (!diagnostic_corruption)
+				{
+					auto writable = open_current_observed_database(
+						opened->api,
+						database_path,
+						vfs_name,
+						backend_lifetime,
+						observation,
+						*implementation->sqlite_source_anchor,
+						handoff_to_current_writer ? opened->deferred_writer_target_namespace_epoch
+												  : nullptr,
+						handoff_to_current_writer ? opened->deferred_writer_sqlite_source_id
+												  : std::nullopt,
+						!implementation->records.empty() || !implementation->publications.empty() ||
+							!implementation->heads.empty());
+					if (!writable)
+					{
+						if (handoff_to_current_writer &&
+							opened->deferred_writer_target_namespace_epoch)
+							(void)finish_source_shm_epoch_after_confirmed_close(
+								opened->deferred_writer_target_namespace_epoch, true);
+						return unexpected(std::move(writable.error()));
+					}
+					opened->deferred_writer_target_namespace_epoch.reset();
+					opened->deferred_writer_sqlite_source_id.reset();
+					implementation->database = std::move(*writable);
+				}
+				else
+				{
+					// Keep a diagnostic-invalid source detached from a writable SHM route. The
+					// validated in-memory census remains available for exact current/open/compact
+					// corruption results, while no mutation can cross the failed authority.
+					if (handoff_to_current_writer && opened->deferred_writer_target_namespace_epoch)
+					{
+						if (auto finished = finish_source_shm_epoch_after_confirmed_close(
+								opened->deferred_writer_target_namespace_epoch, true);
+							!finished)
+							return unexpected(std::move(finished.error()));
+					}
+					opened->deferred_writer_target_namespace_epoch.reset();
+					opened->deferred_writer_sqlite_source_id.reset();
+				}
 			}
 		}
 		else

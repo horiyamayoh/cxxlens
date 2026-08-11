@@ -105,7 +105,7 @@ namespace cxxlens::provider::clang22
 				native_error("native.input-invalid", "logical_path", logical_path));
 		if (source.empty())
 			return sdk::unexpected(native_error("native.input-invalid", "source"));
-		if (arguments.size() > 1024U)
+		if (arguments.size() < 2U || arguments.size() > 1024U)
 			return sdk::unexpected(native_error("native.input-invalid", "arguments"));
 		for (const auto& argument : arguments)
 			if (argument.empty() || argument.find('\0') != std::string::npos)
@@ -139,10 +139,23 @@ namespace cxxlens::provider::clang22
 #if CXXLENS_HAS_CLANG22
 		sdk::result<void> outcome{};
 		auto action = std::make_unique<callback_action>(callback, outcome);
+		// The materialization contract retains argv0 in the effective-invocation
+		// identity. Clang tooling receives only compiler arguments; passing argv0
+		// as an input argument makes it try to compile a file named "clang++".
+		if (input.arguments.back() != input.logical_path)
+			return sdk::unexpected(native_error("native.input-invalid", "arguments"));
+		std::vector<std::string> compiler_arguments{input.arguments.begin() + 1U,
+													input.arguments.end() - 1U};
+		constexpr std::string_view project_prefix{"project://"};
+		const auto compiler_filename = input.logical_path.starts_with(project_prefix)
+			? input.logical_path.substr(project_prefix.size())
+			: input.logical_path;
+		if (compiler_filename.empty())
+			return sdk::unexpected(native_error("native.input-invalid", "logical_path"));
 		const auto parsed = clang::tooling::runToolOnCodeWithArgs(std::move(action),
 																  input.source,
-																  input.arguments,
-																  input.logical_path,
+																  std::move(compiler_arguments),
+																  compiler_filename,
 																  "cxxlens-clang22");
 		if (!parsed && outcome)
 			return sdk::unexpected(native_error("native.parse-failed", input.logical_path));

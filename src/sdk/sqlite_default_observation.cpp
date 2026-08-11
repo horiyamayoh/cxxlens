@@ -270,9 +270,7 @@ namespace cxxlens::sdk
 		make_object_filesystem_profile(const int descriptor, const struct stat& object)
 		{
 #if defined(__linux__)
-			struct statfs observed
-			{
-			};
+			struct statfs observed{};
 			if (::fstatfs(descriptor, &observed) != 0)
 				return std::nullopt;
 			sqlite_backend_opaque_identity output;
@@ -297,9 +295,7 @@ namespace cxxlens::sdk
 		make_object_mount_identity(const int descriptor)
 		{
 #if defined(__linux__) && defined(STATX_MNT_ID)
-			struct statx observed
-			{
-			};
+			struct statx observed{};
 			if (::statx(
 					descriptor, "", AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, STATX_MNT_ID, &observed) !=
 					0 ||
@@ -312,6 +308,26 @@ namespace cxxlens::sdk
 			return output;
 #else
 			(void)descriptor;
+			return std::nullopt;
+#endif
+		}
+
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_relative_object_mount_identity(const int parent, const char* leaf)
+		{
+#if defined(__linux__) && defined(STATX_MNT_ID)
+			struct statx observed{};
+			if (::statx(parent, leaf, AT_SYMLINK_NOFOLLOW, STATX_MNT_ID, &observed) != 0 ||
+				(observed.stx_mask & STATX_MNT_ID) == 0U)
+				return std::nullopt;
+			sqlite_backend_opaque_identity output;
+			output.profile = "default-filesystem-v1.linux-mount-id.v1";
+			output.bytes.reserve(8U);
+			append_u64(output.bytes, observed.stx_mnt_id);
+			return output;
+#else
+			(void)parent;
+			(void)leaf;
 			return std::nullopt;
 #endif
 		}
@@ -496,9 +512,7 @@ namespace cxxlens::sdk
 		{
 			owned_descriptor descriptor;
 			std::string path;
-			struct stat status
-			{
-			};
+			struct stat status{};
 			sqlite_backend_opaque_identity identity;
 		};
 
@@ -506,13 +520,9 @@ namespace cxxlens::sdk
 		struct source_shm_ancestry_watch
 		{
 			owned_descriptor directory;
-			struct stat directory_status
-			{
-			};
+			struct stat directory_status{};
 			std::string child_leaf;
-			struct stat child_status
-			{
-			};
+			struct stat child_status{};
 			int watch{-1};
 		};
 
@@ -558,28 +568,25 @@ namespace cxxlens::sdk
 						const auto component = remainder.substr(0U, separator);
 						if (component.empty() || component == "." || component == "..")
 							return unexpected(observation_io_error());
-						struct stat current_status
-						{
-						};
+						struct stat current_status{};
 						if (::fstat(current.get(), &current_status) != 0 ||
 							!S_ISDIR(current_status.st_mode))
 							return unexpected(observation_io_error());
 						const auto watch = add_watch(current.get());
 						if (watch < 0 ||
-							std::ranges::any_of(ancestry,
-												[&](const source_shm_ancestry_watch& existing)
-												{
-													return existing.watch == watch;
-												}))
+							std::ranges::any_of(
+								ancestry,
+								[&](const source_shm_ancestry_watch& existing)
+								{
+									return existing.watch == watch;
+								}))
 							return unexpected(observation_io_error());
 						std::string child_leaf{component};
 						owned_descriptor child{open_relative(current.get(),
 															 child_leaf.c_str(),
 															 O_RDONLY | O_DIRECTORY | O_NONBLOCK |
 																 O_NOFOLLOW | O_CLOEXEC)};
-						struct stat child_status
-						{
-						};
+						struct stat child_status{};
 						if (!child || ::fstat(child.get(), &child_status) != 0 ||
 							!S_ISDIR(child_status.st_mode))
 							return unexpected(observation_io_error());
@@ -595,19 +602,18 @@ namespace cxxlens::sdk
 						while (!remainder.empty() && remainder.front() == '/')
 							return unexpected(observation_io_error());
 					}
-					struct stat reached_parent
-					{
-					};
+					struct stat reached_parent{};
 					if (::fstat(current.get(), &reached_parent) != 0 ||
 						!same_object(reached_parent, parent->status))
 						return unexpected(observation_io_error());
 					const auto parent_watch = add_watch(parent->descriptor.get());
 					if (parent_watch < 0 ||
-						std::ranges::any_of(ancestry,
-											[&](const source_shm_ancestry_watch& existing)
-											{
-												return existing.watch == parent_watch;
-											}))
+						std::ranges::any_of(
+							ancestry,
+							[&](const source_shm_ancestry_watch& existing)
+							{
+								return existing.watch == parent_watch;
+							}))
 						return unexpected(observation_io_error());
 
 					auto anchored = "/proc/self/fd/" + std::to_string(parent->descriptor.get()) +
@@ -659,12 +665,22 @@ namespace cxxlens::sdk
 						append_u64(identity_.bytes, static_cast<std::uint64_t>(entry.state));
 						const auto active_role =
 							entry.role != sqlite_backend_file_role::rollback_journal;
+						const auto absent_writer_shm =
+							entry.role == sqlite_backend_file_role::shared_memory &&
+							entry.state == sqlite_backend_entry_state::absent &&
+							!entry.object_identity && !entry.directory_entry_identity &&
+							!entry.held_object && !entry.object_filesystem_profile &&
+							!entry.direct_regular_entry;
 						const auto mount = entry.held_object
 							? entry.held_object->object_mount_identity()
 							: std::optional<sqlite_backend_opaque_identity>{};
-						if (active_role &&
+						if (active_role && !absent_writer_shm &&
 							(!entry.object_filesystem_profile || !mount ||
 							 *mount != parent_mount_identity_))
+							return unexpected(observation_io_error());
+						if (active_role &&
+							entry.state != sqlite_backend_entry_state::held_regular &&
+							!absent_writer_shm)
 							return unexpected(observation_io_error());
 						if (entry.object_identity)
 						{
@@ -730,6 +746,45 @@ namespace cxxlens::sdk
 						return entry;
 				return unexpected(observation_io_error());
 			}
+			[[nodiscard]] result<sqlite_backend_writer_shm_stat_observation>
+			observe_writer_shm_stat(const bool after_native_map) const override
+			{
+				std::scoped_lock lock{mutex_};
+				if (!sealed_ || finished_ || !event_queue_ || !parent_)
+					return unexpected(observation_io_error());
+				const auto* shared_memory =
+					find_entry_locked(sqlite_backend_file_role::shared_memory);
+				if (shared_memory == nullptr)
+					return unexpected(observation_io_error());
+				if (writer_shm_stat_only_)
+				{
+					if (auto checked = recheck_writer_map_locked(); !checked)
+						return unexpected(std::move(checked.error()));
+					return observe_writer_shm_stat_only_locked();
+				}
+				if (shared_memory->state == sqlite_backend_entry_state::held_regular)
+				{
+					if (auto checked = recheck_writer_map_locked(); !checked)
+						return unexpected(std::move(checked.error()));
+					return observe_writer_shm_held_locked(*shared_memory);
+				}
+				if (shared_memory->state != sqlite_backend_entry_state::absent || !after_native_map)
+				{
+					if (auto checked = recheck_writer_map_locked(); !checked)
+						return unexpected(std::move(checked.error()));
+					return observe_writer_shm_absent_locked();
+				}
+
+				if (auto created = consume_writer_shm_create_event_locked(); !created)
+					return unexpected(std::move(created.error()));
+				auto current = observe_writer_shm_stat_only_locked();
+				if (!current)
+					return unexpected(std::move(current.error()));
+				writer_shm_stat_only_ = *current;
+				if (auto checked = recheck_writer_map_locked(); !checked)
+					return unexpected(std::move(checked.error()));
+				return current;
+			}
 			[[nodiscard]] result<void> recheck() const override
 			{
 				std::scoped_lock lock{mutex_};
@@ -773,6 +828,163 @@ namespace cxxlens::sdk
 				  anchored_main_locator_{std::move(anchored_main_locator)},
 				  main_leaf_{std::move(main_leaf)}
 			{
+			}
+
+			[[nodiscard]] const sqlite_backend_entry_observation*
+			find_entry_locked(const sqlite_backend_file_role role) const noexcept
+			{
+				for (const auto& entry : entries_)
+					if (entry.role == role)
+						return &entry;
+				return nullptr;
+			}
+
+			[[nodiscard]] result<sqlite_backend_writer_shm_stat_observation>
+			observe_writer_shm_absent_locked() const
+			{
+				auto filesystem =
+					make_object_filesystem_profile(parent_->descriptor.get(), parent_->status);
+				if (!filesystem || parent_mount_identity_.profile.empty() ||
+					parent_mount_identity_.bytes.empty())
+					return unexpected(observation_io_error());
+				return sqlite_backend_writer_shm_stat_observation{
+					sqlite_backend_file_role::shared_memory,
+					sqlite_backend_entry_state::absent,
+					parent_->identity,
+					std::move(*filesystem),
+					parent_mount_identity_,
+					std::nullopt,
+					std::nullopt,
+					0U};
+			}
+
+			[[nodiscard]] result<sqlite_backend_writer_shm_stat_observation>
+			observe_writer_shm_held_locked(const sqlite_backend_entry_observation& entry) const
+			{
+				if (entry.role != sqlite_backend_file_role::shared_memory ||
+					entry.state != sqlite_backend_entry_state::held_regular ||
+					!entry.direct_regular_entry || !entry.object_identity ||
+					!entry.directory_entry_identity || !entry.object_filesystem_profile ||
+					!entry.held_object || !entry.held_object->object_mount_identity())
+					return unexpected(observation_io_error());
+				auto size = entry.held_object->size();
+				if (!size)
+					return unexpected(observation_io_error());
+				return sqlite_backend_writer_shm_stat_observation{
+					entry.role,
+					entry.state,
+					parent_->identity,
+					*entry.object_filesystem_profile,
+					*entry.held_object->object_mount_identity(),
+					entry.object_identity,
+					entry.directory_entry_identity,
+					*size};
+			}
+
+			[[nodiscard]] result<sqlite_backend_writer_shm_stat_observation>
+			observe_writer_shm_stat_only_locked() const
+			{
+				std::string leaf{main_leaf_};
+				leaf.append(shm_suffix);
+				struct stat namespace_entry{};
+				struct stat resolved{};
+				if (stat_relative(parent_->descriptor.get(),
+								  leaf.c_str(),
+								  namespace_entry,
+								  AT_SYMLINK_NOFOLLOW) != 0 ||
+					stat_relative(parent_->descriptor.get(), leaf.c_str(), resolved, 0) != 0 ||
+					!S_ISREG(namespace_entry.st_mode) || !S_ISREG(resolved.st_mode) ||
+					!same_object(namespace_entry, resolved) || resolved.st_size < 0)
+					return unexpected(observation_io_error());
+				auto filesystem =
+					make_object_filesystem_profile(parent_->descriptor.get(), resolved);
+				auto mount =
+					make_relative_object_mount_identity(parent_->descriptor.get(), leaf.c_str());
+				if (!filesystem || !mount ||
+					(writer_shm_stat_only_ &&
+					 (*filesystem != writer_shm_stat_only_->filesystem_profile ||
+					  *mount != writer_shm_stat_only_->mount_identity)))
+					return unexpected(observation_io_error());
+				if (parent_mount_identity_.profile.empty() || parent_mount_identity_.bytes.empty())
+					return unexpected(observation_io_error());
+				auto object_identity =
+					make_stat_identity("default-filesystem-v1.open-object.v1", resolved);
+				auto entry_identity = make_entry_identity(
+					parent_->status, leaf, namespace_entry, std::optional<struct stat>{resolved});
+				if (writer_shm_stat_only_ &&
+					(!writer_shm_stat_only_->object_identity ||
+					 *writer_shm_stat_only_->object_identity != object_identity ||
+					 !writer_shm_stat_only_->directory_entry_identity ||
+					 *writer_shm_stat_only_->directory_entry_identity != entry_identity))
+					return unexpected(observation_io_error());
+				return sqlite_backend_writer_shm_stat_observation{
+					sqlite_backend_file_role::shared_memory,
+					sqlite_backend_entry_state::held_regular,
+					parent_->identity,
+					std::move(*filesystem),
+					std::move(*mount),
+					std::move(object_identity),
+					std::move(entry_identity),
+					static_cast<std::uint64_t>(resolved.st_size)};
+			}
+
+			[[nodiscard]] result<void> consume_writer_shm_create_event_locked() const
+			{
+				std::string expected_leaf{main_leaf_};
+				expected_leaf.append(shm_suffix);
+				bool expected_create{};
+				std::array<std::byte, 4096U> buffer{};
+				for (;;)
+				{
+					ssize_t count{};
+					do
+					{
+						count = ::read(event_queue_.get(), buffer.data(), buffer.size());
+					} while (count < 0 && errno == EINTR);
+					if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+						return expected_create ? result<void>{}
+											   : unexpected(observation_io_error());
+					if (count <= 0)
+						return unexpected(observation_io_error());
+					std::size_t offset{};
+					while (offset < static_cast<std::size_t>(count))
+					{
+						if (static_cast<std::size_t>(count) - offset < sizeof(inotify_event))
+							return unexpected(observation_io_error());
+						const auto* event =
+							reinterpret_cast<const inotify_event*>(buffer.data() + offset);
+						const auto event_size = sizeof(inotify_event) + event->len;
+						if (event_size > static_cast<std::size_t>(count) - offset)
+							return unexpected(observation_io_error());
+						constexpr std::uint32_t unconditional =
+							IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED | IN_UNMOUNT | IN_Q_OVERFLOW;
+						if ((event->mask & unconditional) != 0U)
+							return unexpected(observation_io_error());
+						const auto name_size = event->len == 0U
+							? 0U
+							: ::strnlen(event->name, static_cast<std::size_t>(event->len));
+						const std::string_view name{event->name, name_size};
+						bool relevant = event->wd == parent_watch_ &&
+							(event->len == 0U || source_family_leaf(name));
+						for (const auto& ancestor : ancestry_)
+							if (event->wd == ancestor.watch)
+							{
+								relevant = event->len == 0U || name == ancestor.child_leaf;
+								break;
+							}
+						if (relevant)
+						{
+							const auto exact_create = event->wd == parent_watch_ &&
+								name == expected_leaf && (event->mask & IN_CREATE) != 0U &&
+								(event->mask & ~static_cast<std::uint32_t>(IN_CREATE)) == 0U &&
+								!expected_create;
+							if (!exact_create)
+								return unexpected(observation_io_error());
+							expected_create = true;
+						}
+						offset += event_size;
+					}
+				}
 			}
 
 			[[nodiscard]] bool source_family_leaf(const std::string_view value) const noexcept
@@ -833,14 +1045,12 @@ namespace cxxlens::sdk
 				}
 			}
 
-			[[nodiscard]] result<void> recheck_locked() const
+			[[nodiscard]] result<void> recheck_writer_map_locked() const
 			{
 				if (!sealed_ || finished_ || !event_queue_ || !parent_ ||
 					!require_no_relevant_events_locked())
 					return unexpected(observation_io_error());
-				struct stat current_parent
-				{
-				};
+				struct stat current_parent{};
 				const auto current_parent_mount =
 					make_object_mount_identity(parent_->descriptor.get());
 				if (::fstat(parent_->descriptor.get(), &current_parent) != 0 ||
@@ -851,12 +1061,103 @@ namespace cxxlens::sdk
 					return unexpected(observation_io_error());
 				for (const auto& ancestor : ancestry_)
 				{
-					struct stat current_directory
+					struct stat current_directory{};
+					struct stat current_child{};
+					if (::fstat(ancestor.directory.get(), &current_directory) != 0 ||
+						!same_object(current_directory, ancestor.directory_status) ||
+						stat_relative(ancestor.directory.get(),
+									  ancestor.child_leaf.c_str(),
+									  current_child,
+									  AT_SYMLINK_NOFOLLOW) != 0 ||
+						!S_ISDIR(current_child.st_mode) ||
+						!same_object(current_child, ancestor.child_status))
+						return unexpected(observation_io_error());
+				}
+
+				for (const auto& expected : entries_)
+				{
+					std::string leaf = main_leaf_;
+					if (expected.role == sqlite_backend_file_role::write_ahead_log)
+						leaf.append(wal_suffix);
+					else if (expected.role == sqlite_backend_file_role::shared_memory)
+						leaf.append(shm_suffix);
+					else if (expected.role == sqlite_backend_file_role::rollback_journal)
+						leaf.append(journal_suffix);
+					struct stat namespace_entry{};
+					if (expected.state == sqlite_backend_entry_state::absent)
 					{
-					};
-					struct stat current_child
-					{
-					};
+						if (expected.role == sqlite_backend_file_role::shared_memory &&
+							writer_shm_stat_only_)
+						{
+							auto observed = observe_writer_shm_stat_only_locked();
+							if (!observed ||
+								observed->state != sqlite_backend_entry_state::held_regular)
+								return unexpected(observation_io_error());
+							continue;
+						}
+						if (stat_relative(parent_->descriptor.get(),
+										  leaf.c_str(),
+										  namespace_entry,
+										  AT_SYMLINK_NOFOLLOW) == 0 ||
+							(errno != ENOENT))
+							return unexpected(observation_io_error());
+						continue;
+					}
+
+					if (expected.state != sqlite_backend_entry_state::held_regular ||
+						!expected.direct_regular_entry || !expected.object_identity ||
+						!expected.directory_entry_identity || !expected.object_filesystem_profile ||
+						!expected.held_object || !expected.held_object->object_mount_identity() ||
+						!expected.held_object->recheck_retained_object())
+						return unexpected(observation_io_error());
+					struct stat resolved{};
+					if (stat_relative(parent_->descriptor.get(),
+									  leaf.c_str(),
+									  namespace_entry,
+									  AT_SYMLINK_NOFOLLOW) != 0 ||
+						!S_ISREG(namespace_entry.st_mode) ||
+						stat_relative(parent_->descriptor.get(), leaf.c_str(), resolved, 0) != 0 ||
+						!S_ISREG(resolved.st_mode) || !same_object(namespace_entry, resolved))
+						return unexpected(observation_io_error());
+					auto filesystem =
+						make_object_filesystem_profile(parent_->descriptor.get(), resolved);
+					auto mount = make_relative_object_mount_identity(parent_->descriptor.get(),
+																	 leaf.c_str());
+					if (!filesystem || !mount ||
+						*filesystem != *expected.object_filesystem_profile ||
+						*mount != *expected.held_object->object_mount_identity() ||
+						make_stat_identity("default-filesystem-v1.open-object.v1", resolved) !=
+							*expected.object_identity ||
+						make_entry_identity(parent_->status,
+											leaf,
+											namespace_entry,
+											std::optional<struct stat>{resolved}) !=
+							*expected.directory_entry_identity)
+						return unexpected(observation_io_error());
+				}
+				if (!require_no_relevant_events_locked())
+					return unexpected(observation_io_error());
+				return {};
+			}
+
+			[[nodiscard]] result<void> recheck_locked() const
+			{
+				if (!sealed_ || finished_ || !event_queue_ || !parent_ ||
+					!require_no_relevant_events_locked())
+					return unexpected(observation_io_error());
+				struct stat current_parent{};
+				const auto current_parent_mount =
+					make_object_mount_identity(parent_->descriptor.get());
+				if (::fstat(parent_->descriptor.get(), &current_parent) != 0 ||
+					!same_object(parent_->status, current_parent) || !current_parent_mount ||
+					*current_parent_mount != parent_mount_identity_ ||
+					make_stat_identity("default-filesystem-v1.parent-namespace.v1",
+									   current_parent) != parent_->identity)
+					return unexpected(observation_io_error());
+				for (const auto& ancestor : ancestry_)
+				{
+					struct stat current_directory{};
+					struct stat current_child{};
 					if (::fstat(ancestor.directory.get(), &current_directory) != 0 ||
 						!same_object(current_directory, ancestor.directory_status) ||
 						stat_relative(ancestor.directory.get(),
@@ -876,11 +1177,16 @@ namespace cxxlens::sdk
 						leaf.append(shm_suffix);
 					else if (expected.role == sqlite_backend_file_role::rollback_journal)
 						leaf.append(journal_suffix);
-					struct stat namespace_entry
-					{
-					};
+					struct stat namespace_entry{};
 					if (expected.state == sqlite_backend_entry_state::absent)
 					{
+						if (expected.role == sqlite_backend_file_role::shared_memory &&
+							writer_shm_stat_only_)
+						{
+							if (!observe_writer_shm_stat_only_locked())
+								return unexpected(observation_io_error());
+							continue;
+						}
 						if (stat_relative(parent_->descriptor.get(),
 										  leaf.c_str(),
 										  namespace_entry,
@@ -889,9 +1195,7 @@ namespace cxxlens::sdk
 							return unexpected(observation_io_error());
 						continue;
 					}
-					struct stat resolved
-					{
-					};
+					struct stat resolved{};
 					owned_descriptor current_object{open_relative(
 						parent_->descriptor.get(), leaf.c_str(), O_PATH | O_NOFOLLOW | O_CLOEXEC)};
 					const auto current_stat_ok =
@@ -941,6 +1245,7 @@ namespace cxxlens::sdk
 			std::string anchored_main_locator_;
 			std::string main_leaf_;
 			std::array<sqlite_backend_entry_observation, 4U> entries_;
+			mutable std::optional<sqlite_backend_writer_shm_stat_observation> writer_shm_stat_only_;
 			sqlite_backend_opaque_identity identity_;
 			mutable std::mutex mutex_;
 			bool sealed_{};
@@ -956,9 +1261,7 @@ namespace cxxlens::sdk
 			if (raw < 0)
 				return unexpected(observation_io_error());
 			owned_descriptor descriptor{raw};
-			struct stat observed
-			{
-			};
+			struct stat observed{};
 			if (::fstat(descriptor.get(), &observed) != 0 || !S_ISDIR(observed.st_mode))
 				return unexpected(observation_io_error());
 			try
@@ -1025,9 +1328,7 @@ namespace cxxlens::sdk
 			}
 			[[nodiscard]] result<void> recheck_retained_object() const override
 			{
-				struct stat held
-				{
-				};
+				struct stat held{};
 				if (::fstat(object_.get(), &held) != 0 || !S_ISREG(held.st_mode))
 					return unexpected(observation_io_error());
 				try
@@ -1054,9 +1355,7 @@ namespace cxxlens::sdk
 
 			[[nodiscard]] result<std::uint64_t> size() const override
 			{
-				struct stat observed
-				{
-				};
+				struct stat observed{};
 				if (::fstat(object_.get(), &observed) != 0 || observed.st_size < 0 ||
 					!S_ISREG(observed.st_mode))
 					return unexpected(observation_io_error());
@@ -1100,9 +1399,7 @@ namespace cxxlens::sdk
 
 			[[nodiscard]] result<std::string> sha256() const override
 			{
-				struct stat before
-				{
-				};
+				struct stat before{};
 				if (::fstat(object_.get(), &before) != 0)
 					return unexpected(observation_io_error());
 				const auto before_epoch = epoch_from_stat(before);
@@ -1110,6 +1407,11 @@ namespace cxxlens::sdk
 					return unexpected(observation_io_error());
 				try
 				{
+					{
+						std::scoped_lock lock{digest_mutex_};
+						if (digest_cache_ && digest_cache_->epoch == *before_epoch)
+							return digest_cache_->value;
+					}
 					incremental_sha256 digest;
 					std::array<std::byte, digest_buffer_bytes> buffer{};
 					std::uint64_t offset{};
@@ -1123,13 +1425,17 @@ namespace cxxlens::sdk
 						digest.update(window);
 						offset += count;
 					}
-					struct stat after
-					{
-					};
-					if (::fstat(object_.get(), &after) != 0 ||
-						epoch_from_stat(after) != before_epoch)
+					struct stat after{};
+					const auto after_epoch =
+						::fstat(object_.get(), &after) == 0 ? epoch_from_stat(after) : std::nullopt;
+					if (!after_epoch || *after_epoch != *before_epoch)
 						return unexpected(observation_io_error());
-					return digest.finish();
+					auto finished = digest.finish();
+					{
+						std::scoped_lock lock{digest_mutex_};
+						digest_cache_ = content_digest_cache{*before_epoch, finished};
+					}
+					return finished;
 				}
 				catch (const std::bad_alloc&)
 				{
@@ -1153,9 +1459,7 @@ namespace cxxlens::sdk
 					return unexpected(std::move(replacement.error()));
 				if (*replacement != sqlite_backend_replacement_state::exact_same_entry_and_object)
 					return unexpected(observation_io_error());
-				struct stat before
-				{
-				};
+				struct stat before{};
 				if (::fstat(object_.get(), &before) != 0)
 					return unexpected(observation_io_error());
 				const auto before_epoch = epoch_from_stat(before);
@@ -1177,9 +1481,7 @@ namespace cxxlens::sdk
 							return unexpected(std::move(appended.error()));
 						offset += count;
 					}
-					struct stat after
-					{
-					};
+					struct stat after{};
 					if (::fstat(object_.get(), &after) != 0 ||
 						epoch_from_stat(after) != before_epoch)
 						return unexpected(observation_io_error());
@@ -1213,6 +1515,13 @@ namespace cxxlens::sdk
 			sqlite_backend_opaque_identity entry_identity_;
 			std::optional<sqlite_backend_opaque_identity> object_filesystem_profile_;
 			std::optional<sqlite_backend_opaque_identity> object_mount_identity_;
+			struct content_digest_cache
+			{
+				content_epoch epoch;
+				std::string value;
+			};
+			mutable std::mutex digest_mutex_;
+			mutable std::optional<content_digest_cache> digest_cache_;
 		};
 
 		[[nodiscard]] result<sqlite_backend_entry_observation>
@@ -1223,9 +1532,7 @@ namespace cxxlens::sdk
 			try
 			{
 				const std::string leaf{leaf_view};
-				struct stat namespace_entry
-				{
-				};
+				struct stat namespace_entry{};
 				if (stat_relative(parent->descriptor.get(),
 								  leaf.c_str(),
 								  namespace_entry,
@@ -1238,9 +1545,7 @@ namespace cxxlens::sdk
 				}
 
 				std::optional<struct stat> resolved;
-				struct stat resolved_value
-				{
-				};
+				struct stat resolved_value{};
 				if (stat_relative(parent->descriptor.get(), leaf.c_str(), resolved_value, 0) != 0)
 				{
 					if (errno == EACCES || errno == EPERM || errno == ENOENT || errno == ELOOP)
@@ -1275,12 +1580,8 @@ namespace cxxlens::sdk
 				{
 					if (errno != EACCES && errno != EPERM)
 						return unexpected(observation_io_error());
-					struct stat current_namespace
-					{
-					};
-					struct stat current_resolved
-					{
-					};
+					struct stat current_namespace{};
+					struct stat current_resolved{};
 					if (stat_relative(parent->descriptor.get(),
 									  leaf.c_str(),
 									  current_namespace,
@@ -1301,15 +1602,9 @@ namespace cxxlens::sdk
 					};
 				}
 				owned_descriptor object{raw};
-				struct stat held
-				{
-				};
-				struct stat current_namespace
-				{
-				};
-				struct stat current_resolved
-				{
-				};
+				struct stat held{};
+				struct stat current_namespace{};
+				struct stat current_resolved{};
 				if (::fstat(object.get(), &held) != 0 || !S_ISREG(held.st_mode) ||
 					!same_object(held, resolved_value) ||
 					stat_relative(parent->descriptor.get(),
@@ -1365,18 +1660,14 @@ namespace cxxlens::sdk
 			try
 			{
 				const std::string leaf{leaf_view};
-				struct stat namespace_before
-				{
-				};
+				struct stat namespace_before{};
 				if (stat_relative(parent.descriptor.get(),
 								  leaf.c_str(),
 								  namespace_before,
 								  AT_SYMLINK_NOFOLLOW) != 0)
 				{
 					const auto first_error = errno;
-					struct stat namespace_retry
-					{
-					};
+					struct stat namespace_retry{};
 					if (stat_relative(parent.descriptor.get(),
 									  leaf.c_str(),
 									  namespace_retry,
@@ -1402,15 +1693,9 @@ namespace cxxlens::sdk
 					return unexpected(observation_io_error());
 				}
 
-				struct stat object_before
-				{
-				};
-				struct stat namespace_after
-				{
-				};
-				struct stat object_after
-				{
-				};
+				struct stat object_before{};
+				struct stat namespace_after{};
+				struct stat object_after{};
 				if (stat_relative(parent.descriptor.get(), leaf.c_str(), object_before, 0) != 0)
 				{
 					const auto first_error = errno;
@@ -1420,9 +1705,7 @@ namespace cxxlens::sdk
 									  AT_SYMLINK_NOFOLLOW) != 0 ||
 						!same_object(namespace_before, namespace_after))
 						return unexpected(observation_io_error());
-					struct stat object_retry
-					{
-					};
+					struct stat object_retry{};
 					if (stat_relative(parent.descriptor.get(), leaf.c_str(), object_retry, 0) ==
 							0 ||
 						errno != first_error)
@@ -1503,9 +1786,7 @@ namespace cxxlens::sdk
 				return unexpected(observation_io_error());
 			}
 			owned_descriptor current_parent_descriptor{raw_parent};
-			struct stat current_parent_status
-			{
-			};
+			struct stat current_parent_status{};
 			if (::fstat(current_parent_descriptor.get(), &current_parent_status) != 0 ||
 				!S_ISDIR(current_parent_status.st_mode))
 				return unexpected(observation_io_error());
@@ -1513,9 +1794,7 @@ namespace cxxlens::sdk
 				return sqlite_backend_replacement_state::replaced;
 			try
 			{
-				struct stat namespace_entry
-				{
-				};
+				struct stat namespace_entry{};
 				if (stat_relative(current_parent_descriptor.get(),
 								  leaf_.c_str(),
 								  namespace_entry,
@@ -1527,9 +1806,7 @@ namespace cxxlens::sdk
 						return sqlite_backend_replacement_state::unreadable;
 					return unexpected(observation_io_error());
 				}
-				struct stat resolved
-				{
-				};
+				struct stat resolved{};
 				if (stat_relative(current_parent_descriptor.get(), leaf_.c_str(), resolved, 0) != 0)
 				{
 					if (errno == EACCES || errno == EPERM)
@@ -1538,12 +1815,8 @@ namespace cxxlens::sdk
 				}
 				if (!S_ISREG(resolved.st_mode))
 					return sqlite_backend_replacement_state::unsupported_kind;
-				struct stat namespace_after
-				{
-				};
-				struct stat resolved_after
-				{
-				};
+				struct stat namespace_after{};
+				struct stat resolved_after{};
 				if (stat_relative(current_parent_descriptor.get(),
 								  leaf_.c_str(),
 								  namespace_after,
@@ -1553,9 +1826,7 @@ namespace cxxlens::sdk
 					!same_object(namespace_entry, namespace_after) ||
 					!same_object(resolved, resolved_after))
 					return sqlite_backend_replacement_state::replaced;
-				struct stat held
-				{
-				};
+				struct stat held{};
 				if (::fstat(object_.get(), &held) != 0 || !S_ISREG(held.st_mode))
 					return unexpected(observation_io_error());
 				const auto current_object =
@@ -1761,9 +2032,13 @@ namespace cxxlens::sdk
 						entries[1U].state == sqlite_backend_entry_state::held_regular &&
 						entries[1U].direct_regular_entry && entries[1U].held_object &&
 						entries[1U].held_object->object_mount_identity() &&
-						entries[2U].state == sqlite_backend_entry_state::held_regular &&
-						entries[2U].direct_regular_entry && entries[2U].held_object &&
-						entries[2U].held_object->object_mount_identity() &&
+						((entries[2U].state == sqlite_backend_entry_state::held_regular &&
+						  entries[2U].direct_regular_entry && entries[2U].held_object &&
+						  entries[2U].held_object->object_mount_identity()) ||
+						 (entries[2U].state == sqlite_backend_entry_state::absent &&
+						  !entries[2U].object_identity && !entries[2U].directory_entry_identity &&
+						  !entries[2U].held_object && !entries[2U].object_filesystem_profile &&
+						  !entries[2U].direct_regular_entry)) &&
 						entries[3U].state == sqlite_backend_entry_state::absent;
 					if (guardable_source && source_shm_guard)
 					{
@@ -1851,9 +2126,7 @@ namespace cxxlens::sdk
 					return unexpected(raw_create_error(errno));
 				}
 				owned_descriptor created{raw};
-				struct stat held_status
-				{
-				};
+				struct stat held_status{};
 				if (::fstat(created.get(), &held_status) != 0 || !S_ISREG(held_status.st_mode) ||
 					held_status.st_size != 0)
 					return unexpected(object_kind_error());
@@ -1862,12 +2135,8 @@ namespace cxxlens::sdk
 
 				try
 				{
-					struct stat namespace_entry
-					{
-					};
-					struct stat resolved
-					{
-					};
+					struct stat namespace_entry{};
+					struct stat resolved{};
 					if (stat_relative((*parent)->descriptor.get(),
 									  locator_.leaf.c_str(),
 									  namespace_entry,

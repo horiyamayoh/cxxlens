@@ -50,7 +50,7 @@ layout は semantic snapshot ID から除外する。
 direct-open matrix は次の exact state とする。
 
 | Database | `compatibility()` | Mutation |
-|---|---|---|
+| --- | --- | --- |
 | v3.0.0 | `{sqlite, 3.0.0, true, false}` | publish と v3 compaction を許可 |
 | v2 marker + exact v2.6-compatible layout/authority | `{sqlite, 2.6.0, true, true}` | read API だけを許可 |
 | v2 marker + v2.6 profile 不一致 | `store.format-incompatible / sqlite-physical-format / v2-profile-mismatch` | 禁止 |
@@ -889,7 +889,7 @@ normalizer由来、operation historyを復元しない。preからのdeterminist
 receiptまたはexact journal preimagesが存在するbranchだけで検証する。
 
 | Family | Main | Sidecar |
-|---|---|---|
+| --- | --- | --- |
 | `F0` | pre-form | WAL/SHM/journal absent |
 | `FZ-pre` | pre-form | exact size-zero WAL only |
 | `FZ-post` | post-form | exact size-zero WAL only |

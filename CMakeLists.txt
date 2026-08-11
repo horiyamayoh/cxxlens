@@ -611,3 +611,10 @@ install(
     "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfigVersion.cmake"
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")
+
+# The occurrence manifest inventories the final installed executables, schemas,
+# and (for shared packages) runtime libraries.  Generate it only after all
+# inventoried install rules have completed so its digests bind the actual
+# package, including a relocated install prefix.
+install(
+  SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/GenerateClang22OccurrenceManifest.cmake")

@@ -150,6 +150,26 @@ namespace cxxlens::sdk
 	};
 
 	/**
+	 * Source-private stat-only SHM census used by the writer-map epoch. It deliberately carries no
+	 * duplicate target descriptor or owned object; the native SQLite SHM attachment and retained
+	 * parent namespace are the lifetime authorities.
+	 */
+	struct sqlite_backend_writer_shm_stat_observation
+	{
+		sqlite_backend_file_role role{sqlite_backend_file_role::shared_memory};
+		sqlite_backend_entry_state state{sqlite_backend_entry_state::absent};
+		sqlite_backend_opaque_identity parent_namespace_identity;
+		sqlite_backend_opaque_identity filesystem_profile;
+		sqlite_backend_opaque_identity mount_identity;
+		std::optional<sqlite_backend_opaque_identity> object_identity;
+		std::optional<sqlite_backend_opaque_identity> directory_entry_identity;
+		std::uint64_t byte_count{};
+
+		[[nodiscard]] bool
+		operator==(const sqlite_backend_writer_shm_stat_observation&) const = default;
+	};
+
+	/**
 	 * Census-owned continuous namespace proof. It retains the exact parent descriptor and
 	 * root-to-parent watches used while the census was captured; consumers must recheck it around
 	 * every pre-qualification read and transfer it into the qualified target epoch.
@@ -164,6 +184,17 @@ namespace cxxlens::sdk
 		[[nodiscard]] virtual const sqlite_backend_opaque_identity& identity() const noexcept = 0;
 		[[nodiscard]] virtual result<sqlite_backend_entry_observation>
 		retained_entry(sqlite_backend_file_role role) const = 0;
+		/**
+		 * Writer-map-only stat boundary. `after_native_map` permits the exact one-time absent-to-
+		 * direct-regular create transition; it never opens a duplicate target descriptor.
+		 */
+		[[nodiscard]] virtual result<sqlite_backend_writer_shm_stat_observation>
+		observe_writer_shm_stat(const bool after_native_map) const
+		{
+			(void)after_native_map;
+			return error{
+				"store.backend-unavailable", "sqlite-observation", "writer-shm-stat-unavailable"};
+		}
 		[[nodiscard]] virtual result<void> recheck() const = 0;
 		/** One-shot transfer from census guard authority into one qualified target epoch. */
 		[[nodiscard]] virtual result<void> claim_target_epoch() = 0;
@@ -295,6 +326,14 @@ namespace cxxlens::sdk
 		parent_namespace_identity() const noexcept = 0;
 		[[nodiscard]] virtual result<sqlite_backend_entry_observation>
 		retained_entry(sqlite_backend_file_role role) const = 0;
+		/** Writer-map stat-only observation projected from the retained namespace epoch. */
+		[[nodiscard]] virtual result<sqlite_backend_writer_shm_stat_observation>
+		observe_writer_shm_stat(const bool after_native_map) const
+		{
+			(void)after_native_map;
+			return error{
+				"store.backend-unavailable", "sqlite-observation", "writer-shm-stat-unavailable"};
+		}
 		[[nodiscard]] virtual result<void> recheck() const = 0;
 		/** Consume the epoch after the qualified connection and eager decode have completed. */
 		[[nodiscard]] virtual result<void> finish() = 0;
@@ -407,6 +446,26 @@ namespace cxxlens::sdk
 		sqlite_backend_shm_lock_mode mode{sqlite_backend_shm_lock_mode::shared};
 	};
 
+	/**
+	 * Source-private receipt for the narrow DF-0205 native-OK projection. The receipt is present
+	 * only after the registry has committed this exact map and the forwarding VFS has checked the
+	 * corresponding live handoff, mapping tuple, callback invocation, and native effect identity.
+	 */
+	struct sqlite_backend_shm_map_projection_receipt
+	{
+		std::uint64_t reader_generation{};
+		int page{};
+		int page_size{};
+		int caller_extend{};
+		int delegated_extend{};
+		const volatile void* native_mapping{};
+		std::uint64_t byte_offset{};
+		std::uint64_t byte_count{};
+		std::uint64_t sealed_shm_size{};
+		sqlite_backend_opaque_identity callback_invocation;
+		sqlite_backend_opaque_identity native_effect;
+	};
+
 	/** One delegated xShmMap call and the exact native-to-forwarded transition. */
 	struct sqlite_backend_shm_map_observation
 	{
@@ -422,6 +481,10 @@ namespace cxxlens::sdk
 		bool readonly_family_seen_after{};
 		const void* pinned_underlying_vfs_identity{};
 		const void* pinned_underlying_vfs_app_data_identity{};
+		/** Exact native pointer observed by this one map callback; never an authority by itself. */
+		const volatile void* native_mapping_identity{};
+		/** Present only for a committed, independently authenticated native-OK map. */
+		std::optional<sqlite_backend_shm_map_projection_receipt> native_ok_projection_receipt;
 	};
 
 	struct sqlite_backend_connection_observation
@@ -557,12 +620,50 @@ namespace cxxlens::sdk
 		{
 			return nullptr;
 		}
+		/**
+		 * Whether the current-v3 Store writer must enter the source-SHM mapping epoch route.
+		 * Unknown observation profiles enter this route by default and therefore fail closed if
+		 * they do not implement the required epoch operations. A source-private VFS that owns
+		 * and authenticates its own SHM callbacks must explicitly override this to false.
+		 */
+		[[nodiscard]] virtual bool requires_source_shm_writer_mapping_epoch() const noexcept
+		{
+			return true;
+		}
 		/** Source-private cut after the exact fully-armed current-v3 receipt. */
 		[[nodiscard]] virtual result<void> install_current_v3_writer_eligibility()
 		{
 			return error{"store.backend-unavailable",
 						 "sqlite-observation",
 						 "writer-eligibility-unavailable"};
+		}
+		/** Retain the qualified source namespace epoch for the following current-v3 writer. */
+		[[nodiscard]] virtual result<void> arm_writer_shm_mapping_epoch(
+			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch,
+			sqlite_backend_opaque_identity sqlite_source_id)
+		{
+			(void)target_namespace_epoch;
+			(void)sqlite_source_id;
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "writer-mapping-epoch-unavailable"};
+		}
+		/** Whether this scope has already entered a native SHM-map callback. */
+		[[nodiscard]] virtual bool native_shm_map_attempted() const noexcept
+		{
+			return false;
+		}
+		/** Request the current-v3 writer epoch to be armed before the first native SHM map. */
+		[[nodiscard]] virtual result<void> request_writer_shm_mapping_epoch()
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "writer-mapping-epoch-request-unavailable"};
+		}
+		/** Whether the writer epoch has already been armed for this connection. */
+		[[nodiscard]] virtual bool writer_shm_mapping_epoch_armed() const noexcept
+		{
+			return false;
 		}
 	};
 

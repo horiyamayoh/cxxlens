@@ -37,8 +37,11 @@ namespace cxxlens::sdk
 
 	/**
 	 * Seal the stable exact main/WAL/SHM family identity used by the process-global SHM registry.
-	 * The identity excludes per-observation capability tokens and descriptor anchors, but includes
-	 * the canonical locator and every retained object/entry/filesystem/mount receipt.
+	 * The identity excludes per-observation capability tokens and descriptor anchors, includes the
+	 * canonical locator and retained main/WAL/filesystem/mount receipts, and deliberately carries
+	 * the stable SHM filesystem/mount pair rather than the dynamic SHM inode. The first
+	 * authenticated native xShmMap may create that inode; its exact object/entry receipt remains
+	 * bound to the target namespace epoch and the writer/reader attachment receipt.
 	 */
 	[[nodiscard]] result<sqlite_backend_opaque_identity> seal_sqlite_source_shm_exact_file_family(
 		std::string_view canonical_vfs_locator,
@@ -55,4 +58,10 @@ namespace cxxlens::sdk
 	make_sqlite_source_shm_readonly_preflight(
 		const sqlite_default_observation_binding& binding,
 		sqlite_backend_opaque_identity observation_capability_token);
+
+	/** Construct one retained target namespace epoch from an already captured active file family.
+	 */
+	[[nodiscard]] result<std::shared_ptr<sqlite_source_shm_target_namespace_epoch>>
+	make_sqlite_source_shm_target_namespace_epoch(std::string_view logical_main_locator,
+												  const sqlite_backend_namespace_census& census);
 } // namespace cxxlens::sdk

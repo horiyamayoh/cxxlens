@@ -1,5 +1,5 @@
 {
-  "asset_count": 510,
+  "asset_count": 620,
   "assets": [
     {
       "authority": "active",
@@ -1144,6 +1144,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1334,6 +1341,55 @@
     {
       "authority": "active",
       "path": "docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0201-sqlite-unusable-shm-private-recovery.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0202-sqlite-exact-empty-wal-normalization.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0205-sqlite-same-process-shm-mapping.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0206-sqlite-writer-shm-attachment.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0207-sqlite-reader-shm-attachment.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0208-sqlite-writer-gate-failure-evidence.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0209-sqlite-reader-late-close-cleanup.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1782,6 +1838,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_design_feedback_record.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2341,6 +2411,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_store_conformance_report.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -2356,6 +2433,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_store_conformance_vectors.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_admission_error.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2404,6 +2488,48 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_incremental_coordinator.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_incremental_coordinator.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_incremental_ingress.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_incremental_ingress.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_incremental_receipt.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_incremental_receipt.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_io.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2446,6 +2572,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_partition_event_stream.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_partition_event_stream.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_pipeline.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2454,6 +2594,20 @@
     {
       "authority": "active",
       "path": "src/llvm/clang22/materialization_pipeline.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_public_report.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_public_report.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2573,6 +2727,20 @@
     {
       "authority": "active",
       "path": "src/llvm/clang22/materialization_store.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_streaming_claims.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_streaming_claims.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2782,6 +2950,356 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/sqlite_backend_effect_gate_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_backend_observation_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_connection_lifecycle_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_connection_lifecycle_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_default_forwarding_vfs.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_default_forwarding_vfs_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_default_observation.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_default_observation_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_disposable_normalization_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_disposable_normalization_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_disposable_qualification_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_disposable_qualification_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_limit_length_control_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_limit_length_control_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_payload_streaming_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_payload_streaming_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_private_snapshot_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_private_snapshot_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_identity_issuer_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_process_port_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_process_port_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_reader_lifecycle_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_source_shm_readonly_preflight_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_store_fault_injection_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_store_fault_injection_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_store_terminal_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_store_terminal_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_terminal_reclassifier_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_terminal_reclassifier_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_vfs_abi_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_wal_receipt_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_wal_receipt_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_wal_recovery_workspace_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_wal_recovery_workspace_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_wal_source_capture_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_wal_source_capture_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_writer_gate_outcome_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_writer_gate_outcome_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_writer_shm_mapping_epoch_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_writer_shm_mapping_epoch_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_writer_shm_mapping_semantics_internal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/sqlite_writer_shm_mapping_semantics_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/store.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2817,7 +3335,21 @@
     },
     {
       "authority": "active",
+      "path": "tests/adapter/clang22/df_0200_claim_batch_corpus_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/adapter/clang22/materialization_claims_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_cli_phase_test.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2978,6 +3510,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/install/clang22_materializer_success_test.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/install/clang22_sdk_consumer/CMakeLists.txt",
       "removal_issue": null,
       "replacement": null,
@@ -3098,6 +3637,13 @@
     {
       "authority": "active",
       "path": "tests/public_headers/sdk_header_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/qualification/sqlite_store_v3_qualification_case_runner.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3237,6 +3783,27 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_sqlite_store_contract.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_sqlite_store_v3_qualification.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_produce_ng_sqlite_store_v3_qualification.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_quality_ownership.py",
       "removal_issue": null,
       "replacement": null,
@@ -3245,6 +3812,27 @@
     {
       "authority": "active",
       "path": "tests/quality/test_sanitizer_coverage.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/support/sqlite_store_fixture.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/support/sqlite_store_v3_scenario.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/support/sqlite_store_v3_scenario.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3286,6 +3874,160 @@
     },
     {
       "authority": "active",
+      "path": "tests/unit/sdk/sqlite_connection_lifecycle_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_default_forwarding_vfs_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_disposable_qualification_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_limit_length_precedence_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_payload_streaming_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_same_process_shm_identity_issuer_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_same_process_shm_mapping_lease_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_same_process_shm_process_port_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_same_process_shm_vfs_alias_identity_sealer_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_same_process_shm_vfs_alias_registration_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_source_shm_readonly_preflight_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_store_fault_injection_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_store_terminal_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_store_wal_routing_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_terminal_reclassifier_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_wal_receipt_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_wal_recovery_workspace_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_wal_source_capture_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_writer_gate_outcome_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_writer_shm_mapping_epoch_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/sqlite_writer_shm_mapping_semantics_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/unit/sdk/store_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3301,6 +4043,13 @@
     {
       "authority": "active",
       "path": "tools/ci/llvm22-noble.lock.json",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/clang22/materialize_main.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3461,6 +4210,20 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_sqlite_store_contract.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/quality/check_ng_sqlite_store_v3_qualification.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_public_headers.py",
       "removal_issue": null,
       "replacement": null,
@@ -3497,6 +4260,13 @@
     {
       "authority": "active",
       "path": "tools/quality/install_artifact_manifest.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/quality/produce_ng_sqlite_store_v3_qualification.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3573,7 +4343,7 @@
     }
   ],
   "classifications": {
-    "active": 474,
+    "active": 584,
     "archived": 35,
     "generated": 1
   },

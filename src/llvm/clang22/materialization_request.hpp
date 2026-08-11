@@ -43,6 +43,8 @@ namespace cxxlens::detail::clang22::materialization
 	struct validated_materialization_request
 	{
 		json_document document;
+		/** One request-owned catalog authority shared by all source-private task bindings. */
+		sdk::project_catalog catalog;
 		sdk::relation_engine engine;
 		std::vector<sdk::relation_descriptor> output_descriptors;
 		std::vector<validated_task_request> tasks;

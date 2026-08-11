@@ -28,6 +28,8 @@ namespace cxxlens::detail::clang22::materialization
 	struct streamed_validated_materialization_task_request
 	{
 		clang22_task_input worker_input;
+		/** Non-owning request authority; the v2.1 admission token outlives this seal call. */
+		const sdk::project_catalog* catalog{};
 		clang22_task_source_receipt source_receipt;
 		std::string provider_task_id;
 		std::string provider_execution_id;

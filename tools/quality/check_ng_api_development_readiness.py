@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime
+import functools
 import hashlib
 import json
 import pathlib
@@ -113,9 +115,20 @@ def fail(message: str) -> None:
     raise ReadinessError(message)
 
 
+@functools.lru_cache(maxsize=8)
+def _parse_public_callable_inventory(text: str) -> dict[str, Any]:
+    value = yaml.safe_load(text)
+    if not isinstance(value, dict):
+        fail("public callable inventory is not a mapping")
+    return value
+
+
 def load_document(path: pathlib.Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
-    value = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+    if path.name == PUBLIC_CALLABLE_INVENTORY.name:
+        value = copy.deepcopy(_parse_public_callable_inventory(text))
+    else:
+        value = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
     if not isinstance(value, dict):
         fail(f"expected mapping: {path}")
     return value

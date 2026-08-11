@@ -17,22 +17,22 @@
 #include <cxxlens/sdk.hpp>
 
 #include "../../../src/sdk/sqlite_backend_observation_internal.hpp"
-
 #include "../../support/sqlite_store_fixture.hpp"
 
 namespace cxxlens::sdk
 {
 	void set_sqlite_source_shm_symbols_available_for_testing(bool) noexcept;
-	[[nodiscard]] bool sqlite_source_shm_map_event_read_lock_valid_for_testing(
-		bool native_cantinit_heap_route,
-		bool native_mapping_nonnull,
-		std::uint32_t read_lock_index);
+	[[nodiscard]] bool
+	sqlite_source_shm_map_event_read_lock_valid_for_testing(bool native_cantinit_heap_route,
+															bool native_mapping_nonnull,
+															std::uint32_t read_lock_index);
 	[[nodiscard]] bool sqlite_source_shm_authentic_heap_trigger_valid_for_testing(
 		bool mapped_event_precedes_cantinit, int cantinit_page, bool repeat_cantinit);
-	[[nodiscard]] bool sqlite_source_shm_callback_epoch_binding_valid_for_testing(
-		bool same_epoch_identity);
-	[[nodiscard]] bool sqlite_active_wal_header_receipt_required_for_testing(
-		bool initial_observation, std::uint32_t read_lock_index) noexcept;
+	[[nodiscard]] bool
+	sqlite_source_shm_callback_epoch_binding_valid_for_testing(bool same_epoch_identity);
+	[[nodiscard]] bool
+	sqlite_active_wal_header_receipt_required_for_testing(bool initial_observation,
+														  std::uint32_t read_lock_index) noexcept;
 	[[nodiscard]] bool sqlite_active_wal_shm_recheck_transition_valid_for_testing(
 		bool same_object_identity,
 		bool same_entry_identity,
@@ -155,9 +155,8 @@ namespace
 	constexpr std::string_view producer_digest =
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-	[[nodiscard]] sdk::claim make_claim(const sdk::relation_engine& value,
-										std::string key,
-										std::string payload)
+	[[nodiscard]] sdk::claim
+	make_claim(const sdk::relation_engine& value, std::string key, std::string payload)
 	{
 		sdk::observation observed{
 			row(std::move(key), std::move(payload)),
@@ -174,7 +173,7 @@ namespace
 	}
 
 	[[nodiscard]] sdk::partition_draft partition(const sdk::relation_engine& value,
-											   const std::string_view payload)
+												 const std::string_view payload)
 	{
 		sdk::partition_draft draft;
 		draft.relation_descriptor_id = descriptor().id;
@@ -218,9 +217,9 @@ namespace
 	}
 
 	[[nodiscard]] sdk::snapshot_handle publish(sdk::snapshot_store& store,
-											 const sdk::relation_engine& value,
-											 std::optional<std::string> parent,
-											 const std::string_view payload)
+											   const sdk::relation_engine& value,
+											   std::optional<std::string> parent,
+											   const std::string_view payload)
 	{
 		auto writer = store.begin(snapshot_draft(value, std::move(parent)));
 		require(writer.has_value(), "WAL route writer did not begin");
@@ -240,7 +239,7 @@ namespace
 	};
 
 	[[nodiscard]] current_identity seed_current(const std::filesystem::path& path,
-											  const sdk::relation_engine& value)
+												const sdk::relation_engine& value)
 	{
 		current_identity output;
 		{
@@ -248,8 +247,8 @@ namespace
 			require(store.has_value(), "WAL route source Store was unavailable");
 			auto published = publish(*store, value, std::nullopt, "seed");
 			output = current_identity{std::string{published.id()},
-								  published.publication().publication_id,
-								  published.publication().sequence};
+									  published.publication().publication_id,
+									  published.publication().sequence};
 		}
 		quiesce_wal_sidecars(path);
 		return output;
@@ -262,9 +261,9 @@ namespace
 	{
 		auto current = store.current(selector(value));
 		require(current && current->id() == expected.snapshot &&
-				current->publication().publication_id == expected.publication &&
-				current->publication().sequence == expected.sequence,
-			label);
+					current->publication().publication_id == expected.publication &&
+					current->publication().sequence == expected.sequence,
+				label);
 	}
 
 	[[nodiscard]] std::filesystem::path wal_path(const std::filesystem::path& main)
@@ -356,10 +355,8 @@ namespace
 				"active current WAL+SHM route changed source bytes");
 #else
 		require_error(opened,
-				  {"store.backend-unavailable",
-				   "sqlite",
-				   "source-shm-readonly-qualification"},
-				  "active current WAL+SHM route did not report qualification unavailability");
+					  {"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"},
+					  "active current WAL+SHM route did not report qualification unavailability");
 		require(capture_files(active.path()) == before,
 				"unavailable active current WAL+SHM route changed source bytes");
 #endif
@@ -371,29 +368,21 @@ namespace
 
 	void check_source_shm_read_lock_route_guard()
 	{
-		require(sdk::sqlite_source_shm_map_event_read_lock_valid_for_testing(
-					true, false, 0U),
+		require(sdk::sqlite_source_shm_map_event_read_lock_valid_for_testing(true, false, 0U),
 				"CANTINIT heap WAL-index route rejected read lock zero");
-		require(!sdk::sqlite_source_shm_map_event_read_lock_valid_for_testing(
-					 true, false, 1U),
+		require(!sdk::sqlite_source_shm_map_event_read_lock_valid_for_testing(true, false, 1U),
 				"CANTINIT heap WAL-index route accepted a nonzero read lock");
-		require(sdk::sqlite_source_shm_map_event_read_lock_valid_for_testing(
-					false, true, 1U),
+		require(sdk::sqlite_source_shm_map_event_read_lock_valid_for_testing(false, true, 1U),
 				"READONLY mapped WAL-index route rejected its existing nonzero-lock rule");
-		require(!sdk::sqlite_source_shm_map_event_read_lock_valid_for_testing(
-					 false, false, 0U),
+		require(!sdk::sqlite_source_shm_map_event_read_lock_valid_for_testing(false, false, 0U),
 				"normalized READONLY/null was accepted as an authentic heap trigger");
-		require(sdk::sqlite_source_shm_authentic_heap_trigger_valid_for_testing(
-					false, 0, false),
+		require(sdk::sqlite_source_shm_authentic_heap_trigger_valid_for_testing(false, 0, false),
 				"authentic page-zero CANTINIT/null heap trigger was rejected");
-		require(sdk::sqlite_source_shm_authentic_heap_trigger_valid_for_testing(
-					false, 0, true),
+		require(sdk::sqlite_source_shm_authentic_heap_trigger_valid_for_testing(false, 0, true),
 				"repeated page-zero CANTINIT/null abandoned an established heap route");
-		require(!sdk::sqlite_source_shm_authentic_heap_trigger_valid_for_testing(
-					 false, 1, false),
+		require(!sdk::sqlite_source_shm_authentic_heap_trigger_valid_for_testing(false, 1, false),
 				"non-page-zero CANTINIT/null was accepted as a heap trigger");
-		require(!sdk::sqlite_source_shm_authentic_heap_trigger_valid_for_testing(
-					 true, 0, false),
+		require(!sdk::sqlite_source_shm_authentic_heap_trigger_valid_for_testing(true, 0, false),
 				"CANTINIT/null after a mapped event was accepted as a heap trigger");
 	}
 
@@ -409,8 +398,8 @@ namespace
 		std::size_t logical_path_observations{};
 	};
 
-	[[nodiscard]] sdk::sqlite_backend_opaque_identity epoch_test_identity(
-		const std::string_view label)
+	[[nodiscard]] sdk::sqlite_backend_opaque_identity
+	epoch_test_identity(const std::string_view label)
 	{
 		sdk::sqlite_backend_opaque_identity output{"test.sqlite-epoch-identity.v1", {}};
 		for (const auto value : label)
@@ -424,12 +413,12 @@ namespace
 	{
 	  public:
 		epoch_test_held_object(const sdk::sqlite_backend_file_role role,
-						   const std::string_view label,
-						   epoch_test_state* state = nullptr)
+							   const std::string_view label,
+							   epoch_test_state* state = nullptr)
 			: role_{role}, object_{epoch_test_identity(std::string{label} + ".object")},
 			  entry_{epoch_test_identity(std::string{label} + ".entry")},
-			  filesystem_{epoch_test_identity("filesystem")},
-			  mount_{epoch_test_identity("mount")}, state_{state}
+			  filesystem_{epoch_test_identity("filesystem")}, mount_{epoch_test_identity("mount")},
+			  state_{state}
 		{
 		}
 
@@ -457,9 +446,12 @@ namespace
 		{
 			return mount_;
 		}
-		[[nodiscard]] sdk::result<std::uint64_t> size() const override { return 0U; }
-		[[nodiscard]] sdk::result<void>
-		read_exact(std::uint64_t, std::span<std::byte> output) const override
+		[[nodiscard]] sdk::result<std::uint64_t> size() const override
+		{
+			return 0U;
+		}
+		[[nodiscard]] sdk::result<void> read_exact(std::uint64_t,
+												   std::span<std::byte> output) const override
 		{
 			if (state_ != nullptr)
 				++state_->header_reads;
@@ -531,8 +523,7 @@ namespace
 		return census;
 	}
 
-	class test_target_namespace_epoch final
-		: public sdk::sqlite_source_shm_target_namespace_epoch
+	class test_target_namespace_epoch final : public sdk::sqlite_source_shm_target_namespace_epoch
 	{
 	  public:
 		explicit test_target_namespace_epoch(
@@ -544,7 +535,10 @@ namespace
 			identity_.bytes.push_back(std::byte{1U});
 		}
 
-		~test_target_namespace_epoch() override { ++state_.destructors; }
+		~test_target_namespace_epoch() override
+		{
+			++state_.destructors;
+		}
 
 		[[nodiscard]] std::string_view logical_main_locator() const noexcept override
 		{
@@ -556,8 +550,7 @@ namespace
 			return "anchored.sqlite";
 		}
 
-		[[nodiscard]] const sdk::sqlite_backend_opaque_identity&
-		identity() const noexcept override
+		[[nodiscard]] const sdk::sqlite_backend_opaque_identity& identity() const noexcept override
 		{
 			return identity_;
 		}
@@ -607,31 +600,28 @@ namespace
 		epoch_test_state state;
 		auto epoch = std::make_shared<test_target_namespace_epoch>(state);
 
-		auto wrong_lock = sdk::recheck_sqlite_source_shm_epoch_for_testing(
-			epoch, true, true, 1U);
+		auto wrong_lock = sdk::recheck_sqlite_source_shm_epoch_for_testing(epoch, true, true, 1U);
 		require_error(wrong_lock,
-				  qualification_failure,
-				  "heap epoch recheck accepted a nonzero WAL read lock");
-		auto ended_transaction = sdk::recheck_sqlite_source_shm_epoch_for_testing(
-			epoch, false, true, 0U);
+					  qualification_failure,
+					  "heap epoch recheck accepted a nonzero WAL read lock");
+		auto ended_transaction =
+			sdk::recheck_sqlite_source_shm_epoch_for_testing(epoch, false, true, 0U);
 		require_error(ended_transaction,
-				  qualification_failure,
-				  "epoch recheck accepted an ended read transaction");
+					  qualification_failure,
+					  "epoch recheck accepted an ended read transaction");
 		require(state.rechecks == 0U,
 				"invalid live-read preconditions touched the retained namespace epoch");
 
-		require(sdk::recheck_sqlite_source_shm_epoch_for_testing(epoch, true, true, 0U)
-				.has_value(),
+		require(sdk::recheck_sqlite_source_shm_epoch_for_testing(epoch, true, true, 0U).has_value(),
 				"live heap read did not recheck the retained namespace epoch");
 		require(state.rechecks == 1U && state.namespace_object_opens == 0U &&
-				state.namespace_object_closes == 0U,
+					state.namespace_object_closes == 0U,
 				"live epoch recheck reopened or closed a namespace object");
 
-		auto unconfirmed_close =
-			sdk::finish_sqlite_source_shm_epoch_for_testing(epoch, false);
+		auto unconfirmed_close = sdk::finish_sqlite_source_shm_epoch_for_testing(epoch, false);
 		require_error(unconfirmed_close,
-				  qualification_failure,
-				  "epoch finish accepted an unconfirmed SQLite close");
+					  qualification_failure,
+					  "epoch finish accepted an unconfirmed SQLite close");
 		require(state.finishes == 0U && state.destructors == 0U,
 				"unconfirmed SQLite close consumed or released the retained epoch");
 
@@ -669,22 +659,18 @@ namespace
 		epoch_test_state state;
 		auto census = epoch_test_census();
 		auto epoch = std::make_shared<test_target_namespace_epoch>(state, census);
-		require(sdk::validate_sqlite_source_shm_epoch_census_for_testing(epoch, census)
-				.has_value(),
+		require(sdk::validate_sqlite_source_shm_epoch_census_for_testing(epoch, census).has_value(),
 				"retained epoch census did not match its sealed source entries");
 		require(state.retained_entry_calls == 3U && state.logical_path_observations == 0U &&
-				state.namespace_object_opens == 0U && state.namespace_object_closes == 0U,
+					state.namespace_object_opens == 0U && state.namespace_object_closes == 0U,
 				"active epoch census reopened or re-resolved a logical target pathname");
 
 		auto wrong = census;
 		wrong.entries[1U].object_identity = epoch_test_identity("wrong-wal-object");
-		auto rejected =
-			sdk::validate_sqlite_source_shm_epoch_census_for_testing(epoch, wrong);
+		auto rejected = sdk::validate_sqlite_source_shm_epoch_census_for_testing(epoch, wrong);
 		require_error(rejected,
-				  {"store.backend-unavailable",
-				   "sqlite",
-				   "source-shm-readonly-qualification"},
-				  "retained epoch census accepted a mismatched WAL object");
+					  {"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"},
+					  "retained epoch census accepted a mismatched WAL object");
 		require(state.logical_path_observations == 0U,
 				"retained epoch mismatch fell back to logical-path observation");
 	}
@@ -695,10 +681,10 @@ namespace
 					true, true, 32'768U, 65'536U),
 				"same-object active SHM extension was rejected");
 		require(!sdk::sqlite_active_wal_shm_recheck_transition_valid_for_testing(
-					 true, true, 65'536U, 32'768U),
+					true, true, 65'536U, 32'768U),
 				"active SHM shrink was accepted");
 		require(!sdk::sqlite_active_wal_shm_recheck_transition_valid_for_testing(
-					 false, true, 32'768U, 32'768U) &&
+					false, true, 32'768U, 32'768U) &&
 					!sdk::sqlite_active_wal_shm_recheck_transition_valid_for_testing(
 						true, false, 32'768U, 32'768U),
 				"active SHM object or directory-entry replacement was accepted");
@@ -719,8 +705,8 @@ namespace
 		auto rejected = sdk::observe_sqlite_active_wal_prequalification_for_testing(
 			symlink_observation, "logical.sqlite", qualification_calls);
 		require_error(rejected,
-				  qualification_failure,
-				  "held-regular symlink observations passed the active direct-entry gate");
+					  qualification_failure,
+					  "held-regular symlink observations passed the active direct-entry gate");
 		require(state.header_reads == 0U && qualification_calls == 0U,
 				"active symlink observations reached the header or qualification callback");
 	}
@@ -745,8 +731,8 @@ namespace
 		auto opened = sdk::open_sqlite_snapshot_store(active.path().string(), value);
 		sdk::set_sqlite_source_shm_symbols_available_for_testing(true);
 		require_error(opened,
-				  {"store.sqlite-failure", "sqlite-journal-mode", "expected-wal"},
-				  "non-WAL main header did not precede active-branch qualification");
+					  {"store.sqlite-failure", "sqlite-journal-mode", "expected-wal"},
+					  "non-WAL main header did not precede active-branch qualification");
 		require(capture_files(active.path()) == before,
 				"non-WAL active-pair classification changed the target source family");
 #endif
@@ -790,7 +776,7 @@ namespace
 			require(reopened.has_value(), "WAL-only mutation result did not reopen");
 			auto current = reopened->current(selector(value));
 			require(current && current->publication().publication_id == next_publication &&
-					current->publication().sequence == next_sequence,
+						current->publication().sequence == next_sequence,
 					"WAL-only first mutation was not durable");
 		}
 
@@ -800,7 +786,7 @@ namespace
 			require(opened.has_value(), "WAL-only drift route was unavailable");
 			auto writer = opened->begin(snapshot_draft(value, expected.publication));
 			require(writer && writer->stage(partition(value, "must-not-publish")) &&
-					writer->validate(),
+						writer->validate(),
 					"WAL-only pre-effect drift candidate setup failed");
 			auto bytes = read_file(wal_path(cold.path()));
 			bytes.push_back(0x5aU);
@@ -808,16 +794,16 @@ namespace
 			const auto drifted_source = capture_files(cold.path());
 			auto rejected = writer->publish();
 			require_error(rejected,
-					  {"store.sqlite-failure",
-					   "sqlite-initialization-sidecar",
-					   "concurrent-source-change"},
-					  "WAL-only pre-effect drift tuple changed");
+						  {"store.sqlite-failure",
+						   "sqlite-initialization-sidecar",
+						   "concurrent-source-change"},
+						  "WAL-only pre-effect drift tuple changed");
 			require(capture_files(cold.path()) == drifted_source,
 					"WAL-only pre-effect drift rejection wrote to the source family");
 			require_current(*opened,
-						value,
-						expected,
-						"WAL-only pre-effect drift discarded the eager authority");
+							value,
+							expected,
+							"WAL-only pre-effect drift discarded the eager authority");
 		}
 	}
 
@@ -840,9 +826,8 @@ namespace
 		};
 		constexpr std::array cases{
 			route_case{"zero-byte WAL", closed_wal_shape::zero_bytes, true},
-			route_case{"valid header without commit",
-					   closed_wal_shape::valid_header_without_commit,
-					   true},
+			route_case{
+				"valid header without commit", closed_wal_shape::valid_header_without_commit, true},
 			route_case{"torn WAL header", closed_wal_shape::torn_header, false},
 			route_case{"invalid WAL header", closed_wal_shape::invalid_header, false},
 			route_case{"valid commit with torn suffix",
@@ -863,14 +848,14 @@ namespace
 				require(opened.has_value(),
 						std::string{cases[index].label} + " route was rejected");
 				require_current(*opened,
-							value,
-							expected,
-							std::string{cases[index].label} + " changed main-only authority");
+								value,
+								expected,
+								std::string{cases[index].label} + " changed main-only authority");
 			}
 			else
 				require_error(opened,
-						  unrecognized,
-						  std::string{cases[index].label} + " rejection tuple changed");
+							  unrecognized,
+							  std::string{cases[index].label} + " rejection tuple changed");
 			require(capture_files(cold.path()) == before,
 					std::string{cases[index].label} + " route changed the source file family");
 		}
@@ -888,11 +873,10 @@ namespace
 			copy_active_family(source_path, destination, false, true);
 			const auto before = capture_files(destination);
 			auto opened = sdk::open_sqlite_snapshot_store(destination.string(), value);
-			require_error(opened,
-					  {"store.sqlite-failure",
-					   "sqlite-sidecar-state",
-					   "incomplete-wal-shm-pair"},
-					  "SHM-only topology tuple changed");
+			require_error(
+				opened,
+				{"store.sqlite-failure", "sqlite-sidecar-state", "incomplete-wal-shm-pair"},
+				"SHM-only topology tuple changed");
 			require(capture_files(destination) == before,
 					"SHM-only topology rejection changed the source family");
 		}
@@ -904,11 +888,10 @@ namespace
 					"unreadable SHM fixture removal failed");
 			std::filesystem::create_symlink("missing-shm-target", shm_path(destination));
 			auto opened = sdk::open_sqlite_snapshot_store(destination.string(), value);
-			require_error(opened,
-					  {"store.sqlite-failure",
-					   "sqlite-sidecar-state",
-					   "unreadable-wal-shm-pair"},
-					  "unreadable SHM topology tuple changed");
+			require_error(
+				opened,
+				{"store.sqlite-failure", "sqlite-sidecar-state", "unreadable-wal-shm-pair"},
+				"unreadable SHM topology tuple changed");
 		}
 
 		{
@@ -918,11 +901,10 @@ namespace
 					"unreadable WAL fixture removal failed");
 			std::filesystem::create_symlink("missing-wal-target", wal_path(cold.path()));
 			auto opened = sdk::open_sqlite_snapshot_store(cold.path().string(), value);
-			require_error(opened,
-					  {"store.sqlite-failure",
-					   "sqlite-initialization-sidecar",
-					   "unreadable-wal-only"},
-					  "unreadable WAL-only topology tuple changed");
+			require_error(
+				opened,
+				{"store.sqlite-failure", "sqlite-initialization-sidecar", "unreadable-wal-only"},
+				"unreadable WAL-only topology tuple changed");
 		}
 
 		{

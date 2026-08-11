@@ -2349,11 +2349,21 @@ namespace cxxlens::detail::clang22::materialization
 		metadata_receipt(const validated_task_metadata& task, const std::uint64_t task_index)
 		{
 			const auto& input = task.input;
+			// v2.1 keeps the request-wide catalog outside each task input so the
+			// source-private task window cannot become a second mutable authority.
+			// The metadata receipt must therefore project the admitted catalog owner,
+			// not the intentionally empty legacy field on the task input.
+			const auto* catalog = task.catalog_owner;
 			return {
 				task_index,
 				input.project,
+				catalog != nullptr ? catalog->catalog_id : input.project_catalog.catalog_id,
+				catalog != nullptr ? catalog->catalog_digest : input.project_catalog.catalog_digest,
 				input.selected_catalog_compile_unit,
 				input.compile_unit,
+				input.variant,
+				input.toolchain_context,
+				input.toolchain_digest,
 				input.source_snapshot,
 				input.file,
 				input.logical_path,

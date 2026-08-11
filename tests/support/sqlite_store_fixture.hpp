@@ -1210,13 +1210,10 @@ namespace cxxlens::test::sqlite_fixture
 			wal_fixture_detail::require_active_sidecars(path_);
 #if defined(__linux__) && defined(F_OFD_SETLK)
 			const auto shm_path = std::filesystem::path{path_.string() + "-shm"};
-			const int descriptor =
-				::open(shm_path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+			const int descriptor = ::open(shm_path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
 			if (descriptor < 0)
 				throw std::runtime_error{"test SQLite active SHM DMS open failed"};
-			struct flock lock
-			{
-			};
+			struct flock lock{};
 			lock.l_type = F_RDLCK;
 			lock.l_whence = SEEK_SET;
 			lock.l_start = 128;

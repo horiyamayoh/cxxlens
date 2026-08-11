@@ -68,9 +68,7 @@ namespace
 	struct sqlite_source_file_family_state
 	{
 		cxxlens::test::sqlite_fixture::database_files files;
-		std::map<std::string,
-				 std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>,
-				 std::less<>>
+		std::map<std::string, std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>, std::less<>>
 			identities_and_sizes;
 
 		[[nodiscard]] bool operator==(const sqlite_source_file_family_state&) const = default;
@@ -86,9 +84,7 @@ namespace
 			 {std::string{}, std::string{"-wal"}, std::string{"-shm"}, std::string{"-journal"}})
 		{
 			const auto path = std::filesystem::path{absolute.string() + suffix};
-			struct stat status
-			{
-			};
+			struct stat status{};
 			if (::stat(path.c_str(), &status) != 0 || !S_ISREG(status.st_mode))
 				continue;
 			output.identities_and_sizes.emplace(
@@ -737,8 +733,7 @@ namespace
 		auto opened_sqlite =
 			cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
 		require(opened_sqlite.has_value(), "occurrence SQLite store unavailable");
-		std::optional<cxxlens::sdk::snapshot_store> sqlite{
-			std::move(*opened_sqlite)};
+		std::optional<cxxlens::sdk::snapshot_store> sqlite{std::move(*opened_sqlite)};
 		const auto publish_occurrences =
 			[&](cxxlens::sdk::snapshot_store& store, const bool reverse)
 		{
@@ -2338,20 +2333,19 @@ namespace
 				auto quiescent_without_source_shm_symbols =
 					open_sqlite_snapshot_store(path.string(), relation_engine);
 				set_sqlite_source_shm_symbols_available_for_testing(true);
-				require(quiescent_without_source_shm_symbols &&
+				require(
+					quiescent_without_source_shm_symbols &&
 						quiescent_without_source_shm_symbols->compatibility().migration_required,
-						"quiescent exact-v2 incorrectly required active-WAL source-SHM symbols");
+					"quiescent exact-v2 incorrectly required active-WAL source-SHM symbols");
 			}
-			active_wal_sidecar_fixture crash_source{
-				path, wal_source_authority::predecessor_v2};
-			const auto prepared_active_source =
-				capture_sqlite_source_file_family_state(path);
-			const auto prepared_wal = prepared_active_source.identities_and_sizes.find(
-				path.filename().string() + "-wal");
+			active_wal_sidecar_fixture crash_source{path, wal_source_authority::predecessor_v2};
+			const auto prepared_active_source = capture_sqlite_source_file_family_state(path);
+			const auto prepared_wal =
+				prepared_active_source.identities_and_sizes.find(path.filename().string() + "-wal");
 			require(prepared_wal != prepared_active_source.identities_and_sizes.end() &&
-					prepared_active_source.identities_and_sizes.contains(
-						path.filename().string() + "-shm") &&
-					std::get<2>(prepared_wal->second) > 32U,
+						prepared_active_source.identities_and_sizes.contains(
+							path.filename().string() + "-shm") &&
+						std::get<2>(prepared_wal->second) > 32U,
 					"migration crash source did not begin as an authentic active-v2 family");
 			crash_source.close();
 			const auto native_path = path.string();
@@ -2374,9 +2368,10 @@ namespace
 			const auto crash_wal =
 				crash_remnant.identities_and_sizes.find(path.filename().string() + "-wal");
 			require(crash_remnant.identities_and_sizes.contains(path.filename().string()) &&
-					crash_wal != crash_remnant.identities_and_sizes.end() &&
-					crash_remnant.identities_and_sizes.contains(path.filename().string() + "-shm") &&
-					std::get<2>(crash_wal->second) > 32U,
+						crash_wal != crash_remnant.identities_and_sizes.end() &&
+						crash_remnant.identities_and_sizes.contains(path.filename().string() +
+																	"-shm") &&
+						std::get<2>(crash_wal->second) > 32U,
 					"migration crash fixture did not retain an authentic raw "
 					"main/WAL/SHM remnant");
 
@@ -2384,25 +2379,26 @@ namespace
 			auto unavailable = open_sqlite_snapshot_store(path.string(), relation_engine);
 			set_sqlite_source_shm_symbols_available_for_testing(true);
 			require(!unavailable && unavailable.error().code == "store.backend-unavailable" &&
-					unavailable.error().field == "sqlite" &&
-					unavailable.error().detail == "source-shm-readonly-qualification",
+						unavailable.error().field == "sqlite" &&
+						unavailable.error().detail == "source-shm-readonly-qualification",
 					"active WAL+SHM did not apply its branch-local required-symbol gate");
-			require(capture_sqlite_source_file_family_state(path) == crash_remnant,
-					"active source-SHM symbol failure opened, changed, or privately fell back from the "
-					"raw post-crash active-v2 source");
+			require(
+				capture_sqlite_source_file_family_state(path) == crash_remnant,
+				"active source-SHM symbol failure opened, changed, or privately fell back from the "
+				"raw post-crash active-v2 source");
 
 			{
 				auto reopened = open_sqlite_snapshot_store(path.string(), relation_engine);
 				auto current = reopened ? reopened->current(selector(relation_engine))
 										: result<snapshot_handle>{reopened.error()};
 				auto exported = reopened ? reopened->canonical_export(expected.snapshot_id)
-								 : result<std::string>{reopened.error()};
-				require(reopened && reopened->compatibility().migration_required && current &&
-							exported && current->id() == expected.snapshot_id &&
-							current->publication().publication_id ==
-								expected.current_publication_id &&
-							*exported == expected.canonical_export,
-						"raw post-crash active-v2 source did not preserve exact predecessor authority");
+										 : result<std::string>{reopened.error()};
+				require(
+					reopened && reopened->compatibility().migration_required && current &&
+						exported && current->id() == expected.snapshot_id &&
+						current->publication().publication_id == expected.current_publication_id &&
+						*exported == expected.canonical_export,
+					"raw post-crash active-v2 source did not preserve exact predecessor authority");
 			}
 			require(capture_sqlite_source_file_family_state(path) == crash_remnant,
 					"qualified cold read changed raw post-crash identities, sizes, or bytes");

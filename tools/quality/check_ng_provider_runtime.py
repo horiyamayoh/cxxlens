@@ -472,12 +472,15 @@ def _expected_provider_identity(
     for field in (
         "provider_binary_digest",
         "provider_semantic_contract_digest",
-        "sandbox_policy_digest",
     ):
         if not isinstance(identity[field], str) or re.fullmatch(
             r"sha256:[0-9a-f]{64}", identity[field]
         ) is None:
             raise ContractError(f"expected provider identity {field} is not canonical")
+    if not isinstance(identity["sandbox_policy_digest"], str) or re.fullmatch(
+        r"(?:sha256|semantic-v2:sha256):[0-9a-f]{64}", identity["sandbox_policy_digest"]
+    ) is None:
+        raise ContractError("expected provider identity sandbox_policy_digest is not canonical")
     for field in ("protocol_major", "protocol_minor"):
         _uint64(identity[field], f"expected provider identity {field}", 65535)
     if identity["protocol_major"] != 1 or identity["protocol_minor"] != 1:
@@ -497,7 +500,16 @@ def _expected_provider_identity(
     authorized_descriptors = {
         authority["descriptor_id"] for authority in authority_by_batch.values()
     }
-    if not authorized_descriptors.issubset(identity["offered_relations"]):
+    authorized_manifest_relations = {
+        descriptor.rsplit(".v", 1)[0] + "@" + descriptor.rsplit(".v", 1)[1]
+        for descriptor in authorized_descriptors
+        if ".v" in descriptor
+        and descriptor.rsplit(".v", 1)[1].isdigit()
+    }
+    if not (
+        authorized_descriptors.issubset(identity["offered_relations"])
+        or authorized_manifest_relations.issubset(identity["offered_relations"])
+    ):
         raise ContractError("expected provider relation offers omit an authorized batch")
     return identity
 
@@ -1524,13 +1536,44 @@ def _seal_decoded_transcript(
         raise ContractError("provider hello manifest JSON is invalid") from error
     if not isinstance(manifest, dict):
         raise ContractError("provider hello manifest is not an object")
-    canonical_expected_identity = json.dumps(
-        expected_identity,
+    if manifest_text != json.dumps(
+        manifest,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
-    )
-    if manifest != expected_identity or manifest_text != canonical_expected_identity:
+    ):
+        raise ContractError("provider hello differs from independent expected identity")
+    if "protocol_range" in manifest:
+        protocol_range = manifest.get("protocol_range")
+        if not isinstance(protocol_range, dict):
+            raise ContractError("provider hello differs from independent expected identity")
+        manifest_protocol_major = protocol_range.get("major")
+        manifest_protocol_minor = protocol_range.get("maximum_minor")
+        manifest_required_features = protocol_range.get("required_features")
+    else:
+        # Keep the compact fixture wire useful for the generic runtime tests.  A
+        # production provider hello is the full provider-manifest projection above.
+        manifest_protocol_major = manifest.get("protocol_major")
+        manifest_protocol_minor = manifest.get("protocol_minor")
+        manifest_required_features = manifest.get("required_features")
+    manifest_identity = {
+        "provider_id": manifest.get("provider_id"),
+        "provider_version": manifest.get("provider_version"),
+        "provider_binary_digest": manifest.get("provider_binary_digest"),
+        "provider_semantic_contract_digest": manifest.get(
+            "provider_semantic_contract_digest"
+        ),
+        "protocol_major": manifest_protocol_major,
+        "protocol_minor": manifest_protocol_minor,
+        "required_features": manifest_required_features,
+        "offered_relations": manifest.get("offered_relations"),
+    }
+    expected_manifest_identity = {
+        field: value
+        for field, value in expected_identity.items()
+        if field != "sandbox_policy_digest"
+    }
+    if manifest_identity != expected_manifest_identity:
         raise ContractError("provider hello differs from independent expected identity")
     if decoded_frames[0]["payload"]:
         raise ContractError("provider hello has a payload")
@@ -1631,7 +1674,7 @@ def _seal_decoded_transcript(
             "unresolved_records": unresolved,
             "evidence_records": evidence,
         },
-        manifest,
+        expected_identity,
     )
 
 

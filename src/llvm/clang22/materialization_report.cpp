@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <set>
+#include <span>
 #include <string_view>
 #include <utility>
 
@@ -73,6 +75,11 @@ namespace cxxlens::detail::clang22::materialization
 			return value.size() <= limits.max_string_bytes;
 		}
 
+		[[nodiscard]] std::string digest_text(const std::string_view value)
+		{
+			return sdk::content_digest(std::as_bytes(std::span{value.data(), value.size()}));
+		}
+
 		[[nodiscard]] bool add_bounded_text(std::size_t& total,
 											const std::string_view value,
 											const detailed_report_limits& limits,
@@ -118,12 +125,24 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::result<std::string>
 		row_set_digest(const std::span<const sdk::detached_row> rows,
 					   const detailed_report_limits& limits,
-					   std::size_t& projection_bytes)
+					   std::size_t& projection_bytes,
+					   std::vector<detailed_provider_batch_projection::row_projection>& projections)
 		{
 			std::string projection;
+			if (rows.size() > limits.max_side_channel_records)
+				return sdk::unexpected(fail(detailed_report_error_kind::limit_exceeded,
+											"provider_sealed_transcript.rows",
+											"count"));
+			projections.clear();
+			projections.reserve(rows.size());
 			for (std::size_t index{}; index < rows.size(); ++index)
 			{
-				auto row = rows[index].canonical_form();
+				std::string row = rows[index].canonical_form();
+				if (!bounded_text(row, limits) || !sdk::validate_utf8_text(row))
+					return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+												"provider_sealed_transcript.rows",
+												"canonical-form"));
+				const auto row_digest = digest_text(row);
 				const auto index_text = std::to_string(index);
 				constexpr std::size_t framing_bytes = 2U; // ':' and '\n'
 				if (projection_bytes > limits.max_projection_bytes ||
@@ -143,9 +162,83 @@ namespace cxxlens::detail::clang22::materialization
 				projection.push_back(':');
 				projection.append(row);
 				projection.push_back('\n');
+				projections.push_back({index, std::move(row), std::move(row_digest)});
 			}
 			return sdk::semantic_digest("cxxlens.clang22.materialization-report.row-set.v1",
 										projection);
+		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_primary_span(const observation_v2_primary_span& span,
+							  const detailed_report_limits& limits)
+		{
+			for (const auto& [field, value] : {
+					 std::pair{std::string_view{"span_id"}, std::string_view{span.span_id}},
+					 std::pair{std::string_view{"snapshot"}, std::string_view{span.snapshot}},
+					 std::pair{std::string_view{"file"}, std::string_view{span.file}},
+					 std::pair{std::string_view{"role"}, std::string_view{span.role}},
+				 })
+				if (!bounded_text(value, limits) || !sdk::validate_strong_id(value))
+					return sdk::unexpected(
+						fail(detailed_report_error_kind::invalid_capture,
+							 "observation_rows.primary_span." + std::string{field},
+							 "strong-id"));
+			if (span.begin > span.end)
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+											"observation_rows.primary_span.range",
+											"order"));
+			auto expected = sdk::source_span_identity(
+				span.snapshot, span.file, span.begin, span.end, span.role);
+			if (!expected || *expected != span.span_id)
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+											"observation_rows.primary_span.span_id",
+											"identity"));
+			return {};
+		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_observation_row(const sealed_observation_v2_row& value,
+								 const sdk::provider::detail::sealed_provider_batch& batch,
+								 const std::string_view compile_unit,
+								 const detailed_report_limits& limits)
+		{
+			auto descriptor = observation_v2_descriptor(value.observation.kind);
+			if (!descriptor || (*descriptor)->id != batch.descriptor_id())
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+											"observation_rows.descriptor",
+											"batch-binding"));
+			if (!bounded_text(value.observation.final_relation_compile_unit_id, limits) ||
+				value.observation.final_relation_compile_unit_id != compile_unit ||
+				!sdk::validate_strong_id(value.observation.final_relation_compile_unit_id))
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+											"observation_rows.compile_unit",
+											"task-binding"));
+			if (!bounded_text(value.observation.semantic_key, limits) ||
+				!sdk::validate_utf8_text(value.observation.semantic_key) ||
+				!bounded_text(value.observation.payload_digest, limits))
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+											"observation_rows.observation",
+											"bounded-value"));
+			if (value.observation.limitation &&
+				(!bounded_text(*value.observation.limitation, limits) ||
+				 !sdk::validate_utf8_text(*value.observation.limitation)))
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+											"observation_rows.limitation",
+											"utf8"));
+			if (value.observation.exact_equivalence != !value.observation.limitation.has_value())
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+											"observation_rows.exact_equivalence",
+											"limitation-coupling"));
+			if (value.observation.kind == observation_v2_kind::type &&
+				value.observation.primary_span)
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+											"observation_rows.primary_span",
+											"type-forbidden"));
+			if (value.observation.primary_span)
+				if (auto valid = validate_primary_span(*value.observation.primary_span, limits);
+					!valid)
+					return valid;
+			return {};
 		}
 
 		[[nodiscard]] bool
@@ -553,6 +646,65 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(
 				fail(detailed_report_error_kind::invalid_capture, "task", "empty-identity"));
 
+		constexpr std::array<std::string_view, 5U> base_descriptor_ids{"build.project.v1",
+																	   "build.toolchain_context.v1",
+																	   "build.variant.v1",
+																	   "source.file.v1",
+																	   "build.compile_unit.v1"};
+		const auto copy_and_validate_rows =
+			[&](const std::span<const sdk::detached_row> rows,
+				std::string_view field,
+				std::span<const std::string_view> expected,
+				std::vector<sdk::detached_row>& destination) -> sdk::result<void>
+		{
+			if (rows.size() != expected.size() || rows.size() > limits.max_side_channel_records)
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+											std::string{field},
+											"row-count"));
+			destination.clear();
+			destination.reserve(rows.size());
+			for (std::size_t index{}; index < rows.size(); ++index)
+			{
+				if (rows[index].descriptor_id != expected[index])
+					return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+												std::string{field},
+												"descriptor-order"));
+				const auto canonical = rows[index].canonical_form();
+				if (!bounded_text(canonical, limits) || !sdk::validate_utf8_text(canonical))
+					return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+												std::string{field},
+												"canonical-form"));
+				destination.push_back(rows[index]);
+			}
+			return {};
+		};
+		if (auto valid =
+				copy_and_validate_rows(materialized.base_claim_rows(),
+									   "base_claim_rows",
+									   std::span<const std::string_view>{base_descriptor_ids},
+									   capture.base_claim_rows);
+			!valid)
+			return sdk::unexpected(std::move(valid.error()));
+		if (materialized.source_span_claim_rows().size() > limits.max_side_channel_records)
+			return sdk::unexpected(fail(
+				detailed_report_error_kind::limit_exceeded, "source_span_claim_rows", "count"));
+		capture.source_span_claim_rows.reserve(materialized.source_span_claim_rows().size());
+		std::set<std::string, std::less<>> source_span_identities;
+		for (const auto& row : materialized.source_span_claim_rows())
+		{
+			if (row.descriptor_id != "source.span.v1")
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+											"source_span_claim_rows",
+											"descriptor"));
+			const auto canonical = row.canonical_form();
+			if (!bounded_text(canonical, limits) || !sdk::validate_utf8_text(canonical) ||
+				!source_span_identities.insert(canonical).second)
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+											"source_span_claim_rows",
+											"canonical-or-duplicate"));
+			capture.source_span_claim_rows.push_back(row);
+		}
+
 		std::size_t projection_bytes{};
 		for (const auto& batch : materialized.provider_seal().batches())
 		{
@@ -592,12 +744,54 @@ namespace cxxlens::detail::clang22::materialization
 			output.ordered_chunk_digests.assign(batch.ordered_chunk_digests().begin(),
 												batch.ordered_chunk_digests().end());
 			output.row_count = batch.rows().size();
-			auto rows = row_set_digest(batch.rows(), limits, projection_bytes);
+			auto rows = row_set_digest(batch.rows(), limits, projection_bytes, output.rows);
 			if (!rows)
 				return sdk::unexpected(std::move(rows.error()));
 			output.row_set_digest = std::move(*rows);
 			capture.batches.push_back(std::move(output));
 		}
+		if (materialized.observation_rows().size() > limits.max_side_channel_records)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::limit_exceeded, "observation_rows", "count"));
+		capture.observation_rows.reserve(materialized.observation_rows().size());
+		std::size_t observation_index{};
+		const auto provider_batches = materialized.provider_seal().batches();
+		for (std::size_t batch_index = 3U; batch_index < provider_batches.size(); ++batch_index)
+		{
+			const auto& batch = provider_batches[batch_index];
+			for (std::size_t row_index{}; row_index < batch.rows().size(); ++row_index)
+			{
+				if (observation_index >= materialized.observation_rows().size())
+					return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+												"observation_rows",
+												"missing-binding"));
+				const auto& observation = materialized.observation_rows()[observation_index];
+				if (observation.batch_index != batch_index || observation.row_index != row_index ||
+					observation.batch_index >= capture.batches.size() ||
+					observation.row_index >= capture.batches[batch_index].rows.size())
+					return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+												"observation_rows",
+												"sealed-index"));
+				if (auto valid = validate_observation_row(
+						observation, batch, capture.compile_unit_id, limits);
+					!valid)
+					return sdk::unexpected(std::move(valid.error()));
+				detailed_observation_row_projection projected;
+				projected.batch_index = batch_index;
+				projected.row_index = row_index;
+				projected.observation_row_digest =
+					capture.batches[batch_index].rows[row_index].row_digest;
+				projected.exact_equivalence = observation.observation.exact_equivalence;
+				projected.limitation = observation.observation.limitation;
+				projected.primary_span = observation.observation.primary_span;
+				capture.observation_rows.push_back(std::move(projected));
+				++observation_index;
+			}
+		}
+		if (observation_index != materialized.observation_rows().size())
+			return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+										"observation_rows",
+										"unexpected-binding"));
 		for (const auto& value : materialized.provider_seal().coverage())
 		{
 			if (capture.coverage.size() >= limits.max_side_channel_records)
@@ -635,6 +829,70 @@ namespace cxxlens::detail::clang22::materialization
 		return capture;
 	}
 
+	sdk::result<detailed_task_report_capture> capture_detailed_task_report(
+		const sdk::provider::detail::provider_process_validation_outcome& outcome,
+		const sealed_materialization_result& materialized,
+		const materialization_v2_1_task_metadata_receipt& metadata,
+		const detailed_report_limits& limits)
+	{
+		auto captured = capture_detailed_task_report(outcome, materialized, limits);
+		if (!captured)
+			return captured;
+		if (metadata.provider_task_id != captured->provider_task_id ||
+			metadata.provider_execution_id != captured->provider_execution_id ||
+			metadata.task_input_digest != captured->task_input_digest ||
+			metadata.selected_catalog_compile_unit_id !=
+				captured->selected_catalog_compile_unit_id ||
+			metadata.final_relation_compile_unit_id != captured->compile_unit_id)
+			return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+										"task_context",
+										"metadata-binding"));
+		if (!bounded_text(metadata.condition_universe_id, limits) ||
+			!bounded_text(metadata.condition_id, limits) ||
+			!bounded_text(metadata.interpretation_domain, limits) ||
+			!bounded_text(metadata.catalog_id, limits) ||
+			!bounded_text(metadata.catalog_digest, limits) ||
+			!bounded_text(metadata.variant_id, limits) ||
+			!bounded_text(metadata.toolchain_context_id, limits) ||
+			!bounded_text(metadata.toolchain_digest, limits) ||
+			!bounded_text(metadata.source_snapshot_id, limits) ||
+			!bounded_text(metadata.file_id, limits) ||
+			!bounded_text(metadata.logical_path, limits) ||
+			!bounded_text(metadata.source_content_digest, limits) ||
+			!bounded_text(metadata.source_encoding, limits) ||
+			!bounded_text(metadata.line_index_id, limits) ||
+			!sdk::validate_strong_id(metadata.condition_universe_id) ||
+			!sdk::validate_strong_id(metadata.condition_id) ||
+			!sdk::validate_registered_symbol(metadata.interpretation_domain) ||
+			!sdk::validate_strong_id(metadata.catalog_id) ||
+			!sdk::validate_strong_id(metadata.variant_id) ||
+			!sdk::validate_strong_id(metadata.toolchain_context_id) ||
+			!sdk::validate_strong_id(metadata.source_snapshot_id) ||
+			!sdk::validate_strong_id(metadata.file_id) ||
+			!sdk::validate_strong_id(metadata.logical_path) ||
+			!sdk::validate_strong_id(metadata.line_index_id))
+			return sdk::unexpected(fail(
+				detailed_report_error_kind::invalid_capture, "task_context", "semantic-fields"));
+		captured->condition_universe_id = metadata.condition_universe_id;
+		captured->condition_id = metadata.condition_id;
+		captured->interpretation_domain = metadata.interpretation_domain;
+		captured->project_id = metadata.project_id;
+		captured->catalog_id = metadata.catalog_id;
+		captured->catalog_digest = metadata.catalog_digest;
+		captured->variant_id = metadata.variant_id;
+		captured->toolchain_context_id = metadata.toolchain_context_id;
+		captured->toolchain_digest = metadata.toolchain_digest;
+		captured->source_snapshot_id = metadata.source_snapshot_id;
+		captured->source_file_id = metadata.file_id;
+		captured->source_logical_path = metadata.logical_path;
+		captured->source_content_digest = metadata.source_content_digest;
+		captured->source_size_bytes = metadata.source_size_bytes;
+		captured->source_encoding = metadata.source_encoding;
+		captured->source_line_index_id = metadata.line_index_id;
+		captured->source_read_only = metadata.source_read_only;
+		return captured;
+	}
+
 	namespace
 	{
 		[[nodiscard]] bool add_accounted_bytes(std::size_t& total,
@@ -668,17 +926,26 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] bool account_task_capture(const detailed_task_report_capture& capture,
-												const std::size_t limit,
+												const detailed_report_limits& limits,
 												std::size_t& accounted) noexcept
 		{
+			const auto limit = limits.max_projection_bytes;
 			accounted = sizeof(capture);
 			const auto account = [&](const std::string_view value)
 			{
 				return account_string(accounted, value, limit);
 			};
 			if (!account(capture.provider_task_id) || !account(capture.provider_execution_id) ||
+				!account(capture.project_id) || !account(capture.catalog_id) ||
+				!account(capture.catalog_digest) ||
 				!account(capture.selected_catalog_compile_unit_id) ||
-				!account(capture.compile_unit_id) || !account(capture.task_input_digest) ||
+				!account(capture.compile_unit_id) || !account(capture.variant_id) ||
+				!account(capture.toolchain_context_id) || !account(capture.toolchain_digest) ||
+				!account(capture.source_snapshot_id) || !account(capture.source_file_id) ||
+				!account(capture.source_logical_path) || !account(capture.source_content_digest) ||
+				!account(capture.source_encoding) || !account(capture.source_line_index_id) ||
+				!account(capture.task_input_digest) || !account(capture.condition_universe_id) ||
+				!account(capture.condition_id) || !account(capture.interpretation_domain) ||
 				!account(capture.ordered_chunk_payload_digest_set_digest) ||
 				!account(capture.raw_frame_stream_digest) ||
 				!account(capture.frame_transcript_digest) ||
@@ -689,6 +956,12 @@ namespace cxxlens::detail::clang22::materialization
 			for (const auto& value : capture.ordered_chunk_digests)
 				if (!account(value))
 					return false;
+			if (capture.batches.size() > limits.max_batches_per_task ||
+				capture.observation_rows.size() > limits.max_side_channel_records ||
+				capture.coverage.size() > limits.max_side_channel_records ||
+				capture.unresolved.size() > limits.max_side_channel_records ||
+				capture.evidence.size() > limits.max_side_channel_records)
+				return false;
 			if (!add_accounted_count(accounted,
 									 capture.batches.size(),
 									 sizeof(detailed_provider_batch_projection),
@@ -696,6 +969,10 @@ namespace cxxlens::detail::clang22::materialization
 				return false;
 			for (const auto& batch : capture.batches)
 			{
+				if (batch.rows.size() != batch.row_count ||
+					batch.rows.size() > limits.max_side_channel_records ||
+					batch.ordered_chunk_digests.size() > limits.max_chunks_per_batch)
+					return false;
 				if (!account(batch.task_id) || !account(batch.descriptor_id) ||
 					!account(batch.descriptor_digest) || !account(batch.dependency_group_id) ||
 					!account(batch.atomic_output_group_id) || !account(batch.batch_id) ||
@@ -706,7 +983,58 @@ namespace cxxlens::detail::clang22::materialization
 				for (const auto& value : batch.ordered_chunk_digests)
 					if (!account(value))
 						return false;
+				if (!add_accounted_count(accounted,
+										 batch.rows.size(),
+										 sizeof(detailed_provider_batch_projection::row_projection),
+										 limit))
+					return false;
+				for (const auto& row : batch.rows)
+					if (!account(row.row_canonical_form) || !account(row.row_digest))
+						return false;
 			}
+			if (!add_accounted_count(accounted,
+									 capture.observation_rows.size(),
+									 sizeof(detailed_observation_row_projection),
+									 limit))
+				return false;
+			for (const auto& row : capture.observation_rows)
+			{
+				if (!account(row.observation_row_digest))
+					return false;
+				if (row.limitation && !account(*row.limitation))
+					return false;
+				if (row.primary_span)
+				{
+					const auto& span = *row.primary_span;
+					if (!account(span.span_id) || !account(span.snapshot) || !account(span.file) ||
+						!account(span.role))
+						return false;
+				}
+			}
+			const auto account_rows = [&](const std::vector<sdk::detached_row>& rows)
+			{
+				if (rows.size() > limits.max_side_channel_records ||
+					!add_accounted_count(accounted, rows.size(), sizeof(sdk::detached_row), limit))
+					return false;
+				for (const auto& row : rows)
+				{
+					if (!account(row.descriptor_id) || !account(row.canonical_form()) ||
+						!add_accounted_count(
+							accounted,
+							row.cells.size(),
+							sizeof(std::pair<const std::string, sdk::detached_cell>),
+							limit))
+						return false;
+					for (const auto& [column, cell] : row.cells)
+						if (!account(column) || !account(cell.canonical_form()) ||
+							(cell.unknown_reason && !account(*cell.unknown_reason)))
+							return false;
+				}
+				return true;
+			};
+			if (!account_rows(capture.base_claim_rows) ||
+				!account_rows(capture.source_span_claim_rows))
+				return false;
 			if (!add_accounted_count(accounted,
 									 capture.coverage.size(),
 									 sizeof(detailed_coverage_projection),
@@ -749,7 +1077,7 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(
 				fail(detailed_report_error_kind::limit_exceeded, "task_results", "count"));
 		std::size_t capture_bytes{};
-		if (!account_task_capture(capture, limits_.max_projection_bytes, capture_bytes) ||
+		if (!account_task_capture(capture, limits_, capture_bytes) ||
 			!add_accounted_bytes(accounted_bytes_, capture_bytes, limits_.max_projection_bytes))
 			return sdk::unexpected(fail(
 				detailed_report_error_kind::limit_exceeded, "task_results", "projection-bytes"));

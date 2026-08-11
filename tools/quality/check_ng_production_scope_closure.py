@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
+import functools
 import hashlib
 import json
 import re
@@ -282,9 +284,14 @@ def fail(message: str) -> None:
     raise ContractError(message)
 
 
+@functools.lru_cache(maxsize=64)
+def _parse_yaml(text: str) -> Any:
+    return yaml.safe_load(text)
+
+
 def load_yaml(path: Path) -> Any:
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
+        return copy.deepcopy(_parse_yaml(path.read_text(encoding="utf-8")))
     except (OSError, yaml.YAMLError) as error:
         fail(f"cannot load {path}: {error}")
 

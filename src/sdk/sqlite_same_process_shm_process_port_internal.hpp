@@ -43,8 +43,8 @@ namespace cxxlens::sdk
 		 */
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
 		adopt_runtime_lifetime(sqlite_backend_opaque_identity identity,
-						   sqlite_backend_opaque_identity pin_identity,
-						   std::shared_ptr<void> owner) const;
+							   sqlite_backend_opaque_identity pin_identity,
+							   std::shared_ptr<void> owner) const;
 
 	  private:
 		friend class sqlite_same_process_shm_process_port;
@@ -66,7 +66,6 @@ namespace cxxlens::sdk
 	class sqlite_same_process_shm_process_port
 	{
 	  public:
-		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_process_registry_handle>
-		acquire();
+		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_process_registry_handle> acquire();
 	};
 } // namespace cxxlens::sdk

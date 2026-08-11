@@ -399,12 +399,12 @@ namespace
 		fake_workspace_builder builder;
 		auto captured = capture_sqlite_wal_source(fixture.main, fixture.wal, builder);
 		require(captured.has_value() &&
-				captured->wal_scan.classification == sqlite_wal_scan_classification::empty &&
-				captured->wal_scan.authoritative_prefix_byte_count == 0U &&
-				captured->full_source_wal.byte_count == 0U && builder.wal_bytes.empty() &&
-				captured->workspace_receipt.authoritative_wal_prefix.byte_count == 0U &&
-				!captured->workspace_receipt.private_wal_present,
-			"empty WAL did not preserve an exact main-only recovery receipt");
+					captured->wal_scan.classification == sqlite_wal_scan_classification::empty &&
+					captured->wal_scan.authoritative_prefix_byte_count == 0U &&
+					captured->full_source_wal.byte_count == 0U && builder.wal_bytes.empty() &&
+					captured->workspace_receipt.authoritative_wal_prefix.byte_count == 0U &&
+					!captured->workspace_receipt.private_wal_present,
+				"empty WAL did not preserve an exact main-only recovery receipt");
 	}
 
 	void verify_drift_failures()

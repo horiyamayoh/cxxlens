@@ -23,9 +23,12 @@
 
 #include "sqlite_backend_effect_gate_internal.hpp"
 #include "sqlite_default_forwarding_vfs_internal.hpp"
+#include "sqlite_same_process_shm_identity_issuer_internal.hpp"
 #include "sqlite_same_process_shm_vfs_alias_registration_internal.hpp"
 #include "sqlite_source_shm_readonly_preflight_internal.hpp"
+#include "sqlite_vfs_abi_internal.hpp"
 #include "sqlite_writer_shm_mapping_epoch_internal.hpp"
+#include "sqlite_writer_shm_mapping_semantics_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -74,12 +77,19 @@ namespace cxxlens::sdk
 		constexpr std::size_t maximum_shm_map_observations = 64U;
 		constexpr std::string_view journal_suffix{"-journal"};
 		constexpr std::string_view wal_suffix{"-wal"};
+		constexpr std::string_view shm_suffix{"-shm"};
 		constexpr std::string_view forwarding_profile{"default-forwarding-vfs-v1"};
 		constexpr std::string_view filesystem_profile{"default-filesystem-v1"};
 		constexpr std::string_view ephemeral_profile{"default-ephemeral-v1"};
 		constexpr std::string_view source_shm_profile{"sqlite-source-shm-readonly-unix-uri-v1"};
 		constexpr std::string_view source_shm_qualification_profile{
 			"sqlite-source-shm-readonly-qualification-candidate-v1"};
+		// ADR 0097 and DF-0205 permit the registry/callback implementation to proceed, but
+		// explicitly keep the production native SQLITE_OK exception disabled until the distinct
+		// exact implementation, complete counterexample matrix, and independent activation review
+		// are bound to this source.  This is an intentional fail-closed fence, not a runtime
+		// toggle.
+		constexpr bool source_shm_native_ok_projection_production_activation = false;
 		constexpr int source_shm_open_flags = sqlite_open_read_only | sqlite_open_uri |
 			sqlite_open_private_cache | sqlite_open_full_mutex;
 		constexpr int source_shm_main_xopen_flags =
@@ -87,64 +97,18 @@ namespace cxxlens::sdk
 		constexpr int qualification_fixture_main_xopen_flags =
 			sqlite_open_read_write | sqlite_open_create | sqlite_open_main_database;
 
-		struct sqlite3_file;
-		struct sqlite3_io_methods;
-		struct sqlite3_vfs;
-		using sqlite3_syscall_ptr = void (*)();
+		// Callback and native-lifetime identities can outlive their forwarding state in the
+		// process-global SHM registry.  A state-local counter would therefore permit pointer ABA:
+		// a later forwarding state could receive the same native_file_node address and mint the
+		// same identity after its counter restarted at one.  Keep one checked sequence domain for
+		// every forwarding alias in this process; the registry still binds each resulting receipt
+		// to its exact process/family/alias scope.
+		std::atomic<std::uint64_t> next_native_lifetime_sequence{1U};
 
-		struct sqlite3_file
-		{
-			const sqlite3_io_methods* methods;
-		};
-
-		struct sqlite3_io_methods
-		{
-			int version;
-			int (*close)(sqlite3_file*);
-			int (*read)(sqlite3_file*, void*, int, long long);
-			int (*write)(sqlite3_file*, const void*, int, long long);
-			int (*truncate)(sqlite3_file*, long long);
-			int (*sync)(sqlite3_file*, int);
-			int (*file_size)(sqlite3_file*, long long*);
-			int (*lock)(sqlite3_file*, int);
-			int (*unlock)(sqlite3_file*, int);
-			int (*check_reserved_lock)(sqlite3_file*, int*);
-			int (*file_control)(sqlite3_file*, int, void*);
-			int (*sector_size)(sqlite3_file*);
-			int (*device_characteristics)(sqlite3_file*);
-			int (*shm_map)(sqlite3_file*, int, int, int, volatile void**);
-			int (*shm_lock)(sqlite3_file*, int, int, int);
-			void (*shm_barrier)(sqlite3_file*);
-			int (*shm_unmap)(sqlite3_file*, int);
-			int (*fetch)(sqlite3_file*, long long, int, void**);
-			int (*unfetch)(sqlite3_file*, long long, void*);
-		};
-
-		struct sqlite3_vfs
-		{
-			int version;
-			int os_file_bytes;
-			int maximum_pathname;
-			sqlite3_vfs* next;
-			const char* name;
-			void* app_data;
-			int (*open)(sqlite3_vfs*, const char*, sqlite3_file*, int, int*);
-			int (*remove)(sqlite3_vfs*, const char*, int);
-			int (*access)(sqlite3_vfs*, const char*, int, int*);
-			int (*full_pathname)(sqlite3_vfs*, const char*, int, char*);
-			void* (*dl_open)(sqlite3_vfs*, const char*);
-			void (*dl_error)(sqlite3_vfs*, int, char*);
-			void (*(*dl_sym)(sqlite3_vfs*, void*, const char*))(void);
-			void (*dl_close)(sqlite3_vfs*, void*);
-			int (*randomness)(sqlite3_vfs*, int, char*);
-			int (*sleep)(sqlite3_vfs*, int);
-			int (*current_time)(sqlite3_vfs*, double*);
-			int (*get_last_error)(sqlite3_vfs*, int, char*);
-			int (*current_time_int64)(sqlite3_vfs*, long long*);
-			int (*set_system_call)(sqlite3_vfs*, const char*, sqlite3_syscall_ptr);
-			sqlite3_syscall_ptr (*get_system_call)(sqlite3_vfs*, const char*);
-			const char* (*next_system_call)(sqlite3_vfs*, const char*);
-		};
+		using sqlite3_file = sqlite_vfs_abi::file;
+		using sqlite3_io_methods = sqlite_vfs_abi::io_methods;
+		using sqlite3_vfs = sqlite_vfs_abi::vfs;
+		using sqlite3_syscall_ptr = sqlite_vfs_abi::syscall_ptr;
 
 		[[nodiscard]] error forwarding_error(std::string detail)
 		{
@@ -364,6 +328,8 @@ namespace cxxlens::sdk
 			std::optional<sqlite_backend_opaque_identity> shared_memory_entry_identity;
 			std::vector<sqlite_backend_shm_lock_observation> held_shm_locks;
 			std::vector<sqlite_backend_shm_map_observation> shm_map_events;
+			std::size_t native_shm_map_attempt_count{};
+			bool writer_shm_mapping_epoch_requested{};
 			std::optional<sqlite_source_shm_qualified_open_plan> source_shm_open_plan;
 			std::optional<sqlite_source_shm_qualification_open_plan>
 				source_shm_qualification_open_plan;
@@ -374,9 +340,16 @@ namespace cxxlens::sdk
 			std::optional<sqlite_source_shm_open_callback_receipt> source_shm_open_callback_receipt;
 			std::optional<sqlite_backend_opaque_identity> main_native_file_receipt;
 			std::optional<sqlite_backend_opaque_identity> main_native_xopen_receipt;
+			std::optional<sqlite_backend_opaque_identity> main_callback_cohort;
 			std::optional<sqlite_backend_opaque_identity> main_open_epoch;
+			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> writer_target_namespace_epoch;
+			std::optional<sqlite_backend_opaque_identity> writer_sqlite_source_id;
+			std::optional<sqlite_backend_opaque_identity> writer_effect_gate_receipt;
+			std::optional<sqlite_backend_opaque_identity> writer_effect_receipt;
 			std::optional<sqlite_shm_writer_eligibility> writer_eligibility;
 			std::weak_ptr<default_forwarding_state> owner;
+			std::weak_ptr<native_file_node> main_native_node;
+			std::weak_ptr<native_file_node> wal_native_node;
 			std::string profile;
 			bool complete{};
 			bool invalid{};
@@ -429,7 +402,38 @@ namespace cxxlens::sdk
 				return effect_gate.get();
 			}
 
+			[[nodiscard]] bool requires_source_shm_writer_mapping_epoch() const noexcept override
+			{
+				return true;
+			}
+
+			[[nodiscard]] bool native_shm_map_attempted() const noexcept override
+			{
+				std::scoped_lock lock{mutex};
+				return native_shm_map_attempt_count != 0U;
+			}
+
+			[[nodiscard]] result<void> request_writer_shm_mapping_epoch() override
+			{
+				std::scoped_lock lock{mutex};
+				if (invalid || main_handle_open || writer_shm_mapping_epoch_requested)
+					return unexpected(forwarding_error("source-shm-writer-epoch-request"));
+				writer_shm_mapping_epoch_requested = true;
+				return {};
+			}
+
+			[[nodiscard]] bool writer_shm_mapping_epoch_armed() const noexcept override
+			{
+				std::scoped_lock lock{mutex};
+				return writer_target_namespace_epoch != nullptr &&
+					writer_sqlite_source_id.has_value();
+			}
+
 			[[nodiscard]] result<void> install_current_v3_writer_eligibility() override;
+
+			[[nodiscard]] result<void> arm_writer_shm_mapping_epoch(
+				std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch,
+				sqlite_backend_opaque_identity sqlite_source_id) override;
 
 			[[nodiscard]] result<void>
 			arm_source_shm_readonly_profile(sqlite_source_shm_qualified_open_plan plan) override;
@@ -475,6 +479,15 @@ namespace cxxlens::sdk
 			sqlite_backend_opaque_identity entry;
 		};
 
+		/** Stable source-private view of the installed family while one VFS owner is alive. */
+		struct source_shm_reader_registry_context
+		{
+			sqlite_same_process_shm_mapping_registry* registry{};
+			sqlite_shm_registry_family_pin* family{};
+			const sqlite_shm_lease_family_binding* family_binding{};
+			const sqlite_backend_opaque_identity* alias_lifetime{};
+		};
+
 		struct native_file_node
 		{
 			native_file_node(const std::size_t storage_bytes,
@@ -493,9 +506,12 @@ namespace cxxlens::sdk
 				  observation{std::move(observation_pin)},
 				  target_namespace_epoch{std::move(epoch_pin)}, underlying{underlying_vfs},
 				  underlying_vfs_identity{underlying_vfs},
+				  underlying_vfs_version{underlying_vfs != nullptr ? underlying_vfs->version : 0},
 				  underlying_app_data_identity{underlying_app_data},
 				  underlying_image_identity{underlying_image},
-				  underlying_open_callback_address{underlying_open_callback}
+				  underlying_open_callback_address{underlying_open_callback},
+				  underlying_full_pathname_callback_address{
+					  function_address(underlying_vfs->full_pathname)}
 			{
 				std::memset(storage.get(), 0, storage_count * sizeof(std::max_align_t));
 			}
@@ -511,11 +527,16 @@ namespace cxxlens::sdk
 			std::shared_ptr<void> runtime_lifetime;
 			std::shared_ptr<default_connection_observation> observation;
 			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch;
+			bool writer_target_namespace_epoch_owner{};
 			sqlite3_vfs* underlying{};
 			const void* underlying_vfs_identity{};
+			int underlying_vfs_version{};
 			const void* underlying_app_data_identity{};
 			const void* underlying_image_identity{};
 			const void* underlying_open_callback_address{};
+			const void* underlying_full_pathname_callback_address{};
+			const sqlite3_io_methods* underlying_methods_identity{};
+			int underlying_methods_version{};
 			sqlite3_io_methods trusted_methods{};
 			bool trusted_methods_ready{};
 			int (*trusted_close)(sqlite3_file*){};
@@ -523,9 +544,32 @@ namespace cxxlens::sdk
 			// close epoch before the source's weak owner is released.
 			std::optional<sqlite_writer_shm_native_lifetime_source> writer_lifetime_source;
 			std::optional<sqlite_writer_shm_native_lifetime_revoker> writer_lifetime_revoker;
+			std::optional<sqlite_writer_shm_native_lifetime_source> writer_retained_parent_source;
+			std::optional<sqlite_writer_shm_native_lifetime_revoker> writer_retained_parent_revoker;
+			std::optional<sqlite_backend_opaque_identity> writer_retained_parent_receipt;
+			std::optional<sqlite_writer_shm_native_lifetime_source> writer_shm_attachment_source;
+			std::optional<sqlite_writer_shm_native_lifetime_revoker> writer_shm_attachment_revoker;
+			std::optional<sqlite_backend_opaque_identity> writer_shm_attachment_receipt;
 			std::optional<sqlite_backend_opaque_identity> writer_native_file_receipt;
 			std::optional<sqlite_backend_opaque_identity> writer_native_xopen_receipt;
+			std::optional<sqlite_backend_opaque_identity> writer_callback_cohort;
 			std::optional<sqlite_backend_opaque_identity> writer_open_epoch;
+			// One writer attachment spans every page map on this native main handle. The
+			// identity must not be reminted for a later page, otherwise the registry sees a
+			// same-family lineage with a different attachment epoch and rejects the extension.
+			std::optional<sqlite_backend_opaque_identity> writer_attachment_epoch;
+			std::vector<sqlite_shm_pending_mapping> writer_pending;
+			std::optional<sqlite_shm_native_attachment_identity> writer_pending_attachment;
+			std::vector<sqlite_shm_writer_holder> writer_holders;
+			std::mutex writer_lifecycle_mutex;
+			std::optional<sqlite_shm_reader_open_authority> reader_open_authority;
+			std::mutex reader_lifecycle_mutex;
+			std::optional<sqlite_shm_reader_session_request> reader_session_request;
+			std::optional<sqlite_shm_reader_session> reader_session;
+			std::optional<sqlite_shm_reader_handoff> reader_handoff;
+			std::uint64_t reader_generation{};
+			bool reader_existing_route_active{};
+			bool reader_lifecycle_failed{};
 			std::shared_ptr<native_file_node> quarantine_self;
 			bool close_attempted{};
 		};
@@ -783,11 +827,39 @@ namespace cxxlens::sdk
 			output.insert(output.end(), identity.bytes.begin(), identity.bytes.end());
 		}
 
+		[[nodiscard]] bool
+		valid_opaque_identity(const sqlite_backend_opaque_identity& identity) noexcept
+		{
+			return !identity.profile.empty() && !identity.bytes.empty();
+		}
+
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_sqlite_source_id_identity(const char* source_id) noexcept
+		{
+			if (source_id == nullptr || source_id[0] == '\0')
+				return std::nullopt;
+			try
+			{
+				sqlite_backend_opaque_identity output{"cxxlens.sqlite-source-id.v1", {}};
+				const auto value = std::string_view{source_id};
+				output.bytes.reserve(value.size());
+				for (const auto character : value)
+					output.bytes.push_back(
+						static_cast<std::byte>(static_cast<unsigned char>(character)));
+				return output;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
 		struct native_lifetime_receipts
 		{
 			sqlite_backend_opaque_identity lifetime;
 			sqlite_backend_opaque_identity semantic;
 			sqlite_backend_opaque_identity xopen;
+			sqlite_backend_opaque_identity callback_cohort;
 			sqlite_backend_opaque_identity open_epoch;
 		};
 
@@ -831,6 +903,16 @@ namespace cxxlens::sdk
 				runtime.vfs_unregister != nullptr;
 		}
 
+		class default_forwarding_state;
+
+		struct default_forwarding_state_deleter
+		{
+			void operator()(default_forwarding_state* state) const noexcept;
+		};
+
+		void drain_deferred_forwarding_states() noexcept;
+		void defer_forwarding_state(default_forwarding_state* state) noexcept;
+
 		class default_forwarding_state final
 			: public sqlite_default_forwarding_vfs,
 			  public std::enable_shared_from_this<default_forwarding_state>
@@ -839,6 +921,7 @@ namespace cxxlens::sdk
 			static result<std::shared_ptr<default_forwarding_state>>
 			create(sqlite_private_snapshot_registry_binding registry)
 			{
+				drain_deferred_forwarding_states();
 				const auto source_runtime_present =
 					source_shm_runtime_receipt_present(registry.source_shm_runtime);
 				if (registry.runtime_identity == nullptr ||
@@ -887,7 +970,8 @@ namespace cxxlens::sdk
 													 underlying,
 													 underlying->app_data,
 													 underlying_image.dli_fbase,
-													 *file_offset));
+													 *file_offset),
+						default_forwarding_state_deleter{});
 					output->initialize_wrapper();
 					auto registered = output->register_alias();
 					if (!registered)
@@ -918,24 +1002,52 @@ namespace cxxlens::sdk
 			{
 				if (open_file_count_.load(std::memory_order_acquire) != 0U)
 					std::terminate();
+				if (registered_alias_ || source_shm_family_ || registered_)
+					std::terminate();
+			}
+
+			[[nodiscard]] bool finalize_lifetime() noexcept
+			{
+				if (open_file_count_.load(std::memory_order_acquire) != 0U)
+					std::terminate();
 				if (!registered_alias_)
 				{
 					if (!registered_)
-						return;
+						return true;
 					std::scoped_lock lock{forwarding_registration_mutex};
 					if (registry_.find(registered_name_.c_str()) != &wrapper_ ||
 						registry_.unregister_vfs(&wrapper_) != sqlite_ok ||
 						registry_.find(registered_name_.c_str()) != nullptr)
 						std::terminate();
 					registered_ = false;
-					return;
+					return true;
 				}
-				source_shm_family_.reset();
+				if (source_shm_family_)
+				{
+					if (!registered_alias_ || !registered_alias_->valid() ||
+						registered_alias_->registry() == nullptr)
+						std::terminate();
+					auto released =
+						registered_alias_->registry()->release_family(*source_shm_family_);
+					if (!released)
+					{
+						if (released.error().reason == sqlite_shm_lease_rejection_reason::retiring)
+							return false;
+						std::terminate();
+					}
+					source_shm_family_.reset();
+				}
 				source_shm_family_binding_.reset();
-				if (!registered_alias_->unregister_alias())
+				auto unregistered = registered_alias_->unregister_alias();
+				if (!unregistered)
+				{
+					if (unregistered.error().reason == sqlite_shm_lease_rejection_reason::retiring)
+						return false;
 					std::terminate();
+				}
 				registered_alias_.reset();
 				registered_ = false;
+				return true;
 			}
 
 			[[nodiscard]] std::string_view registered_vfs_name() const noexcept override
@@ -1026,7 +1138,7 @@ namespace cxxlens::sdk
 			[[nodiscard]] std::optional<std::uint64_t> mint_native_lifetime_sequence() noexcept
 			{
 				const auto sequence =
-					next_native_lifetime_sequence_.fetch_add(1U, std::memory_order_relaxed);
+					next_native_lifetime_sequence.fetch_add(1U, std::memory_order_relaxed);
 				if (sequence == 0U || sequence == std::numeric_limits<std::uint64_t>::max())
 					return std::nullopt;
 				return sequence;
@@ -1069,7 +1181,43 @@ namespace cxxlens::sdk
 				default_connection_observation& observation,
 				const sqlite_backend_effect_arm_receipt& effect_receipt);
 			[[nodiscard]] result<void>
+			promote_current_v3_writer_pending(default_connection_observation& observation);
+			[[nodiscard]] result<void> arm_writer_shm_mapping_epoch(
+				default_connection_observation& observation,
+				std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch,
+				sqlite_backend_opaque_identity sqlite_source_id);
+			[[nodiscard]] result<void> arm_requested_writer_epoch_before_native_map(
+				default_connection_observation& observation);
+			[[nodiscard]] int remove_writer_shm_sidecar() noexcept;
+			[[nodiscard]] result<void> ensure_writer_file_family(
+				const sqlite_source_shm_target_namespace_epoch& target_namespace_epoch);
+			[[nodiscard]] result<void>
 			revoke_writer_eligibility(default_connection_observation& observation) noexcept;
+			[[nodiscard]] result<void> acquire_source_reader_open(
+				default_connection_observation& observation,
+				native_file_node& node,
+				std::optional<sqlite_shm_reader_attachment_target_identity> target_identity);
+			[[nodiscard]] result<void> release_source_reader_open(native_file_node& node) noexcept;
+			[[nodiscard]] std::optional<source_shm_reader_registry_context>
+			source_shm_reader_context() noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{source_shm_family_mutex_};
+					if (!source_shm_family_ || !source_shm_family_binding_ || !registered_alias_ ||
+						!registered_alias_->valid() || registered_alias_->registry() == nullptr ||
+						!source_shm_family_->valid())
+						return std::nullopt;
+					return source_shm_reader_registry_context{registered_alias_->registry(),
+															  &*source_shm_family_,
+															  &*source_shm_family_binding_,
+															  &registered_alias_->alias_lifetime()};
+				}
+				catch (...)
+				{
+					return std::nullopt;
+				}
+			}
 
 			[[nodiscard]] result<void>
 			arm_source_shm_readonly_profile(default_connection_observation& observation,
@@ -1463,9 +1611,20 @@ namespace cxxlens::sdk
 							continue;
 						}
 						std::scoped_lock observation_lock{existing->mutex};
+						const auto active_writer_overlap =
+							existing->canonical_locator == canonical_locator &&
+							existing->main_handle_open && !existing->invalid &&
+							existing->effect_gate != nullptr &&
+							existing->effect_gate->stage() ==
+								sqlite_backend_effect_stage::fully_armed &&
+							!existing->source_shm_open_plan &&
+							!existing->source_shm_qualification_open_plan &&
+							!existing->source_shm_qualification_fixture_fullpath_plan &&
+							!existing->source_shm_qualification_fixture_pending_open_plan;
 						if (existing->canonical_locator == canonical_locator &&
 							existing->originating_thread == observation->originating_thread &&
-							(!existing->main_claimed || existing->main_handle_open))
+							(!existing->main_claimed || existing->main_handle_open) &&
+							!active_writer_overlap)
 							return unexpected(forwarding_error("vfs-observation-overlap"));
 						++iterator;
 					}
@@ -1581,8 +1740,19 @@ namespace cxxlens::sdk
 							continue;
 						}
 						std::scoped_lock observation_lock{existing->mutex};
+						const auto active_writer_overlap =
+							existing->canonical_locator == canonical_locator_ &&
+							existing->main_handle_open && !existing->invalid &&
+							existing->effect_gate != nullptr &&
+							existing->effect_gate->stage() ==
+								sqlite_backend_effect_stage::fully_armed &&
+							!existing->source_shm_open_plan &&
+							!existing->source_shm_qualification_open_plan &&
+							!existing->source_shm_qualification_fixture_fullpath_plan &&
+							!existing->source_shm_qualification_fixture_pending_open_plan;
 						if (existing->originating_thread == observation->originating_thread &&
-							(!existing->main_claimed || existing->main_handle_open))
+							(!existing->main_claimed || existing->main_handle_open) &&
+							!active_writer_overlap)
 							return unexpected(
 								forwarding_error("source-shm-qualification-observation-overlap"));
 						++iterator;
@@ -2186,7 +2356,6 @@ namespace cxxlens::sdk
 			std::string canonical_locator_;
 			std::string observation_profile_;
 			std::atomic<std::uint64_t> next_connection_observation_{1U};
-			std::atomic<std::uint64_t> next_native_lifetime_sequence_{1U};
 			std::atomic<std::size_t> open_file_count_;
 			std::optional<sqlite_shm_registered_vfs_alias> registered_alias_;
 			std::mutex source_shm_family_mutex_;
@@ -2194,6 +2363,98 @@ namespace cxxlens::sdk
 			std::optional<sqlite_shm_lease_family_binding> source_shm_family_binding_;
 			bool registered_{};
 		};
+
+		struct deferred_forwarding_state_queue
+		{
+			std::mutex mutex;
+			std::vector<default_forwarding_state*> pending;
+			bool draining{};
+		};
+
+		[[nodiscard]] deferred_forwarding_state_queue& deferred_forwarding_states() noexcept
+		{
+			static auto* queue = new deferred_forwarding_state_queue;
+			return *queue;
+		}
+
+		void defer_forwarding_state(default_forwarding_state* const state) noexcept
+		{
+			if (state == nullptr)
+				std::terminate();
+			try
+			{
+				auto& queue = deferred_forwarding_states();
+				std::scoped_lock lock{queue.mutex};
+				queue.pending.push_back(state);
+			}
+			catch (...)
+			{
+				std::terminate();
+			}
+		}
+
+		void drain_deferred_forwarding_states() noexcept
+		{
+			auto& queue = deferred_forwarding_states();
+			{
+				std::scoped_lock lock{queue.mutex};
+				if (queue.draining)
+					return;
+				queue.draining = true;
+			}
+
+			for (;;)
+			{
+				std::vector<default_forwarding_state*> current;
+				{
+					std::scoped_lock lock{queue.mutex};
+					if (queue.pending.empty())
+					{
+						queue.draining = false;
+						return;
+					}
+					current.swap(queue.pending);
+				}
+
+				std::vector<default_forwarding_state*> retry;
+				retry.reserve(current.size());
+				bool progress{};
+				for (auto* const state : current)
+				{
+					if (state->finalize_lifetime())
+					{
+						delete state;
+						progress = true;
+					}
+					else
+						retry.push_back(state);
+				}
+				{
+					std::scoped_lock lock{queue.mutex};
+					queue.pending.insert(queue.pending.end(), retry.begin(), retry.end());
+					if (!progress)
+					{
+						queue.draining = false;
+						return;
+					}
+				}
+			}
+		}
+
+		void default_forwarding_state_deleter::operator()(
+			default_forwarding_state* const state) const noexcept
+		{
+			if (state == nullptr)
+				return;
+			if (state->finalize_lifetime())
+			{
+				delete state;
+				drain_deferred_forwarding_states();
+				return;
+			}
+			defer_forwarding_state(state);
+			drain_deferred_forwarding_states();
+		}
 
 		[[nodiscard]] std::optional<native_lifetime_receipts>
 		make_native_lifetime_receipts(const default_forwarding_state& owner,
@@ -2251,6 +2512,16 @@ namespace cxxlens::sdk
 				append_pointer(xopen.bytes, owner.underlying_open_callback_address());
 				append_pointer(xopen.bytes, node.underlying_app_data_identity);
 
+				sqlite_backend_opaque_identity callback_cohort{
+					"cxxlens.sqlite-native-callback-cohort.v1", {}};
+				callback_cohort.bytes.reserve(96U);
+				append_pointer(callback_cohort.bytes, owner.vfs_implementation_identity());
+				append_pointer(callback_cohort.bytes, owner.underlying());
+				append_pointer(callback_cohort.bytes, owner.underlying_open_callback_address());
+				append_pointer(callback_cohort.bytes, node.underlying_app_data_identity);
+				append_pointer(callback_cohort.bytes, &node);
+				append_u64(callback_cohort.bytes, static_cast<std::uint64_t>(event_index));
+
 				sqlite_backend_opaque_identity open_epoch{"cxxlens.sqlite-native-open-epoch.v1",
 														  {}};
 				open_epoch.bytes.reserve(lifetime.bytes.size() + xopen.bytes.size());
@@ -2259,6 +2530,7 @@ namespace cxxlens::sdk
 				return native_lifetime_receipts{std::move(lifetime),
 												std::move(semantic),
 												std::move(xopen),
+												std::move(callback_cohort),
 												std::move(open_epoch)};
 			}
 			catch (const std::bad_alloc&)
@@ -2306,11 +2578,15 @@ namespace cxxlens::sdk
 					std::move(*open_epoch),
 					effect_receipt);
 				if (!sealed)
+				{
 					return unexpected(forwarding_error("source-shm-writer-eligibility"));
+				}
 				auto installed = registered_alias_->registry()->install_writer_eligibility(
 					*source_shm_family_, *sealed);
 				if (!installed)
+				{
 					return unexpected(forwarding_error("source-shm-writer-eligibility"));
+				}
 				{
 					std::scoped_lock lock{observation.mutex};
 					if (observation.writer_eligibility)
@@ -2320,6 +2596,8 @@ namespace cxxlens::sdk
 						return unexpected(forwarding_error("source-shm-writer-eligibility"));
 					}
 					observation.writer_eligibility.emplace(std::move(*installed));
+					observation.writer_effect_gate_receipt = effect_receipt.prerequisite_receipt;
+					observation.writer_effect_receipt = effect_receipt.validation_receipt;
 				}
 				return {};
 			}
@@ -2330,6 +2608,290 @@ namespace cxxlens::sdk
 			catch (const std::length_error&)
 			{
 				return unexpected(forwarding_error("source-shm-writer-eligibility"));
+			}
+		}
+
+		result<void> default_forwarding_state::promote_current_v3_writer_pending(
+			default_connection_observation& observation)
+		{
+			try
+			{
+				auto node = observation.main_native_node.lock();
+				if (!node)
+					return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
+				std::unique_lock lifecycle_lock{node->writer_lifecycle_mutex, std::try_to_lock};
+				if (!lifecycle_lock.owns_lock() || node->writer_holders.size() != 0U)
+					return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
+				if (node->writer_pending.empty())
+					return {};
+
+				const auto context = source_shm_reader_context();
+				if (!context || !context->registry || !context->family ||
+					!context->family_binding || !context->alias_lifetime ||
+					!node->writer_pending_attachment)
+					return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
+
+				std::vector<sqlite_shm_pending_mapping*> pending;
+				pending.reserve(node->writer_pending.size());
+				for (auto& mapping : node->writer_pending)
+				{
+					if (!mapping.valid())
+						return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
+					pending.push_back(&mapping);
+				}
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (observation.invalid || !observation.main_handle_open ||
+						!observation.writer_eligibility ||
+						!observation.writer_target_namespace_epoch ||
+						observation.writer_target_namespace_epoch != node->target_namespace_epoch)
+						return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
+					auto promoted = context->registry->advance_positive_writer_attachment_gate(
+						*context->family,
+						*node->writer_pending_attachment,
+						std::span<sqlite_shm_pending_mapping*>{pending.data(), pending.size()},
+						*observation.writer_eligibility);
+					if (!promoted ||
+						promoted->progress !=
+							sqlite_shm_positive_writer_attachment_gate_progress::complete ||
+						promoted->holders.size() != pending.size())
+					{
+						return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
+					}
+					node->writer_holders.swap(promoted->holders);
+					node->writer_pending.clear();
+					node->writer_pending_attachment.reset();
+				}
+				return {};
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
+			}
+			catch (const std::length_error&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
+			}
+			catch (...)
+			{
+				return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
+			}
+		}
+
+		result<void> default_forwarding_state::arm_writer_shm_mapping_epoch(
+			default_connection_observation& observation,
+			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch,
+			sqlite_backend_opaque_identity sqlite_source_id)
+		{
+			try
+			{
+				const auto reject = []() -> result<void>
+				{
+					return unexpected(forwarding_error("source-shm-writer-epoch-arm"));
+				};
+				if (!target_namespace_epoch || !valid_opaque_identity(sqlite_source_id) ||
+					target_namespace_epoch->logical_main_locator() !=
+						observation.canonical_locator ||
+					target_namespace_epoch->anchored_main_locator().empty() ||
+					!valid_opaque_identity(target_namespace_epoch->identity()) ||
+					!valid_opaque_identity(target_namespace_epoch->parent_namespace_identity()) ||
+					!target_namespace_epoch->recheck())
+					return reject();
+				const auto expected_source_id =
+					make_sqlite_source_id_identity(registry_.source_shm_runtime.source_id());
+				if (!expected_source_id || sqlite_source_id != *expected_source_id)
+					return reject();
+				std::shared_ptr<native_file_node> main_node;
+				std::shared_ptr<native_file_node> wal_node;
+				bool attach_to_open_connection{};
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (observation.invalid)
+						return reject();
+					if (observation.writer_target_namespace_epoch)
+						return reject();
+					if (observation.writer_sqlite_source_id)
+						return reject();
+					attach_to_open_connection = observation.main_handle_open;
+					if (attach_to_open_connection)
+					{
+						if (observation.main_handle_read_only ||
+							observation.shm_map_events.size() != 0U ||
+							!observation.main_native_file_receipt ||
+							!observation.main_native_xopen_receipt ||
+							!observation.main_callback_cohort || !observation.main_open_epoch ||
+							!observation.main_native_node.lock())
+							return reject();
+						main_node = observation.main_native_node.lock();
+						wal_node = observation.wal_native_node.lock();
+					}
+				}
+				if (auto family = ensure_writer_file_family(*target_namespace_epoch); !family)
+					return family;
+				if (attach_to_open_connection)
+				{
+					if (!main_node || (wal_node && main_node == wal_node))
+						return reject();
+					std::unique_lock main_lock{main_node->writer_lifecycle_mutex};
+					if (main_node->target_namespace_epoch || !main_node->writer_lifetime_source ||
+						!main_node->writer_lifetime_source->valid())
+						return reject();
+					std::optional<std::unique_lock<std::mutex>> wal_lock;
+					if (wal_node)
+					{
+						wal_lock.emplace(wal_node->writer_lifecycle_mutex);
+						if (wal_node->target_namespace_epoch || !wal_node->writer_lifetime_source ||
+							!wal_node->writer_lifetime_source->valid())
+							return reject();
+					}
+					main_node->target_namespace_epoch = target_namespace_epoch;
+					main_node->writer_target_namespace_epoch_owner = true;
+					if (wal_node)
+						wal_node->target_namespace_epoch = target_namespace_epoch;
+				}
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (observation.invalid || observation.writer_target_namespace_epoch ||
+						observation.writer_sqlite_source_id ||
+						(attach_to_open_connection != observation.main_handle_open))
+						return reject();
+					observation.writer_target_namespace_epoch = std::move(target_namespace_epoch);
+					observation.writer_sqlite_source_id = std::move(sqlite_source_id);
+				}
+				return {};
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-epoch-arm"));
+			}
+			catch (const std::length_error&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-epoch-arm"));
+			}
+			catch (...)
+			{
+				return unexpected(forwarding_error("source-shm-writer-epoch-arm"));
+			}
+		}
+
+		result<void> default_forwarding_state::arm_requested_writer_epoch_before_native_map(
+			default_connection_observation& observation)
+		{
+			try
+			{
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (observation.invalid || !observation.writer_shm_mapping_epoch_requested ||
+						observation.writer_target_namespace_epoch ||
+						observation.writer_sqlite_source_id || !observation.main_handle_open ||
+						observation.main_handle_read_only || observation.source_shm_open_plan ||
+						observation.source_shm_qualification_open_plan ||
+						observation.source_shm_qualification_fixture_fullpath_plan ||
+						observation.source_shm_qualification_fixture_pending_open_plan)
+						return unexpected(forwarding_error("source-shm-writer-epoch-pre-map"));
+				}
+				auto capability = observation_capability_.lock();
+				if (!capability || canonical_locator_.empty())
+					return unexpected(forwarding_error("source-shm-writer-epoch-pre-map"));
+				auto census = capability->capture_namespace(canonical_locator_);
+				if (!census)
+					return unexpected(forwarding_error("source-shm-writer-epoch-pre-map"));
+				auto target_namespace_epoch =
+					make_sqlite_source_shm_target_namespace_epoch(canonical_locator_, *census);
+				if (!target_namespace_epoch)
+					return unexpected(forwarding_error("source-shm-writer-epoch-pre-map"));
+				auto sqlite_source_id =
+					make_sqlite_source_id_identity(registry_.source_shm_runtime.source_id());
+				if (!sqlite_source_id)
+					return unexpected(forwarding_error("source-shm-writer-epoch-pre-map"));
+				return arm_writer_shm_mapping_epoch(
+					observation, std::move(*target_namespace_epoch), std::move(*sqlite_source_id));
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-epoch-pre-map"));
+			}
+			catch (const std::length_error&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-epoch-pre-map"));
+			}
+			catch (...)
+			{
+				return unexpected(forwarding_error("source-shm-writer-epoch-pre-map"));
+			}
+		}
+
+		int default_forwarding_state::remove_writer_shm_sidecar() noexcept
+		{
+			try
+			{
+				if (canonical_locator_.empty() || canonical_locator_.contains('\0'))
+					return sqlite_io_error;
+				std::string shared_memory_path{canonical_locator_};
+				shared_memory_path.append(shm_suffix);
+				return forwarding_vfs_remove(&wrapper_, shared_memory_path.c_str(), 1);
+			}
+			catch (...)
+			{
+				return sqlite_io_error;
+			}
+		}
+
+		result<void> default_forwarding_state::ensure_writer_file_family(
+			const sqlite_source_shm_target_namespace_epoch& target_namespace_epoch)
+		{
+			try
+			{
+				std::scoped_lock lock{source_shm_family_mutex_};
+				if (source_shm_family_ && source_shm_family_binding_)
+					return {};
+				if (!registered_alias_ || !registered_alias_->valid() ||
+					registered_alias_->registry() == nullptr ||
+					registry_.source_shm_runtime.source_id == nullptr)
+					return unexpected(forwarding_error("source-shm-writer-family"));
+				constexpr std::array roles{
+					sqlite_backend_file_role::main_database,
+					sqlite_backend_file_role::write_ahead_log,
+					sqlite_backend_file_role::shared_memory,
+					sqlite_backend_file_role::rollback_journal,
+				};
+				std::array<sqlite_backend_entry_observation, roles.size()> entries;
+				for (std::size_t index{}; index < roles.size(); ++index)
+				{
+					auto retained = target_namespace_epoch.retained_entry(roles[index]);
+					if (!retained)
+						return unexpected(forwarding_error("source-shm-writer-family"));
+					entries[index] = std::move(*retained);
+				}
+				auto exact_file_family = seal_sqlite_source_shm_exact_file_family(
+					canonical_locator_,
+					target_namespace_epoch.parent_namespace_identity(),
+					registry_.source_shm_runtime.source_id(),
+					std::span<const sqlite_backend_entry_observation>{entries});
+				if (!exact_file_family)
+					return unexpected(forwarding_error("source-shm-writer-family"));
+				const sqlite_shm_lease_family_binding family{
+					registered_alias_->process_instance(),
+					registered_alias_->shared_runtime_vfs_cohort(),
+					std::move(*exact_file_family)};
+				if (!registered_alias_->registry())
+					return unexpected(forwarding_error("source-shm-writer-family"));
+				auto installed =
+					sqlite_same_process_shm_vfs_alias_registration_port::install_or_join_family(
+						*registered_alias_, family);
+				if (!installed)
+					return unexpected(forwarding_error("source-shm-writer-family"));
+				source_shm_family_.emplace(std::move(*installed));
+				source_shm_family_binding_ = family;
+				return {};
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-family"));
+			}
+			catch (const std::length_error&)
+			{
+				return unexpected(forwarding_error("source-shm-writer-family"));
 			}
 		}
 
@@ -2349,16 +2911,97 @@ namespace cxxlens::sdk
 				}
 				if (!source_shm_family_ || !registered_alias_ || !registered_alias_->valid() ||
 					registered_alias_->registry() == nullptr)
+				{
 					return unexpected(forwarding_error("source-shm-writer-eligibility-revoke"));
+				}
 				auto revoked = registered_alias_->registry()->revoke_writer_eligibility(
 					*source_shm_family_, *eligibility);
 				if (!revoked)
+				{
 					return unexpected(forwarding_error("source-shm-writer-eligibility-revoke"));
+				}
 				return {};
 			}
 			catch (...)
 			{
 				return unexpected(forwarding_error("source-shm-writer-eligibility-revoke"));
+			}
+		}
+
+		result<void> default_forwarding_state::acquire_source_reader_open(
+			default_connection_observation& observation,
+			native_file_node& node,
+			std::optional<sqlite_shm_reader_attachment_target_identity> target_identity)
+		{
+			try
+			{
+				std::scoped_lock family_lock{source_shm_family_mutex_};
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (!observation.source_shm_open_plan ||
+						observation.source_shm_qualification_open_plan)
+						return {};
+					if (observation.invalid || node.reader_open_authority ||
+						!observation.main_native_file_receipt ||
+						!observation.main_native_xopen_receipt ||
+						!observation.main_callback_cohort || !observation.main_open_epoch)
+						return unexpected(forwarding_error("source-shm-reader-open"));
+				}
+				if (!source_shm_family_ || !source_shm_family_binding_ || !registered_alias_ ||
+					!registered_alias_->valid() || registered_alias_->registry() == nullptr ||
+					!source_shm_family_->valid())
+					return unexpected(forwarding_error("source-shm-reader-open"));
+
+				sqlite_shm_reader_open_binding binding;
+				{
+					std::scoped_lock lock{observation.mutex};
+					binding = {*source_shm_family_binding_,
+							   registered_alias_->alias_lifetime(),
+							   observation.connection_token_value,
+							   *observation.main_native_file_receipt,
+							   *observation.main_native_xopen_receipt,
+							   *observation.main_open_epoch,
+							   *observation.main_callback_cohort,
+							   std::move(target_identity)};
+				}
+				auto acquired = sqlite_shm_reader_open_production_factory::acquire(
+					*registered_alias_->registry(), *source_shm_family_, binding);
+				if (!acquired)
+					return unexpected(forwarding_error("source-shm-reader-open"));
+				node.reader_open_authority.emplace(std::move(*acquired));
+				return {};
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(forwarding_error("source-shm-reader-open"));
+			}
+			catch (const std::length_error&)
+			{
+				return unexpected(forwarding_error("source-shm-reader-open"));
+			}
+		}
+
+		result<void>
+		default_forwarding_state::release_source_reader_open(native_file_node& node) noexcept
+		{
+			try
+			{
+				if (!node.reader_open_authority)
+					return {};
+				std::scoped_lock family_lock{source_shm_family_mutex_};
+				if (!source_shm_family_ || !registered_alias_ || !registered_alias_->valid() ||
+					registered_alias_->registry() == nullptr)
+					return unexpected(forwarding_error("source-shm-reader-open-release"));
+				auto released =
+					registered_alias_->registry()->release_reader_open(*node.reader_open_authority);
+				if (!released)
+					return unexpected(forwarding_error("source-shm-reader-open-release"));
+				node.reader_open_authority.reset();
+				return {};
+			}
+			catch (...)
+			{
+				return unexpected(forwarding_error("source-shm-reader-open-release"));
 			}
 		}
 
@@ -2371,7 +3014,22 @@ namespace cxxlens::sdk
 			if (!effect_receipt ||
 				effect_receipt->stage != sqlite_backend_effect_stage::fully_armed)
 				return unexpected(forwarding_error("source-shm-writer-eligibility"));
-			return owner_pin->install_current_v3_writer_eligibility(*this, *effect_receipt);
+			if (auto installed =
+					owner_pin->install_current_v3_writer_eligibility(*this, *effect_receipt);
+				!installed)
+				return installed;
+			return owner_pin->promote_current_v3_writer_pending(*this);
+		}
+
+		result<void> default_connection_observation::arm_writer_shm_mapping_epoch(
+			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch,
+			sqlite_backend_opaque_identity sqlite_source_id)
+		{
+			auto owner_pin = owner.lock();
+			if (!owner_pin)
+				return unexpected(forwarding_error("source-shm-writer-epoch-arm"));
+			return owner_pin->arm_writer_shm_mapping_epoch(
+				*this, std::move(target_namespace_epoch), std::move(sqlite_source_id));
 		}
 
 		qualification_full_path_result default_forwarding_state::preserve_qualified_full_path(
@@ -2696,6 +3354,108 @@ namespace cxxlens::sdk
 			return output;
 		}
 
+		/**
+		 * Revalidate the complete native callback boundary immediately around a qualified SHM
+		 * delegation.  The forwarding VFS intentionally caches the trusted io-method table so a
+		 * malformed native table cannot be re-read later, but that cache must not hide a live VFS,
+		 * registration, or callback replacement.  A changed raw methods pointer is likewise a
+		 * terminal identity drift even when its replacement happens to point into the same image.
+		 */
+		[[nodiscard]] bool native_shm_callback_identity_valid(const native_file_node& node) noexcept
+		{
+			try
+			{
+				if (!node.owner || !node.trusted_methods_ready || node.underlying == nullptr ||
+					node.underlying_vfs_identity != node.underlying ||
+					node.underlying != node.owner->underlying() ||
+					node.underlying->version != node.underlying_vfs_version ||
+					node.underlying->app_data != node.underlying_app_data_identity ||
+					node.underlying->open == nullptr ||
+					function_address(node.underlying->open) !=
+						node.underlying_open_callback_address ||
+					node.underlying->full_pathname == nullptr ||
+					function_address(node.underlying->full_pathname) !=
+						node.underlying_full_pathname_callback_address)
+					return false;
+
+				const auto* wrapper =
+					static_cast<const sqlite3_vfs*>(node.owner->vfs_implementation_identity());
+				const auto& registry = node.owner->registry();
+				const auto expected_version = std::min(node.underlying_vfs_version, 3);
+				if (wrapper == nullptr || wrapper->version != expected_version ||
+					wrapper->app_data != node.owner->backend_lifetime_identity() ||
+					wrapper->name == nullptr ||
+					std::string_view{wrapper->name} != node.owner->registered_vfs_name() ||
+					registry.find == nullptr ||
+					registry.find(node.owner->registered_vfs_name().data()) != wrapper ||
+					wrapper->open != forwarding_vfs_open ||
+					wrapper->full_pathname != forwarding_vfs_full_pathname ||
+					wrapper->remove !=
+						(node.underlying->remove != nullptr ? forwarding_vfs_remove : nullptr) ||
+					wrapper->access !=
+						(node.underlying->access != nullptr ? forwarding_vfs_access : nullptr) ||
+					wrapper->dl_open !=
+						(node.underlying->dl_open != nullptr ? forwarding_vfs_dl_open : nullptr) ||
+					wrapper->dl_error !=
+						(node.underlying->dl_error != nullptr ? forwarding_vfs_dl_error
+															  : nullptr) ||
+					wrapper->dl_sym !=
+						(node.underlying->dl_sym != nullptr ? forwarding_vfs_dl_sym : nullptr) ||
+					wrapper->dl_close !=
+						(node.underlying->dl_close != nullptr ? forwarding_vfs_dl_close
+															  : nullptr) ||
+					wrapper->randomness !=
+						(node.underlying->randomness != nullptr ? forwarding_vfs_randomness
+																: nullptr) ||
+					wrapper->sleep !=
+						(node.underlying->sleep != nullptr ? forwarding_vfs_sleep : nullptr) ||
+					wrapper->current_time !=
+						(node.underlying->current_time != nullptr ? forwarding_vfs_current_time
+																  : nullptr) ||
+					wrapper->get_last_error !=
+						(node.underlying->get_last_error != nullptr ? forwarding_vfs_last_error
+																	: nullptr) ||
+					wrapper->current_time_int64 !=
+						(expected_version >= 2 && node.underlying->current_time_int64 != nullptr
+							 ? forwarding_vfs_current_time_int64
+							 : nullptr) ||
+					wrapper->set_system_call !=
+						(expected_version >= 3 && node.underlying->set_system_call != nullptr
+							 ? forwarding_vfs_set_system_call
+							 : nullptr) ||
+					wrapper->get_system_call !=
+						(expected_version >= 3 && node.underlying->get_system_call != nullptr
+							 ? forwarding_vfs_get_system_call
+							 : nullptr) ||
+					wrapper->next_system_call !=
+						(expected_version >= 3 && node.underlying->next_system_call != nullptr
+							 ? forwarding_vfs_next_system_call
+							 : nullptr))
+					return false;
+
+				const auto* raw = const_cast<native_file_node&>(node).file();
+				const auto* methods = raw != nullptr ? raw->methods : nullptr;
+				const auto inspected = inspect_native_methods(node);
+				if (raw == nullptr || methods == nullptr ||
+					methods != node.underlying_methods_identity ||
+					methods->version != node.underlying_methods_version ||
+					inspected.forwarding_methods == nullptr ||
+					methods->shm_map != node.trusted_methods.shm_map ||
+					methods->shm_lock != node.trusted_methods.shm_lock ||
+					methods->shm_barrier != node.trusted_methods.shm_barrier ||
+					methods->shm_unmap != node.trusted_methods.shm_unmap)
+					return false;
+				return true;
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
+
+		[[nodiscard]] int close_source_reader_native(std::shared_ptr<native_file_node>& node,
+													 int (*close_callback)(sqlite3_file*)) noexcept;
+
 		[[nodiscard]] int close_native_file(std::shared_ptr<native_file_node>& node,
 											int (*close_callback)(sqlite3_file*)) noexcept
 		{
@@ -2707,6 +3467,13 @@ namespace cxxlens::sdk
 			node->close_attempted = true;
 			try
 			{
+				if (!node->writer_holders.empty() || !node->writer_pending.empty())
+				{
+					// xClose cannot revoke a live or pending writer attachment. The caller must
+					// first complete the exact xShmUnmap cleanup boundary.
+					quarantine_native_file(node);
+					return sqlite_io_error;
+				}
 				if (node->writer_lifetime_revoker && !node->writer_lifetime_revoker->revoke())
 				{
 					// Native close is never entered after the source-private lifetime cut
@@ -2714,10 +3481,44 @@ namespace cxxlens::sdk
 					quarantine_native_file(node);
 					return sqlite_io_error;
 				}
+				if (node->writer_retained_parent_revoker &&
+					!node->writer_retained_parent_revoker->revoke())
+				{
+					quarantine_native_file(node);
+					return sqlite_io_error;
+				}
+				if (node->writer_shm_attachment_revoker &&
+					!node->writer_shm_attachment_revoker->revoke())
+				{
+					quarantine_native_file(node);
+					return sqlite_io_error;
+				}
 				node->writer_lifetime_source.reset();
+				node->writer_retained_parent_source.reset();
+				node->writer_shm_attachment_source.reset();
+				if (node->reader_open_authority)
+				{
+					const auto status = close_source_reader_native(node, close_callback);
+					if (status != sqlite_ok)
+						quarantine_native_file(node);
+					else
+						release_known_safe_native_file(node);
+					return status;
+				}
 				const auto status = close_callback(node->file());
 				if (status == sqlite_ok)
 				{
+					if (node->writer_target_namespace_epoch_owner)
+					{
+						if (!node->target_namespace_epoch ||
+							!node->target_namespace_epoch->finish())
+						{
+							quarantine_native_file(node);
+							return sqlite_io_error;
+						}
+						node->writer_target_namespace_epoch_owner = false;
+						node->target_namespace_epoch.reset();
+					}
 					release_known_safe_native_file(node);
 					return sqlite_ok;
 				}
@@ -2933,15 +3734,18 @@ namespace cxxlens::sdk
 			auto owner = file->owner;
 			auto observation = file->connection_observation;
 			const auto close_callback = file->native ? file->native->trusted_close : nullptr;
-			if (file->main_handle && owner && observation &&
-				!owner->revoke_writer_eligibility(*observation))
+			if (file->main_handle && owner && observation)
 			{
-				mark_incomplete(observation);
-				quarantine_native_file(file->native);
-				if (owner)
-					owner->decrement_open_file_count();
-				file->~forwarding_file();
-				return sqlite_io_error;
+				const auto revoked = owner->revoke_writer_eligibility(*observation);
+				if (!revoked)
+				{
+					mark_incomplete(observation);
+					quarantine_native_file(file->native);
+					if (owner)
+						owner->decrement_open_file_count();
+					file->~forwarding_file();
+					return sqlite_io_error;
+				}
 			}
 			const auto status = close_native_file(file->native, close_callback);
 			if (file->main_handle && observation)
@@ -3204,6 +4008,2064 @@ namespace cxxlens::sdk
 			}
 		}
 
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_source_reader_identity(default_forwarding_state& owner,
+									const native_file_node& node,
+									const std::string_view purpose) noexcept
+		{
+			try
+			{
+				const auto sequence = owner.mint_native_lifetime_sequence();
+				if (!sequence)
+					return std::nullopt;
+				sqlite_backend_opaque_identity identity;
+				identity.profile = std::string{source_shm_profile};
+				append_pointer(identity.bytes, &node);
+				append_pointer(identity.bytes, owner.underlying());
+				append_u64(identity.bytes, *sequence);
+				append_bytes(identity.bytes, purpose);
+				return identity;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_source_reader_lifecycle_request_seal(default_forwarding_state& owner,
+												  const native_file_node& node,
+												  const std::string_view purpose,
+												  const std::uint64_t owner_token,
+												  const std::uint64_t generation) noexcept
+		{
+			try
+			{
+				auto identity = make_source_reader_identity(owner, node, purpose);
+				if (!identity)
+					return std::nullopt;
+				append_u64(identity->bytes, owner_token);
+				append_u64(identity->bytes, generation);
+				return identity;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] bool
+		complete_source_reader_session(default_forwarding_state& owner,
+									   native_file_node& node,
+									   const source_shm_reader_registry_context& context,
+									   const sqlite_shm_reader_session_terminal_kind kind,
+									   const bool authority_read_closed,
+									   const bool no_live_shm_lock) noexcept
+		{
+			const auto has_session =
+				node.reader_session.has_value() || node.reader_session_request.has_value();
+			if (!has_session)
+				return true;
+			if (!node.reader_session || !node.reader_session_request ||
+				!node.reader_session->valid() || context.registry == nullptr ||
+				context.family == nullptr)
+				return false;
+			try
+			{
+				const auto request = *node.reader_session_request;
+				auto request_seal = make_source_reader_lifecycle_request_seal(
+					owner,
+					node,
+					"reader-session-terminal",
+					request.attachment.registry_open_token(),
+					request.attachment.writer_mapping_generation());
+				if (!request_seal)
+					return false;
+				auto scope = sqlite_shm_reader_lifecycle_production_factory::seal_session_scope(
+					*context.registry,
+					*context.family,
+					*node.reader_session,
+					request,
+					*request_seal);
+				if (!scope.valid())
+					return false;
+				auto issuer = sqlite_shm_reader_lifecycle_production_factory::identity_issuer(
+					*context.registry);
+				if (!issuer.valid())
+					return false;
+
+				sqlite_shm_reader_session_terminal_identity_role role;
+				switch (kind)
+				{
+					case sqlite_shm_reader_session_terminal_kind::success:
+						role = sqlite_shm_reader_session_terminal_identity_role::success;
+						break;
+					case sqlite_shm_reader_session_terminal_kind::failure:
+						role = sqlite_shm_reader_session_terminal_identity_role::failure;
+						break;
+					case sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read:
+						role = sqlite_shm_reader_session_terminal_identity_role::
+							cancelled_before_authority_read;
+						break;
+				}
+				auto terminal_result = issuer.issue_session_terminal(scope, role);
+				if (!terminal_result)
+					return false;
+				auto terminal = std::move(*terminal_result);
+				if (!issuer.validate_session_terminal(scope, terminal, role))
+					return false;
+				auto receipt =
+					sqlite_shm_reader_lifecycle_production_factory::make_session_terminal(
+						request,
+						kind,
+						terminal.identity(),
+						authority_read_closed,
+						no_live_shm_lock);
+				if (!context.registry->complete_reader_session(
+						*context.family, *node.reader_session, receipt))
+					return false;
+				if (!issuer.retire_session_terminal(scope, terminal, role) ||
+					!issuer.retire_scope(scope))
+					return false;
+				node.reader_session.reset();
+				node.reader_session_request.reset();
+				return true;
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
+
+		[[nodiscard]] int forwarding_source_shm_unmap(forwarding_file& file,
+													  const int remove_file) noexcept;
+
+		[[nodiscard]] std::optional<sqlite_shm_callback_execution_receipt>
+		make_source_reader_callback(default_forwarding_state& owner,
+									const native_file_node& node) noexcept
+		{
+			try
+			{
+				const auto thread_identity =
+					make_source_reader_identity(owner, node, "reader-callback-thread");
+				const auto invocation_token =
+					make_source_reader_identity(owner, node, "reader-callback-invocation");
+				if (!thread_identity || !invocation_token)
+					return std::nullopt;
+				return sqlite_shm_callback_execution_receipt{
+					std::move(*thread_identity), 0U, std::move(*invocation_token)};
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] std::optional<sqlite_shm_reader_attachment_target_identity>
+		observe_source_reader_target_identity(const forwarding_file& file) noexcept
+		{
+			try
+			{
+				if (!file.target_namespace_epoch || !file.expected_source_shm_identity ||
+					!file.target_namespace_epoch->recheck())
+					return std::nullopt;
+				auto retained = file.target_namespace_epoch->retained_entry(
+					sqlite_backend_file_role::shared_memory);
+				if (!retained || !retained->object_identity ||
+					!retained->directory_entry_identity || !retained->held_object ||
+					*retained->object_identity != file.expected_source_shm_identity->object ||
+					*retained->directory_entry_identity != file.expected_source_shm_identity->entry)
+					return std::nullopt;
+
+				std::optional<sqlite_backend_opaque_identity> filesystem;
+				if (retained->object_filesystem_profile)
+					filesystem = *retained->object_filesystem_profile;
+				else if (retained->held_object->object_filesystem_profile())
+					filesystem = *retained->held_object->object_filesystem_profile();
+				if (!filesystem || !retained->held_object->object_mount_identity())
+					return std::nullopt;
+				auto size = retained->held_object->size();
+				if (!size || *size == 0U)
+					return std::nullopt;
+				return sqlite_shm_reader_attachment_target_identity{
+					file.target_namespace_epoch->identity(),
+					file.target_namespace_epoch->parent_namespace_identity(),
+					*retained->object_identity,
+					*retained->directory_entry_identity,
+					std::move(*filesystem),
+					*retained->held_object->object_mount_identity(),
+					*size};
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] std::optional<sqlite_shm_reader_pre_sqlite_session_request>
+		make_source_reader_session_request(
+			const forwarding_file& file,
+			default_forwarding_state& owner,
+			const native_file_node& node,
+			const default_connection_observation& observation,
+			const source_shm_reader_registry_context& context) noexcept
+		{
+			try
+			{
+				const auto target_identity = observe_source_reader_target_identity(file);
+				const auto callback = make_source_reader_callback(owner, node);
+				const auto transaction =
+					make_source_reader_identity(owner, node, "reader-transaction-epoch");
+				const auto decode =
+					make_source_reader_identity(owner, node, "reader-decode-attempt");
+				const auto authority =
+					make_source_reader_identity(owner, node, "reader-authority-read");
+				if (!callback || !transaction || !decode || !authority ||
+					context.family_binding == nullptr || context.alias_lifetime == nullptr)
+					return std::nullopt;
+				sqlite_shm_reader_pre_sqlite_session_request pre_request;
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (observation.invalid || !observation.source_shm_open_plan ||
+						observation.source_shm_qualification_open_plan ||
+						!observation.main_native_file_receipt ||
+						!observation.main_native_xopen_receipt ||
+						!observation.main_callback_cohort || !observation.main_open_epoch)
+						return std::nullopt;
+					pre_request = {*context.family_binding,
+								   *context.alias_lifetime,
+								   observation.connection_token_value,
+								   *observation.main_native_file_receipt,
+								   *observation.main_native_xopen_receipt,
+								   *observation.main_open_epoch,
+								   *observation.main_callback_cohort,
+								   std::move(*callback),
+								   std::move(*transaction),
+								   std::move(*decode),
+								   std::move(*authority),
+								   std::move(target_identity)};
+				}
+				return pre_request;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] bool
+		ensure_source_reader_session(forwarding_file& file,
+									 native_file_node& node,
+									 const source_shm_reader_registry_context& context) noexcept
+		{
+			if (node.reader_lifecycle_failed || node.reader_open_authority == std::nullopt ||
+				!node.reader_open_authority->valid() || context.registry == nullptr ||
+				context.family == nullptr || context.family_binding == nullptr ||
+				context.alias_lifetime == nullptr || !file.connection_observation)
+			{
+				return false;
+			}
+			if (node.reader_existing_route_active)
+				return true;
+			if (node.reader_session && node.reader_session->valid() && node.reader_session_request)
+				return true;
+			if (node.reader_session || node.reader_session_request)
+				return false;
+			const auto pre_request = make_source_reader_session_request(
+				file, *file.owner, node, *file.connection_observation, context);
+			if (!pre_request)
+			{
+				return false;
+			}
+			try
+			{
+				auto admitted = context.registry->admit_reader_session_before_sqlite(
+					*context.family, *node.reader_open_authority, *pre_request);
+				if (!admitted)
+				{
+					return false;
+				}
+				if (!admitted->proposal_request())
+				{
+					if (admitted->kind() !=
+						sqlite_shm_reader_session_admission_kind::
+							existing_or_ordinary_predecessor_zero_proposal_custody)
+						return false;
+					node.reader_existing_route_active = true;
+					return true;
+				}
+				auto session = admitted->take_session();
+				if (!session || !session->valid())
+					return false;
+				node.reader_session_request = *admitted->proposal_request();
+				node.reader_session.emplace(std::move(*session));
+				return node.reader_session->valid();
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
+
+		struct source_reader_observed_attachment
+		{
+			sqlite_backend_opaque_identity object;
+			sqlite_backend_opaque_identity entry;
+			sqlite_backend_opaque_identity device;
+			sqlite_backend_opaque_identity mount;
+			sqlite_backend_opaque_identity namespace_epoch;
+			sqlite_backend_opaque_identity parent_namespace;
+			std::uint64_t shm_size{};
+		};
+
+		/**
+		 * Seal the narrow DF-0205 native-OK projection against the exact map event that was just
+		 * committed. A connection-wide boolean is deliberately insufficient: another page, a stale
+		 * generation, or a reused native pointer must never inherit a neighbouring map's authority.
+		 */
+		[[nodiscard]] bool authorize_source_shm_native_ok_projection(
+			default_connection_observation& observation,
+			const native_file_node& node,
+			const sqlite_shm_mapping_tuple& mapping,
+			const sqlite_backend_opaque_identity& native_effect,
+			const sqlite_shm_callback_execution_receipt& callback,
+			const int native_status,
+			const volatile void* native_mapping,
+			const int page,
+			const int page_size,
+			const int caller_extend,
+			const int delegated_extend) noexcept
+		{
+			if (!source_shm_native_ok_projection_production_activation ||
+				native_status != sqlite_ok || native_mapping == nullptr || page < 0 ||
+				page_size <= 0 || !node.reader_open_authority ||
+				!node.reader_open_authority->valid() || !node.reader_session ||
+				!node.reader_session->valid() || !node.reader_handoff ||
+				!node.reader_handoff->valid() || node.reader_generation == 0U ||
+				!valid_opaque_identity(native_effect) ||
+				!valid_opaque_identity(callback.invocation_token) || mapping.page_number != page ||
+				mapping.page_size != page_size || mapping.native_mapping != native_mapping)
+				return false;
+			const auto page_number = static_cast<std::uint64_t>(page);
+			const auto size = static_cast<std::uint64_t>(page_size);
+			if (page_number > std::numeric_limits<std::uint64_t>::max() / size)
+				return false;
+			const auto byte_offset = page_number * size;
+			if (byte_offset > std::numeric_limits<std::uint64_t>::max() - size ||
+				mapping.byte_offset != byte_offset || mapping.byte_count != size ||
+				mapping.sealed_shm_size < byte_offset + size)
+				return false;
+			try
+			{
+				std::scoped_lock lock{observation.mutex};
+				if (observation.invalid || !observation.source_shm_open_plan ||
+					!observation.source_shm_open_callback_receipt ||
+					observation.source_shm_qualification_open_plan ||
+					observation.shm_map_events.empty())
+					return false;
+				auto& event = observation.shm_map_events.back();
+				if (event.page != page || event.page_size != page_size ||
+					event.caller_extend != caller_extend ||
+					event.delegated_extend != delegated_extend ||
+					event.native_status != sqlite_ok || event.returned_status != sqlite_readonly ||
+					!event.native_mapping_nonnull || !event.returned_mapping_nonnull ||
+					event.native_mapping_identity != native_mapping ||
+					event.native_ok_projection_receipt.has_value())
+					return false;
+				event.native_ok_projection_receipt.emplace(
+					sqlite_backend_shm_map_projection_receipt{node.reader_generation,
+															  page,
+															  page_size,
+															  caller_extend,
+															  delegated_extend,
+															  native_mapping,
+															  mapping.byte_offset,
+															  mapping.byte_count,
+															  mapping.sealed_shm_size,
+															  callback.invocation_token,
+															  native_effect});
+				return true;
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
+
+		void clear_source_shm_projection_receipts(
+			const std::shared_ptr<default_connection_observation>& observation) noexcept
+		{
+			if (!observation)
+				return;
+			try
+			{
+				std::scoped_lock lock{observation->mutex};
+				for (auto& event : observation->shm_map_events)
+					event.native_ok_projection_receipt.reset();
+			}
+			catch (...)
+			{
+				mark_incomplete(observation);
+			}
+		}
+
+		[[nodiscard]] std::optional<source_reader_observed_attachment>
+		observe_source_reader_attachment(const forwarding_file& file) noexcept
+		{
+			try
+			{
+				auto target = observe_source_reader_target_identity(file);
+				if (!target)
+					return std::nullopt;
+				return source_reader_observed_attachment{target->shm_object,
+														 target->shm_entry,
+														 target->filesystem,
+														 target->mount,
+														 target->namespace_epoch,
+														 target->parent_namespace,
+														 target->sealed_shm_size};
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] int forwarding_source_shm_map(forwarding_file& file,
+													const int page,
+													const int page_size,
+													const int extend,
+													volatile void** output) noexcept
+		{
+			if (output == nullptr)
+				return sqlite_io_error;
+			*output = nullptr;
+			if (extend != 0 && extend != 1)
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+			auto node = file.native;
+			if (!node || !file.owner || !file.connection_observation ||
+				file.source_shm_qualification_candidate)
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+			const auto context = file.owner->source_shm_reader_context();
+			if (!context || context->registry == nullptr || context->family == nullptr ||
+				context->family_binding == nullptr || context->alias_lifetime == nullptr)
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+			std::unique_lock lifecycle_lock{node->reader_lifecycle_mutex, std::try_to_lock};
+			if (!lifecycle_lock.owns_lock())
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+			try
+			{
+				if (!ensure_source_reader_session(file, *node, *context))
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				if (node->reader_existing_route_active && !node->reader_session)
+				{
+					auto* raw = underlying_file(file);
+					const auto* methods = underlying_methods(file);
+					if (raw == nullptr || methods == nullptr || methods->shm_map == nullptr ||
+						!file.expected_source_shm_identity || !file.target_namespace_epoch ||
+						!file.target_namespace_epoch->recheck())
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					if (!native_shm_callback_identity_valid(*node))
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					const auto readonly_family_seen_before = file.source_shm_readonly_family_seen;
+					volatile void* native_mapping{};
+					int native_status{};
+					bool native_unmap_attempted{};
+					bool native_unmap_succeeded{true};
+					const auto release_native_mapping = [&]() noexcept
+					{
+						if (native_mapping == nullptr || native_unmap_attempted)
+							return native_unmap_succeeded;
+						native_unmap_attempted = true;
+						if (methods->shm_unmap == nullptr)
+							native_unmap_succeeded = false;
+						else
+						{
+							try
+							{
+								native_unmap_succeeded = methods->shm_unmap(raw, 0) == sqlite_ok;
+							}
+							catch (...)
+							{
+								native_unmap_succeeded = false;
+							}
+						}
+						return native_unmap_succeeded;
+					};
+					try
+					{
+						native_status = methods->shm_map(raw, page, page_size, 0, &native_mapping);
+					}
+					catch (...)
+					{
+						(void)release_native_mapping();
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					if (!native_shm_callback_identity_valid(*node))
+					{
+						if (native_mapping != nullptr && methods->shm_unmap != nullptr)
+						{
+							try
+							{
+								if (methods->shm_unmap(raw, 0) != sqlite_ok)
+									mark_source_shm_terminal_failure(file);
+							}
+							catch (...)
+							{
+								mark_source_shm_terminal_failure(file);
+							}
+						}
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					const auto native_nonnull = native_mapping != nullptr;
+					int returned_status = native_status;
+					volatile void* returned_mapping = native_mapping;
+					bool protocol_violation{};
+					if (native_status == sqlite_ok)
+					{
+						protocol_violation = true;
+						returned_status = sqlite_io_error;
+						returned_mapping = nullptr;
+					}
+					else if (native_status == sqlite_readonly_cannot_initialize)
+					{
+						file.source_shm_readonly_family_seen = true;
+						if (native_nonnull)
+						{
+							protocol_violation = true;
+							returned_status = sqlite_io_error;
+							returned_mapping = nullptr;
+						}
+					}
+					else if (native_status == sqlite_readonly)
+					{
+						file.source_shm_readonly_family_seen = true;
+						if (!native_nonnull)
+						{
+							returned_status = sqlite_readonly_cannot_initialize;
+							returned_mapping = nullptr;
+						}
+					}
+					else if ((native_status & 0xff) == sqlite_readonly)
+					{
+						file.source_shm_readonly_family_seen = true;
+						protocol_violation = true;
+						returned_status = sqlite_io_error;
+						returned_mapping = nullptr;
+					}
+					else if (native_nonnull)
+					{
+						protocol_violation = true;
+						returned_status = sqlite_io_error;
+						returned_mapping = nullptr;
+					}
+
+					if (!file.target_namespace_epoch->recheck())
+					{
+						protocol_violation = true;
+						returned_status = sqlite_io_error;
+						returned_mapping = nullptr;
+					}
+					if (protocol_violation && !release_native_mapping())
+						mark_source_shm_terminal_failure(file);
+					if (protocol_violation)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					if (!record_shared_memory_identity(file.connection_observation,
+													   *file.expected_source_shm_identity) ||
+						!record_shm_map_event(
+							file.connection_observation,
+							{page,
+							 page_size,
+							 extend,
+							 0,
+							 native_status,
+							 returned_status,
+							 native_nonnull,
+							 returned_mapping != nullptr,
+							 readonly_family_seen_before,
+							 file.source_shm_readonly_family_seen,
+							 file.owner->pinned_underlying_vfs_identity(),
+							 file.owner->pinned_underlying_vfs_app_data_identity(),
+							 native_mapping,
+							 std::nullopt}))
+					{
+						if (!release_native_mapping())
+							mark_source_shm_terminal_failure(file);
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					if (!native_unmap_succeeded)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					*output = returned_mapping;
+					return returned_status;
+				}
+				const auto& session_request = *node->reader_session_request;
+				const sqlite_shm_reader_attachment_map_pre_request pre_request{
+					session_request.attachment.family(),
+					session_request.attachment.alias_lifetime(),
+					session_request.attachment.connection_token(),
+					session_request.attachment,
+					page,
+					page_size,
+					extend};
+				auto prepared = context->registry->prepare_reader_map_identity(
+					*context->family, *node->reader_session, pre_request);
+				if (!prepared)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto scope = context->registry->claim_reader_map_identity_scope(
+					*context->family, *prepared, pre_request);
+				if (!scope)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto issuer = sqlite_shm_reader_lifecycle_production_factory::identity_issuer(
+					*context->registry);
+				const auto thread_identity =
+					make_source_reader_identity(*file.owner, *node, "reader-map-thread");
+				if (!thread_identity)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto permit = issuer.reserve_callback(*scope,
+													  sqlite_shm_reader_callback_identity_role::map,
+													  std::move(*thread_identity),
+													  0U);
+				if (!permit)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto callback = issuer.seal_callback(
+					*permit, *scope, sqlite_shm_reader_callback_identity_role::map);
+				if (!callback)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto inflight = context->registry->bind_reader_map_identity(
+					*context->family, *node->reader_session, *prepared, *scope, *callback);
+				if (!inflight)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				const sqlite_shm_reader_attachment_map_request map_request{
+					pre_request.family,
+					pre_request.alias_lifetime,
+					pre_request.connection_token,
+					pre_request.expected_attachment,
+					callback->receipt(),
+					page,
+					page_size,
+					extend};
+				std::optional<sqlite_shm_reader_native_ok_projection_permit> projection_permit;
+				if (source_shm_native_ok_projection_production_activation)
+				{
+					auto reserved = context->registry->reserve_reader_native_ok_projection(
+						*context->family, *inflight, map_request);
+					if (!reserved)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					projection_permit.emplace(std::move(*reserved));
+				}
+
+				auto* raw = underlying_file(file);
+				const auto* methods = underlying_methods(file);
+				if (raw == nullptr || methods == nullptr || methods->shm_map == nullptr)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				if (!native_shm_callback_identity_valid(*node))
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				const auto& expected_target = session_request.attachment.target_identity();
+				std::optional<sqlite_shm_reader_attachment_target_identity> pre_native_target;
+				if (expected_target)
+					pre_native_target = observe_source_reader_target_identity(file);
+				else if (!file.target_namespace_epoch || !file.target_namespace_epoch->recheck())
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				// A target-bearing reader session is the only route eligible for the native-OK
+				// projection. Re-observe the complete retained object before entering SQLite so an
+				// open-after SHM replacement or size change cannot cross the native callback
+				// boundary. Targetless ordinary readers remain fail-closed for the projection, but
+				// retain their existing namespace-only admission until that projection is
+				// activated.
+				if ((expected_target &&
+					 (!pre_native_target || *pre_native_target != *expected_target)) ||
+					(source_shm_native_ok_projection_production_activation && !expected_target))
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				volatile void* native_mapping{};
+				int native_status{};
+				try
+				{
+					native_status = methods->shm_map(raw, page, page_size, 0, &native_mapping);
+				}
+				catch (...)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				if (!native_shm_callback_identity_valid(*node))
+				{
+					if (native_mapping != nullptr && methods->shm_unmap != nullptr)
+					{
+						try
+						{
+							if (methods->shm_unmap(raw, 0) != sqlite_ok)
+								mark_source_shm_terminal_failure(file);
+						}
+						catch (...)
+						{
+							mark_source_shm_terminal_failure(file);
+						}
+					}
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				const auto native_nonnull = native_mapping != nullptr;
+				const auto release_native_mapping = [&]() noexcept
+				{
+					if (!native_nonnull)
+						return true;
+					if (methods->shm_unmap == nullptr)
+						return false;
+					try
+					{
+						return methods->shm_unmap(raw, 0) == sqlite_ok;
+					}
+					catch (...)
+					{
+						return false;
+					}
+				};
+
+				if (native_status != sqlite_ok || !native_nonnull)
+				{
+					const auto effect_role =
+						sqlite_shm_reader_effect_identity_role::zero_attachment_result;
+					auto effect = issuer.issue_effect(*scope, *callback, effect_role);
+					if (!effect)
+					{
+						if (!release_native_mapping())
+							mark_source_shm_terminal_failure(file);
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					auto zero = sqlite_shm_reader_lifecycle_production_factory::
+						validate_zero_attachment_effect(*context->registry,
+														*context->family,
+														*inflight,
+														*scope,
+														*callback,
+														*effect,
+														native_status,
+														native_mapping,
+														0);
+					if (!zero)
+					{
+						if (!release_native_mapping())
+							mark_source_shm_terminal_failure(file);
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					auto completed = context->registry->complete_reader_zero_attachment_map(
+						*context->family, *inflight, *zero, *node->reader_session);
+					if (!completed)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					if (node->reader_session && !node->reader_session->valid())
+					{
+						node->reader_session.reset();
+						node->reader_session_request.reset();
+					}
+					if (!record_shm_map_event(
+							file.connection_observation,
+							{page,
+							 page_size,
+							 extend,
+							 0,
+							 native_status,
+							 completed->kind() ==
+									 sqlite_shm_reader_attachment_zero_effect_kind::
+										 exact_no_attachment_change
+								 ? native_status
+								 : sqlite_io_error,
+							 native_nonnull,
+							 false,
+							 false,
+							 file.source_shm_readonly_family_seen,
+							 file.owner->pinned_underlying_vfs_identity(),
+							 file.owner->pinned_underlying_vfs_app_data_identity(),
+							 native_mapping,
+							 std::nullopt}))
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					return completed->kind() ==
+							sqlite_shm_reader_attachment_zero_effect_kind::
+								exact_no_attachment_change
+						? native_status
+						: sqlite_io_error;
+				}
+				if (!source_shm_native_ok_projection_production_activation)
+				{
+					if (!release_native_mapping() ||
+						!record_shared_memory_identity(file.connection_observation,
+													   *file.expected_source_shm_identity) ||
+						!record_shm_map_event(
+							file.connection_observation,
+							{page,
+							 page_size,
+							 extend,
+							 0,
+							 native_status,
+							 sqlite_io_error,
+							 native_nonnull,
+							 false,
+							 file.source_shm_readonly_family_seen,
+							 file.source_shm_readonly_family_seen,
+							 file.owner->pinned_underlying_vfs_identity(),
+							 file.owner->pinned_underlying_vfs_app_data_identity(),
+							 native_mapping,
+							 std::nullopt}))
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+
+				auto observed = observe_source_reader_attachment(file);
+				if (!observed)
+				{
+					if (!release_native_mapping())
+						mark_source_shm_terminal_failure(file);
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto effect = issuer.issue_effect(
+					*scope, *callback, sqlite_shm_reader_effect_identity_role::mapped_result);
+				if (!effect)
+				{
+					if (!release_native_mapping())
+						mark_source_shm_terminal_failure(file);
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				const auto projection_effect_identity = effect->identity();
+				auto observed_native =
+					sqlite_shm_reader_lifecycle_production_factory::make_mapped_observation(
+						*inflight,
+						map_request,
+						native_status,
+						native_mapping,
+						0,
+						std::move(observed->object),
+						std::move(observed->entry),
+						std::move(observed->device),
+						std::move(observed->mount),
+						std::move(observed->namespace_epoch),
+						std::move(observed->parent_namespace),
+						observed->shm_size);
+				if (!observed_native)
+				{
+					if (!release_native_mapping())
+						mark_source_shm_terminal_failure(file);
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				if (!record_shared_memory_identity(file.connection_observation,
+												   *file.expected_source_shm_identity) ||
+					!record_shm_map_event(file.connection_observation,
+										  {page,
+										   page_size,
+										   extend,
+										   0,
+										   native_status,
+										   sqlite_readonly,
+										   native_nonnull,
+										   true,
+										   file.source_shm_readonly_family_seen,
+										   true,
+										   file.owner->pinned_underlying_vfs_identity(),
+										   file.owner->pinned_underlying_vfs_app_data_identity(),
+										   native_mapping,
+										   std::nullopt}))
+				{
+					if (!release_native_mapping())
+						mark_source_shm_terminal_failure(file);
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto validated = sqlite_shm_reader_lifecycle_production_factory::
+					validate_mapped_attachment_effect(*context->registry,
+													  *context->family,
+													  *inflight,
+													  *scope,
+													  *callback,
+													  *effect,
+													  std::move(*observed_native));
+				if (!validated)
+				{
+					if (!release_native_mapping())
+						mark_source_shm_terminal_failure(file);
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto committed = projection_permit
+					? context->registry->commit_reader_map_with_native_ok_projection(
+						  *context->family,
+						  *inflight,
+						  *validated,
+						  *node->reader_session,
+						  *projection_permit)
+					: context->registry->commit_reader_map(
+						  *context->family, *inflight, *validated, *node->reader_session);
+				if (!committed)
+				{
+					if (!release_native_mapping())
+						mark_source_shm_terminal_failure(file);
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				if (auto handoff = committed->take_handoff(); handoff)
+				{
+					node->reader_generation = handoff->generation();
+					node->reader_handoff.emplace(std::move(*handoff));
+				}
+				else if (node->reader_handoff)
+					node->reader_generation = node->reader_handoff->generation();
+				const auto projection_authorized =
+					authorize_source_shm_native_ok_projection(*file.connection_observation,
+															  *node,
+															  committed->mapping(),
+															  projection_effect_identity,
+															  callback->receipt(),
+															  native_status,
+															  native_mapping,
+															  page,
+															  page_size,
+															  extend,
+															  0);
+				if (!projection_authorized)
+				{
+					// A committed native map without its exact per-map receipt is terminal. The
+					// later xShmUnmap path remains available solely to consume the already-owned
+					// handoff.
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				file.source_shm_readonly_family_seen = true;
+				*output = native_mapping;
+				return sqlite_readonly;
+			}
+			catch (...)
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+		}
+
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_writer_identity(default_forwarding_state& owner,
+							 const native_file_node& node,
+							 const std::string_view purpose,
+							 const std::string_view profile) noexcept
+		{
+			try
+			{
+				auto output = make_source_reader_identity(owner, node, purpose);
+				if (!output)
+					return std::nullopt;
+				output->profile = std::string{profile};
+				return output;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_writer_expected_shm_leaf(const native_file_node& node) noexcept
+		{
+			try
+			{
+				if (!node.target_namespace_epoch ||
+					!valid_opaque_identity(node.target_namespace_epoch->identity()) ||
+					!valid_opaque_identity(
+						node.target_namespace_epoch->parent_namespace_identity()) ||
+					node.target_namespace_epoch->anchored_main_locator().empty())
+					return std::nullopt;
+				sqlite_backend_opaque_identity output{"cxxlens.sqlite-writer-expected-shm-leaf.v1",
+													  {}};
+				append_opaque_identity(output.bytes, node.target_namespace_epoch->identity());
+				append_opaque_identity(output.bytes,
+									   node.target_namespace_epoch->parent_namespace_identity());
+				append_bytes(output.bytes, node.target_namespace_epoch->anchored_main_locator());
+				append_bytes(output.bytes, shm_suffix);
+				return output;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] bool ensure_writer_epoch_attachment_sources(default_forwarding_state& owner,
+																  native_file_node& node) noexcept
+		{
+			try
+			{
+				if (node.writer_retained_parent_source && node.writer_retained_parent_revoker &&
+					node.writer_retained_parent_source->valid() &&
+					node.writer_shm_attachment_source && node.writer_shm_attachment_revoker &&
+					node.writer_shm_attachment_source->valid() &&
+					node.writer_retained_parent_receipt && node.writer_shm_attachment_receipt)
+					return true;
+				if (!node.target_namespace_epoch || !node.writer_lifetime_source ||
+					!node.writer_lifetime_source->valid() || !node.quarantine_self ||
+					!node.target_namespace_epoch->recheck())
+					return false;
+				auto main_retained = node.target_namespace_epoch->retained_entry(
+					sqlite_backend_file_role::main_database);
+				auto retained = node.target_namespace_epoch->retained_entry(
+					sqlite_backend_file_role::shared_memory);
+				if (!main_retained ||
+					main_retained->state != sqlite_backend_entry_state::held_regular ||
+					!main_retained->direct_regular_entry || !main_retained->object_identity ||
+					!main_retained->directory_entry_identity ||
+					!main_retained->object_filesystem_profile || !main_retained->held_object ||
+					!main_retained->held_object->object_mount_identity() || !retained ||
+					(retained->state != sqlite_backend_entry_state::held_regular &&
+					 retained->state != sqlite_backend_entry_state::absent))
+					return false;
+				auto expected_leaf = make_writer_expected_shm_leaf(node);
+				if (!expected_leaf)
+					return false;
+				const auto filesystem = retained->state == sqlite_backend_entry_state::held_regular
+					? retained->object_filesystem_profile
+					: main_retained->object_filesystem_profile;
+				const auto mount = retained->state == sqlite_backend_entry_state::held_regular
+					? retained->held_object->object_mount_identity()
+					: main_retained->held_object->object_mount_identity();
+				if (!filesystem || !mount)
+					return false;
+				auto parent_lifetime =
+					make_writer_identity(owner,
+										 node,
+										 "writer-retained-parent-lifetime",
+										 "cxxlens.sqlite-writer-retained-parent-lifetime.v1");
+				auto parent_receipt =
+					make_writer_identity(owner,
+										 node,
+										 "writer-retained-parent-semantic",
+										 "cxxlens.sqlite-writer-retained-parent-receipt.v1");
+				auto shm_lifetime =
+					make_writer_identity(owner,
+										 node,
+										 "writer-shm-attachment-lifetime",
+										 "cxxlens.sqlite-writer-shm-attachment-lifetime.v1");
+				auto shm_receipt =
+					make_writer_identity(owner,
+										 node,
+										 "writer-shm-attachment-semantic",
+										 "cxxlens.sqlite-writer-shm-attachment-receipt.v1");
+				if (!parent_lifetime || !parent_receipt || !shm_lifetime || !shm_receipt)
+					return false;
+				append_opaque_identity(parent_receipt->bytes,
+									   node.target_namespace_epoch->parent_namespace_identity());
+				append_opaque_identity(parent_receipt->bytes, *main_retained->object_identity);
+				append_opaque_identity(parent_receipt->bytes,
+									   *main_retained->directory_entry_identity);
+				append_opaque_identity(shm_receipt->bytes, *expected_leaf);
+				append_opaque_identity(shm_receipt->bytes, *filesystem);
+				append_opaque_identity(shm_receipt->bytes, *mount);
+				if (retained->object_identity)
+					append_opaque_identity(shm_receipt->bytes, *retained->object_identity);
+				if (retained->directory_entry_identity)
+					append_opaque_identity(shm_receipt->bytes, *retained->directory_entry_identity);
+				auto parent_semantic = *parent_receipt;
+				auto shm_semantic = *shm_receipt;
+				const auto owner_pin = std::static_pointer_cast<void>(node.quarantine_self);
+				auto parent = sqlite_writer_shm_native_lifetime_production_factory::create_source(
+					sqlite_writer_shm_native_lifetime_role::retained_parent,
+					std::move(*parent_lifetime),
+					std::move(*parent_receipt),
+					std::nullopt,
+					owner_pin);
+				auto shm = sqlite_writer_shm_native_lifetime_production_factory::create_source(
+					sqlite_writer_shm_native_lifetime_role::shared_memory_attachment,
+					std::move(*shm_lifetime),
+					std::move(*shm_receipt),
+					std::nullopt,
+					owner_pin);
+				if (!parent || !shm)
+					return false;
+				node.writer_retained_parent_revoker.emplace(std::move(parent->first));
+				node.writer_retained_parent_source.emplace(std::move(parent->second));
+				node.writer_retained_parent_receipt.emplace(std::move(parent_semantic));
+				node.writer_shm_attachment_revoker.emplace(std::move(shm->first));
+				node.writer_shm_attachment_source.emplace(std::move(shm->second));
+				node.writer_shm_attachment_receipt.emplace(std::move(shm_semantic));
+				return node.writer_retained_parent_source->valid() &&
+					node.writer_shm_attachment_source->valid();
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
+
+		[[nodiscard]] std::optional<sqlite_shm_callback_execution_receipt>
+		make_writer_callback(default_forwarding_state& owner, const native_file_node& node) noexcept
+		{
+			try
+			{
+				auto thread = make_writer_identity(
+					owner, node, "writer-map-thread", "cxxlens.sqlite-writer-callback-thread.v1");
+				auto invocation =
+					make_writer_identity(owner,
+										 node,
+										 "writer-map-invocation",
+										 "cxxlens.sqlite-writer-callback-invocation.v1");
+				if (!thread || !invocation)
+					return std::nullopt;
+				return sqlite_shm_callback_execution_receipt{
+					std::move(*thread), 0U, std::move(*invocation)};
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_writer_attachment_epoch(default_forwarding_state& owner,
+									 const native_file_node& node,
+									 const sqlite_backend_opaque_identity& connection,
+									 const sqlite_backend_opaque_identity& open_epoch) noexcept
+		{
+			try
+			{
+				auto output = make_writer_identity(owner,
+												   node,
+												   "writer-attachment-epoch",
+												   "cxxlens.sqlite-writer-shm-attachment-epoch.v1");
+				if (!output || !node.target_namespace_epoch)
+					return std::nullopt;
+				append_opaque_identity(output->bytes, connection);
+				append_opaque_identity(output->bytes, open_epoch);
+				append_opaque_identity(output->bytes, node.target_namespace_epoch->identity());
+				return output;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		/**
+		 * Seal the wrapper-visible WAL coordination observation for one writer map.
+		 *
+		 * The zero-zero preexisting-SHM route is intentionally allowed before SQLite has
+		 * acquired the WAL write lock: its effect proof is the unchanged direct SHM census,
+		 * not a WAL write.  The one-one routes still require the exact exclusive lock
+		 * observation.  Both cases retain the complete observed lock set so the receipt
+		 * cannot be reconstructed from the caller's extend flag alone.
+		 */
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_writer_wal_lock_receipt(const default_connection_observation& observation,
+									 const native_file_node& node,
+									 const bool require_exclusive_lock) noexcept
+		{
+			try
+			{
+				std::vector<sqlite_backend_shm_lock_observation> locks;
+				{
+					std::scoped_lock lock{observation.mutex};
+					if (observation.invalid || !observation.main_handle_open ||
+						(require_exclusive_lock && observation.held_shm_locks.empty()))
+						return std::nullopt;
+					locks = observation.held_shm_locks;
+				}
+				std::ranges::sort(locks,
+								  [](const auto& left, const auto& right)
+								  {
+									  if (left.offset != right.offset)
+										  return left.offset < right.offset;
+									  if (left.count != right.count)
+										  return left.count < right.count;
+									  return static_cast<int>(left.mode) <
+										  static_cast<int>(right.mode);
+								  });
+				const bool has_exclusive_write_lock = std::ranges::any_of(
+					locks,
+					[](const auto& lock)
+					{
+						return lock.offset == 0 && lock.count == 1 &&
+							lock.mode == sqlite_backend_shm_lock_mode::exclusive;
+					});
+				if (require_exclusive_lock && !has_exclusive_write_lock)
+					return std::nullopt;
+				sqlite_backend_opaque_identity receipt{
+					require_exclusive_lock ? "cxxlens.sqlite-writer-wal-write-lock.v1"
+										   : "cxxlens.sqlite-wal-coordination-observation.v1",
+					{}};
+				append_pointer(receipt.bytes, &node);
+				append_opaque_identity(receipt.bytes, observation.connection_token_value);
+				append_u64(receipt.bytes, require_exclusive_lock ? 1U : 0U);
+				append_u64(receipt.bytes, has_exclusive_write_lock ? 1U : 0U);
+				append_u64(receipt.bytes, static_cast<std::uint64_t>(locks.size()));
+				for (const auto& lock : locks)
+				{
+					if (lock.offset < 0 || lock.count <= 0)
+						return std::nullopt;
+					append_u64(receipt.bytes, static_cast<std::uint64_t>(lock.offset));
+					append_u64(receipt.bytes, static_cast<std::uint64_t>(lock.count));
+					receipt.bytes.push_back(static_cast<std::byte>(lock.mode));
+				}
+				return receipt;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
+		make_writer_route_seal(default_forwarding_state& owner,
+							   const native_file_node& node,
+							   const sqlite_shm_writer_map_request& request,
+							   const std::string_view label) noexcept
+		{
+			try
+			{
+				auto output =
+					make_writer_identity(owner, node, label, "cxxlens.sqlite-writer-route-seal.v1");
+				if (!output)
+					return std::nullopt;
+				append_opaque_identity(output->bytes, request.family.process_instance);
+				append_opaque_identity(output->bytes, request.family.shared_runtime_vfs_cohort);
+				append_opaque_identity(output->bytes, request.family.exact_file_family);
+				append_opaque_identity(output->bytes, request.alias_lifetime);
+				append_opaque_identity(output->bytes, request.connection_token);
+				append_opaque_identity(output->bytes, request.attachment.attachment_epoch());
+				return output;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		/**
+		 * Bind the first writer map to the still-denied effect boundary.
+		 *
+		 * SQLite may call xShmMap while opening the actual current-v3 writer, before Store can
+		 * complete its full effect arm.  The denied validation is the only gate evidence available
+		 * at that point.  The second identity is an attempt-local source transcript; it is never
+		 * consumed by persistent-effect permission and cannot install writer eligibility by itself.
+		 */
+		[[nodiscard]] std::optional<
+			std::pair<sqlite_backend_opaque_identity, sqlite_backend_opaque_identity>>
+		make_writer_pre_gate_effect_receipts(
+			const default_connection_observation& observation,
+			const native_file_node& node,
+			const sqlite_backend_opaque_identity& source_id,
+			const sqlite_backend_opaque_identity& callback_cohort,
+			const sqlite_backend_opaque_identity& open_epoch) noexcept
+		{
+			try
+			{
+				if (observation.effect_gate == nullptr)
+					return std::nullopt;
+				auto latest = observation.effect_gate->latest_receipt();
+				if (!latest || latest->sequence == 0U ||
+					latest->capability_token != observation.capability_token_value ||
+					latest->connection_token != observation.connection_token_value ||
+					latest->canonical_vfs_locator != observation.canonical_locator ||
+					!valid_opaque_identity(latest->validation_receipt) ||
+					!valid_opaque_identity(source_id) || !valid_opaque_identity(callback_cohort) ||
+					!valid_opaque_identity(open_epoch) || !node.target_namespace_epoch ||
+					!valid_opaque_identity(node.target_namespace_epoch->identity()))
+					return std::nullopt;
+				const auto effect_stage = latest->stage;
+				if (effect_stage != sqlite_backend_effect_stage::denied &&
+					effect_stage != sqlite_backend_effect_stage::wal_shm_coordination_only &&
+					effect_stage != sqlite_backend_effect_stage::fully_armed)
+					return std::nullopt;
+				const auto gate_receipt = effect_stage == sqlite_backend_effect_stage::denied
+					? latest->validation_receipt
+					: latest->prerequisite_receipt;
+				if (!valid_opaque_identity(gate_receipt))
+					return std::nullopt;
+
+				sqlite_backend_opaque_identity transcript{
+					"cxxlens.sqlite-writer-pre-gate-coordination-transcript.v1", {}};
+				append_opaque_identity(transcript.bytes, gate_receipt);
+				append_opaque_identity(transcript.bytes, latest->validation_receipt);
+				append_opaque_identity(transcript.bytes, source_id);
+				append_opaque_identity(transcript.bytes, callback_cohort);
+				append_opaque_identity(transcript.bytes, open_epoch);
+				append_opaque_identity(transcript.bytes, node.target_namespace_epoch->identity());
+				append_u64(transcript.bytes, latest->sequence);
+				transcript.bytes.push_back(static_cast<std::byte>(effect_stage));
+				if (!valid_opaque_identity(transcript) || transcript == gate_receipt ||
+					transcript == latest->validation_receipt)
+					return std::nullopt;
+				return std::pair{gate_receipt, std::move(transcript)};
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] bool
+		complete_writer_native_cleanup(const source_shm_reader_registry_context& context,
+									   sqlite_shm_writer_attachment_cleanup& cleanup,
+									   const sqlite_shm_callback_execution_receipt& callback,
+									   int native_status,
+									   bool native_known) noexcept
+		{
+			if (!context.registry || !context.family)
+				return false;
+			const auto outcome = !native_known ? sqlite_shm_native_cleanup_outcome::unknown
+				: native_status == sqlite_ok ? sqlite_shm_native_cleanup_outcome::confirmed_success
+											 : sqlite_shm_native_cleanup_outcome::non_ok;
+			return static_cast<bool>(context.registry->complete_writer_cleanup(
+				*context.family, cleanup, callback, outcome));
+		}
+
+		[[nodiscard]] int
+		fail_writer_post_native(forwarding_file& file,
+								const source_shm_reader_registry_context& context,
+								sqlite_shm_writer_post_native_mapping& post_native,
+								const sqlite_shm_callback_execution_receipt& callback,
+								volatile void* native_mapping) noexcept
+		{
+			auto cleanup = context.registry && context.family
+				? context.registry->begin_writer_cleanup(*context.family, post_native, callback)
+				: sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>{
+					  {sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+					   sqlite_shm_lease_recovery_action::quarantine_no_retry}};
+			int status{};
+			bool known{};
+			auto* raw = underlying_file(file);
+			const auto* methods = underlying_methods(file);
+			if (native_mapping != nullptr && raw != nullptr && methods != nullptr &&
+				methods->shm_unmap != nullptr)
+			{
+				try
+				{
+					status = methods->shm_unmap(raw, 0);
+					known = true;
+				}
+				catch (...)
+				{
+					known = false;
+				}
+			}
+			if (!cleanup ||
+				!complete_writer_native_cleanup(context, *cleanup, callback, status, known))
+				mark_source_shm_terminal_failure(file);
+			return sqlite_io_error;
+		}
+
+		[[nodiscard]] int
+		fail_writer_pending(forwarding_file& file,
+							const source_shm_reader_registry_context& context,
+							sqlite_shm_pending_mapping& pending,
+							const sqlite_shm_callback_execution_receipt& callback) noexcept
+		{
+			auto cleanup = context.registry && context.family
+				? context.registry->begin_writer_cleanup(*context.family, pending, callback)
+				: sqlite_shm_lease_result<sqlite_shm_writer_attachment_cleanup>{
+					  {sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+					   sqlite_shm_lease_recovery_action::quarantine_no_retry}};
+			int status{};
+			bool known{};
+			auto* raw = underlying_file(file);
+			const auto* methods = underlying_methods(file);
+			if (raw != nullptr && methods != nullptr && methods->shm_unmap != nullptr)
+			{
+				try
+				{
+					status = methods->shm_unmap(raw, 0);
+					known = true;
+				}
+				catch (...)
+				{
+					known = false;
+				}
+			}
+			if (!cleanup ||
+				!complete_writer_native_cleanup(context, *cleanup, callback, status, known))
+				mark_source_shm_terminal_failure(file);
+			return sqlite_io_error;
+		}
+
+		[[nodiscard]] int forwarding_writer_shm_map(forwarding_file& file,
+													int page,
+													int page_size,
+													int extend,
+													volatile void** output) noexcept
+		{
+			if (output == nullptr)
+				return sqlite_io_error;
+			*output = nullptr;
+			try
+			{
+				if (!file.owner || !file.connection_observation || !file.native ||
+					file.role != sqlite_backend_file_role::main_database || !file.main_handle ||
+					!file.native->target_namespace_epoch)
+					return sqlite_io_error;
+				auto node = file.native;
+				std::unique_lock lifecycle_lock{node->writer_lifecycle_mutex, std::try_to_lock};
+				if (!lifecycle_lock.owns_lock() ||
+					!ensure_writer_epoch_attachment_sources(*file.owner, *node))
+					return sqlite_io_error;
+				const auto context = file.owner->source_shm_reader_context();
+				if (!context || !context->registry || !context->family ||
+					!context->family_binding || !context->alias_lifetime)
+					return sqlite_io_error;
+
+				sqlite_backend_opaque_identity connection_token;
+				sqlite_backend_opaque_identity main_receipt;
+				sqlite_backend_opaque_identity main_xopen;
+				sqlite_backend_opaque_identity main_open_epoch;
+				sqlite_backend_opaque_identity callback_cohort;
+				sqlite_backend_opaque_identity source_id;
+				sqlite_backend_opaque_identity effect_gate_receipt;
+				sqlite_backend_opaque_identity effect_receipt;
+				bool eligibility_installed{};
+				{
+					std::scoped_lock lock{file.connection_observation->mutex};
+					const auto& observation = *file.connection_observation;
+					if (observation.invalid || !observation.main_handle_open ||
+						!observation.writer_target_namespace_epoch ||
+						observation.writer_target_namespace_epoch != node->target_namespace_epoch ||
+						!observation.writer_sqlite_source_id ||
+						!observation.main_native_file_receipt ||
+						!observation.main_native_xopen_receipt ||
+						!observation.main_callback_cohort || !observation.main_open_epoch)
+					{
+						return sqlite_io_error;
+					}
+					eligibility_installed = observation.writer_eligibility.has_value();
+					connection_token = observation.connection_token_value;
+					main_receipt = *observation.main_native_file_receipt;
+					main_xopen = *observation.main_native_xopen_receipt;
+					main_open_epoch = *observation.main_open_epoch;
+					callback_cohort = *observation.main_callback_cohort;
+					source_id = *observation.writer_sqlite_source_id;
+					if (eligibility_installed)
+					{
+						if (!observation.writer_effect_gate_receipt ||
+							!observation.writer_effect_receipt)
+							return sqlite_io_error;
+						effect_gate_receipt = *observation.writer_effect_gate_receipt;
+						effect_receipt = *observation.writer_effect_receipt;
+					}
+					else
+					{
+						auto pre_gate = make_writer_pre_gate_effect_receipts(
+							observation, *node, source_id, callback_cohort, main_open_epoch);
+						if (!pre_gate)
+						{
+							return sqlite_io_error;
+						}
+						effect_gate_receipt = std::move(pre_gate->first);
+						effect_receipt = std::move(pre_gate->second);
+					}
+				}
+				if (!node->writer_native_file_receipt || !node->writer_native_xopen_receipt ||
+					!node->writer_open_epoch || !node->writer_callback_cohort ||
+					*node->writer_native_file_receipt != main_receipt ||
+					*node->writer_native_xopen_receipt != main_xopen ||
+					*node->writer_open_epoch != main_open_epoch ||
+					*node->writer_callback_cohort != callback_cohort ||
+					!node->writer_retained_parent_receipt || !node->writer_shm_attachment_receipt)
+				{
+					return sqlite_io_error;
+				}
+
+				auto wal_node = file.connection_observation->wal_native_node.lock();
+				if (!wal_node || wal_node.get() == node.get() ||
+					!wal_node->writer_lifetime_source ||
+					!wal_node->writer_lifetime_source->valid() ||
+					!wal_node->writer_native_file_receipt ||
+					!wal_node->writer_native_xopen_receipt || !wal_node->target_namespace_epoch ||
+					wal_node->target_namespace_epoch != node->target_namespace_epoch)
+				{
+					return sqlite_io_error;
+				}
+				auto wal_lock =
+					make_writer_wal_lock_receipt(*file.connection_observation, *node, extend != 0);
+				auto callback = make_writer_callback(*file.owner, *node);
+				if (!node->writer_attachment_epoch)
+					node->writer_attachment_epoch = make_writer_attachment_epoch(
+						*file.owner, *node, connection_token, main_open_epoch);
+				if (!wal_lock || !callback || !node->writer_attachment_epoch)
+				{
+					return sqlite_io_error;
+				}
+				auto attachment =
+					sqlite_shm_native_attachment_identity::bind(*context->family_binding,
+																*context->alias_lifetime,
+																connection_token,
+																main_receipt,
+																main_xopen,
+																main_open_epoch,
+																callback_cohort,
+																*node->writer_attachment_epoch);
+				if (!attachment)
+				{
+					return sqlite_io_error;
+				}
+				std::optional<sqlite_shm_native_attachment_identity> pending_attachment;
+				if (!eligibility_installed)
+				{
+					if (node->writer_pending_attachment &&
+						*node->writer_pending_attachment != *attachment)
+						return sqlite_io_error;
+					if (!node->writer_pending_attachment)
+						pending_attachment.emplace(*attachment);
+				}
+
+				auto main_retained = node->target_namespace_epoch->retained_entry(
+					sqlite_backend_file_role::main_database);
+				auto retained = node->target_namespace_epoch->retained_entry(
+					sqlite_backend_file_role::shared_memory);
+				if (!main_retained ||
+					main_retained->state != sqlite_backend_entry_state::held_regular ||
+					!main_retained->direct_regular_entry ||
+					!main_retained->object_filesystem_profile || !main_retained->held_object ||
+					!main_retained->held_object->object_mount_identity() || !retained ||
+					(retained->state != sqlite_backend_entry_state::held_regular &&
+					 retained->state != sqlite_backend_entry_state::absent))
+				{
+					return sqlite_io_error;
+				}
+				auto expected_leaf = make_writer_expected_shm_leaf(*node);
+				if (!expected_leaf)
+				{
+					return sqlite_io_error;
+				}
+				const auto absent_filesystem = retained->state == sqlite_backend_entry_state::absent
+					? main_retained->object_filesystem_profile
+					: retained->object_filesystem_profile;
+				const auto absent_mount = retained->state == sqlite_backend_entry_state::absent
+					? main_retained->held_object->object_mount_identity()
+					: retained->held_object->object_mount_identity();
+				if (!absent_filesystem || !absent_mount)
+				{
+					return sqlite_io_error;
+				}
+				const sqlite_shm_writer_map_request map_request{*context->family_binding,
+																*context->alias_lifetime,
+																connection_token,
+																*attachment,
+																*callback,
+																page,
+																page_size,
+																extend};
+				const sqlite_writer_shm_mapping_epoch_binding binding{
+					map_request,
+					extend,
+					*expected_leaf,
+					*node->writer_retained_parent_receipt,
+					*wal_node->writer_native_file_receipt,
+					*wal_node->writer_native_xopen_receipt,
+					*node->writer_shm_attachment_receipt,
+					node->target_namespace_epoch->identity()};
+
+				if (node->writer_holders.capacity() < node->writer_holders.size() + 1U)
+					node->writer_holders.reserve(node->writer_holders.size() + 1U);
+				if (node->writer_pending.capacity() < node->writer_pending.size() + 1U)
+					node->writer_pending.reserve(node->writer_pending.size() + 1U);
+				auto parent_pin = node->writer_retained_parent_source->mint_pin();
+				auto main_pin = node->writer_lifetime_source->mint_pin();
+				auto wal_pin = wal_node->writer_lifetime_source->mint_pin();
+				auto shm_pin = node->writer_shm_attachment_source->mint_pin();
+				if (!parent_pin || !main_pin || !wal_pin || !shm_pin)
+				{
+					return sqlite_io_error;
+				}
+				sqlite_writer_shm_mapping_epoch_platform_binding platform{
+					node->target_namespace_epoch,
+					node->target_namespace_epoch->parent_namespace_identity(),
+					source_id,
+					*wal_lock,
+					effect_gate_receipt,
+					effect_receipt,
+					absent_filesystem,
+					absent_mount};
+				sqlite_writer_shm_mapping_epoch_request epoch_request{binding,
+																	  std::move(*parent_pin),
+																	  std::move(*main_pin),
+																	  std::move(*wal_pin),
+																	  std::move(*shm_pin)};
+				sqlite_retained_namespace_writer_shm_mapping_epoch_port epoch_port{
+					std::move(platform)};
+				auto activation = epoch_port.arm(std::move(epoch_request));
+				if (!activation)
+				{
+					return sqlite_io_error;
+				}
+				auto observer = activation->take_observer();
+				auto arm = activation->take_arm();
+				auto inflight = context->registry->begin_writer_map(
+					*context->family, std::move(arm), map_request);
+				if (!inflight)
+				{
+					return sqlite_io_error;
+				}
+
+				auto* raw = underlying_file(file);
+				const auto* methods = underlying_methods(file);
+				if (!raw || !methods || !methods->shm_map)
+				{
+					(void)context->registry->resolve_writer_map_failure(*context->family,
+																		*inflight);
+					return sqlite_io_error;
+				}
+				volatile void* native_mapping{};
+				int native_status{};
+				bool native_threw{};
+				try
+				{
+					native_status = methods->shm_map(raw, page, page_size, extend, &native_mapping);
+				}
+				catch (...)
+				{
+					native_threw = true;
+					native_status = sqlite_io_error;
+				}
+				auto native_receipt =
+					native_mapping != nullptr && (native_status != sqlite_ok || native_threw)
+					? sqlite_writer_shm_native_map_receipt_validator::validate_mapped_failure(
+						  *inflight, native_status, native_mapping)
+					: sqlite_writer_shm_native_map_receipt_validator::validate(
+						  *inflight, native_status, native_mapping);
+				if (native_receipt && native_status != sqlite_ok)
+				{
+					auto post_native = context->registry->record_writer_native_mapping(
+						*context->family, *inflight, *native_receipt);
+					if (post_native)
+						return fail_writer_post_native(
+							file, *context, *post_native, *callback, native_mapping);
+					native_receipt =
+						sqlite_shm_lease_result<sqlite_shm_verified_writer_native_map_receipt>{
+							{sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							 sqlite_shm_lease_recovery_action::quarantine_no_retry}};
+				}
+				if (!native_receipt)
+				{
+					if (native_mapping == nullptr)
+					{
+						auto resolved = context->registry->resolve_writer_map_failure(
+							*context->family, *inflight);
+						if (resolved && native_status != sqlite_ok && !native_threw)
+							return native_status;
+					}
+					else if (methods->shm_unmap)
+					{
+						try
+						{
+							if (methods->shm_unmap(raw, 0) != sqlite_ok)
+								mark_source_shm_terminal_failure(file);
+						}
+						catch (...)
+						{
+							mark_source_shm_terminal_failure(file);
+						}
+					}
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+
+				auto post_native = context->registry->record_writer_native_mapping(
+					*context->family, *inflight, *native_receipt);
+				if (!post_native)
+				{
+					if (methods->shm_unmap)
+					{
+						try
+						{
+							(void)methods->shm_unmap(raw, 0);
+						}
+						catch (...)
+						{
+						}
+					}
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+
+				auto epoch = seal_sqlite_writer_shm_mapping_epoch(observer, native_mapping);
+				if (!epoch)
+					return fail_writer_post_native(
+						file, *context, *post_native, *callback, native_mapping);
+				auto audit = validate_sqlite_writer_shm_mapping_semantics_for_audit(*epoch);
+				if (!audit)
+					return fail_writer_post_native(
+						file, *context, *post_native, *callback, native_mapping);
+				auto auth_seal = make_writer_route_seal(
+					*file.owner, *node, map_request, "authenticated-owned-forwarding-rw-main");
+				auto route_seal =
+					make_writer_route_seal(*file.owner, *node, map_request, "route-validation");
+				if (!auth_seal || !route_seal)
+					return fail_writer_post_native(
+						file, *context, *post_native, *callback, native_mapping);
+				auto proof = sqlite_shm_writer_route_proof_production_factory::seal(
+					audit->route,
+					map_request,
+					extend,
+					std::move(*auth_seal),
+					main_receipt,
+					main_xopen,
+					source_id,
+					map_request.callback.invocation_token,
+					*wal_lock,
+					effect_gate_receipt,
+					std::move(*route_seal));
+				if (!proof)
+					return fail_writer_post_native(
+						file, *context, *post_native, *callback, native_mapping);
+				auto verified =
+					sqlite_writer_shm_mapping_receipt_validator::validate(*epoch, *proof);
+				if (!verified)
+					return fail_writer_post_native(
+						file, *context, *post_native, *callback, native_mapping);
+				const auto& mapped_shm = epoch->post_observation().stat;
+				if (mapped_shm.state != sqlite_writer_shm_entry_state::direct_regular ||
+					!mapped_shm.object_identity || !mapped_shm.directory_entry_identity ||
+					!record_shared_memory_identity(
+						file.connection_observation,
+						{*mapped_shm.object_identity, *mapped_shm.directory_entry_identity}))
+					return fail_writer_post_native(
+						file, *context, *post_native, *callback, native_mapping);
+
+				const bool gate_before_map = !node->writer_holders.empty();
+				if (gate_before_map)
+				{
+					auto holder =
+						context->registry->complete_gate_winning_writer_map_before_callback_return(
+							*context->family, *post_native, *verified);
+					if (!holder)
+						return fail_writer_post_native(
+							file, *context, *post_native, *callback, native_mapping);
+					node->writer_holders.push_back(std::move(*holder));
+					*output = native_mapping;
+					return sqlite_ok;
+				}
+
+				auto pending = context->registry->install_writer_pending(
+					*context->family, *post_native, *verified);
+				if (!pending)
+					return fail_writer_post_native(
+						file, *context, *post_native, *callback, native_mapping);
+				if (!eligibility_installed)
+				{
+					if (node->writer_pending_attachment &&
+						*node->writer_pending_attachment != map_request.attachment)
+						return fail_writer_pending(file, *context, *pending, *callback);
+					if (!node->writer_pending_attachment)
+					{
+						if (!pending_attachment)
+							return fail_writer_pending(file, *context, *pending, *callback);
+						node->writer_pending_attachment.emplace(std::move(*pending_attachment));
+					}
+					node->writer_pending.push_back(std::move(*pending));
+					*output = native_mapping;
+					return sqlite_ok;
+				}
+				std::array<sqlite_shm_pending_mapping*, 1U> group{&*pending};
+				auto gate = [&]()
+					-> sqlite_shm_lease_result<sqlite_shm_positive_writer_attachment_gate_result>
+				{
+					std::scoped_lock lock{file.connection_observation->mutex};
+					if (!file.connection_observation->writer_eligibility)
+						return sqlite_shm_lease_result<
+							sqlite_shm_positive_writer_attachment_gate_result>{
+							sqlite_shm_lease_rejection{
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								sqlite_shm_lease_recovery_action::quarantine_no_retry}};
+					return context->registry->advance_positive_writer_attachment_gate(
+						*context->family,
+						map_request.attachment,
+						group,
+						*file.connection_observation->writer_eligibility);
+				}();
+				if (!gate ||
+					gate->progress !=
+						sqlite_shm_positive_writer_attachment_gate_progress::complete ||
+					gate->holders.size() != 1U)
+					return fail_writer_pending(file, *context, *pending, *callback);
+				node->writer_holders = std::move(gate->holders);
+				*output = native_mapping;
+				return sqlite_ok;
+			}
+			catch (...)
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+		}
+
+		[[nodiscard]] int forwarding_writer_shm_unmap(forwarding_file& file,
+													  const int remove_file) noexcept
+		{
+			if (!file.owner || !file.native || !file.connection_observation ||
+				file.role != sqlite_backend_file_role::main_database)
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+			auto node = file.native;
+			std::unique_lock lifecycle_lock{node->writer_lifecycle_mutex, std::try_to_lock};
+			if (!lifecycle_lock.owns_lock())
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+			const auto context = file.owner->source_shm_reader_context();
+			const bool has_pending = !node->writer_pending.empty();
+			const bool has_holders = !node->writer_holders.empty();
+			if (!context || !context->registry || !context->family || !context->family_binding ||
+				!context->alias_lifetime || (!has_pending && !has_holders) ||
+				(has_pending && has_holders))
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+
+			struct released_writer
+			{
+				sqlite_shm_writer_release release;
+				sqlite_shm_callback_execution_receipt callback;
+			};
+
+			try
+			{
+				if (has_pending)
+				{
+					auto callback = make_writer_callback(*file.owner, *node);
+					if (!callback)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					auto cleanup = context->registry->begin_writer_cleanup(
+						*context->family, node->writer_pending.front(), *callback);
+					int native_status{};
+					bool native_known{};
+					auto* raw = underlying_file(file);
+					const auto* methods = underlying_methods(file);
+					if (raw != nullptr && methods != nullptr && methods->shm_unmap != nullptr)
+					{
+						try
+						{
+							native_status = methods->shm_unmap(raw, 0);
+							native_known = true;
+						}
+						catch (...)
+						{
+							native_known = false;
+						}
+					}
+					if (!cleanup ||
+						!complete_writer_native_cleanup(
+							*context, *cleanup, *callback, native_status, native_known) ||
+						native_status != sqlite_ok)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					if (remove_file != 0 && file.owner->remove_writer_shm_sidecar() != sqlite_ok)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					node->writer_pending.clear();
+					node->writer_pending_attachment.reset();
+					{
+						std::scoped_lock lock{file.connection_observation->mutex};
+						file.connection_observation->held_shm_locks.clear();
+						file.connection_observation->shared_memory_object_identity.reset();
+						file.connection_observation->shared_memory_entry_identity.reset();
+					}
+					file.shm_readonly_cannot_initialize = false;
+					file.source_shm_readonly_family_seen = false;
+					return sqlite_ok;
+				}
+
+				std::vector<released_writer> releases;
+				releases.reserve(node->writer_holders.size());
+				bool release_failed{};
+				for (auto& holder : node->writer_holders)
+				{
+					auto callback = make_writer_callback(*file.owner, *node);
+					if (!callback)
+					{
+						release_failed = true;
+						break;
+					}
+					auto released = context->registry->release_writer_holder(
+						*context->family, holder, *callback);
+					if (!released)
+					{
+						release_failed = true;
+						break;
+					}
+					releases.push_back(released_writer{std::move(*released), std::move(*callback)});
+				}
+
+				const auto native_cleanup = [&]() noexcept
+				{
+					int status{};
+					bool known{};
+					auto* raw = underlying_file(file);
+					const auto* methods = underlying_methods(file);
+					if (raw != nullptr && methods != nullptr && methods->shm_unmap != nullptr)
+					{
+						try
+						{
+							status = methods->shm_unmap(raw, 0);
+							known = true;
+						}
+						catch (...)
+						{
+							known = false;
+						}
+					}
+					return std::pair<int, bool>{status, known};
+				};
+
+				bool retirement_blocked{};
+				bool retirement_quarantined{};
+				for (auto& item : releases)
+				{
+					const auto decision = item.release.decision();
+					if (decision == sqlite_shm_writer_retirement_decision::wait_for_inflight)
+					{
+						const auto polled = context->registry->poll_writer_retirement(
+							*context->family, item.release.cleanup(), item.callback);
+						if (!polled ||
+							polled->decision != sqlite_shm_writer_retirement_decision::ready)
+						{
+							(void)context->registry->fail_writer_retirement_wait(
+								*context->family,
+								item.release.cleanup(),
+								item.callback,
+								sqlite_shm_retirement_wait_failure::timeout);
+							retirement_blocked = true;
+						}
+					}
+					else if (decision ==
+								 sqlite_shm_writer_retirement_decision::quarantine_same_thread ||
+							 decision == sqlite_shm_writer_retirement_decision::quarantined)
+						retirement_quarantined = true;
+				}
+
+				if (release_failed || retirement_blocked || retirement_quarantined)
+				{
+					(void)native_cleanup();
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+
+				const auto [native_status, native_known] = native_cleanup();
+				bool cleanup_confirmed = native_known && native_status == sqlite_ok;
+				for (auto& item : releases)
+				{
+					cleanup_confirmed = complete_writer_native_cleanup(*context,
+																	   item.release.cleanup(),
+																	   item.callback,
+																	   native_status,
+																	   native_known) &&
+						cleanup_confirmed;
+				}
+				if (!cleanup_confirmed)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				if (remove_file != 0 && file.owner->remove_writer_shm_sidecar() != sqlite_ok)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+
+				node->writer_holders.clear();
+				{
+					std::scoped_lock lock{file.connection_observation->mutex};
+					file.connection_observation->held_shm_locks.clear();
+					file.connection_observation->shared_memory_object_identity.reset();
+					file.connection_observation->shared_memory_entry_identity.reset();
+				}
+				file.shm_readonly_cannot_initialize = false;
+				file.source_shm_readonly_family_seen = false;
+				return sqlite_ok;
+			}
+			catch (...)
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+		}
+
 		int forwarding_shm_map(sqlite3_file* base,
 							   const int page,
 							   const int page_size,
@@ -3216,14 +6078,91 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (file->connection_observation)
+				{
+					std::scoped_lock lock{file->connection_observation->mutex};
+					++file->connection_observation->native_shm_map_attempt_count;
+				}
 				if (!native_operation_permitted(*file))
 					return sqlite_io_error;
+				if (file->role == sqlite_backend_file_role::main_database && file->main_handle &&
+					file->native && file->connection_observation)
+				{
+					bool writer_epoch_requested{};
+					bool writer_epoch_armed{};
+					bool writer_read_only{};
+					bool writer_wal_lock_observed{};
+					{
+						std::scoped_lock lock{file->connection_observation->mutex};
+						writer_epoch_requested =
+							file->connection_observation->writer_shm_mapping_epoch_requested;
+						writer_epoch_armed =
+							file->connection_observation->writer_target_namespace_epoch != nullptr;
+						writer_read_only = file->connection_observation->main_handle_read_only;
+						writer_wal_lock_observed = std::ranges::any_of(
+							file->connection_observation->held_shm_locks,
+							[](const auto& shm_lock)
+							{
+								return shm_lock.offset == 0 && shm_lock.count == 1 &&
+									shm_lock.mode == sqlite_backend_shm_lock_mode::exclusive;
+							});
+					}
+					if (writer_epoch_requested && !writer_epoch_armed && !writer_read_only &&
+						writer_wal_lock_observed)
+					{
+						if (auto armed = file->owner->arm_requested_writer_epoch_before_native_map(
+								*file->connection_observation);
+							!armed)
+						{
+							mark_source_shm_terminal_failure(*file);
+							return sqlite_io_error;
+						}
+					}
+				}
+				bool writer_route{};
+				bool writer_epoch{};
+				bool writer_epoch_match{};
+				if (file->role == sqlite_backend_file_role::main_database && file->main_handle &&
+					file->native && file->connection_observation)
+				{
+					std::scoped_lock lock{file->connection_observation->mutex};
+					writer_epoch =
+						file->connection_observation->writer_target_namespace_epoch != nullptr;
+					writer_epoch_match = writer_epoch &&
+						file->connection_observation->writer_target_namespace_epoch ==
+							file->native->target_namespace_epoch;
+					// The epoch is armed before SQLite's opening xShmMap.  Eligibility may be
+					// installed only after that callback returns, so route every exact epoch
+					// attempt through the writer pending state machine.
+					writer_route = writer_epoch_match;
+				}
+				if (writer_route)
+				{
+					return forwarding_writer_shm_map(*file, page, page_size, extend, output);
+				}
 				if (file->source_shm_readonly_qualified)
 				{
+					if (extend != 0 && extend != 1)
+					{
+						mark_source_shm_terminal_failure(*file);
+						return sqlite_io_error;
+					}
+					if (!file->source_shm_qualification_candidate && file->native &&
+						file->native->reader_open_authority)
+					{
+						const auto result =
+							forwarding_source_shm_map(*file, page, page_size, extend, output);
+						return result;
+					}
 					auto* raw = underlying_file(*file);
 					const auto* methods = underlying_methods(*file);
 					if (raw == nullptr || methods == nullptr || methods->shm_map == nullptr)
 						return sqlite_io_error;
+					if (!file->native || !native_shm_callback_identity_valid(*file->native))
+					{
+						mark_source_shm_terminal_failure(*file);
+						return sqlite_io_error;
+					}
 					const auto expected_identity = file->source_shm_qualification_candidate
 						? std::optional<opened_object_identities>{}
 						: file->expected_source_shm_identity;
@@ -3266,6 +6205,12 @@ namespace cxxlens::sdk
 						native_status = methods->shm_map(raw, page, page_size, 0, &native_mapping);
 					}
 					catch (...)
+					{
+						(void)release_native_mapping();
+						mark_source_shm_terminal_failure(*file);
+						return sqlite_io_error;
+					}
+					if (!file->native || !native_shm_callback_identity_valid(*file->native))
 					{
 						(void)release_native_mapping();
 						mark_source_shm_terminal_failure(*file);
@@ -3353,7 +6298,9 @@ namespace cxxlens::sdk
 							 readonly_family_seen_before,
 							 file->source_shm_readonly_family_seen,
 							 file->owner->pinned_underlying_vfs_identity(),
-							 file->owner->pinned_underlying_vfs_app_data_identity()}))
+							 file->owner->pinned_underlying_vfs_app_data_identity(),
+							 native_mapping,
+							 std::nullopt}))
 					{
 						(void)release_native_mapping();
 						mark_source_shm_terminal_failure(*file);
@@ -3458,8 +6405,9 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
-				if (!native_operation_permitted(*file))
-					return sqlite_io_error;
+				if (file->source_shm_readonly_qualified)
+					if (!native_operation_permitted(*file))
+						return sqlite_io_error;
 				auto* raw = underlying_file(*file);
 				const auto* methods = underlying_methods(*file);
 				if (raw == nullptr || methods == nullptr || methods->shm_lock == nullptr)
@@ -3564,11 +6512,707 @@ namespace cxxlens::sdk
 			}
 		}
 
+		[[nodiscard]] int close_source_reader_native(std::shared_ptr<native_file_node>& node,
+													 int (*close_callback)(sqlite3_file*)) noexcept
+		{
+			if (!node || !node->owner || !node->reader_open_authority || close_callback == nullptr)
+				return sqlite_io_error;
+			auto owner = node->owner;
+			const auto context = owner->source_shm_reader_context();
+			if (!context || context->registry == nullptr || context->family == nullptr)
+				return sqlite_io_error;
+			std::unique_lock lifecycle_lock{node->reader_lifecycle_mutex, std::try_to_lock};
+			if (!lifecycle_lock.owns_lock())
+				return sqlite_io_error;
+			try
+			{
+				const auto open_view =
+					sqlite_shm_reader_lifecycle_production_factory::open_epoch_view(
+						*context->registry, *node->reader_open_authority);
+				if (!open_view)
+					return sqlite_io_error;
+				auto issuer = sqlite_shm_reader_lifecycle_production_factory::identity_issuer(
+					*context->registry);
+				if (!issuer.valid())
+					return sqlite_io_error;
+
+				auto issue_callback = [&](sqlite_shm_reader_lifecycle_identity_scope& scope,
+										  const sqlite_shm_reader_callback_identity_role role,
+										  const std::string_view purpose)
+					-> std::optional<sqlite_shm_issued_reader_callback_identity>
+				{
+					try
+					{
+						auto thread_identity = make_source_reader_identity(*owner, *node, purpose);
+						if (!thread_identity)
+							return std::nullopt;
+						auto permit =
+							issuer.reserve_callback(scope, role, std::move(*thread_identity), 0U);
+						if (!permit)
+							return std::nullopt;
+						auto sealed = issuer.seal_callback(*permit, scope, role);
+						if (!sealed)
+							return std::nullopt;
+						return std::optional<sqlite_shm_issued_reader_callback_identity>{
+							std::move(*sealed)};
+					}
+					catch (...)
+					{
+						return std::nullopt;
+					}
+				};
+
+				if (node->reader_handoff)
+				{
+					if (!complete_source_reader_session(
+							*owner,
+							*node,
+							*context,
+							sqlite_shm_reader_session_terminal_kind::success,
+							true,
+							true))
+						return sqlite_io_error;
+					auto& handoff = *node->reader_handoff;
+					auto unmap_request_seal =
+						make_source_reader_lifecycle_request_seal(*owner,
+																  *node,
+																  "reader-live-close-unmap",
+																  open_view->registry_open_token,
+																  handoff.generation());
+					auto close_request_seal =
+						make_source_reader_lifecycle_request_seal(*owner,
+																  *node,
+																  "reader-live-close-close",
+																  open_view->close_owner_token,
+																  node->reader_generation);
+					if (!unmap_request_seal || !close_request_seal)
+						return sqlite_io_error;
+					auto unmap_scope =
+						sqlite_shm_reader_lifecycle_production_factory::seal_handoff_scope(
+							*context->registry,
+							*context->family,
+							handoff,
+							open_view->registry_open_token,
+							open_view->binding.callback_cohort,
+							*unmap_request_seal);
+					auto close_scope = sqlite_shm_reader_lifecycle_production_factory::seal_scope(
+						*context->registry,
+						*context->family,
+						open_view->binding.callback_cohort,
+						*close_request_seal,
+						open_view->registry_open_token,
+						sqlite_shm_reader_lifecycle_owner_kind::close,
+						open_view->close_owner_token,
+						node->reader_generation);
+					if (!unmap_scope.valid() || !close_scope.valid())
+						return sqlite_io_error;
+					auto unmap_callback =
+						issue_callback(unmap_scope,
+									   sqlite_shm_reader_callback_identity_role::attachment_unmap,
+									   "reader-live-close-unmap-thread");
+					auto close_callback_identity =
+						issue_callback(close_scope,
+									   sqlite_shm_reader_callback_identity_role::close,
+									   "reader-live-close-thread");
+					if (!unmap_callback || !close_callback_identity ||
+						unmap_callback->receipt().invocation_token ==
+							close_callback_identity->receipt().invocation_token)
+						return sqlite_io_error;
+					auto begun = context->registry->begin_reader_live_close(
+						*context->family,
+						*node->reader_open_authority,
+						handoff,
+						{unmap_callback->receipt(), 0, 0},
+						{close_callback_identity->receipt()});
+					if (!begun)
+						return sqlite_io_error;
+					node->reader_handoff.reset();
+					auto live_close = std::move(*begun);
+					auto cut = context->registry->poll_reader_live_close_unmap_cut(
+						*context->family,
+						*node->reader_open_authority,
+						live_close,
+						close_callback_identity->receipt());
+					if (!cut ||
+						cut->progress != sqlite_shm_reader_unmap_cut_progress::native_effect_ready)
+					{
+						if (cut)
+							(void)context->registry->fail_reader_live_close_unmap_cut_wait(
+								*context->family,
+								*node->reader_open_authority,
+								live_close,
+								close_callback_identity->receipt(),
+								sqlite_shm_retirement_wait_failure::timeout);
+						return sqlite_io_error;
+					}
+					auto* raw = node->file();
+					const auto& methods = node->trusted_methods;
+					if (raw == nullptr || methods.shm_unmap == nullptr ||
+						!native_shm_callback_identity_valid(*node))
+						return sqlite_io_error;
+					int native_unmap_status{};
+					bool native_unmap_known{};
+					try
+					{
+						native_unmap_status = methods.shm_unmap(raw, 0);
+						native_unmap_known = true;
+					}
+					catch (...)
+					{
+						native_unmap_known = false;
+					}
+					std::optional<sqlite_shm_issued_reader_effect_identity> unmap_effect;
+					std::optional<sqlite_shm_issued_reader_effect_identity> unmap_latch;
+					if (native_unmap_known)
+					{
+						auto effect = issuer.issue_effect(
+							unmap_scope,
+							*unmap_callback,
+							sqlite_shm_reader_effect_identity_role::native_unmap);
+						if (!effect)
+							return sqlite_io_error;
+						unmap_effect.emplace(std::move(*effect));
+						if (native_unmap_status == sqlite_ok)
+						{
+							auto latch = issuer.issue_effect(
+								unmap_scope,
+								*unmap_callback,
+								sqlite_shm_reader_effect_identity_role::latch_reset);
+							if (!latch)
+								return sqlite_io_error;
+							unmap_latch.emplace(std::move(*latch));
+						}
+					}
+					auto unmap_terminal = sqlite_shm_reader_lifecycle_production_factory::
+						make_live_close_unmap_terminal(
+							live_close,
+							unmap_callback->receipt(),
+							native_unmap_known
+								? sqlite_shm_reader_unmap_evidence_kind::exact_native_result
+								: sqlite_shm_reader_unmap_evidence_kind::throw_or_unknown,
+							native_unmap_known ? std::optional<int>{native_unmap_status}
+											   : std::nullopt,
+							0,
+							0,
+							unmap_effect
+								? std::optional<sqlite_backend_opaque_identity>{unmap_effect
+																					->identity()}
+								: std::nullopt,
+							unmap_latch
+								? std::optional<sqlite_backend_opaque_identity>{unmap_latch
+																					->identity()}
+								: std::nullopt);
+					auto unmapped = context->registry->complete_reader_live_close_unmap(
+						*context->family, *node->reader_open_authority, live_close, unmap_terminal);
+					if (!unmapped)
+						return sqlite_io_error;
+					bool retire_unmap_ok = true;
+					if (unmap_latch)
+						retire_unmap_ok = static_cast<bool>(issuer.retire_effect(
+							unmap_scope,
+							*unmap_callback,
+							*unmap_latch,
+							sqlite_shm_reader_effect_identity_role::latch_reset));
+					if (unmap_effect)
+						retire_unmap_ok = retire_unmap_ok &&
+							static_cast<bool>(issuer.retire_effect(
+								unmap_scope,
+								*unmap_callback,
+								*unmap_effect,
+								sqlite_shm_reader_effect_identity_role::native_unmap));
+					retire_unmap_ok = retire_unmap_ok &&
+						static_cast<bool>(issuer.retire_callback(
+							unmap_scope,
+							*unmap_callback,
+							sqlite_shm_reader_callback_identity_role::attachment_unmap));
+					retire_unmap_ok =
+						retire_unmap_ok && static_cast<bool>(issuer.retire_scope(unmap_scope));
+					if (!retire_unmap_ok ||
+						unmapped->kind() !=
+							sqlite_shm_reader_unmap_terminal_kind::retired_confirmed)
+						return sqlite_io_error;
+
+					int native_close_status{};
+					bool native_close_known{};
+					try
+					{
+						native_close_status = close_callback(raw);
+						native_close_known = true;
+					}
+					catch (...)
+					{
+						native_close_known = false;
+					}
+					std::optional<sqlite_shm_issued_reader_effect_identity> close_effect;
+					if (native_close_known)
+					{
+						auto effect = issuer.issue_effect(
+							close_scope,
+							*close_callback_identity,
+							sqlite_shm_reader_effect_identity_role::native_close);
+						if (!effect)
+							return sqlite_io_error;
+						close_effect.emplace(std::move(*effect));
+					}
+					auto close_terminal =
+						sqlite_shm_reader_lifecycle_production_factory::make_live_close_terminal(
+							live_close,
+							close_callback_identity->receipt(),
+							native_close_known
+								? sqlite_shm_reader_close_evidence_kind::exact_native_result
+								: sqlite_shm_reader_close_evidence_kind::throw_or_unknown,
+							native_close_known ? std::optional<int>{native_close_status}
+											   : std::nullopt,
+							close_effect
+								? std::optional<sqlite_backend_opaque_identity>{close_effect
+																					->identity()}
+								: std::nullopt);
+					auto closed = context->registry->complete_reader_live_close(
+						*context->family, *node->reader_open_authority, live_close, close_terminal);
+					if (!closed)
+						return sqlite_io_error;
+					bool retire_close_ok = true;
+					if (close_effect)
+						retire_close_ok = static_cast<bool>(issuer.retire_effect(
+							close_scope,
+							*close_callback_identity,
+							*close_effect,
+							sqlite_shm_reader_effect_identity_role::native_close));
+					retire_close_ok = retire_close_ok &&
+						static_cast<bool>(issuer.retire_callback(
+							close_scope,
+							*close_callback_identity,
+							sqlite_shm_reader_callback_identity_role::close));
+					retire_close_ok =
+						retire_close_ok && static_cast<bool>(issuer.retire_scope(close_scope));
+					if (!retire_close_ok ||
+						closed->kind() != sqlite_shm_reader_close_terminal_kind::closed)
+						return sqlite_io_error;
+					if (!owner->release_source_reader_open(*node))
+						return sqlite_io_error;
+					node->reader_generation = 0U;
+					clear_source_shm_projection_receipts(node->observation);
+					return sqlite_ok;
+				}
+
+				if (node->reader_session &&
+					node->reader_session->phase() !=
+						sqlite_shm_reader_session_phase::reserved_for_first_map)
+					return sqlite_io_error;
+				if (!complete_source_reader_session(
+						*owner,
+						*node,
+						*context,
+						sqlite_shm_reader_session_terminal_kind::cancelled_before_authority_read,
+						false,
+						true))
+					return sqlite_io_error;
+				auto close_request_seal = make_source_reader_lifecycle_request_seal(
+					*owner, *node, "reader-close", open_view->close_owner_token, 0U);
+				if (!close_request_seal)
+					return sqlite_io_error;
+				auto close_scope = sqlite_shm_reader_lifecycle_production_factory::seal_scope(
+					*context->registry,
+					*context->family,
+					open_view->binding.callback_cohort,
+					*close_request_seal,
+					open_view->registry_open_token,
+					sqlite_shm_reader_lifecycle_owner_kind::close,
+					open_view->close_owner_token,
+					0U);
+				if (!close_scope.valid())
+					return sqlite_io_error;
+				auto close_callback_identity =
+					issue_callback(close_scope,
+								   sqlite_shm_reader_callback_identity_role::close,
+								   "reader-close-thread");
+				if (!close_callback_identity)
+					return sqlite_io_error;
+				auto begun =
+					context->registry->begin_reader_close(*context->family,
+														  *node->reader_open_authority,
+														  {close_callback_identity->receipt()});
+				if (!begun)
+					return sqlite_io_error;
+				auto close = std::move(*begun);
+				if (!close.native_effect_ready())
+				{
+					auto cut = context->registry->poll_reader_close_cut(
+						*context->family,
+						*node->reader_open_authority,
+						close,
+						close_callback_identity->receipt());
+					if (!(cut &&
+						  cut->progress ==
+							  sqlite_shm_reader_close_cut_progress::native_effect_ready))
+					{
+						if (cut)
+							(void)context->registry->fail_reader_close_cut_wait(
+								*context->family,
+								*node->reader_open_authority,
+								close,
+								close_callback_identity->receipt(),
+								sqlite_shm_retirement_wait_failure::timeout);
+						return sqlite_io_error;
+					}
+				}
+				int native_status{};
+				bool native_known{};
+				try
+				{
+					native_status = close_callback(node->file());
+					native_known = true;
+				}
+				catch (...)
+				{
+					native_known = false;
+				}
+				std::optional<sqlite_shm_issued_reader_effect_identity> effect_identity;
+				if (native_known)
+				{
+					auto effect =
+						issuer.issue_effect(close_scope,
+											*close_callback_identity,
+											sqlite_shm_reader_effect_identity_role::native_close);
+					if (!effect)
+						return sqlite_io_error;
+					effect_identity.emplace(std::move(*effect));
+				}
+				auto terminal = sqlite_shm_reader_lifecycle_production_factory::make_close_terminal(
+					close,
+					close_callback_identity->receipt(),
+					native_known ? sqlite_shm_reader_close_evidence_kind::exact_native_result
+								 : sqlite_shm_reader_close_evidence_kind::throw_or_unknown,
+					native_known ? std::optional<int>{native_status} : std::nullopt,
+					effect_identity
+						? std::optional<sqlite_backend_opaque_identity>{effect_identity->identity()}
+						: std::nullopt);
+				auto closed = context->registry->complete_reader_close(
+					*context->family, *node->reader_open_authority, close, terminal);
+				if (!closed)
+					return sqlite_io_error;
+				bool retire_ok = true;
+				if (effect_identity)
+					retire_ok = static_cast<bool>(
+						issuer.retire_effect(close_scope,
+											 *close_callback_identity,
+											 *effect_identity,
+											 sqlite_shm_reader_effect_identity_role::native_close));
+				retire_ok = retire_ok &&
+					static_cast<bool>(issuer.retire_callback(
+						close_scope,
+						*close_callback_identity,
+						sqlite_shm_reader_callback_identity_role::close));
+				retire_ok = retire_ok && static_cast<bool>(issuer.retire_scope(close_scope));
+				if (!retire_ok || closed->kind() != sqlite_shm_reader_close_terminal_kind::closed)
+					return sqlite_io_error;
+				if (!owner->release_source_reader_open(*node))
+					return sqlite_io_error;
+				return sqlite_ok;
+			}
+			catch (...)
+			{
+				return sqlite_io_error;
+			}
+		}
+
+		[[nodiscard]] int forwarding_source_shm_unmap(forwarding_file& file,
+													  const int remove_file) noexcept
+		{
+			if (!file.source_shm_readonly_qualified || file.source_shm_qualification_candidate ||
+				file.native == nullptr || !file.owner || !file.native->reader_open_authority ||
+				!file.native->reader_handoff || remove_file != 0)
+				return sqlite_io_error;
+			const auto context = file.owner->source_shm_reader_context();
+			if (!context || context->registry == nullptr || context->family == nullptr ||
+				context->family_binding == nullptr || context->alias_lifetime == nullptr)
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+			std::unique_lock lifecycle_lock{file.native->reader_lifecycle_mutex, std::try_to_lock};
+			if (!lifecycle_lock.owns_lock())
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+			try
+			{
+				const auto open_view =
+					sqlite_shm_reader_lifecycle_production_factory::open_epoch_view(
+						*context->registry, *file.native->reader_open_authority);
+				if (!open_view ||
+					!complete_source_reader_session(
+						*file.owner,
+						*file.native,
+						*context,
+						sqlite_shm_reader_session_terminal_kind::success,
+						true,
+						true))
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+
+				auto& handoff = *file.native->reader_handoff;
+				auto request_seal =
+					make_source_reader_lifecycle_request_seal(*file.owner,
+															  *file.native,
+															  "reader-unmap",
+															  open_view->registry_open_token,
+															  handoff.generation());
+				if (!request_seal)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto scope = sqlite_shm_reader_lifecycle_production_factory::seal_handoff_scope(
+					*context->registry,
+					*context->family,
+					handoff,
+					open_view->registry_open_token,
+					open_view->binding.callback_cohort,
+					*request_seal);
+				if (!scope.valid())
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto issuer = sqlite_shm_reader_lifecycle_production_factory::identity_issuer(
+					*context->registry);
+				if (!issuer.valid())
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto thread_identity =
+					make_source_reader_identity(*file.owner, *file.native, "reader-unmap-thread");
+				if (!thread_identity)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto permit = issuer.reserve_callback(
+					scope,
+					sqlite_shm_reader_callback_identity_role::attachment_unmap,
+					std::move(*thread_identity),
+					0U);
+				if (!permit)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto callback_result = issuer.seal_callback(
+					*permit, scope, sqlite_shm_reader_callback_identity_role::attachment_unmap);
+				if (!callback_result)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				auto callback = std::move(*callback_result);
+				auto begun = context->registry->begin_reader_unmap(
+					*context->family, handoff, callback.receipt());
+				if (!begun)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				file.native->reader_handoff.reset();
+				auto unmap = std::move(*begun);
+				auto cut = context->registry->poll_reader_unmap_cut(
+					*context->family, unmap, callback.receipt());
+				if (!cut ||
+					cut->progress != sqlite_shm_reader_unmap_cut_progress::native_effect_ready)
+				{
+					if (cut)
+						(void)context->registry->fail_reader_unmap_cut_wait(
+							*context->family,
+							unmap,
+							callback.receipt(),
+							sqlite_shm_retirement_wait_failure::timeout);
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+
+				auto* raw = underlying_file(file);
+				const auto* methods = underlying_methods(file);
+				if (raw == nullptr || methods == nullptr || methods->shm_unmap == nullptr ||
+					!file.native || !native_shm_callback_identity_valid(*file.native))
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				int native_status{};
+				bool native_known{};
+				try
+				{
+					native_status = methods->shm_unmap(raw, 0);
+					native_known = true;
+				}
+				catch (...)
+				{
+					native_known = false;
+				}
+				std::optional<sqlite_shm_issued_reader_effect_identity> native_effect;
+				std::optional<sqlite_shm_issued_reader_effect_identity> latch_reset;
+				if (native_known)
+				{
+					auto issued = issuer.issue_effect(
+						scope, callback, sqlite_shm_reader_effect_identity_role::native_unmap);
+					if (!issued)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					native_effect.emplace(std::move(*issued));
+					if (native_status == sqlite_ok)
+					{
+						auto reset = issuer.issue_effect(
+							scope, callback, sqlite_shm_reader_effect_identity_role::latch_reset);
+						if (!reset)
+						{
+							mark_source_shm_terminal_failure(file);
+							return sqlite_io_error;
+						}
+						latch_reset.emplace(std::move(*reset));
+					}
+				}
+				auto terminal = sqlite_shm_reader_lifecycle_production_factory::make_unmap_terminal(
+					unmap,
+					callback.receipt(),
+					native_known ? sqlite_shm_reader_unmap_evidence_kind::exact_native_result
+								 : sqlite_shm_reader_unmap_evidence_kind::throw_or_unknown,
+					native_known ? std::optional<int>{native_status} : std::nullopt,
+					0,
+					0,
+					native_effect
+						? std::optional<sqlite_backend_opaque_identity>{native_effect->identity()}
+						: std::nullopt,
+					latch_reset
+						? std::optional<sqlite_backend_opaque_identity>{latch_reset->identity()}
+						: std::nullopt);
+				auto completed =
+					context->registry->complete_reader_unmap(*context->family, unmap, terminal);
+				if (!completed)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				bool retire_ok = true;
+				if (latch_reset)
+					retire_ok = static_cast<bool>(
+						issuer.retire_effect(scope,
+											 callback,
+											 *latch_reset,
+											 sqlite_shm_reader_effect_identity_role::latch_reset));
+				if (native_effect)
+					retire_ok = retire_ok &&
+						static_cast<bool>(issuer.retire_effect(
+							scope,
+							callback,
+							*native_effect,
+							sqlite_shm_reader_effect_identity_role::native_unmap));
+				retire_ok = retire_ok &&
+					static_cast<bool>(issuer.retire_callback(
+						scope,
+						callback,
+						sqlite_shm_reader_callback_identity_role::attachment_unmap));
+				retire_ok = retire_ok && static_cast<bool>(issuer.retire_scope(scope));
+				if (!retire_ok)
+				{
+					mark_source_shm_terminal_failure(file);
+					return sqlite_io_error;
+				}
+				if (completed->kind() != sqlite_shm_reader_unmap_terminal_kind::retired_confirmed)
+				{
+					mark_source_shm_terminal_failure(file);
+					return completed->outward_status();
+				}
+				file.native->reader_generation = 0U;
+				file.shm_readonly_cannot_initialize = false;
+				file.source_shm_readonly_family_seen = false;
+				if (file.connection_observation)
+				{
+					std::scoped_lock lock{file.connection_observation->mutex};
+					for (auto& event : file.connection_observation->shm_map_events)
+						event.native_ok_projection_receipt.reset();
+					file.connection_observation->held_shm_locks.clear();
+					file.connection_observation->shared_memory_object_identity.reset();
+					file.connection_observation->shared_memory_entry_identity.reset();
+				}
+				return sqlite_ok;
+			}
+			catch (...)
+			{
+				mark_source_shm_terminal_failure(file);
+				return sqlite_io_error;
+			}
+		}
+
 		int forwarding_shm_unmap(sqlite3_file* base, const int remove_file) noexcept
 		{
 			try
 			{
 				auto* file = forwarding(base);
+				if (file->source_shm_readonly_qualified &&
+					!file->source_shm_qualification_candidate)
+				{
+					if (file->native && file->native->reader_handoff)
+					{
+						const auto result = forwarding_source_shm_unmap(*file, remove_file);
+						return result;
+					}
+					if (!native_operation_permitted(*file))
+						return sqlite_io_error;
+					if (file->source_shm_terminal_failure)
+						return sqlite_io_error;
+					auto* raw = underlying_file(*file);
+					const auto* methods = underlying_methods(*file);
+					if (raw == nullptr || methods == nullptr || methods->shm_unmap == nullptr ||
+						!file->native || !native_shm_callback_identity_valid(*file->native))
+						return sqlite_io_error;
+					int status{};
+					try
+					{
+						status = methods->shm_unmap(raw, 0);
+					}
+					catch (...)
+					{
+						mark_source_shm_terminal_failure(*file);
+						return sqlite_io_error;
+					}
+					if (status != sqlite_ok)
+						mark_source_shm_terminal_failure(*file);
+					else
+					{
+						file->shm_readonly_cannot_initialize = false;
+						file->source_shm_readonly_family_seen = false;
+					}
+					return status;
+				}
+				bool writer_route{};
+				if (file->role == sqlite_backend_file_role::main_database && file->native &&
+					file->connection_observation)
+				{
+					std::scoped_lock lock{file->connection_observation->mutex};
+					writer_route = file->connection_observation->writer_target_namespace_epoch &&
+						file->connection_observation->writer_target_namespace_epoch ==
+							file->native->target_namespace_epoch;
+				}
+				if (!writer_route && file->role == sqlite_backend_file_role::main_database &&
+					file->native)
+				{
+					std::unique_lock lifecycle_lock{file->native->writer_lifecycle_mutex,
+													std::try_to_lock};
+					if (lifecycle_lock.owns_lock())
+						writer_route = !file->native->writer_pending.empty() ||
+							!file->native->writer_holders.empty();
+				}
+				if (writer_route)
+				{
+					const auto status = forwarding_writer_shm_unmap(*file, remove_file);
+					return status;
+				}
 				const auto delegated_remove = file->source_shm_readonly_qualified ? 0 : remove_file;
 				if (!file->source_shm_readonly_qualified && remove_file != 0 &&
 					!persistent_effect_permitted(*file))
@@ -3788,6 +7432,11 @@ namespace cxxlens::sdk
 					if (association.observation->source_shm_open_plan)
 						file->target_namespace_epoch = association.observation->source_shm_open_plan
 														   ->qualification.target_namespace_epoch;
+					else if (association.observation->writer_target_namespace_epoch)
+					{
+						file->target_namespace_epoch =
+							association.observation->writer_target_namespace_epoch;
+					}
 				}
 				if (file->target_namespace_epoch && !file->target_namespace_epoch->recheck())
 				{
@@ -3816,6 +7465,14 @@ namespace cxxlens::sdk
 					owner->pinned_underlying_vfs_app_data_identity(),
 					owner->underlying_image_identity(),
 					owner->underlying_open_callback_address());
+				if (association.observation && association.main_handle)
+				{
+					std::scoped_lock lock{association.observation->mutex};
+					file->native->writer_target_namespace_epoch_owner =
+						association.observation->writer_target_namespace_epoch != nullptr &&
+						association.observation->writer_target_namespace_epoch ==
+							file->target_namespace_epoch;
+				}
 				// Copying a shared_ptr is noexcept and cannot allocate. Pre-arm the self-cycle
 				// before native xOpen so every uncertain callback outcome can retain the opaque
 				// allocation.
@@ -3863,6 +7520,8 @@ namespace cxxlens::sdk
 				}
 				file->native->trusted_methods = inspection.callbacks;
 				file->native->trusted_methods_ready = true;
+				file->native->underlying_methods_identity = raw->methods;
+				file->native->underlying_methods_version = raw->methods->version;
 				if (file->target_namespace_epoch && !file->target_namespace_epoch->recheck())
 				{
 					mark_incomplete(association.observation);
@@ -3961,6 +7620,7 @@ namespace cxxlens::sdk
 					file->native->writer_lifetime_source.emplace(std::move(produced->second));
 					file->native->writer_native_file_receipt.emplace(sealed_receipts->semantic);
 					file->native->writer_native_xopen_receipt.emplace(sealed_receipts->xopen);
+					file->native->writer_callback_cohort.emplace(sealed_receipts->callback_cohort);
 					file->native->writer_open_epoch.emplace(sealed_receipts->open_epoch);
 					if (association.main_handle && association.observation)
 					{
@@ -3969,18 +7629,46 @@ namespace cxxlens::sdk
 							file->native->writer_native_file_receipt;
 						association.observation->main_native_xopen_receipt =
 							file->native->writer_native_xopen_receipt;
+						association.observation->main_callback_cohort =
+							file->native->writer_callback_cohort;
 						association.observation->main_open_epoch = file->native->writer_open_epoch;
+					}
+				}
+				if (association.main_handle && association.observation &&
+					file->source_shm_readonly_qualified)
+				{
+					if (auto admitted = owner->acquire_source_reader_open(
+							*association.observation,
+							*file->native,
+							observe_source_reader_target_identity(*file));
+						!admitted)
+					{
+						mark_incomplete(association.observation);
+						record_open_failure(association.observation, event_index);
+						cleanup_failed_forwarding_open(*file);
+						file->~forwarding_file();
+						return sqlite_io_error;
 					}
 				}
 				if (association.main_handle && association.observation)
 				{
 					std::scoped_lock lock{association.observation->mutex};
+					if (association.role == sqlite_backend_file_role::main_database)
+						association.observation->main_native_node = file->native;
+					else if (association.role == sqlite_backend_file_role::write_ahead_log)
+						association.observation->wal_native_node = file->native;
 					association.observation->main_handle_open = true;
 					association.observation->main_handle_read_only =
 						(delegated_flags & sqlite_open_read_only) != 0 &&
 						(delegated_flags & sqlite_open_read_write) == 0 &&
 						(local_out_flags & sqlite_open_read_only) != 0 &&
 						(local_out_flags & sqlite_open_read_write) == 0;
+				}
+				if (association.observation &&
+					association.role == sqlite_backend_file_role::write_ahead_log)
+				{
+					std::scoped_lock lock{association.observation->mutex};
+					association.observation->wal_native_node = file->native;
 				}
 				if (out_flags != nullptr)
 					*out_flags = local_out_flags;
@@ -4026,9 +7714,10 @@ namespace cxxlens::sdk
 				auto* owner = forwarding_owner(vfs);
 				if (owner != nullptr && !owner->permits_path_effect(name))
 					return sqlite_readonly;
-				return owner != nullptr && owner->underlying()->remove != nullptr
+				const auto status = owner != nullptr && owner->underlying()->remove != nullptr
 					? owner->underlying()->remove(owner->underlying(), name, sync_directory)
 					: sqlite_io_error;
+				return status;
 			}
 			catch (...)
 			{

@@ -901,8 +901,11 @@ namespace cxxlens::detail::clang22
 				auto batch = extract(request_, toolchain_digest_);
 				if (!batch)
 					return sdk::unexpected(std::move(batch.error()));
-				auto normalized = canonicalize_provider_batch(
-					*batch, toolchain_digest_, invocation_exact, std::move(limitations));
+				auto normalized = canonicalize_provider_batch(*batch,
+															  toolchain_digest_,
+															  invocation_exact,
+															  std::move(limitations),
+															  request_.toolchain_context);
 				if (!normalized)
 					return sdk::unexpected(std::move(normalized.error()));
 
@@ -962,6 +965,11 @@ namespace cxxlens::detail::clang22
 				const auto coverage_state =
 					normalized->exact_equivalence ? "covered" : "unresolved";
 				const auto reason = limitation_text(normalized->equivalence_limitations);
+				context.coverage().request("task", task.task_id);
+				if (auto classified =
+						context.coverage().classify({"task", task.task_id, "covered", {}});
+					!classified)
+					return classified;
 				for (const auto kind : {
 						 "frontend.clang22.observation",
 						 "cc.entity",
@@ -1175,8 +1183,7 @@ namespace cxxlens::detail::clang22
 	{
 		if (input.usr && !input.usr->empty())
 			return declaration_identity{"clang-usr:" + *input.usr, "exact-usr"};
-		if (input.toolchain_digest.size() != 71U ||
-			!input.toolchain_digest.starts_with("sha256:") || input.declaration_kind.empty() ||
+		if (!canonical_digest(input.toolchain_digest) || input.declaration_kind.empty() ||
 			input.canonical_signature.empty() || input.declaration_context.empty() ||
 			input.canonical_source_anchor.empty())
 			return sdk::unexpected(provider_error(
@@ -1205,11 +1212,12 @@ namespace cxxlens::detail::clang22
 	canonicalize_provider_batch(const observation_batch& batch,
 								const std::string& toolchain_digest,
 								const bool invocation_exact,
-								std::vector<std::string> invocation_limitations)
+								std::vector<std::string> invocation_limitations,
+								const std::string_view toolchain_context_id)
 	{
 		if (auto valid = batch.validate(); !valid)
 			return sdk::unexpected(std::move(valid.error()));
-		if (!toolchain_digest.starts_with("sha256:"))
+		if (!canonical_digest(toolchain_digest))
 			return sdk::unexpected(
 				provider_error("provider.toolchain-digest-invalid", "toolchain"));
 		for (const auto& diagnostic : batch.diagnostics)
@@ -1227,7 +1235,14 @@ namespace cxxlens::detail::clang22
 
 		canonicalized_provider_batch output;
 		output.equivalence_limitations = std::move(invocation_limitations);
-		const auto toolchain = *sdk::semantic_digest("toolchain-context", toolchain_digest);
+		const auto derived_toolchain = sdk::semantic_digest("toolchain-context", toolchain_digest);
+		if (!derived_toolchain)
+			return sdk::unexpected(std::move(derived_toolchain.error()));
+		const auto toolchain =
+			toolchain_context_id.empty() ? *derived_toolchain : std::string{toolchain_context_id};
+		if (!sdk::validate_strong_id(toolchain))
+			return sdk::unexpected(
+				provider_error("provider.toolchain-context-invalid", "toolchain_context_id"));
 		std::vector<const detached_observation*> ordered_observations;
 		ordered_observations.reserve(batch.observations.size());
 		for (const auto& observation : batch.observations)
@@ -1625,7 +1640,9 @@ namespace cxxlens::detail::clang22
 		execution.budget = decoded->input.budget;
 		canonical_provider provider{
 			std::move(decoded->input), toolchain_digest, *expected_semantic_contract};
-		(void)sdk::provider::run_worker(provider, *task, writer, std::move(execution));
+		auto worker_outcome =
+			sdk::provider::run_worker(provider, *task, writer, std::move(execution));
+		(void)worker_outcome;
 		return EXIT_SUCCESS;
 	}
 } // namespace cxxlens::detail::clang22

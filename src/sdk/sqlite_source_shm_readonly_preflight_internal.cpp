@@ -34,6 +34,7 @@
 
 #include "sqlite_connection_lifecycle_internal.hpp"
 #include "sqlite_payload_streaming_internal.hpp"
+#include "sqlite_vfs_abi_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -170,64 +171,10 @@ namespace cxxlens::sdk
 			int value_{-1};
 		};
 
-		struct sqlite3_file;
-		struct sqlite3_io_methods;
-		struct sqlite3_vfs;
-		using sqlite3_syscall_ptr = void (*)();
-
-		struct sqlite3_file
-		{
-			const sqlite3_io_methods* methods;
-		};
-
-		struct sqlite3_io_methods
-		{
-			int version;
-			int (*close)(sqlite3_file*);
-			int (*read)(sqlite3_file*, void*, int, long long);
-			int (*write)(sqlite3_file*, const void*, int, long long);
-			int (*truncate)(sqlite3_file*, long long);
-			int (*sync)(sqlite3_file*, int);
-			int (*file_size)(sqlite3_file*, long long*);
-			int (*lock)(sqlite3_file*, int);
-			int (*unlock)(sqlite3_file*, int);
-			int (*check_reserved_lock)(sqlite3_file*, int*);
-			int (*file_control)(sqlite3_file*, int, void*);
-			int (*sector_size)(sqlite3_file*);
-			int (*device_characteristics)(sqlite3_file*);
-			int (*shm_map)(sqlite3_file*, int, int, int, volatile void**);
-			int (*shm_lock)(sqlite3_file*, int, int, int);
-			void (*shm_barrier)(sqlite3_file*);
-			int (*shm_unmap)(sqlite3_file*, int);
-			int (*fetch)(sqlite3_file*, long long, int, void**);
-			int (*unfetch)(sqlite3_file*, long long, void*);
-		};
-
-		struct sqlite3_vfs
-		{
-			int version;
-			int os_file_bytes;
-			int maximum_pathname;
-			sqlite3_vfs* next;
-			const char* name;
-			void* app_data;
-			int (*open)(sqlite3_vfs*, const char*, sqlite3_file*, int, int*);
-			int (*remove)(sqlite3_vfs*, const char*, int);
-			int (*access)(sqlite3_vfs*, const char*, int, int*);
-			int (*full_pathname)(sqlite3_vfs*, const char*, int, char*);
-			void* (*dl_open)(sqlite3_vfs*, const char*);
-			void (*dl_error)(sqlite3_vfs*, int, char*);
-			void (*(*dl_sym)(sqlite3_vfs*, void*, const char*))(void);
-			void (*dl_close)(sqlite3_vfs*, void*);
-			int (*randomness)(sqlite3_vfs*, int, char*);
-			int (*sleep)(sqlite3_vfs*, int);
-			int (*current_time)(sqlite3_vfs*, double*);
-			int (*get_last_error)(sqlite3_vfs*, int, char*);
-			int (*current_time_int64)(sqlite3_vfs*, long long*);
-			int (*set_system_call)(sqlite3_vfs*, const char*, sqlite3_syscall_ptr);
-			sqlite3_syscall_ptr (*get_system_call)(sqlite3_vfs*, const char*);
-			const char* (*next_system_call)(sqlite3_vfs*, const char*);
-		};
+		using sqlite3_file = sqlite_vfs_abi::file;
+		using sqlite3_io_methods = sqlite_vfs_abi::io_methods;
+		using sqlite3_vfs = sqlite_vfs_abi::vfs;
+		using sqlite3_syscall_ptr = sqlite_vfs_abi::syscall_ptr;
 
 		[[nodiscard]] bool retained_parent_anchor(const std::string_view path) noexcept
 		{
@@ -306,12 +253,8 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<filesystem_profile>
 		read_filesystem_profile(const int descriptor, const struct stat& identity)
 		{
-			struct statfs observed
-			{
-			};
-			struct statx mount
-			{
-			};
+			struct statfs observed{};
+			struct statx mount{};
 			if (::fstatfs(descriptor, &observed) != 0 ||
 				::statx(
 					descriptor, "", AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, STATX_MNT_ID, &mount) !=
@@ -386,9 +329,7 @@ namespace cxxlens::sdk
 				open_at(parent, leaf, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)};
 			if (!descriptor)
 				return unexpected(qualification_error());
-			struct stat before
-			{
-			};
+			struct stat before{};
 			if (::fstat(descriptor.get(), &before) != 0 || !S_ISREG(before.st_mode) ||
 				before.st_size < 0 ||
 				static_cast<std::uint64_t>(before.st_size) > maximum_fixture_file_bytes)
@@ -415,9 +356,7 @@ namespace cxxlens::sdk
 					return unexpected(qualification_error());
 				offset += static_cast<std::uint64_t>(count);
 			}
-			struct stat after
-			{
-			};
+			struct stat after{};
 			if (::fstat(descriptor.get(), &after) != 0 || !same_object(before, after) ||
 				before.st_size != after.st_size)
 				return unexpected(qualification_error());
@@ -442,9 +381,7 @@ namespace cxxlens::sdk
 				source_parent, source_leaf, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)};
 			if (!source)
 				return unexpected(qualification_error());
-			struct stat source_before
-			{
-			};
+			struct stat source_before{};
 			if (::fstat(source.get(), &source_before) != 0 || !S_ISREG(source_before.st_mode) ||
 				source_before.st_size < 0 ||
 				static_cast<std::uint64_t>(source_before.st_size) > maximum_fixture_file_bytes)
@@ -488,12 +425,8 @@ namespace cxxlens::sdk
 			}
 			if (::fdatasync(destination.get()) != 0)
 				return unexpected(qualification_error());
-			struct stat source_after
-			{
-			};
-			struct stat destination_status
-			{
-			};
+			struct stat source_after{};
+			struct stat destination_status{};
 			if (::fstat(source.get(), &source_after) != 0 ||
 				::fstat(destination.get(), &destination_status) != 0 ||
 				!same_object(source_before, source_after) ||
@@ -646,9 +579,7 @@ namespace cxxlens::sdk
 				owned_descriptor parent{open_directory(parent_path.c_str())};
 				if (!parent)
 					return unexpected(qualification_error());
-				struct stat parent_status
-				{
-				};
+				struct stat parent_status{};
 				if (::fstat(parent.get(), &parent_status) != 0 || !S_ISDIR(parent_status.st_mode) ||
 					parent_identity(parent_status) != expected_parent)
 					return unexpected(qualification_error());
@@ -676,9 +607,7 @@ namespace cxxlens::sdk
 						(void)::unlinkat(parent.get(), leaf.c_str(), AT_REMOVEDIR);
 						return unexpected(qualification_error());
 					}
-					struct stat root_status
-					{
-					};
+					struct stat root_status{};
 					if (::fstat(root.get(), &root_status) != 0 || !S_ISDIR(root_status.st_mode) ||
 						(root_status.st_mode & 0777) != 0700)
 					{
@@ -767,15 +696,9 @@ namespace cxxlens::sdk
 			}
 			[[nodiscard]] result<void> recheck_namespace_entry() const
 			{
-				struct stat retained_root
-				{
-				};
-				struct stat named_root
-				{
-				};
-				struct stat current_parent
-				{
-				};
+				struct stat retained_root{};
+				struct stat named_root{};
+				struct stat current_parent{};
 				if (!root_ || !parent_ || ::fstat(root_.get(), &retained_root) != 0 ||
 					::fstat(parent_.get(), &current_parent) != 0 ||
 					::fstatat(parent_.get(), leaf_.c_str(), &named_root, AT_SYMLINK_NOFOLLOW) !=
@@ -832,16 +755,12 @@ namespace cxxlens::sdk
 				}
 				if (::fsync(parent_.get()) != 0)
 					return unexpected(qualification_error());
-				struct stat current_parent
-				{
-				};
+				struct stat current_parent{};
 				if (::fstat(parent_.get(), &current_parent) != 0 ||
 					!same_object(parent_status_, current_parent) ||
 					parent_identity(current_parent) != parent_identity(parent_status_))
 					return unexpected(qualification_error());
-				struct stat removed
-				{
-				};
+				struct stat removed{};
 				if (::fstatat(parent_.get(), leaf_.c_str(), &removed, AT_SYMLINK_NOFOLLOW) == 0 ||
 					errno != ENOENT)
 					return unexpected(qualification_error());
@@ -867,9 +786,7 @@ namespace cxxlens::sdk
 			owned_descriptor root_;
 			std::string parent_path_;
 			std::string leaf_;
-			struct stat parent_status_
-			{
-			};
+			struct stat parent_status_{};
 			filesystem_profile profile_;
 			bool namespace_removed_{};
 			bool cleaned_{};
@@ -901,13 +818,27 @@ namespace cxxlens::sdk
 					{
 						const sqlite_backend_entry_observation* selected{};
 						for (const auto& candidate : census.entries)
-							if (candidate.role == role)
-							{
-								if (selected != nullptr)
-									return unexpected(qualification_error());
-								selected = &candidate;
-							}
+						{
+							if (candidate.role != role)
+								continue;
+							if (selected != nullptr)
+								return unexpected(qualification_error());
+							selected = &candidate;
+						}
 						auto retained = guard->retained_entry(role);
+						const auto absent_shared_memory =
+							role == sqlite_backend_file_role::shared_memory &&
+							selected != nullptr &&
+							selected->state == sqlite_backend_entry_state::absent &&
+							!selected->object_identity && !selected->directory_entry_identity &&
+							!selected->held_object && !selected->object_filesystem_profile &&
+							!selected->direct_regular_entry && retained &&
+							retained->state == sqlite_backend_entry_state::absent &&
+							!retained->object_identity && !retained->directory_entry_identity &&
+							!retained->held_object && !retained->object_filesystem_profile &&
+							!retained->direct_regular_entry;
+						if (absent_shared_memory)
+							continue;
 						if (selected == nullptr ||
 							selected->state != sqlite_backend_entry_state::held_regular ||
 							!selected->object_identity || !selected->directory_entry_identity ||
@@ -935,7 +866,7 @@ namespace cxxlens::sdk
 					append_opaque(identity.bytes, census.parent_namespace_identity);
 					append_opaque(identity.bytes, guard->identity());
 
-						auto output = std::shared_ptr<default_source_shm_target_namespace_epoch>(
+					auto output = std::shared_ptr<default_source_shm_target_namespace_epoch>(
 						new default_source_shm_target_namespace_epoch(
 							std::move(guard),
 							std::string{logical_main_locator},
@@ -983,6 +914,17 @@ namespace cxxlens::sdk
 				if (auto checked = recheck_locked(); !checked)
 					return unexpected(std::move(checked.error()));
 				return guard_->retained_entry(role);
+			}
+			[[nodiscard]] result<sqlite_backend_writer_shm_stat_observation>
+			observe_writer_shm_stat(const bool after_native_map) const override
+			{
+				std::scoped_lock lock{mutex_};
+				if (finished_ || !guard_ || (!after_native_map && !guard_->recheck()))
+					return unexpected(qualification_error());
+				auto stat = guard_->observe_writer_shm_stat(after_native_map);
+				if (!stat || stat->parent_namespace_identity != parent_namespace_identity_)
+					return unexpected(qualification_error());
+				return stat;
 			}
 
 			[[nodiscard]] result<void> recheck() const override
@@ -1644,9 +1586,7 @@ namespace cxxlens::sdk
 				if (!deadman_lock)
 					return unexpected(
 						qualification_error("source-shm-readonly-qualification-route-dms-open"));
-				struct flock lock
-				{
-				};
+				struct flock lock{};
 				lock.l_type = F_RDLCK;
 				lock.l_whence = SEEK_SET;
 				lock.l_start = unix_shm_deadman_switch_offset;
@@ -1798,6 +1738,21 @@ namespace cxxlens::sdk
 				append_u64(output, event.returned_mapping_nonnull ? 1U : 0U);
 				append_u64(output, event.readonly_family_seen_before ? 1U : 0U);
 				append_u64(output, event.readonly_family_seen_after ? 1U : 0U);
+				append_u64(output, event.native_ok_projection_receipt.has_value() ? 1U : 0U);
+				if (event.native_ok_projection_receipt)
+				{
+					const auto& projection = *event.native_ok_projection_receipt;
+					append_u64(output, projection.reader_generation);
+					append_u64(output, static_cast<std::uint64_t>(projection.page));
+					append_u64(output, static_cast<std::uint64_t>(projection.page_size));
+					append_u64(output, static_cast<std::uint64_t>(projection.caller_extend));
+					append_u64(output, static_cast<std::uint64_t>(projection.delegated_extend));
+					append_u64(output, projection.byte_offset);
+					append_u64(output, projection.byte_count);
+					append_u64(output, projection.sealed_shm_size);
+					append_opaque(output, projection.callback_invocation);
+					append_opaque(output, projection.native_effect);
+				}
 			}
 		}
 
@@ -2291,16 +2246,25 @@ namespace cxxlens::sdk
 				ordered_entries[role_index] = &entry;
 
 				const auto active = role_index != 3U;
+				const auto absent_shared_memory =
+					role_index == 2U && entry.state == sqlite_backend_entry_state::absent;
 				const auto mount = entry.held_object
 					? entry.held_object->object_mount_identity()
 					: std::optional<sqlite_backend_opaque_identity>{};
-				if (active)
+				if (active && !absent_shared_memory)
 				{
 					if (entry.state != sqlite_backend_entry_state::held_regular ||
 						!entry.object_identity || !entry.directory_entry_identity ||
 						!entry.object_filesystem_profile || !entry.held_object ||
 						!entry.direct_regular_entry || !mount || mount->profile.empty() ||
 						mount->bytes.empty())
+						return unexpected(qualification_error());
+				}
+				else if (absent_shared_memory)
+				{
+					if (entry.object_identity || entry.directory_entry_identity ||
+						entry.held_object || entry.object_filesystem_profile ||
+						entry.direct_regular_entry || mount)
 						return unexpected(qualification_error());
 				}
 				else if (entry.state != sqlite_backend_entry_state::absent ||
@@ -2315,8 +2279,35 @@ namespace cxxlens::sdk
 										return entry == nullptr;
 									}))
 				return unexpected(qualification_error());
+			const auto* main_entry = ordered_entries[0U];
+			if (main_entry == nullptr ||
+				main_entry->state != sqlite_backend_entry_state::held_regular ||
+				!main_entry->object_filesystem_profile || !main_entry->held_object ||
+				!main_entry->held_object->object_mount_identity())
+				return unexpected(qualification_error());
 			for (const auto* entry : ordered_entries)
 			{
+				if (entry->role == sqlite_backend_file_role::shared_memory)
+				{
+					const auto filesystem = entry->state == sqlite_backend_entry_state::held_regular
+						? entry->object_filesystem_profile
+						: main_entry->object_filesystem_profile;
+					const auto mount = entry->state == sqlite_backend_entry_state::held_regular
+						? (entry->held_object ? entry->held_object->object_mount_identity()
+											  : std::optional<sqlite_backend_opaque_identity>{})
+						: main_entry->held_object->object_mount_identity();
+					if (!filesystem || !mount || filesystem->profile.empty() ||
+						filesystem->bytes.empty() || mount->profile.empty() || mount->bytes.empty())
+						return unexpected(qualification_error());
+					// The SHM inode is created by the first authenticated native xShmMap.  Keep
+					// the family key stable across that absent -> direct-regular transition;
+					// the target epoch and writer/reader attachment receipts retain the exact
+					// post-map object and directory-entry identities.
+					append_u64(output.bytes, static_cast<std::uint64_t>(entry->role));
+					append_opaque(output.bytes, *filesystem);
+					append_opaque(output.bytes, *mount);
+					continue;
+				}
 				const auto mount = entry->held_object
 					? entry->held_object->object_mount_identity()
 					: std::optional<sqlite_backend_opaque_identity>{};
@@ -2337,6 +2328,30 @@ namespace cxxlens::sdk
 					append_opaque(output.bytes, *mount);
 			}
 			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(qualification_error());
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(qualification_error());
+		}
+	}
+
+	result<std::shared_ptr<sqlite_source_shm_target_namespace_epoch>>
+	make_sqlite_source_shm_target_namespace_epoch(const std::string_view logical_main_locator,
+												  const sqlite_backend_namespace_census& census)
+	{
+		if (logical_main_locator.empty() || logical_main_locator.front() != '/')
+			return unexpected(qualification_error());
+		try
+		{
+			auto output = default_source_shm_target_namespace_epoch::create(
+				std::string{logical_main_locator}, census);
+			if (!output)
+				return unexpected(std::move(output.error()));
+			return std::move(*output);
 		}
 		catch (const std::bad_alloc&)
 		{

@@ -314,7 +314,7 @@ namespace
 	}
 
 	[[nodiscard]] sqlite_writer_shm_stat_census direct_stat(const std::uint8_t marker,
-											const std::uint64_t byte_count = 4096U)
+															const std::uint64_t byte_count = 4096U)
 	{
 		return {sqlite_writer_shm_entry_state::direct_regular,
 				identity("test.epoch.parent-namespace", marker),
@@ -333,6 +333,8 @@ namespace
 		std::size_t held_rechecks{};
 		std::size_t size_calls{};
 		std::size_t duplicate_namespace_opens{};
+		std::uint64_t shm_size{4096U};
+		bool shm_absent{};
 	};
 
 	class retained_epoch_held_object final : public sqlite_backend_held_object
@@ -350,7 +352,8 @@ namespace
 		{
 			return sqlite_backend_file_role::shared_memory;
 		}
-		[[nodiscard]] const sqlite_backend_opaque_identity& object_identity() const noexcept override
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		object_identity() const noexcept override
 		{
 			return object_;
 		}
@@ -372,18 +375,18 @@ namespace
 		[[nodiscard]] result<void> recheck_retained_object() const override
 		{
 			++state_.held_rechecks;
-			return state_.stable ? result<void>{} : result<void>{error{
-				"test.retained-epoch", "shm", "stale-retained-object"}};
+			return state_.stable
+				? result<void>{}
+				: result<void>{error{"test.retained-epoch", "shm", "stale-retained-object"}};
 		}
 		[[nodiscard]] result<std::uint64_t> size() const override
 		{
 			++state_.size_calls;
-			return state_.stable ? result<std::uint64_t>{4096U}
-							 : result<std::uint64_t>{error{
-								"test.retained-epoch", "shm", "stale-size"}};
+			return state_.stable
+				? result<std::uint64_t>{state_.shm_size}
+				: result<std::uint64_t>{error{"test.retained-epoch", "shm", "stale-size"}};
 		}
-		[[nodiscard]] result<void> read_exact(std::uint64_t,
-											 std::span<std::byte>) const override
+		[[nodiscard]] result<void> read_exact(std::uint64_t, std::span<std::byte>) const override
 		{
 			return error{"test.retained-epoch", "shm", "unexpected-read"};
 		}
@@ -399,10 +402,11 @@ namespace
 		[[nodiscard]] result<sqlite_backend_replacement_state>
 		recheck_current_entry() const override
 		{
-			return state_.stable ? result<sqlite_backend_replacement_state>{
-												 sqlite_backend_replacement_state::exact_same_entry_and_object}
-										 : result<sqlite_backend_replacement_state>{error{
-													"test.retained-epoch", "shm", "stale-entry"}};
+			return state_.stable
+				? result<sqlite_backend_replacement_state>{sqlite_backend_replacement_state::
+															   exact_same_entry_and_object}
+				: result<sqlite_backend_replacement_state>{
+					  error{"test.retained-epoch", "shm", "stale-entry"}};
 		}
 
 	  private:
@@ -453,14 +457,22 @@ namespace
 			++state_.retained_entry_calls;
 			if (!state_.stable || role != sqlite_backend_file_role::shared_memory)
 				return error{"test.retained-epoch", "shm", "stale-entry"};
+			if (state_.shm_absent)
+				return sqlite_backend_entry_observation{sqlite_backend_file_role::shared_memory,
+														sqlite_backend_entry_state::absent,
+														std::nullopt,
+														std::nullopt,
+														nullptr,
+														std::nullopt,
+														false};
 			return entry_;
 		}
 		[[nodiscard]] result<void> recheck() const override
 		{
 			++state_.target_rechecks;
-			return state_.stable ? result<void>{}
-							 : result<void>{error{
-								"test.retained-epoch", "target", "stale-target"}};
+			return state_.stable
+				? result<void>{}
+				: result<void>{error{"test.retained-epoch", "target", "stale-target"}};
 		}
 		[[nodiscard]] result<void> finish() override
 		{
@@ -478,14 +490,21 @@ namespace
 
 	[[nodiscard]] sqlite_writer_shm_mapping_epoch_platform_binding
 	retained_epoch_platform_binding(const std::shared_ptr<retained_epoch_target>& target,
-											const std::uint8_t marker)
+									const std::uint8_t marker,
+									const bool absent_context = false)
 	{
 		return {target,
 				identity("test.retained-epoch.parent", marker),
 				identity("test.retained-epoch.sqlite-source", marker),
 				identity("test.retained-epoch.wal-lock", marker),
 				identity("test.retained-epoch.effect-gate", marker),
-				identity("test.retained-epoch.effect", marker)};
+				identity("test.retained-epoch.effect", marker),
+				absent_context ? std::optional<sqlite_backend_opaque_identity>{identity(
+									 "test.retained-epoch.filesystem", marker)}
+							   : std::nullopt,
+				absent_context ? std::optional<sqlite_backend_opaque_identity>{identity(
+									 "test.retained-epoch.mount", marker)}
+							   : std::nullopt};
 	}
 
 	[[nodiscard]] sqlite_writer_shm_mapping_epoch_post_observation
@@ -1138,24 +1157,24 @@ namespace
 		sqlite_retained_namespace_writer_shm_mapping_epoch_port port{std::move(platform)};
 		auto activation = port.arm(resources.take_request());
 		require(activation.has_value(), "retained namespace epoch did not arm");
-	auto arm = activation->take_arm();
+		auto arm = activation->take_arm();
 		auto observer = activation->take_observer();
 		std::array<std::byte, 4096U> native_page{};
 		auto sealed = seal_sqlite_writer_shm_mapping_epoch(observer, native_page.data());
 		require(sealed.has_value(), "retained namespace epoch did not seal");
 		require(sealed->pre_stat().state == sqlite_writer_shm_entry_state::direct_regular &&
-				sealed->post_observation().stat == sealed->pre_stat() &&
-				sealed->post_observation().transition ==
-					sqlite_writer_shm_observed_transition::preexisting_unchanged &&
-				sealed->post_observation().namespace_events.trusted_stat_watch_profile &&
-				sealed->post_observation().effects.create_count ==
-					sqlite_writer_shm_bounded_count::zero &&
-				sealed->post_observation().effects.extend_count ==
-					sqlite_writer_shm_bounded_count::zero &&
-				sealed->post_observation().effects.resize_count ==
-					sqlite_writer_shm_bounded_count::zero &&
-				sealed->post_observation().effects.complete &&
-				sealed->post_observation().effects.result_confirmed_success && arm.valid(),
+					sealed->post_observation().stat == sealed->pre_stat() &&
+					sealed->post_observation().transition ==
+						sqlite_writer_shm_observed_transition::preexisting_unchanged &&
+					sealed->post_observation().namespace_events.trusted_stat_watch_profile &&
+					sealed->post_observation().effects.create_count ==
+						sqlite_writer_shm_bounded_count::zero &&
+					sealed->post_observation().effects.extend_count ==
+						sqlite_writer_shm_bounded_count::zero &&
+					sealed->post_observation().effects.resize_count ==
+						sqlite_writer_shm_bounded_count::zero &&
+					sealed->post_observation().effects.complete &&
+					sealed->post_observation().effects.result_confirmed_success && arm.valid(),
 				"retained namespace epoch did not preserve the exact zero-effect proof");
 		require(state.target_rechecks >= 3U && state.retained_entry_calls == 2U &&
 					state.held_rechecks == 2U && state.size_calls == 2U &&
@@ -1163,7 +1182,7 @@ namespace
 				"retained namespace epoch did not recheck the held object without reopening it");
 	}
 
-	void verify_retained_namespace_port_rejects_growth_and_stale_post_map()
+	void verify_retained_namespace_port_supports_writer_extend_matrix_and_stale_post_map()
 	{
 		{
 			constexpr auto marker = std::uint8_t{91U};
@@ -1172,13 +1191,72 @@ namespace
 			auto resources = make_epoch_resources(marker, 1, 1);
 			sqlite_retained_namespace_writer_shm_mapping_epoch_port port{
 				retained_epoch_platform_binding(target, marker)};
-			auto rejected = port.arm(resources.take_request());
-			require(!rejected &&
-					rejected.error().reason == sqlite_shm_lease_rejection_reason::invalid_request &&
-					rejected.error().action ==
-						sqlite_shm_lease_recovery_action::deny_before_native_map &&
-					state.target_rechecks == 0U && state.retained_entry_calls == 0U,
-					"retained namespace port admitted an unsupported growth route");
+			auto activation = port.arm(resources.take_request());
+			require(activation.has_value(),
+					"retained namespace port rejected one-one preallocation");
+			auto arm = activation->take_arm();
+			auto observer = activation->take_observer();
+			std::array<std::byte, 4096U> native_page{};
+			auto preallocated = seal_sqlite_writer_shm_mapping_epoch(observer, native_page.data());
+			require(preallocated.has_value() &&
+						preallocated->post_observation().transition ==
+							sqlite_writer_shm_observed_transition::preexisting_preallocated &&
+						preallocated->post_observation().effects.extend_count ==
+							sqlite_writer_shm_bounded_count::zero &&
+						arm.valid(),
+					"retained namespace port did not preserve one-one preallocation");
+		}
+
+		{
+			constexpr auto marker = std::uint8_t{94U};
+			retained_epoch_state state;
+			state.shm_absent = true;
+			auto target = std::make_shared<retained_epoch_target>(state, marker);
+			auto resources = make_epoch_resources(marker, 1, 1);
+			sqlite_retained_namespace_writer_shm_mapping_epoch_port port{
+				retained_epoch_platform_binding(target, marker, true)};
+			auto activation = port.arm(resources.take_request());
+			require(activation.has_value(),
+					"retained namespace port rejected absent one-one create");
+			auto arm = activation->take_arm();
+			auto observer = activation->take_observer();
+			state.shm_absent = false;
+			std::array<std::byte, 4096U> native_page{};
+			auto created = seal_sqlite_writer_shm_mapping_epoch(observer, native_page.data());
+			require(created.has_value() &&
+						created->pre_stat().state == sqlite_writer_shm_entry_state::absent &&
+						created->post_observation().transition ==
+							sqlite_writer_shm_observed_transition::absent_created &&
+						created->post_observation().namespace_events.expected_leaf_create ==
+							sqlite_writer_shm_bounded_count::one &&
+						created->post_observation().effects.create_count ==
+							sqlite_writer_shm_bounded_count::one &&
+						arm.valid(),
+					"retained namespace port did not preserve absent one-one create");
+		}
+
+		{
+			constexpr auto marker = std::uint8_t{93U};
+			retained_epoch_state state;
+			auto target = std::make_shared<retained_epoch_target>(state, marker);
+			auto resources = make_epoch_resources(marker, 1, 1);
+			resources.binding.map_request.page_number = 1;
+			sqlite_retained_namespace_writer_shm_mapping_epoch_port port{
+				retained_epoch_platform_binding(target, marker)};
+			auto activation = port.arm(resources.take_request());
+			require(activation.has_value(), "retained namespace port rejected one-one growth");
+			auto arm = activation->take_arm();
+			auto observer = activation->take_observer();
+			state.shm_size = 8192U;
+			std::array<std::byte, 4096U> native_page{};
+			auto grown = seal_sqlite_writer_shm_mapping_epoch(observer, native_page.data());
+			require(grown.has_value() &&
+						grown->post_observation().transition ==
+							sqlite_writer_shm_observed_transition::preexisting_grown &&
+						grown->post_observation().effects.extend_count ==
+							sqlite_writer_shm_bounded_count::one &&
+						arm.valid(),
+					"retained namespace port did not preserve one-one growth");
 		}
 
 		constexpr auto marker = std::uint8_t{92U};
@@ -1195,9 +1273,10 @@ namespace
 		std::array<std::byte, 4096U> native_page{};
 		auto stale = seal_sqlite_writer_shm_mapping_epoch(observer, native_page.data());
 		require(!stale &&
-				stale.error().reason == sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
-				stale.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry &&
-				arm.valid() && state.retained_entry_calls == 1U,
+					stale.error().reason ==
+						sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+					stale.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+					arm.valid() && state.retained_entry_calls == 1U,
 				"retained namespace port retried a stale target after native mapping");
 	}
 } // namespace
@@ -1221,7 +1300,7 @@ int main()
 		verify_malformed_post_observation_never_seals();
 		verify_audit_receipt_copy_does_not_retain_authority();
 		verify_retained_namespace_port_proves_only_existing_zero_effect_route();
-		verify_retained_namespace_port_rejects_growth_and_stale_post_map();
+		verify_retained_namespace_port_supports_writer_extend_matrix_and_stale_post_map();
 	}
 	catch (const std::exception& exception)
 	{

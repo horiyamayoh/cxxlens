@@ -409,15 +409,22 @@ int main(const int argc, char**)
 		auto outcome = sdk::provider::detail::execute_provider_process_replayable(
 			*processes, *process_request, replay);
 		if (!outcome || !outcome->succeeded() || !outcome->sealed || !outcome->runtime_receipt)
+		{
 			return sdk::unexpected(sdk::error{"materialization.worker-failure",
 											  execution->metadata.provider_task_id,
 											  "execution"});
+		}
 		if (auto launched = journal->record_worker_launch_success(); !launched)
 			return sdk::unexpected(std::move(launched.error()));
 		launch_in_flight = false;
+		// Retain the authenticated semantic task window long enough to bind the report capture.
+		// The seal request below consumes the movable source/input authorities, so this copy is
+		// made before those fields cross the one-way execution boundary.
+		const auto task_metadata = execution->metadata;
 
 		streamed_validated_materialization_task_request seal_request{
 			std::move(execution->input),
+			&request->request().catalog(),
 			std::move(execution->source_receipt),
 			std::move(execution->metadata.provider_task_id),
 			std::move(execution->metadata.provider_execution_id),
@@ -429,10 +436,15 @@ int main(const int argc, char**)
 			validate_and_seal_materialization(std::move(seal_request), std::move(*outcome->sealed));
 		if (!sealed)
 			return sdk::unexpected(std::move(sealed.error()));
+		// The provider seal has crossed the one-way adoption boundary.  Do not leave a
+		// moved-from optional in the runtime outcome for the report layer to mistake as a
+		// second live authority.
+		outcome->sealed.reset();
 		// Capture the bounded, source-private task evidence before claims adoption.  The
 		// provider seal has been transferred into `sealed`; the capture routine binds the
 		// remaining runtime receipts to that immutable authority and retains no raw frames.
-		auto task_report = capture_detailed_task_report(*outcome, *sealed, report_limits);
+		auto task_report =
+			capture_detailed_task_report(*outcome, *sealed, task_metadata, report_limits);
 		if (!task_report)
 			return sdk::unexpected(std::move(task_report.error()));
 		if (auto appended = task_reports.append(std::move(*task_report)); !appended)
@@ -532,19 +544,26 @@ int main(const int argc, char**)
 	public_materialization_success_report_input public_input;
 	public_input.request = &*request;
 	public_input.request_globals = &*request_globals;
+	public_input.task_reports = &task_reports;
 	public_input.raw_input = &*observed;
 	public_input.occurrence_manifest = &occurrence->manifest();
 	public_input.occurrence_receipt = &occurrence->receipt();
 	public_input.claims = &*claims;
 	public_input.store = &postpublication->store_observation();
+	if (rooted_opener && rooted_opener->receipt())
+		public_input.rooted_vfs_receipt = &*rooted_opener->receipt();
 	public_input.generated_at = utc_now();
 	public_input.maximum_report_bytes = report_limits.max_projection_bytes;
 	auto public_model = build_public_materialization_success_report(public_input);
 	if (!public_model)
+	{
 		return no_response();
+	}
 	auto report = encode_public_materialization_success_report(std::move(*public_model));
 	if (!report)
+	{
 		return no_response();
+	}
 	std::cout << *report;
 	return 0;
 }

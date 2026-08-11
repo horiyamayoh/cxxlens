@@ -126,7 +126,8 @@ namespace cxxlens::detail::clang22
 	canonicalize_provider_batch(const observation_batch& batch,
 								const std::string& toolchain_digest,
 								bool invocation_exact,
-								std::vector<std::string> invocation_limitations = {});
+								std::vector<std::string> invocation_limitations = {},
+								std::string_view toolchain_context_id = {});
 
 	/** Run the worker from a bounded-read host stream; the stream is never materialized. */
 	[[nodiscard]] int run_provider_worker(std::istream& input, std::ostream& output);

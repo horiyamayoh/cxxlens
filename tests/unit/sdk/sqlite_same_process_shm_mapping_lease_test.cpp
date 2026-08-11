@@ -470,7 +470,9 @@ namespace cxxlens::sdk
 									  const std::uint64_t writer_mapping_generation,
 									  sqlite_backend_opaque_identity callback_cohort,
 									  sqlite_backend_opaque_identity attachment_epoch,
-									  const std::uint64_t registry_open_token = 0U)
+									  const std::uint64_t registry_open_token = 0U,
+									  std::optional<sqlite_shm_reader_attachment_target_identity>
+										  target_identity = std::nullopt)
 		{
 			return sqlite_shm_reader_attachment_reservation_identity::bind(
 				std::move(family),
@@ -483,7 +485,8 @@ namespace cxxlens::sdk
 				writer_mapping_generation,
 				std::move(callback_cohort),
 				std::move(attachment_epoch),
-				registry_open_token);
+				registry_open_token,
+				std::move(target_identity));
 		}
 
 		[[nodiscard]] static sqlite_shm_reader_session_terminal_receipt
@@ -693,8 +696,8 @@ namespace
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_holder>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_map_inflight>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_attachment_map_inflight>);
-	static_assert(std::is_nothrow_move_constructible_v<
-				  sqlite_shm_reader_late_close_outer_unwind_authority>);
+	static_assert(
+		std::is_nothrow_move_constructible_v<sqlite_shm_reader_late_close_outer_unwind_authority>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_session>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_reader_cleanup_obligation>);
 	static_assert(
@@ -1021,19 +1024,16 @@ namespace
 									   is_sqlite_shm_reader_logical_ack_transition,
 									   "reader logical acknowledgement graph is exact and closed");
 
-		static_assert(
-			sqlite_shm_reader_late_close_drain_phases ==
-			std::array{late_close::not_applicable,
-						   late_close::retained_original_callback_drain,
-						   late_close::cleanup_admitted,
-						   late_close::cleanup_confirmed_awaiting_sqlite_ack,
-						   late_close::terminal_quarantined,
-						   late_close::consumed_by_exact_outer_unmap});
+		static_assert(sqlite_shm_reader_late_close_drain_phases ==
+					  std::array{late_close::not_applicable,
+								 late_close::retained_original_callback_drain,
+								 late_close::cleanup_admitted,
+								 late_close::cleanup_confirmed_awaiting_sqlite_ack,
+								 late_close::terminal_quarantined,
+								 late_close::consumed_by_exact_outer_unmap});
 		constexpr std::array late_close_edges{
-			std::pair{late_close::not_applicable,
-					  late_close::retained_original_callback_drain},
-			std::pair{late_close::retained_original_callback_drain,
-					  late_close::cleanup_admitted},
+			std::pair{late_close::not_applicable, late_close::retained_original_callback_drain},
+			std::pair{late_close::retained_original_callback_drain, late_close::cleanup_admitted},
 			std::pair{late_close::retained_original_callback_drain,
 					  late_close::terminal_quarantined},
 			std::pair{late_close::cleanup_admitted,
@@ -1250,6 +1250,7 @@ namespace
 			attachment.main_xopen_receipt(),
 			attachment.open_epoch(),
 			attachment.callback_cohort(),
+			attachment.target_identity(),
 		};
 	}
 
@@ -1266,6 +1267,7 @@ namespace
 			identity("test.reader-main-xopen-receipt", marker),
 			identity("test.reader-open-epoch", marker),
 			identity("test.reader-callback-cohort", marker),
+			std::nullopt,
 		};
 	}
 
@@ -1286,7 +1288,8 @@ namespace
 			writer_generation,
 			binding.callback_cohort,
 			attachment_epoch,
-			registry_open_token);
+			registry_open_token,
+			binding.target_identity);
 		require(attachment.has_value(), "bind reader attachment to exact reader-open epoch");
 		return std::move(*attachment);
 	}
@@ -1809,6 +1812,7 @@ namespace
 				sources->wal_file_receipt,
 				sources->wal_xopen_receipt,
 				sources->shm_attachment_receipt,
+				std::nullopt,
 			},
 			std::move(*parent_pin),
 			std::move(*main_pin),
@@ -1931,6 +1935,7 @@ namespace
 			identity("test.phase2.reader-transaction", marker),
 			identity("test.phase2.reader-decode", marker),
 			identity("test.phase2.reader-authority-read", marker),
+			std::nullopt,
 		};
 	}
 
@@ -1945,6 +1950,7 @@ namespace
 			request.main_xopen_receipt,
 			request.open_epoch,
 			request.callback_cohort,
+			request.target_identity,
 		};
 	}
 
@@ -9975,13 +9981,13 @@ namespace
 			require(coordinator.revoke_writer_eligibility(writer.eligibility).has_value(),
 					"revoke unmap-cut wait-policy writer gate");
 
-			const auto unmap_callback = selected == scenario::same_thread ||
-				selected == scenario::reentrant
+			const auto unmap_callback =
+				selected == scenario::same_thread || selected == scenario::reentrant
 				? sqlite_shm_callback_execution_receipt{reader.session_request.execution
-													.thread_identity,
-												selected == scenario::reentrant ? 1U : 0U,
-												identity("test.reader-unmap-same-thread",
-														 marker)}
+															.thread_identity,
+														selected == scenario::reentrant ? 1U : 0U,
+														identity("test.reader-unmap-same-thread",
+																 marker)}
 				: callback(10U, marker + 3U);
 			auto unmap = coordinator.begin_reader_unmap(
 				reader.handoff, sqlite_shm_reader_unmap_request{unmap_callback, 0, 0});

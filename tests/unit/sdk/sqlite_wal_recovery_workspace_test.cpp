@@ -279,9 +279,7 @@ namespace
 		{
 			const auto descriptor = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
 			require(descriptor >= 0, "open SQLite fixture bytes");
-			struct stat observed
-			{
-			};
+			struct stat observed{};
 			if (::fstat(descriptor, &observed) != 0 || observed.st_size < 0)
 			{
 				(void)::close(descriptor);
@@ -562,26 +560,26 @@ namespace
 	}
 
 	void exercise_empty_wal_main_alone(sqlite_runtime& runtime,
-									 const std::vector<std::byte>& main_bytes)
+									   const std::vector<std::byte>& main_bytes)
 	{
 		const std::vector<std::byte> empty_wal;
 		auto scan = scan_bytes(empty_wal);
 		require(scan.classification == sqlite_wal_scan_classification::empty &&
 					scan.stop == sqlite_wal_scan_stop::end_of_input && !scan.header &&
-					scan.inspected_byte_count == 0U &&
-					scan.authoritative_prefix_byte_count == 0U,
-			"empty WAL acquired recovery authority");
+					scan.inspected_byte_count == 0U && scan.authoritative_prefix_byte_count == 0U,
+				"empty WAL acquired recovery authority");
 		auto workspace = build_workspace(runtime, main_bytes, {}, scan);
 		auto receipt = workspace->snapshot_receipt();
-		require(receipt.has_value() && receipt->source_wal_scan.classification ==
-					sqlite_wal_scan_classification::empty &&
+		require(receipt.has_value() &&
+					receipt->source_wal_scan.classification ==
+						sqlite_wal_scan_classification::empty &&
 					receipt->authoritative_wal_prefix.byte_count == 0U &&
 					!receipt->private_wal_present && receipt->opens.main_attempt_count == 0U &&
 					receipt->opens.main_success_count == 0U &&
 					!receipt->opens.main_readwrite_no_create &&
-					receipt->opens.wal_attempt_count == 0U && receipt->shm.map_request_count == 0U &&
-					workspace->verify_sealed_objects(),
-			"empty WAL workspace did not remain main-only");
+					receipt->opens.wal_attempt_count == 0U &&
+					receipt->shm.map_request_count == 0U && workspace->verify_sealed_objects(),
+				"empty WAL workspace did not remain main-only");
 	}
 
 	void exercise_seal_failure(sqlite_runtime& runtime,

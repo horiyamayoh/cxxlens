@@ -875,6 +875,7 @@ foreach(
   ITEMS core-consumer
         sdk-consumer
         clang22-sdk-consumer
+        clang22-materializer-success
         real-project-consumer
         real-project-incompatible-version
         examples-consumer

@@ -2,8 +2,8 @@
 
 #include <array>
 #include <atomic>
-#include <charconv>
 #include <cerrno>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -32,11 +32,11 @@ namespace cxxlens::sdk
 {
 	namespace
 	{
-		[[nodiscard]] sqlite_shm_lease_rejection port_rejection(
-			const sqlite_shm_lease_rejection_reason reason =
-				sqlite_shm_lease_rejection_reason::invalid_identity,
-			const sqlite_shm_lease_recovery_action action =
-				sqlite_shm_lease_recovery_action::deny_before_native_map) noexcept
+		[[nodiscard]] sqlite_shm_lease_rejection
+		port_rejection(const sqlite_shm_lease_rejection_reason reason =
+						   sqlite_shm_lease_rejection_reason::invalid_identity,
+					   const sqlite_shm_lease_recovery_action action =
+						   sqlite_shm_lease_recovery_action::deny_before_native_map) noexcept
 		{
 			return {reason, action};
 		}
@@ -143,7 +143,8 @@ namespace cxxlens::sdk
 			{
 				if (size == buffer.size())
 					return false;
-				const auto count = ::read(descriptor.get(), buffer.data() + size, buffer.size() - size);
+				const auto count =
+					::read(descriptor.get(), buffer.data() + size, buffer.size() - size);
 				if (count > 0)
 				{
 					size += static_cast<std::size_t>(count);
@@ -185,8 +186,8 @@ namespace cxxlens::sdk
 				if (index == 19U)
 				{
 					std::uint64_t value{};
-					const auto parsed = std::from_chars(
-						token.data(), token.data() + token.size(), value, 10);
+					const auto parsed =
+						std::from_chars(token.data(), token.data() + token.size(), value, 10);
 					if (parsed.ec != std::errc{} || parsed.ptr != token.data() + token.size() ||
 						value == 0U)
 						return false;
@@ -231,8 +232,8 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] bool descriptor_identity(const int descriptor,
-											std::uint64_t& device,
-											std::uint64_t& inode) noexcept
+											   std::uint64_t& device,
+											   std::uint64_t& inode) noexcept
 		{
 			struct stat observed{};
 			for (;;)
@@ -306,7 +307,7 @@ namespace cxxlens::sdk
 		{
 			globals.exhausted = true;
 			return port_rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
-						  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+								  sqlite_shm_lease_recovery_action::quarantine_no_retry);
 		}
 
 		struct process_state_deleter
@@ -361,13 +362,12 @@ namespace cxxlens::sdk
 		{
 			if (globals.exhausted || globals.fork_epoch == 0U)
 				return port_rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
-								  sqlite_shm_lease_recovery_action::quarantine_no_retry);
+									  sqlite_shm_lease_recovery_action::quarantine_no_retry);
 
 			const auto creator_pid = ::getpid();
 			if (creator_pid <= 0)
 				return port_rejection();
-			owned_descriptor pid_namespace{
-				open_retry("/proc/self/ns/pid", O_RDONLY | O_CLOEXEC)};
+			owned_descriptor pid_namespace{open_retry("/proc/self/ns/pid", O_RDONLY | O_CLOEXEC)};
 			owned_descriptor pidfd{open_self_pidfd()};
 			if (!pid_namespace || !pidfd || !pidfd_live(pidfd.get()))
 				return port_rejection();
@@ -378,8 +378,7 @@ namespace cxxlens::sdk
 			std::uint64_t pidfd_inode{};
 			std::uint64_t start_ticks{};
 			std::array<std::byte, 32> entropy{};
-			if (!descriptor_identity(
-					pid_namespace.get(), namespace_device, namespace_inode) ||
+			if (!descriptor_identity(pid_namespace.get(), namespace_device, namespace_inode) ||
 				!descriptor_identity(pidfd.get(), pidfd_device, pidfd_inode) ||
 				!process_start_ticks(start_ticks) || !fill_entropy(entropy) ||
 				::getpid() != creator_pid || !pidfd_live(pidfd.get()))
@@ -391,8 +390,7 @@ namespace cxxlens::sdk
 				process_instance.profile = "cxxlens.sqlite.process-instance.v1";
 				process_instance.bytes.reserve(8U * 8U + entropy.size());
 				append_unsigned(process_instance.bytes, std::uint64_t{1U});
-				append_unsigned(
-					process_instance.bytes, static_cast<std::uint64_t>(creator_pid));
+				append_unsigned(process_instance.bytes, static_cast<std::uint64_t>(creator_pid));
 				append_unsigned(process_instance.bytes, start_ticks);
 				append_unsigned(process_instance.bytes, namespace_device);
 				append_unsigned(process_instance.bytes, namespace_inode);

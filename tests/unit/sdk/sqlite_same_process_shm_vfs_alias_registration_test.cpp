@@ -1,6 +1,5 @@
 #include <array>
 #include <atomic>
-#include <barrier>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -16,6 +15,8 @@
 #include <thread>
 #include <utility>
 
+#include <barrier>
+
 #if defined(__linux__)
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -29,18 +30,18 @@ namespace cxxlens::sdk
 	class sqlite_same_process_shm_vfs_alias_registration_test_peer
 	{
 	  public:
-		[[nodiscard]] static sqlite_shm_vfs_alias_lifecycle_binding binding(
-			sqlite_shm_process_registry_handle process,
-			sqlite_backend_opaque_identity shared_runtime_vfs_cohort,
-			sqlite_backend_opaque_identity alias_lifetime,
-			sqlite_backend_opaque_identity runtime_lifetime_identity,
-			sqlite_backend_opaque_identity runtime_lifetime_pin_identity,
-			std::shared_ptr<void> runtime_lifetime_owner,
-			std::string registered_vfs_name,
-			void* vfs_implementation,
-			sqlite_shm_vfs_alias_lifecycle_binding::find_function find,
-			sqlite_shm_vfs_alias_lifecycle_binding::register_function register_vfs,
-			sqlite_shm_vfs_alias_lifecycle_binding::unregister_function unregister_vfs)
+		[[nodiscard]] static sqlite_shm_vfs_alias_lifecycle_binding
+		binding(sqlite_shm_process_registry_handle process,
+				sqlite_backend_opaque_identity shared_runtime_vfs_cohort,
+				sqlite_backend_opaque_identity alias_lifetime,
+				sqlite_backend_opaque_identity runtime_lifetime_identity,
+				sqlite_backend_opaque_identity runtime_lifetime_pin_identity,
+				std::shared_ptr<void> runtime_lifetime_owner,
+				std::string registered_vfs_name,
+				void* vfs_implementation,
+				sqlite_shm_vfs_alias_lifecycle_binding::find_function find,
+				sqlite_shm_vfs_alias_lifecycle_binding::register_function register_vfs,
+				sqlite_shm_vfs_alias_lifecycle_binding::unregister_function unregister_vfs)
 		{
 			return {std::move(process),
 					std::move(shared_runtime_vfs_cohort),
@@ -87,7 +88,7 @@ namespace
 	}
 
 	[[nodiscard]] sqlite_backend_opaque_identity identity(const std::string_view profile,
-												 const std::uint64_t value)
+														  const std::uint64_t value)
 	{
 		sqlite_backend_opaque_identity output;
 		output.profile = std::string{profile};
@@ -164,9 +165,8 @@ namespace
 			if (make_default != 0 || value != fixture.expected_vfs)
 				return 99;
 			if (fixture.install_on_register)
-				fixture.registered = fixture.registration_value != nullptr
-					? fixture.registration_value
-					: value;
+				fixture.registered =
+					fixture.registration_value != nullptr ? fixture.registration_value : value;
 			return fixture.register_status;
 		}
 
@@ -212,11 +212,11 @@ namespace
 		native_registry_scope& operator=(const native_registry_scope&) = delete;
 	};
 
-	[[nodiscard]] cxxlens::sdk::sqlite_shm_vfs_alias_lifecycle_binding make_binding(
-		const sqlite_shm_process_registry_handle& process,
-		native_registry_fixture& fixture,
-		const std::uint64_t marker,
-		const std::shared_ptr<runtime_owner_probe>& owner)
+	[[nodiscard]] cxxlens::sdk::sqlite_shm_vfs_alias_lifecycle_binding
+	make_binding(const sqlite_shm_process_registry_handle& process,
+				 native_registry_fixture& fixture,
+				 const std::uint64_t marker,
+				 const std::shared_ptr<runtime_owner_probe>& owner)
 	{
 		return sqlite_same_process_shm_vfs_alias_registration_test_peer::binding(
 			process,
@@ -244,12 +244,12 @@ namespace
 #endif
 	}
 
-	[[nodiscard]] sqlite_shm_registered_vfs_alias register_clean_alias(
-		const sqlite_shm_process_registry_handle& process,
-		native_registry_fixture& fixture,
-		const std::uint64_t marker,
-		std::weak_ptr<runtime_owner_probe>& weak_owner,
-		std::shared_ptr<std::atomic_int>& destruction_count)
+	[[nodiscard]] sqlite_shm_registered_vfs_alias
+	register_clean_alias(const sqlite_shm_process_registry_handle& process,
+						 native_registry_fixture& fixture,
+						 const std::uint64_t marker,
+						 std::weak_ptr<runtime_owner_probe>& weak_owner,
+						 std::shared_ptr<std::atomic_int>& destruction_count)
 	{
 		destruction_count = std::make_shared<std::atomic_int>(0);
 		auto owner = std::make_shared<runtime_owner_probe>(destruction_count);
@@ -281,8 +281,8 @@ namespace
 			native_registry_scope scope{fixture};
 			std::weak_ptr<runtime_owner_probe> weak_owner;
 			std::shared_ptr<std::atomic_int> destruction_count;
-			auto alias = register_clean_alias(
-				process, fixture, marker, weak_owner, destruction_count);
+			auto alias =
+				register_clean_alias(process, fixture, marker, weak_owner, destruction_count);
 			const auto snapshot = registry->snapshot();
 			require(snapshot.process_live && !snapshot.registry_quarantined,
 					"clean registry remains live");
@@ -298,7 +298,7 @@ namespace
 						alias.registered_vfs_name() == fixture.expected_name,
 					"registered alias retains exact native tuple");
 			require(alias.registration_epoch().profile ==
-						"cxxlens.sqlite.shm.vfs-alias-registration-epoch.v1" &&
+							"cxxlens.sqlite.shm.vfs-alias-registration-epoch.v1" &&
 						!alias.registration_epoch().bytes.empty(),
 					"registration epoch is closed and nonempty");
 			if (previous_epoch)
@@ -310,8 +310,7 @@ namespace
 			require(fixture.registered == nullptr && fixture.register_calls == 1 &&
 						fixture.unregister_calls == 1,
 					"native register and unregister each execute exactly once");
-			require(weak_owner.expired() &&
-						destruction_count->load(std::memory_order_relaxed) == 1,
+			require(weak_owner.expired() && destruction_count->load(std::memory_order_relaxed) == 1,
 					"clean detach releases exact runtime owner once");
 			const auto detached = registry->snapshot();
 			require(detached.alias_record_count == baseline.alias_record_count + marker &&
@@ -353,8 +352,7 @@ namespace
 					snapshot.alias_record_count == baseline.alias_record_count &&
 					snapshot.detached_alias_tombstone_count ==
 						baseline.detached_alias_tombstone_count &&
-					snapshot.reserved_alias_count == 0U &&
-					snapshot.registering_alias_count == 0U &&
+					snapshot.reserved_alias_count == 0U && snapshot.registering_alias_count == 0U &&
 					snapshot.registered_alias_count == 0U &&
 					snapshot.unregistering_alias_count == 0U &&
 					snapshot.quarantined_alias_count == 0U,
@@ -384,8 +382,8 @@ namespace
 		auto waiting = alias.unregister_alias();
 		require(!waiting.has_value() &&
 					waiting.error().reason == sqlite_shm_lease_rejection_reason::retiring &&
-					waiting.error().action == sqlite_shm_lease_recovery_action::
-						await_complete_attachment_gate_boundary,
+					waiting.error().action ==
+						sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary,
 				"unregister waits at exact registry quiescence boundary");
 		require(fixture.unregister_calls == 0 && alias.valid(),
 				"quiescence wait performs no native unregister");
@@ -411,8 +409,8 @@ namespace
 		std::optional<sqlite_shm_lease_rejection_reason> register_reentry_reason;
 		fixture.on_register = [&]
 		{
-			auto owner = std::make_shared<runtime_owner_probe>(
-				std::make_shared<std::atomic_int>(0));
+			auto owner =
+				std::make_shared<runtime_owner_probe>(std::make_shared<std::atomic_int>(0));
 			auto nested = sqlite_same_process_shm_vfs_alias_registration_port::register_alias(
 				make_binding(process, fixture, 50U, owner));
 			require(!nested.has_value(), "same-thread registration reentry rejected");
@@ -458,7 +456,8 @@ namespace
 		std::weak_ptr<runtime_owner_probe> weak_nested_owner = nested_owner;
 		outer_fixture.on_register = [&]
 		{
-			std::thread competitor{[&, owner = nested_owner]() mutable
+			std::thread competitor{
+				[&, owner = nested_owner]() mutable
 				{
 					native_registry_scope nested_scope{nested_fixture};
 					auto result =
@@ -480,8 +479,8 @@ namespace
 			process, outer_fixture, 6U, weak_outer_owner, outer_destruction_count);
 		nested_owner.reset();
 		require(nested_reason == sqlite_shm_lease_rejection_reason::retiring &&
-					nested_action == sqlite_shm_lease_recovery_action::
-						await_complete_attachment_gate_boundary,
+					nested_action ==
+						sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary,
 				"cross-thread callback competitor returns at the bounded gate");
 		require(nested_fixture.find_calls == 0 && nested_fixture.register_calls == 0 &&
 					nested_fixture.unregister_calls == 0,
@@ -527,8 +526,8 @@ namespace
 					auto child_alias = register_clean_alias(
 						child_process, child_fixture, 70U, weak_owner, destruction_count);
 					const bool exact = child_alias.unregister_alias().has_value() &&
-						child_fixture.register_calls == 1 &&
-						child_fixture.unregister_calls == 1 && weak_owner.expired() &&
+						child_fixture.register_calls == 1 && child_fixture.unregister_calls == 1 &&
+						weak_owner.expired() &&
 						destruction_count->load(std::memory_order_relaxed) == 1;
 					::_exit(exact ? EXIT_SUCCESS : EXIT_FAILURE);
 				}
@@ -546,11 +545,8 @@ namespace
 
 		std::weak_ptr<runtime_owner_probe> weak_parent_owner;
 		std::shared_ptr<std::atomic_int> parent_destruction_count;
-		auto parent_alias = register_clean_alias(process,
-			parent_fixture,
-			7U,
-			weak_parent_owner,
-			parent_destruction_count);
+		auto parent_alias = register_clean_alias(
+			process, parent_fixture, 7U, weak_parent_owner, parent_destruction_count);
 		require(parent_alias.unregister_alias().has_value(),
 				"parent lifecycle completes after held-gate fork");
 		require(child_completed,
@@ -562,7 +558,7 @@ namespace
 	}
 
 	void observe_native_effect_concurrency(std::atomic_int& active,
-									   std::atomic_int& maximum) noexcept
+										   std::atomic_int& maximum) noexcept
 	{
 		const auto current = active.fetch_add(1, std::memory_order_acq_rel) + 1;
 		auto prior = maximum.load(std::memory_order_relaxed);
@@ -575,8 +571,7 @@ namespace
 		active.fetch_sub(1, std::memory_order_acq_rel);
 	}
 
-	[[nodiscard]] std::uint64_t epoch_sequence(
-		const sqlite_backend_opaque_identity& epoch)
+	[[nodiscard]] std::uint64_t epoch_sequence(const sqlite_backend_opaque_identity& epoch)
 	{
 		require(epoch.bytes.size() >= sizeof(std::uint64_t), "epoch sequence present");
 		std::uint64_t output{};
@@ -612,20 +607,18 @@ namespace
 		{
 			const auto marker = 1000U + static_cast<std::uint64_t>(index);
 			vfs[index].marker = marker;
-			fixtures[index].expected_name =
-				"cxxlens-test-parallel-" + std::to_string(marker);
+			fixtures[index].expected_name = "cxxlens-test-parallel-" + std::to_string(marker);
 			fixtures[index].expected_vfs = &vfs[index];
 			fixtures[index].on_register = [&]
 			{
-				observe_native_effect_concurrency(
-					active_native_effects, maximum_native_effects);
+				observe_native_effect_concurrency(active_native_effects, maximum_native_effects);
 			};
 			fixtures[index].on_unregister = fixtures[index].on_register;
 			destruction_counts[index] = std::make_shared<std::atomic_int>(0);
-			owners[index] =
-				std::make_shared<runtime_owner_probe>(destruction_counts[index]);
+			owners[index] = std::make_shared<runtime_owner_probe>(destruction_counts[index]);
 			weak_owners[index] = owners[index];
-			threads[index] = std::thread{[&, index, marker, owner = owners[index]]() mutable
+			threads[index] = std::thread{
+				[&, index, marker, owner = owners[index]]() mutable
 				{
 					native_registry_scope scope{fixtures[index]};
 					start.arrive_and_wait();
@@ -649,8 +642,7 @@ namespace
 		start.arrive_and_wait();
 		live.arrive_and_wait();
 		const auto live_snapshot = registry->snapshot();
-		require(live_snapshot.alias_record_count ==
-					baseline.alias_record_count + alias_count &&
+		require(live_snapshot.alias_record_count == baseline.alias_record_count + alias_count &&
 					live_snapshot.registered_alias_count == alias_count &&
 					live_snapshot.quarantined_alias_count == 0U,
 				"parallel registration publishes every exact alias once");
@@ -664,8 +656,7 @@ namespace
 		{
 			require(registered[index] && unregistered[index],
 					"parallel alias lifecycle completes exactly once");
-			require(fixtures[index].register_calls == 1 &&
-						fixtures[index].unregister_calls == 1,
+			require(fixtures[index].register_calls == 1 && fixtures[index].unregister_calls == 1,
 					"parallel native callbacks execute once per alias");
 			require(weak_owners[index].expired() &&
 						destruction_counts[index]->load(std::memory_order_relaxed) == 1,
@@ -681,8 +672,7 @@ namespace
 		require(detached.alias_record_count == baseline.alias_record_count + alias_count &&
 					detached.detached_alias_tombstone_count ==
 						baseline.detached_alias_tombstone_count + alias_count &&
-					detached.registered_alias_count == 0U &&
-					detached.quarantined_alias_count == 0U,
+					detached.registered_alias_count == 0U && detached.quarantined_alias_count == 0U,
 				"parallel clean detach preserves exact immutable history");
 #endif
 	}
@@ -716,7 +706,9 @@ namespace
 
 	void verify_lifecycle_sequence_exhaustion_is_sticky_and_zero_effect()
 	{
-		require_child_success("registration epoch exhaustion child", []
+		require_child_success(
+			"registration epoch exhaustion child",
+			[]
 			{
 				auto process = acquire_process();
 				auto* const registry = process.registry();
@@ -732,31 +724,32 @@ namespace
 				std::weak_ptr<runtime_owner_probe> weak_owner = owner;
 				sqlite_same_process_shm_vfs_alias_registration_test_peer::
 					exhaust_lifecycle_sequence();
-				auto rejected =
-					sqlite_same_process_shm_vfs_alias_registration_port::register_alias(
-						make_binding(process, fixture, 600U, owner));
+				auto rejected = sqlite_same_process_shm_vfs_alias_registration_port::register_alias(
+					make_binding(process, fixture, 600U, owner));
 				owner.reset();
 				require(!rejected.has_value() &&
 							rejected.error().reason ==
 								sqlite_shm_lease_rejection_reason::generation_exhausted &&
 							rejected.error().action ==
 								sqlite_shm_lease_recovery_action::quarantine_no_retry,
-					"registration epoch exhaustion is terminal");
+						"registration epoch exhaustion is terminal");
 				require(fixture.find_calls == 1 && fixture.register_calls == 0 &&
 							fixture.unregister_calls == 0,
-					"registration epoch exhaustion has zero native effect");
+						"registration epoch exhaustion has zero native effect");
 				require(weak_owner.expired() &&
 							destruction_count->load(std::memory_order_relaxed) == 1,
-					"pre-registration exhaustion releases unregistered owner");
+						"pre-registration exhaustion releases unregistered owner");
 				const auto snapshot = registry->snapshot();
 				require(snapshot.alias_record_count == baseline.alias_record_count &&
 							snapshot.detached_alias_tombstone_count ==
 								baseline.detached_alias_tombstone_count &&
 							snapshot.quarantined_alias_count == 0U,
-					"pre-registration exhaustion leaves registry state untouched");
+						"pre-registration exhaustion leaves registry state untouched");
 			});
 
-		require_child_success("unregistration epoch exhaustion child", []
+		require_child_success(
+			"unregistration epoch exhaustion child",
+			[]
 			{
 				auto process = acquire_process();
 				fake_vfs vfs{601U};
@@ -776,25 +769,25 @@ namespace
 								sqlite_shm_lease_rejection_reason::generation_exhausted &&
 							rejected.error().action ==
 								sqlite_shm_lease_recovery_action::quarantine_no_retry,
-					"unregistration epoch exhaustion is terminal");
+						"unregistration epoch exhaustion is terminal");
 				require(!alias.valid() && fixture.unregister_calls == 0,
-					"unregistration exhaustion forbids native unregister and retry");
+						"unregistration exhaustion forbids native unregister and retry");
 				const auto replay = alias.unregister_alias();
 				require(!replay.has_value() && fixture.unregister_calls == 0,
-					"unregistration exhaustion remains sticky");
+						"unregistration exhaustion remains sticky");
 				const auto snapshot = process.registry()->snapshot();
 				require(snapshot.alias_record_count == 1U &&
 							snapshot.quarantined_alias_count == 1U && !weak_owner.expired() &&
 							destruction_count->load(std::memory_order_relaxed) == 0,
-					"registered owner is retained in quarantine after exhaustion");
+						"registered owner is retained in quarantine after exhaustion");
 			});
 	}
 
 	void require_quarantined_registration_failure(const int register_status,
-											 const bool install_on_register,
-											 void* registration_value,
-											 const int throw_find_call,
-											 const bool throw_register)
+												  const bool install_on_register,
+												  void* registration_value,
+												  const int throw_find_call,
+												  const bool throw_register)
 	{
 		auto process = acquire_process();
 		fake_vfs vfs{100U};
@@ -816,10 +809,11 @@ namespace
 		auto rejected = sqlite_same_process_shm_vfs_alias_registration_port::register_alias(
 			make_binding(process, fixture, 100U, owner));
 		owner.reset();
-		require(!rejected.has_value() &&
-					rejected.error().reason == sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
-					rejected.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry,
-				"native registration uncertainty is terminal");
+		require(
+			!rejected.has_value() &&
+				rejected.error().reason == sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+				rejected.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry,
+			"native registration uncertainty is terminal");
 		const auto snapshot = process.registry()->snapshot();
 		require(snapshot.alias_record_count == 1U && snapshot.quarantined_alias_count == 1U,
 				"failed native registration quarantines exact alias");
@@ -830,28 +824,37 @@ namespace
 
 	void verify_registration_failures_quarantine()
 	{
-		require_child_success("non-OK registration child", []
-			{
-				require_quarantined_registration_failure(1, false, nullptr, 0, false);
-			});
-		require_child_success("post-registration mismatch child", []
-			{
-				require_quarantined_registration_failure(
-					0, true, reinterpret_cast<void*>(1U), 0, false);
-			});
-		require_child_success("post-registration find exception child", []
-			{
-				require_quarantined_registration_failure(0, true, nullptr, 2, false);
-			});
-		require_child_success("registration exception child", []
-			{
-				require_quarantined_registration_failure(0, true, nullptr, 0, true);
-			});
+		require_child_success("non-OK registration child",
+							  []
+							  {
+								  require_quarantined_registration_failure(
+									  1, false, nullptr, 0, false);
+							  });
+		require_child_success("post-registration mismatch child",
+							  []
+							  {
+								  require_quarantined_registration_failure(
+									  0, true, reinterpret_cast<void*>(1U), 0, false);
+							  });
+		require_child_success("post-registration find exception child",
+							  []
+							  {
+								  require_quarantined_registration_failure(
+									  0, true, nullptr, 2, false);
+							  });
+		require_child_success("registration exception child",
+							  []
+							  {
+								  require_quarantined_registration_failure(
+									  0, true, nullptr, 0, true);
+							  });
 	}
 
 	void verify_drop_without_unregister_quarantines()
 	{
-		require_child_success("abandoned registered alias child", []
+		require_child_success(
+			"abandoned registered alias child",
+			[]
 			{
 				auto process = acquire_process();
 				fake_vfs vfs{200U};
@@ -862,8 +865,8 @@ namespace
 				std::weak_ptr<runtime_owner_probe> weak_owner;
 				std::shared_ptr<std::atomic_int> destruction_count;
 				{
-					auto alias = register_clean_alias(
-						process, fixture, 200U, weak_owner, destruction_count);
+					auto alias =
+						register_clean_alias(process, fixture, 200U, weak_owner, destruction_count);
 					require(alias.valid(), "alias valid before abandonment");
 				}
 				const auto snapshot = process.registry()->snapshot();
@@ -877,9 +880,9 @@ namespace
 	}
 
 	void require_quarantined_unregistration_failure(const int unregister_status,
-											   const bool clear_on_unregister,
-											   const bool throw_unregister,
-											   const int throw_find_call)
+													const bool clear_on_unregister,
+													const bool throw_unregister,
+													const int throw_find_call)
 	{
 		auto process = acquire_process();
 		fake_vfs vfs{300U};
@@ -895,10 +898,11 @@ namespace
 		std::shared_ptr<std::atomic_int> destruction_count;
 		auto alias = register_clean_alias(process, fixture, 300U, weak_owner, destruction_count);
 		auto rejected = alias.unregister_alias();
-		require(!rejected.has_value() &&
-					rejected.error().reason == sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
-					rejected.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry,
-				"native unregister uncertainty is terminal");
+		require(
+			!rejected.has_value() &&
+				rejected.error().reason == sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+				rejected.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry,
+			"native unregister uncertainty is terminal");
 		require(!alias.valid(), "failed unregister consumes owner into quarantine");
 		auto replay = alias.unregister_alias();
 		require(!replay.has_value() && fixture.unregister_calls == 1,
@@ -912,22 +916,26 @@ namespace
 
 	void verify_unregistration_failures_quarantine()
 	{
-		require_child_success("non-OK unregister child", []
-			{
-				require_quarantined_unregistration_failure(1, false, false, 0);
-			});
-		require_child_success("post-unregister discovery child", []
-			{
-				require_quarantined_unregistration_failure(0, false, false, 0);
-			});
-		require_child_success("unregister exception child", []
-			{
-				require_quarantined_unregistration_failure(0, true, true, 0);
-			});
-		require_child_success("post-unregister find exception child", []
-			{
-				require_quarantined_unregistration_failure(0, true, false, 3);
-			});
+		require_child_success("non-OK unregister child",
+							  []
+							  {
+								  require_quarantined_unregistration_failure(1, false, false, 0);
+							  });
+		require_child_success("post-unregister discovery child",
+							  []
+							  {
+								  require_quarantined_unregistration_failure(0, false, false, 0);
+							  });
+		require_child_success("unregister exception child",
+							  []
+							  {
+								  require_quarantined_unregistration_failure(0, true, true, 0);
+							  });
+		require_child_success("post-unregister find exception child",
+							  []
+							  {
+								  require_quarantined_unregistration_failure(0, true, false, 3);
+							  });
 	}
 
 	void verify_fork_child_cannot_unregister_inherited_alias()

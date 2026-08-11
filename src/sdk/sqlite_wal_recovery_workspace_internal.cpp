@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "sqlite_payload_streaming_internal.hpp"
+#include "sqlite_vfs_abi_internal.hpp"
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
@@ -70,64 +71,10 @@ namespace cxxlens::sdk
 		constexpr std::string_view workspace_profile{
 			"cxxlens.sqlite-wal-only-private-recovery-workspace.v1"};
 
-		struct sqlite3_file;
-		struct sqlite3_io_methods;
-		struct sqlite3_vfs;
-		using sqlite3_syscall_ptr = void (*)();
-
-		struct sqlite3_file
-		{
-			const sqlite3_io_methods* methods;
-		};
-
-		struct sqlite3_io_methods
-		{
-			int version;
-			int (*close)(sqlite3_file*);
-			int (*read)(sqlite3_file*, void*, int, long long);
-			int (*write)(sqlite3_file*, const void*, int, long long);
-			int (*truncate)(sqlite3_file*, long long);
-			int (*sync)(sqlite3_file*, int);
-			int (*file_size)(sqlite3_file*, long long*);
-			int (*lock)(sqlite3_file*, int);
-			int (*unlock)(sqlite3_file*, int);
-			int (*check_reserved_lock)(sqlite3_file*, int*);
-			int (*file_control)(sqlite3_file*, int, void*);
-			int (*sector_size)(sqlite3_file*);
-			int (*device_characteristics)(sqlite3_file*);
-			int (*shm_map)(sqlite3_file*, int, int, int, volatile void**);
-			int (*shm_lock)(sqlite3_file*, int, int, int);
-			void (*shm_barrier)(sqlite3_file*);
-			int (*shm_unmap)(sqlite3_file*, int);
-			int (*fetch)(sqlite3_file*, long long, int, void**);
-			int (*unfetch)(sqlite3_file*, long long, void*);
-		};
-
-		struct sqlite3_vfs
-		{
-			int version;
-			int os_file_bytes;
-			int maximum_pathname;
-			sqlite3_vfs* next;
-			const char* name;
-			void* app_data;
-			int (*open)(sqlite3_vfs*, const char*, sqlite3_file*, int, int*);
-			int (*remove)(sqlite3_vfs*, const char*, int);
-			int (*access)(sqlite3_vfs*, const char*, int, int*);
-			int (*full_pathname)(sqlite3_vfs*, const char*, int, char*);
-			void* (*dl_open)(sqlite3_vfs*, const char*);
-			void (*dl_error)(sqlite3_vfs*, int, char*);
-			void (*(*dl_sym)(sqlite3_vfs*, void*, const char*))(void);
-			void (*dl_close)(sqlite3_vfs*, void*);
-			int (*randomness)(sqlite3_vfs*, int, char*);
-			int (*sleep)(sqlite3_vfs*, int);
-			int (*current_time)(sqlite3_vfs*, double*);
-			int (*get_last_error)(sqlite3_vfs*, int, char*);
-			int (*current_time_int64)(sqlite3_vfs*, long long*);
-			int (*set_system_call)(sqlite3_vfs*, const char*, sqlite3_syscall_ptr);
-			sqlite3_syscall_ptr (*get_system_call)(sqlite3_vfs*, const char*);
-			const char* (*next_system_call)(sqlite3_vfs*, const char*);
-		};
+		using sqlite3_file = sqlite_vfs_abi::file;
+		using sqlite3_io_methods = sqlite_vfs_abi::io_methods;
+		using sqlite3_vfs = sqlite_vfs_abi::vfs;
+		using sqlite3_syscall_ptr = sqlite_vfs_abi::syscall_ptr;
 
 		[[nodiscard]] error workspace_error(std::string detail)
 		{
@@ -547,9 +494,7 @@ namespace cxxlens::sdk
 														  const std::uint64_t byte_count) const
 		{
 #if defined(__unix__) || defined(__APPLE__)
-			struct stat before
-			{
-			};
+			struct stat before{};
 			if (::fstat(descriptor, &before) != 0 || before.st_size < 0 ||
 				static_cast<std::uint64_t>(before.st_size) != byte_count)
 				return unexpected(workspace_error("copy-read"));
@@ -580,9 +525,7 @@ namespace cxxlens::sdk
 					return unexpected(workspace_error("copy-read"));
 				offset += static_cast<std::uint64_t>(wanted);
 			}
-			struct stat after
-			{
-			};
+			struct stat after{};
 			if (::fstat(descriptor, &after) != 0 || before.st_dev != after.st_dev ||
 				before.st_ino != after.st_ino || before.st_size != after.st_size ||
 				before.st_mtim.tv_sec != after.st_mtim.tv_sec ||
@@ -604,9 +547,10 @@ namespace cxxlens::sdk
 		{
 			const auto& scan = expectation.source_wal_scan;
 			if (scan.classification == sqlite_wal_scan_classification::empty)
-				return scan.stop == sqlite_wal_scan_stop::end_of_input && !scan.header.has_value() &&
-					!scan.last_valid_frame.has_value() && !scan.last_valid_commit.has_value() &&
-					scan.inspected_byte_count == 0U && scan.validated_prefix_byte_count == 0U &&
+				return scan.stop == sqlite_wal_scan_stop::end_of_input &&
+					!scan.header.has_value() && !scan.last_valid_frame.has_value() &&
+					!scan.last_valid_commit.has_value() && scan.inspected_byte_count == 0U &&
+					scan.validated_prefix_byte_count == 0U &&
 					scan.authoritative_prefix_byte_count == 0U && scan.valid_frame_count == 0U &&
 					scan.valid_commit_count == 0U && scan.torn_remainder_byte_count == 0U &&
 					expectation.authoritative_wal_prefix.byte_count == 0U;
@@ -867,9 +811,7 @@ namespace cxxlens::sdk
 			if (output == nullptr)
 				return sqlite_io_error;
 			*output = 0;
-			struct stat observed
-			{
-			};
+			struct stat observed{};
 			if (::fstat(recovery_file(base)->descriptor, &observed) != 0 || observed.st_size < 0)
 				return sqlite_io_error;
 			*output = static_cast<long long>(observed.st_size);

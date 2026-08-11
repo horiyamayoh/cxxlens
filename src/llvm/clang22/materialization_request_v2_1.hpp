@@ -72,8 +72,13 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		std::uint64_t task_index{};
 		std::string project_id;
+		std::string catalog_id;
+		std::string catalog_digest;
 		std::string selected_catalog_compile_unit_id;
 		std::string final_relation_compile_unit_id;
+		std::string variant_id;
+		std::string toolchain_context_id;
+		std::string toolchain_digest;
 		std::string source_snapshot_id;
 		std::string file_id;
 		std::string logical_path;

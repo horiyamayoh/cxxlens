@@ -12,16 +12,10 @@ namespace cxxlens::detail::clang22::materialization
 		if (request.tasks.empty())
 			return sdk::unexpected(
 				sdk::error{"materialization.task-binding-mismatch", "tasks", "empty"});
-		const auto& catalog = request.tasks.front().worker_input.project_catalog;
+		const auto& catalog = request.catalog;
 		if (auto valid = catalog.validate(); !valid)
 			return sdk::unexpected(sdk::error{
 				"materialization.identity-mismatch", "project.catalog", valid.error().code});
-		for (const auto& task : request.tasks)
-			if (task.worker_input.project_catalog.catalog_id != catalog.catalog_id ||
-				task.worker_input.project_catalog.catalog_digest != catalog.catalog_digest)
-				return sdk::unexpected(sdk::error{"materialization.task-binding-mismatch",
-												  "tasks.project_catalog",
-												  "not-shared"});
 
 		prepared_store_transaction result;
 		result.draft = {request.publication.selector,

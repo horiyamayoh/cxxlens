@@ -110,6 +110,9 @@ namespace cxxlens::detail::clang22::materialization
 		std::string mount_device_inode_observation_digest;
 		std::string exact_relative_path;
 		std::string parent_and_leaf_resolution_verdict{"openat2-beneath-no-symlinks-no-magiclinks"};
+		/** Explicit report-facing resolution receipts; both are established by the rooted VFS. */
+		std::string parent_resolution_verdict{"openat2-beneath-no-symlinks-no-magiclinks"};
+		std::string leaf_resolution_verdict{"database-and-sidecars-rooted-no-follow"};
 
 		[[nodiscard]] bool operator==(const materialization_rooted_vfs_receipt&) const = default;
 	};

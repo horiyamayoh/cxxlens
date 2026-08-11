@@ -33,8 +33,8 @@ namespace
 		return 0;
 	}
 
-	int runtime_exec(void*, const char*, sqlite_source_shm_runtime_binding::exec_callback,
-					 void*, char**)
+	int runtime_exec(
+		void*, const char*, sqlite_source_shm_runtime_binding::exec_callback, void*, char**)
 	{
 		return 0;
 	}
@@ -89,12 +89,12 @@ namespace
 		return 0;
 	}
 
-	sqlite_shm_vfs_alias_identity_sealing_input input_for(
-		sqlite_shm_process_registry_handle process,
-		const std::shared_ptr<void>& runtime,
-		const std::string_view name,
-		const void* vfs,
-		const void* backend)
+	sqlite_shm_vfs_alias_identity_sealing_input
+	input_for(sqlite_shm_process_registry_handle process,
+			  const std::shared_ptr<void>& runtime,
+			  const std::string_view name,
+			  const void* vfs,
+			  const void* backend)
 	{
 		return {
 			std::move(process),
@@ -154,15 +154,14 @@ namespace
 		int vfs_b{};
 		int backend_b{};
 		registered_name = std::string{alias_name_b};
-		auto second_binding = sqlite_same_process_shm_vfs_alias_identity_sealer::seal(
-			input_for(std::move(second_process.value()), runtime, alias_name_b, &vfs_b, &backend_b));
+		auto second_binding = sqlite_same_process_shm_vfs_alias_identity_sealer::seal(input_for(
+			std::move(second_process.value()), runtime, alias_name_b, &vfs_b, &backend_b));
 		require(second_binding.has_value(), "second complete identity tuple seals");
 		auto second = sqlite_same_process_shm_vfs_alias_registration_port::register_alias(
 			std::move(second_binding.value()));
 		if (!second)
-			throw std::runtime_error(
-				"second sealed binding registers, rejection=" +
-				std::to_string(static_cast<int>(second.error().reason)));
+			throw std::runtime_error("second sealed binding registers, rejection=" +
+									 std::to_string(static_cast<int>(second.error().reason)));
 		require(second->shared_runtime_vfs_cohort() == first_cohort,
 				"same runtime and original VFS share one cohort");
 		require(second->runtime_lifetime_identity() != first_runtime,
@@ -186,24 +185,25 @@ namespace
 		auto runtime = std::static_pointer_cast<void>(std::make_shared<std::uint64_t>(11U));
 		int vfs{};
 		int backend{};
-		auto incomplete = input_for(
-			std::move(process.value()), runtime, alias_name_a, &vfs, &backend);
+		auto incomplete =
+			input_for(std::move(process.value()), runtime, alias_name_a, &vfs, &backend);
 		incomplete.runtime.source_id = nullptr;
-		auto rejected = sqlite_same_process_shm_vfs_alias_identity_sealer::seal(std::move(incomplete));
+		auto rejected =
+			sqlite_same_process_shm_vfs_alias_identity_sealer::seal(std::move(incomplete));
 		require(!rejected.has_value() &&
 					rejected.error().reason == sqlite_shm_lease_rejection_reason::invalid_identity,
 				"missing source identity rejects before registration");
 
 		auto second_process = sqlite_same_process_shm_process_port::acquire();
 		require(second_process.has_value(), "process port remains available after rejection");
-		auto mismatch = input_for(
-			std::move(second_process.value()), runtime, alias_name_a, &vfs, &backend);
+		auto mismatch =
+			input_for(std::move(second_process.value()), runtime, alias_name_a, &vfs, &backend);
 		mismatch.pinned_underlying_vfs_identity = mismatch.vfs_implementation;
 		auto mismatched_rejected =
 			sqlite_same_process_shm_vfs_alias_identity_sealer::seal(std::move(mismatch));
 		require(!mismatched_rejected.has_value() &&
-				mismatched_rejected.error().reason ==
-					sqlite_shm_lease_rejection_reason::invalid_identity,
+					mismatched_rejected.error().reason ==
+						sqlite_shm_lease_rejection_reason::invalid_identity,
 				"alias equal to underlying VFS rejects before registration");
 		require(registered_vfs == nullptr, "negative sealer cases have zero native effect");
 	}

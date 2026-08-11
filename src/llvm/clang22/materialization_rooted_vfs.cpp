@@ -763,6 +763,19 @@ namespace cxxlens::detail::clang22::materialization
 			return output;
 		}
 
+		[[nodiscard]] sdk::sqlite_backend_opaque_identity
+		make_stable_opaque_identity(const std::string_view profile,
+									const materialization_file_identity& value)
+		{
+			sdk::sqlite_backend_opaque_identity output;
+			output.profile = profile;
+			output.bytes.reserve(24U);
+			append_identity_u64(output.bytes, value.device);
+			append_identity_u64(output.bytes, value.inode);
+			append_identity_u64(output.bytes, value.mode);
+			return output;
+		}
+
 		void append_stable_object_identity(std::vector<std::byte>& output,
 										   const materialization_file_identity& value)
 		{
@@ -797,15 +810,16 @@ namespace cxxlens::detail::clang22::materialization
 			}
 		}
 
-		[[nodiscard]] sdk::result<sdk::sqlite_backend_opaque_identity>
-		opaque_fd_identity(const int descriptor, const std::string_view profile)
+		[[nodiscard]] sdk::result<sdk::sqlite_backend_opaque_identity> opaque_fd_identity(
+			const int descriptor, const std::string_view profile, const bool stable = false)
 		{
 			auto observed = materialization_fd_identity(descriptor, false);
 			if (!observed)
 				return sdk::unexpected(observation_error("observation-io-failure"));
 			try
 			{
-				return make_opaque_identity(profile, *observed);
+				return stable ? make_stable_opaque_identity(profile, *observed)
+							  : make_opaque_identity(profile, *observed);
 			}
 			catch (const std::bad_alloc&)
 			{
@@ -819,8 +833,11 @@ namespace cxxlens::detail::clang22::materialization
 			}
 		}
 
-		[[nodiscard]] sdk::result<sdk::sqlite_backend_opaque_identity> opaque_entry_identity(
-			const int parent, const std::string_view leaf, const struct stat& entry)
+		[[nodiscard]] sdk::result<sdk::sqlite_backend_opaque_identity>
+		opaque_entry_identity(const int parent,
+							  const std::string_view leaf,
+							  const struct stat& entry,
+							  const bool stable = false)
 		{
 			auto parent_identity = materialization_fd_identity(parent, false);
 			if (!parent_identity)
@@ -835,6 +852,11 @@ namespace cxxlens::detail::clang22::materialization
 				const auto leaf_identity = identity_from_stat(entry);
 				append_identity_u64(output.bytes, leaf_identity.device);
 				append_identity_u64(output.bytes, leaf_identity.inode);
+				if (stable)
+				{
+					append_identity_u64(output.bytes, leaf_identity.mode);
+					return output;
+				}
 				append_identity_u64(output.bytes, leaf_identity.size_bytes);
 				append_identity_u64(output.bytes, leaf_identity.mode);
 				append_identity_u64(output.bytes,
@@ -871,6 +893,7 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::result<sdk::sqlite_backend_entry_observation> observe_rooted_entry(
 			const int parent, const std::string_view leaf, const sdk::sqlite_backend_file_role role)
 		{
+			const auto stable_identity = role == sdk::sqlite_backend_file_role::shared_memory;
 			struct stat entry{};
 			if (::fstatat(parent, std::string{leaf}.c_str(), &entry, AT_SYMLINK_NOFOLLOW) != 0)
 			{
@@ -879,7 +902,7 @@ namespace cxxlens::detail::clang22::materialization
 						role, sdk::sqlite_backend_entry_state::absent, {}, {}, {}, {}, false};
 				return sdk::unexpected(observation_error("observation-io-failure"));
 			}
-			auto entry_identity = opaque_entry_identity(parent, leaf, entry);
+			auto entry_identity = opaque_entry_identity(parent, leaf, entry, stable_identity);
 			if (!entry_identity)
 				return sdk::unexpected(std::move(entry_identity.error()));
 			if (!S_ISREG(entry.st_mode))
@@ -913,7 +936,7 @@ namespace cxxlens::detail::clang22::materialization
 				};
 			}
 			auto object_identity =
-				opaque_fd_identity(opened->get(), "rooted-vfs-v1.open-object.v1");
+				opaque_fd_identity(opened->get(), "rooted-vfs-v1.open-object.v1", stable_identity);
 			if (!object_identity)
 				return sdk::unexpected(std::move(object_identity.error()));
 			struct stat held_stat{};
@@ -1018,8 +1041,11 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(observation_error("observation-io-failure"));
 			try
 			{
-				if (make_opaque_identity("rooted-vfs-v1.open-object.v1",
-										 identity_from_stat(observed)) != object_identity_)
+				auto current_object =
+					opaque_fd_identity(object_.get(),
+									   "rooted-vfs-v1.open-object.v1",
+									   role_ == sdk::sqlite_backend_file_role::shared_memory);
+				if (!current_object || *current_object != object_identity_)
 					return sdk::unexpected(observation_error("concurrent-source-change"));
 			}
 			catch (const std::bad_alloc&)
@@ -1143,8 +1169,11 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(observation_error("observation-io-failure"));
 			if (held.st_dev != entry.st_dev || held.st_ino != entry.st_ino)
 				return sdk::sqlite_backend_replacement_state::replaced;
-			auto current_object = opaque_fd_identity(object_.get(), "rooted-vfs-v1.open-object.v1");
-			auto current_entry = opaque_entry_identity(parent_.get(), leaf_, entry);
+			const auto stable_identity = role_ == sdk::sqlite_backend_file_role::shared_memory;
+			auto current_object =
+				opaque_fd_identity(object_.get(), "rooted-vfs-v1.open-object.v1", stable_identity);
+			auto current_entry =
+				opaque_entry_identity(parent_.get(), leaf_, entry, stable_identity);
 			if (!current_object || !current_entry)
 				return sdk::unexpected(observation_error("observation-io-failure"));
 			return *current_object == object_identity_ && *current_entry == entry_identity_
@@ -1251,6 +1280,7 @@ namespace cxxlens::detail::clang22::materialization
 			auto parent_identity = opaque_parent_namespace_identity(parent->get());
 			if (!parent_identity)
 				return sdk::unexpected(std::move(parent_identity.error()));
+			const auto stable_identity = role == sdk::sqlite_backend_file_role::shared_memory;
 			try
 			{
 				switch (role)
@@ -1299,7 +1329,8 @@ namespace cxxlens::detail::clang22::materialization
 				if (::fstatat(parent->get(), leaf.c_str(), &after, AT_SYMLINK_NOFOLLOW) != 0 ||
 					identity_from_stat(before) != identity_from_stat(after))
 					return sdk::unexpected(observation_error("concurrent-source-change"));
-				auto entry_identity = opaque_entry_identity(parent->get(), leaf, after);
+				auto entry_identity =
+					opaque_entry_identity(parent->get(), leaf, after, stable_identity);
 				if (!entry_identity)
 					return sdk::unexpected(std::move(entry_identity.error()));
 				if (!S_ISREG(after.st_mode))
@@ -1314,7 +1345,10 @@ namespace cxxlens::detail::clang22::materialization
 					role,
 					sdk::sqlite_backend_entry_state::held_regular,
 					std::move(*parent_identity),
-					make_opaque_identity("rooted-vfs-v1.open-object.v1", identity_from_stat(after)),
+					stable_identity ? make_stable_opaque_identity("rooted-vfs-v1.open-object.v1",
+																  identity_from_stat(after))
+									: make_opaque_identity("rooted-vfs-v1.open-object.v1",
+														   identity_from_stat(after)),
 					std::move(*entry_identity),
 				};
 			}
@@ -1618,8 +1652,11 @@ namespace cxxlens::detail::clang22::materialization
 			sdk::sqlite_backend_opaque_identity object;
 			sdk::sqlite_backend_opaque_identity entry;
 		};
-		[[nodiscard]] sdk::result<opened_object_identities> observe_opened_object(
-			const rooted_sqlite_vfs& owner, std::string_view relative, int descriptor);
+		[[nodiscard]] sdk::result<opened_object_identities>
+		observe_opened_object(const rooted_sqlite_vfs& owner,
+							  std::string_view relative,
+							  int descriptor,
+							  bool stable_identity = false);
 		int rooted_shm_map(
 			sqlite3_file* base, int page, int page_size, int extend, volatile void** out) noexcept;
 		int rooted_shm_lock(sqlite3_file* base, int offset, int count, int flags) noexcept;
@@ -2115,12 +2152,12 @@ namespace cxxlens::detail::clang22::materialization
 				if (file->mappings.size() <= page_index)
 					file->mappings.resize(page_index + 1U);
 
+				std::string path;
+				path.reserve(file->relative_path.size() + sqlite_shm_suffix.size());
+				path.append(file->relative_path);
+				path.append(sqlite_shm_suffix);
 				if (file->shared_memory_descriptor < 0)
 				{
-					std::string path;
-					path.reserve(file->relative_path.size() + sqlite_shm_suffix.size());
-					path.append(file->relative_path);
-					path.append(sqlite_shm_suffix);
 					const auto create_flags = extend != 0 || coordination_permitted ? O_CREAT : 0;
 					auto opened = rooted_open(*file->owner,
 											  path,
@@ -2144,28 +2181,32 @@ namespace cxxlens::detail::clang22::materialization
 					}
 					if (!rooted_regular_file(opened->get()))
 						return sqlite_cannot_open;
-					if (file->connection_observation)
-					{
-						auto identities = observe_opened_object(*file->owner, path, opened->get());
-						if (!identities)
-							return sqlite_io_error;
-						try
-						{
-							std::scoped_lock observation_lock{file->connection_observation->mutex};
-							file->connection_observation->shared_memory_object_identity =
-								std::move(identities->object);
-							file->connection_observation->shared_memory_entry_identity =
-								std::move(identities->entry);
-						}
-						catch (...)
-						{
-							std::scoped_lock observation_lock{file->connection_observation->mutex};
-							file->connection_observation->complete = false;
-							return sqlite_no_memory;
-						}
-					}
 					file->shared_memory_descriptor = opened->release();
 				}
+				const auto refresh_shared_memory_identity = [&]() noexcept
+				{
+					if (!file->connection_observation)
+						return true;
+					auto identities = observe_opened_object(
+						*file->owner, path, file->shared_memory_descriptor, true);
+					if (!identities)
+						return false;
+					try
+					{
+						std::scoped_lock observation_lock{file->connection_observation->mutex};
+						file->connection_observation->shared_memory_object_identity =
+							std::move(identities->object);
+						file->connection_observation->shared_memory_entry_identity =
+							std::move(identities->entry);
+					}
+					catch (...)
+					{
+						std::scoped_lock observation_lock{file->connection_observation->mutex};
+						file->connection_observation->complete = false;
+						return false;
+					}
+					return true;
+				};
 				auto& mapping = file->mappings[page_index];
 				if (mapping.address == nullptr)
 				{
@@ -2184,10 +2225,16 @@ namespace cxxlens::detail::clang22::materialization
 					if (observed.st_size < required)
 					{
 						if (extend == 0)
+						{
+							if (!refresh_shared_memory_identity())
+								return sqlite_io_error;
 							return sqlite_ok;
+						}
 						if (::ftruncate(file->shared_memory_descriptor, required) != 0)
 							return sqlite_io_error;
 					}
+					if (!refresh_shared_memory_identity())
+						return sqlite_io_error;
 					auto* address = ::mmap(nullptr,
 										   static_cast<std::size_t>(page_size),
 										   PROT_READ | PROT_WRITE,
@@ -2472,8 +2519,11 @@ namespace cxxlens::detail::clang22::materialization
 			observation->open_events[*index].outcome = sdk::sqlite_backend_open_outcome::failed;
 		}
 
-		[[nodiscard]] sdk::result<opened_object_identities> observe_opened_object(
-			const rooted_sqlite_vfs& owner, const std::string_view relative, const int descriptor)
+		[[nodiscard]] sdk::result<opened_object_identities>
+		observe_opened_object(const rooted_sqlite_vfs& owner,
+							  const std::string_view relative,
+							  const int descriptor,
+							  const bool stable_identity)
 		{
 			std::string leaf;
 			auto parent = rooted_parent(owner, relative, leaf);
@@ -2486,8 +2536,10 @@ namespace cxxlens::detail::clang22::materialization
 				!S_ISREG(entry.st_mode) || held.st_dev != entry.st_dev ||
 				held.st_ino != entry.st_ino)
 				return sdk::unexpected(observation_error("observation-io-failure"));
-			auto object = opaque_fd_identity(descriptor, "rooted-vfs-v1.open-object.v1");
-			auto directory_entry = opaque_entry_identity(parent->get(), leaf, entry);
+			auto object =
+				opaque_fd_identity(descriptor, "rooted-vfs-v1.open-object.v1", stable_identity);
+			auto directory_entry =
+				opaque_entry_identity(parent->get(), leaf, entry, stable_identity);
 			if (!object || !directory_entry)
 				return sdk::unexpected(observation_error("observation-io-failure"));
 			return opened_object_identities{std::move(*object), std::move(*directory_entry)};

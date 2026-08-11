@@ -1858,6 +1858,7 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(std::move(identity_valid.error()));
 
 		return validated_materialization_request{std::move(document),
+												 std::move(*catalog),
 												 std::move(*engine),
 												 std::move(outputs),
 												 std::move(tasks),

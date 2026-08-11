@@ -843,11 +843,13 @@ namespace cxxlens::detail::clang22::materialization
 		streamed_validated_materialization_task_request request,
 		sdk::provider::detail::sealed_provider_transcript&& provider_seal)
 	{
-		if (!request.worker_payload || !sdk::validate_strong_id(request.provider_task_id) ||
+		if (!request.worker_payload || request.catalog == nullptr ||
+			!sdk::validate_strong_id(request.provider_task_id) ||
 			!sdk::validate_strong_id(request.provider_execution_id))
 			return sdk::unexpected(
 				seal_error("materialization.task-binding-mismatch", "execution-key", "authority"));
-		if (auto valid = request.worker_input.validate_with_source_receipt(request.source_receipt);
+		if (auto valid = request.worker_input.validate_with_catalog(*request.catalog,
+																	request.source_receipt);
 			!valid)
 			return sdk::unexpected(seal_error(
 				"materialization.task-binding-mismatch", "task.v3", nested_error(valid.error())));
@@ -870,7 +872,14 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(seal_error(
 				"materialization.task-binding-mismatch", "task.v3", nested_error(decoded.error())));
 		if (decoded->source != request.source_receipt ||
-			!same_task_input(decoded->input, request.worker_input))
+			!same_project_catalog(decoded->input.project_catalog, *request.catalog))
+			return sdk::unexpected(seal_error(
+				"materialization.task-binding-mismatch", "task.v3", "request-rebinding"));
+		// The v2.1 task keeps the catalog external until this one-task seal boundary.  Bind the
+		// validated shared authority into the live input only long enough to compare and derive the
+		// sealed base rows; no request-wide task vector retains this copy.
+		request.worker_input.project_catalog = *request.catalog;
+		if (!same_task_input(decoded->input, request.worker_input))
 			return sdk::unexpected(seal_error(
 				"materialization.task-binding-mismatch", "task.v3", "request-rebinding"));
 		auto task_digest = digest_task_input_replay(*request.worker_payload);

@@ -62,6 +62,7 @@ namespace cxxlens::sdk
 	  private:
 		friend class sqlite_writer_shm_mapping_receipt_validator;
 		friend class sqlite_same_process_shm_registry_test_peer;
+		friend class sqlite_shm_writer_route_proof_production_factory;
 
 		sqlite_shm_verified_writer_route_proof(
 			sqlite_writer_shm_mapping_semantic_route route,
@@ -88,6 +89,32 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity wal_write_lock_receipt_;
 		sqlite_backend_opaque_identity effect_gate_receipt_;
 		sqlite_backend_opaque_identity route_validation_seal_;
+	};
+
+	/**
+	 * Source-private producer for the exact production writer-route proof.
+	 *
+	 * The factory only packages evidence already sealed by the VFS/epoch bridge. The authoritative
+	 * post-map validator still cross-checks every field against the epoch receipt, so this boundary
+	 * cannot manufacture mapping authority from a copied route or pointer.
+	 */
+	class sqlite_shm_writer_route_proof_production_factory final
+	{
+	  public:
+		sqlite_shm_writer_route_proof_production_factory() = delete;
+
+		[[nodiscard]] static sqlite_shm_lease_result<sqlite_shm_verified_writer_route_proof>
+		seal(sqlite_writer_shm_mapping_semantic_route route,
+			 sqlite_shm_writer_map_request request,
+			 int delegated_extend,
+			 sqlite_backend_opaque_identity authenticated_owned_forwarding_rw_main_route_seal,
+			 sqlite_backend_opaque_identity main_native_file_receipt,
+			 sqlite_backend_opaque_identity main_xopen_receipt,
+			 sqlite_backend_opaque_identity sqlite_source_id,
+			 sqlite_backend_opaque_identity callback_transcript,
+			 sqlite_backend_opaque_identity wal_write_lock_receipt,
+			 sqlite_backend_opaque_identity effect_gate_receipt,
+			 sqlite_backend_opaque_identity route_validation_seal) noexcept;
 	};
 
 	/**

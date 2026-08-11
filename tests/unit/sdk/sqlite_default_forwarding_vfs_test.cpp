@@ -1,9 +1,10 @@
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -25,6 +26,7 @@
 #include "sdk/sqlite_default_forwarding_vfs_internal.hpp"
 #include "sdk/sqlite_private_snapshot_internal.hpp"
 #include "sdk/sqlite_source_shm_readonly_preflight_internal.hpp"
+#include "sdk/sqlite_vfs_abi_internal.hpp"
 
 namespace
 {
@@ -56,65 +58,11 @@ namespace
 	constexpr int sqlite_shm_exclusive = 8;
 	constexpr off_t sqlite_unix_shm_deadman_switch_offset = 128;
 
-	struct sqlite3_file;
-	struct sqlite3_io_methods;
-	struct sqlite3_vfs;
+	using sqlite3_file = sqlite_vfs_abi::file;
+	using sqlite3_io_methods = sqlite_vfs_abi::io_methods;
+	using sqlite3_vfs = sqlite_vfs_abi::vfs;
 	struct sqlite3;
-	using sqlite3_syscall_ptr = void (*)();
-
-	struct sqlite3_file
-	{
-		const sqlite3_io_methods* methods;
-	};
-
-	struct sqlite3_io_methods
-	{
-		int version;
-		int (*close)(sqlite3_file*);
-		int (*read)(sqlite3_file*, void*, int, long long);
-		int (*write)(sqlite3_file*, const void*, int, long long);
-		int (*truncate)(sqlite3_file*, long long);
-		int (*sync)(sqlite3_file*, int);
-		int (*file_size)(sqlite3_file*, long long*);
-		int (*lock)(sqlite3_file*, int);
-		int (*unlock)(sqlite3_file*, int);
-		int (*check_reserved_lock)(sqlite3_file*, int*);
-		int (*file_control)(sqlite3_file*, int, void*);
-		int (*sector_size)(sqlite3_file*);
-		int (*device_characteristics)(sqlite3_file*);
-		int (*shm_map)(sqlite3_file*, int, int, int, volatile void**);
-		int (*shm_lock)(sqlite3_file*, int, int, int);
-		void (*shm_barrier)(sqlite3_file*);
-		int (*shm_unmap)(sqlite3_file*, int);
-		int (*fetch)(sqlite3_file*, long long, int, void**);
-		int (*unfetch)(sqlite3_file*, long long, void*);
-	};
-
-	struct sqlite3_vfs
-	{
-		int version;
-		int os_file_bytes;
-		int maximum_pathname;
-		sqlite3_vfs* next;
-		const char* name;
-		void* app_data;
-		int (*open)(sqlite3_vfs*, const char*, sqlite3_file*, int, int*);
-		int (*remove)(sqlite3_vfs*, const char*, int);
-		int (*access)(sqlite3_vfs*, const char*, int, int*);
-		int (*full_pathname)(sqlite3_vfs*, const char*, int, char*);
-		void* (*dl_open)(sqlite3_vfs*, const char*);
-		void (*dl_error)(sqlite3_vfs*, int, char*);
-		void (*(*dl_sym)(sqlite3_vfs*, void*, const char*))(void);
-		void (*dl_close)(sqlite3_vfs*, void*);
-		int (*randomness)(sqlite3_vfs*, int, char*);
-		int (*sleep)(sqlite3_vfs*, int);
-		int (*current_time)(sqlite3_vfs*, double*);
-		int (*get_last_error)(sqlite3_vfs*, int, char*);
-		int (*current_time_int64)(sqlite3_vfs*, long long*);
-		int (*set_system_call)(sqlite3_vfs*, const char*, sqlite3_syscall_ptr);
-		sqlite3_syscall_ptr (*get_system_call)(sqlite3_vfs*, const char*);
-		const char* (*next_system_call)(sqlite3_vfs*, const char*);
-	};
+	using sqlite3_syscall_ptr = sqlite_vfs_abi::syscall_ptr;
 
 	struct alignas(std::max_align_t) fake_file
 	{
@@ -158,6 +106,8 @@ namespace
 	int shm_map_result{sqlite_ok};
 	bool replace_open_path_on_next_open{};
 	bool replace_shm_path_on_next_map{};
+	bool mutate_vfs_identity_on_next_shm_map{};
+	bool mutate_io_methods_on_next_shm_map{};
 	bool return_null_shm_mapping_without_extension{};
 	bool replacement_succeeded{};
 	std::string replacement_path;
@@ -175,6 +125,36 @@ namespace
 			std::exit(1);
 		}
 	}
+
+	class temporary_test_directory
+	{
+	  public:
+		explicit temporary_test_directory(std::string_view label)
+		{
+			static std::atomic<std::uint64_t> sequence{};
+			path_ = std::filesystem::temp_directory_path() /
+				("cxxlens-" + std::string{label} + '-' + std::to_string(::getpid()) + '-' +
+				 std::to_string(sequence.fetch_add(1U)));
+			if (!std::filesystem::create_directory(path_))
+				throw std::runtime_error{"test temporary directory creation failed"};
+		}
+
+		temporary_test_directory(const temporary_test_directory&) = delete;
+		temporary_test_directory& operator=(const temporary_test_directory&) = delete;
+		~temporary_test_directory()
+		{
+			std::error_code error;
+			std::filesystem::remove_all(path_, error);
+		}
+
+		[[nodiscard]] const std::filesystem::path& path() const noexcept
+		{
+			return path_;
+		}
+
+	  private:
+		std::filesystem::path path_;
+	};
 
 	[[nodiscard]] sqlite_backend_opaque_identity test_receipt(const std::string_view label)
 	{
@@ -406,7 +386,7 @@ namespace
 	{
 		return 0;
 	}
-	int fake_shm_map(sqlite3_file*, int, int, const int extend, volatile void** output)
+	int fake_shm_map(sqlite3_file* base, int, int, const int extend, volatile void** output)
 	{
 		++shm_map_calls;
 		last_shm_extend = extend;
@@ -418,6 +398,19 @@ namespace
 		if (output != nullptr)
 			*output = return_null_shm_mapping_without_extension && extend == 0 ? nullptr
 																			   : shm_page.data();
+		if (mutate_vfs_identity_on_next_shm_map)
+		{
+			mutate_vfs_identity_on_next_shm_map = false;
+			original_vfs.app_data = &runtime_sentinel;
+		}
+		if (mutate_io_methods_on_next_shm_map)
+		{
+			mutate_io_methods_on_next_shm_map = false;
+			// A native callback that replaces the live table after returning is an identity drift,
+			// even when the forwarding VFS retained a previously inspected trusted copy.
+			// The production guard must reject before publishing the native pointer.
+			base->methods = nullptr;
+		}
 		return shm_map_result;
 	}
 	int fake_shm_lock(sqlite3_file*, int, int, int)
@@ -1073,11 +1066,9 @@ namespace
 		auto* real_default = real_find(nullptr);
 		require(real_default != nullptr, "resolve real default VFS once");
 
-		const std::string target_directory =
-			"/tmp/cxxlens-default-forwarding-real-" + std::to_string(::getpid());
-		require(::mkdir(target_directory.c_str(), 0700) == 0,
-				"create real SQLite target directory");
-		const std::string path = target_directory + "/main.sqlite";
+		temporary_test_directory target_directory_guard{"default-forwarding-real"};
+		const std::string target_directory = target_directory_guard.path().string();
+		const std::string path = (target_directory_guard.path() / "main.sqlite").string();
 		const auto real_shm_path = path + "-shm";
 		create_file(path);
 		{
@@ -1121,6 +1112,8 @@ namespace
 
 			auto scope = bundle->observation->begin_connection_observation(path);
 			require(scope.has_value(), "real filesystem scope");
+			require((*scope)->requires_source_shm_writer_mapping_epoch(),
+					"default forwarding VFS did not require the source SHM epoch route");
 			auto* gate = (*scope)->effect_gate_port();
 			require(gate != nullptr, "real filesystem gate");
 			auto activation = gate->activate_denied(
@@ -1182,9 +1175,7 @@ namespace
 					"retain real WAL fixture after writer close");
 			const auto external_dms_holder = ::open(real_shm_path.c_str(), O_RDONLY | O_CLOEXEC);
 			require(external_dms_holder >= 0, "open real active WAL DMS holder");
-			struct flock deadman_lock
-			{
-			};
+			struct flock deadman_lock{};
 			deadman_lock.l_type = F_RDLCK;
 			deadman_lock.l_whence = SEEK_SET;
 			deadman_lock.l_start = sqlite_unix_shm_deadman_switch_offset;
@@ -1439,6 +1430,38 @@ int main()
 		};
 	};
 
+#if defined(__linux__)
+	{
+		require(::unlink(shm_path.c_str()) == 0, "remove initial writer stat-only SHM fixture");
+		require(::unlink(journal_path.c_str()) == 0,
+				"remove initial writer stat-only journal fixture");
+		auto absent_census = bundle->observation->capture_namespace(main_path);
+		require(absent_census.has_value() && absent_census->source_shm_guard,
+				"writer stat-only absent census guard");
+		auto absent_stat = absent_census->source_shm_guard->observe_writer_shm_stat(false);
+		require(absent_stat.has_value() &&
+					absent_stat->state == sqlite_backend_entry_state::absent &&
+					!absent_stat->object_identity && !absent_stat->directory_entry_identity &&
+					absent_stat->byte_count == 0U,
+				"writer stat-only absent observation");
+		const auto created = ::open(shm_path.c_str(), O_CREAT | O_EXCL | O_RDWR | O_CLOEXEC, 0600);
+		require(created >= 0 && ::ftruncate(created, 4096) == 0 && ::close(created) == 0,
+				"create writer stat-only SHM fixture");
+		auto post_stat = absent_census->source_shm_guard->observe_writer_shm_stat(true);
+		require(post_stat.has_value() &&
+					post_stat->state == sqlite_backend_entry_state::held_regular &&
+					post_stat->object_identity && post_stat->directory_entry_identity &&
+					post_stat->byte_count == 4096U,
+				"writer stat-only exact create observation");
+		auto repeated_post_stat = absent_census->source_shm_guard->observe_writer_shm_stat(true);
+		require(repeated_post_stat.has_value() && *repeated_post_stat == *post_stat,
+				"writer stat-only repeated post observation is stable");
+		require(::unlink(shm_path.c_str()) == 0, "remove writer stat-only SHM fixture");
+		create_file(shm_path);
+		create_file(journal_path);
+	}
+#endif
+
 	{
 		const std::string scratch_path{"/proc/self/fd/701/cold/main.db"};
 		auto qualified_scope =
@@ -1642,6 +1665,143 @@ int main()
 		require(ok_null_file->methods->close(ok_null_file) == sqlite_ok,
 				"qualified native OK/null terminal handle closes");
 		return_null_shm_mapping_without_extension = false;
+	}
+
+	{
+		const std::string vfs_drift_path{"/proc/self/fd/711/active/main.db"};
+		auto vfs_drift_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				vfs_drift_path, bundle->observation->capability_token());
+		require(vfs_drift_scope.has_value() &&
+					(*vfs_drift_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(vfs_drift_path))
+						.has_value(),
+				"qualified VFS identity drift scope and arm");
+		std::array<char, 256U> vfs_drift_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   vfs_drift_path.c_str(),
+									   static_cast<int>(vfs_drift_full_path.size()),
+									   vfs_drift_full_path.data()) == sqlite_ok,
+				"qualified VFS identity drift xFullPathname");
+		auto vfs_drift_storage = file_storage(*wrapper);
+		auto* vfs_drift_file = reinterpret_cast<sqlite3_file*>(vfs_drift_storage.data());
+		int vfs_drift_out{};
+		require(wrapper->open(wrapper,
+							  sqlite_uri_filename(vfs_drift_path, exact_uri_parameters).data(),
+							  vfs_drift_file,
+							  source_shm_main_xopen_flags,
+							  &vfs_drift_out) == sqlite_ok,
+				"qualified VFS identity drift open");
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+		mutate_vfs_identity_on_next_shm_map = true;
+		volatile void* vfs_drift_mapping = shm_page.data();
+		const auto vfs_drift_maps_before = shm_map_calls;
+		const auto vfs_drift_unmaps_before = shm_unmap_calls;
+		const auto vfs_drift_status =
+			vfs_drift_file->methods->shm_map(vfs_drift_file, 0, 4096, 1, &vfs_drift_mapping);
+		require(vfs_drift_status == sqlite_io_error && vfs_drift_mapping == nullptr &&
+					shm_map_calls == vfs_drift_maps_before + 1 &&
+					shm_unmap_calls == vfs_drift_unmaps_before + 1,
+				"qualified VFS app-data drift is rejected after native map and unmapped");
+		original_vfs.app_data = &app_data_sentinel;
+		auto vfs_drift_snapshot = (*vfs_drift_scope)->snapshot();
+		require(vfs_drift_snapshot.has_value() && !vfs_drift_snapshot->complete,
+				"qualified VFS app-data drift invalidates the observation receipt");
+		require(vfs_drift_file->methods->close(vfs_drift_file) == sqlite_ok,
+				"qualified VFS app-data drift handle closes through trusted close");
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+	}
+
+	{
+		const std::string methods_drift_path{"/proc/self/fd/712/active/main.db"};
+		auto methods_drift_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				methods_drift_path, bundle->observation->capability_token());
+		require(methods_drift_scope.has_value() &&
+					(*methods_drift_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(methods_drift_path))
+						.has_value(),
+				"qualified io-method identity drift scope and arm");
+		std::array<char, 256U> methods_drift_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   methods_drift_path.c_str(),
+									   static_cast<int>(methods_drift_full_path.size()),
+									   methods_drift_full_path.data()) == sqlite_ok,
+				"qualified io-method identity drift xFullPathname");
+		auto methods_drift_storage = file_storage(*wrapper);
+		auto* methods_drift_file = reinterpret_cast<sqlite3_file*>(methods_drift_storage.data());
+		int methods_drift_out{};
+		auto methods_drift_filename = sqlite_uri_filename(methods_drift_path, exact_uri_parameters);
+		require(wrapper->open(wrapper,
+							  methods_drift_filename.data(),
+							  methods_drift_file,
+							  source_shm_main_xopen_flags,
+							  &methods_drift_out) == sqlite_ok,
+				"qualified io-method identity drift open");
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+		mutate_io_methods_on_next_shm_map = true;
+		volatile void* methods_drift_mapping = shm_page.data();
+		const auto methods_drift_maps_before = shm_map_calls;
+		const auto methods_drift_unmaps_before = shm_unmap_calls;
+		require(methods_drift_file->methods->shm_map(
+					methods_drift_file, 0, 4096, 1, &methods_drift_mapping) == sqlite_io_error &&
+					methods_drift_mapping == nullptr &&
+					shm_map_calls == methods_drift_maps_before + 1 &&
+					shm_unmap_calls == methods_drift_unmaps_before + 1,
+				"qualified io-method identity drift is rejected after native map and unmapped");
+		auto methods_drift_snapshot = (*methods_drift_scope)->snapshot();
+		require(methods_drift_snapshot.has_value() && !methods_drift_snapshot->complete,
+				"qualified io-method identity drift invalidates the observation receipt");
+		require(methods_drift_file->methods->close(methods_drift_file) == sqlite_ok,
+				"qualified io-method identity drift handle closes through trusted close");
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+	}
+
+	{
+		const std::string invalid_extend_path{"/proc/self/fd/710/active/main.db"};
+		auto invalid_extend_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				invalid_extend_path, bundle->observation->capability_token());
+		require(invalid_extend_scope.has_value() &&
+					(*invalid_extend_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(invalid_extend_path))
+						.has_value(),
+				"qualified unknown extend fresh scope and arm");
+		std::array<char, 256U> invalid_extend_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   invalid_extend_path.c_str(),
+									   static_cast<int>(invalid_extend_full_path.size()),
+									   invalid_extend_full_path.data()) == sqlite_ok,
+				"qualified unknown extend xFullPathname");
+		auto invalid_extend_filename =
+			sqlite_uri_filename(invalid_extend_path, exact_uri_parameters);
+		auto invalid_extend_storage = file_storage(*wrapper);
+		auto* invalid_extend_file = reinterpret_cast<sqlite3_file*>(invalid_extend_storage.data());
+		int invalid_extend_out{};
+		require(wrapper->open(wrapper,
+							  invalid_extend_filename.data(),
+							  invalid_extend_file,
+							  source_shm_main_xopen_flags,
+							  &invalid_extend_out) == sqlite_ok,
+				"qualified unknown extend fresh handle open");
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+		volatile void* invalid_extend_mapping = shm_page.data();
+		const auto maps_before_invalid_extend = shm_map_calls;
+		require(invalid_extend_file->methods->shm_map(
+					invalid_extend_file, 0, 4096, 2, &invalid_extend_mapping) == sqlite_io_error &&
+					invalid_extend_mapping == nullptr &&
+					shm_map_calls == maps_before_invalid_extend,
+				"qualified unknown caller extend is rejected before native delegation");
+		require(invalid_extend_file->methods->close(invalid_extend_file) == sqlite_ok,
+				"qualified unknown extend terminal handle closes");
 	}
 
 	{
@@ -1991,33 +2151,25 @@ int main()
 				wrapper, filename.data(), target_file, source_shm_main_xopen_flags, &target_out) ==
 				sqlite_ok,
 			"sealed target strict URI callback open");
+		const auto target_shm_descriptor = ::open(shm_path.c_str(), O_RDWR | O_CLOEXEC);
+		require(target_shm_descriptor >= 0 && ::ftruncate(target_shm_descriptor, 8192) == 0,
+				"sealed target SHM size drift fixture");
 		shm_map_result = sqlite_readonly_cannot_initialize;
 		return_null_shm_mapping_without_extension = true;
 		volatile void* target_mapping = shm_page.data();
 		const auto target_maps_before = shm_map_calls;
 		require(target_file->methods->shm_map(target_file, 0, 4096, 1, &target_mapping) ==
-						sqlite_readonly_cannot_initialize &&
-					target_mapping == nullptr && shm_map_calls == target_maps_before + 1,
-				"sealed target delegates qualified CANTINIT map");
+						sqlite_io_error &&
+					target_mapping == nullptr && shm_map_calls == target_maps_before,
+				"sealed target SHM size drift is rejected before native map");
+		require(::ftruncate(target_shm_descriptor, 4096) == 0 &&
+					::close(target_shm_descriptor) == 0,
+				"sealed target SHM size drift fixture restore");
 		auto target_snapshot = (*target_scope)->snapshot();
-		require(target_snapshot.has_value() && target_snapshot->complete &&
-					target_snapshot->source_shm_open_callback_receipt.has_value() &&
-					target_snapshot->source_shm_open_callback_receipt->profile ==
-						"sqlite-source-shm-readonly-unix-uri-v1" &&
-					target_snapshot->source_shm_open_callback_receipt->qualification_token ==
-						test_receipt("qualified-target") &&
-					target_snapshot->source_shm_open_callback_receipt->canonical_vfs_locator ==
-						main_path &&
-					target_snapshot->source_shm_open_callback_receipt->delegated_vfs_locator ==
-						anchored_target &&
-					target_snapshot->source_shm_open_callback_receipt
-							->target_namespace_epoch_identity == target_epoch->identity() &&
-					target_snapshot->shared_memory_object_identity.has_value() &&
-					target_snapshot->shared_memory_entry_identity.has_value(),
-				"sealed target callback, SHM identity, and map receipt");
-		require(target_file->methods->shm_unmap(target_file, 0) == sqlite_ok &&
-					target_file->methods->close(target_file) == sqlite_ok,
-				"sealed target successful unmap resets per-file state");
+		require(target_snapshot.has_value() && !target_snapshot->complete,
+				"sealed target size-drift invalidates the observation receipt");
+		require(target_file->methods->close(target_file) == sqlite_ok,
+				"sealed target size-drift handle closes");
 		shm_map_result = sqlite_ok;
 		return_null_shm_mapping_without_extension = false;
 	}

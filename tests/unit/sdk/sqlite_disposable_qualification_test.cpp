@@ -20,6 +20,7 @@
 
 #include <cxxlens/sdk/store.hpp>
 
+#include "sdk/sqlite_disposable_normalization_internal.hpp"
 #include "sdk/sqlite_disposable_qualification_internal.hpp"
 
 namespace
@@ -557,6 +558,90 @@ namespace
 		require(parent.entry_absent("qualification-root"),
 				"capability destructor closes and removes unchanged empty root");
 	}
+
+	[[nodiscard]] sqlite_disposable_empty_family_observation
+	family_observation(const sqlite_disposable_main_header_state header,
+					   const sqlite_disposable_wal_state wal,
+					   const sqlite_disposable_journal_state journal)
+	{
+		return {true, true, true, true, header, wal, false, journal, false};
+	}
+
+	void exercise_receiptless_family_partition_and_routes()
+	{
+		const auto f0 = family_observation(sqlite_disposable_main_header_state::wal_empty,
+										   sqlite_disposable_wal_state::absent,
+										   sqlite_disposable_journal_state::absent);
+		auto classified = classify_sqlite_disposable_empty_family(f0);
+		require(classified &&
+					classified->family == sqlite_disposable_empty_family::exact_pre_no_sidecar &&
+					classified->phase == sqlite_disposable_family_phase::pre,
+				"F0 classification");
+		auto planned = plan_sqlite_disposable_empty_normalization(f0);
+		require(
+			planned &&
+				planned->route ==
+					sqlite_disposable_normalization_route::start_new_live_receipted_normalizer &&
+				!planned->may_handoff_to_ordinary_fresh_initialization,
+			"F0 starts a new normalizer without synthetic success");
+
+		const auto fz_pre = family_observation(sqlite_disposable_main_header_state::wal_empty,
+											   sqlite_disposable_wal_state::readable_zero_byte,
+											   sqlite_disposable_journal_state::absent);
+		planned = plan_sqlite_disposable_empty_normalization(fz_pre);
+		require(planned &&
+					planned->family.family ==
+						sqlite_disposable_empty_family::exact_pre_or_post_zero_wal &&
+					planned->family.phase == sqlite_disposable_family_phase::pre &&
+					planned->uses_existing_zero_byte_wal,
+				"FZ pre retains the bound zero-WAL coordination object");
+
+		const auto fz_post = family_observation(sqlite_disposable_main_header_state::rollback_empty,
+												sqlite_disposable_wal_state::readable_zero_byte,
+												sqlite_disposable_journal_state::absent);
+		planned = plan_sqlite_disposable_empty_normalization(fz_post);
+		require(planned &&
+					planned->route ==
+						sqlite_disposable_normalization_route::establish_rollback_empty_anchor &&
+					!planned->may_handoff_to_ordinary_fresh_initialization,
+				"FZ post cannot infer a completed operation");
+
+		for (const auto journal : {sqlite_disposable_journal_state::nonhot_prefix,
+								   sqlite_disposable_journal_state::hot_with_exact_preimages})
+		{
+			auto input = family_observation(sqlite_disposable_main_header_state::wal_empty,
+											sqlite_disposable_wal_state::absent,
+											journal);
+			auto result = plan_sqlite_disposable_empty_normalization(input);
+			require(
+				result &&
+					result->route ==
+						sqlite_disposable_normalization_route::start_new_live_receipted_normalizer,
+				"pre journal families start a new live receipt chain");
+		}
+
+		const auto fi =
+			family_observation(sqlite_disposable_main_header_state::rollback_empty,
+							   sqlite_disposable_wal_state::absent,
+							   sqlite_disposable_journal_state::invalidated_with_exact_post);
+		planned = plan_sqlite_disposable_empty_normalization(fi);
+		require(planned &&
+					planned->route ==
+						sqlite_disposable_normalization_route::establish_rollback_empty_anchor,
+				"FI establishes only a new rollback-empty anchor");
+
+		auto rejected = f0;
+		rejected.shared_memory_present = true;
+		require(!classify_sqlite_disposable_empty_family(rejected),
+				"mixed SHM topology is rejected");
+		rejected = f0;
+		rejected.main_identity_stable = false;
+		require(!classify_sqlite_disposable_empty_family(rejected), "identity drift is rejected");
+		rejected = f0;
+		rejected.wal = sqlite_disposable_wal_state::invalid_or_unknown;
+		require(!classify_sqlite_disposable_empty_family(rejected),
+				"unknown WAL state is rejected");
+	}
 #endif
 } // namespace
 
@@ -572,6 +657,7 @@ int main()
 	exercise_root_rebind();
 	exercise_unlink_boundary_rebind();
 	exercise_retained_parent_lifetime_and_destructor();
+	exercise_receiptless_family_partition_and_routes();
 #else
 	auto unavailable = duplicate_sqlite_disposable_parent_directory(-1);
 	require(!unavailable, "unsupported platform fails closed");

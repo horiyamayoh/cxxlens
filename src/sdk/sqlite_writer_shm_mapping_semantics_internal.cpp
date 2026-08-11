@@ -210,7 +210,9 @@ namespace cxxlens::sdk
 				valid_identity(binding.retained_parent_receipt) &&
 				valid_identity(binding.wal_native_file_receipt) &&
 				valid_identity(binding.wal_xopen_receipt) &&
-				valid_identity(binding.shm_native_attachment_receipt);
+				valid_identity(binding.shm_native_attachment_receipt) &&
+				(!binding.target_namespace_epoch_identity ||
+				 valid_identity(*binding.target_namespace_epoch_identity));
 		}
 	} // namespace
 
@@ -237,6 +239,77 @@ namespace cxxlens::sdk
 		  effect_gate_receipt_{std::move(effect_gate_receipt)},
 		  route_validation_seal_{std::move(route_validation_seal)}
 	{
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_verified_writer_route_proof>
+	sqlite_shm_writer_route_proof_production_factory::seal(
+		const sqlite_writer_shm_mapping_semantic_route route,
+		sqlite_shm_writer_map_request request,
+		const int delegated_extend,
+		sqlite_backend_opaque_identity authenticated_owned_forwarding_rw_main_route_seal,
+		sqlite_backend_opaque_identity main_native_file_receipt,
+		sqlite_backend_opaque_identity main_xopen_receipt,
+		sqlite_backend_opaque_identity sqlite_source_id,
+		sqlite_backend_opaque_identity callback_transcript,
+		sqlite_backend_opaque_identity wal_write_lock_receipt,
+		sqlite_backend_opaque_identity effect_gate_receipt,
+		sqlite_backend_opaque_identity route_validation_seal) noexcept
+	{
+		const auto invalid = []
+		{
+			return sqlite_shm_lease_result<sqlite_shm_verified_writer_route_proof>{
+				{sqlite_shm_lease_rejection_reason::invalid_identity,
+				 sqlite_shm_lease_recovery_action::deny_before_native_map}};
+		};
+
+		if (!valid_writer_request(request) ||
+			!valid_identity(authenticated_owned_forwarding_rw_main_route_seal) ||
+			!valid_identity(main_native_file_receipt) || !valid_identity(main_xopen_receipt) ||
+			!valid_identity(sqlite_source_id) || !valid_identity(callback_transcript) ||
+			!valid_identity(wal_write_lock_receipt) || !valid_identity(effect_gate_receipt) ||
+			!valid_identity(route_validation_seal) ||
+			authenticated_owned_forwarding_rw_main_route_seal == route_validation_seal ||
+			(delegated_extend != 0 && delegated_extend != 1))
+			return invalid();
+
+		const auto pair =
+			classify_sqlite_shm_writer_extend_pair(request.caller_extend, delegated_extend);
+		if (!pair)
+			return invalid();
+		if (*pair == sqlite_shm_writer_extend_pair::zero_zero &&
+			route != sqlite_writer_shm_mapping_semantic_route::zero_zero_preexisting_unchanged)
+			return invalid();
+		if (*pair == sqlite_shm_writer_extend_pair::one_one &&
+			(route == sqlite_writer_shm_mapping_semantic_route::zero_zero_preexisting_unchanged))
+			return invalid();
+
+		try
+		{
+			return sqlite_shm_verified_writer_route_proof{
+				route,
+				std::move(request),
+				delegated_extend,
+				std::move(authenticated_owned_forwarding_rw_main_route_seal),
+				std::move(main_native_file_receipt),
+				std::move(main_xopen_receipt),
+				std::move(sqlite_source_id),
+				std::move(callback_transcript),
+				std::move(wal_write_lock_receipt),
+				std::move(effect_gate_receipt),
+				std::move(route_validation_seal)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sqlite_shm_lease_result<sqlite_shm_verified_writer_route_proof>{
+				{sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+				 sqlite_shm_lease_recovery_action::quarantine_no_retry}};
+		}
+		catch (const std::length_error&)
+		{
+			return sqlite_shm_lease_result<sqlite_shm_verified_writer_route_proof>{
+				{sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+				 sqlite_shm_lease_recovery_action::quarantine_no_retry}};
+		}
 	}
 
 	sqlite_shm_lease_result<sqlite_writer_shm_mapping_semantic_audit>
@@ -375,6 +448,21 @@ namespace cxxlens::sdk
 				audit->holder_specific_effect_receipt,
 				*state,
 				epoch.seal_sequence_,
+				binding.target_namespace_epoch_identity &&
+						epoch.post_observation().stat.state ==
+							sqlite_writer_shm_entry_state::direct_regular &&
+						epoch.post_observation().stat.object_identity &&
+						epoch.post_observation().stat.directory_entry_identity
+					? std::optional<
+						  sqlite_shm_reader_attachment_target_identity>{sqlite_shm_reader_attachment_target_identity{
+						  *binding.target_namespace_epoch_identity,
+						  epoch.post_observation().stat.parent_namespace_identity,
+						  *epoch.post_observation().stat.object_identity,
+						  *epoch.post_observation().stat.directory_entry_identity,
+						  epoch.post_observation().stat.filesystem_profile,
+						  epoch.post_observation().stat.mount_identity,
+						  epoch.post_observation().stat.byte_count}}
+					: std::nullopt,
 			};
 			if (!epoch.authoritative_validation_still_live(*state))
 				return ambiguous_post_native_state();

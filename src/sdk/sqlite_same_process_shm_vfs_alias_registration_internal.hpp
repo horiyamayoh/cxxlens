@@ -30,12 +30,12 @@ namespace cxxlens::sdk
 		~sqlite_shm_vfs_alias_lifecycle_binding() noexcept = default;
 		[[nodiscard]] bool valid() const noexcept;
 
-		sqlite_shm_vfs_alias_lifecycle_binding(
-			sqlite_shm_vfs_alias_lifecycle_binding&&) noexcept = default;
+		sqlite_shm_vfs_alias_lifecycle_binding(sqlite_shm_vfs_alias_lifecycle_binding&&) noexcept =
+			default;
 		sqlite_shm_vfs_alias_lifecycle_binding&
 		operator=(sqlite_shm_vfs_alias_lifecycle_binding&&) = delete;
-		sqlite_shm_vfs_alias_lifecycle_binding(
-			const sqlite_shm_vfs_alias_lifecycle_binding&) = delete;
+		sqlite_shm_vfs_alias_lifecycle_binding(const sqlite_shm_vfs_alias_lifecycle_binding&) =
+			delete;
 		sqlite_shm_vfs_alias_lifecycle_binding&
 		operator=(const sqlite_shm_vfs_alias_lifecycle_binding&) = delete;
 
@@ -96,8 +96,8 @@ namespace cxxlens::sdk
 	 *
 	 * The returned binding is the sole value accepted by the closed registration port. Missing,
 	 * inconsistent, or incomplete receipt coordinates are rejected before any native registration
-	 * attempt. This unit does not install a family, bind xShmMap/xShmUnmap/xClose, or project native
-	 * SQLite status.
+	 * attempt. This unit does not install a family, bind xShmMap/xShmUnmap/xClose, or project
+	 * native SQLite status.
 	 */
 	class sqlite_same_process_shm_vfs_alias_identity_sealer final
 	{
@@ -124,8 +124,7 @@ namespace cxxlens::sdk
 		sqlite_shm_registered_vfs_alias(sqlite_shm_registered_vfs_alias&&) noexcept = default;
 		sqlite_shm_registered_vfs_alias& operator=(sqlite_shm_registered_vfs_alias&&) = delete;
 		sqlite_shm_registered_vfs_alias(const sqlite_shm_registered_vfs_alias&) = delete;
-		sqlite_shm_registered_vfs_alias&
-		operator=(const sqlite_shm_registered_vfs_alias&) = delete;
+		sqlite_shm_registered_vfs_alias& operator=(const sqlite_shm_registered_vfs_alias&) = delete;
 
 		[[nodiscard]] bool valid() const noexcept;
 		[[nodiscard]] const sqlite_backend_opaque_identity& process_instance() const noexcept;
@@ -181,12 +180,13 @@ namespace cxxlens::sdk
 	/**
 	 * Closed native VFS registration validator for the process-global SHM registry.
 	 *
-	 * The port owns the exact reserve/begin/native-call/discovery/confirm order. It never carries the
-	 * mapping-registry mutex across SQLite callbacks, never accepts caller-authored success status or
-	 * discovery evidence, and constructs each closed lifecycle receipt before native effect. Same-thread
-	 * reentry is rejected immediately; other-thread contention waits only at a bounded process-keyed
-	 * gate which resets after fork. Native alias registration does not bind xShmMap/xShmUnmap/xClose
-	 * or alter outward SQLite status projection; family installation is an explicit owner bridge.
+	 * The port owns the exact reserve/begin/native-call/discovery/confirm order. It never carries
+	 * the mapping-registry mutex across SQLite callbacks, never accepts caller-authored success
+	 * status or discovery evidence, and constructs each closed lifecycle receipt before native
+	 * effect. Same-thread reentry is rejected immediately; other-thread contention waits only at a
+	 * bounded process-keyed gate which resets after fork. Native alias registration does not bind
+	 * xShmMap/xShmUnmap/xClose or alter outward SQLite status projection; family installation is an
+	 * explicit owner bridge.
 	 */
 	class sqlite_same_process_shm_vfs_alias_registration_port final
 	{
