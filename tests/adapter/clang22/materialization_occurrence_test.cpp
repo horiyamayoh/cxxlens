@@ -83,7 +83,20 @@ namespace
 		"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
 		"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml",
 	};
+	constexpr std::array<std::string_view, 6U> shared_roles{
+		"base", "kernel", "query", "recipes", "provider-sdk", "clang22-provider-sdk"};
+	constexpr std::array<std::string_view, 6U> shared_paths{
+		"lib/libcxxlens_base.so.1.0.0",
+		"lib/libcxxlens_kernel.so.1.0.0",
+		"lib/libcxxlens_query.so.1.0.0",
+		"lib/libcxxlens_recipes.so.1.0.0",
+		"lib/libcxxlens_provider_sdk.so.1.0.0",
+		"lib/libcxxlens_clang22_provider_sdk.so.1.0.0",
+	};
 	constexpr std::string_view child_mode_name{"CXXLENS_OCCURRENCE_REPLACEMENT_CHILD"};
+	constexpr std::string_view child_shared_mode_name{"CXXLENS_OCCURRENCE_SHARED_CHILD"};
+	constexpr std::string_view child_shared_reject_name{
+		"CXXLENS_OCCURRENCE_SHARED_EXPECT_REJECTION"};
 	constexpr std::string_view child_prefix_name{"CXXLENS_OCCURRENCE_REPLACEMENT_PREFIX"};
 	constexpr std::string_view child_manifest_digest_name{
 		"CXXLENS_OCCURRENCE_REPLACEMENT_MANIFEST_DIGEST"};
@@ -104,16 +117,6 @@ namespace
 			}));
 		if (shared)
 		{
-			constexpr std::array<std::string_view, 6U> shared_roles{
-				"base", "kernel", "query", "recipes", "provider-sdk", "clang22-provider-sdk"};
-			constexpr std::array<std::string_view, 6U> shared_paths{
-				"lib/libcxxlens_base.so.1",
-				"lib64/libcxxlens_kernel.so.1.0",
-				"lib/libcxxlens_query.so",
-				"lib/libcxxlens_recipes.so.1",
-				"lib64/libcxxlens_provider_sdk.so.1",
-				"lib/libcxxlens_clang22_provider_sdk.so.1",
-			};
 			for (std::size_t index{}; index < shared_roles.size(); ++index)
 				files.push_back(object_value({
 					{"role", string_value(std::string{shared_roles[index]})},
@@ -223,6 +226,147 @@ namespace
 				{"digest", string_value(digests[index])},
 			}));
 		return files;
+	}
+
+	[[nodiscard]] json_value::array_type
+	shared_installed_occurrence_files(const std::span<const std::string> digests)
+	{
+		require(digests.size() == roles.size() + shared_roles.size(),
+				"test shared occurrence digest census is incomplete");
+		auto files = installed_occurrence_files(digests.first(roles.size()));
+		for (std::size_t index{}; index < shared_roles.size(); ++index)
+			files.push_back(object_value({
+				{"role", string_value(std::string{shared_roles[index]})},
+				{"path", string_value(std::string{shared_paths[index]})},
+				{"digest", string_value(digests[roles.size() + index])},
+			}));
+		return files;
+	}
+
+	void shared_measurement_child()
+	{
+		const auto expected_rejection = ::getenv(child_shared_reject_name.data()) != nullptr;
+		materialization_occurrence_expectation expected{
+			.source_revision = std::string(40U, '1'),
+			.source_tree = std::string(40U, '2'),
+			.package_configuration = "shared",
+			.occurrence_manifest_digest = required_environment(child_manifest_digest_name),
+			.materializer_executable_digest = required_environment(child_materializer_digest_name),
+			.worker_executable_digest = required_environment(child_worker_digest_name),
+		};
+		auto measured = measure_materialization_occurrence(expected);
+		if (expected_rejection)
+		{
+			require(!measured, "shared occurrence symlink was accepted");
+			return;
+		}
+		require(measured && measured->manifest().files.size() == roles.size() + shared_roles.size(),
+				"shared regular-file occurrence was rejected");
+		for (std::size_t index{}; index < shared_roles.size(); ++index)
+		{
+			const auto& file = measured->manifest().files[roles.size() + index];
+			require(file.role == shared_roles[index] && file.path == shared_paths[index],
+					"shared occurrence accepted a path other than its regular DSO leaf");
+		}
+	}
+
+	void run_shared_measurement_child(const std::filesystem::path& materializer_path,
+									  const std::filesystem::path& prefix,
+									  const std::span<const std::string> digests,
+									  const std::string& manifest_digest,
+									  const bool expect_rejection)
+	{
+		require(::setenv(child_shared_mode_name.data(), "1", 1) == 0 &&
+					::setenv(child_prefix_name.data(), prefix.c_str(), 1) == 0 &&
+					::setenv(child_manifest_digest_name.data(), manifest_digest.c_str(), 1) == 0 &&
+					::setenv(child_materializer_digest_name.data(), digests.front().c_str(), 1) ==
+						0 &&
+					::setenv(child_worker_digest_name.data(), digests[1U].c_str(), 1) == 0 &&
+					(!expect_rejection || ::setenv(child_shared_reject_name.data(), "1", 1) == 0),
+				"test shared occurrence child environment setup failed");
+		const auto child = ::fork();
+		require(child >= 0, "test shared occurrence child fork failed");
+		if (child == 0)
+		{
+			::execl(
+				materializer_path.c_str(), materializer_path.c_str(), static_cast<char*>(nullptr));
+			::_exit(125);
+		}
+		(void)::unsetenv(child_shared_mode_name.data());
+		(void)::unsetenv(child_prefix_name.data());
+		(void)::unsetenv(child_manifest_digest_name.data());
+		(void)::unsetenv(child_materializer_digest_name.data());
+		(void)::unsetenv(child_worker_digest_name.data());
+		(void)::unsetenv(child_shared_reject_name.data());
+		int status{};
+		pid_t waited{};
+		do
+		{
+			waited = ::waitpid(child, &status, 0);
+		} while (waited < 0 && errno == EINTR);
+		require(waited == child && WIFEXITED(status) && WEXITSTATUS(status) == 0,
+				"shared occurrence child did not enforce regular-file measurement");
+	}
+
+	void shared_regular_file_and_symlink_measurement()
+	{
+		std::array<char, 64U> directory_template{};
+		constexpr std::string_view template_value{"/tmp/cxxlens-occurrence-shared-XXXXXX"};
+		std::ranges::copy(template_value, directory_template.begin());
+		auto* directory = ::mkdtemp(directory_template.data());
+		require(directory != nullptr, "test shared occurrence temporary directory creation failed");
+		const std::filesystem::path prefix{directory};
+		const auto materializer_path = prefix / std::string{paths.front()};
+		std::error_code filesystem_error;
+		std::filesystem::create_directories(materializer_path.parent_path(), filesystem_error);
+		require(!filesystem_error, "test shared occurrence bin directory creation failed");
+		std::filesystem::copy_file("/proc/self/exe",
+								   materializer_path,
+								   std::filesystem::copy_options::overwrite_existing,
+								   filesystem_error);
+		require(!filesystem_error, "test shared occurrence executable copy failed");
+		std::filesystem::permissions(materializer_path,
+									 std::filesystem::perms::owner_all,
+									 std::filesystem::perm_options::replace,
+									 filesystem_error);
+		require(!filesystem_error, "test shared occurrence executable permission failed");
+
+		for (std::size_t index{1U}; index < paths.size(); ++index)
+			write_file(prefix / std::string{paths[index]},
+					   bytes(std::string{"authority:"} + std::string{roles[index]} + "\n"),
+					   index == 1U ? 0700 : 0600);
+		for (std::size_t index{}; index < shared_paths.size(); ++index)
+			write_file(prefix / std::string{shared_paths[index]},
+					   bytes(std::string{"runtime:"} + std::string{shared_roles[index]} + "\n"));
+
+		std::vector<std::string> digests;
+		digests.reserve(paths.size() + shared_paths.size());
+		for (const auto path : paths)
+			digests.push_back(sdk::content_digest(read_file(prefix / std::string{path})));
+		for (const auto path : shared_paths)
+			digests.push_back(sdk::content_digest(read_file(prefix / std::string{path})));
+		auto files = shared_installed_occurrence_files(digests);
+		auto manifest = manifest_bytes(true, files);
+		const auto manifest_path = prefix / std::string{materialization_occurrence_manifest_path};
+		write_file(manifest_path, manifest);
+		run_shared_measurement_child(
+			materializer_path, prefix, digests, sdk::content_digest(manifest), false);
+
+		const auto symlink_path = prefix / "lib/libcxxlens_base.so.1";
+		std::filesystem::create_symlink("libcxxlens_base.so.1.0.0", symlink_path, filesystem_error);
+		require(!filesystem_error, "test shared occurrence symlink creation failed");
+		files[roles.size()] = object_value({
+			{"role", string_value("base")},
+			{"path", string_value("lib/libcxxlens_base.so.1")},
+			{"digest", string_value(digests[roles.size()])},
+		});
+		manifest = manifest_bytes(true, std::move(files));
+		write_file(manifest_path, manifest);
+		run_shared_measurement_child(
+			materializer_path, prefix, digests, sdk::content_digest(manifest), true);
+
+		std::filesystem::remove_all(prefix, filesystem_error);
+		require(!filesystem_error, "test shared occurrence temporary directory cleanup failed");
 	}
 
 	void replacement_after_measurement_child()
@@ -468,6 +612,11 @@ namespace
 
 int main()
 {
+	if (::getenv(child_shared_mode_name.data()) != nullptr)
+	{
+		shared_measurement_child();
+		return 0;
+	}
 	if (::getenv(child_mode_name.data()) != nullptr)
 	{
 		replacement_after_measurement_child();
@@ -476,5 +625,6 @@ int main()
 	exact_manifest_closure();
 	negative_manifest_graph();
 	replacement_after_measurement_negative();
+	shared_regular_file_and_symlink_measurement();
 	return 0;
 }

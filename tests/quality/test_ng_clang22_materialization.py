@@ -179,6 +179,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         mutations = (
             ("root_cmake", "must be supplied together"),
             ("occurrence_generator", "CXXLENS_PROVENANCE_EXPECTED_TREE"),
+            ("occurrence_generator", "libcxxlens_base.so.@PROJECT_VERSION@"),
             ("source_verifier", "status --porcelain=v1"),
             ("source_verifier", "--untracked-files=all"),
             ("source_verifier", "_cxxlens_git_observe(after)"),

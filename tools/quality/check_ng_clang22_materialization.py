@@ -193,12 +193,12 @@ OCCURRENCE_AUTHORITY_FILES = [
     ),
 ]
 SHARED_OCCURRENCE_RUNTIME_FILES = [
-    ("base", "lib/libcxxlens_base.so"),
-    ("kernel", "lib/libcxxlens_kernel.so"),
-    ("query", "lib/libcxxlens_query.so"),
-    ("recipes", "lib/libcxxlens_recipes.so"),
-    ("provider-sdk", "lib/libcxxlens_provider_sdk.so"),
-    ("clang22-provider-sdk", "lib/libcxxlens_clang22_provider_sdk.so"),
+    ("base", "lib/libcxxlens_base.so.1.0.0"),
+    ("kernel", "lib/libcxxlens_kernel.so.1.0.0"),
+    ("query", "lib/libcxxlens_query.so.1.0.0"),
+    ("recipes", "lib/libcxxlens_recipes.so.1.0.0"),
+    ("provider-sdk", "lib/libcxxlens_provider_sdk.so.1.0.0"),
+    ("clang22-provider-sdk", "lib/libcxxlens_clang22_provider_sdk.so.1.0.0"),
 ]
 FORBIDDEN_REPORT_LIFECYCLE_TEXT = (
     "bounded-spool-before-publication",
@@ -16779,6 +16779,12 @@ def validate_occurrence_build_provenance(
             'set(CXXLENS_PROVENANCE_EXPECTED_REVISION "@CXXLENS_SOURCE_REVISION@")',
             'set(CXXLENS_PROVENANCE_EXPECTED_TREE "@CXXLENS_SOURCE_TREE@")',
             'include("@CMAKE_CURRENT_BINARY_DIR@/VerifyClang22SourceProvenance.cmake")',
+            "libcxxlens_base.so.@PROJECT_VERSION@",
+            "libcxxlens_kernel.so.@PROJECT_VERSION@",
+            "libcxxlens_query.so.@PROJECT_VERSION@",
+            "libcxxlens_recipes.so.@PROJECT_VERSION@",
+            "libcxxlens_provider_sdk.so.@PROJECT_VERSION@",
+            "libcxxlens_clang22_provider_sdk.so.@PROJECT_VERSION@",
         ),
         "source provenance verifier": (
             'CXXLENS_PROVENANCE_MODE STREQUAL "explicit"',
