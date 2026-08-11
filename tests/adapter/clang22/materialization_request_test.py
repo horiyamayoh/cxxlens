@@ -111,6 +111,18 @@ def main() -> int:
     expect_pass(args.driver, memory)
     expect_pass(args.driver, sqlite)
 
+    wrong_registry_authority = copy.deepcopy(memory)
+    wrong_registry_authority["registry"]["authority_registry_digest"] = (
+        "sha256:" + "0" * 64
+    )
+    oracle.bind_request_identity(wrong_registry_authority)
+    expect_failure(
+        args.driver,
+        encoded(wrong_registry_authority),
+        b"materialization.descriptor-binding-mismatch",
+        b"registry.authority",
+    )
+
     unknown_version_with_shape_error = copy.deepcopy(memory)
     unknown_version_with_shape_error["request_version"] = "3.0.0"
     unknown_version_with_shape_error.pop("tasks")

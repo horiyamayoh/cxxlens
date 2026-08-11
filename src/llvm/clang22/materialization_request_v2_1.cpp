@@ -37,7 +37,7 @@ namespace cxxlens::detail::clang22::materialization
 		using sdk::relation_descriptor;
 
 		constexpr std::string_view authority_registry_digest =
-			"sha256:4caf626ec6f198118802f22d9cac62b02b2c3bb392fdc8d68b1a58f8101c342e";
+			"sha256:e47bbaec6a56bc18f90e314a948003c47bf2c46431cf5f26fd035249a94f35b5";
 		constexpr std::string_view engine_generation_contract =
 			"cxxlens.clang22-materialization-engine.v2";
 		constexpr std::string_view interpretation_policy_id =
