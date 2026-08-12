@@ -1725,9 +1725,7 @@ namespace
 		}
 		[[nodiscard]] result<void> recheck_retained_object() const override
 		{
-			struct stat current
-			{
-			};
+			struct stat current{};
 			return ::fstat(descriptor_, &current) == 0 && current.st_dev == stat_.st_dev &&
 					current.st_ino == stat_.st_ino
 				? result<void>{}
@@ -1735,9 +1733,7 @@ namespace
 		}
 		[[nodiscard]] result<std::uint64_t> size() const override
 		{
-			struct stat current
-			{
-			};
+			struct stat current{};
 			if (::fstat(descriptor_, &current) != 0 || current.st_size < 0)
 				return error{"test.registry", "source-epoch", "retained-object-size"};
 			return static_cast<std::uint64_t>(current.st_size);
@@ -1767,9 +1763,7 @@ namespace
 	  private:
 		sqlite_backend_file_role role_;
 		int descriptor_{-1};
-		struct stat stat_
-		{
-		};
+		struct stat stat_{};
 		sqlite_backend_opaque_identity object_;
 		sqlite_backend_opaque_identity entry_;
 		std::optional<sqlite_backend_opaque_identity> filesystem_;
@@ -3113,19 +3107,20 @@ namespace
 	{
 		const auto& target = request.expected_attachment.target_identity();
 		require(target.has_value(), "native-OK projection validation requires an exact target");
-		auto observation = sqlite_same_process_shm_lease_test_peer::
-			reader_mapped_post_native_observation(owner.inflight,
-												  request,
-												  0,
-												  setup.writer_attempt.native_page.get(),
-												  0,
-												  target->shm_object,
-												  target->shm_entry,
-												  target->filesystem,
-												  target->mount,
-												  target->namespace_epoch,
-												  target->parent_namespace,
-												  target->sealed_shm_size);
+		auto observation =
+			sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+				owner.inflight,
+				request,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				target->shm_object,
+				target->shm_entry,
+				target->filesystem,
+				target->mount,
+				target->namespace_epoch,
+				target->parent_namespace,
+				target->sealed_shm_size);
 		require(sqlite_same_process_shm_lease_test_peer::reader_observation_target_matches(
 					observation, request),
 				"native-OK post-map observation reproduces the local reader target");
@@ -3356,7 +3351,7 @@ namespace
 		require(first_commit && first_commit->formed_group() && !first_permit->valid(),
 				"first projected map transfers exact source custody to the group");
 		require(source_epoch->target->finish().has_value() &&
-				source_epoch->finalization_count->load(std::memory_order_relaxed) == 0,
+					source_epoch->finalization_count->load(std::memory_order_relaxed) == 0,
 				"the projected group retains the source borrow before quarantine");
 
 		auto plain_owner = prepare_qualified_map_effect_owner(
@@ -3399,11 +3394,12 @@ namespace
 
 		{
 			auto handoff = first_commit->take_handoff();
-		require(handoff.has_value(),
+			require(handoff.has_value(),
 					"retain the quarantined projected handoff for terminal abandonment cleanup");
 		}
-		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
-				"late handoff abandonment cannot finalize an already-drained quarantine borrow twice");
+		require(
+			source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
+			"late handoff abandonment cannot finalize an already-drained quarantine borrow twice");
 		const auto terminal =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
 		require(terminal.attachment_groups.size() == 1U,
@@ -3567,8 +3563,7 @@ namespace
 			source_epoch->stat.byte_count};
 		require(local_reader_target.namespace_epoch != source_epoch->target->identity(),
 				"local reader namespace differs from the writer-held source epoch only");
-		auto setup = make_reader_candidate_setup(
-			240U, local_reader_target, false, source_epoch);
+		auto setup = make_reader_candidate_setup(240U, local_reader_target, false, source_epoch);
 		require(setup.pre_sqlite.target_identity == local_reader_target,
 				"reader request retains its local namespace identity for A/B/C admission");
 		auto owner = prepare_qualified_map_effect_owner(
@@ -3584,9 +3579,9 @@ namespace
 				"post-native validation retains the local reader request target exactly");
 		auto committed = setup.fixture.registry->commit_reader_map_with_native_ok_projection(
 			*setup.fixture.family_pin, owner.inflight, *receipt, setup.session, permit);
-		require(committed && committed->formed_group() && !owner.inflight.valid() &&
-					!permit.valid(),
-				"commit authenticates the Stage-C writer exact target rather than the local namespace");
+		require(
+			committed && committed->formed_group() && !owner.inflight.valid() && !permit.valid(),
+			"commit authenticates the Stage-C writer exact target rather than the local namespace");
 		finish_qualified_mapped_reader_candidate(
 			setup, *setup.fixture.family_pin, *committed, 243U);
 		require(source_epoch->target->finish().has_value(),
@@ -3607,8 +3602,7 @@ namespace
 			source_epoch->stat.filesystem_profile,
 			source_epoch->stat.mount_identity,
 			source_epoch->stat.byte_count};
-		auto setup = make_reader_candidate_setup(
-			244U, local_reader_target, false, source_epoch);
+		auto setup = make_reader_candidate_setup(244U, local_reader_target, false, source_epoch);
 		auto owner = prepare_qualified_map_effect_owner(
 			setup, 245U, sqlite_shm_reader_effect_identity_role::mapped_result);
 		const auto request = reader_attachment_map_request(
@@ -8543,8 +8537,8 @@ namespace
 				callback_identity,
 				marker + 20U,
 				recreate				? callback_identity
-									   ? "imported revoked callback cannot authorize a recreated close"
-									   : "imported revoked effect cannot terminalize a recreated close"
+						? "imported revoked callback cannot authorize a recreated close"
+						: "imported revoked effect cannot terminalize a recreated close"
 					: callback_identity ? "local revoked callback cannot authorize a later close"
 										: "local revoked effect cannot terminalize a later close");
 		}
@@ -14735,35 +14729,39 @@ namespace
 		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
 			*fixture.registry, fixture.family);
 		require(coordinator != nullptr, "resolve installing-cell rollback coordinator");
-		auto request = writer_request(fixture.family,
-			fixture.alias_lifetime,
-			identity("test.registry.registration-rollback-connection", 247U),
-			identity("test.registry.registration-rollback-open", 247U),
-			247U);
+		auto request =
+			writer_request(fixture.family,
+						   fixture.alias_lifetime,
+						   identity("test.registry.registration-rollback-connection", 247U),
+						   identity("test.registry.registration-rollback-open", 247U),
+						   247U);
 		auto failed_epoch = make_validated_bridge_epoch(
 			request, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 247U);
 		auto failed_observer = failed_epoch.activation.take_observer();
 		auto failed_arm = failed_epoch.activation.take_arm();
 		sqlite_same_process_shm_lease_test_peer::fail_next_writer_attachment_registration(
 			*coordinator);
-		auto failed = fixture.registry->begin_writer_map(
-			*fixture.family_pin, std::move(failed_arm), request);
+		auto failed =
+			fixture.registry->begin_writer_map(*fixture.family_pin, std::move(failed_arm), request);
 		const auto rolled_back = coordinator->snapshot();
-		require(!failed && rolled_back.installing_generation_authority_count == 0U &&
+		require(
+			!failed && rolled_back.installing_generation_authority_count == 0U &&
 				rolled_back.writer_inflight_count == 0U &&
 				rolled_back.writer_member_authority_count == 0U &&
 				rolled_back.writer_attachment_identity_count == 0U && !rolled_back.generation &&
 				!rolled_back.quarantined,
-				"registration allocation failure leaves no installing cell, writer, or attachment row");
+			"registration allocation failure leaves no installing cell, writer, or attachment row");
 
 		auto retry_epoch = make_validated_bridge_epoch(
 			request, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 248U);
 		auto retry_observer = retry_epoch.activation.take_observer();
 		auto retry_arm = retry_epoch.activation.take_arm();
-		auto retry = fixture.registry->begin_writer_map(*fixture.family_pin, std::move(retry_arm), request);
+		auto retry =
+			fixture.registry->begin_writer_map(*fixture.family_pin, std::move(retry_arm), request);
 		require(retry && retry->valid() &&
-				coordinator->snapshot().installing_generation_authority_count == 1U,
-				"a fresh authenticated writer becomes installer after rollback instead of orphan joiner");
+					coordinator->snapshot().installing_generation_authority_count == 1U,
+				"a fresh authenticated writer becomes installer after rollback instead of orphan "
+				"joiner");
 		require(coordinator->resolve_writer_map_failure(*retry).has_value(),
 				"resolve the retry installer as native no-map");
 		require(coordinator->snapshot().installing_generation_authority_count == 0U,

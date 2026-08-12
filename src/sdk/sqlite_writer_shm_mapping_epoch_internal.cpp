@@ -1,7 +1,5 @@
 #include "sqlite_writer_shm_mapping_epoch_internal.hpp"
 
-#include "sqlite_source_shm_readonly_preflight_internal.hpp"
-
 #include <algorithm>
 #include <atomic>
 #include <limits>
@@ -11,6 +9,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "sqlite_source_shm_readonly_preflight_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -573,12 +573,24 @@ namespace cxxlens::sdk
 		class sqlite_writer_shm_generation_epoch_custody final
 		{
 		  public:
-			[[nodiscard]] bool install(
-				std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter> minter) noexcept
+			~sqlite_writer_shm_generation_epoch_custody() noexcept
+			{
+				if (minter_)
+					minter_->release_generation_authority();
+			}
+
+			[[nodiscard]] bool
+			install(std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter>
+						minter) noexcept
 			{
 				if (installed_ || !minter || !minter->valid())
 					return false;
 				minter_.emplace(std::move(*minter));
+				if (!minter_->retain_generation_authority())
+				{
+					minter_.reset();
+					return false;
+				}
 				installed_ = true;
 				return true;
 			}
@@ -619,7 +631,8 @@ namespace cxxlens::sdk
 			[[nodiscard]] bool matches_canonical_target(
 				const sqlite_shm_reader_attachment_target_identity& target) const noexcept
 			{
-				return canonical_target_ && canonical_target_->parent_namespace == target.parent_namespace &&
+				return canonical_target_ &&
+					canonical_target_->parent_namespace == target.parent_namespace &&
 					canonical_target_->shm_object == target.shm_object &&
 					canonical_target_->shm_entry == target.shm_entry &&
 					canonical_target_->filesystem == target.filesystem &&
@@ -636,7 +649,8 @@ namespace cxxlens::sdk
 			{
 				if (!valid())
 					return unexpected(error{"store.backend-unavailable",
-						"sqlite", "source-shm-readonly-qualification"});
+											"sqlite",
+											"source-shm-readonly-qualification"});
 				return minter_->mint(reservation);
 			}
 
@@ -657,7 +671,8 @@ namespace cxxlens::sdk
 				std::shared_ptr<sqlite_writer_shm_mapping_epoch_liveness> liveness)
 				: request_{std::move(request)}, preparation_{std::move(preparation)},
 				  liveness_{std::move(liveness)},
-				  generation_custody_{std::make_shared<sqlite_writer_shm_generation_epoch_custody>()}
+				  generation_custody_{
+					  std::make_shared<sqlite_writer_shm_generation_epoch_custody>()}
 			{
 			}
 
@@ -681,12 +696,13 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
-			mint_reader_borrow(const sqlite_shm_reader_native_ok_projection_reservation& reservation)
+			mint_reader_borrow(
+				const sqlite_shm_reader_native_ok_projection_reservation& reservation)
 			{
 				if (!lifetimes_valid() || !preparation_.borrow_minter)
 					return unexpected(error{"store.backend-unavailable",
-										"sqlite",
-										"source-shm-readonly-qualification"});
+											"sqlite",
+											"source-shm-readonly-qualification"});
 				return preparation_.borrow_minter->mint(reservation);
 			}
 
@@ -1111,16 +1127,15 @@ namespace cxxlens::sdk
 		}
 	}
 
-	sqlite_writer_shm_generation_epoch_authority::
-		sqlite_writer_shm_generation_epoch_authority(
-			std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state,
-			std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody) noexcept
+	sqlite_writer_shm_generation_epoch_authority::sqlite_writer_shm_generation_epoch_authority(
+		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state,
+		std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody) noexcept
 		: state_{std::move(state)}, custody_{std::move(custody)}
 	{
 	}
 
-	sqlite_writer_shm_generation_epoch_authority::~sqlite_writer_shm_generation_epoch_authority() noexcept =
-		default;
+	sqlite_writer_shm_generation_epoch_authority::
+		~sqlite_writer_shm_generation_epoch_authority() noexcept = default;
 
 	sqlite_writer_shm_generation_epoch_authority::sqlite_writer_shm_generation_epoch_authority(
 		sqlite_writer_shm_generation_epoch_authority&& other) noexcept = default;
@@ -1154,8 +1169,8 @@ namespace cxxlens::sdk
 
 	bool sqlite_writer_shm_generation_epoch_authority::reader_borrow_capable() const noexcept
 	{
-		return custody_ && (custody_->reader_borrow_capable() ||
-			(state_ && state_->reader_borrow_capable()));
+		return custody_ &&
+			(custody_->reader_borrow_capable() || (state_ && state_->reader_borrow_capable()));
 	}
 
 	bool sqlite_writer_shm_generation_epoch_authority::same_custody_as(
@@ -1212,9 +1227,8 @@ namespace cxxlens::sdk
 	{
 		if (!custody_ || !custody_->valid() || map_token == 0U || generation == 0U ||
 			holder_token == 0U)
-			return unexpected(error{"store.backend-unavailable",
-								 "sqlite",
-								 "source-shm-readonly-qualification"});
+			return unexpected(
+				error{"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"});
 		return sqlite_shm_writer_reader_borrow_mint_capability{
 			custody_, map_token, generation, holder_token};
 	}
@@ -1292,11 +1306,10 @@ namespace cxxlens::sdk
 	{
 		if (!state_ || !state_->lifetimes_valid() || map_token == 0U || generation == 0U ||
 			holder_token == 0U)
-			return unexpected(error{"store.backend-unavailable",
-								 "sqlite",
-								 "source-shm-readonly-qualification"});
-		return unexpected(error{"store.backend-unavailable",
-			"sqlite", "source-shm-readonly-qualification"});
+			return unexpected(
+				error{"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"});
+		return unexpected(
+			error{"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"});
 	}
 
 	sqlite_writer_shm_generation_epoch_authority
@@ -1307,7 +1320,7 @@ namespace cxxlens::sdk
 
 	sqlite_shm_writer_reader_borrow_mint_capability::
 		sqlite_shm_writer_reader_borrow_mint_capability(
-		std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody,
+			std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody,
 			const std::uint64_t map_token,
 			const std::uint64_t generation,
 			const std::uint64_t holder_token) noexcept
@@ -1325,12 +1338,11 @@ namespace cxxlens::sdk
 
 	result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
 	sqlite_shm_writer_reader_borrow_mint_capability::mint(
-	const sqlite_shm_reader_native_ok_projection_reservation& reservation)
+		const sqlite_shm_reader_native_ok_projection_reservation& reservation)
 	{
 		if (!custody_ || !reservation.matches(map_token_, generation_, holder_token_))
-			return unexpected(error{"store.backend-unavailable",
-								 "sqlite",
-								 "source-shm-readonly-qualification"});
+			return unexpected(
+				error{"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"});
 		auto output = custody_->mint(reservation);
 		if (output)
 			disarm();
@@ -1584,16 +1596,15 @@ namespace cxxlens::sdk
 				std::make_shared<retained_namespace_writer_shm_mapping_epoch_observation>(
 					binding_, request.binding, *pre_stat, watch_receipt);
 			std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter> borrow_minter;
-			if (auto minted =
-					make_sqlite_source_shm_target_namespace_epoch_borrow_minter(
-						binding_.target_namespace_epoch);
+			if (auto minted = make_sqlite_source_shm_target_namespace_epoch_borrow_minter(
+					binding_.target_namespace_epoch);
 				minted)
 				borrow_minter.emplace(std::move(*minted));
 			return sqlite_writer_shm_mapping_epoch_preparation{std::move(epoch_identity),
-														   std::move(watch_receipt),
-														   std::move(*pre_stat),
-														   std::move(observer),
-														   std::move(borrow_minter)};
+															   std::move(watch_receipt),
+															   std::move(*pre_stat),
+															   std::move(observer),
+															   std::move(borrow_minter)};
 		}
 		catch (...)
 		{

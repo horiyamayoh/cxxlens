@@ -683,8 +683,7 @@ namespace cxxlens::sdk
 			// minting; G1 seeds it from the local arm and G2 replaces that seed with
 			// the generation-owned install/join controller.
 			std::optional<sqlite_writer_shm_mapping_epoch_arm> local_epoch_arm;
-			std::optional<sqlite_writer_shm_generation_epoch_authority>
-				generation_epoch_authority;
+			std::optional<sqlite_writer_shm_generation_epoch_authority> generation_epoch_authority;
 			std::optional<sqlite_shm_registry_activity_seal> audit_seal;
 			// Declared last so ambiguous destruction invalidates registry activity first while
 			// the strong epoch arm is still retained.
@@ -2110,7 +2109,8 @@ namespace cxxlens::sdk
 				sqlite_shm_reader_attachment_map_inflight& inflight,
 				const sqlite_shm_reader_attachment_map_request& request)
 			{
-				if (!current(pin.process_epoch_) || inflight.terminal_presentation_stale_for_registry())
+				if (!current(pin.process_epoch_) ||
+					inflight.terminal_presentation_stale_for_registry())
 					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
 									 sqlite_shm_lease_recovery_action::deny_before_native_map);
 				try
@@ -2124,10 +2124,14 @@ namespace cxxlens::sdk
 					synchronize_coordinator_quarantines_locked();
 					if (!inflight.has_qualified_identity_for_registry() ||
 						!inflight.qualified_identity_owned_for_registry(
-							pin.family_epoch_, pin.pin_token_, pin.alias_token_, seal_->process_epoch,
-							activity_emergency_latch_) || admission_quarantined_locked())
+							pin.family_epoch_,
+							pin.pin_token_,
+							pin.alias_token_,
+							seal_->process_epoch,
+							activity_emergency_latch_) ||
+						admission_quarantined_locked())
 						return rejection(sqlite_shm_lease_rejection_reason::quarantined,
-									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 					auto* family_pin = current_family_pin_locked(pin);
 					auto* alias = find_alias_locked(pin.alias_token_);
 					auto* family = find_family_epoch_locked(pin.family_epoch_);
@@ -2137,14 +2141,15 @@ namespace cxxlens::sdk
 						family->phase != sqlite_shm_registry_family_phase::active ||
 						!exact_family_admission_visible_locked(*family))
 						return rejection(sqlite_shm_lease_rejection_reason::retiring,
-									 sqlite_shm_lease_recovery_action::deny_before_native_map);
+										 sqlite_shm_lease_recovery_action::deny_before_native_map);
 					if (request.family != family->binding ||
 						request.alias_lifetime != alias->alias_lifetime ||
-						request.connection_token != request.expected_attachment.connection_token() ||
+						request.connection_token !=
+							request.expected_attachment.connection_token() ||
 						request.expected_attachment.runtime_lifetime_pin() !=
 							alias->runtime_lifetime.pin_identity())
 						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
-									 sqlite_shm_lease_recovery_action::deny_before_native_map);
+										 sqlite_shm_lease_recovery_action::deny_before_native_map);
 					return family->coordinator->prepare_reader_native_ok_projection(
 						pin, inflight, request);
 				}
@@ -7565,24 +7570,22 @@ namespace cxxlens::sdk
 		const sqlite_shm_reader_attachment_target_identity& target,
 		const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept
 	{
-	return state_ && state_->generation_epoch_authority &&
-		state_->local_epoch_arm &&
-		state_->local_epoch_arm->target_identity_matches(target, receipt) &&
-		state_->generation_epoch_authority->matches_canonical_target(target);
+		return state_ && state_->generation_epoch_authority && state_->local_epoch_arm &&
+			state_->local_epoch_arm->target_identity_matches(target, receipt) &&
+			state_->generation_epoch_authority->matches_canonical_target(target);
 	}
 
 	result<sqlite_shm_writer_reader_borrow_mint_capability>
 	sqlite_shm_writer_member_authority::reserve_reader_borrow_mint(
-	const std::uint64_t map_token,
-	const std::uint64_t generation,
-	const std::uint64_t holder_token) const
+		const std::uint64_t map_token,
+		const std::uint64_t generation,
+		const std::uint64_t holder_token) const
 	{
 		if (!state_ || !state_->activity || !state_->audit_seal ||
-			!state_->generation_epoch_authority ||
-			!state_->activity->valid() || !state_->audit_seal->valid())
-			return unexpected(error{"store.backend-unavailable",
-								 "sqlite",
-								 "source-shm-readonly-qualification"});
+			!state_->generation_epoch_authority || !state_->activity->valid() ||
+			!state_->audit_seal->valid())
+			return unexpected(
+				error{"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"});
 		return state_->generation_epoch_authority->reserve_reader_borrow_mint(
 			map_token, generation, holder_token);
 	}
@@ -8802,8 +8805,7 @@ namespace cxxlens::sdk
 		sqlite_shm_reader_native_ok_projection_reservation& reservation,
 		sqlite_source_shm_target_namespace_epoch_reader_borrow borrow)
 	{
-		return state_->attach_reader_native_ok_projection(
-			family, reservation, std::move(borrow));
+		return state_->attach_reader_native_ok_projection(family, reservation, std::move(borrow));
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>

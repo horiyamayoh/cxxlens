@@ -50,6 +50,7 @@ namespace cxxlens::sdk
 			bool finalized{};
 			bool abandoned{};
 			std::size_t reader_borrow_count{};
+			std::size_t generation_authority_count{};
 		};
 
 		struct sqlite_source_shm_target_namespace_epoch_reader_borrow_state
@@ -87,6 +88,9 @@ namespace cxxlens::sdk
 		claim_target_epoch_finalizer(
 			detail::sqlite_source_shm_target_namespace_epoch_controller& controller)
 		{
+			// Generation custody permits a mint to race with owner close, but it is not a
+			// reader borrow.  Once all reader borrows drain, finalization must still run;
+			// any later mint observes the finalized controller and fails closed.
 			if (!controller.owner_released || controller.reader_borrow_count != 0U ||
 				controller.finalization_claimed || controller.finalized || controller.abandoned ||
 				!controller.guard)
@@ -276,6 +280,41 @@ namespace cxxlens::sdk
 		return state_ != nullptr && state_->controller != nullptr;
 	}
 
+	bool
+	sqlite_source_shm_target_namespace_epoch_borrow_minter::retain_generation_authority() noexcept
+	{
+		if (!state_ || !state_->controller)
+			return false;
+		std::scoped_lock lock{state_->controller->mutex};
+		if (!state_->controller->guard || state_->controller->finalized ||
+			state_->controller->abandoned ||
+			state_->controller->generation_authority_count ==
+				std::numeric_limits<std::size_t>::max())
+			return false;
+		++state_->controller->generation_authority_count;
+		return true;
+	}
+
+	void
+	sqlite_source_shm_target_namespace_epoch_borrow_minter::release_generation_authority() noexcept
+	{
+		if (!state_ || !state_->controller)
+			return;
+		auto controller = state_->controller;
+		std::shared_ptr<sqlite_source_shm_namespace_guard> finalizer;
+		{
+			std::scoped_lock lock{controller->mutex};
+			if (controller->generation_authority_count != 0U)
+				--controller->generation_authority_count;
+			finalizer = claim_target_epoch_finalizer(*controller);
+		}
+		if (finalizer && !finish_target_epoch_finalizer(controller, finalizer))
+		{
+			std::scoped_lock lock{controller->mutex};
+			controller->abandoned = true;
+		}
+	}
+
 	result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
 	sqlite_source_shm_target_namespace_epoch_borrow_minter::mint(
 		const sqlite_shm_reader_native_ok_projection_reservation& reservation)
@@ -305,7 +344,9 @@ namespace cxxlens::sdk
 			std::shared_ptr<sqlite_source_shm_namespace_guard> guard;
 			{
 				std::scoped_lock lock{state_->controller->mutex};
-				if (!state_->controller->guard || state_->controller->owner_released ||
+				if (!state_->controller->guard ||
+					(state_->controller->owner_released &&
+					 state_->controller->generation_authority_count == 0U) ||
 					state_->controller->finalized || state_->controller->abandoned)
 					return unexpected(target_epoch_borrow_error());
 				guard = state_->controller->guard;
@@ -315,8 +356,9 @@ namespace cxxlens::sdk
 			{
 				std::scoped_lock lock{state_->controller->mutex};
 				if (state_->controller->guard.get() != guard.get() ||
-					state_->controller->owner_released || state_->controller->finalized ||
-					state_->controller->abandoned ||
+					(state_->controller->owner_released &&
+					 state_->controller->generation_authority_count == 0U) ||
+					state_->controller->finalized || state_->controller->abandoned ||
 					state_->controller->reader_borrow_count ==
 						std::numeric_limits<std::size_t>::max())
 					return unexpected(target_epoch_borrow_error());
@@ -549,12 +591,8 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<filesystem_profile>
 		read_filesystem_profile(const int descriptor, const struct stat& identity)
 		{
-			struct statfs observed
-			{
-			};
-			struct statx mount
-			{
-			};
+			struct statfs observed{};
+			struct statx mount{};
 			if (::fstatfs(descriptor, &observed) != 0 ||
 				::statx(
 					descriptor, "", AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, STATX_MNT_ID, &mount) !=
@@ -629,9 +667,7 @@ namespace cxxlens::sdk
 				open_at(parent, leaf, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)};
 			if (!descriptor)
 				return unexpected(qualification_error());
-			struct stat before
-			{
-			};
+			struct stat before{};
 			if (::fstat(descriptor.get(), &before) != 0 || !S_ISREG(before.st_mode) ||
 				before.st_size < 0 ||
 				static_cast<std::uint64_t>(before.st_size) > maximum_fixture_file_bytes)
@@ -658,9 +694,7 @@ namespace cxxlens::sdk
 					return unexpected(qualification_error());
 				offset += static_cast<std::uint64_t>(count);
 			}
-			struct stat after
-			{
-			};
+			struct stat after{};
 			if (::fstat(descriptor.get(), &after) != 0 || !same_object(before, after) ||
 				before.st_size != after.st_size)
 				return unexpected(qualification_error());
@@ -685,9 +719,7 @@ namespace cxxlens::sdk
 				source_parent, source_leaf, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)};
 			if (!source)
 				return unexpected(qualification_error());
-			struct stat source_before
-			{
-			};
+			struct stat source_before{};
 			if (::fstat(source.get(), &source_before) != 0 || !S_ISREG(source_before.st_mode) ||
 				source_before.st_size < 0 ||
 				static_cast<std::uint64_t>(source_before.st_size) > maximum_fixture_file_bytes)
@@ -731,12 +763,8 @@ namespace cxxlens::sdk
 			}
 			if (::fdatasync(destination.get()) != 0)
 				return unexpected(qualification_error());
-			struct stat source_after
-			{
-			};
-			struct stat destination_status
-			{
-			};
+			struct stat source_after{};
+			struct stat destination_status{};
 			if (::fstat(source.get(), &source_after) != 0 ||
 				::fstat(destination.get(), &destination_status) != 0 ||
 				!same_object(source_before, source_after) ||
@@ -889,9 +917,7 @@ namespace cxxlens::sdk
 				owned_descriptor parent{open_directory(parent_path.c_str())};
 				if (!parent)
 					return unexpected(qualification_error());
-				struct stat parent_status
-				{
-				};
+				struct stat parent_status{};
 				if (::fstat(parent.get(), &parent_status) != 0 || !S_ISDIR(parent_status.st_mode) ||
 					parent_identity(parent_status) != expected_parent)
 					return unexpected(qualification_error());
@@ -919,9 +945,7 @@ namespace cxxlens::sdk
 						(void)::unlinkat(parent.get(), leaf.c_str(), AT_REMOVEDIR);
 						return unexpected(qualification_error());
 					}
-					struct stat root_status
-					{
-					};
+					struct stat root_status{};
 					if (::fstat(root.get(), &root_status) != 0 || !S_ISDIR(root_status.st_mode) ||
 						(root_status.st_mode & 0777) != 0700)
 					{
@@ -1010,15 +1034,9 @@ namespace cxxlens::sdk
 			}
 			[[nodiscard]] result<void> recheck_namespace_entry() const
 			{
-				struct stat retained_root
-				{
-				};
-				struct stat named_root
-				{
-				};
-				struct stat current_parent
-				{
-				};
+				struct stat retained_root{};
+				struct stat named_root{};
+				struct stat current_parent{};
 				if (!root_ || !parent_ || ::fstat(root_.get(), &retained_root) != 0 ||
 					::fstat(parent_.get(), &current_parent) != 0 ||
 					::fstatat(parent_.get(), leaf_.c_str(), &named_root, AT_SYMLINK_NOFOLLOW) !=
@@ -1075,16 +1093,12 @@ namespace cxxlens::sdk
 				}
 				if (::fsync(parent_.get()) != 0)
 					return unexpected(qualification_error());
-				struct stat current_parent
-				{
-				};
+				struct stat current_parent{};
 				if (::fstat(parent_.get(), &current_parent) != 0 ||
 					!same_object(parent_status_, current_parent) ||
 					parent_identity(current_parent) != parent_identity(parent_status_))
 					return unexpected(qualification_error());
-				struct stat removed
-				{
-				};
+				struct stat removed{};
 				if (::fstatat(parent_.get(), leaf_.c_str(), &removed, AT_SYMLINK_NOFOLLOW) == 0 ||
 					errno != ENOENT)
 					return unexpected(qualification_error());
@@ -1110,9 +1124,7 @@ namespace cxxlens::sdk
 			owned_descriptor root_;
 			std::string parent_path_;
 			std::string leaf_;
-			struct stat parent_status_
-			{
-			};
+			struct stat parent_status_{};
 			filesystem_profile profile_;
 			bool namespace_removed_{};
 			bool cleaned_{};
@@ -1960,9 +1972,7 @@ namespace cxxlens::sdk
 				if (!deadman_lock)
 					return unexpected(
 						qualification_error("source-shm-readonly-qualification-route-dms-open"));
-				struct flock lock
-				{
-				};
+				struct flock lock{};
 				lock.l_type = F_RDLCK;
 				lock.l_whence = SEEK_SET;
 				lock.l_start = unix_shm_deadman_switch_offset;

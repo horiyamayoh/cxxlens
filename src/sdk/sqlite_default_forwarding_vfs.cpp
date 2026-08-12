@@ -4735,8 +4735,9 @@ namespace cxxlens::sdk
 				std::optional<sqlite_shm_reader_native_ok_projection_permit> projection_permit;
 				if (source_shm_native_ok_projection_production_activation)
 				{
-					auto prepared_projection = context->registry->prepare_reader_native_ok_projection(
-						*context->family, *inflight, map_request);
+					auto prepared_projection =
+						context->registry->prepare_reader_native_ok_projection(
+							*context->family, *inflight, map_request);
 					if (!prepared_projection)
 					{
 						mark_source_shm_terminal_failure(file);
@@ -4745,8 +4746,8 @@ namespace cxxlens::sdk
 					// Stage B can recheck the retained namespace.  Do not hold the registry mutex
 					// across that filesystem work: stage A sealed its one-shot reservation and
 					// stage C will revalidate the process/family pin before publication.
-					auto borrowed = context->registry->mint_reader_native_ok_projection(
-						*prepared_projection);
+					auto borrowed =
+						context->registry->mint_reader_native_ok_projection(*prepared_projection);
 					if (!borrowed)
 					{
 						mark_source_shm_terminal_failure(file);

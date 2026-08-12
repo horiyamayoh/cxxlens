@@ -836,8 +836,8 @@ namespace cxxlens::sdk
 			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
 		[[nodiscard]] result<sqlite_shm_writer_reader_borrow_mint_capability>
 		reserve_reader_borrow_mint(std::uint64_t map_token,
-							  std::uint64_t generation,
-							  std::uint64_t holder_token) const;
+								   std::uint64_t generation,
+								   std::uint64_t holder_token) const;
 		[[nodiscard]] std::optional<sqlite_writer_shm_generation_epoch_authority>
 		generation_epoch_authority() const noexcept;
 		void bind_generation_epoch_authority(

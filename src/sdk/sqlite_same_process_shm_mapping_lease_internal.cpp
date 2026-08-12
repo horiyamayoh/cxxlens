@@ -173,7 +173,7 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] bool same_mapping_extent(const sqlite_shm_mapping_tuple& left,
-			const sqlite_shm_mapping_tuple& right) noexcept
+											   const sqlite_shm_mapping_tuple& right) noexcept
 		{
 			return left.page_number == right.page_number && left.page_size == right.page_size &&
 				left.byte_offset == right.byte_offset && left.byte_count == right.byte_count &&
@@ -2840,8 +2840,7 @@ namespace cxxlens::sdk
 				{
 					// Allocate the opaque install/join nonce before the lease mutex.
 					sqlite_backend_opaque_identity generation_epoch_nonce;
-					generation_epoch_nonce.profile =
-						"sqlite-shm-writer-generation-epoch-join.v1";
+					generation_epoch_nonce.profile = "sqlite-shm-writer-generation-epoch-join.v1";
 					generation_epoch_nonce.bytes.reserve(16U);
 					std::scoped_lock lock{mutex_};
 					if (authority != nullptr && !authority->valid_for_predelegation(request))
@@ -2945,8 +2944,7 @@ namespace cxxlens::sdk
 						prepared_generation_controller;
 					if (authority != nullptr)
 					{
-						prepared_generation_controller =
-							authority->generation_epoch_authority();
+						prepared_generation_controller = authority->generation_epoch_authority();
 						if (!prepared_generation_controller)
 							return sqlite_shm_unexpected(ambiguous());
 						if (generation_)
@@ -2997,12 +2995,13 @@ namespace cxxlens::sdk
 										std::nullopt,
 										route,
 										positive_gate_token,
-									generation_epoch_join,
-									std::move(generation_epoch_nonce),
-									reserved_generation,
-									installation_token});
+										generation_epoch_join,
+										std::move(generation_epoch_nonce),
+										reserved_generation,
+										installation_token});
 					if (authority != nullptr &&
-						generation_epoch_join == writer_generation_epoch_join_phase::installer_reserved)
+						generation_epoch_join ==
+							writer_generation_epoch_join_phase::installer_reserved)
 					{
 						generation_epoch_authority_record cell;
 						cell.phase = generation_epoch_authority_phase::installing;
@@ -3013,7 +3012,8 @@ namespace cxxlens::sdk
 					}
 					try
 					{
-						if (std::exchange(fail_next_writer_attachment_registration_for_testing_, false))
+						if (std::exchange(fail_next_writer_attachment_registration_for_testing_,
+										  false))
 							throw std::bad_alloc{};
 						register_attachment_member_locked(
 							request.attachment, *token, authority != nullptr);
@@ -3104,7 +3104,7 @@ namespace cxxlens::sdk
 					{
 						std::scoped_lock lock{mutex_};
 						if (installing_token_rollback)
-						clear_installing_epoch_authority_locked(*installing_token_rollback);
+							clear_installing_epoch_authority_locked(*installing_token_rollback);
 						if (writer_token_rollback)
 						{
 							auto writer = find_by_token(writers_, *writer_token_rollback);
@@ -3591,7 +3591,8 @@ namespace cxxlens::sdk
 							writer_generation_epoch_join_phase::join_reserved)
 						return sqlite_shm_unexpected(rejection(
 							sqlite_shm_lease_rejection_reason::pending_or_eligibility_only,
-							sqlite_shm_lease_recovery_action::await_complete_attachment_gate_boundary));
+							sqlite_shm_lease_recovery_action::
+								await_complete_attachment_gate_boundary));
 
 					generation_record candidate;
 					if (generation_)
@@ -3601,9 +3602,9 @@ namespace cxxlens::sdk
 							writer->generation_epoch_reserved_generation != generation_->value ||
 							writer->generation_epoch_nonce.profile !=
 								"sqlite-shm-writer-generation-epoch-join.v1")
-							return sqlite_shm_unexpected(rejection(
-								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
-								cleanup_action));
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										  cleanup_action));
 						candidate = *generation_;
 						if (candidate.epoch_authority.phase !=
 								generation_epoch_authority_phase::live ||
@@ -3615,17 +3616,18 @@ namespace cxxlens::sdk
 						if (!joining_controller ||
 							(candidate.epoch_authority.target_profile ==
 								 generation_epoch_target_profile::target_bound &&
-							 (!joining_controller->reader_borrow_capable() || !receipt.target_identity() ||
+							 (!joining_controller->reader_borrow_capable() ||
+							  !receipt.target_identity() ||
 							  !candidate.epoch_authority.controller->matches_canonical_target(
 								  *receipt.target_identity()))) ||
 							(candidate.epoch_authority.target_profile ==
 								 generation_epoch_target_profile::targetless_generic &&
 							 joining_controller->reader_borrow_capable()) ||
 							candidate.epoch_authority.target_profile ==
-								 generation_epoch_target_profile::empty)
-							return sqlite_shm_unexpected(rejection(
-								sqlite_shm_lease_rejection_reason::receipt_mismatch,
-								cleanup_action));
+								generation_epoch_target_profile::empty)
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										  cleanup_action));
 						if (!join_mapping(candidate, receipt))
 							return sqlite_shm_unexpected(
 								rejection(sqlite_shm_lease_rejection_reason::mapping_mismatch,
@@ -3639,9 +3641,9 @@ namespace cxxlens::sdk
 							writer->generation_epoch_installation_token != writer->token ||
 							writer->generation_epoch_nonce.profile !=
 								"sqlite-shm-writer-generation-epoch-join.v1")
-							return sqlite_shm_unexpected(rejection(
-								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
-								cleanup_action));
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										  cleanup_action));
 						candidate.phase = sqlite_shm_mapping_generation_phase::live;
 						candidate.sealed_shm_size = receipt.mapping().sealed_shm_size;
 						candidate.pages.push_back(receipt.mapping());
@@ -3658,9 +3660,9 @@ namespace cxxlens::sdk
 							receipt.target_identity() && controller.reader_borrow_capable();
 						if (target_bound ? !controller.bind_canonical_target(receipt)
 										 : !controller.bind_generic_custody())
-							return sqlite_shm_unexpected(rejection(
-								sqlite_shm_lease_rejection_reason::receipt_mismatch,
-								cleanup_action));
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										  cleanup_action));
 						candidate.epoch_authority.phase = generation_epoch_authority_phase::live;
 						candidate.epoch_authority.controller.emplace(std::move(controller));
 						candidate.epoch_authority.target_profile = target_bound
@@ -3926,14 +3928,15 @@ namespace cxxlens::sdk
 								[this](const std::list<writer_record>::iterator writer)
 								{
 									return writer->generation_epoch_join ==
-											writer_generation_epoch_join_phase::join_reserved &&
-										writer->generation_epoch_reserved_generation == generation_->value &&
+										writer_generation_epoch_join_phase::join_reserved &&
+										writer->generation_epoch_reserved_generation ==
+										generation_->value &&
 										writer->generation_epoch_nonce.profile ==
-											"sqlite-shm-writer-generation-epoch-join.v1";
+										"sqlite-shm-writer-generation-epoch-join.v1";
 								}))
-							return sqlite_shm_unexpected(rejection(
-								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
-								cleanup_action));
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										  cleanup_action));
 						candidate = *generation_;
 						if (candidate.epoch_authority.phase !=
 								generation_epoch_authority_phase::live ||
@@ -3958,16 +3961,18 @@ namespace cxxlens::sdk
 										return !member_controller->reader_borrow_capable();
 									return member_controller->reader_borrow_capable() &&
 										writer->receipt->target_identity() &&
-										candidate.epoch_authority.controller->matches_canonical_target(
-											*writer->receipt->target_identity());
+										candidate.epoch_authority.controller
+											->matches_canonical_target(
+												*writer->receipt->target_identity());
 								}))
-							return sqlite_shm_unexpected(rejection(
-								sqlite_shm_lease_rejection_reason::receipt_mismatch,
-								cleanup_action));
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										  cleanup_action));
 					}
 					else
 					{
-						const auto installers_reserved = installing_epoch_authority_ &&
+						const auto installers_reserved =
+							installing_epoch_authority_ &&
 							installing_epoch_authority_->phase ==
 								generation_epoch_authority_phase::installing &&
 							installing_epoch_authority_->controller &&
@@ -3976,43 +3981,48 @@ namespace cxxlens::sdk
 								[this](const std::list<writer_record>::iterator writer)
 								{
 									return (writer->generation_epoch_join ==
-											writer_generation_epoch_join_phase::installer_reserved ||
-										writer->generation_epoch_join ==
-											writer_generation_epoch_join_phase::join_reserved) &&
+												writer_generation_epoch_join_phase::
+													installer_reserved ||
+											writer->generation_epoch_join ==
+												writer_generation_epoch_join_phase::
+													join_reserved) &&
 										writer->generation_epoch_reserved_generation == 0U &&
 										writer->generation_epoch_installation_token ==
-											installing_epoch_authority_->installation_map_token &&
+										installing_epoch_authority_->installation_map_token &&
 										writer->generation_epoch_nonce.profile ==
-											"sqlite-shm-writer-generation-epoch-join.v1";
+										"sqlite-shm-writer-generation-epoch-join.v1";
 								});
 						if (!installers_reserved)
-							return sqlite_shm_unexpected(rejection(
-								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
-								cleanup_action));
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+										  cleanup_action));
 						auto controller = *installing_epoch_authority_->controller;
 						const auto target_bound = selected_writers.front()->receipt &&
 							selected_writers.front()->receipt->target_identity() &&
 							controller.reader_borrow_capable();
 						if (!selected_writers.front()->receipt ||
-							(target_bound
-								 ? !controller.bind_canonical_target(*selected_writers.front()->receipt)
-								 : !controller.bind_generic_custody()) ||
+							(target_bound ? !controller.bind_canonical_target(
+												*selected_writers.front()->receipt)
+										  : !controller.bind_generic_custody()) ||
 							!std::ranges::all_of(
 								selected_writers,
-								[&controller, target_bound](const std::list<writer_record>::iterator writer)
+								[&controller,
+								 target_bound](const std::list<writer_record>::iterator writer)
 								{
 									const auto member_controller = writer->member_authority
 										? writer->member_authority->generation_epoch_authority()
 										: std::nullopt;
 									return writer->receipt && member_controller &&
-										member_controller->reader_borrow_capable() == target_bound &&
-										(!target_bound || (writer->receipt->target_identity() &&
-											controller.matches_canonical_target(
-												*writer->receipt->target_identity())));
+										member_controller->reader_borrow_capable() ==
+										target_bound &&
+										(!target_bound ||
+										 (writer->receipt->target_identity() &&
+										  controller.matches_canonical_target(
+											  *writer->receipt->target_identity())));
 								}))
-							return sqlite_shm_unexpected(rejection(
-								sqlite_shm_lease_rejection_reason::receipt_mismatch,
-								cleanup_action));
+							return sqlite_shm_unexpected(
+								rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										  cleanup_action));
 						candidate.epoch_authority.phase = generation_epoch_authority_phase::live;
 						candidate.epoch_authority.controller.emplace(std::move(controller));
 						candidate.epoch_authority.target_profile = target_bound
@@ -4643,7 +4653,8 @@ namespace cxxlens::sdk
 							completed_holders.splice(completed_holders.end(), holders_, completed);
 						}
 						if (installing_epoch_authority_ &&
-							prefix_contains_token(attachment->sealed_complete_prefix,
+							prefix_contains_token(
+								attachment->sealed_complete_prefix,
 								installing_epoch_authority_->installation_map_token))
 							installing_epoch_authority_.reset();
 						if (!registry_member_sticky_quarantine_ &&
@@ -8731,13 +8742,13 @@ namespace cxxlens::sdk
 						generation_->epoch_authority.target_profile !=
 							generation_epoch_target_profile::target_bound ||
 						!generation_->epoch_authority.controller->valid())
-						return sqlite_shm_unexpected(rejection(
-							sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
-							sqlite_shm_lease_recovery_action::deny_before_native_map));
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									  sqlite_shm_lease_recovery_action::deny_before_native_map));
 					if (requested_target->sealed_shm_size != generation_->sealed_shm_size)
-						return sqlite_shm_unexpected(rejection(
-							sqlite_shm_lease_rejection_reason::receipt_mismatch,
-							sqlite_shm_lease_recovery_action::deny_before_native_map));
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									  sqlite_shm_lease_recovery_action::deny_before_native_map));
 
 					// Holders are page-support and retirement witnesses only.  The generation
 					// owns exactly one canonical borrow minter, so multiple distinct writer
@@ -8752,7 +8763,7 @@ namespace cxxlens::sdk
 							!holder->member_authority ||
 							holder->map_receipt.request().family != request.family ||
 							!same_mapping_extent(holder->map_receipt.mapping(),
-								map->expected_mapping) ||
+												 map->expected_mapping) ||
 							holder->map_receipt.request().page_number != request.page_number ||
 							holder->map_receipt.request().page_size != request.page_size ||
 							!holder_target ||
@@ -8772,9 +8783,9 @@ namespace cxxlens::sdk
 							!holder_controller->same_custody_as(
 								*generation_->epoch_authority.controller) ||
 							holder->member_authority->validate_pending_authority(
-									registry_family,
-									holder->map_receipt.request(),
-									holder->map_receipt) !=
+								registry_family,
+								holder->map_receipt.request(),
+								holder->map_receipt) !=
 								detail::sqlite_shm_writer_pending_authority_status::exact)
 							return sqlite_shm_unexpected(rejection(
 								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
@@ -9193,8 +9204,8 @@ namespace cxxlens::sdk
 				sqlite_shm_registry_family_pin* registry_family = nullptr,
 				std::optional<sqlite_shm_reader_map_predelegate_authority>* completed_predelegate =
 					nullptr,
-					sqlite_shm_reader_native_ok_projection_permit* native_ok_projection_permit =
-						nullptr)
+				sqlite_shm_reader_native_ok_projection_permit* native_ok_projection_permit =
+					nullptr)
 			{
 				scoped_projection_borrow_release_batch projection_borrows{
 					emergency_quarantine_, active_projection_borrow_release_batch_};
@@ -9300,11 +9311,16 @@ namespace cxxlens::sdk
 							// writer-held borrowed epoch.  Commit must therefore authenticate
 							// against that already attached exact target, not the original local
 							// request target.  A/C keep the request, receipt, nonce, and every
-							// non-namespace target field exact before this boundary.
+							// non-namespace target field exact before this boundary. The holder's
+							// own namespace epoch may differ from the generation's borrowed epoch.
+							const auto holder_controller =
+								holder->member_authority->generation_epoch_authority();
 							return map_attempt->native_ok_projection_exact_target &&
-								holder->member_authority->target_identity_matches(
-									*map_attempt->native_ok_projection_exact_target,
-									holder->map_receipt);
+								generation_->epoch_authority.controller && holder_controller &&
+								holder_controller->same_custody_as(
+									*generation_->epoch_authority.controller) &&
+								holder_controller->matches_canonical_target(
+									*map_attempt->native_ok_projection_exact_target);
 						}();
 					}();
 					if (map_attempt->native_ok_projection_permit_armed != projection_route ||
@@ -13420,7 +13436,7 @@ namespace cxxlens::sdk
 							   const bool registry_route = false,
 							   const bool typed_group_request = false,
 							   const int caller_delete_flag = 0,
-				const int delegated_delete_flag = 0) noexcept
+							   const int delegated_delete_flag = 0) noexcept
 			{
 				scoped_projection_borrow_release_batch projection_borrows{
 					emergency_quarantine_, active_projection_borrow_release_batch_};
@@ -13672,7 +13688,7 @@ namespace cxxlens::sdk
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_unmap_cut_result>
 			poll_reader_unmap_cut(sqlite_shm_reader_unmap_obligation& unmap,
 								  const sqlite_shm_callback_execution_receipt& callback,
-				  const bool registry_route = false) noexcept
+								  const bool registry_route = false) noexcept
 			{
 				scoped_projection_borrow_release_batch projection_borrows{
 					emergency_quarantine_, active_projection_borrow_release_batch_};
@@ -13768,7 +13784,7 @@ namespace cxxlens::sdk
 			fail_reader_unmap_cut_wait(sqlite_shm_reader_unmap_obligation& unmap,
 									   const sqlite_shm_callback_execution_receipt& callback,
 									   const sqlite_shm_retirement_wait_failure failure,
-								   const bool registry_route = false) noexcept
+									   const bool registry_route = false) noexcept
 			{
 				scoped_projection_borrow_release_batch projection_borrows{
 					emergency_quarantine_, active_projection_borrow_release_batch_};
@@ -17740,7 +17756,7 @@ namespace cxxlens::sdk
 						return;
 					}
 					static_assert(std::is_nothrow_move_constructible_v<
-							  sqlite_source_shm_target_namespace_epoch_reader_borrow>);
+								  sqlite_source_shm_target_namespace_epoch_reader_borrow>);
 					record.group_token = group.token;
 					record.generation = group.generation;
 					record.borrow.emplace(std::move(*group.native_ok_projection_borrowed_epoch));
@@ -17798,8 +17814,7 @@ namespace cxxlens::sdk
 			{
 			  public:
 				explicit scoped_projection_borrow_release_batch(
-				std::atomic_bool& emergency,
-				projection_borrow_release_batch*& active) noexcept
+					std::atomic_bool& emergency, projection_borrow_release_batch*& active) noexcept
 					: batch_{emergency}, active_{active}, previous_{std::exchange(active, &batch_)}
 				{
 				}
@@ -17809,9 +17824,15 @@ namespace cxxlens::sdk
 				scoped_projection_borrow_release_batch&
 				operator=(const scoped_projection_borrow_release_batch&) = delete;
 
-				~scoped_projection_borrow_release_batch() noexcept { active_ = previous_; }
+				~scoped_projection_borrow_release_batch() noexcept
+				{
+					active_ = previous_;
+				}
 
-				[[nodiscard]] projection_borrow_release_batch& batch() noexcept { return batch_; }
+				[[nodiscard]] projection_borrow_release_batch& batch() noexcept
+				{
+					return batch_;
+				}
 
 			  private:
 				projection_borrow_release_batch batch_;
@@ -17921,8 +17942,7 @@ namespace cxxlens::sdk
 			 */
 			struct generation_epoch_authority_record
 			{
-				generation_epoch_authority_phase phase{
-					generation_epoch_authority_phase::empty};
+				generation_epoch_authority_phase phase{generation_epoch_authority_phase::empty};
 				std::optional<sqlite_writer_shm_generation_epoch_authority> controller;
 				generation_epoch_target_profile target_profile{
 					generation_epoch_target_profile::empty};
@@ -19268,7 +19288,7 @@ namespace cxxlens::sdk
 			void quarantine_locked() noexcept
 			{
 				quarantined_ = true;
-					if (generation_)
+				if (generation_)
 					generation_->phase = sqlite_shm_mapping_generation_phase::quarantined;
 			}
 
@@ -23375,14 +23395,15 @@ namespace cxxlens::sdk
 					return false;
 				const auto joining_end = joining.byte_offset + joining.byte_count;
 				if (joining_end > joining.sealed_shm_size ||
-					std::ranges::any_of(
-						generation.pages,
-						[&joining](const sqlite_shm_mapping_tuple& existing)
-						{
-							const auto existing_end = existing.byte_offset + existing.byte_count;
-							return joining.byte_offset < existing_end &&
-								existing.byte_offset < joining.byte_offset + joining.byte_count;
-						}))
+					std::ranges::any_of(generation.pages,
+										[&joining](const sqlite_shm_mapping_tuple& existing)
+										{
+											const auto existing_end =
+												existing.byte_offset + existing.byte_count;
+											return joining.byte_offset < existing_end &&
+												existing.byte_offset <
+												joining.byte_offset + joining.byte_count;
+										}))
 					return false;
 				generation.pages.push_back(joining);
 				std::ranges::sort(generation.pages,
@@ -23696,7 +23717,6 @@ namespace cxxlens::sdk
 				const auto holder_target = holder->map_receipt.target_identity();
 				if (!requested || !holder_target || map->request != reservation_state->request ||
 					!borrow.matches_projection_reservation(reservation) ||
-					borrow.identity() != holder_target->namespace_epoch ||
 					borrow.parent_namespace_identity() != requested->parent_namespace ||
 					holder_target->parent_namespace != requested->parent_namespace)
 					return sqlite_shm_unexpected(
@@ -24938,8 +24958,8 @@ namespace cxxlens::sdk
 	sqlite_shm_writer_release::~sqlite_shm_writer_release() noexcept = default;
 
 	sqlite_shm_writer_release::sqlite_shm_writer_release(sqlite_shm_writer_release&& other) noexcept
-		: decision_{std::exchange(other.decision_,
-								  sqlite_shm_writer_retirement_decision::quarantined)},
+		: decision_{
+			  std::exchange(other.decision_, sqlite_shm_writer_retirement_decision::quarantined)},
 		  generation_{std::exchange(other.generation_, 0U)}, cleanup_{std::move(other.cleanup_)}
 	{
 	}

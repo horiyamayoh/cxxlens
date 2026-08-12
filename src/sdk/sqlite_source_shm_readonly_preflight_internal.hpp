@@ -63,9 +63,10 @@ namespace cxxlens::sdk
 	 */
 	[[nodiscard]] result<std::shared_ptr<sqlite_source_shm_target_namespace_epoch>>
 	make_sqlite_source_shm_target_namespace_epoch(std::string_view logical_main_locator,
-											  const sqlite_backend_namespace_census& census);
+												  const sqlite_backend_namespace_census& census);
 
-	/** Source-private factory; the returned opaque authority can mint only through writer custody. */
+	/** Source-private factory; the returned opaque authority can mint only through writer custody.
+	 */
 	[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_borrow_minter>
 	make_sqlite_source_shm_target_namespace_epoch_borrow_minter(
 		const std::shared_ptr<sqlite_source_shm_target_namespace_epoch>& target_epoch);

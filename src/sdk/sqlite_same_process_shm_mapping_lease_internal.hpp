@@ -2519,8 +2519,8 @@ namespace cxxlens::sdk
 			std::unique_ptr<detail::sqlite_shm_reader_native_ok_projection_reservation_state>
 				state) noexcept;
 		[[nodiscard]] bool matches(std::uint64_t map_token,
-							   std::uint64_t generation,
-							   std::uint64_t holder_token) const noexcept;
+								   std::uint64_t generation,
+								   std::uint64_t holder_token) const noexcept;
 		[[nodiscard]] const sqlite_backend_opaque_identity& nonce() const noexcept;
 		[[nodiscard]] std::uint64_t map_token() const noexcept;
 		[[nodiscard]] std::uint64_t generation() const noexcept;
@@ -2528,8 +2528,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow> mint();
 		void disarm() noexcept;
 
-		std::unique_ptr<detail::sqlite_shm_reader_native_ok_projection_reservation_state>
-			state_;
+		std::unique_ptr<detail::sqlite_shm_reader_native_ok_projection_reservation_state> state_;
 	};
 
 	/**
@@ -2566,8 +2565,8 @@ namespace cxxlens::sdk
 			std::uint64_t writer_holder_token,
 			sqlite_shm_mapping_tuple expected_mapping,
 			std::optional<sqlite_shm_reader_attachment_target_identity> exact_target = std::nullopt,
-			std::optional<sqlite_source_shm_target_namespace_epoch_reader_borrow>
-				borrowed_epoch = std::nullopt) noexcept;
+			std::optional<sqlite_source_shm_target_namespace_epoch_reader_borrow> borrowed_epoch =
+				std::nullopt) noexcept;
 		void disarm() noexcept;
 
 		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;

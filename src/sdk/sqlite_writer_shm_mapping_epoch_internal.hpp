@@ -396,8 +396,8 @@ namespace cxxlens::sdk
 			const sqlite_writer_shm_generation_epoch_authority&) noexcept = default;
 		sqlite_writer_shm_generation_epoch_authority(
 			sqlite_writer_shm_generation_epoch_authority&&) noexcept;
-		sqlite_writer_shm_generation_epoch_authority& operator=(
-		const sqlite_writer_shm_generation_epoch_authority&) noexcept = default;
+		sqlite_writer_shm_generation_epoch_authority&
+		operator=(const sqlite_writer_shm_generation_epoch_authority&) noexcept = default;
 		sqlite_writer_shm_generation_epoch_authority&
 		operator=(sqlite_writer_shm_generation_epoch_authority&&) noexcept = default;
 
@@ -418,15 +418,15 @@ namespace cxxlens::sdk
 			const sqlite_shm_reader_attachment_target_identity& target) const noexcept;
 		[[nodiscard]] bool canonical_target_bound() const noexcept;
 		[[nodiscard]] bool reader_borrow_capable() const noexcept;
-		[[nodiscard]] bool same_custody_as(
-			const sqlite_writer_shm_generation_epoch_authority& other) const noexcept;
-		[[nodiscard]] bool bind_canonical_target(
-			const sqlite_shm_verified_writer_post_map_receipt& receipt) noexcept;
+		[[nodiscard]] bool
+		same_custody_as(const sqlite_writer_shm_generation_epoch_authority& other) const noexcept;
+		[[nodiscard]] bool
+		bind_canonical_target(const sqlite_shm_verified_writer_post_map_receipt& receipt) noexcept;
 		[[nodiscard]] bool bind_generic_custody() noexcept;
 		[[nodiscard]] result<sqlite_shm_writer_reader_borrow_mint_capability>
 		reserve_reader_borrow_mint(std::uint64_t map_token,
-							  std::uint64_t generation,
-							  std::uint64_t holder_token) const;
+								   std::uint64_t generation,
+								   std::uint64_t holder_token) const;
 		void invalidate_for_testing() noexcept;
 
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state_;
@@ -469,8 +469,8 @@ namespace cxxlens::sdk
 			const sqlite_writer_shm_mapping_epoch_arm& other) const noexcept;
 		[[nodiscard]] result<sqlite_shm_writer_reader_borrow_mint_capability>
 		reserve_reader_borrow_mint(std::uint64_t map_token,
-							  std::uint64_t generation,
-							  std::uint64_t holder_token) const;
+								   std::uint64_t generation,
+								   std::uint64_t holder_token) const;
 		[[nodiscard]] sqlite_writer_shm_generation_epoch_authority
 		make_generation_authority() const noexcept;
 		void invalidate_for_testing() noexcept;

@@ -67,7 +67,7 @@ namespace cxxlens::sdk
 		class sqlite_writer_shm_mapping_epoch_state;
 		class sqlite_writer_shm_generation_epoch_custody;
 		class sqlite_shm_mapping_lease_state;
-	}
+	} // namespace detail
 
 	/**
 	 * Source-private move-only custody for a reader's exact writer namespace epoch.
@@ -106,7 +106,8 @@ namespace cxxlens::sdk
 				state) noexcept;
 		[[nodiscard]] result<void> recheck() const;
 		[[nodiscard]] const sqlite_backend_opaque_identity& identity() const noexcept;
-		[[nodiscard]] const sqlite_backend_opaque_identity& parent_namespace_identity() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		parent_namespace_identity() const noexcept;
 		[[nodiscard]] result<sqlite_backend_entry_observation>
 		retained_entry(sqlite_backend_file_role role) const;
 		[[nodiscard]] bool matches_projection_reservation(
@@ -149,6 +150,8 @@ namespace cxxlens::sdk
 				state) noexcept;
 		[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
 		mint(const sqlite_shm_reader_native_ok_projection_reservation& reservation);
+		[[nodiscard]] bool retain_generation_authority() noexcept;
+		void release_generation_authority() noexcept;
 
 		std::unique_ptr<detail::sqlite_source_shm_target_namespace_epoch_borrow_minter_state>
 			state_;
