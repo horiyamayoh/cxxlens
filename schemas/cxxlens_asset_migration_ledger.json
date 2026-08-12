@@ -1,5 +1,5 @@
 {
-  "asset_count": 630,
+  "asset_count": 633,
   "assets": [
     {
       "authority": "active",
@@ -2502,6 +2502,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_bounded_claim_source.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_bounded_claim_source.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_claim_stream.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3378,6 +3392,13 @@
     {
       "authority": "active",
       "path": "src/sdk/store_backend_lifetime_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/store_claim_codec_internal.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4413,7 +4434,7 @@
     }
   ],
   "classifications": {
-    "active": 594,
+    "active": 597,
     "archived": 35,
     "generated": 1
   },

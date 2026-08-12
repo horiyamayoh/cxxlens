@@ -11,6 +11,10 @@
 
 namespace cxxlens::detail::clang22::materialization
 {
+	struct materialization_bounded_task_claims;
+	struct materialization_guarantee_authority;
+	struct materialization_producer_authority;
+
 	/** One exact count and full-projection digest in the external D3 task receipt. */
 	struct materialization_incremental_receipt_component
 	{
@@ -98,6 +102,16 @@ namespace cxxlens::detail::clang22::materialization
 	[[nodiscard]] sdk::result<std::vector<materialization_incremental_event_projection>>
 	materialization_incremental_result_event_projections(
 		const sealed_materialization_result& result, std::span<const std::string> partition_ids);
+
+	/** Enumerate exact CXLPEV01 fields from the request-bound typed claim adoption. */
+	[[nodiscard]] sdk::result<std::vector<materialization_incremental_event_projection>>
+	materialization_incremental_result_event_projections(
+		const validated_materialization_request& request,
+		std::size_t task_index,
+		const sealed_materialization_result& result,
+		std::span<const std::string> partition_ids,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority);
 
 	/** Build the receipt from an independent pre-encoder event projection enumeration. */
 	[[nodiscard]] sdk::result<materialization_incremental_task_receipt>

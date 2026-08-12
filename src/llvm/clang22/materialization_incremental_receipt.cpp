@@ -2,13 +2,18 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <ranges>
 #include <set>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
+
+#include "materialization_claims.hpp"
+#include "sdk/claim_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -313,6 +318,331 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(receipt_error(field, "count-or-digest"));
 			return {};
 		}
+
+		[[nodiscard]] sdk::result<sdk::canonical_value>
+		ordered_canonical_bytes(std::vector<std::vector<std::byte>> values)
+		{
+			std::vector<std::pair<std::vector<std::byte>, std::vector<std::byte>>> ordered;
+			ordered.reserve(values.size());
+			for (auto& value : values)
+			{
+				auto ordering = encode_value(sdk::canonical_value::from_bytes(value));
+				if (!ordering)
+					return sdk::unexpected(std::move(ordering.error()));
+				ordered.emplace_back(std::move(value), std::move(*ordering));
+			}
+			std::ranges::sort(ordered,
+							  [](const auto& left, const auto& right)
+							  {
+								  return left.second < right.second;
+							  });
+			for (std::size_t index{1U}; index < ordered.size(); ++index)
+				if (ordered[index - 1U].second == ordered[index].second)
+					return sdk::unexpected(
+						receipt_error("result-oracle", "reference-target-duplicate"));
+			std::vector<sdk::canonical_value> output;
+			output.reserve(ordered.size());
+			for (auto& value : ordered)
+				output.push_back(sdk::canonical_value::from_bytes(std::move(value.first)));
+			return tuple(std::move(output));
+		}
+
+		[[nodiscard]] sdk::canonical_value
+		claim_basis_projection(const sdk::claim_input_basis& basis)
+		{
+			if (const auto* direct = std::get_if<sdk::direct_claim_basis>(&basis))
+				return tuple({text("direct"), text(direct->basis_digest)});
+			const auto& derived = std::get<sdk::derived_claim_basis>(basis);
+			std::vector<sdk::canonical_value> consumed;
+			consumed.reserve(derived.consumed_partition_content_digests.size());
+			for (const auto& digest : derived.consumed_partition_content_digests)
+				consumed.push_back(text(digest));
+			return tuple({text("derived"),
+						  text(derived.input_snapshot),
+						  tuple(std::move(consumed)),
+						  text(derived.transform_semantics)});
+		}
+
+		[[nodiscard]] sdk::canonical_value
+		claim_occurrence_metadata_projection(const sdk::claim& value)
+		{
+			std::vector<sdk::canonical_value> modalities;
+			modalities.reserve(value.guarantee.verification_modalities.size());
+			for (const auto& modality : value.guarantee.verification_modalities)
+				modalities.push_back(text(modality));
+			return tuple({text(value.descriptor),
+						  text(value.semantic_key),
+						  text(value.interpretation),
+						  text(value.assertion),
+						  text(value.row.canonical_form()),
+						  text(value.presence.canonical_form()),
+						  u64_bytes(static_cast<std::uint64_t>(value.stage)),
+						  text(value.producer.id),
+						  text(value.producer.semantic_contract),
+						  claim_basis_projection(value.input_basis),
+						  text(value.provenance_root),
+						  text(value.guarantee.approximation),
+						  text(value.guarantee.scope),
+						  text(value.guarantee.assumptions),
+						  tuple(std::move(modalities))});
+		}
+
+		[[nodiscard]] sdk::canonical_value detached_cell_projection(const sdk::detached_cell& cell)
+		{
+			if (cell.state == sdk::cell_state::absent)
+				return sdk::canonical_value::null();
+			if (cell.state == sdk::cell_state::unknown)
+				return tuple({text("unknown"), text(cell.unknown_reason.value_or("unspecified"))});
+			if (!cell.value)
+				return sdk::canonical_value::null();
+			return std::visit(
+				[](const auto& value) -> sdk::canonical_value
+				{
+					using value_type = std::decay_t<decltype(value)>;
+					if constexpr (std::is_same_v<value_type, bool>)
+						return sdk::canonical_value::from_boolean(value);
+					else if constexpr (std::is_same_v<value_type, std::int64_t>)
+						return sdk::canonical_value::from_integer(value);
+					else if constexpr (std::is_same_v<value_type, std::uint64_t>)
+						return tuple({text("unsigned"), text(std::to_string(value))});
+					else if constexpr (std::is_same_v<value_type, std::string>)
+						return text(value);
+					else
+						return sdk::canonical_value::from_bytes(value);
+				},
+				*cell.value);
+		}
+
+		[[nodiscard]] sdk::result<sdk::canonical_value>
+		claim_content_projection(const sdk::claim& value, const sdk::relation_engine& engine)
+		{
+			auto relation = engine.require_id(value.descriptor);
+			if (!relation)
+				return sdk::unexpected(std::move(relation.error()));
+			std::vector<std::string> payload_columns;
+			for (const auto& column : relation->descriptor().columns)
+				if (column.role == sdk::column_role::authoritative_payload)
+					payload_columns.push_back(column.id);
+			std::ranges::sort(payload_columns);
+			std::vector<sdk::canonical_value> payload;
+			payload.reserve(payload_columns.size());
+			for (const auto& column : payload_columns)
+			{
+				const auto found = value.row.cells.find(column);
+				payload.push_back(found == value.row.cells.end()
+									  ? sdk::canonical_value::null()
+									  : detached_cell_projection(found->second));
+			}
+			return tuple({text(value.assertion), tuple(std::move(payload))});
+		}
+
+		[[nodiscard]] sdk::canonical_value annotation_projection(const sdk::claim& value)
+		{
+			std::vector<sdk::canonical_value> modalities;
+			modalities.reserve(value.guarantee.verification_modalities.size());
+			for (const auto& modality : value.guarantee.verification_modalities)
+				modalities.push_back(text(modality));
+			return tuple({text(value.row.canonical_form()),
+						  text(value.presence.canonical_form()),
+						  text(value.interpretation),
+						  text(value.semantic_key),
+						  text(value.assertion),
+						  text(value.content),
+						  text(value.producer.id),
+						  text(value.producer.semantic_contract),
+						  text(value.provenance_root),
+						  text(value.guarantee.approximation),
+						  text(value.guarantee.scope),
+						  text(value.guarantee.assumptions),
+						  tuple(std::move(modalities))});
+		}
+
+		[[nodiscard]] sdk::canonical_value
+		coverage_projection(const sdk::snapshot_coverage_unit& value)
+		{
+			return tuple(
+				{text(value.domain), text(value.key), text(value.state), text(value.reason)});
+		}
+
+		[[nodiscard]] sdk::canonical_value
+		unresolved_projection(const sdk::unresolved_reference& value)
+		{
+			std::vector<sdk::canonical_value> columns;
+			columns.reserve(value.source_columns.size());
+			for (const auto& column : value.source_columns)
+				columns.push_back(text(column));
+			return tuple({text(value.source_assertion),
+						  text(value.source_relation),
+						  text(value.target_relation),
+						  tuple(std::move(columns)),
+						  text(value.reason)});
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::string>>
+		decode_reference_elements(const sdk::claim& source,
+								  const sdk::relation_reference_descriptor& reference)
+		{
+			if (reference.source_columns.empty())
+				return sdk::unexpected(receipt_error("result-oracle", "reference-source-columns"));
+			const auto found = source.row.cells.find(reference.source_columns.front());
+			if (found == source.row.cells.end() || !found->second.value)
+				return std::vector<std::string>{};
+			const auto* encoded = std::get_if<std::vector<std::byte>>(&*found->second.value);
+			if (encoded == nullptr)
+				return sdk::unexpected(receipt_error("result-oracle", "reference-container-type"));
+			std::vector<std::string> output;
+			for (std::size_t offset{}; offset < encoded->size();)
+			{
+				if (encoded->size() - offset < sizeof(std::uint32_t))
+					return sdk::unexpected(
+						receipt_error("result-oracle", "reference-container-frame"));
+				std::uint32_t length{};
+				for (std::size_t index{}; index < sizeof(length); ++index)
+					length |= std::to_integer<std::uint32_t>((*encoded)[offset + index])
+						<< static_cast<unsigned>(index * 8U);
+				offset += sizeof(length);
+				if (length == 0U || length > encoded->size() - offset)
+					return sdk::unexpected(
+						receipt_error("result-oracle", "reference-container-frame"));
+				output.emplace_back(reinterpret_cast<const char*>(encoded->data() + offset),
+									length);
+				offset += length;
+			}
+			return output;
+		}
+
+		[[nodiscard]] bool reference_matches(const sdk::claim& source,
+											 const sdk::claim& target,
+											 const sdk::relation_reference_descriptor& reference,
+											 const std::optional<std::string_view> element,
+											 const sdk::relation_engine& engine)
+		{
+			auto target_descriptor = engine.require_id(target.descriptor);
+			if (!target_descriptor ||
+				target_descriptor->descriptor().name != reference.target_relation ||
+				source.interpretation != target.interpretation ||
+				source.presence.universe != target.presence.universe ||
+				!std::ranges::includes(target.presence.fragments, source.presence.fragments))
+				return false;
+			if (reference.source_columns.size() != reference.target_columns.size())
+				return false;
+			for (std::size_t index{}; index < reference.source_columns.size(); ++index)
+			{
+				const auto left = source.row.cells.find(reference.source_columns[index]);
+				const auto right = target.row.cells.find(reference.target_columns[index]);
+				if (left == source.row.cells.end() || right == target.row.cells.end() ||
+					left->second.state != sdk::cell_state::present ||
+					right->second.state != sdk::cell_state::present || !left->second.value ||
+					!right->second.value)
+					return false;
+				if (reference.container_elements)
+				{
+					if (!element)
+						return false;
+					const auto* target_value = std::get_if<std::string>(&*right->second.value);
+					if (target_value == nullptr || *target_value != *element)
+						return false;
+				}
+				else if (*left->second.value != *right->second.value)
+					return false;
+			}
+			return true;
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::vector<std::byte>>>
+		reference_targets(const sdk::claim& source,
+						  const sdk::relation_reference_descriptor& reference,
+						  const std::span<const sdk::claim* const> claims,
+						  const sdk::relation_engine& engine)
+		{
+			if (std::ranges::any_of(reference.source_columns,
+									[&](const auto& column)
+									{
+										const auto found = source.row.cells.find(column);
+										return found == source.row.cells.end() ||
+											found->second.state == sdk::cell_state::absent;
+									}))
+				return std::vector<std::vector<std::byte>>{};
+
+			std::vector<std::optional<std::string_view>> elements;
+			if (reference.container_elements)
+			{
+				auto decoded = decode_reference_elements(source, reference);
+				if (!decoded)
+					return sdk::unexpected(std::move(decoded.error()));
+				for (const auto& value : *decoded)
+					elements.emplace_back(value);
+				if (elements.empty())
+					return sdk::unexpected(
+						receipt_error("result-oracle", "reference-container-empty"));
+			}
+			else
+				elements.emplace_back(std::nullopt);
+
+			std::vector<std::vector<std::byte>> output;
+			for (const auto element : elements)
+			{
+				const auto found = std::ranges::find_if(
+					claims,
+					[&](const sdk::claim* target)
+					{
+						return reference_matches(source, *target, reference, element, engine);
+					});
+				if (found == claims.end())
+					return sdk::unexpected(
+						receipt_error("result-oracle", "reference-target-missing"));
+				auto occurrence = sdk::detail::claim_occurrence_projection(**found);
+				if (!occurrence)
+					return sdk::unexpected(std::move(occurrence.error()));
+				output.push_back(std::move(*occurrence));
+			}
+			std::ranges::sort(output);
+			if (std::ranges::adjacent_find(output) != output.end())
+				return sdk::unexpected(
+					receipt_error("result-oracle", "reference-target-duplicate"));
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<
+			std::pair<std::vector<std::vector<std::byte>>, std::vector<std::vector<std::byte>>>>
+		claim_reference_targets(const sdk::claim& source,
+								const std::span<const sdk::claim* const> claims,
+								const sdk::relation_engine& engine)
+		{
+			auto descriptor = engine.require_id(source.descriptor);
+			if (!descriptor)
+				return sdk::unexpected(std::move(descriptor.error()));
+			std::vector<std::vector<std::byte>> hard;
+			std::vector<std::vector<std::byte>> soft;
+			for (const auto& reference : descriptor->descriptor().references)
+			{
+				auto targets = reference_targets(source, reference, claims, engine);
+				if (!targets)
+					return sdk::unexpected(std::move(targets.error()));
+				auto& destination =
+					reference.strength == sdk::reference_strength::hard ? hard : soft;
+				destination.insert(destination.end(),
+								   std::make_move_iterator(targets->begin()),
+								   std::make_move_iterator(targets->end()));
+			}
+			return std::pair{std::move(hard), std::move(soft)};
+		}
+
+		[[nodiscard]] sdk::result<std::string>
+		exact_partition_digest(const std::string_view domain,
+							   const std::string_view partition_id,
+							   const std::vector<std::vector<std::byte>>& projections)
+		{
+			std::vector<sdk::canonical_value> values;
+			values.reserve(projections.size());
+			for (const auto& projection : projections)
+				values.push_back(bytes(projection));
+			return semantic_projection(
+				domain,
+				tuple({text(partition_id),
+					   u64_bytes(static_cast<std::uint64_t>(projections.size())),
+					   tuple(std::move(values))}));
+		}
 	} // namespace
 
 	sdk::result<std::vector<std::byte>> materialization_incremental_full_event_projection(
@@ -589,6 +919,414 @@ namespace cxxlens::detail::clang22::materialization
 		catch (const std::bad_alloc&)
 		{
 			return sdk::unexpected(receipt_error("result-oracle", "allocation"));
+		}
+	}
+
+	sdk::result<std::vector<materialization_incremental_event_projection>>
+	materialization_incremental_result_event_projections(
+		const validated_materialization_request& request,
+		const std::size_t task_index,
+		const sealed_materialization_result& result,
+		const std::span<const std::string> partition_ids,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority)
+	{
+		try
+		{
+			if (task_index >= request.tasks.size() ||
+				(!partition_ids.empty() &&
+				 (!std::ranges::is_sorted(partition_ids) ||
+				  std::ranges::adjacent_find(partition_ids) != partition_ids.end())))
+				return sdk::unexpected(receipt_error("bounded-result-oracle", "identity-or-order"));
+			for (const auto& partition_id : partition_ids)
+				if (!sdk::validate_strong_id(partition_id))
+					return sdk::unexpected(receipt_error("bounded-result-oracle", "partition-id"));
+
+			auto bounded = construct_materialization_bounded_task_claims(
+				request, task_index, result, producer_authority, guarantee_authority);
+			if (!bounded)
+				return sdk::unexpected(std::move(bounded.error()));
+			const auto task_id = request.tasks[task_index].provider_task_id;
+			if (result.provider_task_id() != task_id)
+				return sdk::unexpected(receipt_error("bounded-result-oracle", "task-id"));
+
+			std::map<std::string, const materialization_claim_partition*, std::less<>> partitions;
+			std::vector<const sdk::claim*> all_claims;
+			std::map<std::string, std::pair<std::string, std::string>, std::less<>> claim_locations;
+			std::map<std::string, const sdk::claim*, std::less<>> claims_by_ref;
+			for (const auto& partition : bounded->partitions)
+			{
+				if (!partitions.emplace(partition.manifest.partition_id, &partition).second)
+					return sdk::unexpected(
+						receipt_error("bounded-result-oracle", "duplicate-partition"));
+				if (partition.stored_claim_refs.size() != partition.draft.claims.size())
+					return sdk::unexpected(
+						receipt_error("bounded-result-oracle", "claim-reference-census"));
+				for (std::size_t index{}; index < partition.draft.claims.size(); ++index)
+				{
+					const auto& claim = partition.draft.claims[index];
+					all_claims.push_back(&claim);
+					const auto& claim_ref = partition.stored_claim_refs[index];
+					const auto [found, inserted] = claim_locations.emplace(
+						claim_ref, std::pair{partition.manifest.partition_id, claim.content});
+					if (!inserted &&
+						found->second != std::pair{partition.manifest.partition_id, claim.content})
+						return sdk::unexpected(
+							receipt_error("bounded-result-oracle", "claim-reference-alias"));
+					claims_by_ref.emplace(claim_ref, &claim);
+				}
+			}
+			std::vector<std::string> actual_partition_ids;
+			actual_partition_ids.reserve(partitions.size());
+			for (const auto& [partition_id, partition] : partitions)
+			{
+				(void)partition;
+				actual_partition_ids.push_back(partition_id);
+			}
+			std::vector<std::string> selected_partition_ids;
+			if (partition_ids.empty())
+			{
+				selected_partition_ids = actual_partition_ids;
+			}
+			else
+				selected_partition_ids.assign(partition_ids.begin(), partition_ids.end());
+			if (selected_partition_ids.empty() ||
+				std::ranges::adjacent_find(selected_partition_ids) !=
+					selected_partition_ids.end() ||
+				selected_partition_ids != actual_partition_ids)
+				return sdk::unexpected(receipt_error("bounded-result-oracle", "partition-census"));
+			for (const auto& partition_id : selected_partition_ids)
+				if (!partitions.contains(partition_id))
+					return sdk::unexpected(
+						receipt_error("bounded-result-oracle", "partition-missing"));
+
+			const std::span<const sdk::claim*> claim_span{all_claims};
+			std::map<std::string,
+					 std::vector<const materialization_origin_association*>,
+					 std::less<>>
+				associations_by_partition;
+			for (const auto& association : bounded->origin_associations)
+			{
+				const auto found = claim_locations.find(association.stored_claim_ref);
+				if (found == claim_locations.end())
+					return sdk::unexpected(
+						receipt_error("bounded-result-oracle", "association-orphan"));
+				associations_by_partition[found->second.first].push_back(&association);
+			}
+
+			std::vector<materialization_incremental_event_projection> output;
+			for (const auto& partition_id : selected_partition_ids)
+			{
+				const auto& partition = *partitions.at(partition_id);
+				std::vector<materialization_incremental_event_projection> partition_events;
+				const auto append_event =
+					[&](const materialization_partition_event_kind kind,
+						std::vector<sdk::canonical_value> key_values,
+						std::vector<sdk::canonical_value> payload_values) -> sdk::result<void>
+				{
+					auto key = event_tuple(std::move(key_values));
+					if (!key)
+						return sdk::unexpected(std::move(key.error()));
+					auto payload = event_tuple(std::move(payload_values));
+					if (!payload)
+						return sdk::unexpected(std::move(payload.error()));
+					partition_events.push_back({task_id,
+												std::string{partition_id},
+												kind,
+												std::move(*key),
+												std::move(*payload)});
+					return {};
+				};
+
+				if (auto valid = append_event(materialization_partition_event_kind::partition_begin,
+											  {text(task_id), text(partition_id)},
+											  {text(partition.draft.relation_descriptor_id),
+											   text(partition.draft.scope),
+											   text(partition.draft.condition.canonical_form()),
+											   text(partition.draft.interpretation),
+											   text(partition.draft.producer_semantics),
+											   text(partition.draft.producer_input_basis_digest),
+											   text(partition.draft.precision_profile),
+											   text(partition.draft.assumption_set_id)});
+					!valid)
+					return sdk::unexpected(std::move(valid.error()));
+
+				std::vector<std::pair<std::vector<std::byte>, const sdk::claim*>> ordered_claims;
+				ordered_claims.reserve(partition.draft.claims.size());
+				for (const auto& claim : partition.draft.claims)
+				{
+					auto occurrence = sdk::detail::claim_occurrence_projection(claim);
+					if (!occurrence)
+						return sdk::unexpected(std::move(occurrence.error()));
+					ordered_claims.emplace_back(std::move(*occurrence), &claim);
+				}
+				std::ranges::sort(ordered_claims,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				for (const auto& [occurrence, claim] : ordered_claims)
+				{
+					auto content_projection = claim_content_projection(*claim, request.engine);
+					if (!content_projection)
+						return sdk::unexpected(std::move(content_projection.error()));
+					auto claim_key = canonical_bytes_value(*content_projection);
+					auto claim_content = canonical_bytes_value(*content_projection);
+					auto metadata =
+						canonical_bytes_value(claim_occurrence_metadata_projection(*claim));
+					auto targets = claim_reference_targets(*claim, claim_span, request.engine);
+					if (!claim_key || !claim_content || !metadata || !targets)
+						return sdk::unexpected(!claim_key ? std::move(claim_key.error())
+												   : !claim_content
+												   ? std::move(claim_content.error())
+												   : !metadata ? std::move(metadata.error())
+															   : std::move(targets.error()));
+					auto hard = ordered_canonical_bytes(std::move(targets->first));
+					auto soft = ordered_canonical_bytes(std::move(targets->second));
+					auto functional =
+						ordered_canonical_bytes(std::vector<std::vector<std::byte>>{});
+					auto differential =
+						ordered_canonical_bytes(std::vector<std::vector<std::byte>>{});
+					if (!hard || !soft || !functional || !differential)
+						return sdk::unexpected(receipt_error("bounded-result-oracle", "claim-law"));
+					if (auto valid =
+							append_event(materialization_partition_event_kind::claim_occurrence,
+										 {text(task_id),
+										  text(partition_id),
+										  sdk::canonical_value::from_bytes(occurrence),
+										  std::move(*claim_key)},
+										 {std::move(*claim_content),
+										  std::move(*metadata),
+										  std::move(*hard),
+										  std::move(*soft),
+										  std::move(*functional),
+										  std::move(*differential)});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+
+				std::set<std::vector<std::byte>> row_identities;
+				for (const auto& claim : partition.draft.claims)
+				{
+					auto row = canonical_bytes_value(text(claim.row.canonical_form()));
+					if (!row)
+						return sdk::unexpected(std::move(row.error()));
+					if (!row_identities.insert(row->byte_string).second)
+						continue;
+					if (auto valid =
+							append_event(materialization_partition_event_kind::detached_row,
+										 {text(task_id),
+										  text(partition_id),
+										  text(claim.row.descriptor_id),
+										  *row},
+										 {*row});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+
+				std::vector<const materialization_origin_association*> associations =
+					associations_by_partition[std::string{partition_id}];
+				std::vector<
+					std::pair<std::vector<std::byte>, const materialization_origin_association*>>
+					ordered_associations;
+				ordered_associations.reserve(associations.size());
+				for (const auto* association : associations)
+				{
+					const auto claim = claims_by_ref.find(association->stored_claim_ref);
+					if (claim == claims_by_ref.end())
+						return sdk::unexpected(
+							receipt_error("bounded-result-oracle", "annotation-claim"));
+					auto annotation = canonical_bytes_value(annotation_projection(*claim->second));
+					if (!annotation)
+						return sdk::unexpected(std::move(annotation.error()));
+					ordered_associations.emplace_back(std::move(annotation->byte_string),
+													  association);
+				}
+				std::ranges::sort(ordered_associations,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				for (const auto& [annotation, association] : ordered_associations)
+				{
+					const auto claim = claims_by_ref.find(association->stored_claim_ref);
+					if (claim == claims_by_ref.end())
+						return sdk::unexpected(
+							receipt_error("bounded-result-oracle", "annotation-claim"));
+					auto order_key = canonical_bytes_value(
+						tuple({bytes(annotation), text(association->association_id)}));
+					if (!order_key)
+						return sdk::unexpected(std::move(order_key.error()));
+					if (auto valid =
+							append_event(materialization_partition_event_kind::claim_annotation,
+										 {text(task_id),
+										  text(partition_id),
+										  text(claim->second->content),
+										  std::move(*order_key)},
+										 {sdk::canonical_value::from_bytes(annotation)});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+
+				std::vector<std::pair<std::vector<std::byte>, sdk::snapshot_coverage_unit>>
+					coverage;
+				coverage.reserve(partition.draft.coverage.size());
+				for (const auto& item : partition.draft.coverage)
+				{
+					auto encoded = canonical_bytes_value(coverage_projection(item));
+					if (!encoded)
+						return sdk::unexpected(std::move(encoded.error()));
+					coverage.emplace_back(std::move(encoded->byte_string), item);
+				}
+				std::ranges::sort(coverage,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				for (const auto& [encoded, item] : coverage)
+					if (auto valid = append_event(materialization_partition_event_kind::coverage,
+												  {text(task_id),
+												   text(partition_id),
+												   sdk::canonical_value::from_bytes(encoded)},
+												  {sdk::canonical_value::from_bytes(encoded)});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+
+				std::vector<std::pair<std::vector<std::byte>, sdk::unresolved_reference>>
+					unresolved;
+				unresolved.reserve(partition.draft.unresolved.size());
+				for (const auto& item : partition.draft.unresolved)
+				{
+					auto encoded = canonical_bytes_value(unresolved_projection(item));
+					if (!encoded)
+						return sdk::unexpected(std::move(encoded.error()));
+					unresolved.emplace_back(std::move(encoded->byte_string), item);
+				}
+				std::ranges::sort(unresolved,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				for (const auto& [encoded, item] : unresolved)
+					if (auto valid = append_event(materialization_partition_event_kind::unresolved,
+												  {text(task_id),
+												   text(partition_id),
+												   sdk::canonical_value::from_bytes(encoded)},
+												  {sdk::canonical_value::from_bytes(encoded)});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+
+				std::vector<
+					std::pair<std::vector<std::byte>, materialization_incremental_event_projection>>
+					ordered_pre_end;
+				ordered_pre_end.reserve(partition_events.size());
+				std::vector<std::vector<std::byte>> claim_projections;
+				std::vector<std::vector<std::byte>> row_projections;
+				std::vector<std::vector<std::byte>> coverage_projections;
+				std::vector<std::vector<std::byte>> unresolved_projections;
+				for (auto& event : partition_events)
+				{
+					auto full = full_event_projection(event);
+					if (!full)
+						return sdk::unexpected(std::move(full.error()));
+					if (event.kind == materialization_partition_event_kind::claim_occurrence)
+						claim_projections.push_back(*full);
+					else if (event.kind == materialization_partition_event_kind::detached_row)
+						row_projections.push_back(*full);
+					else if (event.kind == materialization_partition_event_kind::coverage)
+						coverage_projections.push_back(*full);
+					else if (event.kind == materialization_partition_event_kind::unresolved)
+						unresolved_projections.push_back(*full);
+					ordered_pre_end.emplace_back(std::move(*full), std::move(event));
+				}
+				std::ranges::sort(ordered_pre_end,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				std::vector<std::vector<std::byte>> ordered_full;
+				ordered_full.reserve(ordered_pre_end.size());
+				for (const auto& entry : ordered_pre_end)
+					ordered_full.push_back(entry.first);
+				auto event_digest =
+					exact_partition_digest("cxxlens.df-0200.partition-event-full-projection.v1",
+										   partition_id,
+										   ordered_full);
+				auto claim_digest =
+					exact_partition_digest("cxxlens.df-0200.claim-occurrence-full-projection.v1",
+										   partition_id,
+										   claim_projections);
+				auto row_digest =
+					exact_partition_digest("cxxlens.df-0200.detached-row-full-projection.v1",
+										   partition_id,
+										   row_projections);
+				auto coverage_digest =
+					exact_partition_digest("cxxlens.df-0200.coverage-full-projection.v1",
+										   partition_id,
+										   coverage_projections);
+				auto unresolved_digest =
+					exact_partition_digest("cxxlens.df-0200.unresolved-full-projection.v1",
+										   partition_id,
+										   unresolved_projections);
+				if (!event_digest || !claim_digest || !row_digest || !coverage_digest ||
+					!unresolved_digest)
+					return sdk::unexpected(receipt_error("bounded-result-oracle", "digest"));
+				const auto event_count = ordered_pre_end.size() + 1U;
+				if (event_count > std::numeric_limits<std::uint64_t>::max())
+					return sdk::unexpected(receipt_error("bounded-result-oracle", "event-count"));
+				if (auto valid = append_event(
+						materialization_partition_event_kind::partition_end,
+						{text(task_id), text(partition_id)},
+						{u64_bytes(static_cast<std::uint64_t>(event_count)),
+						 u64_bytes(static_cast<std::uint64_t>(claim_projections.size())),
+						 u64_bytes(static_cast<std::uint64_t>(row_projections.size())),
+						 u64_bytes(static_cast<std::uint64_t>(coverage_projections.size())),
+						 u64_bytes(static_cast<std::uint64_t>(unresolved_projections.size())),
+						 text(*event_digest),
+						 text(*claim_digest),
+						 text(*row_digest),
+						 text(*coverage_digest),
+						 text(*unresolved_digest),
+						 text(partition.manifest.content_digest)});
+					!valid)
+					return sdk::unexpected(std::move(valid.error()));
+
+				for (auto& entry : ordered_pre_end)
+					output.push_back(std::move(entry.second));
+				output.push_back(std::move(partition_events.back()));
+			}
+
+			std::vector<
+				std::pair<std::vector<std::byte>, materialization_incremental_event_projection>>
+				ordered;
+			ordered.reserve(output.size());
+			for (auto& event : output)
+			{
+				auto full = full_event_projection(event);
+				if (!full)
+					return sdk::unexpected(std::move(full.error()));
+				ordered.emplace_back(std::move(*full), std::move(event));
+			}
+			std::ranges::sort(ordered,
+							  [](const auto& left, const auto& right)
+							  {
+								  return std::tie(left.second.partition_id, left.first) <
+									  std::tie(right.second.partition_id, right.first);
+							  });
+			for (std::size_t index{1U}; index < ordered.size(); ++index)
+				if (ordered[index - 1U].second.partition_id == ordered[index].second.partition_id &&
+					ordered[index - 1U].first == ordered[index].first)
+					return sdk::unexpected(
+						receipt_error("bounded-result-oracle", "duplicate-final-event"));
+			output.clear();
+			output.reserve(ordered.size());
+			for (auto& entry : ordered)
+				output.push_back(std::move(entry.second));
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(receipt_error("bounded-result-oracle", "allocation"));
 		}
 	}
 

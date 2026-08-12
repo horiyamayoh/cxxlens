@@ -456,15 +456,42 @@ namespace cxxlens::detail::clang22::materialization
 			const std::span<const std::string> expected_partition_ids,
 			const sealed_materialization_result& result,
 			const materialization_incremental_task_receipt& receipt,
-			std::vector<std::unique_ptr<materialization_replayable_spool>>& spools)
+			std::vector<std::unique_ptr<materialization_replayable_spool>>& spools,
+			const materialization_producer_authority* producer_authority,
+			const materialization_guarantee_authority* guarantee_authority,
+			const bool dynamic_partition_ids,
+			std::vector<std::string>* discovered_partition_ids)
 		{
-			if (spools.size() != expected_partition_ids.size() || spools.empty())
+			if (spools.empty() ||
+				(!dynamic_partition_ids && spools.size() != expected_partition_ids.size()))
 				return sdk::unexpected(ingress_error("partitions", "exact-census"));
 			const auto task_id = request.tasks[task_index].provider_task_id;
-			auto expected_events = materialization_incremental_result_event_projections(
-				result, expected_partition_ids);
+			auto expected_events = (producer_authority != nullptr && guarantee_authority != nullptr)
+				? materialization_incremental_result_event_projections(request,
+																	   task_index,
+																	   result,
+																	   expected_partition_ids,
+																	   *producer_authority,
+																	   *guarantee_authority)
+				: materialization_incremental_result_event_projections(result,
+																	   expected_partition_ids);
 			if (!expected_events)
 				return sdk::unexpected(std::move(expected_events.error()));
+			std::vector<std::string> oracle_partition_ids;
+			for (const auto& event : *expected_events)
+				if (oracle_partition_ids.empty() ||
+					oracle_partition_ids.back() != event.partition_id)
+					oracle_partition_ids.push_back(event.partition_id);
+			if (oracle_partition_ids.empty() || !std::ranges::is_sorted(oracle_partition_ids) ||
+				std::ranges::adjacent_find(oracle_partition_ids) != oracle_partition_ids.end())
+				return sdk::unexpected(ingress_error("partitions", "oracle-order"));
+			if (dynamic_partition_ids)
+			{
+				if (spools.size() != oracle_partition_ids.size())
+					return sdk::unexpected(ingress_error("partitions", "exact-census"));
+				if (discovered_partition_ids != nullptr)
+					*discovered_partition_ids = oracle_partition_ids;
+			}
 			auto expected_receipt = make_materialization_incremental_task_receipt(
 				request,
 				task_index,
@@ -503,7 +530,9 @@ namespace cxxlens::detail::clang22::materialization
 				auto summary = inspect_stream(*spools[index], *request_id, task_id);
 				if (!summary)
 					return sdk::unexpected(std::move(summary.error()));
-				if (summary->partition_id != expected_partition_ids[index] ||
+				const auto& bound_partition_ids =
+					dynamic_partition_ids ? oracle_partition_ids : expected_partition_ids;
+				if (summary->partition_id != bound_partition_ids[index] ||
 					(index != 0U && summaries.back().partition_id >= summary->partition_id))
 					return sdk::unexpected(ingress_error("partitions", "order-or-binding"));
 				auto expected_begin = std::ranges::find_if(
@@ -682,10 +711,14 @@ namespace cxxlens::detail::clang22::materialization
 	materialization_incremental_ingress::materialization_incremental_ingress(
 		const validated_materialization_request& request,
 		std::string request_id,
-		std::vector<std::vector<std::string>> expected_partition_ids)
+		std::vector<std::vector<std::string>> expected_partition_ids,
+		const materialization_producer_authority* producer_authority,
+		const materialization_guarantee_authority* guarantee_authority,
+		const bool dynamic_partition_ids)
 		: request_{&request}, request_id_{std::move(request_id)},
 		  expected_partition_ids_{std::move(expected_partition_ids)},
-		  task_receipts_(request.tasks.size())
+		  task_receipts_(request.tasks.size()), producer_authority_{producer_authority},
+		  guarantee_authority_{guarantee_authority}, dynamic_partition_ids_{dynamic_partition_ids}
 	{
 	}
 
@@ -723,6 +756,70 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	}
 
+	sdk::result<materialization_incremental_ingress> materialization_incremental_ingress::begin(
+		const validated_materialization_request& request,
+		std::vector<std::vector<std::string>> expected_partition_ids,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority)
+	{
+		try
+		{
+			if (request.tasks.empty() || expected_partition_ids.size() != request.tasks.size())
+				return sdk::unexpected(ingress_error("tasks", "exact-census"));
+			auto request_id = materialization_incremental_request_id(request);
+			if (!request_id)
+				return sdk::unexpected(std::move(request_id.error()));
+			std::set<std::string, std::less<>> all_partitions;
+			for (const auto& partition_ids : expected_partition_ids)
+			{
+				if (partition_ids.empty() || !std::ranges::is_sorted(partition_ids) ||
+					std::ranges::adjacent_find(partition_ids) != partition_ids.end())
+					return sdk::unexpected(ingress_error("partitions", "order-or-duplicate"));
+				for (const auto& partition_id : partition_ids)
+					if (!sdk::validate_strong_id(partition_id) ||
+						!all_partitions.insert(partition_id).second)
+						return sdk::unexpected(
+							ingress_error("partitions", "identity-or-duplicate"));
+			}
+			return materialization_incremental_ingress{request,
+													   std::move(*request_id),
+													   std::move(expected_partition_ids),
+													   &producer_authority,
+													   &guarantee_authority};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(ingress_error("allocation", "unavailable"));
+		}
+	}
+
+	sdk::result<materialization_incremental_ingress>
+	materialization_incremental_ingress::begin_dynamic(
+		const validated_materialization_request& request,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority)
+	{
+		try
+		{
+			if (request.tasks.empty())
+				return sdk::unexpected(ingress_error("tasks", "exact-census"));
+			auto request_id = materialization_incremental_request_id(request);
+			if (!request_id)
+				return sdk::unexpected(std::move(request_id.error()));
+			return materialization_incremental_ingress{
+				request,
+				std::move(*request_id),
+				std::vector<std::vector<std::string>>(request.tasks.size()),
+				&producer_authority,
+				&guarantee_authority,
+				true};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(ingress_error("allocation", "unavailable"));
+		}
+	}
+
 	sdk::result<void> materialization_incremental_ingress::consume_task(
 		materialization_incremental_task_ingress task) &&
 	{
@@ -744,13 +841,18 @@ namespace cxxlens::detail::clang22::materialization
 					request_task.worker_input.selected_catalog_compile_unit ||
 				result.final_relation_compile_unit_id() != request_task.worker_input.compile_unit)
 				return sdk::unexpected(ingress_error("task-result", "identity-mismatch"));
+			std::vector<std::string> discovered_partition_ids;
 			if (auto valid = validate_task_streams(
 					*request_,
 					request_task_index,
 					std::span<const std::string>{expected_partition_ids_[request_task_index]},
 					result,
 					task.receipt,
-					task.partition_spools);
+					task.partition_spools,
+					producer_authority_,
+					guarantee_authority_,
+					dynamic_partition_ids_,
+					&discovered_partition_ids);
 				!valid)
 				return sdk::unexpected(std::move(valid.error()));
 			task_receipts_[request_task_index] = task.receipt;

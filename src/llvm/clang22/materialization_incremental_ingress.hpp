@@ -80,6 +80,20 @@ namespace cxxlens::detail::clang22::materialization
 		begin(const validated_materialization_request& request,
 			  std::vector<std::vector<std::string>> expected_partition_ids);
 
+		/** Begin production ingress with the request-bound typed claim authorities. */
+		[[nodiscard]] static sdk::result<materialization_incremental_ingress>
+		begin(const validated_materialization_request& request,
+			  std::vector<std::vector<std::string>> expected_partition_ids,
+			  const materialization_producer_authority& producer_authority,
+			  const materialization_guarantee_authority& guarantee_authority);
+
+		/** Begin production ingress whose typed Store partition IDs are learned from each sealed
+		 * task. */
+		[[nodiscard]] static sdk::result<materialization_incremental_ingress>
+		begin_dynamic(const validated_materialization_request& request,
+					  const materialization_producer_authority& producer_authority,
+					  const materialization_guarantee_authority& guarantee_authority);
+
 		/** Consume only the canonical next task and destroy its input before returning. */
 		[[nodiscard]] sdk::result<void>
 		consume_task(materialization_incremental_task_ingress task) &&;
@@ -105,10 +119,16 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<std::optional<materialization_incremental_task_receipt>> task_receipts_;
 		std::vector<materialization_claim_stream_task> claim_stream_tasks_;
 		std::size_t next_task_index_{};
+		const materialization_producer_authority* producer_authority_{};
+		const materialization_guarantee_authority* guarantee_authority_{};
+		bool dynamic_partition_ids_{};
 
 		materialization_incremental_ingress(
 			const validated_materialization_request& request,
 			std::string request_id,
-			std::vector<std::vector<std::string>> expected_partition_ids);
+			std::vector<std::vector<std::string>> expected_partition_ids,
+			const materialization_producer_authority* producer_authority = nullptr,
+			const materialization_guarantee_authority* guarantee_authority = nullptr,
+			bool dynamic_partition_ids = false);
 	};
 } // namespace cxxlens::detail::clang22::materialization

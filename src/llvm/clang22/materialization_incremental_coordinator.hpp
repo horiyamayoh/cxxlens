@@ -180,6 +180,12 @@ namespace cxxlens::detail::clang22::materialization
 
 		/** Cancellation is checked before each recompute and after the final task result. */
 		[[nodiscard]] virtual bool cancellation_requested() const noexcept = 0;
+
+		/** Production typed adoption derives CXLPEV01 partitions from the sealed Store result. */
+		[[nodiscard]] virtual bool dynamic_typed_partition_ids() const noexcept
+		{
+			return false;
+		}
 	};
 
 	/** Compute the complete source-private digest bound by a reuse or execution receipt. */

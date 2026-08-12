@@ -212,7 +212,9 @@ namespace cxxlens::detail::clang22::materialization
 			const std::size_t task_index,
 			const sealed_materialization_result& result,
 			const materialization_incremental_provider_execution_receipt& receipt,
-			const std::span<const std::string> partition_ids)
+			const std::span<const std::string> partition_ids,
+			const materialization_producer_authority& producer_authority,
+			const materialization_guarantee_authority& guarantee_authority)
 		{
 			if (!receipt.pre_encoder_seal)
 				return sdk::unexpected(coordinator_error("receipt", "missing-completeness"));
@@ -227,8 +229,12 @@ namespace cxxlens::detail::clang22::materialization
 			auto artifact_digest = seal_materialization_incremental_artifact_digest(result);
 			if (!artifact_digest || seal.result_artifact_digest != *artifact_digest)
 				return sdk::unexpected(coordinator_error("receipt", "artifact-seal-mismatch"));
-			auto events =
-				materialization_incremental_result_event_projections(result, partition_ids);
+			auto events = materialization_incremental_result_event_projections(request,
+																			   task_index,
+																			   result,
+																			   partition_ids,
+																			   producer_authority,
+																			   guarantee_authority);
 			if (!events)
 				return sdk::unexpected(coordinator_error(
 					"receipt", "oracle-" + events.error().field + "/" + events.error().detail));
@@ -585,16 +591,23 @@ namespace cxxlens::detail::clang22::materialization
 				recompute_partition_count != plan.frontend_provider_executions)
 				return sdk::unexpected(coordinator_error("bindings", "plan-partition-census"));
 
+			const bool dynamic_typed_partition_ids = executor.dynamic_typed_partition_ids();
 			std::vector<std::vector<std::string>> expected_partition_ids(request.tasks.size());
-			for (std::size_t task_index{}; task_index < by_task.size(); ++task_index)
-			{
-				auto& expected = expected_partition_ids[task_index];
-				expected.reserve(by_task[task_index]->partitions.size());
-				for (const auto& partition : by_task[task_index]->partitions)
-					expected.push_back(partition.partition_id);
-			}
-			auto ingress_begin = materialization_incremental_ingress::begin(
-				request, std::move(expected_partition_ids));
+			if (!dynamic_typed_partition_ids)
+				for (std::size_t task_index{}; task_index < by_task.size(); ++task_index)
+				{
+					auto& expected = expected_partition_ids[task_index];
+					expected.reserve(by_task[task_index]->partitions.size());
+					for (const auto& partition : by_task[task_index]->partitions)
+						expected.push_back(partition.partition_id);
+				}
+			auto ingress_begin = dynamic_typed_partition_ids
+				? materialization_incremental_ingress::begin_dynamic(
+					  request, producer_authority, guarantee_authority)
+				: materialization_incremental_ingress::begin(request,
+															 std::move(expected_partition_ids),
+															 producer_authority,
+															 guarantee_authority);
 			if (!ingress_begin)
 				return sdk::unexpected(coordinator_error("ingress", ingress_begin.error().detail));
 			std::optional<materialization_incremental_ingress> ingress{std::move(*ingress_begin)};
@@ -717,6 +730,23 @@ namespace cxxlens::detail::clang22::materialization
 						seal_materialization_incremental_task_partition_set_digest(partition_ids);
 					if (!partition_set_digest)
 						return sdk::unexpected(std::move(partition_set_digest.error()));
+					const auto runtime_partition_set_valid =
+						[&](const materialization_incremental_provider_execution_receipt& receipt)
+					{
+						if (receipt.covered_partition_ids.empty() ||
+							!std::ranges::is_sorted(receipt.covered_partition_ids) ||
+							std::ranges::adjacent_find(receipt.covered_partition_ids) !=
+								receipt.covered_partition_ids.end())
+							return false;
+						auto actual_digest =
+							seal_materialization_incremental_task_partition_set_digest(
+								receipt.covered_partition_ids);
+						if (!actual_digest || receipt.task_partition_set_digest != *actual_digest)
+							return false;
+						return dynamic_typed_partition_ids ||
+							(receipt.covered_partition_ids == partition_ids &&
+							 receipt.task_partition_set_digest == *partition_set_digest);
+					};
 
 					if (*task_actions[task_index] == sdk::incremental::action::reuse)
 					{
@@ -740,8 +770,7 @@ namespace cxxlens::detail::clang22::materialization
 							prior->receipt.provider_task_id != prior->result.provider_task_id() ||
 							prior->receipt.provider_execution_id !=
 								prior->result.provider_execution_id() ||
-							prior->receipt.covered_partition_ids != partition_ids ||
-							prior->receipt.task_partition_set_digest != *partition_set_digest)
+							!runtime_partition_set_valid(prior->receipt))
 							return sdk::unexpected(
 								coordinator_error("prior", "sealed-artifact-mismatch"));
 						auto completeness =
@@ -752,8 +781,16 @@ namespace cxxlens::detail::clang22::materialization
 							prior->result, prior->receipt);
 						if (!transcript_binding)
 							return sdk::unexpected(std::move(transcript_binding.error()));
-						auto pre_encoder = validate_pre_encoder_receipt(
-							request, task_index, prior->result, prior->receipt, partition_ids);
+						const auto& prior_partition_ids = dynamic_typed_partition_ids
+							? prior->receipt.covered_partition_ids
+							: partition_ids;
+						auto pre_encoder = validate_pre_encoder_receipt(request,
+																		task_index,
+																		prior->result,
+																		prior->receipt,
+																		prior_partition_ids,
+																		producer_authority,
+																		guarantee_authority);
 						if (!pre_encoder)
 							return sdk::unexpected(std::move(pre_encoder.error()));
 						if (!prior->encode_partition_spools)
@@ -801,8 +838,7 @@ namespace cxxlens::detail::clang22::materialization
 						executed->receipt.provider_task_id != executed->result.provider_task_id() ||
 						executed->receipt.provider_execution_id !=
 							executed->result.provider_execution_id() ||
-						executed->receipt.covered_partition_ids != partition_ids ||
-						executed->receipt.task_partition_set_digest != *partition_set_digest)
+						!runtime_partition_set_valid(executed->receipt))
 						return sdk::unexpected(
 							coordinator_error("executor", "sealed-result-mismatch"));
 					auto completeness =
@@ -813,8 +849,16 @@ namespace cxxlens::detail::clang22::materialization
 						executed->result, executed->receipt);
 					if (!transcript_binding)
 						return sdk::unexpected(std::move(transcript_binding.error()));
-					auto pre_encoder = validate_pre_encoder_receipt(
-						request, task_index, executed->result, executed->receipt, partition_ids);
+					const auto& executed_partition_ids = dynamic_typed_partition_ids
+						? executed->receipt.covered_partition_ids
+						: partition_ids;
+					auto pre_encoder = validate_pre_encoder_receipt(request,
+																	task_index,
+																	executed->result,
+																	executed->receipt,
+																	executed_partition_ids,
+																	producer_authority,
+																	guarantee_authority);
 					if (!pre_encoder)
 						return sdk::unexpected(std::move(pre_encoder.error()));
 					if (!executed->encode_partition_spools)
@@ -842,8 +886,8 @@ namespace cxxlens::detail::clang22::materialization
 						return sdk::unexpected(std::move(adopted.error()));
 					++census.actual_provider_executions;
 					census.executed_partition_ids.insert(census.executed_partition_ids.end(),
-														 partition_ids.begin(),
-														 partition_ids.end());
+														 executed_partition_ids.begin(),
+														 executed_partition_ids.end());
 					census.executed_provider_task_ids.push_back(executed->receipt.provider_task_id);
 					census.executed_provider_execution_ids.push_back(
 						executed->receipt.provider_execution_id);
@@ -851,7 +895,7 @@ namespace cxxlens::detail::clang22::materialization
 						executed->receipt.sealed_artifact_digest);
 					census.executed_task_partition_set_digests.push_back(
 						executed->receipt.task_partition_set_digest);
-					census.actual_recomputed_partition_count += partition_ids.size();
+					census.actual_recomputed_partition_count += executed_partition_ids.size();
 					return std::cref(*current);
 				}
 				catch (const std::bad_alloc&)
@@ -878,8 +922,10 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(coordinator_error("executor", "cancelled"));
 			std::ranges::sort(census.executed_partition_ids);
 			if (census.actual_provider_executions != census.planned_provider_task_executions ||
-				census.actual_recomputed_partition_count != plan.frontend_provider_executions ||
 				census.executed_partition_ids.size() != census.actual_recomputed_partition_count ||
+				(!dynamic_typed_partition_ids &&
+				 std::ranges::adjacent_find(census.executed_partition_ids) !=
+					 census.executed_partition_ids.end()) ||
 				census.executed_provider_task_ids.size() != census.actual_provider_executions ||
 				census.executed_provider_execution_ids.size() !=
 					census.actual_provider_executions ||

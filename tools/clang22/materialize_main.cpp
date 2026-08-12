@@ -432,6 +432,27 @@ namespace
 												 false};
 	}
 
+	[[nodiscard]] sdk::result<std::vector<std::string>> partition_ids_from_event_projections(
+		const std::span<const materialization_incremental_event_projection> events)
+	{
+		if (events.empty())
+			return sdk::unexpected(sdk::error{
+				"materialization.incremental-invalid", "partition-spool", "empty-event-set"});
+		std::vector<std::string> output;
+		for (const auto& event : events)
+		{
+			if (!sdk::validate_strong_id(event.partition_id))
+				return sdk::unexpected(sdk::error{
+					"materialization.incremental-invalid", "partition-spool", "partition-id"});
+			if (output.empty() || output.back() != event.partition_id)
+				output.push_back(event.partition_id);
+		}
+		if (!std::ranges::is_sorted(output) || std::ranges::adjacent_find(output) != output.end())
+			return sdk::unexpected(sdk::error{
+				"materialization.incremental-invalid", "partition-spool", "partition-order"});
+		return output;
+	}
+
 	struct production_incremental_plan_bundle
 	{
 		sdk::incremental::materialization_plan plan;
@@ -480,23 +501,55 @@ namespace
 	}
 
 	[[nodiscard]] sdk::result<std::vector<std::unique_ptr<materialization_replayable_spool>>>
-	encode_production_partition_spools(const std::string_view request_id,
-									   const std::size_t task_index,
-									   const sealed_materialization_result& result,
-									   const materialization_incremental_pre_encoder_seal& seal)
+	encode_production_partition_spools(
+		const validated_materialization_request& request,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority,
+		const std::string_view request_id,
+		const std::size_t task_index,
+		const sealed_materialization_result& result,
+		const materialization_incremental_pre_encoder_seal& seal)
 	{
+		auto all_events =
+			materialization_incremental_result_event_projections(request,
+																 task_index,
+																 result,
+																 std::span<const std::string>{},
+																 producer_authority,
+																 guarantee_authority);
+		if (!all_events)
+			return sdk::unexpected(std::move(all_events.error()));
+		auto actual_partition_ids = partition_ids_from_event_projections(*all_events);
+		if (!actual_partition_ids || *actual_partition_ids != seal.partition_ids)
+			return sdk::unexpected(actual_partition_ids
+									   ? sdk::error{"materialization.incremental-invalid",
+													"partition-spool",
+													"receipt-partition-set"}
+									   : std::move(actual_partition_ids.error()));
+
 		std::vector<std::unique_ptr<materialization_replayable_spool>> output;
 		output.reserve(seal.partition_ids.size());
 		for (std::size_t partition_index{}; partition_index < seal.partition_ids.size();
 			 ++partition_index)
 		{
 			const auto& partition_id = seal.partition_ids[partition_index];
-			auto events = materialization_incremental_result_event_projections(
-				result, std::span<const std::string>{&partition_id, 1U});
-			if (!events)
-				return sdk::unexpected(std::move(events.error()));
+			auto partition_begin =
+				std::ranges::find_if(*all_events,
+									 [&](const auto& event)
+									 {
+										 return event.partition_id == partition_id;
+									 });
+			if (partition_begin == all_events->end())
+				return sdk::unexpected(sdk::error{
+					"materialization.incremental-invalid", "partition-spool", "partition-missing"});
+			auto partition_end = partition_begin;
+			while (partition_end != all_events->end() &&
+				   partition_end->partition_id == partition_id)
+				++partition_end;
+			const std::span<const materialization_incremental_event_projection> events{
+				&*partition_begin, static_cast<std::size_t>(partition_end - partition_begin)};
 			std::uint64_t body_bytes{};
-			for (const auto& event : *events)
+			for (const auto& event : events)
 			{
 				auto frame_size =
 					materialization_partition_event_frame_size(event.key, event.payload);
@@ -525,10 +578,10 @@ namespace
 			const auto spool_index = spool_base + partition_ordinal;
 			const auto ordinal = materialization_event_ordinal{task_ordinal, partition_ordinal};
 			auto stream = materialization_partition_event_stream::begin(
-				std::string{request_id}, spool_index, ordinal, events->size(), body_bytes);
+				std::string{request_id}, spool_index, ordinal, events.size(), body_bytes);
 			if (!stream)
 				return sdk::unexpected(std::move(stream.error()));
-			for (const auto& event : *events)
+			for (const auto& event : events)
 			{
 				auto appended = stream->append(event.kind, event.key, event.payload);
 				if (!appended)
@@ -560,12 +613,15 @@ namespace
 			detailed_task_report_replayable_spool& task_reports,
 			const std::vector<sdk::relation_descriptor>& output_descriptors,
 			const detailed_report_limits& report_limits,
-			std::string request_id)
+			std::string request_id,
+			const materialization_producer_authority& producer_authority,
+			const materialization_guarantee_authority& guarantee_authority)
 			: source_request_{source_request}, task_cursor_{std::move(task_cursor)},
 			  legacy_request_{legacy_request}, selection_{selection}, processes_{processes},
 			  journal_{journal}, task_reports_{task_reports},
 			  output_descriptors_{output_descriptors}, report_limits_{report_limits},
-			  request_id_{std::move(request_id)}
+			  request_id_{std::move(request_id)}, producer_authority_{producer_authority},
+			  guarantee_authority_{guarantee_authority}
 		{
 		}
 
@@ -574,6 +630,7 @@ namespace
 				const validated_task_request& task,
 				const materialization_incremental_task_binding& binding) override
 		{
+			(void)binding;
 			if (worker_launch_success_pending_)
 			{
 				// The previous task remains journal-in-flight until the coordinator has
@@ -628,21 +685,25 @@ namespace
 			if (auto appended = task_reports_.append(std::move(*task_report)); !appended)
 				return sdk::unexpected(std::move(appended.error()));
 
-			std::vector<std::string> partition_ids;
-			partition_ids.reserve(binding.partitions.size());
-			for (const auto& partition : binding.partitions)
-				partition_ids.push_back(partition.partition_id);
-			auto partition_set_digest =
-				seal_materialization_incremental_task_partition_set_digest(partition_ids);
-			if (!partition_set_digest)
-				return sdk::unexpected(std::move(partition_set_digest.error()));
 			auto artifact_digest = seal_materialization_incremental_artifact_digest(*sealed);
 			if (!artifact_digest)
 				return sdk::unexpected(std::move(artifact_digest.error()));
-			auto events = materialization_incremental_result_event_projections(
-				*sealed, std::span<const std::string>{partition_ids});
+			auto events =
+				materialization_incremental_result_event_projections(legacy_request_,
+																	 request_task_index,
+																	 *sealed,
+																	 std::span<const std::string>{},
+																	 producer_authority_,
+																	 guarantee_authority_);
 			if (!events)
 				return sdk::unexpected(std::move(events.error()));
+			auto partition_ids = partition_ids_from_event_projections(*events);
+			if (!partition_ids)
+				return sdk::unexpected(std::move(partition_ids.error()));
+			auto partition_set_digest =
+				seal_materialization_incremental_task_partition_set_digest(*partition_ids);
+			if (!partition_set_digest)
+				return sdk::unexpected(std::move(partition_set_digest.error()));
 			const auto& runtime = *outcome->runtime_receipt;
 			auto task_receipt = make_materialization_incremental_task_receipt(
 				legacy_request_,
@@ -656,24 +717,33 @@ namespace
 			if (!task_receipt)
 				return sdk::unexpected(std::move(task_receipt.error()));
 			materialization_incremental_pre_encoder_seal pre_encoder{
-				std::move(*task_receipt), *artifact_digest, *partition_set_digest, partition_ids};
+				std::move(*task_receipt), *artifact_digest, *partition_set_digest, *partition_ids};
 			materialization_incremental_provider_execution_receipt receipt{
 				1U,
 				std::string{sealed->provider_task_id()},
 				std::string{sealed->provider_execution_id()},
 				*artifact_digest,
-				partition_ids,
+				*partition_ids,
 				*partition_set_digest,
 				std::optional<materialization_incremental_pre_encoder_seal>{
 					std::move(pre_encoder)}};
 			const auto request_id = request_id_;
-			auto delayed_encoder = [request_id, request_task_index](
-									   const sealed_materialization_result& result,
-									   const materialization_incremental_pre_encoder_seal& seal)
+			const auto* request = &legacy_request_;
+			const auto* producer_authority = &producer_authority_;
+			const auto* guarantee_authority = &guarantee_authority_;
+			auto delayed_encoder =
+				[request, producer_authority, guarantee_authority, request_id, request_task_index](
+					const sealed_materialization_result& result,
+					const materialization_incremental_pre_encoder_seal& seal)
 				-> sdk::result<std::vector<std::unique_ptr<materialization_replayable_spool>>>
 			{
-				return encode_production_partition_spools(
-					request_id, request_task_index, result, seal);
+				return encode_production_partition_spools(*request,
+														  *producer_authority,
+														  *guarantee_authority,
+														  request_id,
+														  request_task_index,
+														  result,
+														  seal);
 			};
 			// Keep the launch in-flight across the coordinator's independent receipt, transcript,
 			// and delayed-encoder checks.  A failure in any of those checks must still be
@@ -695,6 +765,11 @@ namespace
 		[[nodiscard]] bool cancellation_requested() const noexcept override
 		{
 			return false;
+		}
+
+		[[nodiscard]] bool dynamic_typed_partition_ids() const noexcept override
+		{
+			return true;
 		}
 
 		sdk::result<void> finalize_task_cursor() &&
@@ -723,6 +798,8 @@ namespace
 		const std::vector<sdk::relation_descriptor>& output_descriptors_;
 		detailed_report_limits report_limits_;
 		std::string request_id_;
+		const materialization_producer_authority& producer_authority_;
+		const materialization_guarantee_authority& guarantee_authority_;
 	};
 } // namespace
 
@@ -884,7 +961,9 @@ int main(const int argc, char**)
 											 task_reports,
 											 claim_request.output_descriptors,
 											 report_limits,
-											 *incremental_request_id};
+											 *incremental_request_id,
+											 claim_context->producer_authority,
+											 claim_context->guarantee_authority};
 	auto materialization =
 		run_materialization_incremental_coordinator(claim_request,
 													plan_bundle->plan,
