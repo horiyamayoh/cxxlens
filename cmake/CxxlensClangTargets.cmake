@@ -3,6 +3,7 @@ set(CXXLENS_CLANG_ADAPTER
     CACHE STRING "Build the exact Clang 22 adapter: AUTO, ON, or OFF")
 set_property(CACHE CXXLENS_CLANG_ADAPTER PROPERTY STRINGS AUTO ON OFF)
 
+# cmake-format: off
 function(cxxlens_configure_clang22_worker_static_component target)
   target_compile_features(${target} PUBLIC cxx_std_23)
   target_include_directories(
@@ -178,6 +179,9 @@ endfunction()
 
 function(cxxlens_finalize_clang22_worker)
   cxxlens_create_clang22_worker_static_closure()
+  if(TARGET cxxlens_clang22_provider_sdk)
+    add_dependencies(cxxlens-clang-worker-22 cxxlens_clang22_provider_sdk)
+  endif()
   cxxlens_apply_clang22_worker_install_rpath()
 endfunction()
 
@@ -302,3 +306,4 @@ function(cxxlens_configure_clang22 target)
       CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
   message(STATUS "Enabled exact LLVM/Clang ${LLVM_PACKAGE_VERSION} adapter")
 endfunction()
+# cmake-format: on
