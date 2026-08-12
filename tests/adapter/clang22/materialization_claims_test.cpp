@@ -378,6 +378,58 @@ namespace
 		return output;
 	}
 
+	[[nodiscard]] std::string incremental_digest(char digit);
+
+	[[nodiscard]] sdk::result<std::vector<std::string>>
+	typed_partition_ids(const validated_materialization_request& request,
+						const std::size_t task_index,
+						const sealed_materialization_result& result,
+						const materialization_producer_authority& producer,
+						const materialization_guarantee_authority& guarantee)
+	{
+		auto events = materialization_incremental_result_event_projections(
+			request, task_index, result, {}, producer, guarantee);
+		if (!events)
+			return sdk::unexpected(std::move(events.error()));
+		std::vector<std::string> output;
+		for (const auto& event : *events)
+			if (output.empty() || output.back() != event.partition_id)
+				output.push_back(event.partition_id);
+		return output;
+	}
+
+	[[nodiscard]] sdk::result<materialization_incremental_task_receipt>
+	fixture_typed_completeness_receipt(const validated_materialization_request& request,
+									   const std::size_t task_index,
+									   const sealed_materialization_result& result,
+									   const std::span<const std::string> partition_ids,
+									   const materialization_producer_authority& producer,
+									   const materialization_guarantee_authority& guarantee,
+									   std::string provider_sealed_transcript_digest = {})
+	{
+		if (provider_sealed_transcript_digest.empty())
+		{
+			auto derived = sdk::provider::detail::provider_sealed_transcript_receipt_digest(
+				result.provider_task_id(), "provider.success", result.provider_seal());
+			if (!derived)
+				return sdk::unexpected(std::move(derived.error()));
+			provider_sealed_transcript_digest = std::move(*derived);
+		}
+		auto events = materialization_incremental_result_event_projections(
+			request, task_index, result, partition_ids, producer, guarantee);
+		if (!events)
+			return sdk::unexpected(std::move(events.error()));
+		return make_materialization_incremental_task_receipt(
+			request,
+			task_index,
+			16U,
+			incremental_digest('1'),
+			static_cast<std::uint64_t>(events->size()),
+			"semantic-v2:sha256:" + std::string(64U, '2'),
+			std::move(provider_sealed_transcript_digest),
+			std::span<const materialization_incremental_event_projection>{*events});
+	}
+
 	[[nodiscard]] std::string read_file(const std::filesystem::path& path)
 	{
 		std::ifstream input{path, std::ios::binary};
@@ -1198,6 +1250,36 @@ namespace
 		return output;
 	}
 
+	[[nodiscard]] std::vector<std::unique_ptr<materialization_replayable_spool>>
+	fixture_typed_partition_spools(const validated_materialization_request& request,
+								   const std::size_t task_index,
+								   const sealed_materialization_result& result,
+								   const std::span<const std::string> partition_ids,
+								   const materialization_producer_authority& producer,
+								   const materialization_guarantee_authority& guarantee)
+	{
+		auto request_id = materialization_incremental_request_id(request);
+		require(request_id.has_value(), "incremental typed spool request identity failed");
+		auto events = materialization_incremental_result_event_projections(
+			request, task_index, result, partition_ids, producer, guarantee);
+		require(events.has_value(), "incremental typed spool oracle projection failed");
+		std::vector<std::unique_ptr<materialization_replayable_spool>> output;
+		output.reserve(partition_ids.size());
+		for (std::size_t partition_index{}; partition_index < partition_ids.size();
+			 ++partition_index)
+		{
+			std::vector<materialization_incremental_event_projection> partition_events;
+			for (const auto& event : *events)
+				if (event.partition_id == partition_ids[partition_index])
+					partition_events.push_back(event);
+			output.push_back(make_fixture_partition_spool(
+				*request_id,
+				static_cast<std::uint64_t>(task_index * 10U + partition_index),
+				partition_events));
+		}
+		return output;
+	}
+
 	[[nodiscard]] materialization_incremental_task_identity
 	incremental_identity(const validated_materialization_request& request, std::size_t index);
 
@@ -1534,6 +1616,8 @@ namespace
 	{
 	  public:
 		fixture_incremental_executor(const validated_materialization_request& request,
+									 const materialization_producer_authority& producer,
+									 const materialization_guarantee_authority& guarantee,
 									 bool cancelled = false,
 									 bool fail = false,
 									 bool return_wrong_task = false,
@@ -1544,8 +1628,8 @@ namespace
 									 bool omit_partition_spools = false,
 									 coverage_mode coverage = coverage_mode::exact,
 									 bool tamper_provider_sealed_transcript_digest = false)
-			: request_{request}, cancelled_{cancelled}, fail_{fail},
-			  return_wrong_task_{return_wrong_task},
+			: request_{request}, producer_{producer}, guarantee_{guarantee}, cancelled_{cancelled},
+			  fail_{fail}, return_wrong_task_{return_wrong_task},
 			  reported_provider_calls_{reported_provider_calls},
 			  wrong_receipt_digest_{wrong_receipt_digest},
 			  reported_reuse_provider_calls_{reported_reuse_provider_calls},
@@ -1559,7 +1643,7 @@ namespace
 		[[nodiscard]] sdk::result<materialization_incremental_task_execution>
 		execute(const std::size_t request_task_index,
 				const validated_task_request&,
-				const materialization_incremental_task_binding& binding) override
+				const materialization_incremental_task_binding&) override
 		{
 			++calls;
 			called_indices.push_back(request_task_index);
@@ -1572,15 +1656,15 @@ namespace
 			auto result = seal_task(request_, index, false, coverage_);
 			if (!result)
 				return sdk::unexpected(std::move(result.error()));
+			auto typed_ids = typed_partition_ids(request_, index, *result, producer_, guarantee_);
+			if (!typed_ids)
+				return sdk::unexpected(std::move(typed_ids.error()));
 			auto digest = seal_materialization_incremental_artifact_digest(*result);
 			if (!digest)
 				return sdk::unexpected(std::move(digest.error()));
 			const auto provider_task_id = std::string{result->provider_task_id()};
 			const auto provider_execution_id = std::string{result->provider_execution_id()};
-			std::vector<std::string> partition_ids;
-			partition_ids.reserve(binding.partitions.size());
-			for (const auto& partition : binding.partitions)
-				partition_ids.push_back(partition.partition_id);
+			std::vector<std::string> partition_ids = std::move(*typed_ids);
 			auto partition_set_digest =
 				seal_materialization_incremental_task_partition_set_digest(partition_ids);
 			if (!partition_set_digest)
@@ -1592,11 +1676,14 @@ namespace
 				return sdk::unexpected(std::move(sealed_transcript_digest.error()));
 			if (tamper_provider_sealed_transcript_digest_)
 				*sealed_transcript_digest = "semantic-v2:sha256:" + std::string(64U, 'f');
-			auto completeness = fixture_completeness_receipt(request_,
-															 request_task_index,
-															 binding,
-															 *result,
-															 std::move(*sealed_transcript_digest));
+			auto completeness =
+				fixture_typed_completeness_receipt(request_,
+												   index,
+												   *result,
+												   std::span<const std::string>{partition_ids},
+												   producer_,
+												   guarantee_,
+												   std::move(*sealed_transcript_digest));
 			if (!completeness)
 				return sdk::unexpected(std::move(completeness.error()));
 			const auto result_artifact_digest = *digest;
@@ -1607,7 +1694,7 @@ namespace
 															 result_artifact_digest,
 															 *partition_set_digest,
 															 partition_ids};
-			auto encode_partition_spools = delayed_encoder(request_task_index, partition_ids);
+			auto encode_partition_spools = delayed_encoder(index, partition_ids);
 			return materialization_incremental_task_execution{
 				std::move(*result),
 				{
@@ -1626,22 +1713,23 @@ namespace
 		[[nodiscard]] sdk::result<materialization_incremental_task_reuse>
 		load_reusable(const std::size_t request_task_index,
 					  const validated_task_request&,
-					  const materialization_incremental_task_binding& binding) override
+					  const materialization_incremental_task_binding&) override
 		{
 			if (request_task_index >= reusable_.size() || !reusable_[request_task_index])
 				return sdk::unexpected(
 					sdk::error{"fixture.incremental-prior-missing", "cache", "deliberate"});
 			auto result = std::move(*reusable_[request_task_index]);
+			auto typed_ids =
+				typed_partition_ids(request_, request_task_index, result, producer_, guarantee_);
+			if (!typed_ids)
+				return sdk::unexpected(std::move(typed_ids.error()));
 			const auto provider_task_id = std::string{result.provider_task_id()};
 			const auto provider_execution_id = std::string{result.provider_execution_id()};
 			reusable_[request_task_index].reset();
 			auto digest = seal_materialization_incremental_artifact_digest(result);
 			if (!digest)
 				return sdk::unexpected(std::move(digest.error()));
-			std::vector<std::string> partition_ids;
-			partition_ids.reserve(binding.partitions.size());
-			for (const auto& partition : binding.partitions)
-				partition_ids.push_back(partition.partition_id);
+			std::vector<std::string> partition_ids = std::move(*typed_ids);
 			auto partition_set_digest =
 				seal_materialization_incremental_task_partition_set_digest(partition_ids);
 			if (!partition_set_digest)
@@ -1653,11 +1741,14 @@ namespace
 				return sdk::unexpected(std::move(sealed_transcript_digest.error()));
 			if (tamper_provider_sealed_transcript_digest_)
 				*sealed_transcript_digest = "semantic-v2:sha256:" + std::string(64U, 'f');
-			auto completeness = fixture_completeness_receipt(request_,
-															 request_task_index,
-															 binding,
-															 result,
-															 std::move(*sealed_transcript_digest));
+			auto completeness =
+				fixture_typed_completeness_receipt(request_,
+												   request_task_index,
+												   result,
+												   std::span<const std::string>{partition_ids},
+												   producer_,
+												   guarantee_,
+												   std::move(*sealed_transcript_digest));
 			if (!completeness)
 				return sdk::unexpected(std::move(completeness.error()));
 			auto pre_encoder_seal = materialization_incremental_pre_encoder_seal{
@@ -1683,6 +1774,11 @@ namespace
 			return cancelled_;
 		}
 
+		[[nodiscard]] bool dynamic_typed_partition_ids() const noexcept override
+		{
+			return true;
+		}
+
 		std::size_t calls{};
 		std::vector<std::size_t> called_indices;
 
@@ -1700,13 +1796,13 @@ namespace
 				if (seal.partition_ids != expected_partition_ids)
 					return sdk::unexpected(sdk::error{
 						"fixture.incremental-encoder", "partition-set", "changed-after-receipt"});
-				std::vector<materialization_incremental_partition_binding> partition_bindings;
-				partition_bindings.reserve(expected_partition_ids.size());
-				for (const auto& partition_id : expected_partition_ids)
-					partition_bindings.emplace_back(partition_id);
-				const materialization_incremental_task_binding binding{
-					incremental_identity(request_, task_index), std::move(partition_bindings)};
-				auto spools = fixture_partition_spools(request_, task_index, binding, result);
+				auto spools = fixture_typed_partition_spools(
+					request_,
+					task_index,
+					result,
+					std::span<const std::string>{expected_partition_ids},
+					producer_,
+					guarantee_);
 				if (omit_partition_spools_)
 					spools.clear();
 				return spools;
@@ -1714,6 +1810,8 @@ namespace
 		}
 
 		const validated_materialization_request& request_;
+		const materialization_producer_authority& producer_;
+		const materialization_guarantee_authority& guarantee_;
 		bool cancelled_{};
 		bool fail_{};
 		bool return_wrong_task_{};
@@ -1732,6 +1830,15 @@ namespace
 		require(request.tasks.size() == 2U, "incremental fixture task census changed");
 		const materialization_guarantee_authority guarantee{
 			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		const auto typed_ids_for_task = [&](const std::size_t task_index)
+		{
+			auto result = seal_task(request, task_index);
+			require(result.has_value(), "typed partition census fixture seal failed");
+			auto ids = typed_partition_ids(request, task_index, *result, producer, guarantee);
+			require(ids.has_value(), "typed partition census fixture oracle failed");
+			return std::move(*ids);
+		};
+		const auto task_zero_typed_ids = typed_ids_for_task(0U);
 		auto first = incremental_state("partition:a");
 		auto second = incremental_state("partition:b");
 		const auto make_warm_plan = [&]
@@ -1764,42 +1871,84 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor warm_executor{
-			request, false, false, false, 1U, false, std::move(prior)};
+			request, producer, guarantee, false, false, false, 1U, false, std::move(prior)};
 		auto warm = run_materialization_incremental_coordinator(
 			request, *make_warm_plan, std::move(warm_bindings), warm_executor, producer, guarantee);
-		require(warm && warm->execution_census().planned_provider_executions == 0U &&
+		require(warm.has_value(),
+				warm ? "warm-zero coordinator failed"
+					 : "warm-zero coordinator failed: " + failure(warm.error()));
+		require(warm->execution_census().planned_provider_executions == 0U &&
 					warm->execution_census().actual_provider_executions == 0U &&
 					warm->execution_census().executed_partition_ids.empty() &&
 					warm->execution_census().executed_provider_task_ids.empty() &&
 					warm->execution_census().executed_provider_execution_ids.empty() &&
 					warm->execution_census().executed_artifact_digests.empty() &&
-					warm_executor.calls == 0U && !warm->claims().partitions().empty(),
+					warm_executor.calls == 0U && warm->bounded_claim_source().sealed() &&
+					warm->bounded_claim_source().partition_count() != 0U,
 				"warm-zero coordinator executed a provider or lost claims");
 		auto full_reference_seals = seal_all(request);
 		auto full_reference =
 			construct_materialization_claims(request, full_reference_seals, producer, guarantee);
 		require(full_reference.has_value(), "full recomputation reference failed");
-		require(warm->claims().final_claim_batch().content_digest ==
-						full_reference->final_claim_batch().content_digest &&
-					warm->claims().final_claim_batch().claims.size() ==
-						full_reference->final_claim_batch().claims.size() &&
-					warm->claims().partitions().size() == full_reference->partitions().size(),
+
+		std::vector<sdk::partition_draft> warm_partitions;
+		std::vector<sdk::unresolved_reference> warm_unresolved;
+		auto replay = warm->bounded_claim_source().replay(
+			[&](sdk::partition_draft&& partition) -> sdk::result<void>
+			{
+				warm_unresolved.insert(warm_unresolved.end(),
+									   partition.unresolved.begin(),
+									   partition.unresolved.end());
+				warm_partitions.push_back(std::move(partition));
+				return {};
+			});
+		require(replay && warm_partitions.size() == full_reference->partitions().size(),
+				"warm-zero bounded source lost or duplicated partitions");
+
+		std::vector<sdk::claim> warm_claims;
+		for (const auto& partition : warm_partitions)
+			warm_claims.insert(warm_claims.end(), partition.claims.begin(), partition.claims.end());
+		const auto& full_batch = full_reference->final_claim_batch();
+		auto warm_digest = sdk::claim_batch_content_digest(
+			std::span<const sdk::claim>{warm_claims},
+			std::span<const sdk::unresolved_reference>{warm_unresolved},
+			std::span<const sdk::claim_conflict>{full_batch.conflicts},
+			std::span<const sdk::differential_disagreement>{full_batch.differential_disagreements});
+		require(warm_digest && *warm_digest == full_batch.content_digest &&
+					warm_claims.size() == full_batch.claims.size(),
 				"warm-zero claims differ from the independent full recomputation");
-		for (std::size_t index{}; index < warm->claims().partitions().size(); ++index)
+		for (std::size_t index{}; index < warm_partitions.size(); ++index)
 		{
-			const auto& incremental_partition = warm->claims().partitions()[index];
+			const auto& incremental_partition = warm_partitions[index];
 			const auto& full_partition = full_reference->partitions()[index];
-			require(
-				incremental_partition.manifest == full_partition.manifest &&
-					incremental_partition.binding == full_partition.binding &&
-					incremental_partition.stored_claim_refs == full_partition.stored_claim_refs &&
-					incremental_partition.claim_content_ids == full_partition.claim_content_ids &&
-					incremental_partition.sdk_claim_occurrence_count ==
-						full_partition.sdk_claim_occurrence_count &&
-					incremental_partition.origin_association_count ==
-						full_partition.origin_association_count &&
-					incremental_partition.empty_partition == full_partition.empty_partition,
-				"warm-zero partition differs from the independent full recomputation");
+			auto incremental_manifest =
+				sdk::make_partition_manifest(request.engine, incremental_partition);
+			auto bounded_metadata = warm->bounded_claim_source().partition_metadata(
+				full_partition.manifest.partition_id);
+			require(incremental_manifest && *incremental_manifest == full_partition.manifest &&
+						incremental_partition.relation_descriptor_id ==
+							full_partition.draft.relation_descriptor_id &&
+						incremental_partition.scope == full_partition.draft.scope &&
+						incremental_partition.condition == full_partition.draft.condition &&
+						incremental_partition.interpretation ==
+							full_partition.draft.interpretation &&
+						incremental_partition.producer_semantics ==
+							full_partition.draft.producer_semantics &&
+						incremental_partition.producer_input_basis_digest ==
+							full_partition.draft.producer_input_basis_digest &&
+						incremental_partition.precision_profile ==
+							full_partition.draft.precision_profile &&
+						incremental_partition.assumption_set_id ==
+							full_partition.draft.assumption_set_id &&
+						bounded_metadata &&
+						bounded_metadata->stored_claim_refs == full_partition.stored_claim_refs &&
+						bounded_metadata->claim_content_ids == full_partition.claim_content_ids &&
+						bounded_metadata->sdk_claim_occurrence_count ==
+							full_partition.sdk_claim_occurrence_count &&
+						bounded_metadata->origin_association_count ==
+							full_partition.origin_association_count &&
+						bounded_metadata->empty_partition == full_partition.empty_partition,
+					"warm-zero partition differs from the independent full recomputation");
 		}
 
 		{
@@ -1834,8 +1983,15 @@ namespace
 									second,
 									std::optional<materialization_incremental_prior_artifact>{
 										incremental_prior_artifact(second, multi_prior[1U])}));
-			fixture_incremental_executor multi_executor{
-				request, false, false, false, 1U, false, std::move(multi_prior)};
+			fixture_incremental_executor multi_executor{request,
+														producer,
+														guarantee,
+														false,
+														false,
+														false,
+														1U,
+														false,
+														std::move(multi_prior)};
 			auto multi_warm = run_materialization_incremental_coordinator(request,
 																		  *multi_plan,
 																		  std::move(multi_bindings),
@@ -1882,8 +2038,15 @@ namespace
 									second,
 									std::optional<materialization_incremental_prior_artifact>{
 										incremental_prior_artifact(second, affected_prior[1U])}));
-			fixture_incremental_executor affected_multi_executor{
-				request, false, false, false, 1U, false, std::move(affected_prior)};
+			fixture_incremental_executor affected_multi_executor{request,
+																 producer,
+																 guarantee,
+																 false,
+																 false,
+																 false,
+																 1U,
+																 false,
+																 std::move(affected_prior)};
 			auto affected_multi =
 				run_materialization_incremental_coordinator(request,
 															*multi_affected_plan,
@@ -1896,9 +2059,9 @@ namespace
 						affected_multi->execution_census().planned_provider_task_executions == 1U &&
 						affected_multi->execution_census().actual_provider_executions == 1U &&
 						affected_multi->execution_census().actual_recomputed_partition_count ==
-							2U &&
+							task_zero_typed_ids.size() &&
 						affected_multi->execution_census().executed_partition_ids ==
-							std::vector<std::string>{"partition:a", "partition:c"} &&
+							task_zero_typed_ids &&
 						affected_multi_executor.calls == 1U &&
 						affected_multi_executor.called_indices == std::vector<std::size_t>{0U},
 					"multi-partition execution receipt did not bind exact affected coverage");
@@ -1933,8 +2096,15 @@ namespace
 									second,
 									std::optional<materialization_incremental_prior_artifact>{
 										incremental_prior_artifact(second, mixed_prior[1U])}));
-			fixture_incremental_executor mixed_executor{
-				request, false, false, false, 1U, false, std::move(mixed_prior)};
+			fixture_incremental_executor mixed_executor{request,
+														producer,
+														guarantee,
+														false,
+														false,
+														false,
+														1U,
+														false,
+														std::move(mixed_prior)};
 			auto mixed = run_materialization_incremental_coordinator(request,
 																	 *mixed_plan,
 																	 std::move(mixed_bindings),
@@ -1965,8 +2135,16 @@ namespace
 									first,
 									std::optional<materialization_incremental_prior_artifact>{
 										incremental_prior_artifact(first, bad_reuse_prior[0U])}));
-			fixture_incremental_executor bad_reuse_executor{
-				request, false, false, false, 1U, false, std::move(bad_reuse_prior), 1U};
+			fixture_incremental_executor bad_reuse_executor{request,
+															producer,
+															guarantee,
+															false,
+															false,
+															false,
+															1U,
+															false,
+															std::move(bad_reuse_prior),
+															1U};
 			auto bad_reuse =
 				run_materialization_incremental_coordinator(request,
 															*make_warm_plan,
@@ -2008,7 +2186,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor affected_executor{
-			request, false, false, false, 1U, false, std::move(prior)};
+			request, producer, guarantee, false, false, false, 1U, false, std::move(prior)};
 		auto affected = run_materialization_incremental_coordinator(request,
 																	*affected_plan,
 																	std::move(affected_bindings),
@@ -2016,8 +2194,7 @@ namespace
 																	producer,
 																	guarantee);
 		require(affected && affected->execution_census().actual_provider_executions == 1U &&
-					affected->execution_census().executed_partition_ids ==
-						std::vector<std::string>{"partition:a"} &&
+					affected->execution_census().executed_partition_ids == task_zero_typed_ids &&
 					affected->execution_census().executed_provider_task_ids ==
 						std::vector<std::string>{request.tasks[0].provider_task_id} &&
 					affected->execution_census().executed_provider_execution_ids ==
@@ -2040,7 +2217,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(second, prior[1U])}));
 		fixture_incremental_executor missing_executor{
-			request, false, false, false, 1U, false, std::move(prior)};
+			request, producer, guarantee, false, false, false, 1U, false, std::move(prior)};
 		auto missing = run_materialization_incremental_coordinator(request,
 																   *make_warm_plan,
 																   std::move(missing_prior),
@@ -2070,7 +2247,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor cancelled_executor{
-			request, true, false, false, 1U, false, std::move(prior)};
+			request, producer, guarantee, true, false, false, 1U, false, std::move(prior)};
 		auto cancelled = run_materialization_incremental_coordinator(request,
 																	 *affected_plan,
 																	 std::move(cancelled_bindings),
@@ -2086,7 +2263,7 @@ namespace
 			incremental_binding(request, "partition:a", 0U, first, std::nullopt));
 		duplicate_bindings.emplace_back(incremental_binding(
 			request, "partition:a", 1U, incremental_state("partition:a"), std::nullopt));
-		fixture_incremental_executor duplicate_executor{request};
+		fixture_incremental_executor duplicate_executor{request, producer, guarantee};
 		auto duplicate = run_materialization_incremental_coordinator(request,
 																	 *make_warm_plan,
 																	 std::move(duplicate_bindings),
@@ -2116,7 +2293,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor failed_executor{
-			request, false, true, false, 1U, false, std::move(prior)};
+			request, producer, guarantee, false, true, false, 1U, false, std::move(prior)};
 		auto failed = run_materialization_incremental_coordinator(request,
 																  *affected_plan,
 																  std::move(failed_bindings),
@@ -2146,7 +2323,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor wrong_executor{
-			request, false, false, true, 1U, false, std::move(prior)};
+			request, producer, guarantee, false, false, true, 1U, false, std::move(prior)};
 		auto wrong = run_materialization_incremental_coordinator(request,
 																 *affected_plan,
 																 std::move(wrong_bindings),
@@ -2178,7 +2355,7 @@ namespace
 									incremental_prior_artifact(first, prior[0U])}));
 		swapped_bindings.emplace_back(std::move(swapped_b));
 		fixture_incremental_executor swapped_executor{
-			request, false, false, false, 1U, false, std::move(prior)};
+			request, producer, guarantee, false, false, false, 1U, false, std::move(prior)};
 		auto swapped = run_materialization_incremental_coordinator(request,
 																   *make_warm_plan,
 																   std::move(swapped_bindings),
@@ -2210,7 +2387,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor corrupt_executor{
-			request, false, false, false, 1U, false, std::move(prior)};
+			request, producer, guarantee, false, false, false, 1U, false, std::move(prior)};
 		auto corrupt = run_materialization_incremental_coordinator(request,
 																   *make_warm_plan,
 																   std::move(corrupt_bindings),
@@ -2243,7 +2420,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor stale_executor{
-			request, false, false, false, 1U, false, std::move(prior)};
+			request, producer, guarantee, false, false, false, 1U, false, std::move(prior)};
 		auto stale = run_materialization_incremental_coordinator(request,
 																 *make_warm_plan,
 																 std::move(stale_bindings),
@@ -2273,7 +2450,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor zero_receipt_executor{
-			request, false, false, false, 0U, false, std::move(prior)};
+			request, producer, guarantee, false, false, false, 0U, false, std::move(prior)};
 		auto zero_receipt = run_materialization_incremental_coordinator(request,
 																		*affected_plan,
 																		std::move(receipt_bindings),
@@ -2304,7 +2481,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor multi_receipt_executor{
-			request, false, false, false, 2U, false, std::move(prior)};
+			request, producer, guarantee, false, false, false, 2U, false, std::move(prior)};
 		auto multi_receipt =
 			run_materialization_incremental_coordinator(request,
 														*affected_plan,
@@ -2335,8 +2512,17 @@ namespace
 								first,
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
-		fixture_incremental_executor streamless_executor{
-			request, false, false, false, 1U, false, std::move(prior), 0U, true};
+		fixture_incremental_executor streamless_executor{request,
+														 producer,
+														 guarantee,
+														 false,
+														 false,
+														 false,
+														 1U,
+														 false,
+														 std::move(prior),
+														 0U,
+														 true};
 		auto streamless =
 			run_materialization_incremental_coordinator(request,
 														*affected_plan,
@@ -2367,6 +2553,8 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor post_load_failure_executor{request,
+																producer,
+																guarantee,
 																false,
 																false,
 																false,
@@ -2408,6 +2596,8 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor mismatched_provider_receipt_executor{request,
+																		  producer,
+																		  guarantee,
 																		  false,
 																		  false,
 																		  false,
@@ -2452,7 +2642,7 @@ namespace
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
 		fixture_incremental_executor publish_executor{
-			request, false, false, false, 1U, false, std::move(prior)};
+			request, producer, guarantee, false, false, false, 1U, false, std::move(prior)};
 		auto published =
 			run_materialization_incremental_coordinator_and_publish(request,
 																	*affected_plan,
