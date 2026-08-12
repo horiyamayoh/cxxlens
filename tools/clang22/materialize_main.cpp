@@ -910,8 +910,8 @@ int main(const int argc, char**)
 		return emit_typed_failure(
 			std::move(*journal), "materialization.spool-failure", request_subject, sealed.error());
 
-	auto streaming_transaction =
-		make_materialization_streaming_store_transaction(claim_request, materialization->claims());
+	auto streaming_transaction = make_materialization_streaming_store_transaction(
+		claim_request, materialization->bounded_claim_source());
 	if (!streaming_transaction)
 	{
 		const auto& source = streaming_transaction.error();
@@ -930,7 +930,7 @@ int main(const int argc, char**)
 			return no_response();
 		rooted_opener = std::move(*created_rooted_opener);
 	}
-	materialization_claim_partition_replay_source partition_source{materialization->claims()};
+	auto& partition_source = materialization->bounded_claim_source();
 	materialization_store_preparation preparation = rooted_opener
 		? prepare_materialization_store_streaming(claim_request.engine,
 												  claim_request.publication,

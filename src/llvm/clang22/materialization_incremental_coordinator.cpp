@@ -436,10 +436,11 @@ namespace cxxlens::detail::clang22::materialization
 
 	sealed_materialization_incremental_result::sealed_materialization_incremental_result(
 		sealed_materialization_claims claims,
+		materialization_bounded_claim_source bounded_claim_source,
 		materialization_incremental_execution_census execution_census,
 		materialization_claim_stream_source claim_stream) noexcept
-		: claims_{std::move(claims)}, execution_census_{std::move(execution_census)},
-		  claim_stream_{std::move(claim_stream)}
+		: claims_{std::move(claims)}, bounded_claim_source_{std::move(bounded_claim_source)},
+		  execution_census_{std::move(execution_census)}, claim_stream_{std::move(claim_stream)}
 	{
 	}
 
@@ -447,6 +448,18 @@ namespace cxxlens::detail::clang22::materialization
 	sealed_materialization_incremental_result::claims() const noexcept
 	{
 		return claims_;
+	}
+
+	materialization_bounded_claim_source&
+	sealed_materialization_incremental_result::bounded_claim_source() noexcept
+	{
+		return bounded_claim_source_;
+	}
+
+	const materialization_bounded_claim_source&
+	sealed_materialization_incremental_result::bounded_claim_source() const noexcept
+	{
+		return bounded_claim_source_;
 	}
 
 	const materialization_incremental_execution_census&
@@ -610,6 +623,25 @@ namespace cxxlens::detail::clang22::materialization
 			std::optional<std::size_t> current_task_index;
 			std::optional<materialization_incremental_task_receipt> current_receipt;
 			std::vector<std::unique_ptr<materialization_replayable_spool>> current_partition_spools;
+			auto bounded_source = materialization_bounded_claim_source::begin(request);
+			if (!bounded_source)
+				return sdk::unexpected(
+					coordinator_error("claim-source", bounded_source.error().detail));
+			const auto adopt_bounded_current = [&]() -> sdk::result<void>
+			{
+				if (!current || !current_task_index)
+					return sdk::unexpected(
+						coordinator_error("claim-source", "missing-current-task"));
+				auto task_claims =
+					construct_materialization_bounded_task_claims(request,
+																  *current_task_index,
+																  *current,
+																  producer_authority,
+																  guarantee_authority);
+				if (!task_claims)
+					return sdk::unexpected(std::move(task_claims.error()));
+				return bounded_source->consume_task(std::move(*task_claims));
+			};
 			const auto consume_current = [&]() -> sdk::result<void>
 			{
 				if (!current_task_index)
@@ -753,6 +785,8 @@ namespace cxxlens::detail::clang22::materialization
 						current_task_index = task_index;
 						current_receipt = std::move(prior->receipt.pre_encoder_seal->task_receipt);
 						current_partition_spools = std::move(*encoded_spools);
+						if (auto adopted = adopt_bounded_current(); !adopted)
+							return sdk::unexpected(std::move(adopted.error()));
 						return std::cref(*current);
 					}
 
@@ -804,6 +838,8 @@ namespace cxxlens::detail::clang22::materialization
 					current_task_index = task_index;
 					current_receipt = std::move(executed->receipt.pre_encoder_seal->task_receipt);
 					current_partition_spools = std::move(*encoded_spools);
+					if (auto adopted = adopt_bounded_current(); !adopted)
+						return sdk::unexpected(std::move(adopted.error()));
 					++census.actual_provider_executions;
 					census.executed_partition_ids.insert(census.executed_partition_ids.end(),
 														 partition_ids.begin(),
@@ -861,9 +897,14 @@ namespace cxxlens::detail::clang22::materialization
 			if (!claim_stream)
 				return sdk::unexpected(
 					coordinator_error("claim-stream", claim_stream.error().detail));
+			auto bounded = std::move(*bounded_source).finalize();
+			if (!bounded)
+				return sdk::unexpected(coordinator_error("claim-source", bounded.error().detail));
 
-			return sealed_materialization_incremental_result{
-				std::move(*claims), std::move(census), std::move(*claim_stream)};
+			return sealed_materialization_incremental_result{std::move(*claims),
+															 std::move(*bounded),
+															 std::move(census),
+															 std::move(*claim_stream)};
 		}
 		catch (const std::bad_alloc&)
 		{

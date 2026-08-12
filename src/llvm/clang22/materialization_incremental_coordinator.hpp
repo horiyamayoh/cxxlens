@@ -12,6 +12,7 @@
 
 #include <cxxlens/sdk/incremental.hpp>
 
+#include "materialization_bounded_claim_source.hpp"
 #include "materialization_claim_stream.hpp"
 #include "materialization_claims.hpp"
 #include "materialization_incremental_receipt.hpp"
@@ -275,6 +276,10 @@ namespace cxxlens::detail::clang22::materialization
 		~sealed_materialization_incremental_result() = default;
 
 		[[nodiscard]] const sealed_materialization_claims& claims() const noexcept;
+		/** Production typed partition source; claims() remains a qualification oracle. */
+		[[nodiscard]] materialization_bounded_claim_source& bounded_claim_source() noexcept;
+		[[nodiscard]] const materialization_bounded_claim_source&
+		bounded_claim_source() const noexcept;
 		[[nodiscard]] const materialization_incremental_execution_census&
 		execution_census() const noexcept;
 		/** Independently replayable D2/D3 event source retained behind sealed spools. */
@@ -283,10 +288,12 @@ namespace cxxlens::detail::clang22::materialization
 	  private:
 		sealed_materialization_incremental_result(
 			sealed_materialization_claims claims,
+			materialization_bounded_claim_source bounded_claim_source,
 			materialization_incremental_execution_census execution_census,
 			materialization_claim_stream_source claim_stream) noexcept;
 
 		sealed_materialization_claims claims_;
+		materialization_bounded_claim_source bounded_claim_source_;
 		materialization_incremental_execution_census execution_census_;
 		materialization_claim_stream_source claim_stream_;
 

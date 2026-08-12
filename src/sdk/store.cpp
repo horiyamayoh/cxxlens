@@ -39,6 +39,7 @@
 #include "sqlite_wal_receipt_internal.hpp"
 #include "sqlite_wal_source_capture_internal.hpp"
 #include "store_backend_lifetime_internal.hpp"
+#include "store_claim_codec_internal.hpp"
 #include "store_identity_internal.hpp"
 
 namespace cxxlens::sdk
@@ -2225,6 +2226,46 @@ namespace cxxlens::sdk
 			claim_annotation_view{&(*values_)[index_++], generation_, *generation_}};
 	}
 } // namespace cxxlens::sdk
+
+namespace cxxlens::sdk::detail
+{
+	result<std::vector<std::byte>> encode_store_claim(const claim& value)
+	{
+		try
+		{
+			binary_writer writer;
+			encode_claim(writer, value);
+			return std::move(writer).finish();
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(error{"store.allocation-failure", "claim-codec", "encode"});
+		}
+	}
+
+	result<claim> decode_store_claim(const std::span<const std::byte> bytes,
+									 const relation_engine& engine)
+	{
+		try
+		{
+			binary_reader reader{bytes};
+			auto value = decode_claim(reader, engine);
+			if (!value)
+				return unexpected(std::move(value.error()));
+			auto finished = reader.finished();
+			if (!finished)
+				return unexpected(finished ? error{"store.corrupt", "claim-codec", "trailing"}
+										   : std::move(finished.error()));
+			if (!*finished)
+				return unexpected(error{"store.corrupt", "claim-codec", "trailing"});
+			return std::move(*value);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(error{"store.allocation-failure", "claim-codec", "decode"});
+		}
+	}
+} // namespace cxxlens::sdk::detail
 
 namespace cxxlens::sdk
 {

@@ -94,4 +94,26 @@ namespace cxxlens::detail::clang22::materialization
 						request.publication.expected_parent_publication};
 		return result;
 	}
+
+	sdk::result<streaming_prepared_store_transaction>
+	make_materialization_streaming_store_transaction(
+		const validated_materialization_request& request,
+		const materialization_bounded_claim_source& source)
+	{
+		if (request.tasks.empty())
+			return sdk::unexpected(
+				sdk::error{"materialization.task-binding-mismatch", "tasks", "empty"});
+		if (auto valid = request.catalog.validate(); !valid)
+			return sdk::unexpected(sdk::error{
+				"materialization.identity-mismatch", "project.catalog", valid.error().code});
+		if (!source.sealed() || source.partition_count() == 0U)
+			return sdk::unexpected(
+				sdk::error{"materialization.claim-invalid", "store.source", "unsealed-or-empty"});
+		streaming_prepared_store_transaction result;
+		result.draft = {request.publication.selector,
+						{1U, 0U, 0U},
+						request.catalog.catalog_digest,
+						request.publication.expected_parent_publication};
+		return result;
+	}
 } // namespace cxxlens::detail::clang22::materialization

@@ -2,6 +2,7 @@
 
 #include <cxxlens/sdk/common.hpp>
 
+#include "materialization_bounded_claim_source.hpp"
 #include "materialization_claims.hpp"
 #include "materialization_store.hpp"
 
@@ -39,4 +40,10 @@ namespace cxxlens::detail::clang22::materialization
 	make_materialization_streaming_store_transaction(
 		const validated_materialization_request& request,
 		const sealed_materialization_claims& claims);
+
+	/** Build Store metadata from the production bounded typed source. */
+	[[nodiscard]] sdk::result<streaming_prepared_store_transaction>
+	make_materialization_streaming_store_transaction(
+		const validated_materialization_request& request,
+		const materialization_bounded_claim_source& source);
 } // namespace cxxlens::detail::clang22::materialization

@@ -6,6 +6,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <cxxlens/sdk/claim.hpp>
@@ -104,6 +105,53 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
+	 * One bounded task adoption result. The contained drafts are limited to the currently consumed
+	 * sealed task; callers must transfer them to a replayable source before advancing the task
+	 * cursor. This type deliberately has no claim_batch or request-wide result-set member.
+	 */
+	struct materialization_bounded_task_claims
+	{
+		std::string materializer_semantics_digest;
+		std::string direct_basis_digest;
+		std::string canonical_adoption_transform_digest;
+		std::string base_ingestion_transform_digest;
+		std::string assumption_set_id;
+		std::vector<materialization_claim_envelope> claim_envelopes;
+		std::vector<materialization_canonicalization_edge> canonicalization_edges;
+		std::vector<materialization_origin_association> origin_associations;
+		std::vector<materialization_claim_partition> partitions;
+
+		materialization_bounded_task_claims(
+			std::string materializer_semantics_digest,
+			std::string direct_basis_digest,
+			std::string canonical_adoption_transform_digest,
+			std::string base_ingestion_transform_digest,
+			std::string assumption_set_id,
+			std::vector<materialization_claim_envelope> claim_envelopes,
+			std::vector<materialization_canonicalization_edge> canonicalization_edges,
+			std::vector<materialization_origin_association> origin_associations,
+			std::vector<materialization_claim_partition> partitions)
+			: materializer_semantics_digest{std::move(materializer_semantics_digest)},
+			  direct_basis_digest{std::move(direct_basis_digest)},
+			  canonical_adoption_transform_digest{std::move(canonical_adoption_transform_digest)},
+			  base_ingestion_transform_digest{std::move(base_ingestion_transform_digest)},
+			  assumption_set_id{std::move(assumption_set_id)},
+			  claim_envelopes{std::move(claim_envelopes)},
+			  canonicalization_edges{std::move(canonicalization_edges)},
+			  origin_associations{std::move(origin_associations)}, partitions{std::move(partitions)}
+		{
+		}
+
+		materialization_bounded_task_claims(const materialization_bounded_task_claims&) = delete;
+		materialization_bounded_task_claims&
+		operator=(const materialization_bounded_task_claims&) = delete;
+		materialization_bounded_task_claims(materialization_bounded_task_claims&&) noexcept =
+			default;
+		materialization_bounded_task_claims&
+		operator=(materialization_bounded_task_claims&&) noexcept = default;
+	};
+
+	/**
 	 * Source-private streaming adoption boundary. The loader exposes at most one live sealed
 	 * result; the coordinator resets that owner before requesting the next task and after claim
 	 * adoption.
@@ -188,6 +236,21 @@ namespace cxxlens::detail::clang22::materialization
 	construct_materialization_claims_from_loader(
 		const validated_materialization_request& request,
 		const materialization_task_result_loader& load,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority);
+
+	/**
+	 * Independently construct final typed claims for exactly one sealed task.
+	 *
+	 * This is the production adoption primitive. It performs field/identity/reference/conflict
+	 * validation without constructing or committing an sdk::claim_batch. The returned value is a
+	 * task-window object and must be spooled or consumed before the next task is loaded.
+	 */
+	[[nodiscard]] sdk::result<materialization_bounded_task_claims>
+	construct_materialization_bounded_task_claims(
+		const validated_materialization_request& request,
+		std::size_t task_index,
+		const sealed_materialization_result& result,
 		const materialization_producer_authority& producer_authority,
 		const materialization_guarantee_authority& guarantee_authority);
 } // namespace cxxlens::detail::clang22::materialization

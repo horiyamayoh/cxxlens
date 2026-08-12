@@ -18,6 +18,7 @@
 #include <variant>
 
 #include "materialization_identity.hpp"
+#include "sdk/claim_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -1594,6 +1595,729 @@ namespace cxxlens::detail::clang22::materialization
 											 std::move(edge_values),
 											 std::move(association_values),
 											 std::move(partitions)};
+	}
+
+	sdk::result<materialization_bounded_task_claims> construct_materialization_bounded_task_claims(
+		const validated_materialization_request& request,
+		const std::size_t task_index,
+		const sealed_materialization_result& result,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority)
+	{
+		try
+		{
+			if (request.tasks.empty() || task_index >= request.tasks.size())
+				return sdk::unexpected(
+					claim_error("materialization.task-binding-mismatch", "task-results", "index"));
+			if (auto valid = request.catalog.validate(); !valid)
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "project-catalog",
+												   nested_error(valid.error())));
+
+			// The direct basis is request-wide semantic authority, but only the current sealed
+			// result is retained below. Context metadata is small and bounded by request admission;
+			// claim rows, envelopes, and occurrence payloads never enter this vector.
+			std::vector<materialization_semantic_task_context> contexts;
+			contexts.reserve(request.tasks.size());
+			std::set<context_key> unique_contexts;
+			for (const auto& task : request.tasks)
+			{
+				if (task.source_receipt)
+				{
+					if (!task.worker_payload.empty() || !task.worker_input.source.empty() ||
+						!task.worker_input.source_content_base64.empty())
+						return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+														   "task.v3",
+														   "streaming-residency-violation"));
+					if (auto valid = task.worker_input.validate_with_catalog(request.catalog,
+																			 *task.source_receipt);
+						!valid)
+						return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+														   "task.v3",
+														   nested_error(valid.error())));
+				}
+				else
+				{
+					if (auto valid = task.worker_input.validate(); !valid)
+						return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+														   "task.v3",
+														   nested_error(valid.error())));
+					auto encoded_task = encode_task_input(task.worker_input);
+					if (!encoded_task || *encoded_task != task.worker_payload ||
+						sdk::content_digest(task.worker_payload) != task.task_input_digest)
+						return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+														   "task.v3",
+														   "payload-or-digest-rebinding"));
+				}
+				auto context = task_context(task);
+				if (!unique_contexts.insert(context_tuple(context)).second)
+					return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+													   "semantic-task-context",
+													   "duplicate"));
+				contexts.push_back(std::move(context));
+			}
+
+			auto basis = make_direct_basis(request, producer_authority, contexts);
+			if (!basis)
+				return sdk::unexpected(std::move(basis.error()));
+			auto guarantee_values = validate_guarantee(request, guarantee_authority);
+			if (!guarantee_values)
+				return sdk::unexpected(std::move(guarantee_values.error()));
+			const auto& guarantee = guarantee_values->first;
+			const auto& assumption_set = guarantee_values->second;
+
+			const auto* worker = request.document.root().member("worker");
+			if (worker == nullptr)
+				return sdk::unexpected(
+					claim_error("materialization.identity-mismatch", "worker", "missing"));
+			auto worker_id = json_text(*worker, "provider_id", "worker.provider_id");
+			auto worker_semantics =
+				json_text(*worker, "semantic_contract_digest", "worker.semantic_contract_digest");
+			if (!worker_id || !worker_semantics)
+				return sdk::unexpected(!worker_id ? std::move(worker_id.error())
+												  : std::move(worker_semantics.error()));
+			const sdk::claim_producer worker_producer{std::string{*worker_id},
+													  std::string{*worker_semantics}};
+			const sdk::claim_producer materializer_producer{"cxxlens.clang22.materializer",
+															basis->materializer_semantics};
+
+			const auto& task = request.tasks[task_index];
+			if (result.provider_task_id() != task.provider_task_id ||
+				result.task_input_digest() != task.task_input_digest ||
+				result.provider_execution_id() != task.provider_execution_id ||
+				result.selected_catalog_compile_unit_id() !=
+					task.worker_input.selected_catalog_compile_unit ||
+				result.final_relation_compile_unit_id() != task.worker_input.compile_unit)
+				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+												   "task-results",
+												   "canonical-order-or-execution-binding"));
+			if (auto valid = validate_task_side_channels(task, result); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			const auto& context = contexts[task_index];
+
+			std::map<std::string, materialization_claim_envelope, std::less<>> envelopes;
+			std::map<std::string, std::pair<std::string, std::string>, std::less<>>
+				claim_rows_by_ref;
+			std::map<std::tuple<std::string, std::string, std::string>,
+					 materialization_canonicalization_edge>
+				edges;
+			std::map<std::string, materialization_origin_association, std::less<>> associations;
+			std::array<bool, 6U> output_nonempty{};
+			std::set<std::string, std::less<>> base_seen;
+			std::map<partition_key, partition_accumulator> partition_groups;
+
+			const auto partition_for = [&](const std::string_view descriptor_id,
+										   const materialization_semantic_task_context& owner,
+										   std::string producer_semantics,
+										   std::string producer_basis,
+										   const bool empty,
+										   const bool base) -> sdk::result<partition_accumulator*>
+			{
+				sdk::partition_draft identity_draft;
+				identity_draft.relation_descriptor_id = descriptor_id;
+				identity_draft.scope = guarantee.scope;
+				identity_draft.condition = condition_for(owner);
+				identity_draft.interpretation = owner.interpretation_domain;
+				identity_draft.producer_semantics = std::move(producer_semantics);
+				identity_draft.producer_input_basis_digest = std::move(producer_basis);
+				identity_draft.precision_profile = guarantee.approximation;
+				identity_draft.assumption_set_id = guarantee.assumptions;
+				if (auto valid = identity_draft.condition.validate(); !valid)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition.condition",
+													   nested_error(valid.error())));
+				const auto key = partition_identity_fields(identity_draft);
+				auto [entry, inserted] = partition_groups.try_emplace(key);
+				if (inserted)
+				{
+					entry->second.draft = std::move(identity_draft);
+					entry->second.empty = empty;
+				}
+				else if (entry->second.empty != empty)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition",
+													   "empty-nonempty-identity-alias"));
+				auto coverage = coverage_units(owner, descriptor_id, base);
+				if (!coverage)
+					return sdk::unexpected(std::move(coverage.error()));
+				for (auto& unit : *coverage)
+				{
+					if (auto valid = unit.validate(); !valid)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   "partition.coverage",
+														   nested_error(valid.error())));
+					const auto canonical = unit.canonical_form();
+					auto [found, added] = entry->second.coverage.emplace(canonical, unit);
+					if (!added && found->second != unit)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   "partition.coverage",
+														   "identity-collision"));
+				}
+				return &entry->second;
+			};
+
+			const auto record_claim = [&](const sdk::detached_row& row,
+										  const std::string& provenance_root,
+										  const sdk::claim_producer& precursor_producer,
+										  const std::optional<std::string>& transform,
+										  const std::string& sealed_row_digest,
+										  const std::optional<std::string>& source_evidence_digest,
+										  const bool base) -> sdk::result<void>
+			{
+				auto assertion = sdk::make_assertion(
+					request.engine,
+					sdk::observation{row,
+									 condition_for(context),
+									 context.interpretation_domain,
+									 precursor_producer,
+									 sdk::direct_claim_basis{basis->direct_basis},
+									 provenance_root,
+									 guarantee});
+				if (!assertion)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   row.descriptor_id,
+													   nested_error(assertion.error())));
+				sdk::claim final = *assertion;
+				std::string final_ref;
+				if (transform)
+				{
+					auto hidden = make_envelope("hidden_precursor", *assertion);
+					if (!hidden)
+						return sdk::unexpected(std::move(hidden.error()));
+					auto hidden_ref =
+						add_envelope(envelopes, claim_rows_by_ref, std::move(*hidden));
+					if (!hidden_ref)
+						return sdk::unexpected(std::move(hidden_ref.error()));
+					auto canonical = sdk::make_canonical_claim(
+						request.engine, *assertion, materializer_producer, row, *transform);
+					if (!canonical)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   row.descriptor_id,
+														   nested_error(canonical.error())));
+					final = std::move(*canonical);
+					auto final_envelope = make_envelope("stored_final", final);
+					if (!final_envelope)
+						return sdk::unexpected(std::move(final_envelope.error()));
+					final_ref = final_envelope->claim_ref;
+					auto stored =
+						add_envelope(envelopes, claim_rows_by_ref, std::move(*final_envelope));
+					if (!stored)
+						return sdk::unexpected(std::move(stored.error()));
+					materialization_canonicalization_edge edge{*hidden_ref, final_ref, *transform};
+					auto edge_key = std::tuple{
+						edge.precursor_claim_ref, edge.final_claim_ref, edge.transform_semantics};
+					auto [found, inserted] = edges.emplace(edge_key, edge);
+					if (!inserted && found->second != edge)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   "canonicalization-edge",
+														   "identity-collision"));
+				}
+				else
+				{
+					auto final_envelope = make_envelope("stored_final", final);
+					if (!final_envelope)
+						return sdk::unexpected(std::move(final_envelope.error()));
+					final_ref = final_envelope->claim_ref;
+					auto stored =
+						add_envelope(envelopes, claim_rows_by_ref, std::move(*final_envelope));
+					if (!stored)
+						return sdk::unexpected(std::move(stored.error()));
+				}
+
+				if (auto valid = sdk::validate_claim(request.engine, final); !valid)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   row.descriptor_id,
+													   nested_error(valid.error())));
+				auto association =
+					make_association(final_ref, context, sealed_row_digest, source_evidence_digest);
+				if (!association)
+					return sdk::unexpected(std::move(association.error()));
+				auto [association_entry, association_inserted] =
+					associations.emplace(association->association_id, *association);
+				if (!association_inserted && association_entry->second != *association)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "origin-association",
+													   "identity-collision"));
+				auto producer_basis = sdk::claim_input_basis_digest(final.input_basis);
+				if (!producer_basis)
+					return sdk::unexpected(std::move(producer_basis.error()));
+				auto partition = partition_for(final.descriptor,
+											   context,
+											   final.producer.semantic_contract,
+											   std::move(*producer_basis),
+											   false,
+											   base);
+				if (!partition)
+					return sdk::unexpected(std::move(partition.error()));
+				auto [claim_entry, claim_inserted] =
+					(*partition)->claims_by_ref.emplace(final_ref, final);
+				if (!claim_inserted && !same_claim(claim_entry->second, final))
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition.claim-ref",
+													   "aliases-different-occurrence"));
+				(*partition)->claim_contents.insert(final.content);
+				return {};
+			};
+
+			const auto batches = result.provider_seal().batches();
+			for (std::size_t batch_index{}; batch_index < batches.size(); ++batch_index)
+			{
+				const auto rows = batches[batch_index].rows();
+				if (batch_index < output_nonempty.size())
+					output_nonempty[batch_index] = !rows.empty();
+				for (std::size_t row_index{}; row_index < rows.size(); ++row_index)
+				{
+					const auto& row = rows[row_index];
+					const auto row_digest = digest_text(row.canonical_form());
+					auto provenance = worker_provenance(row.descriptor_id, context, row_digest);
+					if (!provenance)
+						return sdk::unexpected(std::move(provenance.error()));
+					std::optional<std::string> source_evidence;
+					if (batch_index >= 3U)
+					{
+						const auto decoded =
+							std::ranges::find_if(result.observation_rows(),
+												 [&](const sealed_observation_v2_row& value)
+												 {
+													 return value.batch_index == batch_index &&
+														 value.row_index == row_index;
+												 });
+						if (decoded == result.observation_rows().end())
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   "observation-row",
+															   "decoded-binding-missing"));
+						if (decoded->observation.primary_span)
+						{
+							auto span = span_bundle_digest(*decoded->observation.primary_span);
+							if (!span)
+								return sdk::unexpected(std::move(span.error()));
+							source_evidence = std::move(*span);
+						}
+						else if (decoded->observation.limitation)
+							source_evidence = digest_text(*decoded->observation.limitation);
+					}
+					const std::optional<std::string> transform = batch_index < 3U
+						? std::optional<std::string>{basis->canonical_transform}
+						: std::nullopt;
+					if (auto recorded = record_claim(row,
+													 *provenance,
+													 worker_producer,
+													 transform,
+													 row_digest,
+													 source_evidence,
+													 false);
+						!recorded)
+						return sdk::unexpected(std::move(recorded.error()));
+				}
+			}
+
+			const auto base_rows = result.base_claim_rows();
+			if (base_rows.size() != base_descriptor_ids.size() - 1U)
+				return sdk::unexpected(
+					claim_error("materialization.claim-invalid", "base-rows", "exact-five"));
+			for (std::size_t index{}; index < base_rows.size(); ++index)
+			{
+				const auto& row = base_rows[index];
+				if (row.descriptor_id != base_descriptor_ids[index])
+					return sdk::unexpected(claim_error(
+						"materialization.claim-invalid", "base-rows", "dependency-order"));
+				auto row_digest = base_row_digest(request.engine, row);
+				if (!row_digest)
+					return sdk::unexpected(std::move(row_digest.error()));
+				auto evidence = base_evidence_for(request, task, row, *row_digest);
+				if (!evidence)
+					return sdk::unexpected(std::move(evidence.error()));
+				if (auto recorded = record_claim(row,
+												 task.task_input_digest,
+												 materializer_producer,
+												 basis->base_transform,
+												 *row_digest,
+												 *evidence,
+												 true);
+					!recorded)
+					return sdk::unexpected(std::move(recorded.error()));
+				base_seen.insert(std::string{row.descriptor_id});
+			}
+
+			std::map<std::string, const sdk::detached_row*, std::less<>> span_rows;
+			for (const auto& row : result.source_span_claim_rows())
+			{
+				if (row.descriptor_id != base_descriptor_ids.back())
+					return sdk::unexpected(claim_error(
+						"materialization.span-invalid", "source-span-row", "descriptor"));
+				auto span = required_row_string(row, "source.span.v1.span");
+				if (!span)
+					return sdk::unexpected(std::move(span.error()));
+				if (!span_rows.emplace(*span, &row).second)
+					return sdk::unexpected(claim_error(
+						"materialization.span-invalid", "source-span-row", "duplicate-identity"));
+			}
+			std::set<std::string, std::less<>> used_spans;
+			for (const auto& decoded : result.observation_rows())
+			{
+				if (!decoded.observation.primary_span)
+					continue;
+				const auto& span = *decoded.observation.primary_span;
+				const auto found = span_rows.find(span.span_id);
+				if (found == span_rows.end())
+					return sdk::unexpected(claim_error(
+						"materialization.span-invalid", "source-span-row", "bundle-row-missing"));
+				if (decoded.batch_index >= batches.size() ||
+					decoded.row_index >= batches[decoded.batch_index].rows().size())
+					return sdk::unexpected(claim_error(
+						"materialization.claim-invalid", "observation-row", "sealed-index"));
+				const auto& observation_row =
+					batches[decoded.batch_index].rows()[decoded.row_index];
+				const auto observation_digest = digest_text(observation_row.canonical_form());
+				auto bundle = span_bundle_digest(span);
+				if (!bundle)
+					return sdk::unexpected(std::move(bundle.error()));
+				auto row_digest = base_row_digest(request.engine, *found->second);
+				if (!row_digest)
+					return sdk::unexpected(std::move(row_digest.error()));
+				auto evidence = span_source_evidence(observation_digest, *bundle);
+				if (!evidence)
+					return sdk::unexpected(std::move(evidence.error()));
+				if (auto recorded = record_claim(*found->second,
+												 *bundle,
+												 materializer_producer,
+												 basis->base_transform,
+												 *row_digest,
+												 *evidence,
+												 true);
+					!recorded)
+					return sdk::unexpected(std::move(recorded.error()));
+				used_spans.insert(span.span_id);
+				base_seen.insert(std::string{base_descriptor_ids.back()});
+			}
+			if (used_spans.size() != span_rows.size())
+				return sdk::unexpected(
+					claim_error("materialization.span-invalid", "source-span-row", "orphan"));
+
+			// Add the six explicit output partitions and six base partitions even when their
+			// current task has no rows. The empty basis remains content-bound and is never inferred
+			// from a missing map entry.
+			for (std::size_t descriptor_index{}; descriptor_index < output_descriptor_ids.size();
+				 ++descriptor_index)
+			{
+				if (output_nonempty[descriptor_index])
+					continue;
+				const bool canonical = descriptor_index < 3U;
+				const std::string producer =
+					canonical ? basis->materializer_semantics : std::string{*worker_semantics};
+				const std::string transform = canonical ? basis->canonical_transform : producer;
+				auto empty_basis = empty_partition_basis(basis->direct_basis,
+														 output_descriptor_ids[descriptor_index],
+														 condition_for(context),
+														 context.interpretation_domain,
+														 producer,
+														 transform);
+				if (!empty_basis)
+					return sdk::unexpected(std::move(empty_basis.error()));
+				if (auto partition = partition_for(output_descriptor_ids[descriptor_index],
+												   context,
+												   producer,
+												   std::move(*empty_basis),
+												   true,
+												   false);
+					!partition)
+					return sdk::unexpected(std::move(partition.error()));
+			}
+			for (const auto descriptor_id : base_descriptor_ids)
+			{
+				if (base_seen.contains(std::string{descriptor_id}))
+					continue;
+				auto empty_basis = empty_partition_basis(basis->direct_basis,
+														 descriptor_id,
+														 condition_for(context),
+														 context.interpretation_domain,
+														 basis->materializer_semantics,
+														 basis->base_transform);
+				if (!empty_basis)
+					return sdk::unexpected(std::move(empty_basis.error()));
+				if (auto partition = partition_for(descriptor_id,
+												   context,
+												   basis->materializer_semantics,
+												   std::move(*empty_basis),
+												   true,
+												   true);
+					!partition)
+					return sdk::unexpected(std::move(partition.error()));
+			}
+
+			// Apply the independent hard/soft reference and functional-conflict validator before
+			// any typed partition leaves this task window. The implementation intentionally does
+			// not call sdk::claim_batch::commit or import its verdict routine.
+			std::vector<const sdk::claim*> reference_space;
+			for (auto& [key, accumulator] : partition_groups)
+				for (auto& [claim_ref, value] : accumulator.claims_by_ref)
+				{
+					(void)key;
+					(void)claim_ref;
+					reference_space.push_back(&value);
+				}
+			std::ranges::sort(reference_space,
+							  [](const sdk::claim* left, const sdk::claim* right)
+							  {
+								  return left->content < right->content;
+							  });
+			for (const auto* value : reference_space)
+			{
+				auto descriptor = request.engine.require_id(value->descriptor);
+				if (!descriptor)
+					return sdk::unexpected(std::move(descriptor.error()));
+				for (const auto& reference : descriptor->descriptor().references)
+				{
+					const auto absent = [&]()
+					{
+						return std::ranges::any_of(
+							reference.source_columns,
+							[&](const auto& column)
+							{
+								const auto found = value->row.cells.find(column);
+								return found == value->row.cells.end() ||
+									found->second.state == sdk::cell_state::absent;
+							});
+					};
+					if (absent())
+						continue;
+					const auto matches = [&](const std::optional<std::string_view> element)
+					{
+						return std::ranges::any_of(
+							reference_space,
+							[&](const sdk::claim* target)
+							{
+								auto target_descriptor =
+									request.engine.require_id(target->descriptor);
+								if (!target_descriptor ||
+									target_descriptor->descriptor().name !=
+										reference.target_relation)
+									return false;
+								if (value->interpretation != target->interpretation ||
+									value->presence.universe != target->presence.universe ||
+									!std::ranges::includes(target->presence.fragments,
+														   value->presence.fragments))
+									return false;
+								for (std::size_t index{}; index < reference.source_columns.size();
+									 ++index)
+								{
+									const auto left =
+										value->row.cells.find(reference.source_columns[index]);
+									const auto right =
+										target->row.cells.find(reference.target_columns[index]);
+									if (left == value->row.cells.end() ||
+										right == target->row.cells.end() ||
+										left->second.state != sdk::cell_state::present ||
+										right->second.state != sdk::cell_state::present ||
+										!left->second.value || !right->second.value)
+										return false;
+									if (reference.container_elements)
+									{
+										if (!element)
+											return false;
+										const auto* target_value =
+											std::get_if<std::string>(&*right->second.value);
+										if (target_value == nullptr || *target_value != *element)
+											return false;
+									}
+									else if (left->second.value != right->second.value)
+										return false;
+								}
+								return true;
+							});
+					};
+					bool resolved{};
+					if (reference.container_elements)
+					{
+						const auto source = value->row.cells.find(reference.source_columns.front());
+						std::vector<std::string> elements;
+						if (source != value->row.cells.end() && source->second.value)
+						{
+							if (const auto* encoded =
+									std::get_if<std::vector<std::byte>>(&*source->second.value))
+							{
+								for (std::size_t offset{}; offset < encoded->size();)
+								{
+									if (encoded->size() - offset < sizeof(std::uint32_t))
+										break;
+									std::uint32_t length{};
+									for (std::size_t byte{}; byte < sizeof(length); ++byte)
+										length |= std::to_integer<std::uint32_t>(
+													  (*encoded)[offset + byte])
+											<< (byte * 8U);
+									offset += sizeof(length);
+									if (length == 0U || length > encoded->size() - offset)
+										break;
+									elements.emplace_back(
+										reinterpret_cast<const char*>(encoded->data() + offset),
+										length);
+									offset += length;
+								}
+							}
+						}
+						resolved = !elements.empty() &&
+							std::ranges::all_of(elements,
+												[&](const std::string& element)
+												{
+													return matches(std::string_view{element});
+												});
+					}
+					else
+						resolved = matches(std::nullopt);
+					if (!resolved)
+						return sdk::unexpected(
+							claim_error("materialization.claim-invalid",
+										value->descriptor,
+										reference.strength == sdk::reference_strength::hard
+											? "hard-reference-missing"
+											: "soft-reference-unresolved"));
+				}
+			}
+
+			for (std::size_t left_index{}; left_index < reference_space.size(); ++left_index)
+				for (std::size_t right_index = left_index + 1U;
+					 right_index < reference_space.size();
+					 ++right_index)
+				{
+					const auto& left = *reference_space[left_index];
+					const auto& right = *reference_space[right_index];
+					if (left.content == right.content || left.descriptor != right.descriptor ||
+						left.semantic_key != right.semantic_key)
+						continue;
+					auto descriptor = request.engine.require_id(left.descriptor);
+					if (!descriptor ||
+						descriptor->descriptor().merge != sdk::merge_mode::functional_assertion)
+						continue;
+					auto left_payload =
+						sdk::detail::functional_payload_digest(descriptor->descriptor(), left.row);
+					auto right_payload =
+						sdk::detail::functional_payload_digest(descriptor->descriptor(), right.row);
+					if (!left_payload || !right_payload)
+						return sdk::unexpected(!left_payload ? std::move(left_payload.error())
+															 : std::move(right_payload.error()));
+					if (*left_payload == *right_payload)
+						continue;
+					auto overlap = left.presence.overlap(right.presence);
+					if (!overlap)
+						return sdk::unexpected(std::move(overlap.error()));
+					if (!overlap->empty())
+						return sdk::unexpected(
+							claim_error("materialization.claim-invalid",
+										left.descriptor,
+										left.interpretation == right.interpretation
+											? "functional-conflict"
+											: "differential-disagreement"));
+				}
+
+			std::vector<materialization_claim_partition> partitions;
+			partitions.reserve(partition_groups.size());
+			std::map<std::string, std::uint64_t, std::less<>> association_count_by_ref;
+			for (const auto& [association_id, association] : associations)
+			{
+				(void)association_id;
+				++association_count_by_ref[association.stored_claim_ref];
+			}
+			for (auto& [key, accumulator] : partition_groups)
+			{
+				(void)key;
+				for (const auto& [claim_ref, claim] : accumulator.claims_by_ref)
+				{
+					accumulator.draft.claims.push_back(claim);
+					(void)claim_ref;
+				}
+				for (const auto& [coverage_id, coverage] : accumulator.coverage)
+				{
+					(void)coverage_id;
+					accumulator.draft.coverage.push_back(coverage);
+				}
+				auto manifest = sdk::make_partition_manifest(request.engine, accumulator.draft);
+				if (!manifest)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition-manifest",
+													   nested_error(manifest.error())));
+				std::vector<std::string> refs;
+				refs.reserve(accumulator.claims_by_ref.size());
+				std::uint64_t association_count{};
+				for (const auto& [claim_ref, claim] : accumulator.claims_by_ref)
+				{
+					(void)claim;
+					refs.push_back(claim_ref);
+					association_count += association_count_by_ref[claim_ref];
+				}
+				std::vector<std::string> contents{accumulator.claim_contents.begin(),
+												  accumulator.claim_contents.end()};
+				if (manifest->claim_count != contents.size() ||
+					manifest->complete != !accumulator.coverage.empty())
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition-manifest",
+													   "census-or-completeness"));
+				const sdk::snapshot_partition_binding binding{
+					manifest->partition_id,
+					accumulator.draft.relation_descriptor_id,
+					accumulator.draft.scope,
+					accumulator.draft.condition,
+					accumulator.draft.interpretation,
+					accumulator.draft.producer_semantics,
+					accumulator.draft.producer_input_basis_digest,
+					accumulator.draft.precision_profile,
+					accumulator.draft.assumption_set_id,
+				};
+				partitions.push_back({std::move(accumulator.draft),
+									  std::move(*manifest),
+									  binding,
+									  std::move(refs),
+									  std::move(contents),
+									  static_cast<std::uint64_t>(accumulator.claims_by_ref.size()),
+									  association_count,
+									  accumulator.empty});
+			}
+			std::ranges::sort(partitions,
+							  [](const materialization_claim_partition& left,
+								 const materialization_claim_partition& right)
+							  {
+								  return left.manifest.partition_id < right.manifest.partition_id;
+							  });
+			if (partitions.empty())
+				return sdk::unexpected(
+					claim_error("materialization.claim-invalid", "partitions", "empty"));
+
+			std::vector<materialization_claim_envelope> envelope_values;
+			envelope_values.reserve(envelopes.size());
+			for (auto& [claim_ref, envelope] : envelopes)
+			{
+				(void)claim_ref;
+				envelope_values.push_back(std::move(envelope));
+			}
+			std::vector<materialization_canonicalization_edge> edge_values;
+			edge_values.reserve(edges.size());
+			for (auto& [edge_key, edge] : edges)
+			{
+				(void)edge_key;
+				edge_values.push_back(std::move(edge));
+			}
+			std::vector<materialization_origin_association> association_values;
+			association_values.reserve(associations.size());
+			for (auto& [association_id, association] : associations)
+			{
+				(void)association_id;
+				association_values.push_back(std::move(association));
+			}
+
+			return materialization_bounded_task_claims{basis->materializer_semantics,
+													   basis->direct_basis,
+													   basis->canonical_transform,
+													   basis->base_transform,
+													   assumption_set,
+													   std::move(envelope_values),
+													   std::move(edge_values),
+													   std::move(association_values),
+													   std::move(partitions)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				claim_error("materialization.spool-failure", "bounded-claim-window", "allocation"));
+		}
 	}
 
 	sdk::result<sealed_materialization_claims> construct_materialization_claims(
