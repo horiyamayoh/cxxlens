@@ -243,6 +243,7 @@ jobs:
           path: |
             build/install-check/tests/install-consumer/relocated-prefix
             build/install-check/tests/install-consumer/install-artifact-manifest.json
+            build/install-check/tests/install-consumer/materialization-evidence
             build/install-check/ctest-install-${{ matrix.shared }}.xml
             build/install-check/.ninja_log
             build/install-check/toolchain-install-${{ matrix.shared }}.json

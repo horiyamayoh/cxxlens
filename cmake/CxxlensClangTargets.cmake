@@ -274,7 +274,31 @@ function(cxxlens_configure_clang22 target)
   endif()
   target_include_directories(${target} SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS}
                                                       ${CLANG_INCLUDE_DIRS})
-  target_link_libraries(${target} PRIVATE ${_cxxlens_clang22_components})
+  # The exact LLVM 22 distribution exports both non-PIC component archives and
+  # a shared clang-cpp DSO.  A shared public SDK cannot embed those archives:
+  # the transitive LLVMSupport closure includes a non-PIC zstd archive and the
+  # link must fail closed instead of producing a text-relocation DSO.  Keep the
+  # worker's private static closure explicit, while making the installed public
+  # shared SDK depend on the exact packaged clang-cpp DSO.
+  if(CXXLENS_BUILD_SHARED AND UNIX
+     AND target STREQUAL "cxxlens_clang22_provider_sdk")
+    if(NOT TARGET clang-cpp)
+      message(
+        FATAL_ERROR
+          "Shared Clang 22 provider SDK requires the exact packaged clang-cpp shared target"
+      )
+    endif()
+    get_target_property(_cxxlens_clang_cpp_type clang-cpp TYPE)
+    if(NOT _cxxlens_clang_cpp_type STREQUAL "SHARED_LIBRARY")
+      message(
+        FATAL_ERROR
+          "Shared Clang 22 provider SDK requires clang-cpp to be a shared library target"
+      )
+    endif()
+    target_link_libraries(${target} PRIVATE clang-cpp)
+  else()
+    target_link_libraries(${target} PRIVATE ${_cxxlens_clang22_components})
+  endif()
   set(CXXLENS_CLANG22_EXPLICIT_COMPONENTS
       "${_cxxlens_clang22_components}"
       CACHE INTERNAL "Explicit Clang 22 link closure" FORCE)

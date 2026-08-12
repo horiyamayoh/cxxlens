@@ -881,6 +881,74 @@ namespace
 				"report capture spool accepted a post-seal append");
 	}
 
+	[[nodiscard]] detailed_success_report_model valid_detailed_success_model()
+	{
+		detailed_success_report_model model;
+		model.generated_at = "2026-08-10T12:34:56Z";
+		model.store.backend = "memory";
+		model.store.series_id = "series:test";
+		model.store.selector_id = "selector:test";
+		model.store.published_record = detailed_publication_projection{
+			"publication:test", "series:test", "snapshot:test", 1U, 1U, std::nullopt};
+		model.store.candidate_identity = detailed_publication_projection{
+			"publication:test", "series:test", "snapshot:test", 1U, 0U, std::nullopt};
+		model.store.verification = {
+			{"current-selector", "present", std::nullopt, std::nullopt},
+			{"open-publication", "present", std::nullopt, std::nullopt},
+			{"open-snapshot", "present", std::nullopt, std::nullopt},
+		};
+		model.store.publication_attempted = true;
+		model.store.publish_call_count = 1U;
+		model.store.prior_history_retained = true;
+		model.store.verified = true;
+		model.tasks.push_back(replayable_capture("task:capacity"));
+		return model;
+	}
+
+	void detailed_report_capacity_reservation_is_compositional_and_closed()
+	{
+		auto model = valid_detailed_success_model();
+		auto bound = checked_detailed_report_capacity_upper_bound(model);
+		require(bound.has_value(), "valid detailed projection did not produce a capacity bound");
+		require(bound->publication_independent_projection > 0U && bound->final_json_framing > 0U &&
+					bound->exact_publication_outcome > 0U &&
+					bound->exact_sdk_records_and_receipts > 0U &&
+					bound->maximum_bounded_diagnostics > 0U &&
+					bound->total ==
+						bound->publication_independent_projection + bound->final_json_framing +
+							bound->exact_publication_outcome +
+							bound->exact_sdk_records_and_receipts +
+							bound->maximum_bounded_diagnostics,
+				"capacity proof dropped a required compositional component");
+
+		auto encoded = encode_detailed_success_report(model);
+		require(encoded.has_value() && encoded->size() <= bound->total,
+				"capacity upper bound is smaller than the encoded projection: encoded=" +
+					std::to_string(encoded ? encoded->size() : 0U) +
+					" bound=" + std::to_string(bound->total) +
+					(encoded ? std::string{}
+							 : ": error=" + encoded.error().field + ":" + encoded.error().detail));
+
+		require(bound->total > 1U, "capacity fixture did not leave room for boundary mutation");
+		const auto encode_with_limit = [&](const std::size_t limit)
+		{
+			auto limited = model;
+			limited.limits.max_projection_bytes = limit;
+			return encode_detailed_success_report(limited);
+		};
+		auto limit_minus_one = encode_with_limit(bound->total - 1U);
+		require(!limit_minus_one &&
+					limit_minus_one.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report",
+								   "limit-exceeded:capacity-reservation"},
+				"capacity limit-minus-one did not fail closed before encoding");
+		require(encode_with_limit(bound->total).has_value(),
+				"capacity limit was rejected despite the checked bound");
+		require(encode_with_limit(bound->total + 1U).has_value(),
+				"capacity limit-plus-one was rejected unexpectedly");
+	}
+
 	void public_success_report_requires_all_authority_inputs()
 	{
 		public_materialization_success_report_input input;
@@ -953,6 +1021,7 @@ int main(const int argument_count, const char* const* arguments)
 	store_stage_and_publication_boundary_are_closed();
 	bounded_detailed_projection_never_promotes_unverified_store();
 	report_capture_spool_replays_one_task_at_a_time();
+	detailed_report_capacity_reservation_is_compositional_and_closed();
 	public_success_report_requires_all_authority_inputs();
 
 	return 0;

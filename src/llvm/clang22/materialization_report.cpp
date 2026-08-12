@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 #include <new>
+#include <optional>
 #include <set>
 #include <span>
 #include <string_view>
@@ -560,7 +561,493 @@ namespace cxxlens::detail::clang22::materialization
 			return {};
 		}
 
+		constexpr std::size_t maximum_publication_text_bytes = 512U;
+		constexpr std::size_t maximum_diagnostic_code_bytes = 64U;
+		constexpr std::size_t maximum_diagnostic_phase_bytes = 64U;
+		constexpr std::size_t maximum_diagnostic_bytes = 4096U;
+		constexpr std::size_t maximum_json_string_expansion = 6U;
+		constexpr std::size_t maximum_json_u64_bytes = 20U;
+
+		[[nodiscard]] bool checked_add(std::size_t& total, const std::size_t value) noexcept
+		{
+			if (value > std::numeric_limits<std::size_t>::max() - total)
+				return false;
+			total += value;
+			return true;
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		json_string_capacity(const std::size_t payload_bytes) noexcept
+		{
+			if (payload_bytes >
+				std::numeric_limits<std::size_t>::max() / maximum_json_string_expansion)
+				return std::nullopt;
+			std::size_t value = payload_bytes * maximum_json_string_expansion;
+			if (!checked_add(value, 2U))
+				return std::nullopt;
+			return value;
+		}
+
+		struct json_capacity_object
+		{
+			std::size_t bytes{1U};
+			std::size_t member_count{};
+
+			[[nodiscard]] bool add_member(const std::string_view name,
+										  const std::size_t value_bytes) noexcept
+			{
+				if (member_count != 0U && !checked_add(bytes, 1U))
+					return false;
+				auto encoded_name = json_string_capacity(name.size());
+				if (!encoded_name || !checked_add(bytes, *encoded_name) ||
+					!checked_add(bytes, 1U) || !checked_add(bytes, value_bytes))
+					return false;
+				++member_count;
+				return true;
+			}
+
+			[[nodiscard]] std::optional<std::size_t> finish() noexcept
+			{
+				if (!checked_add(bytes, 1U))
+					return std::nullopt;
+				return bytes;
+			}
+		};
+
+		struct json_capacity_array
+		{
+			std::size_t bytes{1U};
+			std::size_t element_count{};
+
+			[[nodiscard]] bool add_element(const std::size_t value_bytes) noexcept
+			{
+				if (element_count != 0U && !checked_add(bytes, 1U))
+					return false;
+				if (!checked_add(bytes, value_bytes))
+					return false;
+				++element_count;
+				return true;
+			}
+
+			[[nodiscard]] std::optional<std::size_t> finish() noexcept
+			{
+				if (!checked_add(bytes, 1U))
+					return std::nullopt;
+				return bytes;
+			}
+		};
+
+		template <class Consumer>
+		[[nodiscard]] std::optional<std::size_t> json_array_capacity(const std::size_t count,
+																	 Consumer&& consume) noexcept
+		{
+			json_capacity_array output;
+			for (std::size_t index{}; index < count; ++index)
+			{
+				auto value = consume(index);
+				if (!value || !output.add_element(*value))
+					return std::nullopt;
+			}
+			return output.finish();
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		bounded_json_string_capacity(const std::string_view value,
+									 const detailed_report_limits& limits) noexcept
+		{
+			if (value.size() > limits.max_string_bytes || !sdk::validate_utf8_text(value))
+				return std::nullopt;
+			return json_string_capacity(value.size());
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		publication_json_string_capacity(const std::string_view value,
+										 const detailed_report_limits& limits) noexcept
+		{
+			const auto maximum = std::min(limits.max_string_bytes, maximum_publication_text_bytes);
+			if (value.empty() || value.size() > maximum || !sdk::validate_utf8_text(value))
+				return std::nullopt;
+			return json_string_capacity(maximum);
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		publication_identity_capacity(const detailed_publication_projection& value,
+									  const detailed_report_limits& limits) noexcept
+		{
+			json_capacity_object output;
+			auto publication_id = publication_json_string_capacity(value.publication_id, limits);
+			auto series_id = publication_json_string_capacity(value.series_id, limits);
+			auto snapshot_id = publication_json_string_capacity(value.snapshot_id, limits);
+			auto parent = value.parent_publication
+				? publication_json_string_capacity(*value.parent_publication, limits)
+				: std::optional<std::size_t>{4U};
+			if (!publication_id || !series_id || !snapshot_id || !parent ||
+				!output.add_member("publication_id", *publication_id) ||
+				!output.add_member("series_id", *series_id) ||
+				!output.add_member("snapshot_id", *snapshot_id) ||
+				!output.add_member("sequence", maximum_json_u64_bytes) ||
+				!output.add_member("physical_generation", maximum_json_u64_bytes) ||
+				!output.add_member("parent_publication", *parent))
+				return std::nullopt;
+			return output.finish();
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		detailed_batch_capacity(const detailed_provider_batch_projection& batch,
+								const detailed_report_limits& limits) noexcept
+		{
+			json_capacity_object output;
+			const auto string = [&](const std::string_view value)
+			{
+				return bounded_json_string_capacity(value, limits);
+			};
+			const auto chunks =
+				json_array_capacity(batch.ordered_chunk_digests.size(),
+									[&](const std::size_t index)
+									{
+										return string(batch.ordered_chunk_digests[index]);
+									});
+			auto task_id = string(batch.task_id);
+			auto descriptor_id = string(batch.descriptor_id);
+			auto descriptor_digest = string(batch.descriptor_digest);
+			auto dependency = string(batch.dependency_group_id);
+			auto atomic = string(batch.atomic_output_group_id);
+			auto batch_id = string(batch.batch_id);
+			auto batch_digest = string(batch.batch_digest);
+			auto row_digest = string(batch.row_set_digest);
+			if (!chunks || !task_id || !descriptor_id || !descriptor_digest || !dependency ||
+				!atomic || !batch_id || !batch_digest || !row_digest ||
+				!output.add_member("task_id", *task_id) ||
+				!output.add_member("descriptor_id", *descriptor_id) ||
+				!output.add_member("descriptor_digest", *descriptor_digest) ||
+				!output.add_member("dependency_group_id", *dependency) ||
+				!output.add_member("atomic_output_group_id", *atomic) ||
+				!output.add_member("batch_id", *batch_id) ||
+				!output.add_member("batch_digest", *batch_digest) ||
+				!output.add_member("ordered_chunk_digests", *chunks) ||
+				!output.add_member("row_count", maximum_json_u64_bytes) ||
+				!output.add_member("row_set_digest", *row_digest))
+				return std::nullopt;
+			return output.finish();
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		detailed_task_capacity(const detailed_task_report_capture& task,
+							   const detailed_report_limits& limits) noexcept
+		{
+			json_capacity_object output;
+			const auto string = [&](const std::string_view value)
+			{
+				return bounded_json_string_capacity(value, limits);
+			};
+			const auto chunks =
+				json_array_capacity(task.ordered_chunk_digests.size(),
+									[&](const std::size_t index)
+									{
+										return string(task.ordered_chunk_digests[index]);
+									});
+			json_capacity_object input_transfer;
+			auto logical_digest = string(task.task_input_digest);
+			auto chunk_digest_set = string(task.ordered_chunk_payload_digest_set_digest);
+			auto input_transfer_value = [&]() -> std::optional<std::size_t>
+			{
+				if (!logical_digest || !chunk_digest_set || !chunks ||
+					!input_transfer.add_member(
+						"protocol_version",
+						json_string_capacity(std::string_view{"1.1.0"}.size()).value()) ||
+					!input_transfer.add_member(
+						"required_feature",
+						json_string_capacity(std::string_view{"task-input-chunks-v1"}.size())
+							.value()) ||
+					!input_transfer.add_member(
+						"task_input_codec",
+						json_string_capacity(std::string_view{"cxxlens.clang22.task.v3"}.size())
+							.value()) ||
+					!input_transfer.add_member("logical_input_bytes", maximum_json_u64_bytes) ||
+					!input_transfer.add_member("logical_input_digest", *logical_digest) ||
+					!input_transfer.add_member("canonical_chunk_bytes", maximum_json_u64_bytes) ||
+					!input_transfer.add_member("chunk_count", maximum_json_u64_bytes) ||
+					!input_transfer.add_member("ordered_chunk_digests", *chunks) ||
+					!input_transfer.add_member("ordered_chunk_payload_digest_set_digest",
+											   *chunk_digest_set))
+					return std::nullopt;
+				return input_transfer.finish();
+			}();
+
+			json_capacity_object runtime_receipt;
+			auto raw_digest = string(task.raw_frame_stream_digest);
+			auto frame_digest = string(task.frame_transcript_digest);
+			auto sealed_digest = string(task.sealed_transcript_digest);
+			std::optional<std::size_t> runtime_receipt_value;
+			if (raw_digest && frame_digest && sealed_digest &&
+				runtime_receipt.add_member("raw_frame_stream_bytes", maximum_json_u64_bytes) &&
+				runtime_receipt.add_member("raw_frame_stream_digest", *raw_digest) &&
+				runtime_receipt.add_member("frame_count", maximum_json_u64_bytes) &&
+				runtime_receipt.add_member("frame_transcript_digest", *frame_digest) &&
+				runtime_receipt.add_member("sealed_transcript_digest", *sealed_digest))
+				runtime_receipt_value = runtime_receipt.finish();
+
+			const auto coverage_capacity = json_array_capacity(
+				task.coverage.size(),
+				[&](const std::size_t index) -> std::optional<std::size_t>
+				{
+					const auto& record = task.coverage[index];
+					json_capacity_object value;
+					auto kind = string(record.kind);
+					auto id = string(record.id);
+					auto state = string(record.state);
+					auto reason = string(record.reason);
+					if (!kind || !id || !state || !reason || !value.add_member("kind", *kind) ||
+						!value.add_member("id", *id) || !value.add_member("state", *state) ||
+						!value.add_member("reason", *reason))
+						return std::nullopt;
+					return value.finish();
+				});
+			const auto unresolved_capacity = json_array_capacity(
+				task.unresolved.size(),
+				[&](const std::size_t index) -> std::optional<std::size_t>
+				{
+					const auto& record = task.unresolved[index];
+					json_capacity_object value;
+					auto code = string(record.code);
+					auto subject = string(record.subject);
+					auto detail = string(record.detail);
+					if (!code || !subject || !detail || !value.add_member("code", *code) ||
+						!value.add_member("subject", *subject) ||
+						!value.add_member("detail", *detail))
+						return std::nullopt;
+					return value.finish();
+				});
+			const auto evidence_capacity =
+				json_array_capacity(task.evidence.size(),
+									[&](const std::size_t index) -> std::optional<std::size_t>
+									{
+										const auto& record = task.evidence[index];
+										json_capacity_object value;
+										auto kind = string(record.kind);
+										auto subject = string(record.subject);
+										auto producer = string(record.producer);
+										auto summary = string(record.summary);
+										if (!kind || !subject || !producer || !summary ||
+											!value.add_member("kind", *kind) ||
+											!value.add_member("subject", *subject) ||
+											!value.add_member("producer", *producer) ||
+											!value.add_member("summary", *summary))
+											return std::nullopt;
+										return value.finish();
+									});
+			const auto batches_capacity =
+				json_array_capacity(task.batches.size(),
+									[&](const std::size_t index)
+									{
+										return detailed_batch_capacity(task.batches[index], limits);
+									});
+			json_capacity_object transcript;
+			std::optional<std::size_t> transcript_value;
+			if (batches_capacity && coverage_capacity && unresolved_capacity && evidence_capacity &&
+				transcript.add_member("batch_count", maximum_json_u64_bytes) &&
+				transcript.add_member("batches", *batches_capacity) &&
+				transcript.add_member("coverage_count", maximum_json_u64_bytes) &&
+				transcript.add_member("coverage", *coverage_capacity) &&
+				transcript.add_member("unresolved_count", maximum_json_u64_bytes) &&
+				transcript.add_member("unresolved", *unresolved_capacity) &&
+				transcript.add_member("evidence_count", maximum_json_u64_bytes) &&
+				transcript.add_member("evidence", *evidence_capacity))
+				transcript_value = transcript.finish();
+
+			auto provider_task_id = string(task.provider_task_id);
+			auto provider_execution_id = string(task.provider_execution_id);
+			auto selected = string(task.selected_catalog_compile_unit_id);
+			auto compile_unit = string(task.compile_unit_id);
+			auto task_digest = string(task.task_input_digest);
+			if (!input_transfer_value || !runtime_receipt_value || !transcript_value ||
+				!provider_task_id || !provider_execution_id || !selected || !compile_unit ||
+				!task_digest || !output.add_member("provider_task_id", *provider_task_id) ||
+				!output.add_member("provider_execution_id", *provider_execution_id) ||
+				!output.add_member("selected_catalog_compile_unit_id", *selected) ||
+				!output.add_member("compile_unit_id", *compile_unit) ||
+				!output.add_member("task_input_digest", *task_digest) ||
+				!output.add_member(
+					"terminal",
+					json_string_capacity(std::string_view{"provider.success"}.size()).value()) ||
+				!output.add_member("input_transfer", *input_transfer_value) ||
+				!output.add_member("runtime_receipt", *runtime_receipt_value) ||
+				!output.add_member("provider_sealed_transcript", *transcript_value))
+				return std::nullopt;
+			return output.finish();
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		verification_capacity(const std::span<const detailed_store_access_projection> receipts,
+							  const detailed_report_limits& limits) noexcept
+		{
+			return json_array_capacity(
+				receipts.size(),
+				[&](const std::size_t index) -> std::optional<std::size_t>
+				{
+					const auto& receipt = receipts[index];
+					json_capacity_object value;
+					auto path = bounded_json_string_capacity(receipt.path, limits);
+					auto status = bounded_json_string_capacity(receipt.status, limits);
+					auto code = receipt.error_code
+						? bounded_json_string_capacity(*receipt.error_code, limits)
+						: std::optional<std::size_t>{4U};
+					auto field = receipt.error_field
+						? bounded_json_string_capacity(*receipt.error_field, limits)
+						: std::optional<std::size_t>{4U};
+					if (!path || !status || !code || !field || !value.add_member("path", *path) ||
+						!value.add_member("status", *status) ||
+						!value.add_member("error_code", *code) ||
+						!value.add_member("error_field", *field))
+						return std::nullopt;
+					return value.finish();
+				});
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		publication_capacity(const detailed_success_report_model& model) noexcept
+		{
+			const auto& limits = model.limits;
+			json_capacity_object output;
+			auto backend = bounded_json_string_capacity(model.store.backend, limits);
+			auto series_id = publication_json_string_capacity(model.store.series_id, limits);
+			auto selector_id = publication_json_string_capacity(model.store.selector_id, limits);
+			auto candidate = publication_identity_capacity(*model.store.candidate_identity, limits);
+			auto published = publication_identity_capacity(*model.store.published_record, limits);
+			if (!backend || !series_id || !selector_id || !candidate || !published ||
+				!output.add_member("backend", *backend) ||
+				!output.add_member("series_id", *series_id) ||
+				!output.add_member("selector_id", *selector_id) ||
+				!output.add_member("publication_attempted", 5U) ||
+				!output.add_member(
+					"outcome",
+					json_string_capacity(std::string_view{"committed_verified"}.size()).value()) ||
+				!output.add_member(
+					"candidate_identity_state",
+					json_string_capacity(std::string_view{"constructed"}.size()).value()) ||
+				!output.add_member("candidate_identity", *candidate) ||
+				!output.add_member("published_record", *published) ||
+				!output.add_member(
+					"invocation_commit_state",
+					json_string_capacity(std::string_view{"committed"}.size()).value()) ||
+				!output.add_member("committed_transaction_count", maximum_json_u64_bytes) ||
+				!output.add_member("prior_history_retained", 5U) ||
+				!output.add_member("verification", 4U))
+				return std::nullopt;
+			return output.finish();
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		final_framing_capacity(const std::size_t task_count) noexcept
+		{
+			(void)task_count;
+			json_capacity_object output;
+			const auto string = [](const std::string_view value)
+			{
+				return json_string_capacity(value.size());
+			};
+			if (!output.add_member(
+					"schema",
+					*string("cxxlens.clang22-materialization-report.source-private-bounded.v1")) ||
+				!output.add_member("report_version", *string("1.0.0")) ||
+				!output.add_member("response_kind", *string("detailed_projection")) ||
+				!output.add_member("result", *string("projection_ready")) ||
+				!output.add_member("generated_at", 4U) ||
+				!output.add_member("process_exit_status", 1U) ||
+				!output.add_member("task_results", 4U) || !output.add_member("publication", 4U) ||
+				!output.add_member("projection", *string("source-private-bounded")))
+				return std::nullopt;
+			auto result = output.finish();
+			if (!result || !checked_add(*result, 1U))
+				return std::nullopt;
+			return result;
+		}
+
+		[[nodiscard]] std::optional<std::size_t>
+		maximum_diagnostic_capacity(const detailed_report_limits& limits) noexcept
+		{
+			const auto diagnostic = std::min(limits.max_string_bytes, maximum_diagnostic_bytes);
+			json_capacity_object output;
+			auto code = json_string_capacity(maximum_diagnostic_code_bytes);
+			auto phase = json_string_capacity(maximum_diagnostic_phase_bytes);
+			auto subject = json_string_capacity(
+				std::min(limits.max_string_bytes, maximum_publication_text_bytes));
+			auto detail = json_string_capacity(diagnostic);
+			if (!code || !phase || !subject || !detail || !output.add_member("code", *code) ||
+				!output.add_member("phase", *phase) || !output.add_member("subject", *subject) ||
+				!output.add_member("diagnostic", *detail))
+				return std::nullopt;
+			auto value = output.finish();
+			if (!value)
+				return std::nullopt;
+			auto field = json_string_capacity(std::string_view{"error"}.size());
+			if (!field || !checked_add(*field, 1U) || !checked_add(*field, *value))
+				return std::nullopt;
+			return field;
+		}
+
 	} // namespace
+
+	sdk::result<detailed_report_capacity_bound>
+	checked_detailed_report_capacity_upper_bound(const detailed_success_report_model& model)
+	{
+		if (model.limits.max_tasks == 0U || model.limits.max_batches_per_task == 0U ||
+			model.limits.max_chunks_per_batch == 0U ||
+			model.limits.max_side_channel_records == 0U || model.limits.max_string_bytes == 0U ||
+			model.limits.max_projection_bytes == 0U)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::invalid_capture, "limits", "zero"));
+		if (model.tasks.empty() || model.tasks.size() > model.limits.max_tasks)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::limit_exceeded, "task_results", "count"));
+		if (!generated_at(model.generated_at))
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::invalid_time, "generated_at", "utc-second"));
+		if (!model.store.published_record || !model.store.candidate_identity ||
+			!exact_success_verification(model.store.verification))
+			return sdk::unexpected(fail(detailed_report_error_kind::publication_unverified,
+										"publication",
+										"committed-verified-required"));
+
+		try
+		{
+			const auto task_values = json_array_capacity(model.tasks.size(),
+														 [&](const std::size_t index)
+														 {
+															 return detailed_task_capacity(
+																 model.tasks[index], model.limits);
+														 });
+			auto generated = bounded_json_string_capacity(model.generated_at, model.limits);
+			auto independent =
+				task_values && generated ? std::optional<std::size_t>{*task_values} : std::nullopt;
+			if (independent && !checked_add(*independent, *generated))
+				independent = std::nullopt;
+			auto framing = final_framing_capacity(model.tasks.size());
+			auto publication = publication_capacity(model);
+			auto receipts = verification_capacity(model.store.verification, model.limits);
+			auto diagnostics = maximum_diagnostic_capacity(model.limits);
+			if (!independent || !framing || !publication || !receipts || !diagnostics)
+				return sdk::unexpected(fail(detailed_report_error_kind::limit_exceeded,
+											"report",
+											"capacity-overflow-or-unbounded-value"));
+
+			detailed_report_capacity_bound result{
+				*independent, *framing, *publication, *receipts, *diagnostics, 0U};
+			if (!checked_add(result.total, result.publication_independent_projection) ||
+				!checked_add(result.total, result.final_json_framing) ||
+				!checked_add(result.total, result.exact_publication_outcome) ||
+				!checked_add(result.total, result.exact_sdk_records_and_receipts) ||
+				!checked_add(result.total, result.maximum_bounded_diagnostics))
+				return sdk::unexpected(fail(
+					detailed_report_error_kind::limit_exceeded, "report", "capacity-overflow"));
+			return result;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "report", "capacity-allocation"));
+		}
+	}
 
 	sdk::error detailed_report_error::as_sdk_error() const
 	{
@@ -2336,6 +2823,13 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(fail(detailed_report_error_kind::publication_unverified,
 										"publication",
 										"committed-verified-required"));
+
+		auto capacity = checked_detailed_report_capacity_upper_bound(model);
+		if (!capacity)
+			return sdk::unexpected(std::move(capacity.error()));
+		if (capacity->total > model.limits.max_projection_bytes)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::limit_exceeded, "report", "capacity-reservation"));
 
 		std::size_t projection_bytes{};
 		auto accept_text = [&](const std::string_view value, const bool required) noexcept

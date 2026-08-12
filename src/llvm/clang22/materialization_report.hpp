@@ -313,6 +313,28 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
+	 * Checked compositional upper bound for the source-private detailed report.
+	 *
+	 * The components deliberately remain separate: a response ceiling is only the final admission
+	 * check, not the proof.  The bound includes the publication-independent task projection, fixed
+	 * response framing, the exact publication outcome shape, the SDK verification receipts, and a
+	 * bounded diagnostic envelope which may be needed for an outcome-specific response.
+	 */
+	struct detailed_report_capacity_bound
+	{
+		std::size_t publication_independent_projection{};
+		std::size_t final_json_framing{};
+		std::size_t exact_publication_outcome{};
+		std::size_t exact_sdk_records_and_receipts{};
+		std::size_t maximum_bounded_diagnostics{};
+		std::size_t total{};
+	};
+
+	/** Calculate the checked bound without admitting it against `max_projection_bytes`. */
+	[[nodiscard]] sdk::result<detailed_report_capacity_bound>
+	checked_detailed_report_capacity_upper_bound(const detailed_success_report_model& model);
+
+	/**
 	 * Encode a canonical JSON source-private bounded projection. This is intentionally not the
 	 * full public schema report: it emits only the typed evidence owned by this two-file model. It
 	 * returns an error instead of emitting a success-like public result unless all task seals and

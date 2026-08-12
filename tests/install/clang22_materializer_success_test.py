@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -23,6 +24,9 @@ BASELINE_POLICY_DIGEST = (
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
+REQUEST_FILENAME = "cxxlens-clang22-materialization-request.json"
+REPORT_FILENAME = "cxxlens-clang22-materialization-report.json"
+EXECUTION_RECEIPT_FILENAME = "cxxlens-clang22-materialization-execution-receipt.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,11 +37,65 @@ def parse_args() -> argparse.Namespace:
         "--backend", choices=("memory", "sqlite"), default="memory"
     )
     parser.add_argument("--translation-unit-count", type=int, default=2)
+    parser.add_argument(
+        "--evidence-dir",
+        type=pathlib.Path,
+        help=(
+            "optional external evidence directory; request, exact report stdout, "
+            "and execution receipt are written below <configuration>/<backend>"
+        ),
+    )
     return parser.parse_args()
 
 
 def fail(message: str) -> None:
     raise AssertionError(message)
+
+
+def content_digest(value: bytes) -> str:
+    return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def write_external_evidence(
+    evidence_dir: pathlib.Path,
+    configuration: str,
+    backend: str,
+    request_bytes: bytes,
+    report_bytes: bytes,
+    stderr_bytes: bytes,
+) -> None:
+    """Persist only externally observable bytes used by release qualification.
+
+    The installed process remains the report authority: the report artifact is
+    the exact stdout byte stream, and the receipt binds that byte stream.  This
+    directory is intentionally outside the installed prefix so it cannot alter
+    the immutable install-artifact manifest.
+    """
+
+    destination = (evidence_dir / configuration / backend).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    receipt = {
+        "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
+        "actual_exit_status": 0,
+        "exact_stdout_byte_count": len(report_bytes),
+        "stdout_sha256": content_digest(report_bytes),
+        "parsed_response_count": 1,
+        "stderr_sha256": content_digest(stderr_bytes),
+    }
+    receipt_path = destination / EXECUTION_RECEIPT_FILENAME
+    receipt_bytes = oracle_canonical_json(receipt)
+    receipt_path.write_bytes(receipt_bytes)
+    (destination / REQUEST_FILENAME).write_bytes(request_bytes)
+    (destination / REPORT_FILENAME).write_bytes(report_bytes)
+
+
+def oracle_canonical_json(value: Any) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
 
 
 def main() -> int:
@@ -283,6 +341,21 @@ def main() -> int:
 
         if len({row["final_relation_compile_unit_id"] for row in entity_rows}) < 2:
             fail("multi-TU installed source did not retain both entity TUs")
+
+    if completed.stdout != oracle.canonical_json(report):
+        fail(
+            "installed materializer stdout is not the canonical report artifact; "
+            "an external receipt cannot bind a reformatted response"
+        )
+    if args.evidence_dir is not None:
+        write_external_evidence(
+            args.evidence_dir,
+            occurrence["package_configuration"],
+            args.backend,
+            request_bytes,
+            completed.stdout,
+            completed.stderr,
+        )
 
     return 0
 
