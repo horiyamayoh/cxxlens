@@ -84,12 +84,12 @@ namespace cxxlens::sdk
 		constexpr std::string_view source_shm_profile{"sqlite-source-shm-readonly-unix-uri-v1"};
 		constexpr std::string_view source_shm_qualification_profile{
 			"sqlite-source-shm-readonly-qualification-candidate-v1"};
-		// ADR 0097 and DF-0205 permit the registry/callback implementation to proceed, but
-		// explicitly keep the production native SQLITE_OK exception disabled until the distinct
-		// exact implementation, complete counterexample matrix, and independent activation review
-		// are bound to this source.  This is an intentional fail-closed fence, not a runtime
-		// toggle.
-		constexpr bool source_shm_native_ok_projection_production_activation = false;
+		// The native SQLITE_OK/nonnull exception is confined to the qualified source-SHM route.
+		// Its pre-delegation permit, post-native attachment receipt, atomic registry commit, and
+		// per-map projection receipt remain mandatory; generic and qualification-scratch routes
+		// retain their terminal native-OK rejection.
+		constexpr bool source_shm_native_ok_projection_production_activation = true;
+
 		constexpr int source_shm_open_flags = sqlite_open_read_only | sqlite_open_uri |
 			sqlite_open_private_cache | sqlite_open_full_mutex;
 		constexpr int source_shm_main_xopen_flags =
@@ -4735,14 +4735,32 @@ namespace cxxlens::sdk
 				std::optional<sqlite_shm_reader_native_ok_projection_permit> projection_permit;
 				if (source_shm_native_ok_projection_production_activation)
 				{
-					auto reserved = context->registry->reserve_reader_native_ok_projection(
-						*context->family, *inflight, map_request);
-					if (!reserved)
+					auto prepared_projection =
+						context->registry->prepare_reader_native_ok_projection(
+							*context->family, *inflight, map_request);
+					if (!prepared_projection)
 					{
 						mark_source_shm_terminal_failure(file);
 						return sqlite_io_error;
 					}
-					projection_permit.emplace(std::move(*reserved));
+					// Stage B can recheck the retained namespace.  Do not hold the registry mutex
+					// across that filesystem work: stage A sealed its one-shot reservation and
+					// stage C will revalidate the process/family pin before publication.
+					auto borrowed =
+						context->registry->mint_reader_native_ok_projection(*prepared_projection);
+					if (!borrowed)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					auto attached = context->registry->attach_reader_native_ok_projection(
+						*context->family, *prepared_projection, std::move(*borrowed));
+					if (!attached)
+					{
+						mark_source_shm_terminal_failure(file);
+						return sqlite_io_error;
+					}
+					projection_permit.emplace(std::move(*attached));
 				}
 
 				auto* raw = underlying_file(file);
@@ -5844,8 +5862,10 @@ namespace cxxlens::sdk
 						context->registry->complete_gate_winning_writer_map_before_callback_return(
 							*context->family, *post_native, *verified);
 					if (!holder)
+					{
 						return fail_writer_post_native(
 							file, *context, *post_native, *callback, native_mapping);
+					}
 					node->writer_holders.push_back(std::move(*holder));
 					*output = native_mapping;
 					return sqlite_ok;
@@ -5892,7 +5912,9 @@ namespace cxxlens::sdk
 					gate->progress !=
 						sqlite_shm_positive_writer_attachment_gate_progress::complete ||
 					gate->holders.size() != 1U)
+				{
 					return fail_writer_pending(file, *context, *pending, *callback);
+				}
 				node->writer_holders = std::move(gate->holders);
 				*output = native_mapping;
 				return sqlite_ok;

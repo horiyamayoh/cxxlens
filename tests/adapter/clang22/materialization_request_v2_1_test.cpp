@@ -566,6 +566,11 @@ namespace
 		auto raw = fixture_v2_0();
 		replace_once(raw, "\"request_version\":\"2.0.0\"", "\"request_version\":\"2.1.0\"");
 		replace_once(raw, "\"interface_version\":\"2.0.0\"", "\"interface_version\":\"2.1.0\"");
+		replace_once(raw,
+					 "\"authority_registry_digest\":\"sha256:"
+					 "4caf626ec6f198118802f22d9cac62b02b2c3bb392fdc8d68b1a58f8101c342e\"",
+					 "\"authority_registry_digest\":\"sha256:"
+					 "e47bbaec6a56bc18f90e314a948003c47bf2c46431cf5f26fd035249a94f35b5\"");
 		const auto digest = "sha256:" + std::string(64U, '1');
 		replace_once(raw,
 					 ",\"prefix_manifest_digest\":\"" + digest +

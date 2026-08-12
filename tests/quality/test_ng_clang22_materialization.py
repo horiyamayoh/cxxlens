@@ -24,6 +24,74 @@ from relation_idl_compiler import (  # noqa: E402
 
 
 class NgClang22MaterializationTests(unittest.TestCase):
+    def test_baseline_recovery_installed_surface_bindings_are_fail_closed(self) -> None:
+        documents = {
+            "root_cmake": (ROOT / materialization.ROOT_CMAKE).read_text(
+                encoding="utf-8"
+            ),
+            "quality_workflow": (ROOT / materialization.QUALITY_WORKFLOW).read_text(
+                encoding="utf-8"
+            ),
+            "install_test": (ROOT / materialization.INSTALL_TEST).read_text(
+                encoding="utf-8"
+            ),
+            "mapping_semantics_test": (
+                ROOT / materialization.MAPPING_SEMANTICS_TEST
+            ).read_text(encoding="utf-8"),
+            "mapping_epoch_test": (
+                ROOT / materialization.MAPPING_EPOCH_TEST
+            ).read_text(encoding="utf-8"),
+        }
+        materialization.validate_baseline_recovery_source_bindings(**documents)
+        mutations = (
+            (
+                "root_cmake",
+                "  target_sources(cxxlens_clang22_worker_core\n"
+                "                 PRIVATE $<TARGET_OBJECTS:"
+                "cxxlens_provider_runtime_internal>)\n",
+                "",
+            ),
+            (
+                "quality_workflow",
+                "          cmake --build --preset install-check --target \\\n"
+                "            cxxlens-provider-scaffold cxxlens-sdk-doctor "
+                "cxxlens-clang-worker-22 \\\n"
+                "            cxxlens-clang22-materialize\n",
+                "          cmake --build --preset install-check --target \\\n"
+                "            cxxlens-provider-scaffold cxxlens-sdk-doctor "
+                "cxxlens-clang-worker-22\n",
+            ),
+            (
+                "install_test",
+                '"${install_prefix}/bin/cxxlens-clang22-materialize"',
+                '"${install_prefix}/bin/cxxlens-clang22-materialize-removed"',
+            ),
+            (
+                "install_test",
+                '  execute_process(\n'
+                '    COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target\n'
+                '            cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)\n',
+                "",
+            ),
+            (
+                "mapping_semantics_test",
+                "test.mapping-semantics.target-namespace-epoch",
+                "test.mapping-semantics.target-namespace-epoch-removed",
+            ),
+            (
+                "mapping_epoch_test",
+                "test.epoch.target-namespace-epoch",
+                "test.epoch.target-namespace-epoch-removed",
+            ),
+        )
+        for document, marker, replacement in mutations:
+            with self.subTest(document=document):
+                drift = copy.deepcopy(documents)
+                self.assertIn(marker, drift[document])
+                drift[document] = drift[document].replace(marker, replacement, 1)
+                with self.assertRaises(materialization.MaterializationError):
+                    materialization.validate_baseline_recovery_source_bindings(**drift)
+
     def test_source_provenance_verifier_is_fail_closed(self) -> None:
         script = ROOT / "cmake/VerifyClang22SourceProvenance.cmake"
         with tempfile.TemporaryDirectory() as temporary:
@@ -111,6 +179,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         mutations = (
             ("root_cmake", "must be supplied together"),
             ("occurrence_generator", "CXXLENS_PROVENANCE_EXPECTED_TREE"),
+            ("occurrence_generator", "libcxxlens_base.so.@PROJECT_VERSION@"),
             ("source_verifier", "status --porcelain=v1"),
             ("source_verifier", "--untracked-files=all"),
             ("source_verifier", "_cxxlens_git_observe(after)"),

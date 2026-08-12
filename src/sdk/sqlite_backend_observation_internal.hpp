@@ -55,8 +55,107 @@ namespace cxxlens::sdk
 	};
 
 	class sqlite_backend_private_snapshot;
+	struct sqlite_backend_entry_observation;
 	class sqlite_source_shm_namespace_guard;
 	class sqlite_source_shm_target_namespace_epoch;
+	class sqlite_shm_reader_native_ok_projection_reservation;
+	class sqlite_shm_writer_reader_borrow_mint_capability;
+	namespace detail
+	{
+		struct sqlite_source_shm_target_namespace_epoch_reader_borrow_state;
+		struct sqlite_source_shm_target_namespace_epoch_borrow_minter_state;
+		class sqlite_writer_shm_mapping_epoch_state;
+		class sqlite_writer_shm_generation_epoch_custody;
+		class sqlite_shm_mapping_lease_state;
+	} // namespace detail
+
+	/**
+	 * Source-private move-only custody for a reader's exact writer namespace epoch.
+	 *
+	 * Its implementation intentionally hides the owner capability; no raw or shared epoch pointer
+	 * crosses this boundary.  Only authenticated writer-member and reader-projection machinery may
+	 * mint or consume it.
+	 */
+	class sqlite_source_shm_target_namespace_epoch_reader_borrow final
+	{
+	  public:
+		~sqlite_source_shm_target_namespace_epoch_reader_borrow() noexcept;
+		sqlite_source_shm_target_namespace_epoch_reader_borrow(
+			sqlite_source_shm_target_namespace_epoch_reader_borrow&&) noexcept;
+		sqlite_source_shm_target_namespace_epoch_reader_borrow&
+		operator=(sqlite_source_shm_target_namespace_epoch_reader_borrow&&) = delete;
+		sqlite_source_shm_target_namespace_epoch_reader_borrow(
+			const sqlite_source_shm_target_namespace_epoch_reader_borrow&) = delete;
+		sqlite_source_shm_target_namespace_epoch_reader_borrow&
+		operator=(const sqlite_source_shm_target_namespace_epoch_reader_borrow&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+
+	  private:
+		friend class sqlite_source_shm_target_namespace_epoch;
+		friend class sqlite_source_shm_target_namespace_epoch_borrow_minter;
+		friend class sqlite_writer_shm_mapping_epoch_arm;
+		friend class sqlite_shm_writer_member_authority;
+		friend class sqlite_shm_reader_native_ok_projection_permit;
+		friend class sqlite_shm_reader_handoff;
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		explicit sqlite_source_shm_target_namespace_epoch_reader_borrow(
+			std::unique_ptr<detail::sqlite_source_shm_target_namespace_epoch_reader_borrow_state>
+				state) noexcept;
+		[[nodiscard]] result<void> recheck() const;
+		[[nodiscard]] const sqlite_backend_opaque_identity& identity() const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		parent_namespace_identity() const noexcept;
+		[[nodiscard]] result<sqlite_backend_entry_observation>
+		retained_entry(sqlite_backend_file_role role) const;
+		[[nodiscard]] bool matches_projection_reservation(
+			const sqlite_shm_reader_native_ok_projection_reservation& reservation) const noexcept;
+		[[nodiscard]] result<void> disarm();
+
+		std::unique_ptr<detail::sqlite_source_shm_target_namespace_epoch_reader_borrow_state>
+			state_;
+	};
+
+	/** Opaque writer-held mint authority; it exposes neither target epoch nor controller. */
+	class sqlite_source_shm_target_namespace_epoch_borrow_minter final
+	{
+	  public:
+		~sqlite_source_shm_target_namespace_epoch_borrow_minter() noexcept;
+		sqlite_source_shm_target_namespace_epoch_borrow_minter(
+			sqlite_source_shm_target_namespace_epoch_borrow_minter&&) noexcept;
+		sqlite_source_shm_target_namespace_epoch_borrow_minter&
+		operator=(sqlite_source_shm_target_namespace_epoch_borrow_minter&&) = delete;
+		sqlite_source_shm_target_namespace_epoch_borrow_minter(
+			const sqlite_source_shm_target_namespace_epoch_borrow_minter&) = delete;
+		sqlite_source_shm_target_namespace_epoch_borrow_minter&
+		operator=(const sqlite_source_shm_target_namespace_epoch_borrow_minter&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+
+	  private:
+		friend class sqlite_writer_shm_mapping_epoch_arm;
+		friend class sqlite_shm_writer_member_authority;
+		friend class sqlite_shm_writer_reader_borrow_mint_capability;
+		friend class detail::sqlite_writer_shm_mapping_epoch_state;
+		friend class detail::sqlite_writer_shm_generation_epoch_custody;
+		friend class sqlite_same_process_shm_lease_test_peer;
+		friend result<sqlite_source_shm_target_namespace_epoch_borrow_minter>
+		make_sqlite_source_shm_target_namespace_epoch_borrow_minter(
+			const std::shared_ptr<sqlite_source_shm_target_namespace_epoch>&);
+
+		explicit sqlite_source_shm_target_namespace_epoch_borrow_minter(
+			std::unique_ptr<detail::sqlite_source_shm_target_namespace_epoch_borrow_minter_state>
+				state) noexcept;
+		[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
+		mint(const sqlite_shm_reader_native_ok_projection_reservation& reservation);
+		[[nodiscard]] bool retain_generation_authority() noexcept;
+		void release_generation_authority() noexcept;
+
+		std::unique_ptr<detail::sqlite_source_shm_target_namespace_epoch_borrow_minter_state>
+			state_;
+	};
 
 	/** Bounded builder for one pathname-free source-private SQLite snapshot. */
 	class sqlite_backend_private_snapshot_builder

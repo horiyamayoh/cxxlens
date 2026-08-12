@@ -84,21 +84,19 @@ if("@CXXLENS_OCCURRENCE_CONFIGURATION@" STREQUAL "shared")
       FATAL_ERROR "Shared Clang 22 occurrence authority requires lib or lib64")
   endif()
   _cxxlens_occurrence_append(
-    base "@CMAKE_INSTALL_LIBDIR@/libcxxlens_base.so.@PROJECT_VERSION_MAJOR@")
+    base "@CMAKE_INSTALL_LIBDIR@/libcxxlens_base.so.@PROJECT_VERSION@")
   _cxxlens_occurrence_append(
-    kernel
-    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_kernel.so.@PROJECT_VERSION_MAJOR@")
+    kernel "@CMAKE_INSTALL_LIBDIR@/libcxxlens_kernel.so.@PROJECT_VERSION@")
   _cxxlens_occurrence_append(
-    query "@CMAKE_INSTALL_LIBDIR@/libcxxlens_query.so.@PROJECT_VERSION_MAJOR@")
+    query "@CMAKE_INSTALL_LIBDIR@/libcxxlens_query.so.@PROJECT_VERSION@")
   _cxxlens_occurrence_append(
-    recipes
-    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_recipes.so.@PROJECT_VERSION_MAJOR@")
+    recipes "@CMAKE_INSTALL_LIBDIR@/libcxxlens_recipes.so.@PROJECT_VERSION@")
   _cxxlens_occurrence_append(
     provider-sdk
-    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_provider_sdk.so.@PROJECT_VERSION_MAJOR@")
+    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_provider_sdk.so.@PROJECT_VERSION@")
   _cxxlens_occurrence_append(
     clang22-provider-sdk
-    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_clang22_provider_sdk.so.@PROJECT_VERSION_MAJOR@"
+    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_clang22_provider_sdk.so.@PROJECT_VERSION@"
   )
 endif()
 

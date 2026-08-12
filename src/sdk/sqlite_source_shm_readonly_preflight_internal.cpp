@@ -34,10 +34,349 @@
 
 #include "sqlite_connection_lifecycle_internal.hpp"
 #include "sqlite_payload_streaming_internal.hpp"
+#include "sqlite_same_process_shm_mapping_lease_internal.hpp"
 #include "sqlite_vfs_abi_internal.hpp"
 
 namespace cxxlens::sdk
 {
+	namespace detail
+	{
+		struct sqlite_source_shm_target_namespace_epoch_controller
+		{
+			std::shared_ptr<sqlite_source_shm_namespace_guard> guard;
+			mutable std::mutex mutex;
+			bool owner_released{};
+			bool finalization_claimed{};
+			bool finalized{};
+			bool abandoned{};
+			std::size_t reader_borrow_count{};
+			std::size_t generation_authority_count{};
+		};
+
+		struct sqlite_source_shm_target_namespace_epoch_reader_borrow_state
+		{
+			std::shared_ptr<sqlite_source_shm_target_namespace_epoch_controller> controller;
+			std::string logical_main_locator;
+			std::string anchored_main_locator;
+			sqlite_backend_opaque_identity identity;
+			sqlite_backend_opaque_identity parent_namespace_identity;
+			sqlite_backend_opaque_identity reservation_nonce;
+			std::uint64_t reservation_map_token{};
+			std::uint64_t reservation_generation{};
+			std::uint64_t reservation_holder_token{};
+			bool released{};
+		};
+
+		struct sqlite_source_shm_target_namespace_epoch_borrow_minter_state
+		{
+			std::shared_ptr<sqlite_source_shm_target_namespace_epoch_controller> controller;
+			std::string logical_main_locator;
+			std::string anchored_main_locator;
+			sqlite_backend_opaque_identity identity;
+			sqlite_backend_opaque_identity parent_namespace_identity;
+		};
+	} // namespace detail
+
+	namespace
+	{
+		[[nodiscard]] error target_epoch_borrow_error()
+		{
+			return {"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"};
+		}
+
+		[[nodiscard]] std::shared_ptr<sqlite_source_shm_namespace_guard>
+		claim_target_epoch_finalizer(
+			detail::sqlite_source_shm_target_namespace_epoch_controller& controller)
+		{
+			// Generation custody is the authority that permits a post-owner-close mint. Keep
+			// the namespace guard alive until both reader borrows and generation authorities
+			// have drained; otherwise owner close can finalize the source between Stage A and
+			// Stage B and turn an authenticated late projection into a spurious IOERR.
+			if (!controller.owner_released || controller.reader_borrow_count != 0U ||
+				controller.generation_authority_count != 0U || controller.finalization_claimed ||
+				controller.finalized || controller.abandoned || !controller.guard)
+				return {};
+			controller.finalization_claimed = true;
+			return controller.guard;
+		}
+
+		[[nodiscard]] result<void> finish_target_epoch_finalizer(
+			const std::shared_ptr<detail::sqlite_source_shm_target_namespace_epoch_controller>&
+				controller,
+			const std::shared_ptr<sqlite_source_shm_namespace_guard>& guard)
+		{
+			// Namespace guard operations may touch the filesystem.  The controller lock is held
+			// only for authority-state transitions, never across those operations.
+			if (!controller || !guard || !guard->finish())
+			{
+				if (controller)
+				{
+					std::scoped_lock lock{controller->mutex};
+					controller->abandoned = true;
+				}
+				return unexpected(target_epoch_borrow_error());
+			}
+			std::scoped_lock lock{controller->mutex};
+			if (controller->guard.get() != guard.get() || controller->finalized ||
+				controller->abandoned)
+				return unexpected(target_epoch_borrow_error());
+			controller->finalized = true;
+			return {};
+		}
+
+		[[nodiscard]] result<void> release_target_epoch_reader_borrow(
+			detail::sqlite_source_shm_target_namespace_epoch_reader_borrow_state& state)
+		{
+			auto controller = state.controller;
+			if (!controller)
+				return unexpected(target_epoch_borrow_error());
+			std::shared_ptr<sqlite_source_shm_namespace_guard> finalizer;
+			{
+				std::scoped_lock lock{controller->mutex};
+				if (state.released || !controller->guard || controller->finalized ||
+					controller->abandoned || controller->reader_borrow_count == 0U)
+					return unexpected(target_epoch_borrow_error());
+				state.released = true;
+				--controller->reader_borrow_count;
+				finalizer = claim_target_epoch_finalizer(*controller);
+			}
+			if (finalizer)
+				return finish_target_epoch_finalizer(controller, finalizer);
+			return {};
+		}
+
+		void abandon_target_epoch_reader_borrow(
+			detail::sqlite_source_shm_target_namespace_epoch_reader_borrow_state& state) noexcept
+		{
+			if (auto released = release_target_epoch_reader_borrow(state);
+				!released && state.controller)
+			{
+				// A destructor cannot surface the failure.  Keep the controller terminally
+				// fail-closed so a later registry integration can quarantine this custody loss.
+				std::scoped_lock lock{state.controller->mutex};
+				state.controller->abandoned = true;
+			}
+		}
+	} // namespace
+
+	sqlite_source_shm_target_namespace_epoch_reader_borrow::
+		sqlite_source_shm_target_namespace_epoch_reader_borrow(
+			std::unique_ptr<detail::sqlite_source_shm_target_namespace_epoch_reader_borrow_state>
+				state) noexcept
+		: state_{std::move(state)}
+	{
+	}
+
+	sqlite_source_shm_target_namespace_epoch_reader_borrow::
+		~sqlite_source_shm_target_namespace_epoch_reader_borrow() noexcept
+	{
+		if (state_)
+			abandon_target_epoch_reader_borrow(*state_);
+	}
+
+	sqlite_source_shm_target_namespace_epoch_reader_borrow::
+		sqlite_source_shm_target_namespace_epoch_reader_borrow(
+			sqlite_source_shm_target_namespace_epoch_reader_borrow&&) noexcept = default;
+
+	bool sqlite_source_shm_target_namespace_epoch_reader_borrow::valid() const noexcept
+	{
+		return state_ != nullptr && !state_->released && state_->controller != nullptr;
+	}
+
+	result<void> sqlite_source_shm_target_namespace_epoch_reader_borrow::recheck() const
+	{
+		if (!state_ || state_->released || !state_->controller)
+			return unexpected(target_epoch_borrow_error());
+		std::shared_ptr<sqlite_source_shm_namespace_guard> guard;
+		{
+			std::scoped_lock lock{state_->controller->mutex};
+			if (!state_->controller->guard || state_->controller->finalized ||
+				state_->controller->abandoned)
+				return unexpected(target_epoch_borrow_error());
+			guard = state_->controller->guard;
+		}
+		if (!guard->recheck())
+			return unexpected(target_epoch_borrow_error());
+		return {};
+	}
+
+	const sqlite_backend_opaque_identity&
+	sqlite_source_shm_target_namespace_epoch_reader_borrow::identity() const noexcept
+	{
+		static const sqlite_backend_opaque_identity empty{};
+		return state_ ? state_->identity : empty;
+	}
+
+	const sqlite_backend_opaque_identity&
+	sqlite_source_shm_target_namespace_epoch_reader_borrow::parent_namespace_identity()
+		const noexcept
+	{
+		static const sqlite_backend_opaque_identity empty{};
+		return state_ ? state_->parent_namespace_identity : empty;
+	}
+
+	bool sqlite_source_shm_target_namespace_epoch_reader_borrow::matches_projection_reservation(
+		const sqlite_shm_reader_native_ok_projection_reservation& reservation) const noexcept
+	{
+		return state_ != nullptr && !state_->released &&
+			state_->reservation_nonce == reservation.nonce() &&
+			state_->reservation_map_token == reservation.map_token() &&
+			state_->reservation_generation == reservation.generation() &&
+			state_->reservation_holder_token == reservation.holder_token();
+	}
+
+	result<sqlite_backend_entry_observation>
+	sqlite_source_shm_target_namespace_epoch_reader_borrow::retained_entry(
+		const sqlite_backend_file_role role) const
+	{
+		if (!state_ || state_->released || !state_->controller)
+			return unexpected(target_epoch_borrow_error());
+		std::shared_ptr<sqlite_source_shm_namespace_guard> guard;
+		{
+			std::scoped_lock lock{state_->controller->mutex};
+			if (!state_->controller->guard || state_->controller->finalized ||
+				state_->controller->abandoned)
+				return unexpected(target_epoch_borrow_error());
+			guard = state_->controller->guard;
+		}
+		if (!guard->recheck())
+			return unexpected(target_epoch_borrow_error());
+		return guard->retained_entry(role);
+	}
+
+	result<void> sqlite_source_shm_target_namespace_epoch_reader_borrow::disarm()
+	{
+		if (!state_)
+			return unexpected(target_epoch_borrow_error());
+		if (auto released = release_target_epoch_reader_borrow(*state_); !released)
+		{
+			// release_target_epoch_reader_borrow can consume the counted borrow before
+			// the finalizer reports its failure.  The caller receives that failure and
+			// must quarantine its own terminal custody; retaining this already-consumed
+			// state would make the destructor silently turn it into abandonment.
+			state_.reset();
+			return unexpected(std::move(released.error()));
+		}
+		state_.reset();
+		return {};
+	}
+
+	sqlite_source_shm_target_namespace_epoch_borrow_minter::
+		sqlite_source_shm_target_namespace_epoch_borrow_minter(
+			std::unique_ptr<detail::sqlite_source_shm_target_namespace_epoch_borrow_minter_state>
+				state) noexcept
+		: state_{std::move(state)}
+	{
+	}
+
+	sqlite_source_shm_target_namespace_epoch_borrow_minter::
+		~sqlite_source_shm_target_namespace_epoch_borrow_minter() noexcept = default;
+
+	sqlite_source_shm_target_namespace_epoch_borrow_minter::
+		sqlite_source_shm_target_namespace_epoch_borrow_minter(
+			sqlite_source_shm_target_namespace_epoch_borrow_minter&&) noexcept = default;
+
+	bool sqlite_source_shm_target_namespace_epoch_borrow_minter::valid() const noexcept
+	{
+		return state_ != nullptr && state_->controller != nullptr;
+	}
+
+	bool
+	sqlite_source_shm_target_namespace_epoch_borrow_minter::retain_generation_authority() noexcept
+	{
+		if (!state_ || !state_->controller)
+			return false;
+		std::scoped_lock lock{state_->controller->mutex};
+		if (!state_->controller->guard || state_->controller->finalized ||
+			state_->controller->abandoned ||
+			state_->controller->generation_authority_count ==
+				std::numeric_limits<std::size_t>::max())
+			return false;
+		++state_->controller->generation_authority_count;
+		return true;
+	}
+
+	void
+	sqlite_source_shm_target_namespace_epoch_borrow_minter::release_generation_authority() noexcept
+	{
+		if (!state_ || !state_->controller)
+			return;
+		auto controller = state_->controller;
+		std::shared_ptr<sqlite_source_shm_namespace_guard> finalizer;
+		{
+			std::scoped_lock lock{controller->mutex};
+			if (controller->generation_authority_count != 0U)
+				--controller->generation_authority_count;
+			finalizer = claim_target_epoch_finalizer(*controller);
+		}
+		if (finalizer && !finish_target_epoch_finalizer(controller, finalizer))
+		{
+			std::scoped_lock lock{controller->mutex};
+			controller->abandoned = true;
+		}
+	}
+
+	result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
+	sqlite_source_shm_target_namespace_epoch_borrow_minter::mint(
+		const sqlite_shm_reader_native_ok_projection_reservation& reservation)
+	{
+		// The writer-held capability verifies the non-forgeable lease reservation before this
+		// method is reachable.  This layer owns only source-namespace custody and performs its
+		// filesystem recheck outside every lease/registry lock.
+		(void)reservation;
+		if (!state_ || !state_->controller)
+			return unexpected(target_epoch_borrow_error());
+		try
+		{
+			auto borrow_state = std::make_unique<
+				detail::sqlite_source_shm_target_namespace_epoch_reader_borrow_state>(
+				detail::sqlite_source_shm_target_namespace_epoch_reader_borrow_state{
+					state_->controller,
+					state_->logical_main_locator,
+					state_->anchored_main_locator,
+					state_->identity,
+					state_->parent_namespace_identity,
+					reservation.nonce(),
+					reservation.map_token(),
+					reservation.generation(),
+					reservation.holder_token(),
+					false,
+				});
+			std::shared_ptr<sqlite_source_shm_namespace_guard> guard;
+			{
+				std::scoped_lock lock{state_->controller->mutex};
+				if (!state_->controller->guard ||
+					(state_->controller->owner_released &&
+					 state_->controller->generation_authority_count == 0U) ||
+					state_->controller->finalized || state_->controller->abandoned)
+					return unexpected(target_epoch_borrow_error());
+				guard = state_->controller->guard;
+			}
+			if (!guard->recheck())
+				return unexpected(target_epoch_borrow_error());
+			{
+				std::scoped_lock lock{state_->controller->mutex};
+				if (state_->controller->guard.get() != guard.get() ||
+					(state_->controller->owner_released &&
+					 state_->controller->generation_authority_count == 0U) ||
+					state_->controller->finalized || state_->controller->abandoned ||
+					state_->controller->reader_borrow_count ==
+						std::numeric_limits<std::size_t>::max())
+					return unexpected(target_epoch_borrow_error());
+				++state_->controller->reader_borrow_count;
+			}
+			return sqlite_source_shm_target_namespace_epoch_reader_borrow{std::move(borrow_state)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(target_epoch_borrow_error());
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(target_epoch_borrow_error());
+		}
+	}
+
 	namespace
 	{
 		constexpr std::string_view observation_profile{"default-filesystem-v1"};
@@ -866,9 +1205,12 @@ namespace cxxlens::sdk
 					append_opaque(identity.bytes, census.parent_namespace_identity);
 					append_opaque(identity.bytes, guard->identity());
 
+					auto controller = std::make_shared<
+						detail::sqlite_source_shm_target_namespace_epoch_controller>();
+					controller->guard = std::move(guard);
 					auto output = std::shared_ptr<default_source_shm_target_namespace_epoch>(
 						new default_source_shm_target_namespace_epoch(
-							std::move(guard),
+							std::move(controller),
 							std::string{logical_main_locator},
 							std::string{census.source_shm_guard->anchored_main_locator()},
 							census.parent_namespace_identity,
@@ -910,18 +1252,18 @@ namespace cxxlens::sdk
 			[[nodiscard]] result<sqlite_backend_entry_observation>
 			retained_entry(const sqlite_backend_file_role role) const override
 			{
-				std::scoped_lock lock{mutex_};
-				if (auto checked = recheck_locked(); !checked)
-					return unexpected(std::move(checked.error()));
-				return guard_->retained_entry(role);
+				auto guard = usable_guard();
+				if (!guard || !guard->recheck())
+					return unexpected(qualification_error());
+				return guard->retained_entry(role);
 			}
 			[[nodiscard]] result<sqlite_backend_writer_shm_stat_observation>
 			observe_writer_shm_stat(const bool after_native_map) const override
 			{
-				std::scoped_lock lock{mutex_};
-				if (finished_ || !guard_ || (!after_native_map && !guard_->recheck()))
+				auto guard = usable_guard();
+				if (!guard || (!after_native_map && !guard->recheck()))
 					return unexpected(qualification_error());
-				auto stat = guard_->observe_writer_shm_stat(after_native_map);
+				auto stat = guard->observe_writer_shm_stat(after_native_map);
 				if (!stat || stat->parent_namespace_identity != parent_namespace_identity_)
 					return unexpected(qualification_error());
 				return stat;
@@ -929,49 +1271,94 @@ namespace cxxlens::sdk
 
 			[[nodiscard]] result<void> recheck() const override
 			{
-				std::scoped_lock lock{mutex_};
-				return recheck_locked();
+				auto guard = usable_guard();
+				if (!guard || !guard->recheck())
+					return unexpected(qualification_error());
+				return {};
 			}
 
 			[[nodiscard]] result<void> finish() override
 			{
-				std::scoped_lock lock{mutex_};
-				if (auto checked = recheck_locked(); !checked)
-					return checked;
-				if (!guard_->finish())
+				auto guard = usable_guard();
+				if (!guard || !guard->recheck())
 					return unexpected(qualification_error());
-				finished_ = true;
+				std::shared_ptr<sqlite_source_shm_namespace_guard> finalizer;
+				{
+					std::scoped_lock lock{controller_->mutex};
+					if (controller_->owner_released || controller_->finalized ||
+						controller_->abandoned || controller_->guard.get() != guard.get())
+						return unexpected(qualification_error());
+					controller_->owner_released = true;
+					finalizer = claim_target_epoch_finalizer(*controller_);
+				}
+				if (finalizer)
+					return finish_target_epoch_finalizer(controller_, finalizer);
 				return {};
 			}
 
 		  private:
 			default_source_shm_target_namespace_epoch(
-				std::shared_ptr<sqlite_source_shm_namespace_guard> guard,
+				std::shared_ptr<detail::sqlite_source_shm_target_namespace_epoch_controller>
+					controller,
 				std::string logical_main_locator,
 				std::string anchored_main_locator,
 				sqlite_backend_opaque_identity parent_namespace_identity,
 				sqlite_backend_opaque_identity identity)
-				: guard_{std::move(guard)}, logical_main_locator_{std::move(logical_main_locator)},
+				: controller_{std::move(controller)},
+				  logical_main_locator_{std::move(logical_main_locator)},
 				  anchored_main_locator_{std::move(anchored_main_locator)},
 				  parent_namespace_identity_{std::move(parent_namespace_identity)},
 				  identity_{std::move(identity)}
 			{
 			}
 
-			[[nodiscard]] result<void> recheck_locked() const
+			[[nodiscard]] std::shared_ptr<sqlite_source_shm_namespace_guard> usable_guard() const
 			{
-				if (finished_ || !guard_ || !guard_->recheck())
-					return unexpected(qualification_error());
-				return {};
+				if (!controller_)
+					return {};
+				std::scoped_lock lock{controller_->mutex};
+				if (!controller_->guard || controller_->finalized || controller_->abandoned)
+					return {};
+				return controller_->guard;
 			}
 
-			std::shared_ptr<sqlite_source_shm_namespace_guard> guard_;
+		  public:
+			[[nodiscard]] result<std::unique_ptr<
+				detail::sqlite_source_shm_target_namespace_epoch_borrow_minter_state>>
+			make_reader_borrow_minter_state() const
+			{
+				if (!controller_)
+					return unexpected(qualification_error());
+				try
+				{
+					auto state = std::make_unique<
+						detail::sqlite_source_shm_target_namespace_epoch_borrow_minter_state>(
+						detail::sqlite_source_shm_target_namespace_epoch_borrow_minter_state{
+							controller_,
+							logical_main_locator_,
+							anchored_main_locator_,
+							identity_,
+							parent_namespace_identity_,
+						});
+					return state;
+				}
+				catch (const std::bad_alloc&)
+				{
+					return unexpected(qualification_error());
+				}
+				catch (const std::length_error&)
+				{
+					return unexpected(qualification_error());
+				}
+			}
+
+		  private:
+			std::shared_ptr<detail::sqlite_source_shm_target_namespace_epoch_controller>
+				controller_;
 			std::string logical_main_locator_;
 			std::string anchored_main_locator_;
 			sqlite_backend_opaque_identity parent_namespace_identity_;
 			sqlite_backend_opaque_identity identity_;
-			mutable std::mutex mutex_;
-			mutable bool finished_{};
 		};
 
 		[[nodiscard]] result<void>
@@ -2361,6 +2748,20 @@ namespace cxxlens::sdk
 		{
 			return unexpected(qualification_error());
 		}
+	}
+
+	result<sqlite_source_shm_target_namespace_epoch_borrow_minter>
+	make_sqlite_source_shm_target_namespace_epoch_borrow_minter(
+		const std::shared_ptr<sqlite_source_shm_target_namespace_epoch>& target_epoch)
+	{
+		auto concrete =
+			std::dynamic_pointer_cast<default_source_shm_target_namespace_epoch>(target_epoch);
+		if (!concrete)
+			return unexpected(qualification_error());
+		auto state = concrete->make_reader_borrow_minter_state();
+		if (!state)
+			return unexpected(std::move(state.error()));
+		return sqlite_source_shm_target_namespace_epoch_borrow_minter{std::move(*state)};
 	}
 
 	result<void> validate_sqlite_source_shm_readonly_origin_probe(

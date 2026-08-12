@@ -291,7 +291,8 @@ namespace
 			parent_receipt,
 			wal_receipt,
 			identity("test.epoch.wal-xopen", marker),
-			shm_receipt};
+			shm_receipt,
+			identity("test.epoch.target-namespace-epoch", marker)};
 
 		return {
 			epoch_binding,
@@ -589,7 +590,7 @@ namespace
 				during_pre_stat(request);
 			preparation_order.emplace_back("pre-stat");
 			return sqlite_writer_shm_mapping_epoch_preparation{
-				epoch_identity_, watch_receipt_, pre_stat_, observation_};
+				epoch_identity_, watch_receipt_, pre_stat_, observation_, std::nullopt};
 		}
 
 	  private:
@@ -1154,6 +1155,7 @@ namespace
 		auto target = std::make_shared<retained_epoch_target>(state, marker);
 		auto platform = retained_epoch_platform_binding(target, marker);
 		auto resources = make_epoch_resources(marker);
+		resources.binding.target_namespace_epoch_identity.reset();
 		sqlite_retained_namespace_writer_shm_mapping_epoch_port port{std::move(platform)};
 		auto activation = port.arm(resources.take_request());
 		require(activation.has_value(), "retained namespace epoch did not arm");
@@ -1182,6 +1184,24 @@ namespace
 				"retained namespace epoch did not recheck the held object without reopening it");
 	}
 
+	void verify_target_bound_epoch_rejects_missing_reader_minter()
+	{
+		constexpr auto marker = std::uint8_t{89U};
+		retained_epoch_state state;
+		auto target = std::make_shared<retained_epoch_target>(state, marker);
+		auto resources = make_epoch_resources(marker);
+		sqlite_retained_namespace_writer_shm_mapping_epoch_port port{
+			retained_epoch_platform_binding(target, marker)};
+		auto activation = port.arm(resources.take_request());
+		require(
+			!activation &&
+				activation.error().reason ==
+					sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+				activation.error().action ==
+					sqlite_shm_lease_recovery_action::deny_before_native_map,
+			"target-bound writer epoch silently fell back without an authenticated reader minter");
+	}
+
 	void verify_retained_namespace_port_supports_writer_extend_matrix_and_stale_post_map()
 	{
 		{
@@ -1189,6 +1209,7 @@ namespace
 			retained_epoch_state state;
 			auto target = std::make_shared<retained_epoch_target>(state, marker);
 			auto resources = make_epoch_resources(marker, 1, 1);
+			resources.binding.target_namespace_epoch_identity.reset();
 			sqlite_retained_namespace_writer_shm_mapping_epoch_port port{
 				retained_epoch_platform_binding(target, marker)};
 			auto activation = port.arm(resources.take_request());
@@ -1213,6 +1234,7 @@ namespace
 			state.shm_absent = true;
 			auto target = std::make_shared<retained_epoch_target>(state, marker);
 			auto resources = make_epoch_resources(marker, 1, 1);
+			resources.binding.target_namespace_epoch_identity.reset();
 			sqlite_retained_namespace_writer_shm_mapping_epoch_port port{
 				retained_epoch_platform_binding(target, marker, true)};
 			auto activation = port.arm(resources.take_request());
@@ -1240,6 +1262,7 @@ namespace
 			retained_epoch_state state;
 			auto target = std::make_shared<retained_epoch_target>(state, marker);
 			auto resources = make_epoch_resources(marker, 1, 1);
+			resources.binding.target_namespace_epoch_identity.reset();
 			resources.binding.map_request.page_number = 1;
 			sqlite_retained_namespace_writer_shm_mapping_epoch_port port{
 				retained_epoch_platform_binding(target, marker)};
@@ -1263,6 +1286,7 @@ namespace
 		retained_epoch_state state;
 		auto target = std::make_shared<retained_epoch_target>(state, marker);
 		auto resources = make_epoch_resources(marker);
+		resources.binding.target_namespace_epoch_identity.reset();
 		sqlite_retained_namespace_writer_shm_mapping_epoch_port port{
 			retained_epoch_platform_binding(target, marker)};
 		auto activation = port.arm(resources.take_request());
@@ -1300,6 +1324,7 @@ int main()
 		verify_malformed_post_observation_never_seals();
 		verify_audit_receipt_copy_does_not_retain_authority();
 		verify_retained_namespace_port_proves_only_existing_zero_effect_route();
+		verify_target_bound_epoch_rejects_missing_reader_minter();
 		verify_retained_namespace_port_supports_writer_extend_matrix_and_stale_post_map();
 	}
 	catch (const std::exception& exception)
