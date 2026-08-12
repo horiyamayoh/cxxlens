@@ -15,6 +15,9 @@ namespace cxxlens::sdk
 		struct sqlite_writer_shm_mapping_epoch_liveness;
 		struct sqlite_writer_shm_native_lifetime_control;
 		class sqlite_writer_shm_mapping_epoch_state;
+		class sqlite_writer_shm_generation_epoch_custody;
+		class sqlite_shm_mapping_lease_state;
+		class sqlite_shm_mapping_registry_state;
 	} // namespace detail
 
 	class sqlite_writer_shm_mapping_epoch_test_peer;
@@ -24,6 +27,9 @@ namespace cxxlens::sdk
 	class sqlite_writer_shm_mapping_receipt_validator;
 	class sqlite_writer_shm_mapping_epoch_receipt;
 	class sqlite_shm_writer_member_authority;
+	class sqlite_shm_reader_native_ok_projection_reservation;
+	class sqlite_shm_writer_reader_borrow_mint_capability;
+	class sqlite_writer_shm_generation_epoch_authority;
 
 	/**
 	 * Closed role of one native lifetime retained across a writer mapping epoch.
@@ -371,6 +377,60 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity watch_arm_receipt;
 		sqlite_writer_shm_stat_census pre_stat;
 		std::shared_ptr<sqlite_writer_shm_mapping_epoch_observation_port> observer;
+		// Source-private custody only. It does not mint until a lease reservation binds the
+		// exact holder/generation/map/callback/page coordinates in stage two.
+		std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter> borrow_minter;
+	};
+
+	/**
+	 * Generation-owned source custody, distinct from a writer member's local census arm.
+	 * It is intentionally opaque: only the lease may bind a reader mint to exact
+	 * generation/map/holder coordinates. G1 introduces the custody split; G2 wires
+	 * installation and joining at the writer lifecycle boundaries.
+	 */
+	class sqlite_writer_shm_generation_epoch_authority final
+	{
+	  public:
+		~sqlite_writer_shm_generation_epoch_authority() noexcept;
+		sqlite_writer_shm_generation_epoch_authority(
+			const sqlite_writer_shm_generation_epoch_authority&) noexcept = default;
+		sqlite_writer_shm_generation_epoch_authority(
+			sqlite_writer_shm_generation_epoch_authority&&) noexcept;
+		sqlite_writer_shm_generation_epoch_authority&
+		operator=(const sqlite_writer_shm_generation_epoch_authority&) noexcept = default;
+		sqlite_writer_shm_generation_epoch_authority&
+		operator=(sqlite_writer_shm_generation_epoch_authority&&) noexcept = default;
+
+		[[nodiscard]] bool valid() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
+		friend class sqlite_shm_writer_member_authority;
+		friend class sqlite_writer_shm_mapping_epoch_arm;
+		explicit sqlite_writer_shm_generation_epoch_authority(
+			std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state,
+			std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody) noexcept;
+		[[nodiscard]] bool target_identity_matches(
+			const sqlite_shm_reader_attachment_target_identity& target,
+			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
+		[[nodiscard]] bool matches_canonical_target(
+			const sqlite_shm_reader_attachment_target_identity& target) const noexcept;
+		[[nodiscard]] bool canonical_target_bound() const noexcept;
+		[[nodiscard]] bool reader_borrow_capable() const noexcept;
+		[[nodiscard]] bool
+		same_custody_as(const sqlite_writer_shm_generation_epoch_authority& other) const noexcept;
+		[[nodiscard]] bool
+		bind_canonical_target(const sqlite_shm_verified_writer_post_map_receipt& receipt) noexcept;
+		[[nodiscard]] bool bind_generic_custody() noexcept;
+		[[nodiscard]] result<sqlite_shm_writer_reader_borrow_mint_capability>
+		reserve_reader_borrow_mint(std::uint64_t map_token,
+								   std::uint64_t generation,
+								   std::uint64_t holder_token) const;
+		void invalidate_for_testing() noexcept;
+
+		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state_;
+		std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody_;
 	};
 
 	class sqlite_writer_shm_mapping_epoch_arm
@@ -388,6 +448,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_shm_writer_member_authority;
+		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_writer_shm_mapping_epoch_port;
 		friend class sqlite_writer_shm_mapping_receipt_validator;
 
@@ -406,9 +467,52 @@ namespace cxxlens::sdk
 			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
 		[[nodiscard]] bool attachment_cohort_compatible_with(
 			const sqlite_writer_shm_mapping_epoch_arm& other) const noexcept;
+		[[nodiscard]] result<sqlite_shm_writer_reader_borrow_mint_capability>
+		reserve_reader_borrow_mint(std::uint64_t map_token,
+								   std::uint64_t generation,
+								   std::uint64_t holder_token) const;
+		[[nodiscard]] sqlite_writer_shm_generation_epoch_authority
+		make_generation_authority() const noexcept;
 		void invalidate_for_testing() noexcept;
 
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state_;
+	};
+
+	/** Opaque one-shot bridge from a selected writer holder to a lease reservation. */
+	class sqlite_shm_writer_reader_borrow_mint_capability final
+	{
+	  public:
+		~sqlite_shm_writer_reader_borrow_mint_capability() noexcept;
+		sqlite_shm_writer_reader_borrow_mint_capability(
+			sqlite_shm_writer_reader_borrow_mint_capability&&) noexcept;
+		sqlite_shm_writer_reader_borrow_mint_capability&
+		operator=(sqlite_shm_writer_reader_borrow_mint_capability&&) = delete;
+		sqlite_shm_writer_reader_borrow_mint_capability(
+			const sqlite_shm_writer_reader_borrow_mint_capability&) = delete;
+		sqlite_shm_writer_reader_borrow_mint_capability&
+		operator=(const sqlite_shm_writer_reader_borrow_mint_capability&) = delete;
+
+	  private:
+		friend class sqlite_shm_writer_member_authority;
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class detail::sqlite_shm_mapping_registry_state;
+		friend class sqlite_shm_reader_native_ok_projection_reservation;
+		friend class sqlite_same_process_shm_mapping_lease_coordinator;
+		friend class sqlite_writer_shm_mapping_epoch_arm;
+		friend class sqlite_writer_shm_generation_epoch_authority;
+		explicit sqlite_shm_writer_reader_borrow_mint_capability(
+			std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody,
+			std::uint64_t map_token,
+			std::uint64_t generation,
+			std::uint64_t holder_token) noexcept;
+		[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
+		mint(const sqlite_shm_reader_native_ok_projection_reservation& reservation);
+		void disarm() noexcept;
+
+		std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody_;
+		std::uint64_t map_token_{};
+		std::uint64_t generation_{};
+		std::uint64_t holder_token_{};
 	};
 
 	class sqlite_writer_shm_mapping_epoch_observer

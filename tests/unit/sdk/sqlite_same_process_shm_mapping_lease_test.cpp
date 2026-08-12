@@ -1644,6 +1644,7 @@ namespace
 				identity("test.phase2.writer-watch", marker_),
 				pre_stat_,
 				observer_,
+				std::nullopt,
 			};
 		}
 
