@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the installed Clang 22 materializer through its positive memory path."""
+"""Run the installed Clang 22 materializer through an actual-source E2E path."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import tempfile
 from typing import Any
 
 
@@ -28,6 +29,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, type=pathlib.Path)
     parser.add_argument("--prefix", required=True, type=pathlib.Path)
+    parser.add_argument(
+        "--backend", choices=("memory", "sqlite"), default="memory"
+    )
+    parser.add_argument("--translation-unit-count", type=int, default=2)
     return parser.parse_args()
 
 
@@ -37,6 +42,8 @@ def fail(message: str) -> None:
 
 def main() -> int:
     args = parse_args()
+    args.root = args.root.resolve()
+    args.prefix = args.prefix.resolve()
     sys.path.insert(0, str(args.root / "tools" / "quality"))
     import check_ng_clang22_materialization as oracle  # pylint: disable=import-error
 
@@ -54,7 +61,8 @@ def main() -> int:
     request = oracle.sample_request(
         args.root,
         configuration=occurrence["package_configuration"],
-        backend="memory",
+        backend=args.backend,
+        translation_unit_count=args.translation_unit_count,
     )
     request["tool"].update(
         source_revision=occurrence["source_revision"],
@@ -81,15 +89,22 @@ def main() -> int:
     environment.pop("LD_LIBRARY_PATH", None)
     environment.pop("DYLD_LIBRARY_PATH", None)
     materializer = args.prefix / "bin" / "cxxlens-clang22-materialize"
-    completed = subprocess.run(
-        [str(materializer)],
-        input=request_bytes,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        cwd=args.prefix,
-        env=environment,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory(
+        dir=args.prefix if args.backend == "sqlite" else None,
+        prefix="clang22-materializer-e2e-",
+    ) as working_directory:
+        completed = subprocess.run(
+            [str(materializer)],
+            input=request_bytes,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=working_directory if args.backend == "sqlite" else args.prefix,
+            env=environment,
+            check=False,
+        )
+        sqlite_path = pathlib.Path(working_directory) / "materialization.sqlite"
+        if args.backend == "sqlite" and not sqlite_path.is_file():
+            fail("installed SQLite materializer did not leave a file-backed Store")
     if completed.returncode != 0:
         fail(
             "installed materializer did not publish success: "
@@ -159,13 +174,14 @@ def main() -> int:
 
     publication = report["publication"]
     if (
-        publication["backend"] != "memory"
+        publication["backend"] != args.backend
         or publication["selector"] != request["publication"]["selector"]
         or publication["outcome"] != "committed_verified"
         or publication["invocation_commit_state"] != "committed"
         or publication["committed_transaction_count"] != 1
         or publication["publication_attempted"] is not True
-        or publication["sqlite_effect_root_receipt"] is not None
+        or (args.backend == "memory" and publication["sqlite_effect_root_receipt"] is not None)
+        or (args.backend == "sqlite" and publication["sqlite_effect_root_receipt"] is None)
     ):
         fail("installed success report publication is not committed and verified")
     if report["semantic_verification"]["status"] != "passed":
@@ -174,6 +190,22 @@ def main() -> int:
         "claim_batch_validation"
     ):
         fail("installed success report lacks verified Store observations")
+    expected_projection, _ = oracle._reopened_handle_projection(
+        request,
+        report["store"],
+        publication["invocation_committed_record"],
+    )
+    reopened_store = report["semantic_verification"]["reopened_store"]
+    if reopened_store["canonical_export_digest"] != expected_projection[
+        "canonical_export_digest"
+    ]:
+        fail("installed report canonical export digest differs from exact SDK export mirror")
+    if any(
+        receipt["projection"]["canonical_export_digest"]
+        != expected_projection["canonical_export_digest"]
+        for receipt in reopened_store["handle_receipts"]
+    ):
+        fail("installed reopened handle receipt lost the exact SDK export digest")
     if report["adoption"]["state"] != "sealed":
         fail("installed success report adopted an unsealed result")
     if (
@@ -204,6 +236,53 @@ def main() -> int:
             fail("installed success report dropped transport or semantic coverage")
         if result["runtime_receipt"]["frame_count"] <= 0:
             fail("installed success report has no validated provider frames")
+
+    if args.translation_unit_count > 1:
+        direct_target_rows = [
+            row
+            for result in task_results
+            for batch in result["batches"]
+            if batch["descriptor_id"] == "cc.call_direct_target.v1"
+            for row in batch["row_bindings"]
+        ]
+        if not direct_target_rows:
+            fail("multi-TU installed source did not produce a direct-target row")
+        target_compile_units = {
+            row["final_relation_compile_unit_id"] for row in direct_target_rows
+        }
+        if len(target_compile_units) != 1:
+            fail("direct-target rows did not retain one authoritative caller TU")
+        entity_rows = [
+            row
+            for result in task_results
+            for batch in result["batches"]
+            if batch["descriptor_id"] == "cc.entity.v1"
+            for row in batch["row_bindings"]
+        ]
+        entity_occurrences: dict[str, set[str]] = {}
+        for row in entity_rows:
+            canonical = json.loads(row["row_canonical_form"])
+            entity_id = canonical["cells"]["cc.entity.v1.entity"]["value"]
+            entity_occurrences.setdefault(entity_id, set()).add(
+                row["final_relation_compile_unit_id"]
+            )
+        target_ids = {
+            json.loads(row["row_canonical_form"])["cells"][
+                "cc.call_direct_target.v1.target"
+            ]["value"]
+            for row in direct_target_rows
+        }
+        target_entity_units = set().union(
+            *(entity_occurrences.get(target_id, set()) for target_id in target_ids)
+        )
+        if len(target_entity_units) < 2:
+            fail(
+                "multi-TU direct target did not resolve to the same entity across "
+                "caller and separately defined target units"
+            )
+
+        if len({row["final_relation_compile_unit_id"] for row in entity_rows}) < 2:
+            fail("multi-TU installed source did not retain both entity TUs")
 
     return 0
 

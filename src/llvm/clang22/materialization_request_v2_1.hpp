@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -96,6 +97,9 @@ namespace cxxlens::detail::clang22::materialization
 		sdk::provider::sandbox_requirement sandbox;
 	};
 
+	/** Opaque lifetime token held by a task-at-a-time cursor result. */
+	struct materialization_v2_1_task_cursor_state;
+
 	/**
 	 * One source-dependent task replay issued only after complete v2.1 admission.
 	 *
@@ -105,11 +109,36 @@ namespace cxxlens::detail::clang22::materialization
 	 */
 	struct materialization_v2_1_task_execution
 	{
+		materialization_v2_1_task_execution(clang22_task_input input,
+											materialization_v2_1_task_metadata_receipt metadata,
+											clang22_task_source_receipt source_receipt,
+											std::unique_ptr<clang22_task_source_spool> source,
+											std::unique_ptr<clang22_task_input_spool> task_input);
+		materialization_v2_1_task_execution(const materialization_v2_1_task_execution&) = delete;
+		materialization_v2_1_task_execution&
+		operator=(const materialization_v2_1_task_execution&) = delete;
+		materialization_v2_1_task_execution(materialization_v2_1_task_execution&&) noexcept =
+			default;
+		materialization_v2_1_task_execution&
+		operator=(materialization_v2_1_task_execution&&) noexcept = default;
+		~materialization_v2_1_task_execution() = default;
+
 		clang22_task_input input;
 		materialization_v2_1_task_metadata_receipt metadata;
 		clang22_task_source_receipt source_receipt;
 		std::unique_ptr<clang22_task_source_spool> source;
 		std::unique_ptr<clang22_task_input_spool> task_input;
+
+	  private:
+		/**
+		 * Source-private lease installed only by materialization_v2_1_task_cursor.  It is
+		 * deliberately opaque to downstream code and moves with the complete task binding, so the
+		 * cursor cannot advance while any bounded task window is still owned by a consumer.
+		 */
+		std::shared_ptr<void> cursor_lease;
+
+		void attach_cursor_lease(std::shared_ptr<void> lease) noexcept;
+		friend class materialization_v2_1_task_cursor;
 	};
 
 	class validated_materialization_request_v2_1;
@@ -263,6 +292,50 @@ namespace cxxlens::detail::clang22::materialization
 		admit_materialization_request_v2_1(prevalidated_materialization_request_v2_1,
 										   materialization_v2_1_auxiliary_spool_factory&);
 	};
+
+	/**
+	 * Move-only, source-private replay of exactly one admitted v2.1 task at a time.
+	 *
+	 * `next()` follows the sealed canonical task index.  The returned execution owns the source and
+	 * task-input spools for one bounded validation window; its opaque lease follows moves and must
+	 * be destroyed before the next call.  A live binding, a replay error, or an incomplete final
+	 * census fails closed.  No request-wide task vector is constructed by this source.
+	 */
+	class materialization_v2_1_task_cursor final
+	{
+	  public:
+		materialization_v2_1_task_cursor(const materialization_v2_1_task_cursor&) = delete;
+		materialization_v2_1_task_cursor&
+		operator=(const materialization_v2_1_task_cursor&) = delete;
+		materialization_v2_1_task_cursor(materialization_v2_1_task_cursor&&) noexcept;
+		materialization_v2_1_task_cursor& operator=(materialization_v2_1_task_cursor&&) noexcept;
+		~materialization_v2_1_task_cursor();
+
+		[[nodiscard]] const streamed_materialization_request_identity& identity() const noexcept;
+		[[nodiscard]] std::uint64_t task_count() const noexcept;
+		[[nodiscard]] std::uint64_t next_task_index() const noexcept;
+
+		/** Return the exact next task, or empty only after the complete task census is consumed. */
+		[[nodiscard]] sdk::result<std::optional<materialization_v2_1_task_execution>> next();
+
+		/** Seal the cursor lifecycle only after every task binding has been released. */
+		[[nodiscard]] sdk::result<void> finalize() &&;
+
+	  private:
+		materialization_v2_1_task_cursor(
+			validated_materialization_request_v2_1& request,
+			std::shared_ptr<materialization_v2_1_task_cursor_state> state) noexcept;
+
+		validated_materialization_request_v2_1* request_{};
+		std::shared_ptr<materialization_v2_1_task_cursor_state> state_;
+
+		friend sdk::result<materialization_v2_1_task_cursor>
+		make_materialization_v2_1_task_cursor(validated_materialization_request_v2_1&);
+	};
+
+	/** Begin the bounded source-private task replay for one already admitted request. */
+	[[nodiscard]] sdk::result<materialization_v2_1_task_cursor>
+	make_materialization_v2_1_task_cursor(validated_materialization_request_v2_1& request);
 
 	/** Complete source-dependent admission after the effect-free metadata prevalidation phase. */
 	[[nodiscard]] sdk::result<validated_materialization_request_v2_1>

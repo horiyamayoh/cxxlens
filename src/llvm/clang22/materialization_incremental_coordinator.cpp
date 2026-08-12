@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <memory>
 #include <new>
@@ -165,6 +166,20 @@ namespace cxxlens::detail::clang22::materialization
 				identity.final_relation_compile_unit_id == task.worker_input.compile_unit;
 		}
 
+		[[nodiscard]] bool
+		identity_matches_v2_1_task(const materialization_incremental_task_identity& identity,
+								   const std::size_t task_index,
+								   const materialization_v2_1_task_execution& task) noexcept
+		{
+			return identity.canonical_task_ordinal == task_index &&
+				identity.provider_task_id == task.metadata.provider_task_id &&
+				identity.task_input_digest == task.metadata.task_input_digest &&
+				identity.selected_catalog_compile_unit_id ==
+				task.metadata.selected_catalog_compile_unit_id &&
+				identity.final_relation_compile_unit_id ==
+				task.metadata.final_relation_compile_unit_id;
+		}
+
 		[[nodiscard]] sdk::error execution_error(const std::string_view detail)
 		{
 			return sdk::error{
@@ -285,10 +300,146 @@ namespace cxxlens::detail::clang22::materialization
 											  fields);
 	}
 
+	sdk::result<void> run_materialization_incremental_v2_1_task_cursor(
+		validated_materialization_request_v2_1& request,
+		const sdk::incremental::materialization_plan& plan,
+		const std::span<const materialization_incremental_task_binding> bindings,
+		const materialization_v2_1_task_cursor_consumer& consumer)
+	{
+		try
+		{
+			if (!consumer)
+				return sdk::unexpected(coordinator_error("cursor", "consumer-missing"));
+			if (auto valid = plan.validate(); !valid)
+				return sdk::unexpected(coordinator_error("plan", "plan-validation"));
+
+			const auto task_count = request.request().task_count();
+			if (task_count == 0U || task_count > std::numeric_limits<std::size_t>::max() ||
+				bindings.size() != static_cast<std::size_t>(task_count))
+				return sdk::unexpected(coordinator_error("tasks", "exact-census"));
+			const auto task_count_size = static_cast<std::size_t>(task_count);
+
+			std::vector<const materialization_incremental_task_binding*> by_task(task_count_size);
+			std::map<std::string, const sdk::incremental::plan_entry*, std::less<>> plan_entries;
+			for (const auto& entry : plan.entries)
+			{
+				if (!plan_entries.emplace(entry.partition_id, &entry).second)
+					return sdk::unexpected(
+						coordinator_error("plan.entries", "duplicate-partition"));
+			}
+
+			std::set<std::string, std::less<>> binding_ids;
+			std::vector<std::optional<sdk::incremental::action>> task_actions(task_count_size);
+			std::uint64_t recompute_partition_count{};
+			for (const auto& binding : bindings)
+			{
+				const auto task_index = binding.task_identity.canonical_task_ordinal;
+				if (task_index >= task_count_size || binding.partitions.empty() ||
+					by_task[task_index] != nullptr ||
+					!std::ranges::is_sorted(
+						binding.partitions,
+						{},
+						&materialization_incremental_partition_binding::partition_id))
+					return sdk::unexpected(coordinator_error("bindings", "task-partition-order"));
+
+				std::optional<sdk::incremental::action> task_action;
+				for (const auto& partition : binding.partitions)
+				{
+					const auto plan_entry = plan_entries.find(partition.partition_id);
+					if (!sdk::validate_strong_id(partition.partition_id) ||
+						plan_entry == plan_entries.end() ||
+						!binding_ids.insert(partition.partition_id).second ||
+						!partition.current_state || !partition.current_state->validate() ||
+						partition.current_state->partition_id != partition.partition_id)
+						return sdk::unexpected(
+							coordinator_error("bindings", "partition-task-mismatch"));
+					if (task_action && *task_action != plan_entry->second->decision)
+						return sdk::unexpected(
+							coordinator_error("bindings", "mixed-task-decisions"));
+					task_action = plan_entry->second->decision;
+					if (*task_action == sdk::incremental::action::recompute)
+						++recompute_partition_count;
+				}
+				task_actions[task_index] = task_action;
+				by_task[task_index] = &binding;
+			}
+
+			if (std::ranges::any_of(by_task,
+									[](const auto* binding)
+									{
+										return binding == nullptr;
+									}))
+				return sdk::unexpected(coordinator_error("bindings", "missing-task"));
+
+			std::set<std::string, std::less<>> plan_ids;
+			for (const auto& [partition_id, entry] : plan_entries)
+			{
+				(void)entry;
+				plan_ids.insert(partition_id);
+			}
+			if (binding_ids != plan_ids ||
+				recompute_partition_count != plan.frontend_provider_executions)
+				return sdk::unexpected(coordinator_error("bindings", "plan-partition-census"));
+
+			auto cursor_result = make_materialization_v2_1_task_cursor(request);
+			if (!cursor_result)
+				return sdk::unexpected(std::move(cursor_result.error()));
+			auto cursor = std::move(*cursor_result);
+			for (std::uint64_t task_index{}; task_index < task_count; ++task_index)
+			{
+				auto next = cursor.next();
+				if (!next)
+					return sdk::unexpected(std::move(next.error()));
+				if (!*next || (*next)->metadata.task_index != task_index ||
+					cursor.next_task_index() != task_index + 1U)
+					return sdk::unexpected(coordinator_error("cursor", "order-or-end"));
+
+				const auto task_index_size = static_cast<std::size_t>(task_index);
+				auto task = std::move(**next);
+				if (!identity_matches_v2_1_task(
+						by_task[task_index_size]->task_identity, task_index_size, task))
+					return sdk::unexpected(coordinator_error("bindings", "task-identity-mismatch"));
+				{
+					// The cursor lease must be released before the next call to next(), and before
+					// the successful finalize below.
+					auto consumed = consumer(task_index_size,
+											 *task_actions[task_index_size],
+											 task,
+											 *by_task[task_index_size]);
+					if (!consumed)
+						return sdk::unexpected(std::move(consumed.error()));
+				}
+			}
+
+			auto end = cursor.next();
+			if (!end)
+				return sdk::unexpected(std::move(end.error()));
+			if (*end)
+				return sdk::unexpected(coordinator_error("cursor", "order-or-end"));
+			if (auto finalized = std::move(cursor).finalize(); !finalized)
+				return sdk::unexpected(std::move(finalized.error()));
+			return {};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(coordinator_error("allocation", "unavailable"));
+		}
+		catch (const std::length_error&)
+		{
+			return sdk::unexpected(coordinator_error("allocation", "unavailable"));
+		}
+		catch (...)
+		{
+			return sdk::unexpected(coordinator_error("cursor", "exception"));
+		}
+	}
+
 	sealed_materialization_incremental_result::sealed_materialization_incremental_result(
 		sealed_materialization_claims claims,
-		materialization_incremental_execution_census execution_census) noexcept
-		: claims_{std::move(claims)}, execution_census_{std::move(execution_census)}
+		materialization_incremental_execution_census execution_census,
+		materialization_claim_stream_source claim_stream) noexcept
+		: claims_{std::move(claims)}, execution_census_{std::move(execution_census)},
+		  claim_stream_{std::move(claim_stream)}
 	{
 	}
 
@@ -302,6 +453,12 @@ namespace cxxlens::detail::clang22::materialization
 	sealed_materialization_incremental_result::execution_census() const noexcept
 	{
 		return execution_census_;
+	}
+
+	const materialization_claim_stream_source*
+	sealed_materialization_incremental_result::claim_stream() const noexcept
+	{
+		return &claim_stream_;
 	}
 
 	materialization_incremental_publication_result::materialization_incremental_publication_result(
@@ -423,11 +580,11 @@ namespace cxxlens::detail::clang22::materialization
 				for (const auto& partition : by_task[task_index]->partitions)
 					expected.push_back(partition.partition_id);
 			}
-			auto ingress_result = materialization_incremental_ingress::begin(
+			auto ingress_begin = materialization_incremental_ingress::begin(
 				request, std::move(expected_partition_ids));
-			if (!ingress_result)
-				return sdk::unexpected(coordinator_error("ingress", ingress_result.error().detail));
-			std::optional<materialization_incremental_ingress> ingress{std::move(*ingress_result)};
+			if (!ingress_begin)
+				return sdk::unexpected(coordinator_error("ingress", ingress_begin.error().detail));
+			std::optional<materialization_incremental_ingress> ingress{std::move(*ingress_begin)};
 
 			materialization_incremental_execution_census census{plan.frontend_provider_executions,
 																recompute_task_count,
@@ -695,12 +852,18 @@ namespace cxxlens::detail::clang22::materialization
 					census.actual_provider_executions ||
 				census.warm_zero != (census.actual_provider_executions == 0U))
 				return sdk::unexpected(coordinator_error("execution", "census-mismatch"));
-			auto journal = std::move(*ingress).finalize();
-			if (!journal)
-				return sdk::unexpected(coordinator_error("receipt", journal.error().detail));
-			census.execution_journal_receipt = std::move(*journal);
+			auto ingress_result = std::move(*ingress).finalize_with_claim_stream();
+			if (!ingress_result)
+				return sdk::unexpected(coordinator_error("receipt", ingress_result.error().detail));
+			census.execution_journal_receipt = ingress_result->journal;
+			auto claim_stream = materialization_claim_stream_source::begin(
+				request, ingress_result->journal, std::move(ingress_result->claim_stream_tasks));
+			if (!claim_stream)
+				return sdk::unexpected(
+					coordinator_error("claim-stream", claim_stream.error().detail));
 
-			return sealed_materialization_incremental_result{std::move(*claims), std::move(census)};
+			return sealed_materialization_incremental_result{
+				std::move(*claims), std::move(census), std::move(*claim_stream)};
 		}
 		catch (const std::bad_alloc&)
 		{

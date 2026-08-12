@@ -45,6 +45,8 @@ namespace
 	static_assert(std::move_constructible<compact_failure_authority>);
 	static_assert(compact_failure_capable<materialization_execution_journal>);
 	static_assert(!compact_failure_capable<materialization_postpublication_journal>);
+	static_assert(!std::copy_constructible<detailed_task_report_replayable_spool>);
+	static_assert(std::move_constructible<detailed_task_report_replayable_spool>);
 
 	[[nodiscard]] raw_input_observation complete_input()
 	{
@@ -419,6 +421,26 @@ namespace
 				"compact authority was copy-like or a consumed token remained usable");
 	}
 
+	void coordinator_failure_must_use_worker_phase_code()
+	{
+		auto journal = bound_journal(1U);
+		require(journal.record_worker_launch_attempt().has_value(),
+				"coordinator failure journal did not open the worker launch window");
+		auto unmapped = std::move(journal).issue_compact_failure(
+			{"materialization.incremental-invalid", "worker", "receipt-validation"});
+		require(!unmapped,
+				"journal accepted the coordinator's generic incremental failure in worker phase");
+		auto mapped = std::move(journal).issue_compact_failure(
+			{"materialization.worker-failure",
+			 "worker",
+			 "source-code=materialization.coverage-incomplete;source-field=provider.coverage;"
+			 "source-detail=sealed-transcript-mismatch"});
+		require(mapped && mapped->error().code == "materialization.worker-failure" &&
+					mapped->error().diagnostic.find("materialization.coverage-incomplete") !=
+						std::string::npos,
+				"journal did not retain a typed coordinator failure under its allowed worker code");
+	}
+
 	[[nodiscard]] std::string typed_store_cause_preserves_exact_detail()
 	{
 		constexpr std::uint64_t task_count = 3U;
@@ -711,6 +733,154 @@ namespace
 				"task evidence accumulator exceeded its task limit");
 	}
 
+	[[nodiscard]] detailed_task_report_capture replayable_capture(std::string task_id)
+	{
+		detailed_task_report_capture capture;
+		capture.provider_task_id = task_id;
+		capture.provider_execution_id = "execution:" + task_id;
+		capture.project_id = "project:test";
+		capture.catalog_id = "catalog:test";
+		capture.catalog_digest =
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111";
+		capture.selected_catalog_compile_unit_id = "compile-unit:selected";
+		capture.compile_unit_id = "compile-unit:final";
+		capture.variant_id = "variant:test";
+		capture.toolchain_context_id = "toolchain:test";
+		capture.toolchain_digest =
+			"sha256:2222222222222222222222222222222222222222222222222222222222222222";
+		capture.source_snapshot_id = "source-snapshot:test";
+		capture.source_file_id = "file:test";
+		capture.source_logical_path = "project://test.cpp";
+		capture.source_content_digest =
+			"sha256:3333333333333333333333333333333333333333333333333333333333333333";
+		capture.source_size_bytes = 42U;
+		capture.source_encoding = "utf8";
+		capture.source_line_index_id = "line-index:test";
+		capture.source_read_only = true;
+		capture.task_input_digest =
+			"sha256:4444444444444444444444444444444444444444444444444444444444444444";
+		capture.condition_universe_id = "condition-universe:test";
+		capture.condition_id = "condition:test";
+		capture.interpretation_domain = "cc.clang22-canonical-1";
+		capture.input_protocol_major = 1U;
+		capture.input_protocol_minor = 1U;
+		capture.logical_input_bytes = 42U;
+		capture.canonical_chunk_bytes = 42U;
+		capture.input_chunk_count = 1U;
+		capture.ordered_chunk_digests = {
+			"sha256:5555555555555555555555555555555555555555555555555555555555555555"};
+		capture.ordered_chunk_payload_digest_set_digest =
+			"sha256:6666666666666666666666666666666666666666666666666666666666666666";
+		capture.raw_frame_stream_bytes = 7U;
+		capture.raw_frame_stream_digest =
+			"sha256:7777777777777777777777777777777777777777777777777777777777777777";
+		capture.frame_count = 1U;
+		capture.frame_transcript_digest =
+			"sha256:8888888888888888888888888888888888888888888888888888888888888888";
+		capture.sealed_transcript_digest =
+			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+		capture.coverage.push_back({"canonical", "coverage:test", "complete", ""});
+		capture.unresolved.push_back({"provider.unavailable", task_id, "observation unavailable"});
+		capture.evidence.push_back({"provider", task_id, "clang22", "sealed"});
+		detailed_provider_batch_projection batch;
+		batch.task_id = task_id;
+		batch.descriptor_id = "cc.entity.v1";
+		batch.descriptor_digest =
+			"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+		batch.dependency_group_id = "canonical";
+		batch.atomic_output_group_id = "clang22-atomic";
+		batch.batch_id = "cc.entity.v1-batch";
+		batch.batch_digest =
+			"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+		batch.ordered_chunk_digests = {
+			"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"};
+		batch.row_count = 1U;
+		batch.row_set_digest =
+			"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+		batch.rows.push_back(
+			{0U,
+			 "{\"row\":\"" + task_id + "\"}",
+			 "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"});
+		capture.batches.push_back(std::move(batch));
+		capture.observation_rows.push_back(
+			{0U,
+			 0U,
+			 "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			 false,
+			 std::string{"provider-unavailable"},
+			 observation_v2_primary_span{
+				 "span:test", "snapshot:test", "file:test", 1U, 2U, "expansion", true}});
+		sdk::detached_row row;
+		row.descriptor_id = "cc.entity.v1";
+		row.cells.emplace("boolean", sdk::detached_cell::boolean(true));
+		row.cells.emplace("bytes", sdk::detached_cell::bytes({std::byte{0x01}, std::byte{0x02}}));
+		row.cells.emplace("optional",
+						  sdk::detached_cell::absent({sdk::scalar_kind::utf8_string, {}, true}));
+		row.cells.emplace("unknown",
+						  sdk::detached_cell::unknown({sdk::scalar_kind::utf8_string, {}, true},
+													  "provider-unavailable"));
+		capture.base_claim_rows.push_back(std::move(row));
+		return capture;
+	}
+
+	void report_capture_spool_replays_one_task_at_a_time()
+	{
+		detailed_report_limits limits;
+		limits.max_projection_bytes = 1024U * 1024U;
+		auto created = detailed_task_report_replayable_spool::create(limits);
+		require(created.has_value(), "report capture spool could not be created");
+		auto spool = std::move(*created);
+		require(!spool.sealed() && spool.task_count() == 0U && spool.spooled_bytes() == 0U,
+				"report capture spool did not start empty and unsealed");
+
+		require(spool.append(replayable_capture("task:one")).has_value(),
+				"report capture spool rejected its first task");
+		require(spool.append(replayable_capture("task:two")).has_value(),
+				"report capture spool rejected its second task");
+		const auto bytes_before_seal = spool.spooled_bytes();
+		require(spool.task_count() == 2U && bytes_before_seal > 0U,
+				"report capture spool did not retain bounded record metadata");
+
+		const auto consume = [&](detailed_task_report_capture&& capture) -> sdk::result<void>
+		{
+			require(capture.base_claim_rows.size() == 1U && capture.batches.size() == 1U &&
+						capture.observation_rows.size() == 1U,
+					"report capture replay dropped a nested value-owned field");
+			require(capture.base_claim_rows.front().cells.at("boolean").canonical_form() ==
+							sdk::detached_cell::boolean(true).canonical_form() &&
+						capture.base_claim_rows.front().cells.at("optional").state ==
+							sdk::cell_state::absent &&
+						capture.base_claim_rows.front().cells.at("unknown").unknown_reason ==
+							std::optional<std::string>{"provider-unavailable"},
+					"report capture replay changed detached-cell semantics");
+			require(capture.observation_rows.front().primary_span &&
+						capture.observation_rows.front().primary_span->begin == 1U &&
+						capture.observation_rows.front().primary_span->read_only,
+					"report capture replay changed observation-span semantics");
+			return {};
+		};
+
+		auto before_seal = spool.replay(consume);
+		require(!before_seal &&
+					before_seal.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "task_spool",
+								   "spool-io:replay-lifecycle"},
+				"report capture spool replayed before sealing");
+		require(spool.seal().has_value() && spool.sealed(),
+				"report capture spool could not be sealed");
+		require(spool.replay(consume).has_value() && spool.replay(consume).has_value(),
+				"report capture spool was not independently replayable twice");
+		require(spool.spooled_bytes() == bytes_before_seal,
+				"report capture replay changed the sealed spool");
+		auto append_after_seal = spool.append(replayable_capture("task:three"));
+		require(!append_after_seal &&
+					append_after_seal.error() ==
+						sdk::error{
+							"materialization.report-invalid", "task_spool", "spool-io:lifecycle"},
+				"report capture spool accepted a post-seal append");
+	}
+
 	void public_success_report_requires_all_authority_inputs()
 	{
 		public_materialization_success_report_input input;
@@ -777,10 +947,12 @@ int main(const int argument_count, const char* const* arguments)
 	input_limit_failure_is_phase_authentic();
 	spool_failure_phases_are_closed();
 	exact_worker_census_is_journal_owned();
+	coordinator_failure_must_use_worker_phase_code();
 	static_cast<void>(typed_store_cause_preserves_exact_detail());
 	static_cast<void>(failed_head_observation_is_four_state_and_path_bound());
 	store_stage_and_publication_boundary_are_closed();
 	bounded_detailed_projection_never_promotes_unverified_store();
+	report_capture_spool_replays_one_task_at_a_time();
 	public_success_report_requires_all_authority_inputs();
 
 	return 0;

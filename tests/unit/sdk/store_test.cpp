@@ -699,6 +699,69 @@ namespace
 		std::filesystem::remove(path);
 	}
 
+	void check_writer_partition_payload_transfer()
+	{
+		const auto relation_engine = engine();
+		const auto publish_two_partitions =
+			[&](cxxlens::sdk::snapshot_store& store, const bool reverse_stage_order)
+		{
+			auto writer = store.begin(snapshot_draft(relation_engine));
+			auto first = partition(relation_engine, false);
+			auto second = partition(relation_engine, true);
+			second.scope = "compile-unit-2";
+			second.coverage.front().key = "compile-unit-2";
+			require(writer.has_value(), "payload transfer writer did not begin");
+			if (reverse_stage_order)
+			{
+				require(writer->stage(std::move(second)) && writer->stage(std::move(first)),
+						"reverse payload transfer staging failed");
+			}
+			else
+			{
+				require(writer->stage(std::move(first)) && writer->stage(std::move(second)),
+						"payload transfer staging failed");
+			}
+			require(writer->validate() &&
+						writer->state() == cxxlens::sdk::publication_state::validating,
+					"payload transfer candidate did not validate");
+			auto published = writer->publish();
+			require(published.has_value() && published->manifest().partitions.size() == 2U,
+					"payload transfer candidate did not publish two partitions");
+			return std::move(*published);
+		};
+
+		auto first_store = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+		auto second_store = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+		require(first_store && second_store, "payload transfer memory stores unavailable");
+		auto first = publish_two_partitions(*first_store, false);
+		auto second = publish_two_partitions(*second_store, true);
+		auto first_export = first_store->canonical_export(first.id());
+		auto second_export = second_store->canonical_export(second.id());
+		require(first.id() == second.id() && first_export && second_export &&
+					*first_export == *second_export &&
+					first.manifest().partitions == second.manifest().partitions,
+				"payload transfer changed the exact multi-partition export");
+
+		auto retry_store = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+		require(retry_store.has_value(), "payload transfer retry store unavailable");
+		auto retry_writer = retry_store->begin(snapshot_draft(relation_engine));
+		require(retry_writer && retry_writer->stage(partition(relation_engine, false)),
+				"payload transfer retry staging failed");
+		cxxlens::sdk::closure_candidate missing_subject{};
+		missing_subject.subject_partition_id = "partition-that-does-not-exist";
+		require(retry_writer->add_closure(std::move(missing_subject)).has_value(),
+				"payload transfer retry closure staging failed");
+		auto first_failure = retry_writer->validate();
+		require(!first_failure && first_failure.error().code == "store.closure-subject-missing" &&
+					retry_writer->state() == cxxlens::sdk::publication_state::staged,
+				"failed payload transfer validation consumed the staged writer");
+		auto second_failure = retry_writer->validate();
+		require(!second_failure && second_failure.error().code == "store.closure-subject-missing" &&
+					second_failure.error().field == first_failure.error().field,
+				"payload transfer validation was not repeatably rollback-safe");
+		retry_writer->cancel();
+	}
+
 	[[nodiscard]] std::vector<std::string>
 	occurrence_evidence(const cxxlens::sdk::snapshot_handle& snapshot)
 	{
@@ -2907,6 +2970,7 @@ int main(const int argc, char** argv)
 	check_sqlite_poison_guards_and_nonresult_observers();
 	check_canonical_vectors();
 	check_backend_parity();
+	check_writer_partition_payload_transfer();
 	check_occurrence_round_trip();
 	check_sqlite_multi_instance_cas();
 	check_compaction_resolver_order();

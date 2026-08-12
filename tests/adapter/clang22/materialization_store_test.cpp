@@ -210,6 +210,34 @@ namespace
 		sdk::error injected_error{"store.sqlite-failure", "open", "injected-test-boundary"};
 	};
 
+	class replayable_partition_source final : public materialization_store_partition_replay_source
+	{
+	  public:
+		explicit replayable_partition_source(std::vector<sdk::partition_draft> partitions)
+			: partitions_{std::move(partitions)}
+		{
+		}
+
+		sdk::result<void> replay(const materialization_store_partition_consumer& consumer) override
+		{
+			if (!consumer)
+				return sdk::unexpected(sdk::error{"store.partition-source", "consumer", "missing"});
+			++replay_count;
+			for (const auto& partition : partitions_)
+			{
+				auto copy = partition;
+				if (auto consumed = consumer(std::move(copy)); !consumed)
+					return consumed;
+			}
+			return {};
+		}
+
+		std::size_t replay_count{};
+
+	  private:
+		std::vector<sdk::partition_draft> partitions_;
+	};
+
 	class temporary_working_directory
 	{
 	  public:
@@ -513,6 +541,35 @@ namespace
 			"Store-open failure did not retain the injected typed SDK error");
 	}
 
+	void streaming_store_replays_and_rechecks_exact_partitions()
+	{
+		const auto value = engine();
+		const auto selector_value = selector(value);
+		const auto publication = publication_request(selector_value, "memory", std::nullopt);
+		auto draft = partition(value, "item:streaming", "compile-unit-streaming");
+		const auto expected =
+			execute_materialization_store(value, publication, plan(value, publication, {draft}));
+		require(!expected.first_issue && expected.publish_returned_record &&
+					expected.candidate_manifest,
+				"reference Store publication for streaming comparison failed");
+
+		replayable_partition_source source{{draft}};
+		streaming_prepared_store_transaction prepared{
+			{publication.selector,
+			 {1U, 0U, 0U},
+			 "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+			 publication.expected_parent_publication},
+			{}};
+		auto streamed = execute_materialization_store_streaming(
+			value, publication, std::move(prepared), source);
+		require(!streamed.first_issue && streamed.publish_returned_record &&
+					streamed.candidate_manifest && source.replay_count == 2U,
+				"streaming Store did not complete the two replay publication boundary");
+		require(*streamed.publish_returned_record == *expected.publish_returned_record &&
+					*streamed.candidate_manifest == *expected.candidate_manifest,
+				"streaming Store changed the exact publication or manifest identity");
+	}
+
 	void sqlite_reopen_failure_retains_commit()
 	{
 		temporary_working_directory working_directory;
@@ -618,6 +675,7 @@ int main()
 	sqlite_genesis_append_and_stale();
 	sqlite_publish_race_recovers_exact_receipts();
 	typed_prepublication_failures();
+	streaming_store_replays_and_rechecks_exact_partitions();
 	sqlite_reopen_failure_retains_commit();
 	return 0;
 }

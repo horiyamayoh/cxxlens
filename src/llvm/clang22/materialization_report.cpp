@@ -2,7 +2,11 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <chrono>
+#include <limits>
+#include <memory>
+#include <new>
 #include <set>
 #include <span>
 #include <string_view>
@@ -45,6 +49,12 @@ namespace cxxlens::detail::clang22::materialization
 					break;
 				case detailed_report_error_kind::invalid_time:
 					code = "invalid-time";
+					break;
+				case detailed_report_error_kind::spool_io:
+					code = "spool-io";
+					break;
+				case detailed_report_error_kind::spool_corrupt:
+					code = "spool-corrupt";
 					break;
 				default:
 					// The enum is source-private, but a corrupted value must never produce an
@@ -1061,7 +1071,1106 @@ namespace cxxlens::detail::clang22::materialization
 					return false;
 			return true;
 		}
+
+		constexpr std::array<char, 8U> report_spool_magic{'C', 'X', 'L', 'D', 'R', 'S', 'P', '1'};
+		constexpr std::uint8_t report_spool_version = 1U;
+		constexpr std::size_t report_spool_max_tasks = 4096U;
+		constexpr std::size_t report_spool_max_batches = 6U;
+		constexpr std::size_t report_spool_max_chunks = 65536U;
+		constexpr std::size_t report_spool_max_side_records = 65536U;
+		constexpr std::size_t report_spool_max_string_bytes = 16U * 1024U * 1024U;
+
+		[[nodiscard]] bool valid_report_spool_limits(const detailed_report_limits& limits) noexcept
+		{
+			return limits.max_tasks != 0U && limits.max_tasks <= report_spool_max_tasks &&
+				limits.max_batches_per_task != 0U &&
+				limits.max_batches_per_task <= report_spool_max_batches &&
+				limits.max_chunks_per_batch != 0U &&
+				limits.max_chunks_per_batch <= report_spool_max_chunks &&
+				limits.max_side_channel_records != 0U &&
+				limits.max_side_channel_records <= report_spool_max_side_records &&
+				limits.max_string_bytes != 0U &&
+				limits.max_string_bytes <= report_spool_max_string_bytes &&
+				limits.max_projection_bytes != 0U &&
+				limits.max_projection_bytes <= detailed_report_limits::maximum_report_bytes;
+		}
+
+		[[nodiscard]] sdk::error report_spool_failure(const detailed_report_error_kind kind,
+													  const std::string_view field,
+													  const std::string_view detail)
+		{
+			return fail(kind, std::string{field}, std::string{detail});
+		}
+
+		class report_spool_writer
+		{
+		  public:
+			report_spool_writer(materialization_replayable_spool& storage,
+								const std::uint64_t remaining) noexcept
+				: storage_{storage}, remaining_{remaining}
+			{
+			}
+
+			[[nodiscard]] sdk::result<void> bytes(const std::span<const std::byte> value)
+			{
+				if (static_cast<std::uint64_t>(value.size()) > remaining_)
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::limit_exceeded, "task_spool", "bytes"));
+				if (value.empty())
+					return {};
+				auto written = storage_.append(value);
+				if (!written)
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_io, "task_spool", "append"));
+				remaining_ -= static_cast<std::uint64_t>(value.size());
+				written_bytes_ += static_cast<std::uint64_t>(value.size());
+				return {};
+			}
+
+			[[nodiscard]] sdk::result<void> byte(const std::uint8_t value)
+			{
+				return bytes(std::array{static_cast<std::byte>(value)});
+			}
+
+			[[nodiscard]] sdk::result<void> boolean(const bool value)
+			{
+				return byte(value ? 1U : 0U);
+			}
+
+			[[nodiscard]] sdk::result<void> u64(const std::uint64_t value)
+			{
+				std::array<std::byte, 8U> encoded{};
+				for (std::size_t index{}; index < encoded.size(); ++index)
+					encoded[index] = static_cast<std::byte>(
+						(value >> static_cast<unsigned>(56U - index * 8U)) & 0xffU);
+				return bytes(encoded);
+			}
+
+			[[nodiscard]] sdk::result<void> string(const std::string_view value)
+			{
+				if (auto length = u64(static_cast<std::uint64_t>(value.size())); !length)
+					return length;
+				return bytes(std::as_bytes(std::span<const char>{value.data(), value.size()}));
+			}
+
+			[[nodiscard]] sdk::result<void> optional_string(const std::optional<std::string>& value)
+			{
+				if (auto present = boolean(value.has_value()); !present)
+					return present;
+				if (!value)
+					return {};
+				return string(*value);
+			}
+
+			[[nodiscard]] sdk::result<void> strings(const std::vector<std::string>& values)
+			{
+				if (auto count = u64(static_cast<std::uint64_t>(values.size())); !count)
+					return count;
+				for (const auto& value : values)
+					if (auto written = string(value); !written)
+						return written;
+				return {};
+			}
+
+			[[nodiscard]] sdk::result<void>
+			optional_span(const std::optional<observation_v2_primary_span>& value)
+			{
+				if (auto present = boolean(value.has_value()); !present)
+					return present;
+				if (!value)
+					return {};
+				const auto& span = *value;
+				for (const auto field : {std::string_view{span.span_id},
+										 std::string_view{span.snapshot},
+										 std::string_view{span.file},
+										 std::string_view{span.role}})
+					if (auto written = string(field); !written)
+						return written;
+				if (auto begin = u64(span.begin); !begin)
+					return begin;
+				if (auto end = u64(span.end); !end)
+					return end;
+				return boolean(span.read_only);
+			}
+
+			[[nodiscard]] sdk::result<void> cell(const sdk::detached_cell& value)
+			{
+				if (!sdk::is_valid(value.type.scalar) || !sdk::is_valid(value.state) ||
+					!value.validate())
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::invalid_capture, "task_spool.cell", "invalid"));
+				if (auto scalar = byte(static_cast<std::uint8_t>(value.type.scalar)); !scalar)
+					return scalar;
+				if (auto parameter = string(value.type.parameter); !parameter)
+					return parameter;
+				if (auto optional = boolean(value.type.optional); !optional)
+					return optional;
+				if (auto state = byte(static_cast<std::uint8_t>(value.state)); !state)
+					return state;
+				if (auto present = boolean(value.value.has_value()); !present)
+					return present;
+				if (value.value)
+				{
+					if (auto kind = byte(static_cast<std::uint8_t>(value.value->index())); !kind)
+						return kind;
+					const auto& scalar = *value.value;
+					if (const auto* boolean_value = std::get_if<bool>(&scalar))
+					{
+						if (auto written = boolean(*boolean_value); !written)
+							return written;
+					}
+					else if (const auto* signed_value = std::get_if<std::int64_t>(&scalar))
+					{
+						if (auto written = u64(std::bit_cast<std::uint64_t>(*signed_value));
+							!written)
+							return written;
+					}
+					else if (const auto* unsigned_value = std::get_if<std::uint64_t>(&scalar))
+					{
+						if (auto written = u64(*unsigned_value); !written)
+							return written;
+					}
+					else if (const auto* string_value = std::get_if<std::string>(&scalar))
+					{
+						if (auto written = string(*string_value); !written)
+							return written;
+					}
+					else if (const auto* bytes_value = std::get_if<std::vector<std::byte>>(&scalar))
+					{
+						if (auto length = u64(static_cast<std::uint64_t>(bytes_value->size()));
+							!length)
+							return length;
+						if (auto written = bytes(*bytes_value); !written)
+							return written;
+					}
+				}
+				if (auto reason = optional_string(value.unknown_reason); !reason)
+					return reason;
+				return {};
+			}
+
+			[[nodiscard]] sdk::result<void> row(const sdk::detached_row& value)
+			{
+				if (auto descriptor = string(value.descriptor_id); !descriptor)
+					return descriptor;
+				if (auto count = u64(static_cast<std::uint64_t>(value.cells.size())); !count)
+					return count;
+				for (const auto& [column, cell_value] : value.cells)
+				{
+					if (auto name = string(column); !name)
+						return name;
+					if (auto cell_result = cell(cell_value); !cell_result)
+						return cell_result;
+				}
+				return {};
+			}
+
+			[[nodiscard]] std::uint64_t written_bytes() const noexcept
+			{
+				return written_bytes_;
+			}
+
+		  private:
+			materialization_replayable_spool& storage_;
+			std::uint64_t remaining_{};
+			std::uint64_t written_bytes_{};
+		};
+
+		[[nodiscard]] sdk::result<void>
+		write_report_capture(report_spool_writer& writer,
+							 const detailed_task_report_capture& capture)
+		{
+			std::array<std::byte, report_spool_magic.size()> magic{};
+			for (std::size_t index{}; index < magic.size(); ++index)
+				magic[index] = static_cast<std::byte>(report_spool_magic[index]);
+			if (auto header = writer.bytes(magic); !header)
+				return header;
+			if (auto version = writer.byte(report_spool_version); !version)
+				return version;
+			const auto write_fixed_strings =
+				[&](const std::initializer_list<std::string_view> values) -> sdk::result<void>
+			{
+				for (const auto value : values)
+					if (auto written = writer.string(value); !written)
+						return written;
+				return {};
+			};
+			if (auto fields = write_fixed_strings({capture.provider_task_id,
+												   capture.provider_execution_id,
+												   capture.project_id,
+												   capture.catalog_id,
+												   capture.catalog_digest,
+												   capture.selected_catalog_compile_unit_id,
+												   capture.compile_unit_id,
+												   capture.variant_id,
+												   capture.toolchain_context_id,
+												   capture.toolchain_digest,
+												   capture.source_snapshot_id,
+												   capture.source_file_id,
+												   capture.source_logical_path,
+												   capture.source_content_digest});
+				!fields)
+				return fields;
+			if (auto value = writer.u64(capture.source_size_bytes); !value)
+				return value;
+			if (auto fields =
+					write_fixed_strings({capture.source_encoding, capture.source_line_index_id});
+				!fields)
+				return fields;
+			if (auto value = writer.boolean(capture.source_read_only); !value)
+				return value;
+			if (auto fields = write_fixed_strings({capture.task_input_digest,
+												   capture.condition_universe_id,
+												   capture.condition_id,
+												   capture.interpretation_domain});
+				!fields)
+				return fields;
+			if (auto value = writer.u64(capture.input_protocol_major); !value)
+				return value;
+			if (auto value = writer.u64(capture.input_protocol_minor); !value)
+				return value;
+			if (auto value = writer.u64(capture.logical_input_bytes); !value)
+				return value;
+			if (auto value = writer.u64(capture.canonical_chunk_bytes); !value)
+				return value;
+			if (auto value = writer.u64(capture.input_chunk_count); !value)
+				return value;
+			if (auto values = writer.strings(capture.ordered_chunk_digests); !values)
+				return values;
+			if (auto fields = write_fixed_strings({capture.ordered_chunk_payload_digest_set_digest,
+												   capture.raw_frame_stream_digest,
+												   capture.frame_transcript_digest,
+												   capture.sealed_transcript_digest});
+				!fields)
+				return fields;
+			if (auto value = writer.u64(capture.raw_frame_stream_bytes); !value)
+				return value;
+			if (auto value = writer.u64(capture.frame_count); !value)
+				return value;
+
+			if (auto count = writer.u64(static_cast<std::uint64_t>(capture.coverage.size()));
+				!count)
+				return count;
+			for (const auto& value : capture.coverage)
+				if (auto fields =
+						write_fixed_strings({value.kind, value.id, value.state, value.reason});
+					!fields)
+					return fields;
+			if (auto count = writer.u64(static_cast<std::uint64_t>(capture.unresolved.size()));
+				!count)
+				return count;
+			for (const auto& value : capture.unresolved)
+				if (auto fields = write_fixed_strings({value.code, value.subject, value.detail});
+					!fields)
+					return fields;
+			if (auto count = writer.u64(static_cast<std::uint64_t>(capture.evidence.size()));
+				!count)
+				return count;
+			for (const auto& value : capture.evidence)
+				if (auto fields = write_fixed_strings(
+						{value.kind, value.subject, value.producer, value.summary});
+					!fields)
+					return fields;
+
+			if (auto count = writer.u64(static_cast<std::uint64_t>(capture.batches.size())); !count)
+				return count;
+			for (const auto& batch : capture.batches)
+			{
+				if (auto fields = write_fixed_strings({batch.task_id,
+													   batch.descriptor_id,
+													   batch.descriptor_digest,
+													   batch.dependency_group_id,
+													   batch.atomic_output_group_id,
+													   batch.batch_id,
+													   batch.batch_digest});
+					!fields)
+					return fields;
+				if (auto values = writer.strings(batch.ordered_chunk_digests); !values)
+					return values;
+				if (auto value = writer.u64(batch.row_count); !value)
+					return value;
+				if (auto value = writer.string(batch.row_set_digest); !value)
+					return value;
+				if (auto count = writer.u64(static_cast<std::uint64_t>(batch.rows.size())); !count)
+					return count;
+				for (const auto& row : batch.rows)
+				{
+					if (auto value = writer.u64(static_cast<std::uint64_t>(row.row_index)); !value)
+						return value;
+					if (auto value = writer.string(row.row_canonical_form); !value)
+						return value;
+					if (auto value = writer.string(row.row_digest); !value)
+						return value;
+				}
+			}
+
+			if (auto count =
+					writer.u64(static_cast<std::uint64_t>(capture.observation_rows.size()));
+				!count)
+				return count;
+			for (const auto& row : capture.observation_rows)
+			{
+				if (auto value = writer.u64(static_cast<std::uint64_t>(row.batch_index)); !value)
+					return value;
+				if (auto value = writer.u64(static_cast<std::uint64_t>(row.row_index)); !value)
+					return value;
+				if (auto value = writer.string(row.observation_row_digest); !value)
+					return value;
+				if (auto value = writer.boolean(row.exact_equivalence); !value)
+					return value;
+				if (auto value = writer.optional_string(row.limitation); !value)
+					return value;
+				if (auto value = writer.optional_span(row.primary_span); !value)
+					return value;
+			}
+
+			const auto write_rows =
+				[&](const std::vector<sdk::detached_row>& rows) -> sdk::result<void>
+			{
+				if (auto count = writer.u64(static_cast<std::uint64_t>(rows.size())); !count)
+					return count;
+				for (const auto& row : rows)
+					if (auto written = writer.row(row); !written)
+						return written;
+				return {};
+			};
+			if (auto rows = write_rows(capture.base_claim_rows); !rows)
+				return rows;
+			return write_rows(capture.source_span_claim_rows);
+		}
+
+		class report_spool_reader
+		{
+		  public:
+			report_spool_reader(materialization_replayable_spool& storage,
+								const std::uint64_t begin,
+								const std::uint64_t end,
+								const detailed_report_limits& limits) noexcept
+				: storage_{storage}, offset_{begin}, end_{end}, limits_{limits}
+			{
+			}
+
+			[[nodiscard]] sdk::result<void> exact(const std::span<std::byte> destination)
+			{
+				if (static_cast<std::uint64_t>(destination.size()) > end_ - offset_)
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, "task_spool", "truncated"));
+				std::size_t consumed{};
+				while (consumed < destination.size())
+				{
+					auto read = storage_.read_at(offset_, destination.subspan(consumed));
+					if (!read)
+						return sdk::unexpected(report_spool_failure(
+							detailed_report_error_kind::spool_io, "task_spool", "read"));
+					if (*read == 0U || *read > destination.size() - consumed ||
+						static_cast<std::uint64_t>(*read) > end_ - offset_)
+						return sdk::unexpected(report_spool_failure(
+							detailed_report_error_kind::spool_corrupt, "task_spool", "short-read"));
+					consumed += *read;
+					offset_ += static_cast<std::uint64_t>(*read);
+				}
+				return {};
+			}
+
+			[[nodiscard]] sdk::result<std::uint8_t> byte()
+			{
+				std::array<std::byte, 1U> value{};
+				if (auto read = exact(value); !read)
+					return sdk::unexpected(std::move(read.error()));
+				return std::to_integer<std::uint8_t>(value[0]);
+			}
+
+			[[nodiscard]] sdk::result<bool> boolean()
+			{
+				auto value = byte();
+				if (!value)
+					return sdk::unexpected(std::move(value.error()));
+				if (*value > 1U)
+					return sdk::unexpected(
+						report_spool_failure(detailed_report_error_kind::spool_corrupt,
+											 "task_spool.bool",
+											 "closed-enum"));
+				return *value == 1U;
+			}
+
+			[[nodiscard]] sdk::result<std::uint64_t> u64()
+			{
+				std::array<std::byte, 8U> bytes{};
+				if (auto read = exact(bytes); !read)
+					return sdk::unexpected(std::move(read.error()));
+				std::uint64_t value{};
+				for (const auto byte : bytes)
+					value = (value << 8U) |
+						static_cast<std::uint64_t>(std::to_integer<std::uint8_t>(byte));
+				return value;
+			}
+
+			[[nodiscard]] sdk::result<std::size_t> count(const std::size_t maximum,
+														 const std::string_view field)
+			{
+				auto value = u64();
+				if (!value)
+					return sdk::unexpected(std::move(value.error()));
+				if (*value > static_cast<std::uint64_t>(maximum) ||
+					*value > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, field, "count"));
+				return static_cast<std::size_t>(*value);
+			}
+
+			[[nodiscard]] sdk::result<std::string> string(const std::string_view field)
+			{
+				auto length = u64();
+				if (!length)
+					return sdk::unexpected(std::move(length.error()));
+				if (*length > static_cast<std::uint64_t>(limits_.max_string_bytes) ||
+					*length > end_ - offset_ ||
+					*length > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, field, "string-length"));
+				std::string value(static_cast<std::size_t>(*length), '\0');
+				if (auto read =
+						exact(std::as_writable_bytes(std::span<char>{value.data(), value.size()}));
+					!read)
+					return sdk::unexpected(std::move(read.error()));
+				return value;
+			}
+
+			[[nodiscard]] sdk::result<std::vector<std::byte>> bytes(const std::string_view field)
+			{
+				auto length = u64();
+				if (!length)
+					return sdk::unexpected(std::move(length.error()));
+				if (*length > static_cast<std::uint64_t>(limits_.max_string_bytes) ||
+					*length > end_ - offset_ ||
+					*length > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, field, "bytes-length"));
+				std::vector<std::byte> value(static_cast<std::size_t>(*length));
+				if (auto read = exact(value); !read)
+					return sdk::unexpected(std::move(read.error()));
+				return value;
+			}
+
+			[[nodiscard]] sdk::result<std::optional<std::string>>
+			optional_string(const std::string_view field)
+			{
+				auto present = boolean();
+				if (!present)
+					return sdk::unexpected(std::move(present.error()));
+				if (!*present)
+					return std::optional<std::string>{};
+				auto value = string(field);
+				if (!value)
+					return sdk::unexpected(std::move(value.error()));
+				return std::optional<std::string>{std::move(*value)};
+			}
+
+			[[nodiscard]] sdk::result<std::optional<observation_v2_primary_span>> optional_span()
+			{
+				auto present = boolean();
+				if (!present)
+					return sdk::unexpected(std::move(present.error()));
+				if (!*present)
+					return std::optional<observation_v2_primary_span>{};
+				observation_v2_primary_span value;
+				auto span_id = string("task_spool.span_id");
+				auto snapshot = string("task_spool.span.snapshot");
+				auto file = string("task_spool.span.file");
+				auto role = string("task_spool.span.role");
+				if (!span_id || !snapshot || !file || !role)
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, "task_spool.span", "string"));
+				value.span_id = std::move(*span_id);
+				value.snapshot = std::move(*snapshot);
+				value.file = std::move(*file);
+				value.role = std::move(*role);
+				auto begin = u64();
+				auto end = u64();
+				auto read_only = boolean();
+				if (!begin || !end || !read_only)
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, "task_spool.span", "value"));
+				value.begin = *begin;
+				value.end = *end;
+				value.read_only = *read_only;
+				return std::optional<observation_v2_primary_span>{std::move(value)};
+			}
+
+			[[nodiscard]] sdk::result<sdk::detached_cell> cell()
+			{
+				auto scalar = byte();
+				auto parameter = string("task_spool.cell.parameter");
+				auto optional = boolean();
+				auto state = byte();
+				auto has_value = boolean();
+				if (!scalar || !parameter || !optional || !state || !has_value ||
+					!sdk::is_valid(static_cast<sdk::scalar_kind>(*scalar)) ||
+					*state > static_cast<std::uint8_t>(sdk::cell_state::unknown))
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, "task_spool.cell", "header"));
+				sdk::detached_cell value;
+				value.type = {
+					static_cast<sdk::scalar_kind>(*scalar), std::move(*parameter), *optional};
+				value.state = static_cast<sdk::cell_state>(*state);
+				if (*has_value)
+				{
+					auto kind = byte();
+					if (!kind || *kind > 4U)
+						return sdk::unexpected(
+							report_spool_failure(detailed_report_error_kind::spool_corrupt,
+												 "task_spool.cell.value",
+												 "kind"));
+					switch (*kind)
+					{
+						case 0U:
+						{
+							auto item = boolean();
+							if (!item)
+								return sdk::unexpected(std::move(item.error()));
+							value.value = sdk::scalar_value{*item};
+							break;
+						}
+						case 1U:
+						{
+							auto item = u64();
+							if (!item)
+								return sdk::unexpected(std::move(item.error()));
+							value.value = sdk::scalar_value{std::bit_cast<std::int64_t>(*item)};
+							break;
+						}
+						case 2U:
+						{
+							auto item = u64();
+							if (!item)
+								return sdk::unexpected(std::move(item.error()));
+							value.value = sdk::scalar_value{*item};
+							break;
+						}
+						case 3U:
+						{
+							auto item = string("task_spool.cell.string");
+							if (!item)
+								return sdk::unexpected(std::move(item.error()));
+							value.value = sdk::scalar_value{std::move(*item)};
+							break;
+						}
+						case 4U:
+						{
+							auto item = bytes("task_spool.cell.bytes");
+							if (!item)
+								return sdk::unexpected(std::move(item.error()));
+							value.value = sdk::scalar_value{std::move(*item)};
+							break;
+						}
+						default:
+							return sdk::unexpected(
+								report_spool_failure(detailed_report_error_kind::spool_corrupt,
+													 "task_spool.cell.value",
+													 "kind"));
+					}
+				}
+				auto reason = optional_string("task_spool.cell.unknown_reason");
+				if (!reason)
+					return sdk::unexpected(std::move(reason.error()));
+				value.unknown_reason = std::move(*reason);
+				if (!value.validate())
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, "task_spool.cell", "invalid"));
+				return value;
+			}
+
+			[[nodiscard]] sdk::result<sdk::detached_row> row()
+			{
+				auto descriptor = string("task_spool.row.descriptor_id");
+				auto count = this->count(limits_.max_side_channel_records, "task_spool.row.cells");
+				if (!descriptor || !count)
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, "task_spool.row", "header"));
+				sdk::detached_row value;
+				value.descriptor_id = std::move(*descriptor);
+				std::string previous;
+				for (std::size_t index{}; index < *count; ++index)
+				{
+					auto column = string("task_spool.row.column");
+					if (!column || (!previous.empty() && *column <= previous))
+						return sdk::unexpected(
+							report_spool_failure(detailed_report_error_kind::spool_corrupt,
+												 "task_spool.row.column",
+												 "order"));
+					auto cell_value = cell();
+					if (!cell_value)
+						return sdk::unexpected(std::move(cell_value.error()));
+					previous = *column;
+					if (!value.cells.emplace(std::move(*column), std::move(*cell_value)).second)
+						return sdk::unexpected(
+							report_spool_failure(detailed_report_error_kind::spool_corrupt,
+												 "task_spool.row.column",
+												 "duplicate"));
+				}
+				return value;
+			}
+
+			[[nodiscard]] std::uint64_t offset() const noexcept
+			{
+				return offset_;
+			}
+
+		  private:
+			materialization_replayable_spool& storage_;
+			std::uint64_t offset_{};
+			std::uint64_t end_{};
+			const detailed_report_limits& limits_;
+		};
+
+		[[nodiscard]] sdk::result<detailed_task_report_capture>
+		read_report_capture(report_spool_reader& reader, const detailed_report_limits& limits)
+		{
+			std::array<std::byte, report_spool_magic.size()> magic{};
+			if (auto read = reader.exact(magic); !read)
+				return sdk::unexpected(std::move(read.error()));
+			for (std::size_t index{}; index < magic.size(); ++index)
+				if (std::to_integer<char>(magic[index]) != report_spool_magic[index])
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, "task_spool.magic", "mismatch"));
+			auto version = reader.byte();
+			if (!version || *version != report_spool_version)
+				return sdk::unexpected(report_spool_failure(
+					detailed_report_error_kind::spool_corrupt, "task_spool.version", "mismatch"));
+
+			detailed_task_report_capture capture;
+			const auto read_fixed_strings =
+				[&](const std::initializer_list<std::string*> fields) -> sdk::result<void>
+			{
+				for (auto* field : fields)
+				{
+					auto value = reader.string("task_spool.string");
+					if (!value)
+						return sdk::unexpected(std::move(value.error()));
+					*field = std::move(*value);
+				}
+				return {};
+			};
+			if (auto fields = read_fixed_strings({&capture.provider_task_id,
+												  &capture.provider_execution_id,
+												  &capture.project_id,
+												  &capture.catalog_id,
+												  &capture.catalog_digest,
+												  &capture.selected_catalog_compile_unit_id,
+												  &capture.compile_unit_id,
+												  &capture.variant_id,
+												  &capture.toolchain_context_id,
+												  &capture.toolchain_digest,
+												  &capture.source_snapshot_id,
+												  &capture.source_file_id,
+												  &capture.source_logical_path,
+												  &capture.source_content_digest});
+				!fields)
+				return sdk::unexpected(std::move(fields.error()));
+			auto source_size = reader.u64();
+			if (!source_size)
+				return sdk::unexpected(std::move(source_size.error()));
+			capture.source_size_bytes = *source_size;
+			if (auto fields =
+					read_fixed_strings({&capture.source_encoding, &capture.source_line_index_id});
+				!fields)
+				return sdk::unexpected(std::move(fields.error()));
+			auto source_read_only = reader.boolean();
+			if (!source_read_only)
+				return sdk::unexpected(std::move(source_read_only.error()));
+			capture.source_read_only = *source_read_only;
+			if (auto fields = read_fixed_strings({&capture.task_input_digest,
+												  &capture.condition_universe_id,
+												  &capture.condition_id,
+												  &capture.interpretation_domain});
+				!fields)
+				return sdk::unexpected(std::move(fields.error()));
+			const auto read_u16 = [&](std::uint16_t& output) -> sdk::result<void>
+			{
+				auto value = reader.u64();
+				if (!value || *value > std::numeric_limits<std::uint16_t>::max())
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, "task_spool.protocol", "u16"));
+				output = static_cast<std::uint16_t>(*value);
+				return {};
+			};
+			if (auto value = read_u16(capture.input_protocol_major); !value)
+				return sdk::unexpected(std::move(value.error()));
+			if (auto value = read_u16(capture.input_protocol_minor); !value)
+				return sdk::unexpected(std::move(value.error()));
+			if (auto value = reader.u64(); !value)
+				return sdk::unexpected(std::move(value.error()));
+			else
+				capture.logical_input_bytes = *value;
+			if (auto value = reader.u64(); !value)
+				return sdk::unexpected(std::move(value.error()));
+			else
+				capture.canonical_chunk_bytes = *value;
+			if (auto value = reader.u64(); !value)
+				return sdk::unexpected(std::move(value.error()));
+			else
+				capture.input_chunk_count = *value;
+			auto chunk_count = reader.count(limits.max_chunks_per_batch, "task_spool.chunks");
+			if (!chunk_count)
+				return sdk::unexpected(std::move(chunk_count.error()));
+			capture.ordered_chunk_digests.reserve(*chunk_count);
+			for (std::size_t index{}; index < *chunk_count; ++index)
+			{
+				auto value = reader.string("task_spool.chunk");
+				if (!value)
+					return sdk::unexpected(std::move(value.error()));
+				capture.ordered_chunk_digests.push_back(std::move(*value));
+			}
+			if (auto fields = read_fixed_strings({&capture.ordered_chunk_payload_digest_set_digest,
+												  &capture.raw_frame_stream_digest,
+												  &capture.frame_transcript_digest,
+												  &capture.sealed_transcript_digest});
+				!fields)
+				return sdk::unexpected(std::move(fields.error()));
+			if (auto value = reader.u64(); !value)
+				return sdk::unexpected(std::move(value.error()));
+			else
+				capture.raw_frame_stream_bytes = *value;
+			if (auto value = reader.u64(); !value)
+				return sdk::unexpected(std::move(value.error()));
+			else
+				capture.frame_count = *value;
+
+			auto coverage_count =
+				reader.count(limits.max_side_channel_records, "task_spool.coverage");
+			if (!coverage_count)
+				return sdk::unexpected(std::move(coverage_count.error()));
+			capture.coverage.reserve(*coverage_count);
+			for (std::size_t index{}; index < *coverage_count; ++index)
+			{
+				detailed_coverage_projection value;
+				if (auto fields =
+						read_fixed_strings({&value.kind, &value.id, &value.state, &value.reason});
+					!fields)
+					return sdk::unexpected(std::move(fields.error()));
+				capture.coverage.push_back(std::move(value));
+			}
+			auto unresolved_count =
+				reader.count(limits.max_side_channel_records, "task_spool.unresolved");
+			if (!unresolved_count)
+				return sdk::unexpected(std::move(unresolved_count.error()));
+			capture.unresolved.reserve(*unresolved_count);
+			for (std::size_t index{}; index < *unresolved_count; ++index)
+			{
+				detailed_unresolved_projection value;
+				if (auto fields = read_fixed_strings({&value.code, &value.subject, &value.detail});
+					!fields)
+					return sdk::unexpected(std::move(fields.error()));
+				capture.unresolved.push_back(std::move(value));
+			}
+			auto evidence_count =
+				reader.count(limits.max_side_channel_records, "task_spool.evidence");
+			if (!evidence_count)
+				return sdk::unexpected(std::move(evidence_count.error()));
+			capture.evidence.reserve(*evidence_count);
+			for (std::size_t index{}; index < *evidence_count; ++index)
+			{
+				detailed_evidence_projection value;
+				if (auto fields = read_fixed_strings(
+						{&value.kind, &value.subject, &value.producer, &value.summary});
+					!fields)
+					return sdk::unexpected(std::move(fields.error()));
+				capture.evidence.push_back(std::move(value));
+			}
+
+			auto batch_count = reader.count(limits.max_batches_per_task, "task_spool.batches");
+			if (!batch_count)
+				return sdk::unexpected(std::move(batch_count.error()));
+			capture.batches.reserve(*batch_count);
+			for (std::size_t index{}; index < *batch_count; ++index)
+			{
+				detailed_provider_batch_projection batch;
+				if (auto fields = read_fixed_strings({&batch.task_id,
+													  &batch.descriptor_id,
+													  &batch.descriptor_digest,
+													  &batch.dependency_group_id,
+													  &batch.atomic_output_group_id,
+													  &batch.batch_id,
+													  &batch.batch_digest});
+					!fields)
+					return sdk::unexpected(std::move(fields.error()));
+				auto chunks = reader.count(limits.max_chunks_per_batch, "task_spool.batch.chunks");
+				if (!chunks)
+					return sdk::unexpected(std::move(chunks.error()));
+				batch.ordered_chunk_digests.reserve(*chunks);
+				for (std::size_t chunk{}; chunk < *chunks; ++chunk)
+				{
+					auto value = reader.string("task_spool.batch.chunk");
+					if (!value)
+						return sdk::unexpected(std::move(value.error()));
+					batch.ordered_chunk_digests.push_back(std::move(*value));
+				}
+				auto row_count = reader.u64();
+				auto row_set_digest = reader.string("task_spool.batch.row_set_digest");
+				if (!row_count || !row_set_digest ||
+					*row_count > static_cast<std::uint64_t>(limits.max_side_channel_records))
+					return sdk::unexpected(
+						report_spool_failure(detailed_report_error_kind::spool_corrupt,
+											 "task_spool.batch.rows",
+											 "count"));
+				batch.row_count = *row_count;
+				batch.row_set_digest = std::move(*row_set_digest);
+				auto rows = reader.count(limits.max_side_channel_records, "task_spool.batch.rows");
+				if (!rows || *rows != batch.row_count)
+					return sdk::unexpected(
+						report_spool_failure(detailed_report_error_kind::spool_corrupt,
+											 "task_spool.batch.rows",
+											 "count"));
+				batch.rows.reserve(*rows);
+				for (std::size_t row_index{}; row_index < *rows; ++row_index)
+				{
+					detailed_provider_batch_projection::row_projection row;
+					auto index_value = reader.u64();
+					auto canonical = reader.string("task_spool.batch.row.canonical");
+					auto digest = reader.string("task_spool.batch.row.digest");
+					if (!index_value || !canonical || !digest ||
+						*index_value >
+							static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+						return sdk::unexpected(
+							report_spool_failure(detailed_report_error_kind::spool_corrupt,
+												 "task_spool.batch.row",
+												 "value"));
+					row.row_index = static_cast<std::size_t>(*index_value);
+					row.row_canonical_form = std::move(*canonical);
+					row.row_digest = std::move(*digest);
+					batch.rows.push_back(std::move(row));
+				}
+				capture.batches.push_back(std::move(batch));
+			}
+
+			auto observation_count =
+				reader.count(limits.max_side_channel_records, "task_spool.observation_rows");
+			if (!observation_count)
+				return sdk::unexpected(std::move(observation_count.error()));
+			capture.observation_rows.reserve(*observation_count);
+			for (std::size_t index{}; index < *observation_count; ++index)
+			{
+				detailed_observation_row_projection row;
+				auto batch_index = reader.u64();
+				auto row_index = reader.u64();
+				auto digest = reader.string("task_spool.observation.digest");
+				auto exact = reader.boolean();
+				auto limitation = reader.optional_string("task_spool.observation.limitation");
+				auto span = reader.optional_span();
+				if (!batch_index || !row_index || !digest || !exact || !limitation || !span ||
+					*batch_index >
+						static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()) ||
+					*row_index >
+						static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+					return sdk::unexpected(
+						report_spool_failure(detailed_report_error_kind::spool_corrupt,
+											 "task_spool.observation",
+											 "value"));
+				row.batch_index = static_cast<std::size_t>(*batch_index);
+				row.row_index = static_cast<std::size_t>(*row_index);
+				row.observation_row_digest = std::move(*digest);
+				row.exact_equivalence = *exact;
+				row.limitation = std::move(*limitation);
+				row.primary_span = std::move(*span);
+				capture.observation_rows.push_back(std::move(row));
+			}
+
+			const auto read_rows = [&](std::vector<sdk::detached_row>& rows) -> sdk::result<void>
+			{
+				auto count = reader.count(limits.max_side_channel_records, "task_spool.rows");
+				if (!count)
+					return sdk::unexpected(std::move(count.error()));
+				rows.reserve(*count);
+				for (std::size_t index{}; index < *count; ++index)
+				{
+					auto row = reader.row();
+					if (!row)
+						return sdk::unexpected(std::move(row.error()));
+					rows.push_back(std::move(*row));
+				}
+				return {};
+			};
+			if (auto rows = read_rows(capture.base_claim_rows); !rows)
+				return sdk::unexpected(std::move(rows.error()));
+			if (auto rows = read_rows(capture.source_span_claim_rows); !rows)
+				return sdk::unexpected(std::move(rows.error()));
+			std::size_t accounted{};
+			if (!account_task_capture(capture, limits, accounted))
+				return sdk::unexpected(report_spool_failure(
+					detailed_report_error_kind::spool_corrupt, "task_spool.capture", "bounds"));
+			return capture;
+		}
 	} // namespace
+
+	detailed_task_report_replayable_spool::detailed_task_report_replayable_spool(
+		detailed_report_limits limits, std::unique_ptr<materialization_replayable_spool> storage)
+		: limits_{limits}, storage_{std::move(storage)}
+	{
+	}
+
+	detailed_task_report_replayable_spool::detailed_task_report_replayable_spool(
+		detailed_task_report_replayable_spool&&) noexcept = default;
+
+	detailed_task_report_replayable_spool& detailed_task_report_replayable_spool::operator=(
+		detailed_task_report_replayable_spool&&) noexcept = default;
+
+	detailed_task_report_replayable_spool::~detailed_task_report_replayable_spool() = default;
+
+	sdk::result<detailed_task_report_replayable_spool>
+	detailed_task_report_replayable_spool::create(detailed_report_limits limits)
+	{
+		if (!valid_report_spool_limits(limits))
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::invalid_capture, "task_spool.limits", "bounded"));
+		try
+		{
+			auto storage = make_materialization_private_spool();
+			if (!storage)
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::spool_io, "task_spool", "create"));
+			detailed_task_report_replayable_spool output{limits, std::move(*storage)};
+			output.record_offsets_.reserve(limits.max_tasks);
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "allocation"));
+		}
+	}
+
+	sdk::result<void>
+	detailed_task_report_replayable_spool::append(detailed_task_report_capture capture)
+	{
+		if (!storage_ || poisoned_ || sealed_)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "lifecycle"));
+		if (record_offsets_.size() >= limits_.max_tasks)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::limit_exceeded, "task_spool", "count"));
+		try
+		{
+			std::size_t accounted{};
+			if (!account_task_capture(capture, limits_, accounted))
+				return sdk::unexpected(fail(
+					detailed_report_error_kind::limit_exceeded, "task_spool", "capture-bytes"));
+			const auto validate_rows = [](const std::vector<sdk::detached_row>& rows)
+			{
+				for (const auto& row : rows)
+					for (const auto& [column, cell] : row.cells)
+						if (!sdk::is_valid(cell.state) || !sdk::is_valid(cell.type.scalar) ||
+							!cell.validate())
+							return false;
+				return true;
+			};
+			if (!validate_rows(capture.base_claim_rows) ||
+				!validate_rows(capture.source_span_claim_rows))
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::invalid_capture, "task_spool.rows", "cell"));
+
+			const auto remaining = limits_.max_projection_bytes - spooled_bytes_;
+			report_spool_writer writer{*storage_, static_cast<std::uint64_t>(remaining)};
+			auto encoded = write_report_capture(writer, capture);
+			if (!encoded)
+			{
+				poisoned_ = true;
+				return encoded;
+			}
+			if (writer.written_bytes() == 0U ||
+				writer.written_bytes() > static_cast<std::uint64_t>(remaining))
+			{
+				poisoned_ = true;
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::spool_corrupt, "task_spool", "size"));
+			}
+			record_offsets_.push_back(spooled_bytes_);
+			spooled_bytes_ += writer.written_bytes();
+			return {};
+		}
+		catch (const std::bad_alloc&)
+		{
+			poisoned_ = true;
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "allocation"));
+		}
+		catch (...)
+		{
+			poisoned_ = true;
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "exception"));
+		}
+	}
+
+	sdk::result<void> detailed_task_report_replayable_spool::seal()
+	{
+		if (!storage_ || poisoned_ || sealed_)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "lifecycle"));
+		auto result = storage_->seal();
+		if (!result)
+		{
+			poisoned_ = true;
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "seal"));
+		}
+		sealed_ = true;
+		return {};
+	}
+
+	sdk::result<void> detailed_task_report_replayable_spool::replay(const consumer& consume) const
+	{
+		if (!storage_ || poisoned_ || !sealed_ || !consume)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "replay-lifecycle"));
+		try
+		{
+			for (std::size_t index{}; index < record_offsets_.size(); ++index)
+			{
+				const auto begin = record_offsets_[index];
+				const auto end = index + 1U < record_offsets_.size() ? record_offsets_[index + 1U]
+																	 : spooled_bytes_;
+				if (begin >= end || end > spooled_bytes_)
+					return sdk::unexpected(fail(
+						detailed_report_error_kind::spool_corrupt, "task_spool.offset", "order"));
+				report_spool_reader reader{*storage_, begin, end, limits_};
+				auto capture = read_report_capture(reader, limits_);
+				if (!capture)
+					return sdk::unexpected(std::move(capture.error()));
+				if (reader.offset() != end)
+					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+												"task_spool.record",
+												"trailing-bytes"));
+				if (auto accepted = consume(std::move(*capture)); !accepted)
+					return accepted;
+			}
+			return {};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "allocation"));
+		}
+		catch (...)
+		{
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "exception"));
+		}
+	}
+
+	std::size_t detailed_task_report_replayable_spool::task_count() const noexcept
+	{
+		return record_offsets_.size();
+	}
+
+	std::uint64_t detailed_task_report_replayable_spool::spooled_bytes() const noexcept
+	{
+		return spooled_bytes_;
+	}
+
+	bool detailed_task_report_replayable_spool::sealed() const noexcept
+	{
+		return sealed_;
+	}
 
 	detailed_task_report_accumulator::detailed_task_report_accumulator(
 		detailed_report_limits limits) noexcept

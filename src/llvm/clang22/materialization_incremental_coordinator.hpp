@@ -12,9 +12,11 @@
 
 #include <cxxlens/sdk/incremental.hpp>
 
+#include "materialization_claim_stream.hpp"
 #include "materialization_claims.hpp"
 #include "materialization_incremental_receipt.hpp"
 #include "materialization_io.hpp"
+#include "materialization_request_v2_1.hpp"
 #include "materialization_store.hpp"
 
 namespace cxxlens::detail::clang22::materialization
@@ -223,6 +225,18 @@ namespace cxxlens::detail::clang22::materialization
 		operator=(materialization_incremental_task_binding&&) noexcept = default;
 	};
 
+	/**
+	 * Source-private v2.1 execution seam. The consumer must finish the bounded task window before
+	 * returning; the coordinator destroys that window before it advances the cursor. The callback
+	 * owns the downstream result/spool handoff because the legacy claim/store result type cannot
+	 * represent a v2.1 task without first materializing a request-wide legacy task vector.
+	 */
+	using materialization_v2_1_task_cursor_consumer =
+		std::function<sdk::result<void>(std::size_t,
+										sdk::incremental::action,
+										materialization_v2_1_task_execution&,
+										const materialization_incremental_task_binding&)>;
+
 	/** Independent evidence of actual provider calls; planner counters are not substituted. */
 	struct materialization_incremental_execution_census
 	{
@@ -263,14 +277,18 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] const sealed_materialization_claims& claims() const noexcept;
 		[[nodiscard]] const materialization_incremental_execution_census&
 		execution_census() const noexcept;
+		/** Independently replayable D2/D3 event source retained behind sealed spools. */
+		[[nodiscard]] const materialization_claim_stream_source* claim_stream() const noexcept;
 
 	  private:
 		sealed_materialization_incremental_result(
 			sealed_materialization_claims claims,
-			materialization_incremental_execution_census execution_census) noexcept;
+			materialization_incremental_execution_census execution_census,
+			materialization_claim_stream_source claim_stream) noexcept;
 
 		sealed_materialization_claims claims_;
 		materialization_incremental_execution_census execution_census_;
+		materialization_claim_stream_source claim_stream_;
 
 		friend sdk::result<sealed_materialization_incremental_result>
 		run_materialization_incremental_coordinator(
@@ -319,6 +337,21 @@ namespace cxxlens::detail::clang22::materialization
 			const materialization_producer_authority& producer_authority,
 			const materialization_guarantee_authority& guarantee_authority);
 	};
+
+	/**
+	 * Consume one admitted v2.1 request through the exact canonical task cursor lifecycle.
+	 *
+	 * This seam intentionally does not construct claims, reports, or Store transactions. It is the
+	 * coordinator-owned bridge for the production caller: the callback performs the bounded worker
+	 * execution and hands its result to the next source-private spool boundary. On success, every
+	 * task has been released before the cursor is finalized. On failure, the cursor is destroyed
+	 * without fabricating a complete finalization receipt.
+	 */
+	[[nodiscard]] sdk::result<void> run_materialization_incremental_v2_1_task_cursor(
+		validated_materialization_request_v2_1& request,
+		const sdk::incremental::materialization_plan& plan,
+		std::span<const materialization_incremental_task_binding> bindings,
+		const materialization_v2_1_task_cursor_consumer& consumer);
 
 	/**
 	 * Execute or reuse a validated plan and construct claims only from the complete ordered result

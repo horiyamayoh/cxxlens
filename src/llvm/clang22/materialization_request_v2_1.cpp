@@ -31,6 +31,34 @@
 
 namespace cxxlens::detail::clang22::materialization
 {
+	struct materialization_v2_1_task_cursor_state
+	{
+		streamed_materialization_request_identity identity;
+		std::uint64_t next_task_index{};
+		std::weak_ptr<void> active_lease;
+		std::optional<sdk::error> failure;
+		bool poisoned{};
+		bool finalized{};
+	};
+
+	materialization_v2_1_task_execution::materialization_v2_1_task_execution(
+		clang22_task_input input,
+		materialization_v2_1_task_metadata_receipt metadata,
+		clang22_task_source_receipt source_receipt,
+		std::unique_ptr<clang22_task_source_spool> source,
+		std::unique_ptr<clang22_task_input_spool> task_input)
+		: input{std::move(input)}, metadata{std::move(metadata)},
+		  source_receipt{std::move(source_receipt)}, source{std::move(source)},
+		  task_input{std::move(task_input)}
+	{
+	}
+
+	void
+	materialization_v2_1_task_execution::attach_cursor_lease(std::shared_ptr<void> lease) noexcept
+	{
+		cursor_lease = std::move(lease);
+	}
+
 	namespace
 	{
 		using sdk::canonical_value;
@@ -3451,6 +3479,144 @@ namespace cxxlens::detail::clang22::materialization
 											request_.output_descriptors_,
 											request_.worker_,
 											auxiliary_spools);
+	}
+
+	materialization_v2_1_task_cursor::materialization_v2_1_task_cursor(
+		validated_materialization_request_v2_1& request,
+		std::shared_ptr<materialization_v2_1_task_cursor_state> state) noexcept
+		: request_{&request}, state_{std::move(state)}
+	{
+	}
+
+	materialization_v2_1_task_cursor::materialization_v2_1_task_cursor(
+		materialization_v2_1_task_cursor&& other) noexcept
+		: request_{std::exchange(other.request_, nullptr)}, state_{std::move(other.state_)}
+	{
+	}
+
+	materialization_v2_1_task_cursor&
+	materialization_v2_1_task_cursor::operator=(materialization_v2_1_task_cursor&& other) noexcept
+	{
+		if (this != &other)
+		{
+			request_ = std::exchange(other.request_, nullptr);
+			state_ = std::move(other.state_);
+		}
+		return *this;
+	}
+
+	materialization_v2_1_task_cursor::~materialization_v2_1_task_cursor() = default;
+
+	const streamed_materialization_request_identity&
+	materialization_v2_1_task_cursor::identity() const noexcept
+	{
+		static const streamed_materialization_request_identity empty_identity{};
+		return state_ == nullptr ? empty_identity : state_->identity;
+	}
+
+	std::uint64_t materialization_v2_1_task_cursor::task_count() const noexcept
+	{
+		return request_ == nullptr ? 0U : request_->request().task_count();
+	}
+
+	std::uint64_t materialization_v2_1_task_cursor::next_task_index() const noexcept
+	{
+		return state_ == nullptr ? 0U : state_->next_task_index;
+	}
+
+	sdk::result<std::optional<materialization_v2_1_task_execution>>
+	materialization_v2_1_task_cursor::next()
+	{
+		try
+		{
+			if (request_ == nullptr || state_ == nullptr || state_->poisoned || state_->finalized)
+				return sdk::unexpected(materialization_admission_no_response());
+			if (state_->failure)
+				return sdk::unexpected(*state_->failure);
+			if (!state_->active_lease.expired())
+			{
+				state_->poisoned = true;
+				return sdk::unexpected(materialization_admission_no_response());
+			}
+
+			const auto count = request_->request().task_count();
+			if (state_->next_task_index > count)
+			{
+				state_->poisoned = true;
+				return sdk::unexpected(materialization_admission_no_response());
+			}
+			if (state_->next_task_index == count)
+				return std::optional<materialization_v2_1_task_execution>{};
+
+			const auto index = state_->next_task_index;
+			auto execution = request_->task_execution(index);
+			if (!execution)
+			{
+				state_->failure = execution.error();
+				return sdk::unexpected(std::move(execution.error()));
+			}
+			if (execution->metadata.task_index != index)
+			{
+				state_->poisoned = true;
+				return sdk::unexpected(materialization_admission_no_response());
+			}
+
+			auto lease = std::make_shared<std::uint8_t>(0U);
+			state_->active_lease = lease;
+			execution->attach_cursor_lease(std::move(lease));
+			std::optional<materialization_v2_1_task_execution> output{std::in_place,
+																	  std::move(*execution)};
+			++state_->next_task_index;
+			return std::move(output);
+		}
+		catch (const std::bad_alloc&)
+		{
+			if (state_ != nullptr)
+				state_->poisoned = true;
+			return sdk::unexpected(materialization_admission_no_response());
+		}
+	}
+
+	sdk::result<void> materialization_v2_1_task_cursor::finalize() &&
+	{
+		try
+		{
+			if (request_ == nullptr || state_ == nullptr || state_->poisoned || state_->finalized)
+				return sdk::unexpected(materialization_admission_no_response());
+			if (state_->failure)
+				return sdk::unexpected(*state_->failure);
+			if (!state_->active_lease.expired() || state_->next_task_index != task_count())
+			{
+				state_->poisoned = true;
+				return sdk::unexpected(materialization_admission_no_response());
+			}
+			state_->finalized = true;
+			request_ = nullptr;
+			return {};
+		}
+		catch (const std::bad_alloc&)
+		{
+			if (state_ != nullptr)
+				state_->poisoned = true;
+			return sdk::unexpected(materialization_admission_no_response());
+		}
+	}
+
+	sdk::result<materialization_v2_1_task_cursor>
+	make_materialization_v2_1_task_cursor(validated_materialization_request_v2_1& request)
+	{
+		try
+		{
+			if (request.request().task_count() == 0U)
+				return sdk::unexpected(materialization_admission_no_response());
+			auto state = std::make_shared<materialization_v2_1_task_cursor_state>();
+			state->identity = request.identity();
+			return materialization_v2_1_task_cursor{request, std::move(state)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(materialization_admission_no_response());
+		}
 	}
 
 	sdk::result<validated_materialization_request_v2_1> admit_materialization_request_v2_1(

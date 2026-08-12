@@ -40,7 +40,8 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<json_document>
 		make_claim_authority_document(const materialization_v2_1_tool_authority& tool,
-									  const materialization_v2_1_worker_authority& worker)
+									  const materialization_v2_1_worker_authority& worker,
+									  const std::string_view materialization_request_id)
 		{
 			json_value::object_type tool_members;
 			for (const auto& [name, value] : {
@@ -96,7 +97,12 @@ namespace cxxlens::detail::clang22::materialization
 			if (!tool_object || !worker_object)
 				return sdk::unexpected(!tool_object ? std::move(tool_object.error())
 													: std::move(worker_object.error()));
+			auto request_id_value =
+				string_value(std::string{materialization_request_id}, "materialization_request_id");
+			if (!request_id_value)
+				return sdk::unexpected(std::move(request_id_value.error()));
 			json_value::object_type root_members;
+			root_members.emplace("materialization_request_id", std::move(*request_id_value));
 			root_members.emplace("tool", std::move(*tool_object));
 			root_members.emplace("worker", std::move(*worker_object));
 			auto root = object_value(std::move(root_members), "claims-authority");
@@ -176,7 +182,8 @@ namespace cxxlens::detail::clang22::materialization
 				tasks.push_back(std::move(task));
 			}
 
-			auto document = make_claim_authority_document(admitted.tool(), admitted.worker());
+			auto document = make_claim_authority_document(
+				admitted.tool(), admitted.worker(), request.identity().materialization_request_id);
 			if (!document)
 				return sdk::unexpected(std::move(document.error()));
 			auto bindings = make_authority_bindings(occurrence);

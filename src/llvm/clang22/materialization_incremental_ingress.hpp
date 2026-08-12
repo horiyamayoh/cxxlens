@@ -3,8 +3,10 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "materialization_claim_stream.hpp"
 #include "materialization_incremental_receipt.hpp"
 #include "materialization_seal.hpp"
 
@@ -14,8 +16,9 @@ namespace cxxlens::detail::clang22::materialization
 	 * One move-only task handoff to the private bounded ingress.
 	 *
 	 * The task result and event spools are owned by this value only until consume_task() has
-	 * independently checked the external receipt and every sealed partition stream. They are
-	 * destroyed before consume_task() returns; the ingress retains only receipt metadata.
+	 * independently checked the external receipt and every sealed partition stream. The sealed
+	 * result is destroyed before consume_task() returns; sealed event spools remain anonymous,
+	 * immutable handles for the downstream independent claim-stream replay.
 	 */
 	struct materialization_incremental_task_ingress
 	{
@@ -40,6 +43,20 @@ namespace cxxlens::detail::clang22::materialization
 			materialization_incremental_task_ingress&&) noexcept = default;
 		materialization_incremental_task_ingress&
 		operator=(materialization_incremental_task_ingress&&) noexcept = default;
+	};
+
+	/** Final ingress authority plus the sealed, independently replayable event streams. */
+	struct materialization_incremental_ingress_result
+	{
+		materialization_incremental_execution_journal_receipt journal;
+		std::vector<materialization_claim_stream_task> claim_stream_tasks;
+
+		materialization_incremental_ingress_result(
+			materialization_incremental_execution_journal_receipt journal,
+			std::vector<materialization_claim_stream_task> claim_stream_tasks)
+			: journal{std::move(journal)}, claim_stream_tasks{std::move(claim_stream_tasks)}
+		{
+		}
 	};
 
 	/**
@@ -71,6 +88,11 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::result<materialization_incremental_execution_journal_receipt>
 		finalize() &&;
 
+		/** Seal the exact task receipt set and transfer sealed event streams to the independent
+		 * source. */
+		[[nodiscard]] sdk::result<materialization_incremental_ingress_result>
+		finalize_with_claim_stream() &&;
+
 		[[nodiscard]] std::size_t consumed_task_count() const noexcept
 		{
 			return next_task_index_;
@@ -81,6 +103,7 @@ namespace cxxlens::detail::clang22::materialization
 		std::string request_id_;
 		std::vector<std::vector<std::string>> expected_partition_ids_;
 		std::vector<std::optional<materialization_incremental_task_receipt>> task_receipts_;
+		std::vector<materialization_claim_stream_task> claim_stream_tasks_;
 		std::size_t next_task_index_{};
 
 		materialization_incremental_ingress(

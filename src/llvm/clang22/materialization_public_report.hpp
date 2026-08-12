@@ -59,22 +59,54 @@ namespace cxxlens::detail::clang22::materialization
 		std::map<std::string, json_value, utf8_byte_less> values;
 	};
 
+	/**
+	 * Publication-independent report authority reserved before the Store publish call.
+	 *
+	 * This projection deliberately contains no claim, publication, or query value.  It binds the
+	 * authenticated request/input/installation census and reserves the complete report byte budget;
+	 * the post-publication builder must recompute and match it before emitting success.
+	 */
+	struct public_materialization_prepublication_projection
+	{
+		std::string binding_digest;
+		std::string request_digest;
+		std::string semantic_request_digest;
+		std::string occurrence_inventory_digest;
+		std::uint64_t task_count{};
+		std::size_t reserved_bytes{};
+
+		[[nodiscard]] bool
+		operator==(const public_materialization_prepublication_projection&) const = default;
+	};
+
+	/** Build the bounded publication-independent projection before publication is attempted. */
+	[[nodiscard]] sdk::result<public_materialization_prepublication_projection>
+	prepare_public_materialization_prepublication_projection(
+		const validated_materialization_request_v2_1& request,
+		const raw_input_observation& raw_input,
+		const materialization_occurrence_manifest& occurrence_manifest,
+		const materialization_occurrence_receipt& occurrence_receipt,
+		std::size_t maximum_report_bytes);
+
 	/** Inputs to the fail-closed public v2.1 success-report builder. */
 	struct public_materialization_success_report_input
 	{
 		const validated_materialization_request_v2_1* request{};
 		const json_document* request_globals{};
 		const detailed_task_report_accumulator* task_reports{};
+		/** Replayable production task-report source; mutually exclusive with task_reports. */
+		const detailed_task_report_replayable_spool* task_report_spool{};
 		const raw_input_observation* raw_input{};
 		const materialization_occurrence_manifest* occurrence_manifest{};
 		const materialization_occurrence_receipt* occurrence_receipt{};
 		const sealed_materialization_claims* claims{};
 		const materialization_store_observation* store{};
+		const public_materialization_prepublication_projection* prepublication{};
 		/** Exact rooted-VFS receipt retained by the SQLite opener, when the backend is SQLite. */
 		const materialization_rooted_vfs_receipt* rooted_vfs_receipt{};
 		std::string generated_at;
 		public_materialization_authority_projections projections;
-		std::size_t maximum_report_bytes{64U * 1024U * 1024U};
+		std::size_t maximum_report_bytes{detailed_report_limits::maximum_report_bytes};
 	};
 
 	/**

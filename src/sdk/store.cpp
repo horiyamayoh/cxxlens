@@ -863,6 +863,67 @@ namespace cxxlens::sdk
 
 	namespace
 	{
+		/**
+		 * Transfer staged partition payloads into the validated candidate without retaining a
+		 * second full set of partition-owned strings and vectors in the writer.  The map nodes
+		 * are allocated before this guard is constructed, so the swaps themselves are
+		 * allocation-free.  A failed validation must leave the public writer in its original
+		 * staged state; the destructor restores ownership unless commit() is called.
+		 */
+		class staged_partition_payload_transfer
+		{
+		  public:
+			staged_partition_payload_transfer(
+				std::vector<partition_draft>& staged,
+				std::map<std::string, partition_draft, std::less<>>& payload,
+				const std::vector<std::string>& partition_ids) noexcept
+				: staged_{staged}, payload_{payload}, partition_ids_{partition_ids}
+			{
+				static_assert(std::is_nothrow_swappable_v<partition_draft>);
+				if (staged_.size() != partition_ids_.size())
+					std::abort();
+				for (std::size_t index = 0U; index < partition_ids_.size(); ++index)
+					swap_partition(index);
+			}
+
+			staged_partition_payload_transfer(const staged_partition_payload_transfer&) = delete;
+			staged_partition_payload_transfer&
+			operator=(const staged_partition_payload_transfer&) = delete;
+
+			~staged_partition_payload_transfer() noexcept
+			{
+				if (!committed_)
+					rollback();
+			}
+
+			void commit() noexcept
+			{
+				std::vector<partition_draft>{}.swap(staged_);
+				committed_ = true;
+			}
+
+		  private:
+			void swap_partition(const std::size_t index) noexcept
+			{
+				auto partition = payload_.find(partition_ids_[index]);
+				if (partition == payload_.end())
+					std::abort();
+				std::swap(staged_[index], partition->second);
+			}
+
+			void rollback() noexcept
+			{
+				for (std::size_t index = 0U; index < partition_ids_.size(); ++index)
+					swap_partition(index);
+				payload_.clear();
+			}
+
+			std::vector<partition_draft>& staged_;
+			std::map<std::string, partition_draft, std::less<>>& payload_;
+			const std::vector<std::string>& partition_ids_;
+			bool committed_{};
+		};
+
 		void encode_partition_envelopes(
 			binary_writer& writer,
 			const std::map<std::string, partition_draft, std::less<>>& envelopes)
@@ -11154,16 +11215,35 @@ namespace cxxlens::sdk
 		manifest.condition_universe_id = data_->draft.series.condition_universe_id;
 		manifest.relation_registry_digest = data_->draft.series.relation_registry_digest;
 		manifest.interpretation_policy_digest = data_->draft.series.interpretation_policy_digest;
+		std::vector<partition_manifest> partition_manifests;
+		partition_manifests.reserve(data_->partitions.size());
+		std::vector<std::string> partition_ids;
+		partition_ids.reserve(data_->partitions.size());
 		for (const auto& partition : data_->partitions)
 		{
 			auto built = make_partition_manifest(data_->store->engine, partition);
 			if (!built)
 				return unexpected(std::move(built.error()));
-			if (!candidate->partition_envelopes.emplace(built->partition_id, partition).second)
+			if (!candidate->partition_envelopes.emplace(built->partition_id, partition_draft{})
+					 .second)
 				return unexpected(store_error("store.partition-duplicate", built->partition_id));
-			manifest.partitions.push_back(*built);
+			partition_ids.push_back(built->partition_id);
+			partition_manifests.push_back(std::move(*built));
+		}
+		// The candidate now owns the partition payloads.  Keep this transfer transactional so
+		// every existing validation error still leaves the writer retryable in its staged state.
+		staged_partition_payload_transfer partition_payload{
+			data_->partitions, candidate->partition_envelopes, partition_ids};
+		for (std::size_t index = 0U; index < partition_ids.size(); ++index)
+		{
+			auto envelope = candidate->partition_envelopes.find(partition_ids[index]);
+			if (envelope == candidate->partition_envelopes.end())
+				return unexpected(store_error("store.corrupt", "partition-envelope", "missing"));
+			const auto& partition = envelope->second;
+			const auto& built = partition_manifests[index];
+			manifest.partitions.push_back(built);
 			candidate->partition_bindings.push_back(
-				partition_binding(built->partition_id, partition));
+				partition_binding(built.partition_id, partition));
 			auto relation = data_->store->engine.require_id(partition.relation_descriptor_id);
 			if (!relation)
 				return unexpected(std::move(relation.error()));
@@ -11297,6 +11377,10 @@ namespace cxxlens::sdk
 		if (auto valid = validate_semantic_graph(*candidate, data_->store->engine); !valid)
 			return unexpected(std::move(valid.error()));
 		manifest.id = snapshot_identity(manifest);
+		// The candidate's query projections and backend persistence semantics remain unchanged;
+		// this removes only the writer-side staged partition ownership.
+		partition_payload.commit();
+		data_->closures.clear();
 		data_->candidate = std::move(candidate);
 		data_->current_state = publication_state::validating;
 		return {};

@@ -8,6 +8,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -22,6 +23,7 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 
+#include "llvm/clang22/materialization_claim_stream.hpp"
 #include "llvm/clang22/materialization_incremental_coordinator.hpp"
 #include "llvm/clang22/materialization_incremental_ingress.hpp"
 #include "llvm/clang22/materialization_incremental_receipt.hpp"
@@ -612,6 +614,54 @@ namespace
 					store_transaction->partitions.size() == claims->partitions().size() &&
 					store_transaction->closures.empty(),
 				"sealed claims did not produce the exact one-transaction Store plan");
+		auto streaming_transaction =
+			make_materialization_streaming_store_transaction(request, *claims);
+		require(streaming_transaction.has_value() &&
+					streaming_transaction->draft.series == request.publication.selector &&
+					streaming_transaction->draft.catalog_semantic_digest ==
+						request.tasks.front().worker_input.project_catalog.catalog_digest,
+				"sealed claims did not produce the streaming Store metadata");
+		materialization_claim_partition_replay_source partition_source{*claims};
+		std::vector<std::string> replayed_partition_ids;
+		auto replay = partition_source.replay(
+			[&](sdk::partition_draft&& partition) -> sdk::result<void>
+			{
+				auto manifest = sdk::make_partition_manifest(request.engine, partition);
+				if (!manifest)
+					return sdk::unexpected(std::move(manifest.error()));
+				replayed_partition_ids.push_back(std::move(manifest->partition_id));
+				return {};
+			});
+		require(replay.has_value() &&
+					std::ranges::equal(replayed_partition_ids,
+									   claims->partitions(),
+									   {},
+									   std::identity{},
+									   [](const auto& partition)
+									   {
+										   return partition.manifest.partition_id;
+									   }),
+				"streaming Store source changed the typed partition order or identity");
+		const auto first_replay_count = replayed_partition_ids.size();
+		replayed_partition_ids.clear();
+		replay = partition_source.replay(
+			[&](sdk::partition_draft&& partition) -> sdk::result<void>
+			{
+				auto manifest = sdk::make_partition_manifest(request.engine, partition);
+				if (!manifest)
+					return sdk::unexpected(std::move(manifest.error()));
+				replayed_partition_ids.push_back(std::move(manifest->partition_id));
+				return {};
+			});
+		require(replay.has_value() && replayed_partition_ids.size() == first_replay_count,
+				"streaming Store source was not replayable");
+		replay = partition_source.replay(
+			[](sdk::partition_draft&&) -> sdk::result<void>
+			{
+				return sdk::unexpected(sdk::error{"test.store-source", "consumer", "rejected"});
+			});
+		require(!replay && replay.error().code == "test.store-source",
+				"streaming Store source swallowed the consumer failure");
 		for (std::size_t index = 1U; index < claims->partitions().size(); ++index)
 			require(claims->partitions()[index - 1U].manifest.partition_id <
 						claims->partitions()[index].manifest.partition_id,
@@ -1349,6 +1399,68 @@ namespace
 		};
 		require(!std::move(*dropped).consume_task(std::move(dropped_input)),
 				"incremental ingress accepted a whole-partition drop");
+	}
+
+	void check_claim_stream_source(const validated_materialization_request& request)
+	{
+		const auto maximum = std::numeric_limits<std::uint64_t>::max();
+		auto exact_limit = materialization_claim_stream_framed_length(maximum - 9U);
+		require(exact_limit && *exact_limit == maximum,
+				"claim stream framed length rejected the exact uint64 limit");
+		const auto overflow = materialization_claim_stream_framed_length(maximum - 8U);
+		require(!overflow &&
+					failure(overflow.error()) ==
+						"materialization.claim-stream-invalid/digest/length-overflow",
+				"claim stream framed length accepted a uint64 overflow");
+
+		std::vector<materialization_claim_stream_task> tasks;
+		std::vector<materialization_incremental_task_receipt> receipts;
+		tasks.reserve(request.tasks.size());
+		receipts.reserve(request.tasks.size());
+		for (std::size_t index{}; index < request.tasks.size(); ++index)
+		{
+			auto result = seal_task(request, index);
+			require(result.has_value(), "claim stream task seal failed");
+			const auto binding = materialization_incremental_task_binding{
+				incremental_identity(request, index),
+				std::vector<materialization_incremental_partition_binding>{
+					materialization_incremental_partition_binding{"partition:claim-stream-" +
+																  std::to_string(index)}}};
+			auto receipt = fixture_completeness_receipt(request, index, binding, *result);
+			require(receipt.has_value(), "claim stream task receipt construction failed");
+			std::vector<std::unique_ptr<materialization_replayable_spool>> spools =
+				fixture_partition_spools(request, index, binding, *result);
+			receipts.push_back(*receipt);
+			tasks.emplace_back(std::move(*receipt), std::move(spools));
+		}
+		auto request_id = materialization_incremental_request_id(request);
+		require(request_id.has_value(), "claim stream request identity failed");
+		auto journal = seal_materialization_incremental_execution_journal(
+			*request_id, std::span<const materialization_incremental_task_receipt>{receipts});
+		require(journal.has_value(), "claim stream journal construction failed");
+		auto external = materialization_claim_stream_source::validate_external_task_receipts(
+			request, *journal, std::span<materialization_claim_stream_task>{tasks});
+		require(external.has_value(),
+				"claim stream external validator rejected unchanged sealed task streams: " +
+					(external ? std::string{} : failure(external.error())));
+
+		auto source =
+			materialization_claim_stream_source::begin(request, *journal, std::move(tasks));
+		require(source.has_value() && source->task_count() == request.tasks.size() &&
+					source->partition_count() == request.tasks.size(),
+				"claim stream source did not retain the exact task/partition census");
+		std::size_t event_count{};
+		auto replayed = source->replay(
+			[&](const materialization_claim_stream_event& event) -> sdk::result<void>
+			{
+				require(!event.task_id.empty() && !event.partition_id.empty() &&
+							event.key.size() != 0U,
+						"claim stream replay exposed an incomplete event identity");
+				++event_count;
+				return {};
+			});
+		require(replayed.has_value() && event_count != 0U,
+				"claim stream source did not replay the sealed event boundary");
 	}
 
 	[[nodiscard]] incremental::input_fingerprint incremental_fingerprint()
@@ -2370,6 +2482,7 @@ int main(const int argc, char** argv)
 	check_partition_event_stream();
 	check_incremental_receipts(request);
 	check_incremental_ingress(request);
+	check_claim_stream_source(request);
 	positive_and_zero_partitions(request, producer);
 	streaming_source_receipts_replace_resident_payloads(root);
 	check_incremental_coordinator(request, producer);

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <map>
 #include <ranges>
 #include <utility>
 
@@ -94,6 +95,89 @@ namespace cxxlens::detail::clang22::materialization
 			if (!identity)
 				return sdk::unexpected(std::move(identity.error()));
 			output.id = std::move(*identity);
+			return output;
+		}
+
+		struct streaming_partition_index
+		{
+			sdk::snapshot_manifest manifest;
+			std::map<std::string, sdk::snapshot_partition_binding, std::less<>> bindings;
+			std::vector<std::string> source_order;
+		};
+
+		/**
+		 * Consume a replay once to derive final partition identity and closure subjects without
+		 * retaining any partition draft. The manifest is the unavoidable final semantic projection;
+		 * provider claims and payload vectors are not retained here.
+		 */
+		[[nodiscard]] sdk::result<streaming_partition_index>
+		index_streaming_partitions(const sdk::relation_engine& engine,
+								   const sdk::snapshot_draft& draft,
+								   const std::vector<sdk::closure_candidate>& closures,
+								   materialization_store_partition_replay_source& source)
+		{
+			streaming_partition_index output;
+			output.manifest.snapshot_semantics_version = draft.snapshot_semantics_version;
+			output.manifest.catalog_semantic_digest = draft.catalog_semantic_digest;
+			output.manifest.condition_universe_id = draft.series.condition_universe_id;
+			output.manifest.relation_registry_digest = draft.series.relation_registry_digest;
+			output.manifest.interpretation_policy_digest =
+				draft.series.interpretation_policy_digest;
+
+			materialization_store_partition_consumer consumer =
+				[&](sdk::partition_draft&& partition) -> sdk::result<void>
+			{
+				auto manifest = sdk::make_partition_manifest(engine, partition);
+				if (!manifest)
+					return sdk::unexpected(std::move(manifest.error()));
+				const auto binding = partition_binding(*manifest, partition);
+				if (!output.bindings.emplace(manifest->partition_id, binding).second)
+					return sdk::unexpected(
+						sdk::error{"store.partition-duplicate", manifest->partition_id, {}});
+				output.source_order.push_back(manifest->partition_id);
+				output.manifest.partitions.push_back(std::move(*manifest));
+				return {};
+			};
+			if (auto replayed = source.replay(consumer); !replayed)
+				return sdk::unexpected(std::move(replayed.error()));
+			if (output.manifest.partitions.empty())
+				return sdk::unexpected(sdk::error{"store.partitions-empty", "source", {}});
+			if (!std::ranges::is_sorted(output.source_order))
+				return sdk::unexpected(
+					sdk::error{"store.partition-order", "source", "noncanonical"});
+
+			std::ranges::sort(
+				output.manifest.partitions, {}, &sdk::partition_manifest::partition_id);
+			for (const auto& closure : closures)
+			{
+				const auto binding = output.bindings.find(closure.subject_partition_id);
+				if (binding == output.bindings.end())
+					return sdk::unexpected(sdk::error{
+						"store.closure-subject-missing", closure.subject_partition_id, {}});
+				const auto subject_manifest =
+					std::ranges::find(output.manifest.partitions,
+									  closure.subject_partition_id,
+									  &sdk::partition_manifest::partition_id);
+				if (subject_manifest == output.manifest.partitions.end())
+					return sdk::unexpected(sdk::error{
+						"store.closure-subject-missing", closure.subject_partition_id, {}});
+				auto subject =
+					sdk::make_partition_certificate_subject(*subject_manifest, binding->second);
+				if (!subject)
+					return sdk::unexpected(std::move(subject.error()));
+				auto certificate = sdk::make_closure_certificate(*subject, closure);
+				if (!certificate)
+					return sdk::unexpected(std::move(certificate.error()));
+				output.manifest.closure_ids.push_back(std::move(certificate->id));
+			}
+			std::ranges::sort(output.manifest.closure_ids);
+			if (std::ranges::adjacent_find(output.manifest.closure_ids) !=
+				output.manifest.closure_ids.end())
+				return sdk::unexpected(sdk::error{"store.closure-duplicate", "closures", {}});
+			auto identity = sdk::detail::snapshot_manifest_identity(output.manifest);
+			if (!identity)
+				return sdk::unexpected(std::move(identity.error()));
+			output.manifest.id = std::move(*identity);
 			return output;
 		}
 
@@ -295,7 +379,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] bool validate_configuration(materialization_store_observation& output,
 												  const validated_publication_request& publication,
-												  const prepared_store_transaction& prepared)
+												  const sdk::snapshot_draft& draft)
 		{
 			if (publication.backend != "memory" && publication.backend != "sqlite")
 				retain_mismatch(output,
@@ -311,21 +395,20 @@ namespace cxxlens::detail::clang22::materialization
 								"selector-series-id",
 								publication.selector.id(),
 								publication.series_id);
-			else if (prepared.draft.series != publication.selector)
+			else if (draft.series != publication.selector)
 				retain_mismatch(output,
 								materialization_store_operation::configuration,
 								std::nullopt,
 								"draft-selector",
 								publication.selector,
-								prepared.draft.series);
-			else if (prepared.draft.expected_parent_publication !=
-					 publication.expected_parent_publication)
+								draft.series);
+			else if (draft.expected_parent_publication != publication.expected_parent_publication)
 				retain_mismatch(output,
 								materialization_store_operation::configuration,
 								std::nullopt,
 								"draft-expected-parent-publication",
 								publication.expected_parent_publication,
-								prepared.draft.expected_parent_publication);
+								draft.expected_parent_publication);
 			else if (publication.genesis != !publication.expected_parent_publication.has_value())
 				retain_mismatch(output,
 								materialization_store_operation::configuration,
@@ -466,7 +549,7 @@ namespace cxxlens::detail::clang22::materialization
 		auto state_value = std::make_unique<materialization_store_preparation::state>(
 			engine, publication, initial_observation(publication), opener);
 		auto& output = state_value->observation;
-		if (!validate_configuration(output, publication, prepared))
+		if (!validate_configuration(output, publication, prepared.draft))
 			return materialization_store_preparation{std::move(state_value)};
 
 		auto candidate_manifest = build_candidate_manifest(engine, prepared);
@@ -620,6 +703,231 @@ namespace cxxlens::detail::clang22::materialization
 			output.candidate_identity = std::move(*candidate);
 		}
 		return materialization_store_preparation{std::move(state_value)};
+	}
+
+	materialization_store_preparation
+	prepare_materialization_store_streaming(const sdk::relation_engine& engine,
+											const validated_publication_request& publication,
+											streaming_prepared_store_transaction prepared,
+											materialization_store_partition_replay_source& source,
+											materialization_store_opener& opener)
+	{
+		auto state_value = std::make_unique<materialization_store_preparation::state>(
+			engine, publication, initial_observation(publication), opener);
+		auto& output = state_value->observation;
+		if (!validate_configuration(output, publication, prepared.draft))
+			return materialization_store_preparation{std::move(state_value)};
+
+		auto indexed =
+			index_streaming_partitions(engine, prepared.draft, prepared.closures, source);
+		if (!indexed)
+		{
+			retain_sdk_failure(output,
+							   materialization_store_operation::configuration,
+							   std::nullopt,
+							   indexed.error());
+			return materialization_store_preparation{std::move(state_value)};
+		}
+
+		auto opened = publication.backend == "memory"
+			? opener.open_memory(engine)
+			: opener.open_sqlite(*publication.sqlite_path, engine);
+		if (!opened)
+		{
+			retain_sdk_failure(
+				output, materialization_store_operation::store_open, std::nullopt, opened.error());
+			return materialization_store_preparation{std::move(state_value)};
+		}
+		state_value->store.emplace(std::move(*opened));
+		const auto compatibility = state_value->store->compatibility();
+		if (compatibility.backend != publication.backend)
+		{
+			retain_mismatch(output,
+							materialization_store_operation::store_open,
+							std::nullopt,
+							"opened-backend",
+							publication.backend,
+							compatibility.backend);
+			return materialization_store_preparation{std::move(state_value)};
+		}
+
+		capture_head(output, state_value->store->current(publication.selector));
+		std::optional<std::uint64_t> prior_sequence;
+		if (output.head_observation.status == materialization_store_receipt_status::sdk_error)
+		{
+			const auto& error = *output.head_observation.error;
+			if (!publication.genesis || error.code != "store.current-not-found")
+				retain_sdk_failure(output,
+								   materialization_store_operation::head_current,
+								   materialization_store_path::current_selector,
+								   error);
+		}
+		else
+		{
+			const auto& head = *output.head_observation.projection;
+			if (head.physical_backend != publication.backend)
+				retain_mismatch(output,
+								materialization_store_operation::head_current,
+								materialization_store_path::current_selector,
+								"physical-backend",
+								publication.backend,
+								head.physical_backend);
+			if (head.publication.series_id != publication.series_id)
+				retain_mismatch(output,
+								materialization_store_operation::head_current,
+								materialization_store_path::current_selector,
+								"series-id",
+								publication.series_id,
+								head.publication.series_id);
+			const bool committed_noncorrupt =
+				head.publication.state == sdk::publication_state::committed &&
+				!head.publication.corrupt;
+			if (!committed_noncorrupt)
+				retain_mismatch(output,
+								materialization_store_operation::head_current,
+								materialization_store_path::current_selector,
+								"committed-noncorrupt",
+								true,
+								committed_noncorrupt);
+			const auto actual_parent = std::optional<std::string>{head.publication.publication_id};
+			if (publication.expected_parent_publication != actual_parent)
+				retain_mismatch(output,
+								materialization_store_operation::head_current,
+								materialization_store_path::current_selector,
+								"expected-parent-publication",
+								publication.expected_parent_publication,
+								actual_parent);
+			prior_sequence = head.publication.sequence;
+		}
+		if (output.first_issue)
+			return materialization_store_preparation{std::move(state_value)};
+
+		++output.writer_begin_call_count;
+		auto writer = state_value->store->begin(std::move(prepared.draft));
+		if (!writer)
+		{
+			retain_sdk_failure(output,
+							   materialization_store_operation::writer_begin,
+							   std::nullopt,
+							   writer.error());
+			return materialization_store_preparation{std::move(state_value)};
+		}
+		state_value->writer.emplace(std::move(*writer));
+
+		std::size_t staged_index{};
+		std::optional<sdk::error> consumer_error;
+		materialization_store_partition_consumer stage =
+			[&](sdk::partition_draft&& partition) -> sdk::result<void>
+		{
+			if (consumer_error)
+				return sdk::unexpected(*consumer_error);
+			if (staged_index >= indexed->manifest.partitions.size())
+			{
+				consumer_error.emplace(
+					sdk::error{"store.partition-count-mismatch", "source", "too-many"});
+				return sdk::unexpected(*consumer_error);
+			}
+			auto manifest = sdk::make_partition_manifest(engine, partition);
+			if (!manifest)
+			{
+				consumer_error.emplace(manifest.error());
+				return sdk::unexpected(*consumer_error);
+			}
+			const auto& expected = indexed->manifest.partitions[staged_index];
+			if (manifest->partition_id != expected.partition_id)
+			{
+				consumer_error.emplace(sdk::error{
+					"store.partition-order", expected.partition_id, manifest->partition_id});
+				return sdk::unexpected(*consumer_error);
+			}
+			if (*manifest != expected)
+			{
+				consumer_error.emplace(
+					sdk::error{"store.partition-replay-mismatch", manifest->partition_id, {}});
+				return sdk::unexpected(*consumer_error);
+			}
+			++staged_index;
+			auto staged = state_value->writer->stage(std::move(partition));
+			if (!staged)
+			{
+				consumer_error.emplace(staged.error());
+				return sdk::unexpected(*consumer_error);
+			}
+			return {};
+		};
+		if (auto replayed = source.replay(stage); !replayed && !consumer_error)
+			consumer_error.emplace(replayed.error());
+		if (consumer_error || staged_index != indexed->manifest.partitions.size())
+		{
+			if (!consumer_error)
+				consumer_error.emplace(
+					sdk::error{"store.partition-count-mismatch", "source", "too-few"});
+			retain_sdk_failure(output,
+							   materialization_store_operation::partition_stage,
+							   std::nullopt,
+							   *consumer_error);
+			state_value->writer.reset();
+			return materialization_store_preparation{std::move(state_value)};
+		}
+
+		for (auto& closure : prepared.closures)
+		{
+			auto staged = state_value->writer->add_closure(std::move(closure));
+			if (!staged)
+			{
+				retain_sdk_failure(output,
+								   materialization_store_operation::closure_stage,
+								   std::nullopt,
+								   staged.error());
+				state_value->writer.reset();
+				return materialization_store_preparation{std::move(state_value)};
+			}
+		}
+		auto validated = state_value->writer->validate();
+		if (!validated)
+		{
+			retain_sdk_failure(output,
+							   materialization_store_operation::writer_validate,
+							   std::nullopt,
+							   validated.error());
+			state_value->writer.reset();
+			return materialization_store_preparation{std::move(state_value)};
+		}
+
+		output.candidate_manifest = std::move(indexed->manifest);
+		if (!prior_sequence || *prior_sequence != std::numeric_limits<std::uint64_t>::max())
+		{
+			const auto sequence = prior_sequence ? *prior_sequence + 1U : 1U;
+			auto candidate = make_publication_candidate(publication.series_id,
+														output.candidate_manifest->id,
+														sequence,
+														publication.expected_parent_publication);
+			if (!candidate)
+			{
+				retain_sdk_failure(output,
+								   materialization_store_operation::configuration,
+								   std::nullopt,
+								   candidate.error());
+				state_value->writer.reset();
+				return materialization_store_preparation{std::move(state_value)};
+			}
+			output.candidate_identity = std::move(*candidate);
+		}
+		return materialization_store_preparation{std::move(state_value)};
+	}
+
+	materialization_store_preparation
+	prepare_materialization_store_streaming(const sdk::relation_engine& engine,
+											const validated_publication_request& publication,
+											streaming_prepared_store_transaction prepared,
+											materialization_store_partition_replay_source& source)
+	{
+		auto owned = std::make_unique<sdk_store_opener>();
+		auto output = prepare_materialization_store_streaming(
+			engine, publication, std::move(prepared), source, *owned);
+		output.state_->owned_opener = std::move(owned);
+		output.state_->opener = output.state_->owned_opener.get();
+		return output;
 	}
 
 	materialization_store_preparation
@@ -790,5 +1098,26 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		return publish_materialization_store(
 			prepare_materialization_store(engine, publication, std::move(prepared), opener));
+	}
+
+	materialization_store_observation
+	execute_materialization_store_streaming(const sdk::relation_engine& engine,
+											const validated_publication_request& publication,
+											streaming_prepared_store_transaction prepared,
+											materialization_store_partition_replay_source& source)
+	{
+		return publish_materialization_store(prepare_materialization_store_streaming(
+			engine, publication, std::move(prepared), source));
+	}
+
+	materialization_store_observation
+	execute_materialization_store_streaming(const sdk::relation_engine& engine,
+											const validated_publication_request& publication,
+											streaming_prepared_store_transaction prepared,
+											materialization_store_partition_replay_source& source,
+											materialization_store_opener& opener)
+	{
+		return publish_materialization_store(prepare_materialization_store_streaming(
+			engine, publication, std::move(prepared), source, opener));
 	}
 } // namespace cxxlens::detail::clang22::materialization

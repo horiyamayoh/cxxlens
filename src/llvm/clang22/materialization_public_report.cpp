@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <new>
 #include <ranges>
 #include <set>
 #include <span>
@@ -640,8 +641,59 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] materialization_semantic_task_context
 		task_context(const detailed_task_report_capture& capture);
 
+		/**
+		 * One read-only task-report view used by the detailed report projector.
+		 *
+		 * The installed production path supplies the sealed replayable spool, while the accumulator
+		 * remains available for bounded unit fixtures.  The callback is invoked while one capture
+		 * is live and must not retain a reference after it returns.
+		 */
+		class task_report_source
+		{
+		  public:
+			using consumer = std::function<sdk::result<void>(const detailed_task_report_capture&)>;
+
+			task_report_source(const detailed_task_report_accumulator& accumulator) noexcept
+				: accumulator_{&accumulator}
+			{
+			}
+			task_report_source(const detailed_task_report_replayable_spool& spool) noexcept
+				: spool_{&spool}
+			{
+			}
+
+			[[nodiscard]] std::size_t task_count() const noexcept
+			{
+				return accumulator_ != nullptr ? accumulator_->tasks().size()
+											   : spool_->task_count();
+			}
+
+			[[nodiscard]] sdk::result<void> replay(const consumer& consume) const
+			{
+				if (!consume)
+					return sdk::unexpected(
+						{"materialization.report-invalid", "task_results", "consumer"});
+				if (accumulator_ != nullptr)
+				{
+					for (const auto& capture : accumulator_->tasks())
+						if (auto accepted = consume(capture); !accepted)
+							return accepted;
+					return {};
+				}
+				return spool_->replay(
+					[&consume](detailed_task_report_capture&& capture) -> sdk::result<void>
+					{
+						return consume(capture);
+					});
+			}
+
+		  private:
+			const detailed_task_report_accumulator* accumulator_{};
+			const detailed_task_report_replayable_spool* spool_{};
+		};
+
 		[[nodiscard]] sdk::result<std::vector<base_row_record>>
-		collect_base_rows(const detailed_task_report_accumulator& accumulator,
+		collect_base_rows(const task_report_source& source,
 						  const sdk::relation_engine& engine,
 						  const detailed_report_limits& limits)
 		{
@@ -673,18 +725,22 @@ namespace cxxlens::detail::clang22::materialization
 						row.descriptor_id, *identity, *digest, row.canonical_form(), row});
 				return {};
 			};
-			for (const auto& capture : accumulator.tasks())
-			{
-				if (capture.base_claim_rows.size() != 5U)
-					return sdk::unexpected(
-						{"materialization.report-invalid", "base_claims", "base-row-count"});
-				for (const auto& row : capture.base_claim_rows)
-					if (auto added = add(row); !added)
-						return sdk::unexpected(std::move(added.error()));
-				for (const auto& row : capture.source_span_claim_rows)
-					if (auto added = add(row); !added)
-						return sdk::unexpected(std::move(added.error()));
-			}
+			auto replayed = source.replay(
+				[&](const detailed_task_report_capture& capture) -> sdk::result<void>
+				{
+					if (capture.base_claim_rows.size() != 5U)
+						return sdk::unexpected(
+							{"materialization.report-invalid", "base_claims", "base-row-count"});
+					for (const auto& row : capture.base_claim_rows)
+						if (auto added = add(row); !added)
+							return added;
+					for (const auto& row : capture.source_span_claim_rows)
+						if (auto added = add(row); !added)
+							return added;
+					return {};
+				});
+			if (!replayed)
+				return sdk::unexpected(std::move(replayed.error()));
 			if (unique.empty())
 				return sdk::unexpected({"materialization.report-invalid", "base_claims", "empty"});
 			std::vector<base_row_record> output;
@@ -718,63 +774,69 @@ namespace cxxlens::detail::clang22::materialization
 		};
 
 		[[nodiscard]] sdk::result<std::vector<span_binding_record>>
-		collect_span_bindings(const detailed_task_report_accumulator& accumulator,
+		collect_span_bindings(const task_report_source& source,
 							  const std::vector<base_row_record>& rows)
 		{
 			std::vector<span_binding_record> output;
 			std::set<std::tuple<std::string, std::string, std::string, std::string, std::string>>
 				seen;
-			for (const auto& capture : accumulator.tasks())
-			{
-				const auto context = task_context(capture);
-				for (const auto& observation : capture.observation_rows)
+			auto replayed = source.replay(
+				[&](const detailed_task_report_capture& capture) -> sdk::result<void>
 				{
-					if (!observation.primary_span)
-						continue;
-					if (observation.batch_index >= capture.batches.size())
-						return sdk::unexpected(
-							{"materialization.report-invalid", "span_validation", "batch-index"});
-					const auto& batch = capture.batches[observation.batch_index];
-					if (batch.descriptor_id != "frontend.clang22.call_observation.v2" &&
-						batch.descriptor_id != "frontend.clang22.entity_observation.v2")
-						return sdk::unexpected(
-							{"materialization.report-invalid", "span_validation", "descriptor"});
-					auto bundle_digest = span_bundle_digest(*observation.primary_span);
-					if (!bundle_digest)
-						return sdk::unexpected(std::move(bundle_digest.error()));
-					const auto found = std::ranges::find_if(
-						rows,
-						[&](const base_row_record& row)
-						{
-							return row.descriptor_id == "source.span.v1" &&
-								row.row_identity == observation.primary_span->span_id;
-						});
-					if (found == rows.end())
-						return sdk::unexpected({"materialization.report-invalid",
-												"span_validation",
-												"source-span-row-missing"});
-					auto row_span = span_from_row(found->row);
-					if (!row_span || *row_span != *observation.primary_span)
-						return sdk::unexpected({"materialization.report-invalid",
-												"span_validation",
-												"bundle-row-mismatch"});
-					const auto key = std::tuple{observation.primary_span->span_id,
-												context.provider_task_id,
-												batch.descriptor_id,
-												observation.observation_row_digest,
-												*bundle_digest};
-					if (!seen.insert(key).second)
-						return sdk::unexpected({"materialization.report-invalid",
-												"span_validation",
-												"duplicate-binding"});
-					output.push_back({*observation.primary_span,
-									  *bundle_digest,
-									  found->row_digest,
-									  batch.descriptor_id,
-									  observation.observation_row_digest,
-									  context});
-				}
-			}
+					const auto context = task_context(capture);
+					for (const auto& observation : capture.observation_rows)
+					{
+						if (!observation.primary_span)
+							continue;
+						if (observation.batch_index >= capture.batches.size())
+							return sdk::unexpected({"materialization.report-invalid",
+													"span_validation",
+													"batch-index"});
+						const auto& batch = capture.batches[observation.batch_index];
+						if (batch.descriptor_id != "frontend.clang22.call_observation.v2" &&
+							batch.descriptor_id != "frontend.clang22.entity_observation.v2")
+							return sdk::unexpected({"materialization.report-invalid",
+													"span_validation",
+													"descriptor"});
+						auto bundle_digest = span_bundle_digest(*observation.primary_span);
+						if (!bundle_digest)
+							return sdk::unexpected(std::move(bundle_digest.error()));
+						const auto found = std::ranges::find_if(
+							rows,
+							[&](const base_row_record& row)
+							{
+								return row.descriptor_id == "source.span.v1" &&
+									row.row_identity == observation.primary_span->span_id;
+							});
+						if (found == rows.end())
+							return sdk::unexpected({"materialization.report-invalid",
+													"span_validation",
+													"source-span-row-missing"});
+						auto row_span = span_from_row(found->row);
+						if (!row_span || *row_span != *observation.primary_span)
+							return sdk::unexpected({"materialization.report-invalid",
+													"span_validation",
+													"bundle-row-mismatch"});
+						const auto key = std::tuple{observation.primary_span->span_id,
+													context.provider_task_id,
+													batch.descriptor_id,
+													observation.observation_row_digest,
+													*bundle_digest};
+						if (!seen.insert(key).second)
+							return sdk::unexpected({"materialization.report-invalid",
+													"span_validation",
+													"duplicate-binding"});
+						output.push_back({*observation.primary_span,
+										  *bundle_digest,
+										  found->row_digest,
+										  batch.descriptor_id,
+										  observation.observation_row_digest,
+										  context});
+					}
+					return {};
+				});
+			if (!replayed)
+				return sdk::unexpected(std::move(replayed.error()));
 			std::ranges::sort(output,
 							  [](const span_binding_record& left, const span_binding_record& right)
 							  {
@@ -1036,15 +1098,15 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<json_value>
-		base_claims_json(const detailed_task_report_accumulator& accumulator,
+		base_claims_json(const task_report_source& source,
 						 const prevalidated_materialization_request_v2_1& request,
 						 const std::string_view guarantee_digest,
 						 const detailed_report_limits& limits)
 		{
-			auto rows = collect_base_rows(accumulator, request.engine(), limits);
+			auto rows = collect_base_rows(source, request.engine(), limits);
 			if (!rows)
 				return sdk::unexpected(std::move(rows.error()));
-			auto span_bindings = collect_span_bindings(accumulator, *rows);
+			auto span_bindings = collect_span_bindings(source, *rows);
 			if (!span_bindings)
 				return sdk::unexpected(std::move(span_bindings.error()));
 			auto producer_digest = producer_identity_digest(request);
@@ -1067,47 +1129,55 @@ namespace cxxlens::detail::clang22::materialization
 				for (const auto* row : descriptor_rows)
 				{
 					json_value::array_type origins;
-					for (const auto& capture : accumulator.tasks())
-					{
-						if (descriptor == "source.span.v1")
+					// The source is replayed for each row so this projection never retains all
+					// task captures.  The sealed spool remains the only cross-task owner.
+					auto replayed = source.replay(
+						[&](const detailed_task_report_capture& capture) -> sdk::result<void>
 						{
-							for (const auto& binding : *span_bindings)
-								if (binding.row_digest == row->row_digest &&
-									binding.context == task_context(capture))
-								{
-									base_origin_record origin{
-										binding.context,
-										"validated_span_bundle",
-										binding.bundle_digest,
-										{{"dynamic_observation", binding.observation_row_digest},
-										 {"source_observation", binding.bundle_digest}},
-										make_object(
-											{
-												{"bundle_digest",
-												 text_value(binding.bundle_digest)},
-												{"observation_descriptor_id",
-												 text_value(binding.observation_descriptor_id)},
-												{"observation_row_digest",
-												 text_value(binding.observation_row_digest)},
-											})
-											.value()};
-									auto origin_json = base_origin_json(origin);
-									if (!origin_json)
-										return sdk::unexpected(std::move(origin_json.error()));
-									origins.push_back(std::move(*origin_json));
-								}
-						}
-						else if (base_row_matches_capture(*row, capture))
-						{
-							auto origin = make_base_origin(*row, capture, request, *span_bindings);
-							if (!origin)
-								return sdk::unexpected(std::move(origin.error()));
-							auto origin_json = base_origin_json(*origin);
-							if (!origin_json)
-								return sdk::unexpected(std::move(origin_json.error()));
-							origins.push_back(std::move(*origin_json));
-						}
-					}
+							if (descriptor == "source.span.v1")
+							{
+								for (const auto& binding : *span_bindings)
+									if (binding.row_digest == row->row_digest &&
+										binding.context == task_context(capture))
+									{
+										base_origin_record origin{
+											binding.context,
+											"validated_span_bundle",
+											binding.bundle_digest,
+											{{"dynamic_observation",
+											  binding.observation_row_digest},
+											 {"source_observation", binding.bundle_digest}},
+											make_object(
+												{
+													{"bundle_digest",
+													 text_value(binding.bundle_digest)},
+													{"observation_descriptor_id",
+													 text_value(binding.observation_descriptor_id)},
+													{"observation_row_digest",
+													 text_value(binding.observation_row_digest)},
+												})
+												.value()};
+										auto origin_json = base_origin_json(origin);
+										if (!origin_json)
+											return sdk::unexpected(std::move(origin_json.error()));
+										origins.push_back(std::move(*origin_json));
+									}
+							}
+							else if (base_row_matches_capture(*row, capture))
+							{
+								auto origin =
+									make_base_origin(*row, capture, request, *span_bindings);
+								if (!origin)
+									return sdk::unexpected(std::move(origin.error()));
+								auto origin_json = base_origin_json(*origin);
+								if (!origin_json)
+									return sdk::unexpected(std::move(origin_json.error()));
+								origins.push_back(std::move(*origin_json));
+							}
+							return {};
+						});
+					if (!replayed)
+						return sdk::unexpected(std::move(replayed.error()));
 					if (origins.empty())
 						return sdk::unexpected({"materialization.report-invalid",
 												"base_claims.row_envelope_bindings",
@@ -1336,14 +1406,14 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<json_value>
-		span_validation_json(const detailed_task_report_accumulator& accumulator,
+		span_validation_json(const task_report_source& source,
 							 const sdk::relation_engine& engine,
 							 const detailed_report_limits& limits)
 		{
-			auto rows = collect_base_rows(accumulator, engine, limits);
+			auto rows = collect_base_rows(source, engine, limits);
 			if (!rows)
 				return sdk::unexpected(std::move(rows.error()));
-			auto bindings = collect_span_bindings(accumulator, *rows);
+			auto bindings = collect_span_bindings(source, *rows);
 			if (!bindings)
 				return sdk::unexpected(std::move(bindings.error()));
 			json_value::array_type binding_values;
@@ -1405,25 +1475,33 @@ namespace cxxlens::detail::clang22::materialization
 			std::uint64_t absent{};
 			std::uint64_t entity_absent{};
 			std::uint64_t call_absent{};
-			for (const auto& capture : accumulator.tasks())
-				for (const auto& observation : capture.observation_rows)
+			auto replayed = source.replay(
+				[&](const detailed_task_report_capture& capture) -> sdk::result<void>
 				{
-					if (observation.batch_index >= capture.batches.size())
-						return sdk::unexpected(
-							{"materialization.report-invalid", "span_validation", "batch-index"});
-					const auto descriptor = capture.batches[observation.batch_index].descriptor_id;
-					if (descriptor != "frontend.clang22.call_observation.v2" &&
-						descriptor != "frontend.clang22.entity_observation.v2")
-						continue;
-					if (!observation.primary_span)
+					for (const auto& observation : capture.observation_rows)
 					{
-						++absent;
-						if (descriptor == "frontend.clang22.call_observation.v2")
-							++call_absent;
-						else
-							++entity_absent;
+						if (observation.batch_index >= capture.batches.size())
+							return sdk::unexpected({"materialization.report-invalid",
+													"span_validation",
+													"batch-index"});
+						const auto descriptor =
+							capture.batches[observation.batch_index].descriptor_id;
+						if (descriptor != "frontend.clang22.call_observation.v2" &&
+							descriptor != "frontend.clang22.entity_observation.v2")
+							continue;
+						if (!observation.primary_span)
+						{
+							++absent;
+							if (descriptor == "frontend.clang22.call_observation.v2")
+								++call_absent;
+							else
+								++entity_absent;
+						}
 					}
-				}
+					return {};
+				});
+			if (!replayed)
+				return sdk::unexpected(std::move(replayed.error()));
 			if (absent != 0U)
 				return sdk::unexpected(
 					{"materialization.report-invalid", "span_validation", "absent-primary-span"});
@@ -2226,19 +2304,23 @@ namespace cxxlens::detail::clang22::materialization
 		};
 
 		[[nodiscard]] sdk::result<task_results_projection>
-		project_task_results(const detailed_task_report_accumulator& accumulator,
+		project_task_results(const task_report_source& source,
 							 const sealed_materialization_claims& claims,
 							 const detailed_report_limits& limits)
 		{
 			std::vector<task_result_projection> projected;
-			projected.reserve(accumulator.tasks().size());
-			for (const auto& capture : accumulator.tasks())
-			{
-				auto value = project_task_result(capture, claims, limits);
-				if (!value)
-					return sdk::unexpected(std::move(value.error()));
-				projected.push_back(std::move(*value));
-			}
+			projected.reserve(source.task_count());
+			auto replayed = source.replay(
+				[&](const detailed_task_report_capture& capture) -> sdk::result<void>
+				{
+					auto value = project_task_result(capture, claims, limits);
+					if (!value)
+						return sdk::unexpected(std::move(value.error()));
+					projected.push_back(std::move(*value));
+					return {};
+				});
+			if (!replayed)
+				return sdk::unexpected(std::move(replayed.error()));
 			if (projected.empty() || projected.size() > limits.max_tasks)
 				return sdk::unexpected({"materialization.report-invalid", "task_results", "count"});
 			std::ranges::sort(
@@ -3635,15 +3717,12 @@ namespace cxxlens::detail::clang22::materialization
 		project_reopened_handle(const sdk::snapshot_handle& handle,
 								const sdk::relation_engine& engine,
 								const json_value& engine_projection,
-								const json_value& store_projection)
+								const json_value& store_projection,
+								const std::string_view canonical_export_digest)
 		{
 			const auto* admitted = engine_projection.member("admitted_descriptors");
-			const auto* partitions = store_projection.member("partitions");
 			const auto* snapshot_manifest = store_projection.member("snapshot_manifest");
-			const auto* envelopes = store_projection.member("claim_envelopes");
-			if (admitted == nullptr || !admitted->as_array() || partitions == nullptr ||
-				!partitions->as_array() || snapshot_manifest == nullptr || envelopes == nullptr ||
-				!envelopes->as_array())
+			if (admitted == nullptr || !admitted->as_array() || snapshot_manifest == nullptr)
 				return sdk::unexpected(
 					{"materialization.report-invalid", "semantic_verification", "authority-shape"});
 			json_value::array_type descriptors = *admitted->as_array();
@@ -3804,43 +3883,6 @@ namespace cxxlens::detail::clang22::materialization
 			if (!cursor)
 				return sdk::unexpected(std::move(cursor.error()));
 
-			json_value::array_type claim_contents;
-			std::set<std::string, std::less<>> content_set;
-			for (const auto& envelope : *envelopes->as_array())
-				if (envelope.member("role") != nullptr &&
-					envelope.member("role")->as_string() != nullptr &&
-					*envelope.member("role")->as_string() == "stored_final")
-					content_set.insert(*envelope.member("content")->as_string());
-			for (const auto& content : content_set)
-				claim_contents.push_back(text_value(content));
-			json_value::array_type partition_envelopes;
-			for (const auto& partition : *partitions->as_array())
-				partition_envelopes.push_back(
-					make_object({
-									{"partition_id", *partition.member("partition_id")},
-									{"stored_claim_refs", *partition.member("stored_claim_refs")},
-									{"coverage_units", *partition.member("coverage_units")},
-									{"unresolved", *partition.member("unresolved")},
-								})
-						.value());
-			std::ranges::sort(partition_envelopes,
-							  [](const json_value& left, const json_value& right)
-							  {
-								  return *left.member("partition_id")->as_string() <
-									  *right.member("partition_id")->as_string();
-							  });
-			auto canonical_export_projection = make_object({
-				{"schema", text_value("cxxlens.snapshot-export.v1")},
-				{"snapshot_manifest", *snapshot_manifest},
-				{"claim_contents", json_value::array(std::move(claim_contents))},
-				{"rows", json_value::array(relations)},
-				{"partition_bindings", json_value::array(partition_bindings)},
-				{"partition_envelopes", json_value::array(std::move(partition_envelopes))},
-			});
-			if (!canonical_export_projection)
-				return sdk::unexpected(std::move(canonical_export_projection.error()));
-			const auto canonical_export_digest =
-				content_digest_text(canonical_json(*canonical_export_projection));
 			auto snapshot_manifest_digest = content_digest_text(canonical_json(*snapshot_manifest));
 			auto partition_digest =
 				semantic_projection_digest("cxxlens.clang22-reopened-partition-binding-multiset.v1",
@@ -3921,7 +3963,7 @@ namespace cxxlens::detail::clang22::materialization
 				json_value::array(std::move(coverage)),
 				json_value::array(std::move(relations)),
 				std::move(*cursor),
-				canonical_export_digest};
+				std::string{canonical_export_digest}};
 		}
 
 		[[nodiscard]] sdk::result<json_value>
@@ -3954,8 +3996,11 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected({"materialization.report-invalid",
 											"semantic_verification",
 											"receipt-mismatch"});
-				auto projected = project_reopened_handle(
-					*receipt.handle, request.engine(), engine_projection, store_projection);
+				auto projected = project_reopened_handle(*receipt.handle,
+														 request.engine(),
+														 engine_projection,
+														 store_projection,
+														 content_digest_text(*actual_export));
 				if (!projected)
 					return sdk::unexpected(std::move(projected.error()));
 				bundles[index] = std::move(*projected);
@@ -4365,6 +4410,60 @@ namespace cxxlens::detail::clang22::materialization
 			 {"authority_digests", false}}};
 	} // namespace
 
+	sdk::result<public_materialization_prepublication_projection>
+	prepare_public_materialization_prepublication_projection(
+		const validated_materialization_request_v2_1& request,
+		const raw_input_observation& raw_input,
+		const materialization_occurrence_manifest& occurrence_manifest,
+		const materialization_occurrence_receipt& occurrence_receipt,
+		const std::size_t maximum_report_bytes)
+	{
+		try
+		{
+			if (maximum_report_bytes == 0U || raw_input.byte_limit == 0U || !raw_input.complete ||
+				raw_input.observed_size_bytes > raw_input.byte_limit ||
+				raw_input.observed_prefix_digest.empty())
+				return sdk::unexpected(
+					{"materialization.report-invalid", "prepublication", "input-boundary"});
+			if (occurrence_manifest.occurrence_payload_digest.empty() ||
+				occurrence_manifest.inventory_digest.empty() || occurrence_receipt.files.empty() ||
+				occurrence_receipt.occurrence_payload_digest !=
+					occurrence_manifest.occurrence_payload_digest ||
+				occurrence_receipt.inventory_digest != occurrence_manifest.inventory_digest)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "prepublication", "occurrence-boundary"});
+
+			const auto& identity = request.identity();
+			const auto task_count = request.request().task_count();
+			std::vector<sdk::canonical_value> binding_fields{
+				sdk::canonical_value::from_string(identity.materialization_request_id),
+				sdk::canonical_value::from_string(identity.request_digest),
+				sdk::canonical_value::from_string(identity.semantic_request_digest),
+				sdk::canonical_value::from_string(raw_input.observed_prefix_digest),
+				sdk::canonical_value::from_string(std::to_string(raw_input.observed_size_bytes)),
+				sdk::canonical_value::from_string(occurrence_manifest.occurrence_payload_digest),
+				sdk::canonical_value::from_string(occurrence_manifest.inventory_digest),
+				sdk::canonical_value::from_string(std::to_string(task_count)),
+				sdk::canonical_value::from_string(std::to_string(maximum_report_bytes))};
+			auto binding = sdk::canonical_identity_digest(
+				"cxxlens.clang22.prepublication-report.v1", binding_fields);
+			if (!binding)
+				return sdk::unexpected(std::move(binding.error()));
+			return public_materialization_prepublication_projection{
+				std::move(*binding),
+				identity.request_digest,
+				identity.semantic_request_digest,
+				occurrence_manifest.inventory_digest,
+				task_count,
+				maximum_report_bytes};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				{"materialization.report-invalid", "prepublication", "allocation"});
+		}
+	}
+
 	sdk::error public_materialization_report_error::as_sdk_error() const
 	{
 		return report_error(*this);
@@ -4407,6 +4506,16 @@ namespace cxxlens::detail::clang22::materialization
 			missing.emplace_back("claims");
 		if (input.store == nullptr)
 			missing.emplace_back("store.observation");
+		if (input.task_reports != nullptr && input.task_report_spool != nullptr)
+			return sdk::unexpected(
+				report_error({public_materialization_report_error_kind::invalid_projection,
+							  {},
+							  "task_reports",
+							  "accumulator-and-spool"}));
+		const bool has_task_reports =
+			input.task_reports != nullptr || input.task_report_spool != nullptr;
+		if (input.prepublication == nullptr)
+			missing.emplace_back("prepublication_projection");
 		if (input.generated_at.empty())
 			missing.emplace_back("generated_at");
 		for (const auto& [name, _] : required_supplemental)
@@ -4414,7 +4523,7 @@ namespace cxxlens::detail::clang22::materialization
 				!(input.request_globals != nullptr &&
 				  (name == "registry" || name == "engine" || name == "interpretation_policy" ||
 				   name == "trust_policy")) &&
-				!(input.task_reports != nullptr &&
+				!(has_task_reports &&
 				  (name == "task_results" || name == "adoption" || name == "span_validation" ||
 				   name == "base_claims" || name == "side_channels" || name == "claim_stages" ||
 				   name == "provenance")) &&
@@ -4440,6 +4549,19 @@ namespace cxxlens::detail::clang22::materialization
 							  {},
 							  "report",
 							  "zero-limit"}));
+		auto prepublication =
+			prepare_public_materialization_prepublication_projection(*input.request,
+																	 *input.raw_input,
+																	 *input.occurrence_manifest,
+																	 *input.occurrence_receipt,
+																	 input.maximum_report_bytes);
+		if (!prepublication || input.prepublication == nullptr ||
+			*prepublication != *input.prepublication)
+			return sdk::unexpected(
+				report_error({public_materialization_report_error_kind::invalid_projection,
+							  {},
+							  "prepublication_projection",
+							  "recompute-mismatch"}));
 
 		const auto& request = input.request->request();
 		const auto& tool = request.tool();
@@ -4478,15 +4600,17 @@ namespace cxxlens::detail::clang22::materialization
 		std::optional<json_value> derived_claim_stages;
 		std::optional<json_value> derived_provenance;
 		std::optional<json_value> derived_semantic_verification;
-		if (input.task_reports != nullptr)
+		if (has_task_reports)
 		{
-			auto projected =
-				project_task_results(*input.task_reports, *input.claims, detailed_report_limits{});
+			task_report_source source = input.task_reports != nullptr
+				? task_report_source{*input.task_reports}
+				: task_report_source{*input.task_report_spool};
+			auto projected = project_task_results(source, *input.claims, detailed_report_limits{});
 			if (!projected)
 				return sdk::unexpected(std::move(projected.error()));
 			task_results = std::move(*projected);
 			auto span = span_validation_json(
-				*input.task_reports, input.request->request().engine(), detailed_report_limits{});
+				source, input.request->request().engine(), detailed_report_limits{});
 			if (!span)
 				return sdk::unexpected(std::move(span.error()));
 			span_validation = std::move(*span);
@@ -4500,7 +4624,7 @@ namespace cxxlens::detail::clang22::materialization
 			if (guarantee_digest == nullptr || guarantee_digest->as_string() == nullptr)
 				return sdk::unexpected(
 					{"materialization.report-invalid", "side_channels.guarantee", "digest"});
-			auto base = base_claims_json(*input.task_reports,
+			auto base = base_claims_json(source,
 										 input.request->request(),
 										 *guarantee_digest->as_string(),
 										 detailed_report_limits{});

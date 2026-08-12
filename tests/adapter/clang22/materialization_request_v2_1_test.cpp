@@ -872,6 +872,42 @@ namespace
 				"derived task binding preceded selected full-schema Base64 validation");
 	}
 
+	void task_cursor_enforces_one_live_task_window()
+	{
+		auto accepted = validate(upgrade_fixture(), 1U);
+		require(accepted.has_value(), "task cursor admission fixture failed");
+		auto cursor = make_materialization_v2_1_task_cursor(*accepted);
+		require(cursor.has_value() && cursor->task_count() == 2U,
+				"task cursor did not retain the admitted task census");
+
+		{
+			auto first = cursor->next();
+			require(first && *first && (*first)->metadata.task_index == 0U,
+					"task cursor did not return the canonical first task");
+			auto live_window = std::move(*first);
+			auto advanced_while_live = cursor->next();
+			require(!advanced_while_live,
+					"task cursor advanced while its bounded task window was still live");
+		}
+		require(!cursor->next(), "poisoned task cursor resumed after a lifecycle violation");
+
+		auto resumed = validate(upgrade_fixture(), 1U);
+		require(resumed.has_value(), "task cursor positive replay admission failed");
+		auto positive_cursor = make_materialization_v2_1_task_cursor(*resumed);
+		require(positive_cursor.has_value(), "positive task cursor construction failed");
+		auto first = positive_cursor->next();
+		require(first && *first, "positive task cursor first task was unavailable");
+		first->reset();
+		auto second = positive_cursor->next();
+		require(second && *second && (*second)->metadata.task_index == 1U,
+				"task cursor did not resume at the exact second task");
+		second->reset();
+		auto eof = positive_cursor->next();
+		require(eof && !*eof, "task cursor did not expose the exact end of task census");
+		require(std::move(*positive_cursor).finalize().has_value(),
+				"task cursor did not finalize after the complete task census");
+	}
+
 	void protocol_catalog_and_source_metadata_negatives()
 	{
 		auto minor = upgrade_fixture();
@@ -1493,6 +1529,7 @@ int main()
 	selected_schema_shape_errors_follow_admission_phase();
 	shared_catalog_owner_and_single_task_replay();
 	source_dependent_production_admission();
+	task_cursor_enforces_one_live_task_window();
 	protocol_catalog_and_source_metadata_negatives();
 	schema_before_binding_and_version_dispatch();
 	full_schema_and_external_uniqueness_adversarial();

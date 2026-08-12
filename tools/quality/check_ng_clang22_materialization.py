@@ -8133,11 +8133,19 @@ def sample_request(
     digest_digits = "fedcba9876543210"
     for index in range(translation_unit_count):
         logical_path = "project://main.cpp" if index == 0 else f"project://unit_{index}.cpp"
-        source = (
-            b"int main() { return 0; }\n"
-            if index == 0
-            else f"int unit_{index}() {{ return {index}; }}\n".encode("utf-8")
-        )
+        if index == 0 and translation_unit_count > 1:
+            # The multi-TU acceptance fixture is intentionally a real cross-TU
+            # edge: the caller sees a declaration while the target is defined in
+            # the separately compiled second unit.  The installed Clang worker
+            # must therefore bind the direct target by semantic identity rather
+            # than by a source-local anchor or task order.
+            source = b"int unit_1(int);\nint main() { return unit_1(2); }\n"
+        elif index == 1 and translation_unit_count > 1:
+            source = b"int unit_1(int value) { return value + 1; }\n"
+        elif index == 0:
+            source = b"int main() { return 0; }\n"
+        else:
+            source = f"int unit_{index}() {{ return {index}; }}\n".encode("utf-8")
         effective_argv = ["clang++", "-std=c++23", logical_path]
         source_specs.append(
             {
@@ -10964,6 +10972,8 @@ def claim_input_basis_digest(input_basis: dict[str, Any]) -> str:
 
 
 def sdk_claim_occurrence_projection(envelope: dict[str, Any]) -> bytes:
+    """Mirror sdk::detail::claim_occurrence_projection for direct claim bases."""
+
     stage = {"assertion": 0, "canonical_claim": 1}.get(envelope["stage"])
     if stage is None:
         fail("materialization.claim-invalid", "reported claim stage is not an SDK stage")
@@ -11149,6 +11159,8 @@ def _claim_association(
 
 
 def coverage_unit_identity(unit: dict[str, str]) -> str:
+    """Exact mirror of sdk::snapshot_coverage_unit::canonical_form()."""
+
     return canonical_identity_digest(
         "coverage-unit",
         [unit["domain"], unit["key"], unit["state"], unit["reason"]],
@@ -11260,9 +11272,15 @@ def _partition_identity_fields(partition: dict[str, Any]) -> list[str]:
 
 
 def bind_store_partition_identities(partition: dict[str, Any]) -> None:
-    refs = sorted(set(partition["stored_claim_refs"]))
+    refs = _sdk_canonical_string_set(
+        partition["stored_claim_refs"],
+        "partition claim references",
+    )
     partition["stored_claim_refs"] = refs
-    contents = sorted(set(partition["claim_content_digests"]))
+    contents = _sdk_canonical_string_set(
+        partition["claim_content_digests"],
+        "partition claim contents",
+    )
     partition["claim_content_digests"] = contents
     partition["sdk_claim_occurrence_count"] = len(refs)
     partition["claim_count"] = len(contents)
@@ -11777,7 +11795,10 @@ def _compute_store_binding(
         "final_claim_refs": sorted(final_by_ref),
         "sdk_claim_occurrence_count": len(final_envelopes),
         "unique_claim_content_count": len(
-            {envelope["content"] for envelope in final_envelopes}
+            _sdk_canonical_string_set(
+                (envelope["content"] for envelope in final_envelopes),
+                "final claim contents",
+            )
         ),
         "unresolved_count": 0,
         "conflict_count": 0,
@@ -11837,7 +11858,10 @@ def bind_batch_sdk_claim_summaries(
             for binding in batch["row_bindings"]:
                 key = (execution_key, batch["descriptor_id"], binding["row_digest"])
                 binding_claims = assertions.get(key, [])
-                binding_refs = {envelope["claim_ref"] for envelope in binding_claims}
+                binding_refs = _sdk_canonical_string_set(
+                    (envelope["claim_ref"] for envelope in binding_claims),
+                    "worker assertion claim references",
+                )
                 if len(binding_refs) != 1:
                     fail(
                         "materialization.claim-invalid",
@@ -11856,8 +11880,9 @@ def bind_batch_sdk_claim_summaries(
                 envelope["claim_ref"] for envelope in ordered
             ]
             batch["worker_assertion_claim_occurrence_count"] = len(ordered)
-            batch["claim_content_ids"] = sorted(
-                {envelope["content"] for envelope in ordered}
+            batch["claim_content_ids"] = _sdk_canonical_string_set(
+                (envelope["content"] for envelope in ordered),
+                "worker assertion claim contents",
             )
             batch["claim_content_count"] = len(batch["claim_content_ids"])
     return store
@@ -11889,6 +11914,535 @@ def _reopened_annotation(envelope: dict[str, Any]) -> dict[str, Any]:
         "provenance_root": envelope["provenance_root"],
         "guarantee": copy.deepcopy(envelope["guarantee"]),
     }
+
+
+_SDK_SCALAR_KIND = {
+    "bool": 0,
+    "int64": 1,
+    "uint64": 2,
+    "utf8_string": 3,
+    "bytes": 4,
+    "digest": 5,
+    "semantic_version": 6,
+    "typed_id": 7,
+    "open_symbol": 8,
+    "condition_ref": 9,
+    "source_span_id": 10,
+    "evidence_id": 11,
+    "closed_symbol": 12,
+    "set": 13,
+    "relation_name": 14,
+    "semantic_key_id": 15,
+    "assertion_id": 16,
+    "content_digest": 17,
+    "interpretation_domain_id": 18,
+}
+_SDK_CELL_STATE = {"present": 0, "absent": 1, "unknown": 2}
+_SDK_CLAIM_STAGE = {"assertion": 0, "canonical_claim": 1, "derived_claim": 2}
+
+
+def _sdk_u64(value: int) -> bytes:
+    return int(value).to_bytes(8, byteorder="big", signed=False)
+
+
+def _sdk_bool(value: bool) -> bytes:
+    return b"\x01" if value else b"\x00"
+
+
+def _sdk_string(value: str) -> bytes:
+    encoded = value.encode("utf-8")
+    return _sdk_u64(len(encoded)) + encoded
+
+
+def _sdk_raw(value: bytes) -> bytes:
+    return _sdk_u64(len(value)) + value
+
+
+def _sdk_strings(values: Iterable[str]) -> bytes:
+    values = list(values)
+    return _sdk_u64(len(values)) + b"".join(_sdk_string(value) for value in values)
+
+
+def _sdk_type_parts(type_name: str) -> tuple[int, str, bool]:
+    optional = False
+    while type_name.startswith("optional<") and type_name.endswith(">"):
+        optional = True
+        type_name = type_name[len("optional<") : -1]
+    if "<" in type_name:
+        scalar_name, parameter = type_name.split("<", 1)
+        if not parameter.endswith(">"):
+            fail("materialization.store-failure", "SDK detached cell type is malformed")
+        parameter = parameter[:-1]
+    else:
+        scalar_name, parameter = type_name, ""
+    scalar = _SDK_SCALAR_KIND.get(scalar_name)
+    if scalar is None:
+        fail("materialization.store-failure", "SDK detached cell scalar kind is unknown")
+    return scalar, parameter, optional
+
+
+def _sdk_cell(cell: dict[str, Any]) -> bytes:
+    scalar, parameter, optional = _sdk_type_parts(cell["type"])
+    state = _SDK_CELL_STATE.get(cell["state"])
+    if state is None:
+        fail("materialization.store-failure", "SDK detached cell state is unknown")
+    encoded = bytearray()
+    encoded.extend(_sdk_u64(scalar))
+    encoded.extend(_sdk_string(parameter))
+    encoded.extend(_sdk_bool(optional))
+    encoded.extend(_sdk_u64(state))
+    has_value = "value" in cell
+    encoded.extend(_sdk_bool(has_value))
+    if has_value:
+        value = cell["value"]
+        if scalar == _SDK_SCALAR_KIND["bool"]:
+            if not isinstance(value, bool):
+                fail("materialization.store-failure", "SDK bool cell value is malformed")
+            encoded.extend(_sdk_u64(0))
+            encoded.extend(_sdk_bool(value))
+        elif scalar == _SDK_SCALAR_KIND["int64"]:
+            if isinstance(value, bool) or not isinstance(value, int):
+                fail("materialization.store-failure", "SDK signed cell value is malformed")
+            encoded.extend(_sdk_u64(1))
+            encoded.extend(_sdk_u64(value & ((1 << 64) - 1)))
+        elif scalar == _SDK_SCALAR_KIND["uint64"]:
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                fail("materialization.store-failure", "SDK unsigned cell value is malformed")
+            encoded.extend(_sdk_u64(2))
+            encoded.extend(_sdk_u64(value))
+        elif scalar in {
+            _SDK_SCALAR_KIND["bytes"],
+            _SDK_SCALAR_KIND["set"],
+        }:
+            if not isinstance(value, str):
+                fail("materialization.store-failure", "SDK byte cell value is malformed")
+            try:
+                raw = bytes.fromhex(value)
+            except ValueError as error:
+                fail("materialization.store-failure", f"SDK byte cell value is malformed: {error}")
+            encoded.extend(_sdk_u64(4))
+            encoded.extend(_sdk_raw(raw))
+        else:
+            if not isinstance(value, str):
+                fail("materialization.store-failure", "SDK text cell value is malformed")
+            encoded.extend(_sdk_u64(3))
+            encoded.extend(_sdk_string(value))
+    unknown_reason = cell.get("unknown_reason")
+    encoded.extend(_sdk_bool(unknown_reason is not None))
+    if unknown_reason is not None:
+        if not isinstance(unknown_reason, str):
+            fail("materialization.store-failure", "SDK unknown-cell reason is malformed")
+        encoded.extend(_sdk_string(unknown_reason))
+    return bytes(encoded)
+
+
+def _sdk_row(row_canonical_form: str) -> bytes:
+    try:
+        row = json.loads(row_canonical_form)
+    except (TypeError, ValueError, json.JSONDecodeError) as error:
+        fail("materialization.store-failure", f"SDK row canonical form is malformed: {error}")
+    if not isinstance(row, dict) or not isinstance(row.get("descriptor_id"), str):
+        fail("materialization.store-failure", "SDK row canonical form is malformed")
+    cells = row.get("cells")
+    if not isinstance(cells, dict):
+        fail("materialization.store-failure", "SDK row cells are malformed")
+    encoded = bytearray(_sdk_string(row["descriptor_id"]))
+    encoded.extend(_sdk_u64(len(cells)))
+    for column in sorted(cells):
+        cell = cells[column]
+        if not isinstance(column, str) or not isinstance(cell, dict):
+            fail("materialization.store-failure", "SDK row cell entry is malformed")
+        encoded.extend(_sdk_string(column))
+        encoded.extend(_sdk_cell(cell))
+    return bytes(encoded)
+
+
+def _sdk_condition(condition: dict[str, Any]) -> bytes:
+    fragments = condition["fragments"]
+    if not isinstance(condition.get("universe"), str) or not isinstance(fragments, list):
+        fail("materialization.store-failure", "SDK claim condition is malformed")
+    return _sdk_string(condition["universe"]) + _sdk_strings(fragments)
+
+
+def _sdk_guarantee(guarantee: dict[str, Any]) -> bytes:
+    modalities = guarantee["verification_modalities"]
+    if not isinstance(modalities, list):
+        fail("materialization.store-failure", "SDK claim guarantee is malformed")
+    return b"".join(
+        (
+            _sdk_string(guarantee["approximation"]),
+            _sdk_string(guarantee["scope"]),
+            _sdk_string(guarantee["assumptions"]),
+            _sdk_strings(modalities),
+        )
+    )
+
+
+def _sdk_annotation(annotation: dict[str, Any]) -> bytes:
+    producer = annotation["producer"]
+    return b"".join(
+        (
+            _sdk_row(annotation["row_canonical_form"]),
+            _sdk_condition(annotation["presence"]),
+            _sdk_string(annotation["interpretation"]),
+            _sdk_string(annotation["semantic_key"]),
+            _sdk_string(annotation["assertion"]),
+            _sdk_string(annotation["content"]),
+            _sdk_string(producer["id"]),
+            _sdk_string(producer["semantic_contract"]),
+            _sdk_string(annotation["provenance_root"]),
+            _sdk_guarantee(annotation["guarantee"]),
+        )
+    )
+
+
+def _sdk_string_values(values: Iterable[Any], field: str) -> list[str]:
+    materialized = list(values)
+    for value in materialized:
+        if not isinstance(value, str):
+            fail("materialization.store-failure", f"SDK {field} contains a non-string value")
+    return materialized
+
+
+def _sdk_require_unique_strings(values: Iterable[Any], field: str) -> list[str]:
+    """Reject identity duplicates before a map-like SDK projection can erase them."""
+
+    materialized = _sdk_string_values(values, field)
+    seen: set[str] = set()
+    for value in materialized:
+        if value in seen:
+            fail("materialization.store-failure", f"SDK {field} contains a duplicate value")
+        seen.add(value)
+    return materialized
+
+
+def _sdk_canonical_string_set(values: Iterable[Any], field: str) -> list[str]:
+    """Mirror snapshot_store's explicit sort/unique claim-content normalization."""
+
+    ordered = sorted(_sdk_string_values(values, field))
+    unique: list[str] = []
+    for value in ordered:
+        if not unique or unique[-1] != value:
+            unique.append(value)
+    return unique
+
+
+def _sdk_unresolved_key(value: dict[str, Any]) -> tuple[Any, ...]:
+    if not isinstance(value, dict):
+        fail("materialization.store-failure", "SDK unresolved reference is malformed")
+    fields = (
+        "source_assertion",
+        "source_relation",
+        "target_relation",
+        "reason",
+    )
+    if any(not isinstance(value.get(field), str) for field in fields):
+        fail("materialization.store-failure", "SDK unresolved reference has malformed text")
+    columns = value.get("source_columns")
+    if not isinstance(columns, list) or any(
+        not isinstance(column, str) for column in columns
+    ):
+        fail("materialization.store-failure", "SDK unresolved reference has malformed columns")
+    return (
+        value["source_assertion"],
+        value["source_relation"],
+        value["target_relation"],
+        tuple(columns),
+        value["reason"],
+    )
+
+
+def _sdk_unresolved_reference(value: dict[str, Any]) -> bytes:
+    _sdk_unresolved_key(value)
+    return b"".join(
+        (
+            _sdk_string(value["source_assertion"]),
+            _sdk_string(value["source_relation"]),
+            _sdk_string(value["target_relation"]),
+            _sdk_strings(value["source_columns"]),
+            _sdk_string(value["reason"]),
+        )
+    )
+
+
+def _sdk_store_unresolved(store: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten partition payloads exactly as snapshot_store does."""
+
+    partitions = store.get("partitions")
+    if not isinstance(partitions, list):
+        fail("materialization.store-failure", "SDK store partitions are malformed")
+    unresolved: list[dict[str, Any]] = []
+    for partition in partitions:
+        if not isinstance(partition, dict) or not isinstance(
+            partition.get("unresolved"), list
+        ):
+            fail("materialization.store-failure", "SDK partition unresolved payload is malformed")
+        for value in partition["unresolved"]:
+            _sdk_unresolved_key(value)
+            unresolved.append(value)
+    return sorted(unresolved, key=_sdk_unresolved_key)
+
+
+def _sdk_claim(envelope: dict[str, Any]) -> bytes:
+    stage = _SDK_CLAIM_STAGE.get(envelope["stage"])
+    if stage is None:
+        fail("materialization.store-failure", "SDK claim stage is malformed")
+    producer = envelope["producer"]
+    basis = envelope["input_basis"]
+    encoded = bytearray(
+        b"".join(
+            (
+                _sdk_row(envelope["row_canonical_form"]),
+                _sdk_string(envelope["descriptor_id"]),
+                _sdk_string(envelope["semantic_key"]),
+                _sdk_string(envelope["assertion"]),
+                _sdk_string(envelope["content"]),
+                _sdk_condition(envelope["presence"]),
+                _sdk_string(envelope["interpretation"]),
+                _sdk_u64(stage),
+                _sdk_string(producer["id"]),
+                _sdk_string(producer["semantic_contract"]),
+            )
+        )
+    )
+    if basis.get("kind") == "direct":
+        encoded.extend(_sdk_bool(True))
+        encoded.extend(_sdk_string(basis["basis_digest"]))
+    elif basis.get("kind") == "derived":
+        encoded.extend(_sdk_bool(False))
+        encoded.extend(_sdk_string(basis["input_snapshot"]))
+        encoded.extend(_sdk_strings(basis["consumed_partition_content_digests"]))
+        encoded.extend(_sdk_string(basis["transform_semantics"]))
+    else:
+        fail("materialization.store-failure", "SDK claim input basis is malformed")
+    encoded.extend(_sdk_string(envelope["provenance_root"]))
+    encoded.extend(_sdk_guarantee(envelope["guarantee"]))
+    return bytes(encoded)
+
+
+def _sdk_semantic_projection_bytes(
+    relations: list[dict[str, Any]],
+    annotations: list[dict[str, Any]],
+    coverage: list[dict[str, Any]],
+    partition_bindings: list[dict[str, Any]],
+    claim_contents: list[str],
+    unresolved: list[dict[str, Any]],
+) -> bytes:
+    encoded = bytearray()
+    ordered_relations = sorted(
+        relations,
+        key=lambda relation: relation["relation_descriptor_id"],
+    )
+    descriptors = _sdk_require_unique_strings(
+        (relation["relation_descriptor_id"] for relation in ordered_relations),
+        "relation descriptors",
+    )
+    encoded.extend(_sdk_u64(len(ordered_relations)))
+    for descriptor, relation in zip(descriptors, ordered_relations):
+        rows = relation["row_canonical_forms"]
+        encoded.extend(_sdk_string(descriptor))
+        encoded.extend(_sdk_u64(len(rows)))
+        for row in rows:
+            encoded.extend(_sdk_row(row))
+    ordered_claim_contents = _sdk_canonical_string_set(claim_contents, "claim contents")
+    encoded.extend(_sdk_strings(ordered_claim_contents))
+    encoded.extend(_sdk_u64(len(unresolved)))
+    for value in sorted(unresolved, key=_sdk_unresolved_key):
+        encoded.extend(_sdk_unresolved_reference(value))
+
+    annotations_by_descriptor: dict[str, list[dict[str, Any]]] = {
+        descriptor: [] for descriptor in descriptors
+    }
+    for annotation in annotations:
+        descriptor = annotation["relation_descriptor_id"]
+        if descriptor not in annotations_by_descriptor:
+            fail(
+                "materialization.store-failure",
+                "SDK annotation references an unknown relation descriptor",
+            )
+        annotations_by_descriptor[descriptor].append(annotation)
+    encoded.extend(_sdk_u64(len(annotations_by_descriptor)))
+    for descriptor in sorted(descriptors):
+        values = sorted(
+            annotations_by_descriptor[descriptor],
+            key=_sdk_annotation,
+        )
+        encoded.extend(_sdk_string(descriptor))
+        encoded.extend(_sdk_u64(len(values)))
+        for annotation in values:
+            encoded.extend(_sdk_annotation(annotation))
+
+    ordered_coverage = sorted(
+        coverage,
+        key=lambda row: (
+            row["relation_descriptor_id"],
+            row["unit"]["domain"],
+            row["unit"]["key"],
+            row["unit"]["state"],
+            row["unit"]["reason"],
+        ),
+    )
+    encoded.extend(_sdk_u64(len(ordered_coverage)))
+    for value in ordered_coverage:
+        unit = value["unit"]
+        encoded.extend(
+            b"".join(
+                (
+                    _sdk_string(value["relation_descriptor_id"]),
+                    _sdk_string(unit["domain"]),
+                    _sdk_string(unit["key"]),
+                    _sdk_string(unit["state"]),
+                    _sdk_string(unit["reason"]),
+                )
+            )
+        )
+
+    ordered_bindings = sorted(partition_bindings, key=lambda row: row["partition_id"])
+    _sdk_require_unique_strings(
+        (binding["partition_id"] for binding in ordered_bindings),
+        "partition bindings",
+    )
+    encoded.extend(_sdk_u64(len(ordered_bindings)))
+    for binding in ordered_bindings:
+        condition = binding["condition"]
+        encoded.extend(
+            b"".join(
+                (
+                    _sdk_string(binding["partition_id"]),
+                    _sdk_string(binding["relation_descriptor_id"]),
+                    _sdk_string(binding["scope"]),
+                    _sdk_condition(condition),
+                    _sdk_string(binding["interpretation"]),
+                    _sdk_string(binding["producer_semantics"]),
+                    _sdk_string(binding["producer_input_basis_digest"]),
+                    _sdk_string(binding["precision_profile"]),
+                    _sdk_string(binding["assumption_set_id"]),
+                )
+            )
+        )
+    return bytes(encoded)
+
+
+def _sdk_partition_envelopes_bytes(
+    store: dict[str, Any],
+    final_by_ref: dict[str, dict[str, Any]],
+) -> bytes:
+    encoded = bytearray()
+    partitions = sorted(store["partitions"], key=lambda row: row["partition_id"])
+    _sdk_require_unique_strings(
+        (partition["partition_id"] for partition in partitions),
+        "partition IDs",
+    )
+    encoded.extend(_sdk_u64(len(partitions)))
+    for partition in partitions:
+        claim_refs = _sdk_require_unique_strings(
+            partition["stored_claim_refs"],
+            f"partition {partition['partition_id']} claim references",
+        )
+        claims = []
+        for claim_ref in claim_refs:
+            claim = final_by_ref.get(claim_ref)
+            if claim is None:
+                fail("materialization.store-failure", "partition claim reference is missing")
+            claims.append(claim)
+        # This is sdk::detail::claim_occurrence_less, whose key is the exact
+        # canonical claim-occurrence projection, not claim_ref or input order.
+        claims.sort(key=sdk_claim_occurrence_projection)
+        coverage_units = sorted(
+            partition["coverage_units"],
+            key=coverage_unit_identity,
+        )
+        unresolved = sorted(partition["unresolved"], key=_sdk_unresolved_key)
+        encoded.extend(_sdk_string(partition["partition_id"]))
+        encoded.extend(_sdk_u64(len(claims)))
+        for claim in claims:
+            encoded.extend(_sdk_claim(claim))
+        encoded.extend(_sdk_u64(len(coverage_units)))
+        for unit in coverage_units:
+            encoded.extend(
+                b"".join(
+                    _sdk_string(unit[field])
+                    for field in ("domain", "key", "state", "reason")
+                )
+            )
+        encoded.extend(_sdk_u64(len(unresolved)))
+        for value in unresolved:
+            encoded.extend(_sdk_unresolved_reference(value))
+    return bytes(encoded)
+
+
+def _sdk_canonical_export_digest(
+    store: dict[str, Any],
+    relations: list[dict[str, Any]],
+    annotations: list[dict[str, Any]],
+    coverage: list[dict[str, Any]],
+    partition_bindings: list[dict[str, Any]],
+) -> str:
+    final_envelopes = [
+        envelope
+        for envelope in store["claim_envelopes"]
+        if envelope["role"] == "stored_final"
+    ]
+    claim_refs = _sdk_require_unique_strings(
+        (envelope["claim_ref"] for envelope in final_envelopes),
+        "final claim references",
+    )
+    final_by_ref: dict[str, dict[str, Any]] = {}
+    for envelope in final_envelopes:
+        claim_ref = envelope["claim_ref"]
+        if claim_ref in final_by_ref:
+            fail("materialization.store-failure", "SDK final claim references contains a duplicate")
+        final_by_ref[claim_ref] = envelope
+    claim_contents = _sdk_canonical_string_set(
+        (envelope["content"] for envelope in final_envelopes),
+        "final claim contents",
+    )
+    unresolved = _sdk_store_unresolved(store)
+    semantic_projection = _sdk_semantic_projection_bytes(
+        relations,
+        annotations,
+        coverage,
+        partition_bindings,
+        claim_contents,
+        unresolved,
+    )
+    partition_envelopes = _sdk_partition_envelopes_bytes(store, final_by_ref)
+    manifest = store["snapshot_manifest"]
+    lines = [
+        "schema=cxxlens.snapshot-export.v1",
+        f"snapshot={manifest['snapshot_id']}",
+        f"semantics={manifest['snapshot_semantics_version']}",
+        f"catalog={manifest['catalog_semantic_digest']}",
+        f"universe={manifest['condition_universe_id']}",
+        f"registry={manifest['relation_registry_digest']}",
+        f"interpretation-policy={manifest['interpretation_policy_digest']}",
+    ]
+    lines.extend(
+        "partition={partition_id}|{content_digest}|{coverage_digest}|{claim_count}|{complete}".format(
+            partition_id=partition["partition_id"],
+            content_digest=partition["content_digest"],
+            coverage_digest=partition["coverage_digest"],
+            claim_count=partition["claim_count"],
+            complete="complete" if partition["complete"] else "partial",
+        )
+        for partition in manifest["partitions"]
+    )
+    lines.extend(f"closure={closure}" for closure in manifest["closure_ids"])
+    lines.extend(f"claim={content}" for content in claim_contents)
+    for relation in relations:
+        descriptor = relation["relation_descriptor_id"]
+        lines.extend(
+            f"row={descriptor}|{row}"
+            for row in relation["row_canonical_forms"]
+        )
+    lines.extend(
+        f"unresolved={value['source_assertion']}|{value['source_relation']}|"
+        f"{value['target_relation']}|{value['reason']}"
+        for value in unresolved
+    )
+    lines.append(f"semantic-projection={semantic_projection.hex()}")
+    lines.append(f"partition-envelopes={partition_envelopes.hex()}")
+    return content_digest(("\n".join(lines) + "\n").encode("utf-8"))
 
 
 def _reopened_handle_projection(
@@ -11980,26 +12534,12 @@ def _reopened_handle_projection(
         "cxxlens.clang22-materialization-reopen-cursor.v1",
         {key: cursor[key] for key in ("specification", "relations")},
     )
-    canonical_export_projection = {
-        "schema": "cxxlens.snapshot-export.v1",
-        "snapshot_manifest": store["snapshot_manifest"],
-        "claim_contents": sorted(
-            {envelope["content"] for envelope in final_envelopes}
-        ),
-        "rows": relations,
-        "partition_bindings": partition_bindings,
-        "partition_envelopes": [
-            {
-                "partition_id": partition["partition_id"],
-                "stored_claim_refs": partition["stored_claim_refs"],
-                "coverage_units": partition["coverage_units"],
-                "unresolved": partition["unresolved"],
-            }
-            for partition in store["partitions"]
-        ],
-    }
-    canonical_export_digest = content_digest(
-        canonical_json(canonical_export_projection)
+    canonical_export_digest = _sdk_canonical_export_digest(
+        store,
+        relations,
+        annotations,
+        coverage,
+        partition_bindings,
     )
     semantic_fields = {
         "backend": request["publication"]["backend"],

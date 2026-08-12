@@ -25,12 +25,12 @@ jobs:
       matrix:
         shared: ["OFF", "ON"]
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
       - name: Install exact Clang 22 toolchain
         if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
         with:
           python-version: "3.12.11"
@@ -75,10 +75,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Install exact Clang 22 toolchain
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -124,14 +124,14 @@ jobs:
   quality-contracts:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 2
       - name: Install exact Clang 22 toolchain
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
       - name: Install exact Doxygen toolchain
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile documentation
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -205,10 +205,10 @@ jobs:
       matrix:
         shared: ["OFF", "ON"]
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Install Clang 22 and Ninja
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -253,8 +253,8 @@ jobs:
   gcc-public-headers:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -287,8 +287,8 @@ jobs:
     needs: [build-test, quality-contracts, install-consumer, gcc-public-headers]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -312,8 +312,8 @@ jobs:
     needs: [build-test, quality-contracts, install-consumer, gcc-public-headers, quality-evidence]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -353,8 +353,8 @@ jobs:
     needs: [foundation-completion]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -390,10 +390,10 @@ jobs:
     needs: [wave0-readiness]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Install exact Clang 22 toolchain
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -426,8 +426,8 @@ jobs:
     outputs:
       qualification: ${{ steps.evaluate.outputs.qualification }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -466,8 +466,8 @@ jobs:
     needs: [release-evaluation]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
@@ -514,8 +514,8 @@ jobs:
           fi
           echo "invalid qualification dependency matrix: evaluation=${EVALUATION_RESULT}, qualification=${QUALIFICATION}, strict=${STRICT_RESULT}" >&2
           exit 1
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"

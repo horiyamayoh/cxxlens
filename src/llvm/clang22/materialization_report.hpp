@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -10,6 +12,7 @@
 #include <cxxlens/sdk/common.hpp>
 
 #include "materialization_execution_journal.hpp"
+#include "materialization_io.hpp"
 #include "materialization_request_v2_1.hpp"
 #include "materialization_seal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
@@ -29,12 +32,13 @@ namespace cxxlens::detail::clang22::materialization
 	/** Bounded limits for the source-private detailed-report projection. */
 	struct detailed_report_limits
 	{
+		static constexpr std::size_t maximum_report_bytes = 1024U * 1024U * 1024U;
 		std::size_t max_tasks{4096U};
 		std::size_t max_batches_per_task{6U};
 		std::size_t max_chunks_per_batch{65536U};
 		std::size_t max_side_channel_records{65536U};
 		std::size_t max_string_bytes{16U * 1024U * 1024U};
-		std::size_t max_projection_bytes{64U * 1024U * 1024U};
+		std::size_t max_projection_bytes{maximum_report_bytes};
 	};
 
 	/** Closed error taxonomy for detailed capture/encoding. */
@@ -47,6 +51,8 @@ namespace cxxlens::detail::clang22::materialization
 		transcript_mismatch,
 		publication_unverified,
 		invalid_time,
+		spool_io,
+		spool_corrupt,
 	};
 
 	/** Typed source-private error converted to sdk::error at the public boundary. */
@@ -189,6 +195,60 @@ namespace cxxlens::detail::clang22::materialization
 		detailed_report_limits limits_;
 		std::size_t accounted_bytes_{};
 		std::vector<detailed_task_report_capture> tasks_;
+	};
+
+	/**
+	 * Source-private replayable owner for production task captures.
+	 *
+	 * Captures are encoded into the existing anonymous sealed spool one at a time.  The owner keeps
+	 * only bounded record offsets and the spool handle; replay decodes one complete capture for the
+	 * callback and releases it before decoding the next one.  This is deliberately a separate
+	 * ingress from `detailed_task_report_accumulator`: the latter's span API is retained for the
+	 * existing bounded projection tests and cannot be made streaming without changing its callers.
+	 */
+	class detailed_task_report_replayable_spool
+	{
+	  public:
+		using consumer = std::function<sdk::result<void>(detailed_task_report_capture&&)>;
+
+		static_assert(sizeof(std::size_t) <= sizeof(std::uint64_t));
+
+		detailed_task_report_replayable_spool(const detailed_task_report_replayable_spool&) =
+			delete;
+		detailed_task_report_replayable_spool&
+		operator=(const detailed_task_report_replayable_spool&) = delete;
+		detailed_task_report_replayable_spool(detailed_task_report_replayable_spool&&) noexcept;
+		detailed_task_report_replayable_spool&
+		operator=(detailed_task_report_replayable_spool&&) noexcept;
+		~detailed_task_report_replayable_spool();
+
+		[[nodiscard]] static sdk::result<detailed_task_report_replayable_spool>
+		create(detailed_report_limits limits = {});
+
+		/** Consume one capture; after return the caller's capture may be released. */
+		[[nodiscard]] sdk::result<void> append(detailed_task_report_capture capture);
+
+		/** Seal the complete record stream before any replay is allowed. */
+		[[nodiscard]] sdk::result<void> seal();
+
+		/** Replay all records, one decoded capture at a time. The spool remains replayable. */
+		[[nodiscard]] sdk::result<void> replay(const consumer& consume) const;
+
+		[[nodiscard]] std::size_t task_count() const noexcept;
+		[[nodiscard]] std::uint64_t spooled_bytes() const noexcept;
+		[[nodiscard]] bool sealed() const noexcept;
+
+	  private:
+		detailed_task_report_replayable_spool(
+			detailed_report_limits limits,
+			std::unique_ptr<materialization_replayable_spool> storage);
+
+		detailed_report_limits limits_;
+		std::unique_ptr<materialization_replayable_spool> storage_;
+		std::vector<std::uint64_t> record_offsets_;
+		std::uint64_t spooled_bytes_{};
+		bool sealed_{};
+		bool poisoned_{};
 	};
 
 	struct detailed_publication_projection

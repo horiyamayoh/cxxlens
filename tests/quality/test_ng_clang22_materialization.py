@@ -3484,6 +3484,181 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             self.validate_report(request, semantic_drift)
 
+    def test_sdk_canonical_export_mirror_is_unresolved_exact_and_fail_closed(
+        self,
+    ) -> None:
+        request = self.request()
+        report = self.report(request)
+        record = report["publication"]["invocation_committed_record"]
+        projection, reopened = materialization._reopened_handle_projection(
+            request,
+            report["store"],
+            record,
+        )
+        final_claim_contents = [
+            envelope["content"]
+            for envelope in report["store"]["claim_envelopes"]
+            if envelope["role"] == "stored_final"
+        ]
+        unresolved = {
+            "source_assertion": "assertion:missing-target",
+            "source_relation": "source.span",
+            "target_relation": "cc.entity",
+            "source_columns": ["source.span.v1.origin"],
+            "reason": "target-missing",
+        }
+        empty_bytes = materialization._sdk_semantic_projection_bytes(
+            reopened["cursor_projection"]["relations"],
+            reopened["claim_annotations"],
+            reopened["coverage"],
+            reopened["partition_bindings"],
+            final_claim_contents,
+            [],
+        )
+        unresolved_bytes = materialization._sdk_semantic_projection_bytes(
+            reopened["cursor_projection"]["relations"],
+            reopened["claim_annotations"],
+            reopened["coverage"],
+            reopened["partition_bindings"],
+            final_claim_contents,
+            [unresolved],
+        )
+        self.assertNotEqual(empty_bytes, unresolved_bytes)
+
+        with_unresolved = copy.deepcopy(report["store"])
+        with_unresolved["partitions"][0]["unresolved"] = [unresolved]
+        unresolved_projection, _ = materialization._reopened_handle_projection(
+            request,
+            with_unresolved,
+            record,
+        )
+        self.assertNotEqual(
+            projection["canonical_export_digest"],
+            unresolved_projection["canonical_export_digest"],
+        )
+
+        malformed_unresolved = copy.deepcopy(report["store"])
+        malformed_unresolved["partitions"][0]["unresolved"] = [
+            {"source_assertion": "assertion:missing-target"}
+        ]
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "SDK unresolved reference has malformed",
+        ):
+            materialization._reopened_handle_projection(
+                request,
+                malformed_unresolved,
+                record,
+            )
+
+        relation = {
+            "relation_descriptor_id": "descriptor:test",
+            "row_canonical_forms": [],
+        }
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "SDK relation descriptors contains a duplicate",
+        ):
+            materialization._sdk_semantic_projection_bytes(
+                [relation, copy.deepcopy(relation)],
+                [],
+                [],
+                [],
+                [],
+                [],
+            )
+
+        duplicate_claim_reference = copy.deepcopy(report["store"])
+        final_envelope = next(
+            envelope
+            for envelope in duplicate_claim_reference["claim_envelopes"]
+            if envelope["role"] == "stored_final"
+        )
+        duplicate_claim_reference["claim_envelopes"].append(
+            copy.deepcopy(final_envelope)
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "SDK final claim references contains a duplicate",
+        ):
+            materialization._reopened_handle_projection(
+                request,
+                duplicate_claim_reference,
+                record,
+            )
+
+        final_by_ref = {}
+        final_envelopes = [
+            envelope
+            for envelope in report["store"]["claim_envelopes"]
+            if envelope["role"] == "stored_final"
+        ]
+        for envelope in final_envelopes:
+            self.assertNotIn(envelope["claim_ref"], final_by_ref)
+            final_by_ref[envelope["claim_ref"]] = envelope
+
+        coverage_store = copy.deepcopy(report["store"])
+        coverage_partition = next(
+            partition
+            for partition in coverage_store["partitions"]
+            if len(partition["coverage_units"]) > 1
+        )
+        coverage_partition["coverage_units"].reverse()
+        self.assertEqual(
+            materialization._sdk_partition_envelopes_bytes(
+                report["store"],
+                final_by_ref,
+            ),
+            materialization._sdk_partition_envelopes_bytes(
+                coverage_store,
+                final_by_ref,
+            ),
+        )
+        for unit in coverage_partition["coverage_units"]:
+            self.assertEqual(
+                materialization.coverage_unit_identity(unit),
+                materialization.canonical_identity_digest(
+                    "coverage-unit",
+                    [unit["domain"], unit["key"], unit["state"], unit["reason"]],
+                ),
+            )
+
+        claim_order_store = {"partitions": [copy.deepcopy(report["store"]["partitions"][0])]}
+        claim_refs = [envelope["claim_ref"] for envelope in final_envelopes[:2]]
+        claim_order_store["partitions"][0]["stored_claim_refs"] = list(reversed(claim_refs))
+        claim_order_sorted = copy.deepcopy(claim_order_store)
+        claim_order_sorted["partitions"][0]["stored_claim_refs"] = claim_refs
+        self.assertEqual(
+            materialization._sdk_partition_envelopes_bytes(
+                claim_order_store,
+                final_by_ref,
+            ),
+            materialization._sdk_partition_envelopes_bytes(
+                claim_order_sorted,
+                final_by_ref,
+            ),
+        )
+
+        envelope_order_drift = copy.deepcopy(report["store"])
+        envelope_order_drift["claim_envelopes"].reverse()
+        envelope_order_projection, _ = materialization._reopened_handle_projection(
+            request,
+            envelope_order_drift,
+            record,
+        )
+        self.assertEqual(
+            projection["canonical_export_digest"],
+            envelope_order_projection["canonical_export_digest"],
+        )
+
+        ordering_drift = copy.deepcopy(report)
+        ordering_drift["store"]["partitions"].reverse()
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "claim occurrence, partition, or snapshot identity DAG differs",
+        ):
+            self.validate_report(request, ordering_drift)
+
     def test_matrix_requires_static_shared_and_memory_sqlite_exactly_once(self) -> None:
         entries = self.matrix()
         materialization.validate_qualification_matrix(ROOT, entries)

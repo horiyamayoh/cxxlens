@@ -753,8 +753,9 @@ namespace cxxlens::detail::clang22::materialization
 					task.partition_spools);
 				!valid)
 				return sdk::unexpected(std::move(valid.error()));
-			task.partition_spools.clear();
-			task_receipts_[request_task_index] = std::move(task.receipt);
+			task_receipts_[request_task_index] = task.receipt;
+			claim_stream_tasks_.emplace_back(std::move(task.receipt),
+											 std::move(task.partition_spools));
 			++next_task_index_;
 			return {};
 		}
@@ -771,6 +772,15 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<materialization_incremental_execution_journal_receipt>
 	materialization_incremental_ingress::finalize() &&
 	{
+		auto finalized = std::move(*this).finalize_with_claim_stream();
+		if (!finalized)
+			return sdk::unexpected(std::move(finalized.error()));
+		return std::move(finalized->journal);
+	}
+
+	sdk::result<materialization_incremental_ingress_result>
+	materialization_incremental_ingress::finalize_with_claim_stream() &&
+	{
 		try
 		{
 			if (request_ == nullptr || next_task_index_ != task_receipts_.size())
@@ -783,8 +793,14 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(ingress_error("tasks", "missing-receipt"));
 				receipts.push_back(std::move(*receipt));
 			}
-			return seal_materialization_incremental_execution_journal(
+			auto journal = seal_materialization_incremental_execution_journal(
 				request_id_, std::span<const materialization_incremental_task_receipt>{receipts});
+			if (!journal)
+				return sdk::unexpected(std::move(journal.error()));
+			if (claim_stream_tasks_.size() != receipts.size())
+				return sdk::unexpected(ingress_error("tasks", "stream-census"));
+			return materialization_incremental_ingress_result{std::move(*journal),
+															  std::move(claim_stream_tasks_)};
 		}
 		catch (const std::bad_alloc&)
 		{
