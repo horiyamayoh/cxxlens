@@ -1118,6 +1118,16 @@ namespace
 		require(winner && !loser && loser.error().code == "store.publication-conflict",
 				"two SQLite instances committed forked heads or returned an unstable conflict");
 
+		// `first_store` opens and maps first, so it is the generation installer in
+		// the forwarding-VFS path.  Close that member while W2 remains live, then
+		// prove a third connection can still load and derive through W2's retained
+		// generation authority.  This guards against an installer-local epoch arm
+		// accidentally owning the generation source controller.
+		first_writer = cxxlens::sdk::result<cxxlens::sdk::snapshot_writer>{
+			cxxlens::sdk::unexpected(cxxlens::sdk::error{"test.release", "first-writer", {}})};
+		first_store = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{
+			cxxlens::sdk::unexpected(cxxlens::sdk::error{"test.release", "first-store", {}})};
+
 		auto reopened = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
 		require(reopened.has_value(), "SQLite CAS result reopened as an ambiguous head");
 		auto head = reopened->current(selector(relation_engine));

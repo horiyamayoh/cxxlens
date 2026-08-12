@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -20,11 +21,14 @@
 #include <vector>
 
 #include <barrier>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include "sdk/sqlite_same_process_shm_identity_issuer_internal.hpp"
 #include "sdk/sqlite_same_process_shm_mapping_registry_internal.hpp"
+#include "sdk/sqlite_source_shm_readonly_preflight_internal.hpp"
 #include "sdk/sqlite_writer_shm_mapping_epoch_internal.hpp"
 #include "sdk/sqlite_writer_shm_mapping_semantics_internal.hpp"
 
@@ -453,6 +457,13 @@ namespace cxxlens::sdk
 					source.qualified_control_};
 		}
 
+		static void substitute_native_ok_projection_permit_target(
+			sqlite_shm_reader_native_ok_projection_permit& permit,
+			sqlite_shm_reader_attachment_target_identity target) noexcept
+		{
+			permit.exact_target_.emplace(std::move(target));
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_attachment_post_map_receipt
 		reader_attachment_map_with_qualified_observation(
 			const sqlite_shm_verified_reader_attachment_post_map_receipt& source,
@@ -814,6 +825,12 @@ namespace cxxlens::sdk
 			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
 		{
 			coordinator.inject_writer_attachment_seal_failure_for_testing();
+		}
+
+		static void fail_next_writer_attachment_registration(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_writer_attachment_registration_failure_for_testing();
 		}
 
 		static void fail_next_reader_mapped_validation_allocation(
@@ -1637,7 +1654,8 @@ namespace
 											  std::nullopt,
 											  std::nullopt,
 											  0U},
-				observation_};
+				observation_,
+				std::nullopt};
 		}
 
 	  private:
@@ -1652,6 +1670,296 @@ namespace
 		std::shared_ptr<int> owner;
 	};
 
+	/**
+	 * A deliberately small real-filesystem source epoch fixture.  The registry tests do not need a
+	 * second forwarding VFS, but they must not forge the private reader-borrow minter: the product
+	 * target-epoch factory consumes this retained main/WAL/SHM census and its live namespace guard.
+	 */
+	class source_epoch_held_object final : public sqlite_backend_held_object
+	{
+	  public:
+		source_epoch_held_object(const std::filesystem::path& path,
+								 const sqlite_backend_file_role role,
+								 const std::uint8_t marker)
+			: role_{role}, descriptor_{::open(path.c_str(), O_RDONLY | O_CLOEXEC)}
+		{
+			require(descriptor_ >= 0, "open retained real source-epoch fixture object");
+			require(::fstat(descriptor_, &stat_) == 0,
+					"stat retained real source-epoch fixture object");
+			const auto role_text = std::to_string(static_cast<unsigned>(role));
+			object_ = identity("test.registry.real-source-epoch.object." + role_text, marker);
+			entry_ = identity("test.registry.real-source-epoch.entry." + role_text, marker);
+			filesystem_ = identity("test.registry.real-source-epoch.filesystem", marker);
+			mount_ = identity("test.registry.real-source-epoch.mount", marker);
+		}
+
+		~source_epoch_held_object() override
+		{
+			if (descriptor_ >= 0)
+				(void)::close(descriptor_);
+		}
+
+		[[nodiscard]] sqlite_backend_file_role role() const noexcept override
+		{
+			return role_;
+		}
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		object_identity() const noexcept override
+		{
+			return object_;
+		}
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		directory_entry_identity() const noexcept override
+		{
+			return entry_;
+		}
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		object_filesystem_profile() const noexcept override
+		{
+			return filesystem_;
+		}
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		object_mount_identity() const noexcept override
+		{
+			return mount_;
+		}
+		[[nodiscard]] result<void> recheck_retained_object() const override
+		{
+			struct stat current
+			{
+			};
+			return ::fstat(descriptor_, &current) == 0 && current.st_dev == stat_.st_dev &&
+					current.st_ino == stat_.st_ino
+				? result<void>{}
+				: result<void>{error{"test.registry", "source-epoch", "retained-object-drift"}};
+		}
+		[[nodiscard]] result<std::uint64_t> size() const override
+		{
+			struct stat current
+			{
+			};
+			if (::fstat(descriptor_, &current) != 0 || current.st_size < 0)
+				return error{"test.registry", "source-epoch", "retained-object-size"};
+			return static_cast<std::uint64_t>(current.st_size);
+		}
+		[[nodiscard]] result<void> read_exact(std::uint64_t, std::span<std::byte>) const override
+		{
+			return error{"test.registry", "source-epoch", "unexpected-read"};
+		}
+		[[nodiscard]] result<std::string> sha256() const override
+		{
+			return error{"test.registry", "source-epoch", "unexpected-hash"};
+		}
+		[[nodiscard]] result<std::shared_ptr<sqlite_backend_private_snapshot>>
+		copy_exact(sqlite_backend_private_snapshot_builder&, std::span<std::byte>) const override
+		{
+			return error{"test.registry", "source-epoch", "unexpected-copy"};
+		}
+		[[nodiscard]] result<sqlite_backend_replacement_state>
+		recheck_current_entry() const override
+		{
+			auto checked = recheck_retained_object();
+			if (!checked)
+				return checked.error();
+			return sqlite_backend_replacement_state::exact_same_entry_and_object;
+		}
+
+	  private:
+		sqlite_backend_file_role role_;
+		int descriptor_{-1};
+		struct stat stat_
+		{
+		};
+		sqlite_backend_opaque_identity object_;
+		sqlite_backend_opaque_identity entry_;
+		std::optional<sqlite_backend_opaque_identity> filesystem_;
+		std::optional<sqlite_backend_opaque_identity> mount_;
+	};
+
+	class source_epoch_namespace_guard final : public sqlite_source_shm_namespace_guard
+	{
+	  public:
+		source_epoch_namespace_guard(std::string logical,
+									 sqlite_backend_opaque_identity identity,
+									 sqlite_backend_opaque_identity parent,
+									 std::array<sqlite_backend_entry_observation, 4U> entries,
+									 std::shared_ptr<std::atomic_int> finalization_count)
+			: logical_{std::move(logical)}, identity_{std::move(identity)},
+			  parent_{std::move(parent)}, entries_{std::move(entries)},
+			  finalization_count_{std::move(finalization_count)}
+		{
+		}
+
+		[[nodiscard]] std::string_view logical_main_locator() const noexcept override
+		{
+			return logical_;
+		}
+		[[nodiscard]] std::string_view anchored_main_locator() const noexcept override
+		{
+			return logical_;
+		}
+		[[nodiscard]] const sqlite_backend_opaque_identity& identity() const noexcept override
+		{
+			return identity_;
+		}
+		[[nodiscard]] result<sqlite_backend_entry_observation>
+		retained_entry(const sqlite_backend_file_role role) const override
+		{
+			if (!recheck())
+				return error{"test.registry", "source-epoch", "namespace-drift"};
+			for (const auto& entry : entries_)
+				if (entry.role == role)
+					return entry;
+			return error{"test.registry", "source-epoch", "missing-role"};
+		}
+		[[nodiscard]] result<sqlite_backend_writer_shm_stat_observation>
+		observe_writer_shm_stat(const bool) const override
+		{
+			auto entry = retained_entry(sqlite_backend_file_role::shared_memory);
+			if (!entry || !entry->held_object || !entry->object_identity ||
+				!entry->directory_entry_identity || !entry->object_filesystem_profile)
+				return error{"test.registry", "source-epoch", "shm-stat"};
+			auto byte_count = entry->held_object->size();
+			auto mount = entry->held_object->object_mount_identity();
+			if (!byte_count || !mount)
+				return error{"test.registry", "source-epoch", "shm-stat"};
+			return sqlite_backend_writer_shm_stat_observation{
+				sqlite_backend_file_role::shared_memory,
+				sqlite_backend_entry_state::held_regular,
+				parent_,
+				*entry->object_filesystem_profile,
+				*mount,
+				entry->object_identity,
+				entry->directory_entry_identity,
+				*byte_count};
+		}
+		[[nodiscard]] result<void> recheck() const override
+		{
+			if (finished_)
+				return error{"test.registry", "source-epoch", "finished"};
+			for (const auto& entry : entries_)
+				if (entry.held_object && !entry.held_object->recheck_retained_object())
+					return error{"test.registry", "source-epoch", "namespace-drift"};
+			return {};
+		}
+		[[nodiscard]] result<void> claim_target_epoch() override
+		{
+			if (claimed_ || !recheck())
+				return error{"test.registry", "source-epoch", "claim"};
+			claimed_ = true;
+			return {};
+		}
+		[[nodiscard]] result<void> finish() override
+		{
+			if (!claimed_ || finished_)
+				return error{"test.registry", "source-epoch", "finish"};
+			finished_ = true;
+			finalization_count_->fetch_add(1, std::memory_order_relaxed);
+			return {};
+		}
+
+	  private:
+		std::string logical_;
+		sqlite_backend_opaque_identity identity_;
+		sqlite_backend_opaque_identity parent_;
+		std::array<sqlite_backend_entry_observation, 4U> entries_;
+		std::shared_ptr<std::atomic_int> finalization_count_;
+		bool claimed_{};
+		bool finished_{};
+	};
+
+	struct source_epoch_fixture
+	{
+		explicit source_epoch_fixture(const std::uint8_t marker)
+		{
+			static std::atomic<std::uint64_t> sequence{};
+			directory = std::filesystem::temp_directory_path() /
+				("cxxlens-registry-source-epoch-" + std::to_string(::getpid()) + '-' +
+				 std::to_string(sequence.fetch_add(1U)));
+			require(std::filesystem::create_directory(directory),
+					"create real source-epoch directory");
+			main = directory / "main.sqlite";
+			wal = directory / "main.sqlite-wal";
+			shm = directory / "main.sqlite-shm";
+			for (const auto& path : {main, wal, shm})
+			{
+				const auto descriptor =
+					::open(path.c_str(), O_CREAT | O_EXCL | O_RDWR | O_CLOEXEC, 0600);
+				require(descriptor >= 0, "create real source-epoch main/WAL/SHM file");
+				require(::ftruncate(descriptor, 4096) == 0,
+						"size real source-epoch main/WAL/SHM file");
+				require(::close(descriptor) == 0,
+						"close real source-epoch fixture create descriptor");
+			}
+			std::array<std::shared_ptr<source_epoch_held_object>, 3U> held{
+				std::make_shared<source_epoch_held_object>(
+					main, sqlite_backend_file_role::main_database, marker),
+				std::make_shared<source_epoch_held_object>(
+					wal, sqlite_backend_file_role::write_ahead_log, marker),
+				std::make_shared<source_epoch_held_object>(
+					shm, sqlite_backend_file_role::shared_memory, marker)};
+			std::array<sqlite_backend_entry_observation, 4U> entries;
+			for (std::size_t index{}; index < held.size(); ++index)
+				entries[index] = {held[index]->role(),
+								  sqlite_backend_entry_state::held_regular,
+								  held[index]->object_identity(),
+								  held[index]->directory_entry_identity(),
+								  held[index],
+								  held[index]->object_filesystem_profile(),
+								  true};
+			entries[3U] = {sqlite_backend_file_role::rollback_journal,
+						   sqlite_backend_entry_state::absent,
+						   {},
+						   {},
+						   {},
+						   {},
+						   false};
+			const auto parent = identity("test.registry.real-source-epoch.parent", marker);
+			finalization_count = std::make_shared<std::atomic_int>(0);
+			auto guard = std::make_shared<source_epoch_namespace_guard>(
+				main.string(),
+				identity("test.registry.real-source-epoch.guard", marker),
+				parent,
+				entries,
+				finalization_count);
+			sqlite_backend_namespace_census census{
+				"default-filesystem-v1",
+				identity("test.registry.real-source-epoch.capability", marker),
+				parent,
+				entries,
+				std::move(guard)};
+			auto made = make_sqlite_source_shm_target_namespace_epoch(main.string(), census);
+			require(made && *made, "make real default source target namespace epoch");
+			target = std::move(*made);
+			auto writer_stat = target->observe_writer_shm_stat(true);
+			require(writer_stat && writer_stat->state == sqlite_backend_entry_state::held_regular,
+					"observe real source target SHM stat");
+			stat = {sqlite_writer_shm_entry_state::direct_regular,
+					writer_stat->parent_namespace_identity,
+					writer_stat->filesystem_profile,
+					writer_stat->mount_identity,
+					writer_stat->object_identity,
+					writer_stat->directory_entry_identity,
+					writer_stat->byte_count};
+		}
+
+		source_epoch_fixture(const source_epoch_fixture&) = delete;
+		source_epoch_fixture& operator=(const source_epoch_fixture&) = delete;
+		~source_epoch_fixture()
+		{
+			std::error_code error;
+			std::filesystem::remove_all(directory, error);
+		}
+
+		std::filesystem::path directory;
+		std::filesystem::path main;
+		std::filesystem::path wal;
+		std::filesystem::path shm;
+		std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target;
+		sqlite_writer_shm_stat_census stat;
+		std::shared_ptr<std::atomic_int> finalization_count;
+	};
+
 	struct bridge_epoch_sources
 	{
 		sqlite_backend_opaque_identity retained_parent_receipt;
@@ -1664,6 +1972,8 @@ namespace
 		bridge_native_source main;
 		bridge_native_source wal;
 		bridge_native_source shm;
+		std::shared_ptr<sqlite_source_shm_target_namespace_epoch> source_target;
+		std::optional<sqlite_writer_shm_stat_census> source_stat;
 
 		[[nodiscard]] sqlite_writer_shm_mapping_epoch_activation
 		arm(const sqlite_shm_writer_map_request& request, const std::uint8_t marker)
@@ -1706,21 +2016,43 @@ namespace
 		return {std::move(source.first), std::move(source.second), std::move(owner)};
 	}
 
-	[[nodiscard]] std::shared_ptr<bridge_epoch_sources>
-	make_bridge_epoch_sources(const sqlite_shm_writer_map_request& request,
-							  const std::uint8_t marker)
+	[[nodiscard]] std::shared_ptr<bridge_epoch_sources> make_bridge_epoch_sources(
+		const sqlite_shm_writer_map_request& request,
+		const std::uint8_t marker,
+		std::shared_ptr<sqlite_source_shm_target_namespace_epoch> source_target = {})
 	{
 		const auto retained_parent = identity("test.registry.bridge-retained-parent", marker);
 		const auto wal_file = identity("test.registry.bridge-wal-file", marker);
 		const auto wal_xopen = identity("test.registry.bridge-wal-xopen", marker);
 		const auto shm_attachment = identity("test.registry.bridge-shm-attachment", marker);
+		auto expected_shm_leaf = identity("test.registry.bridge-shm-leaf", marker);
+		auto target_namespace_epoch_identity =
+			identity("test.registry.validated-target-namespace", marker);
+		std::optional<sqlite_writer_shm_stat_census> source_stat;
+		if (source_target)
+		{
+			auto observed = source_target->observe_writer_shm_stat(true);
+			require(observed && observed->state == sqlite_backend_entry_state::held_regular &&
+						observed->object_identity && observed->directory_entry_identity,
+					"observe exact retained source epoch before writer arm");
+			expected_shm_leaf = *observed->directory_entry_identity;
+			target_namespace_epoch_identity = source_target->identity();
+			source_stat =
+				sqlite_writer_shm_stat_census{sqlite_writer_shm_entry_state::direct_regular,
+											  observed->parent_namespace_identity,
+											  observed->filesystem_profile,
+											  observed->mount_identity,
+											  observed->object_identity,
+											  observed->directory_entry_identity,
+											  observed->byte_count};
+		}
 		return std::make_shared<bridge_epoch_sources>(bridge_epoch_sources{
 			retained_parent,
 			wal_file,
 			wal_xopen,
 			shm_attachment,
-			identity("test.registry.bridge-shm-leaf", marker),
-			identity("test.registry.validated-target-namespace", marker),
+			std::move(expected_shm_leaf),
+			std::move(target_namespace_epoch_identity),
 			make_bridge_native_source(sqlite_writer_shm_native_lifetime_role::retained_parent,
 									  identity("test.registry.bridge-parent-lifetime", marker),
 									  retained_parent,
@@ -1741,7 +2073,9 @@ namespace
 				identity("test.registry.bridge-shm-lifetime", marker),
 				shm_attachment,
 				std::nullopt,
-				4)});
+				4),
+			std::move(source_target),
+			std::move(source_stat)});
 	}
 
 	struct bridge_epoch
@@ -1783,11 +2117,15 @@ namespace
 	class sealed_bridge_epoch_port final : public sqlite_writer_shm_mapping_epoch_port
 	{
 	  public:
-		sealed_bridge_epoch_port(const std::uint8_t marker,
-								 sqlite_writer_shm_stat_census pre_stat,
-								 sqlite_writer_shm_mapping_epoch_post_observation post)
+		sealed_bridge_epoch_port(
+			const std::uint8_t marker,
+			sqlite_writer_shm_stat_census pre_stat,
+			sqlite_writer_shm_mapping_epoch_post_observation post,
+			std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter> borrow_minter =
+				std::nullopt)
 			: marker_{marker}, pre_stat_{std::move(pre_stat)},
-			  observation_{std::make_shared<sealed_bridge_observation_port>(std::move(post))}
+			  observation_{std::make_shared<sealed_bridge_observation_port>(std::move(post))},
+			  borrow_minter_{std::move(borrow_minter)}
 		{
 		}
 
@@ -1800,6 +2138,7 @@ namespace
 				identity("test.registry.validated-watch", marker_),
 				pre_stat_,
 				observation_,
+				std::move(borrow_minter_),
 			};
 		}
 
@@ -1807,6 +2146,7 @@ namespace
 		std::uint8_t marker_{};
 		sqlite_writer_shm_stat_census pre_stat_;
 		std::shared_ptr<sealed_bridge_observation_port> observation_;
+		std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter> borrow_minter_;
 	};
 
 	[[nodiscard]] sqlite_writer_shm_stat_census direct_route_stat(const std::uint8_t marker,
@@ -1842,11 +2182,12 @@ namespace
 		sqlite_writer_shm_mapping_epoch_post_observation post;
 	};
 
-	[[nodiscard]] route_epoch_observations
-	route_observations(const sqlite_writer_shm_mapping_semantic_route route,
-					   const sqlite_shm_writer_map_request& request,
-					   const std::uint8_t marker,
-					   const sqlite_backend_opaque_identity& expected_leaf)
+	[[nodiscard]] route_epoch_observations route_observations(
+		const sqlite_writer_shm_mapping_semantic_route route,
+		const sqlite_shm_writer_map_request& request,
+		const std::uint8_t marker,
+		const sqlite_backend_opaque_identity& expected_leaf,
+		const std::optional<sqlite_writer_shm_stat_census>& source_stat = std::nullopt)
 	{
 		const auto requested_range_end = static_cast<std::uint64_t>(request.page_number + 1) *
 			static_cast<std::uint64_t>(request.page_size);
@@ -1860,6 +2201,16 @@ namespace
 					  ? grown_size_before
 					  : requested_range_end);
 		auto post = direct_route_stat(marker, requested_range_end);
+		if (source_stat)
+		{
+			post = *source_stat;
+			post.byte_count = requested_range_end;
+			pre = post;
+			pre.byte_count =
+				route == sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown
+				? grown_size_before
+				: requested_range_end;
+		}
 		sqlite_writer_shm_namespace_event_census events{
 			identity("test.registry.validated-watch", marker),
 			expected_leaf,
@@ -1915,15 +2266,26 @@ namespace
 	{
 		if (!sources)
 			sources = make_bridge_epoch_sources(request, marker);
-		auto observations = route_observations(route, request, marker, sources->expected_shm_leaf);
+		auto observations = route_observations(
+			route, request, marker, sources->expected_shm_leaf, sources->source_stat);
 		auto parent_pin = sources->parent.source.mint_pin();
 		auto main_pin = sources->main.source.mint_pin();
 		auto wal_pin = sources->wal.source.mint_pin();
 		auto shm_pin = sources->shm.source.mint_pin();
 		require(parent_pin && main_pin && wal_pin && shm_pin,
 				"mint validated route native lifetime pins");
-		sealed_bridge_epoch_port port{
-			marker, std::move(observations.pre), std::move(observations.post)};
+		std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter> borrow_minter;
+		if (sources->source_target)
+		{
+			auto made =
+				make_sqlite_source_shm_target_namespace_epoch_borrow_minter(sources->source_target);
+			require(made && made->valid(), "mint source-private writer borrow capability");
+			borrow_minter.emplace(std::move(*made));
+		}
+		sealed_bridge_epoch_port port{marker,
+									  std::move(observations.pre),
+									  std::move(observations.post),
+									  std::move(borrow_minter)};
 		auto activation = port.arm(sqlite_writer_shm_mapping_epoch_request{
 			sqlite_writer_shm_mapping_epoch_binding{
 				request,
@@ -2379,6 +2741,7 @@ namespace
 
 	struct reader_candidate_setup
 	{
+		std::shared_ptr<source_epoch_fixture> source_epoch;
 		registry_fixture fixture;
 		sqlite_same_process_shm_mapping_lease_coordinator* coordinator{};
 		sqlite_shm_writer_map_request writer;
@@ -2400,7 +2763,8 @@ namespace
 	[[nodiscard]] reader_candidate_setup make_reader_candidate_setup(
 		const std::uint8_t marker,
 		std::optional<sqlite_shm_reader_attachment_target_identity> target_identity = std::nullopt,
-		const bool cross_alias_reader = false)
+		const bool cross_alias_reader = false,
+		std::shared_ptr<source_epoch_fixture> source_epoch = {})
 	{
 		auto fixture = make_fixture(marker, false);
 		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
@@ -2425,11 +2789,14 @@ namespace
 		require(gate &&
 					gate->progress == sqlite_shm_positive_writer_attachment_gate_progress::complete,
 				"activate focused reader writer gate");
+		auto sources = make_bridge_epoch_sources(
+			writer, marker, source_epoch ? source_epoch->target : nullptr);
 		auto writer_attempt = begin_bound_route_attempt_for_request(
 			fixture,
 			writer,
 			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
-			marker);
+			marker,
+			std::move(sources));
 		auto writer_receipt = validate_bound_route(
 			writer_attempt,
 			sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown,
@@ -2463,6 +2830,20 @@ namespace
 		{
 			pre_sqlite.alias_lifetime = reader_alias->alias_lifetime;
 			pre_sqlite.registration_epoch = reader_alias->registration_epoch;
+		}
+		if (source_epoch && !target_identity)
+		{
+			require(source_epoch->stat.object_identity &&
+						source_epoch->stat.directory_entry_identity,
+					"bind retained real source epoch to reader target identity");
+			target_identity = sqlite_shm_reader_attachment_target_identity{
+				source_epoch->target->identity(),
+				source_epoch->target->parent_namespace_identity(),
+				*source_epoch->stat.object_identity,
+				*source_epoch->stat.directory_entry_identity,
+				source_epoch->stat.filesystem_profile,
+				source_epoch->stat.mount_identity,
+				source_epoch->stat.byte_count};
 		}
 		pre_sqlite.target_identity = std::move(target_identity);
 		auto open_result = sqlite_shm_reader_open_production_factory::acquire(
@@ -2529,6 +2910,7 @@ namespace
 		auto session = admitted->take_session();
 		require(session && session->valid(), "take focused reader candidate session");
 		return {
+			std::move(source_epoch),
 			std::move(fixture),
 			coordinator,
 			std::move(writer),
@@ -2541,6 +2923,25 @@ namespace
 			std::move(*session),
 			std::move(reader_alias),
 		};
+	}
+
+	[[nodiscard]] std::optional<sqlite_shm_reader_native_ok_projection_permit>
+	mint_native_ok_projection_permit(reader_candidate_setup& setup,
+									 sqlite_shm_reader_attachment_map_inflight& inflight,
+									 const sqlite_shm_reader_attachment_map_request& request)
+	{
+		auto reservation = setup.fixture.registry->prepare_reader_native_ok_projection(
+			setup.reader_family_pin(), inflight, request);
+		if (!reservation)
+			return std::nullopt;
+		auto borrow = setup.fixture.registry->mint_reader_native_ok_projection(*reservation);
+		if (!borrow)
+			return std::nullopt;
+		auto permit = setup.fixture.registry->attach_reader_native_ok_projection(
+			setup.reader_family_pin(), *reservation, std::move(*borrow));
+		if (!permit)
+			return std::nullopt;
+		return std::move(*permit);
 	}
 
 	void complete_callback_free_identity_smoke(
@@ -2705,17 +3106,46 @@ namespace
 		}
 	}
 
+	[[nodiscard]] auto validate_native_ok_projection_local_target(
+		reader_candidate_setup& setup,
+		const qualified_zero_map_owner& owner,
+		const sqlite_shm_reader_attachment_map_request& request)
+	{
+		const auto& target = request.expected_attachment.target_identity();
+		require(target.has_value(), "native-OK projection validation requires an exact target");
+		auto observation = sqlite_same_process_shm_lease_test_peer::
+			reader_mapped_post_native_observation(owner.inflight,
+												  request,
+												  0,
+												  setup.writer_attempt.native_page.get(),
+												  0,
+												  target->shm_object,
+												  target->shm_entry,
+												  target->filesystem,
+												  target->mount,
+												  target->namespace_epoch,
+												  target->parent_namespace,
+												  target->sealed_shm_size);
+		require(sqlite_same_process_shm_lease_test_peer::reader_observation_target_matches(
+					observation, request),
+				"native-OK post-map observation reproduces the local reader target");
+		return sqlite_same_process_shm_reader_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
+			owner.inflight,
+			owner.identity.scope,
+			owner.identity.callback_identity,
+			owner.effect,
+			std::move(observation));
+	}
+
 	void verify_native_ok_projection_permit_binds_live_writer_and_is_one_shot()
 	{
-		const auto target_identity = sqlite_shm_reader_attachment_target_identity{
-			identity("test.registry.validated-target-namespace", 29U),
-			identity("test.registry.validated-parent", 29U),
-			identity("test.registry.validated-object", 29U),
-			identity("test.registry.validated-entry", 29U),
-			identity("test.registry.validated-filesystem", 29U),
-			identity("test.registry.validated-mount", 29U),
-			4096U};
-		auto setup = make_reader_candidate_setup(29U, target_identity);
+		auto source_epoch = std::make_shared<source_epoch_fixture>(29U);
+		auto setup = make_reader_candidate_setup(29U, std::nullopt, false, source_epoch);
+		require(setup.pre_sqlite.target_identity.has_value(),
+				"real source target is retained through the direct native-OK fixture");
+		const auto& target_identity = *setup.pre_sqlite.target_identity;
 		auto owner = prepare_qualified_map_effect_owner(
 			setup, 30U, sqlite_shm_reader_effect_identity_role::mapped_result);
 		const auto request = reader_attachment_map_request(
@@ -2725,7 +3155,7 @@ namespace
 		{
 			auto mismatched = request;
 			++mismatched.page_number;
-			auto rejected = setup.fixture.registry->reserve_reader_native_ok_projection(
+			auto rejected = setup.fixture.registry->prepare_reader_native_ok_projection(
 				*setup.fixture.family_pin, owner.inflight, mismatched);
 			require(!rejected &&
 						rejected.error().reason ==
@@ -2733,12 +3163,19 @@ namespace
 						owner.inflight.valid(),
 					"native-OK projection reservation rejects page drift before native delegation");
 		}
-		auto permit_result = setup.fixture.registry->reserve_reader_native_ok_projection(
+		auto reservation = setup.fixture.registry->prepare_reader_native_ok_projection(
 			*setup.fixture.family_pin, owner.inflight, request);
+		require(reservation && reservation->valid(),
+				"stage A reserves the exact live writer holder under the registry lock");
+		auto borrowed = setup.fixture.registry->mint_reader_native_ok_projection(*reservation);
+		require(borrowed && borrowed->valid(),
+				"stage B mints source-private custody outside the registry lock");
+		auto permit_result = setup.fixture.registry->attach_reader_native_ok_projection(
+			*setup.fixture.family_pin, *reservation, std::move(*borrowed));
 		require(permit_result && permit_result->valid(),
-				"native-OK projection reservation requires the exact live writer holder");
+				"stage C rechecks and attaches the exact source borrow before native mapping");
 		auto permit = std::move(*permit_result);
-		auto replay_reservation = setup.fixture.registry->reserve_reader_native_ok_projection(
+		auto replay_reservation = setup.fixture.registry->prepare_reader_native_ok_projection(
 			*setup.fixture.family_pin, owner.inflight, request);
 		require(!replay_reservation &&
 					replay_reservation.error().reason ==
@@ -2753,13 +3190,13 @@ namespace
 				0,
 				setup.writer_attempt.native_page.get(),
 				0,
-				identity("test.registry.validated-object", 29U),
-				identity("test.registry.validated-entry", 29U),
-				identity("test.registry.validated-filesystem", 29U),
-				identity("test.registry.validated-mount", 29U),
-				identity("test.registry.validated-target-namespace", 29U),
-				identity("test.registry.validated-parent", 29U),
-				4096U);
+				target_identity.shm_object,
+				target_identity.shm_entry,
+				target_identity.filesystem,
+				target_identity.mount,
+				target_identity.namespace_epoch,
+				target_identity.parent_namespace,
+				target_identity.sealed_shm_size);
 		require(sqlite_same_process_shm_lease_test_peer::reader_observation_target_matches(
 					observation, request),
 				"construct exact reader target observation for native-OK projection");
@@ -2777,6 +3214,53 @@ namespace
 		require(committed && committed->formed_group() && !owner.inflight.valid() &&
 					!permit.valid(),
 				"native-OK projection consumes the permit at the atomic reader commit");
+		auto later_owner = prepare_qualified_map_effect_owner(
+			setup, 31U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto later_request = reader_attachment_map_request(
+			later_owner.identity.request, later_owner.identity.callback_identity.receipt());
+		auto later_permit =
+			mint_native_ok_projection_permit(setup, later_owner.inflight, later_request);
+		require(later_permit && later_permit->valid(),
+				"a later same-page native-OK map receives a fresh three-phase permit");
+		auto later_observation =
+			sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+				later_owner.inflight,
+				later_request,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				target_identity.shm_object,
+				target_identity.shm_entry,
+				target_identity.filesystem,
+				target_identity.mount,
+				target_identity.namespace_epoch,
+				target_identity.parent_namespace,
+				target_identity.sealed_shm_size);
+		auto later_receipt = sqlite_same_process_shm_reader_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
+			later_owner.inflight,
+			later_owner.identity.scope,
+			later_owner.identity.callback_identity,
+			later_owner.effect,
+			std::move(later_observation));
+		require(later_receipt.has_value(),
+				"seal the later same-page native-OK receipt against its fresh permit");
+		auto later_committed = setup.fixture.registry->commit_reader_map_with_native_ok_projection(
+			*setup.fixture.family_pin,
+			later_owner.inflight,
+			*later_receipt,
+			setup.session,
+			*later_permit);
+		require(later_committed &&
+					later_committed->kind() ==
+						sqlite_shm_reader_map_commit_kind::existing_member_revalidation &&
+					!later_owner.inflight.valid() && !later_permit->valid(),
+				"later projected same-page map cannot reuse the first map's permit or custody");
+		require(source_epoch->target->finish().has_value(),
+				"release the source owner while the committed handoff retains its borrow");
+		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 0,
+				"source owner finish cannot finalize while the handoff still owns the borrow");
 		auto replay_commit = setup.fixture.registry->commit_reader_map_with_native_ok_projection(
 			*setup.fixture.family_pin, owner.inflight, *receipt, setup.session, permit);
 		require(!replay_commit &&
@@ -2810,6 +3294,8 @@ namespace
 					->complete_reader_unmap(*setup.fixture.family_pin, *unmap, unmap_receipt)
 					.has_value(),
 				"complete native-OK projection reader unmap");
+		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
+				"terminal handoff releases the source borrow and finalizes exactly once");
 		close_and_release_reader_open(setup.fixture,
 									  setup.open,
 									  34U,
@@ -2817,29 +3303,171 @@ namespace
 		retire_writer(*setup.coordinator, setup.holder, 35U);
 		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
 				"revoke native-OK projection writer eligibility");
+		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
+				"later writer retirement cannot finalize the released handoff a second time");
 		require(sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator)
 						.last_issued_sequence >= before.last_issued_sequence,
 				"native-OK projection preserves the checked reader lifecycle sequence domain");
 		clean_fixture(setup.fixture);
 	}
 
+	void verify_native_ok_projection_group_rejects_plain_later_map()
+	{
+		auto source_epoch = std::make_shared<source_epoch_fixture>(81U);
+		auto setup = make_reader_candidate_setup(81U, std::nullopt, false, source_epoch);
+		const auto& target_identity = *setup.pre_sqlite.target_identity;
+		auto first_owner = prepare_qualified_map_effect_owner(
+			setup, 82U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto first_request = reader_attachment_map_request(
+			first_owner.identity.request, first_owner.identity.callback_identity.receipt());
+		auto first_permit =
+			mint_native_ok_projection_permit(setup, first_owner.inflight, first_request);
+		require(first_permit && first_permit->valid(),
+				"form the projected group with its first exact three-phase permit");
+		auto first_observation =
+			sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+				first_owner.inflight,
+				first_request,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				target_identity.shm_object,
+				target_identity.shm_entry,
+				target_identity.filesystem,
+				target_identity.mount,
+				target_identity.namespace_epoch,
+				target_identity.parent_namespace,
+				target_identity.sealed_shm_size);
+		auto first_receipt = sqlite_same_process_shm_reader_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
+			first_owner.inflight,
+			first_owner.identity.scope,
+			first_owner.identity.callback_identity,
+			first_owner.effect,
+			std::move(first_observation));
+		require(first_receipt.has_value(), "seal the first projected mapped receipt");
+		auto first_commit = setup.fixture.registry->commit_reader_map_with_native_ok_projection(
+			*setup.fixture.family_pin,
+			first_owner.inflight,
+			*first_receipt,
+			setup.session,
+			*first_permit);
+		require(first_commit && first_commit->formed_group() && !first_permit->valid(),
+				"first projected map transfers exact source custody to the group");
+		require(source_epoch->target->finish().has_value() &&
+				source_epoch->finalization_count->load(std::memory_order_relaxed) == 0,
+				"the projected group retains the source borrow before quarantine");
+
+		auto plain_owner = prepare_qualified_map_effect_owner(
+			setup, 83U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto plain_request = reader_attachment_map_request(
+			plain_owner.identity.request, plain_owner.identity.callback_identity.receipt());
+		auto plain_observation =
+			sqlite_same_process_shm_lease_test_peer::reader_mapped_post_native_observation(
+				plain_owner.inflight,
+				plain_request,
+				0,
+				setup.writer_attempt.native_page.get(),
+				0,
+				target_identity.shm_object,
+				target_identity.shm_entry,
+				target_identity.filesystem,
+				target_identity.mount,
+				target_identity.namespace_epoch,
+				target_identity.parent_namespace,
+				target_identity.sealed_shm_size);
+		auto plain_receipt = sqlite_same_process_shm_reader_receipt_validator::validate(
+			*setup.fixture.registry,
+			*setup.fixture.family_pin,
+			plain_owner.inflight,
+			plain_owner.identity.scope,
+			plain_owner.identity.callback_identity,
+			plain_owner.effect,
+			std::move(plain_observation));
+		require(plain_receipt.has_value(), "seal the later plain mapped receipt before rejection");
+		auto rejected = setup.fixture.registry->commit_reader_map(
+			*setup.fixture.family_pin, plain_owner.inflight, *plain_receipt, setup.session);
+		require(
+			!rejected &&
+				rejected.error().reason == sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+				rejected.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry &&
+				!plain_owner.inflight.valid() && !setup.session.valid(),
+			"a projected group rejects a later ordinary map instead of bypassing A/B/C custody");
+		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
+				"projected-group quarantine drains its retained source borrow exactly once");
+
+		{
+			auto handoff = first_commit->take_handoff();
+		require(handoff.has_value(),
+					"retain the quarantined projected handoff for terminal abandonment cleanup");
+		}
+		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
+				"late handoff abandonment cannot finalize an already-drained quarantine borrow twice");
+		const auto terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(terminal.attachment_groups.size() == 1U,
+				"plain projected-group bypass retains one terminal group row");
+		require(terminal.attachment_groups.front().phase ==
+					detail::sqlite_shm_reader_attachment_group_phase::terminal_quarantined,
+				"plain projected-group bypass seals its group terminally");
+		require(terminal.map_attempts.empty(),
+				"plain projected-group bypass leaves no live map attempt");
+		require(
+			reader_terminal_permit_slots_are_exact(terminal),
+			"plain projected-group bypass leaves only the independently-owned terminal permits");
+		require(!terminal.terminal_quarantines.empty(),
+				"plain projected-group bypass records a terminal quarantine");
+		require(terminal.terminal_quarantines.back().reason ==
+					detail::sqlite_shm_reader_terminal_quarantine_reason::presented_invalid,
+				"plain projected-group bypass records the presented-invalid reason");
+		setup.fixture.family_pin.reset();
+	}
+
+	void verify_native_ok_projection_three_phase_mint_failure_abandons_reservation()
+	{
+		auto source_epoch = std::make_shared<source_epoch_fixture>(36U);
+		auto setup = make_reader_candidate_setup(36U, std::nullopt, false, source_epoch);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 37U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto request = reader_attachment_map_request(
+			owner.identity.request, owner.identity.callback_identity.receipt());
+		require(source_epoch->target->finish().has_value(),
+				"retire genuine source epoch before the stage-B stale mint counterexample");
+		{
+			auto reservation = setup.fixture.registry->prepare_reader_native_ok_projection(
+				*setup.fixture.family_pin, owner.inflight, request);
+			require(reservation && reservation->valid(),
+					"stage A reserves one exact live holder before source custody is touched");
+			auto borrowed = setup.fixture.registry->mint_reader_native_ok_projection(*reservation);
+			require(!borrowed && reservation->valid() && owner.inflight.valid(),
+					"stage B rejects a writer epoch without source-private borrow custody");
+		}
+		require(!owner.inflight.valid(),
+				"dropping an unattached stage-A reservation terminalizes the map fail closed");
+		const auto terminal =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
+		require(setup.coordinator->snapshot().quarantined &&
+					setup.fixture.registry->snapshot().quarantined_family_count == 1U &&
+					!terminal.terminal_quarantines.empty() && terminal.map_attempts.empty() &&
+					!owner.inflight.valid(),
+				"abandoned stage-A reservation seals exactly its map/family quarantine without a "
+				"normal open-release retry");
+		setup.fixture.family_pin.reset();
+	}
+
 	void verify_native_ok_projection_permit_accepts_cross_alias_writer_reader()
 	{
-		const auto target_identity = sqlite_shm_reader_attachment_target_identity{
-			identity("test.registry.validated-target-namespace", 39U),
-			identity("test.registry.validated-parent", 39U),
-			identity("test.registry.validated-object", 39U),
-			identity("test.registry.validated-entry", 39U),
-			identity("test.registry.validated-filesystem", 39U),
-			identity("test.registry.validated-mount", 39U),
-			4096U};
-		auto setup = make_reader_candidate_setup(39U, target_identity, true);
+		auto source_epoch = std::make_shared<source_epoch_fixture>(39U);
+		auto setup = make_reader_candidate_setup(39U, std::nullopt, true, source_epoch);
+		require(setup.pre_sqlite.target_identity.has_value(),
+				"cross-alias route retains the genuine source target");
+		const auto& target_identity = *setup.pre_sqlite.target_identity;
 		auto owner = prepare_qualified_map_effect_owner(
 			setup, 40U, sqlite_shm_reader_effect_identity_role::mapped_result);
 		const auto request = reader_attachment_map_request(
 			owner.identity.request, owner.identity.callback_identity.receipt());
-		auto permit_result = setup.fixture.registry->reserve_reader_native_ok_projection(
-			setup.reader_family_pin(), owner.inflight, request);
+		auto permit_result = mint_native_ok_projection_permit(setup, owner.inflight, request);
 		require(permit_result && permit_result->valid(),
 				"cross-alias reader receives a writer-authorized native-OK projection permit");
 		auto permit = std::move(*permit_result);
@@ -2851,13 +3479,13 @@ namespace
 				0,
 				setup.writer_attempt.native_page.get(),
 				0,
-				identity("test.registry.validated-object", 39U),
-				identity("test.registry.validated-entry", 39U),
-				identity("test.registry.validated-filesystem", 39U),
-				identity("test.registry.validated-mount", 39U),
-				identity("test.registry.validated-target-namespace", 39U),
-				identity("test.registry.validated-parent", 39U),
-				4096U);
+				target_identity.shm_object,
+				target_identity.shm_entry,
+				target_identity.filesystem,
+				target_identity.mount,
+				target_identity.namespace_epoch,
+				target_identity.parent_namespace,
+				target_identity.sealed_shm_size);
 		require(sqlite_same_process_shm_lease_test_peer::reader_observation_target_matches(
 					observation, request),
 				"construct exact cross-alias reader target observation");
@@ -2912,6 +3540,8 @@ namespace
 		retire_writer(*setup.coordinator, setup.holder, 44U);
 		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
 				"revoke cross-alias native-OK writer eligibility");
+		require(source_epoch->target->finish().has_value(),
+				"cross-alias terminal handoff releases real source epoch custody");
 
 		require(setup.reader_alias.has_value(), "retain the distinct reader alias until cleanup");
 		unregister_alias(*setup.fixture.registry,
@@ -2920,6 +3550,84 @@ namespace
 						 *setup.reader_alias);
 		setup.reader_alias.reset();
 		clean_fixture(setup.fixture, 2);
+	}
+
+	void verify_native_ok_projection_commits_with_writer_exact_namespace_target()
+	{
+		auto source_epoch = std::make_shared<source_epoch_fixture>(240U);
+		require(source_epoch->stat.object_identity && source_epoch->stat.directory_entry_identity,
+				"form the writer exact target for namespace projection");
+		auto local_reader_target = sqlite_shm_reader_attachment_target_identity{
+			identity("test.registry.local-reader-namespace", 240U),
+			source_epoch->target->parent_namespace_identity(),
+			*source_epoch->stat.object_identity,
+			*source_epoch->stat.directory_entry_identity,
+			source_epoch->stat.filesystem_profile,
+			source_epoch->stat.mount_identity,
+			source_epoch->stat.byte_count};
+		require(local_reader_target.namespace_epoch != source_epoch->target->identity(),
+				"local reader namespace differs from the writer-held source epoch only");
+		auto setup = make_reader_candidate_setup(
+			240U, local_reader_target, false, source_epoch);
+		require(setup.pre_sqlite.target_identity == local_reader_target,
+				"reader request retains its local namespace identity for A/B/C admission");
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 241U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto request = reader_attachment_map_request(
+			owner.identity.request, owner.identity.callback_identity.receipt());
+		auto permit_result = mint_native_ok_projection_permit(setup, owner.inflight, request);
+		require(permit_result && permit_result->valid(),
+				"A/B/C accept the exact non-namespace target and attach the writer epoch");
+		auto permit = std::move(*permit_result);
+		auto receipt = validate_native_ok_projection_local_target(setup, owner, request);
+		require(receipt.has_value(),
+				"post-native validation retains the local reader request target exactly");
+		auto committed = setup.fixture.registry->commit_reader_map_with_native_ok_projection(
+			*setup.fixture.family_pin, owner.inflight, *receipt, setup.session, permit);
+		require(committed && committed->formed_group() && !owner.inflight.valid() &&
+					!permit.valid(),
+				"commit authenticates the Stage-C writer exact target rather than the local namespace");
+		finish_qualified_mapped_reader_candidate(
+			setup, *setup.fixture.family_pin, *committed, 243U);
+		require(source_epoch->target->finish().has_value(),
+				"projected handoff releases the writer exact target after terminal drain");
+		clean_fixture(setup.fixture);
+	}
+
+	void verify_native_ok_projection_rejects_exact_target_substitution()
+	{
+		auto source_epoch = std::make_shared<source_epoch_fixture>(244U);
+		require(source_epoch->stat.object_identity && source_epoch->stat.directory_entry_identity,
+				"form exact target substitution fixture");
+		auto local_reader_target = sqlite_shm_reader_attachment_target_identity{
+			identity("test.registry.local-reader-namespace", 244U),
+			source_epoch->target->parent_namespace_identity(),
+			*source_epoch->stat.object_identity,
+			*source_epoch->stat.directory_entry_identity,
+			source_epoch->stat.filesystem_profile,
+			source_epoch->stat.mount_identity,
+			source_epoch->stat.byte_count};
+		auto setup = make_reader_candidate_setup(
+			244U, local_reader_target, false, source_epoch);
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 245U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto request = reader_attachment_map_request(
+			owner.identity.request, owner.identity.callback_identity.receipt());
+		auto permit_result = mint_native_ok_projection_permit(setup, owner.inflight, request);
+		require(permit_result && permit_result->valid(),
+				"form an attached permit before exact-target substitution");
+		auto permit = std::move(*permit_result);
+		auto replacement = local_reader_target;
+		replacement.shm_object = identity("test.registry.projected-target-substitution", 245U);
+		sqlite_same_process_shm_lease_test_peer::substitute_native_ok_projection_permit_target(
+			permit, std::move(replacement));
+		auto receipt = validate_native_ok_projection_local_target(setup, owner, request);
+		require(receipt.has_value(), "seal the original exact local request before substitution");
+		auto rejected = setup.fixture.registry->commit_reader_map_with_native_ok_projection(
+			*setup.fixture.family_pin, owner.inflight, *receipt, setup.session, permit);
+		require(!rejected && !owner.inflight.valid() && !setup.session.valid() &&
+					setup.coordinator->snapshot().quarantined,
+				"substituting the Stage-C exact target remains terminally rejected");
 	}
 
 	void verify_callback_free_reader_identity_prepare_claim_bind_and_registry_collision()
@@ -7835,8 +8543,8 @@ namespace
 				callback_identity,
 				marker + 20U,
 				recreate				? callback_identity
-						? "imported revoked callback cannot authorize a recreated close"
-						: "imported revoked effect cannot terminalize a recreated close"
+									   ? "imported revoked callback cannot authorize a recreated close"
+									   : "imported revoked effect cannot terminalize a recreated close"
 					: callback_identity ? "local revoked callback cannot authorize a later close"
 										: "local revoked effect cannot terminalize a later close");
 		}
@@ -14021,6 +14729,48 @@ namespace
 		clean_fixture(fixture);
 	}
 
+	void verify_writer_registration_failure_rolls_back_installing_authority()
+	{
+		auto fixture = make_fixture(247U, false);
+		auto* coordinator = sqlite_same_process_shm_registry_test_peer::coordinator(
+			*fixture.registry, fixture.family);
+		require(coordinator != nullptr, "resolve installing-cell rollback coordinator");
+		auto request = writer_request(fixture.family,
+			fixture.alias_lifetime,
+			identity("test.registry.registration-rollback-connection", 247U),
+			identity("test.registry.registration-rollback-open", 247U),
+			247U);
+		auto failed_epoch = make_validated_bridge_epoch(
+			request, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 247U);
+		auto failed_observer = failed_epoch.activation.take_observer();
+		auto failed_arm = failed_epoch.activation.take_arm();
+		sqlite_same_process_shm_lease_test_peer::fail_next_writer_attachment_registration(
+			*coordinator);
+		auto failed = fixture.registry->begin_writer_map(
+			*fixture.family_pin, std::move(failed_arm), request);
+		const auto rolled_back = coordinator->snapshot();
+		require(!failed && rolled_back.installing_generation_authority_count == 0U &&
+				rolled_back.writer_inflight_count == 0U &&
+				rolled_back.writer_member_authority_count == 0U &&
+				rolled_back.writer_attachment_identity_count == 0U && !rolled_back.generation &&
+				!rolled_back.quarantined,
+				"registration allocation failure leaves no installing cell, writer, or attachment row");
+
+		auto retry_epoch = make_validated_bridge_epoch(
+			request, sqlite_writer_shm_mapping_semantic_route::one_one_preexisting_grown, 248U);
+		auto retry_observer = retry_epoch.activation.take_observer();
+		auto retry_arm = retry_epoch.activation.take_arm();
+		auto retry = fixture.registry->begin_writer_map(*fixture.family_pin, std::move(retry_arm), request);
+		require(retry && retry->valid() &&
+				coordinator->snapshot().installing_generation_authority_count == 1U,
+				"a fresh authenticated writer becomes installer after rollback instead of orphan joiner");
+		require(coordinator->resolve_writer_map_failure(*retry).has_value(),
+				"resolve the retry installer as native no-map");
+		require(coordinator->snapshot().installing_generation_authority_count == 0U,
+				"native no-map clears the retry installing cell");
+		clean_fixture(fixture);
+	}
+
 	void verify_registry_pending_accepts_all_four_authoritative_routes()
 	{
 		constexpr std::array routes{
@@ -18949,21 +19699,13 @@ void verify_native_ok_projection_requires_target_identity_before_native_map()
 
 void verify_native_ok_projection_holds_writer_authority_until_reader_commit()
 {
-	const auto target = sqlite_shm_reader_attachment_target_identity{
-		identity("test.registry.validated-target-namespace", 49U),
-		identity("test.registry.validated-parent", 49U),
-		identity("test.registry.validated-object", 49U),
-		identity("test.registry.validated-entry", 49U),
-		identity("test.registry.validated-filesystem", 49U),
-		identity("test.registry.validated-mount", 49U),
-		4096U};
-	auto setup = make_reader_candidate_setup(49U, target);
+	auto source_epoch = std::make_shared<source_epoch_fixture>(49U);
+	auto setup = make_reader_candidate_setup(49U, std::nullopt, false, source_epoch);
 	auto owner = prepare_qualified_map_effect_owner(
 		setup, 50U, sqlite_shm_reader_effect_identity_role::mapped_result);
 	const auto request = reader_attachment_map_request(owner.identity.request,
 													   owner.identity.callback_identity.receipt());
-	auto permit_result = setup.fixture.registry->reserve_reader_native_ok_projection(
-		setup.reader_family_pin(), owner.inflight, request);
+	auto permit_result = mint_native_ok_projection_permit(setup, owner.inflight, request);
 	require(permit_result && permit_result->valid(),
 			"reserve projection permit before writer retirement race");
 	auto permit = std::move(*permit_result);
@@ -18996,43 +19738,31 @@ void verify_native_ok_projection_holds_writer_authority_until_reader_commit()
 			"complete writer cleanup after the bounded retirement wait");
 	require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
 			"revoke writer eligibility after retirement cleanup");
+	require(source_epoch->target->finish().has_value(),
+			"retirement waits through reader handoff before releasing source epoch custody");
 	clean_fixture(setup.fixture);
 }
 
 void verify_native_ok_projection_rejects_foreign_permit_and_terminal_drift()
 {
 	{
-		const auto target = sqlite_shm_reader_attachment_target_identity{
-			identity("test.registry.validated-target-namespace", 54U),
-			identity("test.registry.validated-parent", 54U),
-			identity("test.registry.validated-object", 54U),
-			identity("test.registry.validated-entry", 54U),
-			identity("test.registry.validated-filesystem", 54U),
-			identity("test.registry.validated-mount", 54U),
-			4096U};
-		auto exact = make_reader_candidate_setup(54U, target);
-		const auto foreign_target = sqlite_shm_reader_attachment_target_identity{
-			identity("test.registry.validated-target-namespace", 55U),
-			identity("test.registry.validated-parent", 55U),
-			identity("test.registry.validated-object", 55U),
-			identity("test.registry.validated-entry", 55U),
-			identity("test.registry.validated-filesystem", 55U),
-			identity("test.registry.validated-mount", 55U),
-			4096U};
-		auto foreign = make_reader_candidate_setup(55U, foreign_target);
+		auto exact_source_epoch = std::make_shared<source_epoch_fixture>(54U);
+		auto foreign_source_epoch = std::make_shared<source_epoch_fixture>(55U);
+		auto exact = make_reader_candidate_setup(54U, std::nullopt, false, exact_source_epoch);
+		auto foreign = make_reader_candidate_setup(55U, std::nullopt, false, foreign_source_epoch);
 		auto exact_owner = prepare_qualified_map_effect_owner(
 			exact, 56U, sqlite_shm_reader_effect_identity_role::mapped_result);
 		const auto exact_request = reader_attachment_map_request(
 			exact_owner.identity.request, exact_owner.identity.callback_identity.receipt());
-		auto exact_permit = exact.fixture.registry->reserve_reader_native_ok_projection(
-			exact.reader_family_pin(), exact_owner.inflight, exact_request);
+		auto exact_permit =
+			mint_native_ok_projection_permit(exact, exact_owner.inflight, exact_request);
 		require(exact_permit && exact_permit->valid(), "reserve exact projection permit");
 		auto foreign_owner = prepare_qualified_map_effect_owner(
 			foreign, 57U, sqlite_shm_reader_effect_identity_role::mapped_result);
 		const auto foreign_request = reader_attachment_map_request(
 			foreign_owner.identity.request, foreign_owner.identity.callback_identity.receipt());
-		auto foreign_permit = foreign.fixture.registry->reserve_reader_native_ok_projection(
-			foreign.reader_family_pin(), foreign_owner.inflight, foreign_request);
+		auto foreign_permit =
+			mint_native_ok_projection_permit(foreign, foreign_owner.inflight, foreign_request);
 		require(foreign_permit && foreign_permit->valid(), "reserve foreign projection permit");
 		auto exact_receipt = validate_qualified_mapped_result(
 			exact, exact_owner, 0, exact.writer_attempt.native_page.get(), 0, 58U);
@@ -19054,23 +19784,15 @@ void verify_native_ok_projection_rejects_foreign_permit_and_terminal_drift()
 	for (std::size_t index = 0U; index < 3U; ++index)
 	{
 		const auto marker = static_cast<std::uint8_t>(60U + index);
-		const auto target = sqlite_shm_reader_attachment_target_identity{
-			identity("test.registry.validated-target-namespace", marker),
-			identity("test.registry.validated-parent", marker),
-			identity("test.registry.validated-object", marker),
-			identity("test.registry.validated-entry", marker),
-			identity("test.registry.validated-filesystem", marker),
-			identity("test.registry.validated-mount", marker),
-			4096U};
-		auto setup = make_reader_candidate_setup(marker, target);
+		auto source_epoch = std::make_shared<source_epoch_fixture>(marker);
+		auto setup = make_reader_candidate_setup(marker, std::nullopt, false, source_epoch);
 		auto owner = prepare_qualified_map_effect_owner(
 			setup,
 			static_cast<std::uint8_t>(marker + 1U),
 			sqlite_shm_reader_effect_identity_role::mapped_result);
 		const auto request = reader_attachment_map_request(
 			owner.identity.request, owner.identity.callback_identity.receipt());
-		auto permit_result = setup.fixture.registry->reserve_reader_native_ok_projection(
-			setup.reader_family_pin(), owner.inflight, request);
+		auto permit_result = mint_native_ok_projection_permit(setup, owner.inflight, request);
 		require(permit_result && permit_result->valid(),
 				"reserve projection permit before terminal drift");
 		auto permit = std::move(*permit_result);
@@ -20336,6 +21058,8 @@ int main()
 		verify_native_ok_projection_holds_writer_authority_until_reader_commit();
 		verify_native_ok_projection_rejects_foreign_permit_and_terminal_drift();
 		verify_native_ok_projection_permit_accepts_cross_alias_writer_reader();
+		verify_native_ok_projection_commits_with_writer_exact_namespace_target();
+		verify_native_ok_projection_rejects_exact_target_substitution();
 		verify_qualified_mapped_validator_wrong_role_is_nonmutating();
 		verify_qualified_mapped_validator_invalid_native_row_is_terminal();
 		verify_qualified_mapped_validator_receipt_drop_abandons_owner();
@@ -20431,7 +21155,10 @@ int main()
 		verify_reader_lineage_mixing_is_family_wide_and_bidirectional();
 		verify_reader_open_lineage_seal_distinguishes_active_clean_and_abandoned();
 		verify_native_ok_projection_permit_binds_live_writer_and_is_one_shot();
+		verify_native_ok_projection_group_rejects_plain_later_map();
+		verify_native_ok_projection_three_phase_mint_failure_abandons_reservation();
 		verify_registry_writer_member_is_exact_and_cleanup_only();
+		verify_writer_registration_failure_rolls_back_installing_authority();
 		verify_registry_pending_accepts_all_four_authoritative_routes();
 		verify_authoritative_route_proof_is_exact_and_one_shot();
 		verify_registry_pending_rejects_determinate_cross_binding_without_consumption();

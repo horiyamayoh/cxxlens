@@ -590,7 +590,7 @@ namespace
 				during_pre_stat(request);
 			preparation_order.emplace_back("pre-stat");
 			return sqlite_writer_shm_mapping_epoch_preparation{
-				epoch_identity_, watch_receipt_, pre_stat_, observation_};
+				epoch_identity_, watch_receipt_, pre_stat_, observation_, std::nullopt};
 		}
 
 	  private:

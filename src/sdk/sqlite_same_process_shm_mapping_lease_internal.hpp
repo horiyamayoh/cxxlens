@@ -30,6 +30,7 @@ namespace cxxlens::sdk
 		class sqlite_shm_reader_lifecycle_owner_abandonment_control;
 		class sqlite_shm_reader_identity_completion_control;
 		class sqlite_shm_reader_mapped_post_native_observation_minter;
+		struct sqlite_shm_reader_native_ok_projection_reservation_state;
 
 		struct sqlite_shm_lease_token_identity
 		{
@@ -100,6 +101,7 @@ namespace cxxlens::sdk
 	class sqlite_shm_reader_map_predelegate_minter;
 	class sqlite_shm_registry_family_pin;
 	class sqlite_shm_reader_session_admission;
+	class sqlite_shm_reader_native_ok_projection_reservation;
 	class sqlite_shm_reader_native_ok_projection_permit;
 	struct sqlite_shm_reader_pre_sqlite_session_request;
 	class sqlite_writer_shm_mapping_epoch_arm;
@@ -1846,6 +1848,7 @@ namespace cxxlens::sdk
 		std::uint64_t sealed_shm_size{};
 		std::size_t mapping_page_count{};
 		std::size_t generation_authority_count{};
+		std::size_t installing_generation_authority_count{};
 		std::size_t eligibility_count{};
 		std::size_t writer_inflight_count{};
 		std::size_t writer_cleanup_count{};
@@ -2484,6 +2487,52 @@ namespace cxxlens::sdk
 	};
 
 	/**
+	 * Move-only two-phase reservation for a native-OK projection.
+	 *
+	 * The coordinator creates it under the lease mutex after selecting exactly one active holder.
+	 * Its destructor cancels the reservation fail-closed; it never silently releases authority.
+	 */
+	class sqlite_shm_reader_native_ok_projection_reservation final
+	{
+	  public:
+		~sqlite_shm_reader_native_ok_projection_reservation() noexcept;
+		sqlite_shm_reader_native_ok_projection_reservation(
+			sqlite_shm_reader_native_ok_projection_reservation&&) noexcept;
+		sqlite_shm_reader_native_ok_projection_reservation&
+		operator=(sqlite_shm_reader_native_ok_projection_reservation&&) = delete;
+		sqlite_shm_reader_native_ok_projection_reservation(
+			const sqlite_shm_reader_native_ok_projection_reservation&) = delete;
+		sqlite_shm_reader_native_ok_projection_reservation&
+		operator=(const sqlite_shm_reader_native_ok_projection_reservation&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_shm_writer_reader_borrow_mint_capability;
+		friend class sqlite_source_shm_target_namespace_epoch_borrow_minter;
+		friend class sqlite_source_shm_target_namespace_epoch_reader_borrow;
+		friend class sqlite_same_process_shm_mapping_lease_coordinator;
+		friend class sqlite_same_process_shm_mapping_registry;
+		friend class sqlite_same_process_shm_lease_test_peer;
+		explicit sqlite_shm_reader_native_ok_projection_reservation(
+			std::unique_ptr<detail::sqlite_shm_reader_native_ok_projection_reservation_state>
+				state) noexcept;
+		[[nodiscard]] bool matches(std::uint64_t map_token,
+							   std::uint64_t generation,
+							   std::uint64_t holder_token) const noexcept;
+		[[nodiscard]] const sqlite_backend_opaque_identity& nonce() const noexcept;
+		[[nodiscard]] std::uint64_t map_token() const noexcept;
+		[[nodiscard]] std::uint64_t generation() const noexcept;
+		[[nodiscard]] std::uint64_t holder_token() const noexcept;
+		[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow> mint();
+		void disarm() noexcept;
+
+		std::unique_ptr<detail::sqlite_shm_reader_native_ok_projection_reservation_state>
+			state_;
+	};
+
+	/**
 	 * Registry-issued, one-shot authority for the narrow same-process native-OK projection.
 	 *
 	 * The permit is minted only while an exact live writer holder supports the requested page in
@@ -2515,7 +2564,10 @@ namespace cxxlens::sdk
 			std::uint64_t map_token,
 			std::uint64_t generation,
 			std::uint64_t writer_holder_token,
-			sqlite_shm_mapping_tuple expected_mapping) noexcept;
+			sqlite_shm_mapping_tuple expected_mapping,
+			std::optional<sqlite_shm_reader_attachment_target_identity> exact_target = std::nullopt,
+			std::optional<sqlite_source_shm_target_namespace_epoch_reader_borrow>
+				borrowed_epoch = std::nullopt) noexcept;
 		void disarm() noexcept;
 
 		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
@@ -2523,6 +2575,8 @@ namespace cxxlens::sdk
 		std::uint64_t generation_{};
 		std::uint64_t writer_holder_token_{};
 		sqlite_shm_mapping_tuple expected_mapping_{};
+		std::optional<sqlite_shm_reader_attachment_target_identity> exact_target_;
+		std::optional<sqlite_source_shm_target_namespace_epoch_reader_borrow> borrowed_epoch_;
 	};
 
 	/** Move-only callback-free provisional owner for one exact reader map request. */
@@ -3115,6 +3169,18 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_attachment_map_inflight>
 		begin_reader_map(sqlite_shm_reader_session& session,
 						 const sqlite_shm_reader_attachment_map_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_reservation>
+		prepare_reader_native_ok_projection(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_reader_attachment_map_request& request);
+		[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
+		mint_reader_native_ok_projection(
+			sqlite_shm_reader_native_ok_projection_reservation& reservation);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
+		attach_reader_native_ok_projection(
+			sqlite_shm_reader_native_ok_projection_reservation& reservation,
+			sqlite_source_shm_target_namespace_epoch_reader_borrow borrow);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
 		reserve_reader_native_ok_projection(
 			sqlite_shm_registry_family_pin& family,
@@ -3518,6 +3584,7 @@ namespace cxxlens::sdk
 		void inject_registry_writer_incoming_liveness_loss_for_testing() noexcept;
 		void inject_registry_writer_existing_liveness_loss_for_testing() noexcept;
 		void inject_registry_writer_pending_liveness_loss_for_testing() noexcept;
+		void inject_writer_attachment_registration_failure_for_testing() noexcept;
 		void lock_state_mutex_for_fork_testing();
 		void unlock_state_mutex_for_fork_testing() noexcept;
 

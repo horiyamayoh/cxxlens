@@ -368,7 +368,7 @@ namespace
 		{
 			++calls;
 			return sqlite_writer_shm_mapping_epoch_preparation{
-				epoch_identity_, watch_receipt_, pre_, observation_};
+				epoch_identity_, watch_receipt_, pre_, observation_, std::nullopt};
 		}
 
 	  private:

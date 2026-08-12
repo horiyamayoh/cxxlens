@@ -60,6 +60,7 @@ namespace cxxlens::sdk
 	class sqlite_shm_reader_attachment_authority;
 	class sqlite_shm_reader_map_predelegate_authority;
 	class sqlite_writer_shm_mapping_epoch_arm;
+	class sqlite_writer_shm_generation_epoch_authority;
 
 	/**
 	 * Copyable, weak, audit-only view of one exact registry activity.
@@ -796,8 +797,9 @@ namespace cxxlens::sdk
 	 * Source-private exact-member authority retained by the lease coordinator.
 	 *
 	 * The bundle is useful only as the inseparable conjunction of its move-only registry activity
-	 * owner, one-shot weak audit seal, and strong exact-request writer mapping-epoch arm. Neither a
-	 * copied seal nor any semantic receipt can recreate it. Clean release is performed only after
+	 * owner, one-shot weak audit seal, strong exact-request local-census arm, and a separate
+	 * generation-owned projection controller. Neither a copied seal nor any semantic receipt can
+	 * recreate it. Clean release is performed only after
 	 * the lease mutex is left; ambiguous destruction uses the activity owner's atomic quarantine
 	 * path and never re-enters either mutex.
 	 */
@@ -832,6 +834,14 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool target_identity_matches(
 			const sqlite_shm_reader_attachment_target_identity& target,
 			const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept;
+		[[nodiscard]] result<sqlite_shm_writer_reader_borrow_mint_capability>
+		reserve_reader_borrow_mint(std::uint64_t map_token,
+							  std::uint64_t generation,
+							  std::uint64_t holder_token) const;
+		[[nodiscard]] std::optional<sqlite_writer_shm_generation_epoch_authority>
+		generation_epoch_authority() const noexcept;
+		void bind_generation_epoch_authority(
+			sqlite_writer_shm_generation_epoch_authority authority) noexcept;
 		void invalidate_epoch_for_testing() noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
 
@@ -1081,6 +1091,19 @@ namespace cxxlens::sdk
 		 * Reserve the exact live-writer support used by the qualified reader native-OK exception.
 		 * The reservation is minted after reader identity binding and before the native callback.
 		 */
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_reservation>
+		prepare_reader_native_ok_projection(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_attachment_map_inflight& inflight,
+			const sqlite_shm_reader_attachment_map_request& request);
+		[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
+		mint_reader_native_ok_projection(
+			sqlite_shm_reader_native_ok_projection_reservation& reservation);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
+		attach_reader_native_ok_projection(
+			sqlite_shm_registry_family_pin& family,
+			sqlite_shm_reader_native_ok_projection_reservation& reservation,
+			sqlite_source_shm_target_namespace_epoch_reader_borrow borrow);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
 		reserve_reader_native_ok_projection(
 			sqlite_shm_registry_family_pin& family,

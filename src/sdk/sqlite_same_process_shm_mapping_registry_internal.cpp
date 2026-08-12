@@ -678,7 +678,13 @@ namespace cxxlens::sdk
 
 		struct sqlite_shm_writer_member_authority_state
 		{
-			std::optional<sqlite_writer_shm_mapping_epoch_arm> epoch_arm;
+			// The member arm is the writer's own fresh-census proof.  The separate
+			// generation authority is the only future source of reader projection
+			// minting; G1 seeds it from the local arm and G2 replaces that seed with
+			// the generation-owned install/join controller.
+			std::optional<sqlite_writer_shm_mapping_epoch_arm> local_epoch_arm;
+			std::optional<sqlite_writer_shm_generation_epoch_authority>
+				generation_epoch_authority;
 			std::optional<sqlite_shm_registry_activity_seal> audit_seal;
 			// Declared last so ambiguous destruction invalidates registry activity first while
 			// the strong epoch arm is still retained.
@@ -1369,7 +1375,9 @@ namespace cxxlens::sdk
 							synchronize_activity_controls_locked();
 							return audit.error();
 						}
-						storage->epoch_arm.emplace(std::move(arm));
+						storage->local_epoch_arm.emplace(std::move(arm));
+						storage->generation_epoch_authority.emplace(
+							storage->local_epoch_arm->make_generation_authority());
 						storage->audit_seal.emplace(std::move(*audit));
 						authority.emplace(sqlite_shm_writer_member_authority{std::move(storage)});
 						if (!authority->valid_for_predelegation(request))
@@ -2090,6 +2098,102 @@ namespace cxxlens::sdk
 				{
 					if (exact_presented_owner)
 						prepared.abandon_identity_owner_for_registry();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+			[[nodiscard]]
+			sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_reservation>
+			prepare_reader_native_ok_projection(
+				sqlite_shm_registry_family_pin& pin,
+				sqlite_shm_reader_attachment_map_inflight& inflight,
+				const sqlite_shm_reader_attachment_map_request& request)
+			{
+				if (!current(pin.process_epoch_) || inflight.terminal_presentation_stale_for_registry())
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+									 sqlite_shm_lease_recovery_action::deny_before_native_map);
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					if (pin.state_.get() != this)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										 sqlite_shm_lease_recovery_action::deny_before_native_map);
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (!inflight.has_qualified_identity_for_registry() ||
+						!inflight.qualified_identity_owned_for_registry(
+							pin.family_epoch_, pin.pin_token_, pin.alias_token_, seal_->process_epoch,
+							activity_emergency_latch_) || admission_quarantined_locked())
+						return rejection(sqlite_shm_lease_rejection_reason::quarantined,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* alias = find_alias_locked(pin.alias_token_);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || alias == nullptr || family == nullptr ||
+						!family->coordinator ||
+						alias->phase != sqlite_shm_registry_alias_phase::registered ||
+						family->phase != sqlite_shm_registry_family_phase::active ||
+						!exact_family_admission_visible_locked(*family))
+						return rejection(sqlite_shm_lease_rejection_reason::retiring,
+									 sqlite_shm_lease_recovery_action::deny_before_native_map);
+					if (request.family != family->binding ||
+						request.alias_lifetime != alias->alias_lifetime ||
+						request.connection_token != request.expected_attachment.connection_token() ||
+						request.expected_attachment.runtime_lifetime_pin() !=
+							alias->runtime_lifetime.pin_identity())
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									 sqlite_shm_lease_recovery_action::deny_before_native_map);
+					return family->coordinator->prepare_reader_native_ok_projection(
+						pin, inflight, request);
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+				}
+			}
+
+			[[nodiscard]]
+			sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
+			attach_reader_native_ok_projection(
+				sqlite_shm_registry_family_pin& pin,
+				sqlite_shm_reader_native_ok_projection_reservation& reservation,
+				sqlite_source_shm_target_namespace_epoch_reader_borrow borrow)
+			{
+				if (!current(pin.process_epoch_))
+					return rejection(sqlite_shm_lease_rejection_reason::stale_token,
+									 sqlite_shm_lease_recovery_action::deny_before_native_map);
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					if (pin.state_.get() != this)
+						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+										 sqlite_shm_lease_recovery_action::deny_before_native_map);
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					if (admission_quarantined_locked())
+						return rejection(sqlite_shm_lease_rejection_reason::quarantined,
+										 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+					auto* family_pin = current_family_pin_locked(pin);
+					auto* alias = find_alias_locked(pin.alias_token_);
+					auto* family = find_family_epoch_locked(pin.family_epoch_);
+					if (family_pin == nullptr || alias == nullptr || family == nullptr ||
+						!family->coordinator ||
+						alias->phase != sqlite_shm_registry_alias_phase::registered ||
+						family->phase != sqlite_shm_registry_family_phase::active ||
+						!exact_family_admission_visible_locked(*family))
+						return rejection(sqlite_shm_lease_rejection_reason::retiring,
+										 sqlite_shm_lease_recovery_action::deny_before_native_map);
+					return family->coordinator->attach_reader_native_ok_projection(
+						reservation, std::move(borrow));
+				}
+				catch (...)
+				{
+					emergency_quarantine();
 					return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
 									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 				}
@@ -7444,32 +7548,68 @@ namespace cxxlens::sdk
 	bool sqlite_shm_writer_member_authority::valid_for_predelegation(
 		const sqlite_shm_writer_map_request& request) const noexcept
 	{
-		return state_ && state_->activity && state_->audit_seal && state_->epoch_arm &&
+		return state_ && state_->activity && state_->audit_seal && state_->local_epoch_arm &&
 			state_->activity->valid() && state_->audit_seal->valid() &&
-			state_->epoch_arm->valid_for_predelegation(request);
+			state_->local_epoch_arm->valid_for_predelegation(request);
 	}
 
 	bool sqlite_shm_writer_member_authority::retains_exact_lifetimes(
 		const sqlite_shm_writer_map_request& request) const noexcept
 	{
-		return state_ && state_->activity && state_->audit_seal && state_->epoch_arm &&
+		return state_ && state_->activity && state_->audit_seal && state_->local_epoch_arm &&
 			state_->activity->valid() && state_->audit_seal->valid() &&
-			state_->epoch_arm->retains_exact_lifetimes(request);
+			state_->local_epoch_arm->retains_exact_lifetimes(request);
 	}
 
 	bool sqlite_shm_writer_member_authority::target_identity_matches(
 		const sqlite_shm_reader_attachment_target_identity& target,
 		const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept
 	{
-		return state_ && state_->epoch_arm &&
-			state_->epoch_arm->target_identity_matches(target, receipt);
+	return state_ && state_->generation_epoch_authority &&
+		state_->local_epoch_arm &&
+		state_->local_epoch_arm->target_identity_matches(target, receipt) &&
+		state_->generation_epoch_authority->matches_canonical_target(target);
+	}
+
+	result<sqlite_shm_writer_reader_borrow_mint_capability>
+	sqlite_shm_writer_member_authority::reserve_reader_borrow_mint(
+	const std::uint64_t map_token,
+	const std::uint64_t generation,
+	const std::uint64_t holder_token) const
+	{
+		if (!state_ || !state_->activity || !state_->audit_seal ||
+			!state_->generation_epoch_authority ||
+			!state_->activity->valid() || !state_->audit_seal->valid())
+			return unexpected(error{"store.backend-unavailable",
+								 "sqlite",
+								 "source-shm-readonly-qualification"});
+		return state_->generation_epoch_authority->reserve_reader_borrow_mint(
+			map_token, generation, holder_token);
+	}
+
+	std::optional<sqlite_writer_shm_generation_epoch_authority>
+	sqlite_shm_writer_member_authority::generation_epoch_authority() const noexcept
+	{
+		if (!state_ || !state_->generation_epoch_authority ||
+			!state_->generation_epoch_authority->valid())
+			return std::nullopt;
+		return state_->generation_epoch_authority;
+	}
+
+	void sqlite_shm_writer_member_authority::bind_generation_epoch_authority(
+		sqlite_writer_shm_generation_epoch_authority authority) noexcept
+	{
+		if (!state_ || !authority.valid())
+			return;
+		state_->generation_epoch_authority.emplace(std::move(authority));
 	}
 
 	bool sqlite_shm_writer_member_authority::attachment_cohort_compatible_with(
 		const sqlite_shm_writer_member_authority& other) const noexcept
 	{
-		return state_ && state_->epoch_arm && other.state_ && other.state_->epoch_arm &&
-			state_->epoch_arm->attachment_cohort_compatible_with(*other.state_->epoch_arm);
+		return state_ && state_->local_epoch_arm && other.state_ && other.state_->local_epoch_arm &&
+			state_->local_epoch_arm->attachment_cohort_compatible_with(
+				*other.state_->local_epoch_arm);
 	}
 
 	detail::sqlite_shm_writer_pending_authority_status
@@ -7479,7 +7619,7 @@ namespace cxxlens::sdk
 		const sqlite_shm_verified_writer_post_map_receipt& receipt) const noexcept
 	{
 		using status = detail::sqlite_shm_writer_pending_authority_status;
-		if (!state_ || !state_->activity || !state_->audit_seal || !state_->epoch_arm)
+		if (!state_ || !state_->activity || !state_->audit_seal || !state_->local_epoch_arm)
 			return status::lifecycle_ambiguous;
 		const auto& activity = *state_->activity;
 		const auto control = activity.control_;
@@ -7495,7 +7635,8 @@ namespace cxxlens::sdk
 			control->process_instance == request.family.process_instance &&
 			control->family == request.family &&
 			control->alias_lifetime == request.alias_lifetime && receipt.request() == request;
-		if (!structural_coordinates_match || !state_->epoch_arm->matches_validated_receipt(receipt))
+		if (!structural_coordinates_match ||
+			!state_->local_epoch_arm->matches_validated_receipt(receipt))
 			return status::determinate_mismatch;
 
 		// The registry family is intentionally cross-owned: the reader may use a distinct
@@ -7537,15 +7678,15 @@ namespace cxxlens::sdk
 			reader_alias->shared_runtime_vfs_cohort != request.family.shared_runtime_vfs_cohort ||
 			!family_record->activity_authority_latch ||
 			!family_record->activity_authority_latch->load(std::memory_order_acquire) ||
-			!state_->epoch_arm->retains_exact_validated_receipt(receipt))
+			!state_->local_epoch_arm->retains_exact_validated_receipt(receipt))
 			return status::lifecycle_ambiguous;
 		return status::exact;
 	}
 
 	void sqlite_shm_writer_member_authority::invalidate_epoch_for_testing() noexcept
 	{
-		if (state_ && state_->epoch_arm)
-			state_->epoch_arm->invalidate_for_testing();
+		if (state_ && state_->local_epoch_arm)
+			state_->local_epoch_arm->invalidate_for_testing();
 	}
 
 	sqlite_shm_lease_result<void> sqlite_shm_writer_member_authority::release_activity() noexcept
@@ -8634,6 +8775,35 @@ namespace cxxlens::sdk
 	{
 		return state_->bind_reader_map_identity(
 			family, session, prepared, scope, callback, identity_issuer_state_);
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_reservation>
+	sqlite_same_process_shm_mapping_registry::prepare_reader_native_ok_projection(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_attachment_map_inflight& inflight,
+		const sqlite_shm_reader_attachment_map_request& request)
+	{
+		return state_->prepare_reader_native_ok_projection(family, inflight, request);
+	}
+
+	result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
+	sqlite_same_process_shm_mapping_registry::mint_reader_native_ok_projection(
+		sqlite_shm_reader_native_ok_projection_reservation& reservation)
+	{
+		// Minting performs filesystem revalidation.  It intentionally occurs outside the registry
+		// mutex; stage A already sealed the selected holder and stage C revalidates the registry
+		// process/pin/family boundary before the permit is made visible.
+		return reservation.mint();
+	}
+
+	sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
+	sqlite_same_process_shm_mapping_registry::attach_reader_native_ok_projection(
+		sqlite_shm_registry_family_pin& family,
+		sqlite_shm_reader_native_ok_projection_reservation& reservation,
+		sqlite_source_shm_target_namespace_epoch_reader_borrow borrow)
+	{
+		return state_->attach_reader_native_ok_projection(
+			family, reservation, std::move(borrow));
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
