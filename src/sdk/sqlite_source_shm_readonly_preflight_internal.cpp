@@ -88,12 +88,13 @@ namespace cxxlens::sdk
 		claim_target_epoch_finalizer(
 			detail::sqlite_source_shm_target_namespace_epoch_controller& controller)
 		{
-			// Generation custody permits a mint to race with owner close, but it is not a
-			// reader borrow.  Once all reader borrows drain, finalization must still run;
-			// any later mint observes the finalized controller and fails closed.
+			// Generation custody is the authority that permits a post-owner-close mint. Keep
+			// the namespace guard alive until both reader borrows and generation authorities
+			// have drained; otherwise owner close can finalize the source between Stage A and
+			// Stage B and turn an authenticated late projection into a spurious IOERR.
 			if (!controller.owner_released || controller.reader_borrow_count != 0U ||
-				controller.finalization_claimed || controller.finalized || controller.abandoned ||
-				!controller.guard)
+				controller.generation_authority_count != 0U || controller.finalization_claimed ||
+				controller.finalized || controller.abandoned || !controller.guard)
 				return {};
 			controller.finalization_claimed = true;
 			return controller.guard;

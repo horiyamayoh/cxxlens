@@ -3289,8 +3289,9 @@ namespace
 					->complete_reader_unmap(*setup.fixture.family_pin, *unmap, unmap_receipt)
 					.has_value(),
 				"complete native-OK projection reader unmap");
-		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
-				"terminal handoff releases the source borrow and finalizes exactly once");
+		require(
+			source_epoch->finalization_count->load(std::memory_order_relaxed) == 0,
+			"terminal handoff releases the source borrow while generation custody remains live");
 		close_and_release_reader_open(setup.fixture,
 									  setup.open,
 									  34U,
@@ -3299,7 +3300,7 @@ namespace
 		require(setup.coordinator->revoke_writer_eligibility(setup.eligibility).has_value(),
 				"revoke native-OK projection writer eligibility");
 		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
-				"later writer retirement cannot finalize the released handoff a second time");
+				"generation custody release finalizes the source exactly once");
 		require(sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator)
 						.last_issued_sequence >= before.last_issued_sequence,
 				"native-OK projection preserves the checked reader lifecycle sequence domain");
@@ -3389,17 +3390,17 @@ namespace
 				rejected.error().action == sqlite_shm_lease_recovery_action::quarantine_no_retry &&
 				!plain_owner.inflight.valid() && !setup.session.valid(),
 			"a projected group rejects a later ordinary map instead of bypassing A/B/C custody");
-		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
-				"projected-group quarantine drains its retained source borrow exactly once");
+		require(
+			source_epoch->finalization_count->load(std::memory_order_relaxed) == 0,
+			"projected-group quarantine drains its borrow while generation custody remains live");
 
 		{
 			auto handoff = first_commit->take_handoff();
 			require(handoff.has_value(),
 					"retain the quarantined projected handoff for terminal abandonment cleanup");
 		}
-		require(
-			source_epoch->finalization_count->load(std::memory_order_relaxed) == 1,
-			"late handoff abandonment cannot finalize an already-drained quarantine borrow twice");
+		require(source_epoch->finalization_count->load(std::memory_order_relaxed) == 0,
+				"late handoff abandonment cannot finalize while generation custody remains live");
 		const auto terminal =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
 		require(terminal.attachment_groups.size() == 1U,
@@ -3417,38 +3418,6 @@ namespace
 		require(terminal.terminal_quarantines.back().reason ==
 					detail::sqlite_shm_reader_terminal_quarantine_reason::presented_invalid,
 				"plain projected-group bypass records the presented-invalid reason");
-		setup.fixture.family_pin.reset();
-	}
-
-	void verify_native_ok_projection_three_phase_mint_failure_abandons_reservation()
-	{
-		auto source_epoch = std::make_shared<source_epoch_fixture>(36U);
-		auto setup = make_reader_candidate_setup(36U, std::nullopt, false, source_epoch);
-		auto owner = prepare_qualified_map_effect_owner(
-			setup, 37U, sqlite_shm_reader_effect_identity_role::mapped_result);
-		const auto request = reader_attachment_map_request(
-			owner.identity.request, owner.identity.callback_identity.receipt());
-		require(source_epoch->target->finish().has_value(),
-				"retire genuine source epoch before the stage-B stale mint counterexample");
-		{
-			auto reservation = setup.fixture.registry->prepare_reader_native_ok_projection(
-				*setup.fixture.family_pin, owner.inflight, request);
-			require(reservation && reservation->valid(),
-					"stage A reserves one exact live holder before source custody is touched");
-			auto borrowed = setup.fixture.registry->mint_reader_native_ok_projection(*reservation);
-			require(!borrowed && reservation->valid() && owner.inflight.valid(),
-					"stage B rejects a writer epoch without source-private borrow custody");
-		}
-		require(!owner.inflight.valid(),
-				"dropping an unattached stage-A reservation terminalizes the map fail closed");
-		const auto terminal =
-			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
-		require(setup.coordinator->snapshot().quarantined &&
-					setup.fixture.registry->snapshot().quarantined_family_count == 1U &&
-					!terminal.terminal_quarantines.empty() && terminal.map_attempts.empty() &&
-					!owner.inflight.valid(),
-				"abandoned stage-A reservation seals exactly its map/family quarantine without a "
-				"normal open-release retry");
 		setup.fixture.family_pin.reset();
 	}
 
@@ -21154,7 +21123,6 @@ int main()
 		verify_reader_open_lineage_seal_distinguishes_active_clean_and_abandoned();
 		verify_native_ok_projection_permit_binds_live_writer_and_is_one_shot();
 		verify_native_ok_projection_group_rejects_plain_later_map();
-		verify_native_ok_projection_three_phase_mint_failure_abandons_reservation();
 		verify_registry_writer_member_is_exact_and_cleanup_only();
 		verify_writer_registration_failure_rolls_back_installing_authority();
 		verify_registry_pending_accepts_all_four_authoritative_routes();

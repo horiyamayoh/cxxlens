@@ -1600,6 +1600,9 @@ namespace cxxlens::sdk
 					binding_.target_namespace_epoch);
 				minted)
 				borrow_minter.emplace(std::move(*minted));
+			else if (request.binding.target_namespace_epoch_identity)
+				return rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								 sqlite_shm_lease_recovery_action::deny_before_native_map);
 			return sqlite_writer_shm_mapping_epoch_preparation{std::move(epoch_identity),
 															   std::move(watch_receipt),
 															   std::move(*pre_stat),

@@ -1119,9 +1119,10 @@ namespace
 				"two SQLite instances committed forked heads or returned an unstable conflict");
 
 		// `first_store` opens and maps first, so it is the generation installer in
-		// the forwarding-VFS path.  Close that member while W2 remains live, then
-		// prove a third connection can still load and derive through W2's retained
-		// generation authority.  This guards against an installer-local epoch arm
+		// the forwarding-VFS path.  Close that member while W2 remains live; there
+		// is no reader borrow from the closed member, but W2 still holds generation
+		// custody.  Prove a third connection can load and derive through that
+		// retained authority.  This guards against an installer-local epoch arm
 		// accidentally owning the generation source controller.
 		first_writer = cxxlens::sdk::result<cxxlens::sdk::snapshot_writer>{
 			cxxlens::sdk::unexpected(cxxlens::sdk::error{"test.release", "first-writer", {}})};
