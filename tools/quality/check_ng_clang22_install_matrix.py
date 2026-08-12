@@ -122,7 +122,7 @@ def artifact_paths(evidence_dir: pathlib.Path) -> dict[pathlib.Path, dict[str, p
         parent: {
             REQUEST_FILENAME: parent / REQUEST_FILENAME,
             REPORT_FILENAME: parent / REPORT_FILENAME,
-            EXECUTION_RECEIPT_FILENAME: parent / EXECUTION_RECEIP_FILENAME,
+            EXECUTION_RECEIPT_FILENAME: parent / EXECUTION_RECEIPT_FILENAME,
         }
         for parent in parents[REQUEST_FILENAME]
     }
@@ -152,11 +152,17 @@ def validate_triplet(
         paths[REPORT_FILENAME], f"materialization report {paths[REPORT_FILENAME]}"
     )
     try:
+        runtime_raw_occurrences = oracle.report_runtime_raw_occurrences(
+            root,
+            request,
+            report,
+        )
         oracle.validate_report(
             root,
             request,
             report,
             request_bytes=request_bytes,
+            runtime_raw_occurrences=runtime_raw_occurrences,
         )
     except oracle.MaterializationError as error:
         raise InstallMatrixError(

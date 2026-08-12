@@ -866,6 +866,17 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(provider_error("provider.output-plan-invalid", "slot"));
 		}
 
+		[[nodiscard]] std::string
+		wire_row_canonical_form(const sdk::relation_descriptor& descriptor,
+								const sdk::detached_row& row)
+		{
+			auto wire_row = row;
+			for (const auto& column : descriptor.columns)
+				if (!wire_row.cells.contains(column.id) && column.type.optional)
+					wire_row.cells.emplace(column.id, sdk::detached_cell::absent(column.type));
+			return wire_row.canonical_form();
+		}
+
 		class canonical_provider final : public sdk::provider::portable_provider
 		{
 		  public:
@@ -918,8 +929,30 @@ namespace cxxlens::detail::clang22
 							std::string{group}, "clang22-atomic", descriptor.id + "-batch");
 						!opened)
 						return opened;
+					struct ordered_row
+					{
+						std::string digest;
+						std::string canonical;
+						const sdk::detached_row* row;
+					};
+					std::vector<ordered_row> ordered_rows;
+					ordered_rows.reserve(rows.size());
 					for (const auto& row : rows)
-						if (auto pushed = sink.push(row); !pushed)
+					{
+						auto canonical = wire_row_canonical_form(descriptor, row);
+						ordered_rows.push_back(
+							{sdk::content_digest(std::as_bytes(std::span{canonical})),
+							 std::move(canonical),
+							 &row});
+					}
+					std::ranges::sort(ordered_rows,
+									  [](const ordered_row& left, const ordered_row& right)
+									  {
+										  return std::tuple{left.digest, left.canonical} <
+											  std::tuple{right.digest, right.canonical};
+									  });
+					for (const auto& ordered : ordered_rows)
+						if (auto pushed = sink.push(*ordered.row); !pushed)
 							return pushed;
 					return sink.end();
 				};

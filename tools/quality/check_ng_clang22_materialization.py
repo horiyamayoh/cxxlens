@@ -9136,6 +9136,55 @@ def expected_runtime_provider_identity(
     }
 
 
+def expected_runtime_provider_manifest(
+    root: pathlib.Path,
+    request: dict[str, Any],
+) -> str:
+    """Mirror the installed worker's full provider-manifest hello projection."""
+
+    identity = expected_runtime_provider_identity(root, request)
+    return json.dumps(
+        {
+            "determinism_contract": "sha256:" + "78" * 32,
+            "interpretation_domains": ["cc.clang22-canonical-1"],
+            "invalidation_contract": "sha256:" + "56" * 32,
+            "license": "Apache-2.0",
+            "offered_relations": identity["offered_relations"],
+            "package_identity": "cxxlens.clang22.reference.package",
+            "platform_tuples": ["linux-glibc"],
+            "protocol_range": {
+                "major": identity["protocol_major"],
+                "maximum_minor": identity["protocol_minor"],
+                "minimum_minor": identity["protocol_minor"],
+                "optional_features": [],
+                "required_features": identity["required_features"],
+            },
+            "provider_binary_digest": identity["provider_binary_digest"],
+            "provider_id": identity["provider_id"],
+            "provider_semantic_contract_digest": identity[
+                "provider_semantic_contract_digest"
+            ],
+            "provider_version": identity["provider_version"],
+            "publisher": "cxxlens",
+            "requested_qualifications": [
+                "canonical-semantic-qualified",
+                "sandbox-qualified",
+                "schema-conformant",
+            ],
+            "required_relations": [],
+            "resource_class": "provider.clang22",
+            "sandbox_minimum": "enforced",
+            "schema": "cxxlens.provider-manifest.v1",
+            "signature": None,
+            "task_stage": {"input": "observation", "output": "observation"},
+            "trust_flags": [],
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
 def report_runtime_provider_identity(report: dict[str, Any]) -> dict[str, Any]:
     """Project the report leaves that must match the raw-validated provider identity."""
 
@@ -9279,8 +9328,10 @@ def encode_fixture_runtime_raw(
     request: dict[str, Any],
     task: dict[str, Any],
     result: dict[str, Any],
+    *,
+    installed_runtime: bool = False,
 ) -> bytes:
-    """Encode deterministic real provider wire through the shared runtime codec."""
+    """Encode deterministic provider wire through the shared runtime codec."""
 
     batch_rows = {
         batch["batch_id"]: [
@@ -9298,7 +9349,16 @@ def encode_fixture_runtime_raw(
             result["coverage"]["transport_records"]
             + result["coverage"]["semantic_records"],
             fixture_task_unresolved_records(result),
-            fixture_task_evidence_records(result),
+            (
+                expected_runtime_provider_evidence_records(result)
+                if installed_runtime
+                else fixture_task_evidence_records(result)
+            ),
+            provider_manifest=(
+                expected_runtime_provider_manifest(root, request)
+                if installed_runtime
+                else None
+            ),
         )
     except ValueError as error:
         fail(
@@ -9587,6 +9647,33 @@ def bind_fixture_runtime_occurrences_for_report(
             request,
             tasks[key],
             result,
+        )
+    return occurrences
+
+
+def report_runtime_raw_occurrences(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    report: dict[str, Any],
+) -> dict[tuple[str, str, str], bytes]:
+    """Encode independent raw occurrences from the report's adopted row projections."""
+
+    tasks = {task_execution_key(task): task for task in request["tasks"]}
+    occurrences: dict[tuple[str, str, str], bytes] = {}
+    for result in report["task_results"]:
+        key = task_execution_key(result)
+        task = tasks.get(key)
+        if task is None:
+            fail(
+                "materialization.transcript-invalid",
+                "report task has no matching request execution authority",
+            )
+        occurrences[key] = encode_fixture_runtime_raw(
+            root,
+            request,
+            task,
+            result,
+            installed_runtime=True,
         )
     return occurrences
 

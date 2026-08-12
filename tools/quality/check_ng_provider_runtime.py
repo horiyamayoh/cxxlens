@@ -1245,6 +1245,8 @@ def encode_runtime_private_fixture(
     coverage_records: Any,
     unresolved_records: Any,
     evidence_records: Any,
+    *,
+    provider_manifest: str | None = None,
 ) -> bytes:
     """Encode actual CXXP/CXCC/CXBE bytes for quality fixtures, never adoption input."""
 
@@ -1258,12 +1260,28 @@ def encode_runtime_private_fixture(
         raise ContractError("fixture task identity is invalid")
     if not isinstance(batch_rows, dict) or set(batch_rows) != set(authority_by_batch):
         raise ContractError("fixture batch row census differs from authorized batches")
-    manifest = json.dumps(
-        identity,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
+    if provider_manifest is None:
+        manifest = json.dumps(
+            identity,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    else:
+        if not isinstance(provider_manifest, str) or not provider_manifest:
+            raise ContractError("fixture provider manifest is not a nonempty string")
+        try:
+            parsed_manifest = json.loads(provider_manifest)
+        except json.JSONDecodeError as error:
+            raise ContractError("fixture provider manifest is not JSON") from error
+        if provider_manifest != json.dumps(
+            parsed_manifest,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ):
+            raise ContractError("fixture provider manifest is not canonical JSON")
+        manifest = provider_manifest
     frames: list[tuple[int, Any, bytes]] = [
         (1, manifest, b""),
         (

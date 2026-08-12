@@ -159,7 +159,7 @@ namespace cxxlens::detail::clang22::materialization
 	build_public_materialization_success_report(
 		const public_materialization_success_report_input& input);
 
-	/** Encode the model as one bounded canonical JSON line of report schema v2.1. */
+	/** Encode the model as bounded canonical JSON without a trailing LF. */
 	[[nodiscard]] sdk::result<std::string> encode_public_materialization_success_report(
 		const public_materialization_success_report_model& model);
 } // namespace cxxlens::detail::clang22::materialization

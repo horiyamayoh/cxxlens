@@ -2113,6 +2113,16 @@ namespace cxxlens::detail::clang22::materialization
 					provenance_digests.push_back(std::move(*provenance));
 				}
 				std::ranges::sort(provenance_digests);
+				std::ranges::sort(row_bindings,
+								  [](const json_value& left, const json_value& right)
+								  {
+									  const auto* left_digest = left.member("row_digest");
+									  const auto* right_digest = right.member("row_digest");
+									  return left_digest != nullptr && right_digest != nullptr &&
+										  left_digest->as_string() != nullptr &&
+										  right_digest->as_string() != nullptr &&
+										  *left_digest->as_string() < *right_digest->as_string();
+								  });
 				json_value::array_type assertion_values;
 				for (const auto& value : assertion_refs)
 					assertion_values.push_back(text_value(value));
@@ -2651,10 +2661,28 @@ namespace cxxlens::detail::clang22::materialization
 											 })
 									 .value());
 			}
+			const auto task_key = [](const json_value& value)
+			{
+				const auto* key = value.member("semantic_task_key");
+				const auto* values = key == nullptr ? nullptr : key->as_array();
+				return std::tuple{
+					values != nullptr && values->size() > 0U && (*values)[0U].as_string() != nullptr
+						? std::string_view{*(*values)[0U].as_string()}
+						: std::string_view{},
+					values != nullptr && values->size() > 1U && (*values)[1U].as_string() != nullptr
+						? std::string_view{*(*values)[1U].as_string()}
+						: std::string_view{},
+					values != nullptr && values->size() > 2U && (*values)[2U].as_string() != nullptr
+						? std::string_view{*(*values)[2U].as_string()}
+						: std::string_view{},
+					values != nullptr && values->size() > 3U && (*values)[3U].as_string() != nullptr
+						? std::string_view{*(*values)[3U].as_string()}
+						: std::string_view{}};
+			};
 			std::ranges::sort(output,
-							  [](const json_value& left, const json_value& right)
+							  [&task_key](const json_value& left, const json_value& right)
 							  {
-								  return canonical_json(left) < canonical_json(right);
+								  return task_key(left) < task_key(right);
 							  });
 			return json_value::array(std::move(output));
 		}
@@ -5105,7 +5133,10 @@ namespace cxxlens::detail::clang22::materialization
 			if (!root.emplace(name, value).second)
 				return sdk::unexpected(
 					{"materialization.report-invalid", name, "duplicate-root-member"});
-		const auto encoded = canonical_json_line(json_value::object(std::move(root)).value());
+		// The installed tool's stdout is the report artifact.  Keep it byte-identical
+		// to the release authority's canonical JSON encoding; a presentation newline
+		// would change the bound report digest and make the companion receipt unverifiable.
+		const auto encoded = canonical_json(json_value::object(std::move(root)).value());
 		if (encoded.size() > model.maximum_report_bytes_)
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report", "projection-bytes"});
