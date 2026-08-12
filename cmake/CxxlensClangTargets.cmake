@@ -3,6 +3,33 @@ set(CXXLENS_CLANG_ADAPTER
     CACHE STRING "Build the exact Clang 22 adapter: AUTO, ON, or OFF")
 set_property(CACHE CXXLENS_CLANG_ADAPTER PROPERTY STRINGS AUTO ON OFF)
 
+function(cxxlens_apply_clang22_worker_install_rpath)
+  if(NOT UNIX
+     OR NOT TARGET cxxlens-clang-worker-22
+     OR NOT CXXLENS_CLANG22_AVAILABLE
+     OR NOT CXXLENS_CLANG22_LIBRARY_DIRS)
+    return()
+  endif()
+
+  # The installed worker is launched with ambient loader variables removed.  A
+  # shared cxxlens build still links the worker's private static core against
+  # the exact external LLVM/Clang runtime, so retain the prefix-relative cxxlens
+  # lookup path and append the measured LLVM 22 directories explicitly.
+  get_target_property(_cxxlens_worker_install_rpath cxxlens-clang-worker-22
+                      INSTALL_RPATH)
+  if(NOT _cxxlens_worker_install_rpath
+     OR _cxxlens_worker_install_rpath STREQUAL
+        "_cxxlens_worker_install_rpath-NOTFOUND")
+    set(_cxxlens_worker_install_rpath)
+  endif()
+  list(APPEND _cxxlens_worker_install_rpath ${CXXLENS_CLANG22_LIBRARY_DIRS})
+  list(REMOVE_DUPLICATES _cxxlens_worker_install_rpath)
+  set_target_properties(
+    cxxlens-clang-worker-22
+    PROPERTIES INSTALL_RPATH "${_cxxlens_worker_install_rpath}"
+               INSTALL_RPATH_USE_LINK_PATH FALSE)
+endfunction()
+
 function(cxxlens_configure_clang22 target)
   set(CXXLENS_CLANG22_LIBRARY_DIRS
       ""
@@ -111,6 +138,14 @@ function(cxxlens_configure_clang22 target)
       ${target} PROPERTIES INSTALL_RPATH "${_cxxlens_existing_install_rpath}"
                            INSTALL_RPATH_USE_LINK_PATH FALSE)
   endif()
+
+  get_property(_cxxlens_worker_rpath_scheduled DIRECTORY
+               PROPERTY CXXLENS_CLANG22_WORKER_RPATH_SCHEDULED)
+  if(NOT _cxxlens_worker_rpath_scheduled)
+    set_property(DIRECTORY PROPERTY CXXLENS_CLANG22_WORKER_RPATH_SCHEDULED TRUE)
+    cmake_language(DEFER CALL cxxlens_apply_clang22_worker_install_rpath)
+  endif()
+
   set(CXXLENS_CLANG22_AVAILABLE
       TRUE
       CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
