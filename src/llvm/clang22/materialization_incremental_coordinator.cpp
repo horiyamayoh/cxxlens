@@ -441,19 +441,12 @@ namespace cxxlens::detail::clang22::materialization
 	}
 
 	sealed_materialization_incremental_result::sealed_materialization_incremental_result(
-		sealed_materialization_claims claims,
 		materialization_bounded_claim_source bounded_claim_source,
 		materialization_incremental_execution_census execution_census,
 		materialization_claim_stream_source claim_stream) noexcept
-		: claims_{std::move(claims)}, bounded_claim_source_{std::move(bounded_claim_source)},
+		: bounded_claim_source_{std::move(bounded_claim_source)},
 		  execution_census_{std::move(execution_census)}, claim_stream_{std::move(claim_stream)}
 	{
-	}
-
-	const sealed_materialization_claims&
-	sealed_materialization_incremental_result::claims() const noexcept
-	{
-		return claims_;
 	}
 
 	materialization_bounded_claim_source&
@@ -908,16 +901,14 @@ namespace cxxlens::detail::clang22::materialization
 				}
 			};
 
-			auto claims = construct_materialization_claims_from_loader(
-				request, load, producer_authority, guarantee_authority);
-			if (!claims)
+			for (std::size_t task_index{}; task_index < request.tasks.size(); ++task_index)
 			{
-				if (auto cleaned = consume_current(); !cleaned)
-					return sdk::unexpected(std::move(cleaned.error()));
-				return sdk::unexpected(std::move(claims.error()));
+				auto loaded = load(task_index);
+				if (!loaded)
+					return sdk::unexpected(std::move(loaded.error()));
+				if (auto consumed = consume_current(); !consumed)
+					return sdk::unexpected(std::move(consumed.error()));
 			}
-			if (auto consumed = consume_current(); !consumed)
-				return sdk::unexpected(std::move(consumed.error()));
 			if (executor.cancellation_requested())
 				return sdk::unexpected(coordinator_error("executor", "cancelled"));
 			std::ranges::sort(census.executed_partition_ids);
@@ -947,10 +938,8 @@ namespace cxxlens::detail::clang22::materialization
 			if (!bounded)
 				return sdk::unexpected(coordinator_error("claim-source", bounded.error().detail));
 
-			return sealed_materialization_incremental_result{std::move(*claims),
-															 std::move(*bounded),
-															 std::move(census),
-															 std::move(*claim_stream)};
+			return sealed_materialization_incremental_result{
+				std::move(*bounded), std::move(census), std::move(*claim_stream)};
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -997,12 +986,15 @@ namespace cxxlens::detail::clang22::materialization
 																			   guarantee_authority);
 			if (!materialization)
 				return sdk::unexpected(std::move(materialization.error()));
-			auto transaction =
-				make_materialization_store_transaction(request, materialization->claims());
+			auto transaction = make_materialization_streaming_store_transaction(
+				request, materialization->bounded_claim_source());
 			if (!transaction)
 				return sdk::unexpected(std::move(transaction.error()));
-			auto observation = execute_materialization_store(
-				request.engine, request.publication, std::move(*transaction));
+			auto observation =
+				execute_materialization_store_streaming(request.engine,
+														request.publication,
+														std::move(*transaction),
+														materialization->bounded_claim_source());
 			return materialization_incremental_publication_result{std::move(*materialization),
 																  std::move(observation)};
 		}

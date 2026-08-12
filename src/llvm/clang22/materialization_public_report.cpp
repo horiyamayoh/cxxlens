@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <iterator>
 #include <limits>
 #include <new>
 #include <ranges>
@@ -17,6 +18,211 @@ namespace cxxlens::detail::clang22::materialization
 	namespace
 	{
 		using object = json_value::object_type;
+
+		struct claim_batch_status
+		{
+			std::string content_digest;
+			std::uint64_t claim_count{};
+			std::uint64_t unresolved_count{};
+			std::uint64_t conflict_count{};
+			std::uint64_t differential_disagreement_count{};
+			std::size_t partition_count{};
+		};
+
+		using report_partition_consumer =
+			std::function<sdk::result<void>(const materialization_claim_partition&)>;
+
+		/**
+		 * Uniform private report view. The resident claims object is deliberately accepted only as
+		 * a qualification/reference view; production uses replayable bounded source callbacks.
+		 */
+		class claim_report_source final
+		{
+		  public:
+			claim_report_source(const sealed_materialization_claims* claims,
+								materialization_bounded_claim_source* bounded) noexcept
+				: claims_{claims}, bounded_{bounded}
+			{
+			}
+
+			[[nodiscard]] bool valid() const noexcept
+			{
+				return (claims_ != nullptr) != (bounded_ != nullptr);
+			}
+
+			[[nodiscard]] std::string_view materializer_semantics_digest() const noexcept
+			{
+				return claims_ != nullptr ? claims_->materializer_semantics_digest()
+										  : bounded_->materializer_semantics_digest();
+			}
+			[[nodiscard]] std::string_view direct_basis_digest() const noexcept
+			{
+				return claims_ != nullptr ? claims_->direct_basis_digest()
+										  : bounded_->direct_basis_digest();
+			}
+			[[nodiscard]] std::string_view canonical_adoption_transform_digest() const noexcept
+			{
+				return claims_ != nullptr ? claims_->canonical_adoption_transform_digest()
+										  : bounded_->canonical_adoption_transform_digest();
+			}
+			[[nodiscard]] std::string_view base_ingestion_transform_digest() const noexcept
+			{
+				return claims_ != nullptr ? claims_->base_ingestion_transform_digest()
+										  : bounded_->base_ingestion_transform_digest();
+			}
+
+			[[nodiscard]] sdk::result<void>
+			replay_claim_envelopes(const materialization_claim_envelope_consumer& consumer)
+			{
+				if (claims_ != nullptr)
+				{
+					for (const auto& value : claims_->claim_envelopes())
+						if (auto consumed = consumer(value); !consumed)
+							return consumed;
+					return {};
+				}
+				return bounded_ == nullptr
+					? sdk::result<void>{sdk::error{
+						  "materialization.report-invalid", "claims", "missing"}}
+					: bounded_->replay_claim_envelopes(consumer);
+			}
+
+			[[nodiscard]] sdk::result<void> replay_canonicalization_edges(
+				const materialization_canonicalization_edge_consumer& consumer)
+			{
+				if (claims_ != nullptr)
+				{
+					for (const auto& value : claims_->canonicalization_edges())
+						if (auto consumed = consumer(value); !consumed)
+							return consumed;
+					return {};
+				}
+				return bounded_ == nullptr
+					? sdk::result<void>{sdk::error{
+						  "materialization.report-invalid", "claims", "missing"}}
+					: bounded_->replay_canonicalization_edges(consumer);
+			}
+
+			[[nodiscard]] sdk::result<void>
+			replay_origin_associations(const materialization_origin_association_consumer& consumer)
+			{
+				if (claims_ != nullptr)
+				{
+					for (const auto& value : claims_->origin_associations())
+						if (auto consumed = consumer(value); !consumed)
+							return consumed;
+					return {};
+				}
+				return bounded_ == nullptr
+					? sdk::result<void>{sdk::error{
+						  "materialization.report-invalid", "claims", "missing"}}
+					: bounded_->replay_origin_associations(consumer);
+			}
+
+			[[nodiscard]] sdk::result<void>
+			replay_partitions(const sdk::relation_engine& engine,
+							  const report_partition_consumer& consumer)
+			{
+				if (claims_ != nullptr)
+				{
+					for (const auto& partition : claims_->partitions())
+						if (auto consumed = consumer(partition); !consumed)
+							return consumed;
+					return {};
+				}
+				if (bounded_ == nullptr)
+					return sdk::unexpected({"materialization.report-invalid", "claims", "missing"});
+				return bounded_->replay(
+					[&](sdk::partition_draft draft) -> sdk::result<void>
+					{
+						auto manifest = sdk::make_partition_manifest(engine, draft);
+						if (!manifest)
+							return sdk::unexpected(std::move(manifest.error()));
+						auto metadata = bounded_->partition_metadata(manifest->partition_id);
+						if (!metadata)
+							return sdk::unexpected(std::move(metadata.error()));
+						const sdk::snapshot_partition_binding binding{
+							manifest->partition_id,
+							draft.relation_descriptor_id,
+							draft.scope,
+							draft.condition,
+							draft.interpretation,
+							draft.producer_semantics,
+							draft.producer_input_basis_digest,
+							draft.precision_profile,
+							draft.assumption_set_id,
+						};
+						const materialization_claim_partition value{
+							std::move(draft),
+							std::move(*manifest),
+							binding,
+							std::move(metadata->stored_claim_refs),
+							std::move(metadata->claim_content_ids),
+							metadata->sdk_claim_occurrence_count,
+							metadata->origin_association_count,
+							metadata->empty_partition,
+						};
+						return consumer(value);
+					});
+			}
+
+			[[nodiscard]] sdk::result<claim_batch_status> status()
+			{
+				if (claims_ != nullptr)
+				{
+					const auto& batch = claims_->final_claim_batch();
+					return claim_batch_status{
+						batch.content_digest,
+						static_cast<std::uint64_t>(batch.claims.size()),
+						static_cast<std::uint64_t>(batch.unresolved.size()),
+						static_cast<std::uint64_t>(batch.conflicts.size()),
+						static_cast<std::uint64_t>(batch.differential_disagreements.size()),
+						claims_->partitions().size()};
+				}
+				if (bounded_ == nullptr)
+					return sdk::unexpected({"materialization.report-invalid", "claims", "missing"});
+				std::vector<sdk::claim> claims;
+				std::uint64_t unresolved{};
+				std::size_t partitions{};
+				auto replayed = bounded_->replay(
+					[&](sdk::partition_draft draft) -> sdk::result<void>
+					{
+						++partitions;
+						if (draft.unresolved.size() >
+							std::numeric_limits<std::uint64_t>::max() - unresolved)
+							return sdk::unexpected({"materialization.report-invalid",
+													"claims.unresolved",
+													"overflow"});
+						unresolved += static_cast<std::uint64_t>(draft.unresolved.size());
+						claims.insert(claims.end(),
+									  std::make_move_iterator(draft.claims.begin()),
+									  std::make_move_iterator(draft.claims.end()));
+						return {};
+					});
+				if (!replayed)
+					return sdk::unexpected(std::move(replayed.error()));
+				if (unresolved != 0U)
+					return claim_batch_status{"",
+											  static_cast<std::uint64_t>(claims.size()),
+											  unresolved,
+											  0U,
+											  0U,
+											  partitions};
+				auto digest = sdk::claim_batch_content_digest(claims, {}, {}, {});
+				if (!digest)
+					return sdk::unexpected(std::move(digest.error()));
+				return claim_batch_status{std::move(*digest),
+										  static_cast<std::uint64_t>(claims.size()),
+										  0U,
+										  0U,
+										  0U,
+										  partitions};
+			}
+
+		  private:
+			const sealed_materialization_claims* claims_{};
+			materialization_bounded_claim_source* bounded_{};
+		};
 
 		[[nodiscard]] sdk::error report_error(public_materialization_report_error error)
 		{
@@ -205,82 +411,102 @@ namespace cxxlens::detail::clang22::materialization
 
 		struct claim_binding
 		{
-			const materialization_origin_association* association{};
-			const materialization_claim_envelope* final_envelope{};
-			const materialization_claim_envelope* assertion_envelope{};
+			materialization_origin_association association;
+			materialization_claim_envelope final_envelope;
+			materialization_claim_envelope assertion_envelope;
 		};
 
 		[[nodiscard]] sdk::result<claim_binding>
 		find_claim_binding(const detailed_provider_batch_projection& batch,
 						   const detailed_provider_batch_projection::row_projection& row,
 						   const materialization_semantic_task_context& context,
-						   const sealed_materialization_claims& claims)
+						   claim_report_source& claims)
 		{
-			std::optional<claim_binding> found;
-			for (const auto& association : claims.origin_associations())
-			{
-				if (association.originating_task != context ||
-					association.sealed_row_digest != row.row_digest)
-					continue;
-				const auto envelope =
-					std::ranges::find(claims.claim_envelopes(),
-									  association.stored_claim_ref,
-									  [](const materialization_claim_envelope& value)
-									  {
-										  return value.claim_ref;
-									  });
-				if (envelope == claims.claim_envelopes().end() ||
-					envelope->role != "stored_final" ||
-					envelope->value.descriptor != batch.descriptor_id)
-					continue;
-				if (envelope->value.row.canonical_form() != row.row_canonical_form)
-					return sdk::unexpected({"materialization.report-invalid",
-											"task_results.batches.row_bindings",
-											"claim-row-mismatch"});
-				if (found)
-					return sdk::unexpected({"materialization.report-invalid",
-											"task_results.batches.row_bindings",
-											"ambiguous-claim-association"});
-				found = claim_binding{&association, &*envelope, &*envelope};
-			}
-			if (!found)
+			std::optional<materialization_origin_association> association;
+			std::optional<materialization_claim_envelope> final_envelope;
+			auto associations = claims.replay_origin_associations(
+				[&](const materialization_origin_association& candidate) -> sdk::result<void>
+				{
+					if (candidate.originating_task != context ||
+						candidate.sealed_row_digest != row.row_digest)
+						return {};
+					std::optional<materialization_claim_envelope> matching;
+					auto envelopes = claims.replay_claim_envelopes(
+						[&](const materialization_claim_envelope& value) -> sdk::result<void>
+						{
+							if (value.claim_ref == candidate.stored_claim_ref &&
+								value.role == "stored_final" &&
+								value.value.descriptor == batch.descriptor_id)
+								matching = value;
+							return {};
+						});
+					if (!envelopes)
+						return sdk::unexpected(std::move(envelopes.error()));
+					if (!matching)
+						return {};
+					if (matching->value.row.canonical_form() != row.row_canonical_form)
+						return sdk::unexpected({"materialization.report-invalid",
+												"task_results.batches.row_bindings",
+												"claim-row-mismatch"});
+					if (association)
+						return sdk::unexpected({"materialization.report-invalid",
+												"task_results.batches.row_bindings",
+												"ambiguous-claim-association"});
+					association = candidate;
+					final_envelope = std::move(*matching);
+					return {};
+				});
+			if (!associations)
+				return sdk::unexpected(std::move(associations.error()));
+			if (!association || !final_envelope)
 				return sdk::unexpected({"materialization.report-invalid",
 										"task_results.batches.row_bindings",
 										"claim-association-missing"});
 
 			const bool canonical = batch.descriptor_id == "cc.call_direct_target.v1" ||
 				batch.descriptor_id == "cc.call_site.v1" || batch.descriptor_id == "cc.entity.v1";
-			std::vector<const materialization_canonicalization_edge*> edges;
-			for (const auto& edge : claims.canonicalization_edges())
-				if (edge.final_claim_ref == found->final_envelope->claim_ref)
-					edges.push_back(&edge);
+			std::vector<materialization_canonicalization_edge> edges;
+			auto replayed_edges = claims.replay_canonicalization_edges(
+				[&](const materialization_canonicalization_edge& edge) -> sdk::result<void>
+				{
+					if (edge.final_claim_ref == final_envelope->claim_ref)
+						edges.push_back(edge);
+					return {};
+				});
+			if (!replayed_edges)
+				return sdk::unexpected(std::move(replayed_edges.error()));
+			std::optional<materialization_claim_envelope> assertion_envelope;
 			if (canonical)
 			{
 				if (edges.size() != 1U)
 					return sdk::unexpected({"materialization.report-invalid",
 											"task_results.batches.row_bindings",
 											"canonical-assertion-edge-missing"});
-				const auto assertion =
-					std::ranges::find(claims.claim_envelopes(),
-									  edges.front()->precursor_claim_ref,
-									  [](const materialization_claim_envelope& value)
-									  {
-										  return value.claim_ref;
-									  });
-				if (assertion == claims.claim_envelopes().end() ||
-					assertion->role != "hidden_precursor" ||
-					assertion->value.descriptor != batch.descriptor_id ||
-					assertion->value.row.canonical_form() != row.row_canonical_form)
+				auto envelopes = claims.replay_claim_envelopes(
+					[&](const materialization_claim_envelope& value) -> sdk::result<void>
+					{
+						if (value.claim_ref == edges.front().precursor_claim_ref)
+							assertion_envelope = value;
+						return {};
+					});
+				if (!envelopes)
+					return sdk::unexpected(std::move(envelopes.error()));
+				if (!assertion_envelope || assertion_envelope->role != "hidden_precursor" ||
+					assertion_envelope->value.descriptor != batch.descriptor_id ||
+					assertion_envelope->value.row.canonical_form() != row.row_canonical_form)
 					return sdk::unexpected({"materialization.report-invalid",
 											"task_results.batches.row_bindings",
 											"canonical-assertion-missing"});
-				found->assertion_envelope = &*assertion;
 			}
 			else if (!edges.empty())
 				return sdk::unexpected({"materialization.report-invalid",
 										"task_results.batches.row_bindings",
 										"observation-canonicalization-edge"});
-			return std::move(*found);
+			const auto fallback_assertion = *final_envelope;
+			return claim_binding{std::move(*association),
+								 std::move(*final_envelope),
+								 assertion_envelope ? std::move(*assertion_envelope)
+													: fallback_assertion};
 		}
 
 		[[nodiscard]] sdk::result<std::string>
@@ -1672,19 +1898,17 @@ namespace cxxlens::detail::clang22::materialization
 			}
 			const auto expected_evidence =
 				primary_span_digest ? primary_span_digest : limitation_digest;
-			if (binding.association == nullptr ||
-				binding.association->source_evidence_digest != expected_evidence)
+			if (binding.association.source_evidence_digest != expected_evidence)
 				return sdk::unexpected({"materialization.report-invalid",
 										"task_results.batches.row_bindings",
 										"source-evidence-binding"});
-			if (binding.assertion_envelope == nullptr || binding.final_envelope == nullptr ||
-				binding.assertion_envelope->claim_ref.empty() ||
-				binding.final_envelope->value.content.empty())
+			if (binding.assertion_envelope.claim_ref.empty() ||
+				binding.final_envelope.value.content.empty())
 				return sdk::unexpected({"materialization.report-invalid",
 										"task_results.batches.row_bindings",
 										"claim-envelope"});
-			if (binding.assertion_envelope->value.row.canonical_form() != row.row_canonical_form ||
-				binding.final_envelope->value.row.canonical_form() != row.row_canonical_form)
+			if (binding.assertion_envelope.value.row.canonical_form() != row.row_canonical_form ||
+				binding.final_envelope.value.row.canonical_form() != row.row_canonical_form)
 				return sdk::unexpected({"materialization.report-invalid",
 										"task_results.batches.row_bindings",
 										"claim-row-mismatch"});
@@ -1694,7 +1918,7 @@ namespace cxxlens::detail::clang22::materialization
 			return make_object({
 				{"row_digest", text_value(row.row_digest)},
 				{"row_canonical_form", text_value(row.row_canonical_form)},
-				{"worker_assertion_claim_ref", text_value(binding.assertion_envelope->claim_ref)},
+				{"worker_assertion_claim_ref", text_value(binding.assertion_envelope.claim_ref)},
 				{"final_relation_compile_unit_id", text_value(capture.compile_unit_id)},
 				{"originating_task", std::move(*originating_task)},
 				{"primary_span_bundle_digest",
@@ -1787,7 +2011,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<task_result_projection>
 		project_task_result(const detailed_task_report_capture& capture,
-							const sealed_materialization_claims& claims,
+							claim_report_source& claims,
 							const detailed_report_limits& limits)
 		{
 			const auto context = task_context(capture);
@@ -1873,8 +2097,8 @@ namespace cxxlens::detail::clang22::materialization
 					if (!row_value)
 						return sdk::unexpected(std::move(row_value.error()));
 					row_bindings.push_back(std::move(*row_value));
-					assertion_refs.insert(binding->assertion_envelope->claim_ref);
-					content_ids.insert(binding->assertion_envelope->value.content);
+					assertion_refs.insert(binding->assertion_envelope.claim_ref);
+					content_ids.insert(binding->assertion_envelope.value.content);
 					auto provenance_projection = make_object({
 						{"descriptor_id", text_value(batch.descriptor_id)},
 						{"originating_task", *full_context},
@@ -2305,7 +2529,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<task_results_projection>
 		project_task_results(const task_report_source& source,
-							 const sealed_materialization_claims& claims,
+							 claim_report_source& claims,
 							 const detailed_report_limits& limits)
 		{
 			std::vector<task_result_projection> projected;
@@ -3051,7 +3275,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<json_value>
 		store_json(const prevalidated_materialization_request_v2_1& request,
-				   const sealed_materialization_claims& claims,
+				   claim_report_source& claims,
 				   const materialization_store_observation& observation)
 		{
 			if (observation.first_issue || !observation.publication_attempted ||
@@ -3093,26 +3317,32 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(std::move(direct_input.error()));
 			auto producer_input = std::string{*direct_input};
 
-			std::vector<const materialization_claim_envelope*> envelopes;
-			for (const auto& envelope : claims.claim_envelopes())
-				envelopes.push_back(&envelope);
+			std::vector<materialization_claim_envelope> envelopes;
+			auto replayed_envelopes = claims.replay_claim_envelopes(
+				[&](const materialization_claim_envelope& envelope) -> sdk::result<void>
+				{
+					envelopes.push_back(envelope);
+					return {};
+				});
+			if (!replayed_envelopes)
+				return sdk::unexpected(std::move(replayed_envelopes.error()));
 			std::ranges::sort(envelopes,
-							  [](const auto* left, const auto* right)
+							  [](const auto& left, const auto& right)
 							  {
-								  return left->claim_ref < right->claim_ref;
+								  return left.claim_ref < right.claim_ref;
 							  });
 			json_value::array_type envelope_values;
 			std::map<std::string, std::pair<std::string, std::string>, std::less<>> rows;
-			for (const auto* envelope : envelopes)
+			for (const auto& envelope : envelopes)
 			{
-				auto value = claim_envelope_json(*envelope);
+				auto value = claim_envelope_json(envelope);
 				if (!value)
 					return sdk::unexpected(std::move(value.error()));
 				envelope_values.push_back(std::move(*value));
-				const auto canonical = envelope->value.row.canonical_form();
-				auto [found, inserted] = rows.emplace(
-					envelope->row_ref, std::pair{envelope->value.descriptor, canonical});
-				if (!inserted && found->second != std::pair{envelope->value.descriptor, canonical})
+				const auto canonical = envelope.value.row.canonical_form();
+				auto [found, inserted] =
+					rows.emplace(envelope.row_ref, std::pair{envelope.value.descriptor, canonical});
+				if (!inserted && found->second != std::pair{envelope.value.descriptor, canonical})
 					return sdk::unexpected({"materialization.report-invalid",
 											"store.claim_rows",
 											"row-ref-collision"});
@@ -3126,83 +3356,88 @@ namespace cxxlens::detail::clang22::materialization
 						.value());
 
 			json_value::array_type edge_values;
-			std::vector<const materialization_canonicalization_edge*> edges;
-			for (const auto& edge : claims.canonicalization_edges())
-				edges.push_back(&edge);
+			std::vector<materialization_canonicalization_edge> edges;
+			auto replayed_edges = claims.replay_canonicalization_edges(
+				[&](const materialization_canonicalization_edge& edge) -> sdk::result<void>
+				{
+					edges.push_back(edge);
+					return {};
+				});
+			if (!replayed_edges)
+				return sdk::unexpected(std::move(replayed_edges.error()));
 			std::ranges::sort(edges,
-							  [](const auto* left, const auto* right)
+							  [](const auto& left, const auto& right)
 							  {
-								  return std::tie(left->precursor_claim_ref,
-												  left->final_claim_ref,
-												  left->transform_semantics) <
-									  std::tie(right->precursor_claim_ref,
-											   right->final_claim_ref,
-											   right->transform_semantics);
+								  return std::tie(left.precursor_claim_ref,
+												  left.final_claim_ref,
+												  left.transform_semantics) <
+									  std::tie(right.precursor_claim_ref,
+											   right.final_claim_ref,
+											   right.transform_semantics);
 							  });
-			for (const auto* edge : edges)
+			for (const auto& edge : edges)
 				edge_values.push_back(
 					make_object({
-									{"precursor_claim_ref", text_value(edge->precursor_claim_ref)},
-									{"final_claim_ref", text_value(edge->final_claim_ref)},
-									{"transform_semantics", text_value(edge->transform_semantics)},
+									{"precursor_claim_ref", text_value(edge.precursor_claim_ref)},
+									{"final_claim_ref", text_value(edge.final_claim_ref)},
+									{"transform_semantics", text_value(edge.transform_semantics)},
 								})
 						.value());
 
 			json_value::array_type association_values;
-			std::vector<const materialization_origin_association*> associations;
-			for (const auto& association : claims.origin_associations())
-				associations.push_back(&association);
+			std::vector<materialization_origin_association> associations;
+			auto replayed_associations = claims.replay_origin_associations(
+				[&](const materialization_origin_association& association) -> sdk::result<void>
+				{
+					associations.push_back(association);
+					return {};
+				});
+			if (!replayed_associations)
+				return sdk::unexpected(std::move(replayed_associations.error()));
 			std::ranges::sort(associations,
-							  [](const auto* left, const auto* right)
+							  [](const auto& left, const auto& right)
 							  {
-								  return left->association_id < right->association_id;
+								  return left.association_id < right.association_id;
 							  });
-			for (const auto* association : associations)
+			for (const auto& association : associations)
 			{
-				auto context = task_context_json(association->originating_task);
+				auto context = task_context_json(association.originating_task);
 				if (!context)
 					return sdk::unexpected(std::move(context.error()));
 				association_values.push_back(
 					make_object(
 						{
-							{"association_id", text_value(association->association_id)},
-							{"stored_claim_ref", text_value(association->stored_claim_ref)},
+							{"association_id", text_value(association.association_id)},
+							{"stored_claim_ref", text_value(association.stored_claim_ref)},
 							{"originating_task", std::move(*context)},
-							{"sealed_row_digest", text_value(association->sealed_row_digest)},
+							{"sealed_row_digest", text_value(association.sealed_row_digest)},
 							{"source_evidence_digest",
-							 association->source_evidence_digest
-								 ? text_value(*association->source_evidence_digest)
+							 association.source_evidence_digest
+								 ? text_value(*association.source_evidence_digest)
 								 : json_value::null()},
 						})
 						.value());
 			}
 
-			const auto& final_batch = claims.final_claim_batch();
+			auto batch_status = claims.status();
+			if (!batch_status)
+				return sdk::unexpected(std::move(batch_status.error()));
 			std::vector<std::string> final_refs;
 			std::set<std::string, std::less<>> final_contents;
-			for (const auto* envelope : envelopes)
-				if (envelope->role == "stored_final")
+			for (const auto& envelope : envelopes)
+				if (envelope.role == "stored_final")
 				{
-					final_refs.push_back(envelope->claim_ref);
-					final_contents.insert(envelope->value.content);
+					final_refs.push_back(envelope.claim_ref);
+					final_contents.insert(envelope.value.content);
 				}
 			std::ranges::sort(final_refs);
-			if (final_refs.size() != final_batch.claims.size() ||
-				final_batch.content_digest.empty() || final_batch.unresolved.size() != 0U ||
-				final_batch.conflicts.size() != 0U ||
-				final_batch.differential_disagreements.size() != 0U)
+			if (final_refs.size() != batch_status->claim_count ||
+				batch_status->content_digest.empty() || batch_status->unresolved_count != 0U ||
+				batch_status->conflict_count != 0U ||
+				batch_status->differential_disagreement_count != 0U)
 				return sdk::unexpected({"materialization.report-invalid",
 										"store.claim_batch_validation",
 										"census-mismatch"});
-			auto batch_digest =
-				sdk::claim_batch_content_digest(std::span<const sdk::claim>{final_batch.claims},
-												final_batch.unresolved,
-												final_batch.conflicts,
-												final_batch.differential_disagreements);
-			if (!batch_digest || *batch_digest != final_batch.content_digest)
-				return sdk::unexpected({"materialization.report-invalid",
-										"store.claim_batch_validation",
-										"digest-mismatch"});
 			json_value::array_type final_ref_values;
 			for (const auto& ref : final_refs)
 				final_ref_values.push_back(text_value(ref));
@@ -3210,52 +3445,55 @@ namespace cxxlens::detail::clang22::materialization
 				{"contract", text_value("cxxlens.claim-batch.v2")},
 				{"final_claim_refs", json_value::array(std::move(final_ref_values))},
 				{"sdk_claim_occurrence_count",
-				 json_value::unsigned_integer(final_batch.claims.size())},
+				 json_value::unsigned_integer(batch_status->claim_count)},
 				{"unique_claim_content_count", json_value::unsigned_integer(final_contents.size())},
-				{"unresolved_count", json_value::unsigned_integer(final_batch.unresolved.size())},
-				{"conflict_count", json_value::unsigned_integer(final_batch.conflicts.size())},
+				{"unresolved_count", json_value::unsigned_integer(batch_status->unresolved_count)},
+				{"conflict_count", json_value::unsigned_integer(batch_status->conflict_count)},
 				{"differential_disagreement_count",
-				 json_value::unsigned_integer(final_batch.differential_disagreements.size())},
-				{"content_digest", text_value(final_batch.content_digest)},
+				 json_value::unsigned_integer(batch_status->differential_disagreement_count)},
+				{"content_digest", text_value(batch_status->content_digest)},
 			});
 			if (!claim_batch)
 				return sdk::unexpected(std::move(claim_batch.error()));
 
-			std::vector<const materialization_claim_partition*> partitions;
-			for (const auto& partition : claims.partitions())
-				partitions.push_back(&partition);
-			std::ranges::sort(partitions,
-							  [](const auto* left, const auto* right)
-							  {
-								  return left->manifest.partition_id < right->manifest.partition_id;
-							  });
 			json_value::array_type partition_values;
-			for (const auto* partition : partitions)
-			{
-				auto value = partition_json(*partition);
-				if (!value)
-					return sdk::unexpected(std::move(value.error()));
-				partition_values.push_back(std::move(*value));
-			}
+			std::set<std::string, std::less<>> partition_ids;
+			std::size_t partition_count{};
+			auto replayed_partitions = claims.replay_partitions(
+				request.engine(),
+				[&](const materialization_claim_partition& partition) -> sdk::result<void>
+				{
+					if (!partition_ids.insert(partition.manifest.partition_id).second)
+						return sdk::unexpected(
+							{"materialization.report-invalid", "store.partitions", "duplicate"});
+					if (!std::ranges::any_of(returned_handle.manifest().partitions,
+											 [&](const sdk::partition_manifest& value)
+											 {
+												 return value == partition.manifest;
+											 }))
+						return sdk::unexpected({"materialization.report-invalid",
+												"store.snapshot_manifest",
+												"partition-mismatch"});
+					auto value = partition_json(partition);
+					if (!value)
+						return sdk::unexpected(std::move(value.error()));
+					partition_values.push_back(std::move(*value));
+					++partition_count;
+					return {};
+				});
+			if (!replayed_partitions)
+				return sdk::unexpected(std::move(replayed_partitions.error()));
 			if (partition_values.empty())
 				return sdk::unexpected(
 					{"materialization.report-invalid", "store.partitions", "empty"});
 			auto manifest = snapshot_manifest_json(returned_handle.manifest());
 			if (!manifest)
 				return sdk::unexpected(std::move(manifest.error()));
-			if (returned_handle.manifest().partitions.size() != partitions.size())
+			if (returned_handle.manifest().partitions.size() != partition_count ||
+				partition_count != batch_status->partition_count)
 				return sdk::unexpected({"materialization.report-invalid",
 										"store.snapshot_manifest",
 										"partition-count"});
-			for (const auto& partition : partitions)
-				if (!std::ranges::any_of(returned_handle.manifest().partitions,
-										 [&](const sdk::partition_manifest& value)
-										 {
-											 return value == partition->manifest;
-										 }))
-					return sdk::unexpected({"materialization.report-invalid",
-											"store.snapshot_manifest",
-											"partition-mismatch"});
 
 			auto direct_basis = make_object({
 				{"projection_version",
@@ -4502,7 +4740,7 @@ namespace cxxlens::detail::clang22::materialization
 			missing.emplace_back("installation.manifest");
 		if (input.occurrence_receipt == nullptr)
 			missing.emplace_back("installation.receipt");
-		if (input.claims == nullptr)
+		if (input.claims == nullptr && input.bounded_claims == nullptr)
 			missing.emplace_back("claims");
 		if (input.store == nullptr)
 			missing.emplace_back("store.observation");
@@ -4527,7 +4765,8 @@ namespace cxxlens::detail::clang22::materialization
 				  (name == "task_results" || name == "adoption" || name == "span_validation" ||
 				   name == "base_claims" || name == "side_channels" || name == "claim_stages" ||
 				   name == "provenance")) &&
-				!(input.claims != nullptr && input.store != nullptr &&
+				!((input.claims != nullptr || input.bounded_claims != nullptr) &&
+				  input.store != nullptr &&
 				  (name == "store" || name == "publication" || name == "semantic_verification")) &&
 				!(name == "authority_digests" && input.occurrence_receipt != nullptr))
 				missing.emplace_back(std::string{name});
@@ -4566,10 +4805,18 @@ namespace cxxlens::detail::clang22::materialization
 		const auto& request = input.request->request();
 		const auto& tool = request.tool();
 		const auto& worker = request.worker();
-		const auto& claim_batch = input.claims->final_claim_batch();
-		if (claim_batch.content_digest.empty() || !claim_batch.unresolved.empty() ||
-			!claim_batch.conflicts.empty() || !claim_batch.differential_disagreements.empty() ||
-			input.claims->partitions().empty())
+		claim_report_source claims{input.claims, input.bounded_claims};
+		if (!claims.valid())
+			return sdk::unexpected(
+				report_error({public_materialization_report_error_kind::invalid_projection,
+							  {},
+							  "claims",
+							  "exactly-one-source-required"}));
+		auto claim_status = claims.status();
+		if (!claim_status || claim_status->content_digest.empty() ||
+			claim_status->unresolved_count != 0U || claim_status->conflict_count != 0U ||
+			claim_status->differential_disagreement_count != 0U ||
+			claim_status->partition_count == 0U)
 			return sdk::unexpected(
 				report_error({public_materialization_report_error_kind::invalid_projection,
 							  {},
@@ -4605,7 +4852,7 @@ namespace cxxlens::detail::clang22::materialization
 			task_report_source source = input.task_reports != nullptr
 				? task_report_source{*input.task_reports}
 				: task_report_source{*input.task_report_spool};
-			auto projected = project_task_results(source, *input.claims, detailed_report_limits{});
+			auto projected = project_task_results(source, claims, detailed_report_limits{});
 			if (!projected)
 				return sdk::unexpected(std::move(projected.error()));
 			task_results = std::move(*projected);
@@ -4632,9 +4879,9 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(std::move(base.error()));
 			base_claims = std::move(*base);
 		}
-		if (input.claims != nullptr && input.store != nullptr)
+		if (claims.valid() && input.store != nullptr)
 		{
-			auto store = store_json(request, *input.claims, *input.store);
+			auto store = store_json(request, claims, *input.store);
 			if (!store)
 				return sdk::unexpected(std::move(store.error()));
 			derived_store = std::move(*store);

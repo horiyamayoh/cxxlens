@@ -10,6 +10,7 @@
 
 #include <cxxlens/sdk/common.hpp>
 
+#include "materialization_bounded_claim_source.hpp"
 #include "materialization_claims.hpp"
 #include "materialization_json.hpp"
 #include "materialization_occurrence.hpp"
@@ -99,6 +100,10 @@ namespace cxxlens::detail::clang22::materialization
 		const raw_input_observation* raw_input{};
 		const materialization_occurrence_manifest* occurrence_manifest{};
 		const materialization_occurrence_receipt* occurrence_receipt{};
+		/** Production report authority; mutually exclusive with the qualification-only claims view.
+		 */
+		materialization_bounded_claim_source* bounded_claims{};
+		/** Qualification-only resident oracle retained for adapter/reference tests. */
 		const sealed_materialization_claims* claims{};
 		const materialization_store_observation* store{};
 		const public_materialization_prepublication_projection* prepublication{};

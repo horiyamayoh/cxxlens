@@ -918,10 +918,9 @@ int main(const int argc, char**)
 			identity.materialization_request_id,
 			sdk::error{"materialization.identity-mismatch", "process-port", "unavailable"});
 
-	// The v2.1 request remains the source authority.  This compatibility bridge deliberately
-	// retains only task metadata and sealed source receipts (never decoded source/task.v3 bytes),
-	// while the legacy claim oracle still owns a request-wide metadata vector until its production
-	// replacement is independently validated.
+	// The v2.1 request remains the source authority. The production bridge retains only task
+	// metadata, sealed source receipts, and replayable bounded claim/report spools (never decoded
+	// source/task.v3 bytes). The resident claim oracle remains qualification-only.
 	auto claim_context = make_materialization_v2_1_claim_context(*request, occurrence->receipt());
 	if (!claim_context)
 		return emit_typed_failure(std::move(*journal),
@@ -1064,7 +1063,7 @@ int main(const int argc, char**)
 	public_input.raw_input = &*observed;
 	public_input.occurrence_manifest = &occurrence->manifest();
 	public_input.occurrence_receipt = &occurrence->receipt();
-	public_input.claims = &materialization->claims();
+	public_input.bounded_claims = &materialization->bounded_claim_source();
 	public_input.store = &postpublication->store_observation();
 	public_input.prepublication = &*prepublication;
 	if (rooted_opener && rooted_opener->receipt())

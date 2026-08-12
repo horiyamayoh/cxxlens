@@ -14,7 +14,6 @@
 
 #include "materialization_bounded_claim_source.hpp"
 #include "materialization_claim_stream.hpp"
-#include "materialization_claims.hpp"
 #include "materialization_incremental_receipt.hpp"
 #include "materialization_io.hpp"
 #include "materialization_request_v2_1.hpp"
@@ -267,7 +266,8 @@ namespace cxxlens::detail::clang22::materialization
 		operator==(const materialization_incremental_execution_census&) const = default;
 	};
 
-	/** Immutable claim output plus the independent execution census for one incremental run. */
+	/** Immutable bounded typed output plus the independent execution census for one incremental
+	 * run. */
 	class sealed_materialization_incremental_result
 	{
 	  public:
@@ -281,8 +281,7 @@ namespace cxxlens::detail::clang22::materialization
 		operator=(sealed_materialization_incremental_result&&) noexcept = default;
 		~sealed_materialization_incremental_result() = default;
 
-		[[nodiscard]] const sealed_materialization_claims& claims() const noexcept;
-		/** Production typed partition source; claims() remains a qualification oracle. */
+		/** Production typed partition source backed by sealed source-private spools. */
 		[[nodiscard]] materialization_bounded_claim_source& bounded_claim_source() noexcept;
 		[[nodiscard]] const materialization_bounded_claim_source&
 		bounded_claim_source() const noexcept;
@@ -293,12 +292,10 @@ namespace cxxlens::detail::clang22::materialization
 
 	  private:
 		sealed_materialization_incremental_result(
-			sealed_materialization_claims claims,
 			materialization_bounded_claim_source bounded_claim_source,
 			materialization_incremental_execution_census execution_census,
 			materialization_claim_stream_source claim_stream) noexcept;
 
-		sealed_materialization_claims claims_;
 		materialization_bounded_claim_source bounded_claim_source_;
 		materialization_incremental_execution_census execution_census_;
 		materialization_claim_stream_source claim_stream_;
