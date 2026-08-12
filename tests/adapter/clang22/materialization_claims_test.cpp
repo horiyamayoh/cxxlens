@@ -1656,14 +1656,27 @@ namespace
 			auto result = seal_task(request_, index, false, coverage_);
 			if (!result)
 				return sdk::unexpected(std::move(result.error()));
-			auto typed_ids = typed_partition_ids(request_, index, *result, producer_, guarantee_);
-			if (!typed_ids)
-				return sdk::unexpected(std::move(typed_ids.error()));
 			auto digest = seal_materialization_incremental_artifact_digest(*result);
 			if (!digest)
 				return sdk::unexpected(std::move(digest.error()));
 			const auto provider_task_id = std::string{result->provider_task_id()};
 			const auto provider_execution_id = std::string{result->provider_execution_id()};
+			std::optional<sealed_materialization_result> exact_partition_baseline;
+			const sealed_materialization_result* partition_id_source = &*result;
+			if (coverage_ == coverage_mode::incomplete)
+			{
+				// Keep the malformed result under test, but derive its typed partition census from
+				// an independent exact result so the fixture reaches the coordinator's oracle.
+				auto exact = seal_task(request_, index, false, coverage_mode::exact);
+				if (!exact)
+					return sdk::unexpected(std::move(exact.error()));
+				exact_partition_baseline.emplace(std::move(*exact));
+				partition_id_source = &*exact_partition_baseline;
+			}
+			auto typed_ids =
+				typed_partition_ids(request_, index, *partition_id_source, producer_, guarantee_);
+			if (!typed_ids)
+				return sdk::unexpected(std::move(typed_ids.error()));
 			std::vector<std::string> partition_ids = std::move(*typed_ids);
 			auto partition_set_digest =
 				seal_materialization_incremental_task_partition_set_digest(partition_ids);
@@ -1676,14 +1689,32 @@ namespace
 				return sdk::unexpected(std::move(sealed_transcript_digest.error()));
 			if (tamper_provider_sealed_transcript_digest_)
 				*sealed_transcript_digest = "semantic-v2:sha256:" + std::string(64U, 'f');
-			auto completeness =
-				fixture_typed_completeness_receipt(request_,
-												   index,
-												   *result,
-												   std::span<const std::string>{partition_ids},
-												   producer_,
-												   guarantee_,
-												   std::move(*sealed_transcript_digest));
+			auto completeness = [&]() -> sdk::result<materialization_incremental_task_receipt>
+			{
+				if (coverage_ == coverage_mode::exact)
+					return fixture_typed_completeness_receipt(
+						request_,
+						index,
+						*result,
+						std::span<const std::string>{partition_ids},
+						producer_,
+						guarantee_,
+						std::move(*sealed_transcript_digest));
+				else
+				{
+					std::vector<materialization_incremental_partition_binding> partition_bindings;
+					partition_bindings.reserve(partition_ids.size());
+					for (const auto& partition_id : partition_ids)
+						partition_bindings.emplace_back(partition_id);
+					const materialization_incremental_task_binding typed_binding{
+						incremental_identity(request_, index), std::move(partition_bindings)};
+					return fixture_completeness_receipt(request_,
+														index,
+														typed_binding,
+														*result,
+														std::move(*sealed_transcript_digest));
+				}
+			}();
 			if (!completeness)
 				return sdk::unexpected(std::move(completeness.error()));
 			const auto result_artifact_digest = *digest;
@@ -1695,7 +1726,7 @@ namespace
 															 *partition_set_digest,
 															 partition_ids};
 			auto encode_partition_spools = delayed_encoder(index, partition_ids);
-			return materialization_incremental_task_execution{
+			materialization_incremental_task_execution execution{
 				std::move(*result),
 				{
 					reported_provider_calls_,
@@ -1708,6 +1739,8 @@ namespace
 						std::move(pre_encoder_seal)},
 				},
 				std::move(encode_partition_spools)};
+			++returned_executions;
+			return execution;
 		}
 
 		[[nodiscard]] sdk::result<materialization_incremental_task_reuse>
@@ -1719,16 +1752,16 @@ namespace
 				return sdk::unexpected(
 					sdk::error{"fixture.incremental-prior-missing", "cache", "deliberate"});
 			auto result = std::move(*reusable_[request_task_index]);
-			auto typed_ids =
-				typed_partition_ids(request_, request_task_index, result, producer_, guarantee_);
-			if (!typed_ids)
-				return sdk::unexpected(std::move(typed_ids.error()));
 			const auto provider_task_id = std::string{result.provider_task_id()};
 			const auto provider_execution_id = std::string{result.provider_execution_id()};
 			reusable_[request_task_index].reset();
 			auto digest = seal_materialization_incremental_artifact_digest(result);
 			if (!digest)
 				return sdk::unexpected(std::move(digest.error()));
+			auto typed_ids =
+				typed_partition_ids(request_, request_task_index, result, producer_, guarantee_);
+			if (!typed_ids)
+				return sdk::unexpected(std::move(typed_ids.error()));
 			std::vector<std::string> partition_ids = std::move(*typed_ids);
 			auto partition_set_digest =
 				seal_materialization_incremental_task_partition_set_digest(partition_ids);
@@ -1780,6 +1813,7 @@ namespace
 		}
 
 		std::size_t calls{};
+		std::size_t returned_executions{};
 		std::vector<std::size_t> called_indices;
 
 	  private:
@@ -2535,8 +2569,8 @@ namespace
 				"coordinator bypassed the external event-stream ingress");
 
 		prior = seal_all(request);
-		std::vector<materialization_incremental_task_binding> post_load_failure_bindings;
-		post_load_failure_bindings.emplace_back(
+		std::vector<materialization_incremental_task_binding> pre_encoder_coverage_failure_bindings;
+		pre_encoder_coverage_failure_bindings.emplace_back(
 			incremental_binding(request,
 								"partition:b",
 								1U,
@@ -2544,7 +2578,7 @@ namespace
 								second,
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(second, prior[1U])}));
-		post_load_failure_bindings.emplace_back(
+		pre_encoder_coverage_failure_bindings.emplace_back(
 			incremental_binding(request,
 								"partition:a",
 								0U,
@@ -2552,30 +2586,35 @@ namespace
 								first,
 								std::optional<materialization_incremental_prior_artifact>{
 									incremental_prior_artifact(first, prior[0U])}));
-		fixture_incremental_executor post_load_failure_executor{request,
-																producer,
-																guarantee,
-																false,
-																false,
-																false,
-																1U,
-																false,
-																std::move(prior),
-																0U,
-																false,
-																coverage_mode::incomplete};
-		auto post_load_failure =
-			run_materialization_incremental_coordinator(request,
-														*affected_plan,
-														std::move(post_load_failure_bindings),
-														post_load_failure_executor,
-														producer,
-														guarantee);
-		require(!post_load_failure &&
-					post_load_failure.error().code == "materialization.coverage-incomplete" &&
-					post_load_failure.error().field == "provider.coverage" &&
-					post_load_failure_executor.calls == 1U,
-				"claim construction failure after load was not preserved as a typed rejection");
+		fixture_incremental_executor pre_encoder_coverage_failure_executor{
+			request,
+			producer,
+			guarantee,
+			false,
+			false,
+			false,
+			1U,
+			false,
+			std::move(prior),
+			0U,
+			false,
+			coverage_mode::incomplete};
+		auto pre_encoder_coverage_failure = run_materialization_incremental_coordinator(
+			request,
+			*affected_plan,
+			std::move(pre_encoder_coverage_failure_bindings),
+			pre_encoder_coverage_failure_executor,
+			producer,
+			guarantee);
+		require(!pre_encoder_coverage_failure &&
+					pre_encoder_coverage_failure.error().code ==
+						"materialization.incremental-invalid" &&
+					pre_encoder_coverage_failure.error().field == "receipt" &&
+					pre_encoder_coverage_failure.error().detail ==
+						"oracle-provider.coverage/canonical-balanced-covered" &&
+					pre_encoder_coverage_failure_executor.calls == 1U &&
+					pre_encoder_coverage_failure_executor.returned_executions == 1U,
+				"incomplete coverage was not rejected by the pre-encoder oracle");
 
 		prior = seal_all(request);
 		std::vector<materialization_incremental_task_binding> mismatched_provider_receipt_bindings;
