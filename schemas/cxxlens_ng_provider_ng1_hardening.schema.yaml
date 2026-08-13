@@ -6,45 +6,258 @@ additionalProperties: false
 required: [schema, document_version, maturity, authority, profile, heartbeat, progress, resume, spill, recovery, stable_failures, qualification]
 properties:
   schema: {const: cxxlens.provider-ng1-hardening.v1}
-  document_version: {const: 1.0.0}
-  maturity: {enum: [proposed, accepted]}
+  document_version: {const: '1.0.0'}
+  maturity: {const: proposed}
   authority:
-    type: object
-    additionalProperties: false
-    required: [design, protocol, runtime, decision_adr, decision_issue, implementation_issue, owner]
-    properties:
-      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
-      protocol: {const: schemas/cxxlens_ng_provider_protocol.yaml}
-      runtime: {const: schemas/cxxlens_ng_provider_runtime_contract.yaml}
-      decision_adr: {const: docs/design/adr/0099-provider-ng1-hardening.md}
-      decision_issue: {const: '#233'}
-      implementation_issue: {const: '#183'}
-      owner: {const: steward.ng-provider-runtime}
+    const:
+      design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+      protocol: schemas/cxxlens_ng_provider_protocol.yaml
+      runtime: schemas/cxxlens_ng_provider_runtime_contract.yaml
+      decision_adr: docs/design/adr/0099-provider-ng1-hardening.md
+      decision_issue: '#233'
+      implementation_issue: '#183'
+      owner: steward.ng-provider-runtime
   profile:
-    type: object
-    additionalProperties: false
-    required: [id, protocol_major, protocol_minor, required_features, capability_claim, manifest_self_claim_authority]
-    properties:
-      id: {const: NG1}
-      protocol_major: {const: 1}
-      protocol_minor: {const: 1}
-      required_features:
-        const: [durable-resume-token, heartbeat, progress-rate-enforcement, spill-staging, long-run-fault-qualification]
-      capability_claim: {const: exact-certified-qualification-only}
-      manifest_self_claim_authority: {const: forbidden}
-  heartbeat: {$ref: '#/$defs/open_object'}
-  progress: {$ref: '#/$defs/open_object'}
-  resume: {$ref: '#/$defs/open_object'}
-  spill: {$ref: '#/$defs/open_object'}
-  recovery: {$ref: '#/$defs/open_object'}
+    const:
+      id: NG1
+      protocol_major: 1
+      protocol_minor: 1
+      required_features: [durable-resume-token, heartbeat, progress-rate-enforcement, spill-staging, long-run-fault-qualification]
+      capability_claim: exact-certified-qualification-only
+      manifest_self_claim_authority: forbidden
+  heartbeat:
+    const:
+      message_type: 23
+      control_schema: cxxlens.provider-control.heartbeat.v1
+      direction: {probe: host-to-provider, ack: provider-to-host}
+      exact_fields: [schema, kind, provider_id, provider_version, protocol_session_id, task_id, stream_id, heartbeat_sequence, monotonic_time_ns, highest_contiguous_acked_sequence, staged_digest]
+      field_types:
+        schema: fixed-string
+        kind: enum
+        provider_id: typed-id
+        provider_version: semantic-version
+        protocol_session_id: typed-id
+        task_id: typed-id
+        stream_id: uint64
+        heartbeat_sequence: uint64
+        monotonic_time_ns: uint64
+        highest_contiguous_acked_sequence: uint64
+        staged_digest: semantic-digest
+      field_constraints:
+        schema: exact-control-schema
+        kind: probe-or-ack
+        provider_id: non-empty-canonical-identity
+        provider_version: exact-negotiated-provider-version
+        protocol_session_id: exact-session-binding
+        task_id: exact-task-binding
+        stream_id: exact-stream-binding
+        heartbeat_sequence: contiguous-from-zero-per-session
+        monotonic_time_ns: injected-clock-non-decreasing
+        highest_contiguous_acked_sequence: contiguous-ack-not-ahead-of-observed
+        staged_digest: exact-staged-prefix-digest
+      kinds: [probe, ack]
+      identity_binding: [provider_id, provider_version, protocol_session_id, task_id, stream_id]
+      sequence: {starts_at: 0, namespace: per-session-and-direction, contiguous: required, duplicate: reject, replay: reject}
+      clock: {source: host-injected-monotonic-clock, unit: nanoseconds, wall_clock: forbidden, provider_timestamp: ordering-and-diagnostics-only, receipt_timestamp: host-observed-before-validation, future: provider.heartbeat-clock-invalid, arithmetic: checked-u64-subtraction, backwards: provider.heartbeat-clock-invalid}
+      liveness:
+        interval_ns: 1000000000
+        timeout_ns: 5000000000
+        startup_grace_ns: 10000000000
+        ack_deadline: timeout-after-last-probe
+        deadline: last-probe-plus-timeout-inclusive
+        startup_boundary: grace-inclusive
+        time_authority: host-injected-monotonic-clock
+        last_valid_ack: host-receipt-time-of-validated-ack
+        timeout_formula: now_ns-last_valid_ack_received_ns>=timeout_ns
+        timeout_arithmetic: checked-u64-subtraction
+        terminal_grace: no-heartbeat-required-after-terminal
+        timeout_result: provider.heartbeat-timeout
+      credit: {counts_toward_output_credit: false, counts_toward_transport_budget: true, max_control_bytes: 65536}
+  progress:
+    const:
+      message_type: 17
+      control_schema: cxxlens.provider-control.progress.v2
+      exact_fields: [schema, task_id, dependency_group_id, progress_sequence, monotonic_time_ns, completed_units, total_units]
+      field_types:
+        schema: fixed-string
+        task_id: typed-id
+        dependency_group_id: typed-id
+        progress_sequence: uint64
+        monotonic_time_ns: uint64
+        completed_units: uint64
+        total_units: uint64
+      field_constraints:
+        schema: exact-control-schema
+        task_id: exact-task-binding
+        dependency_group_id: exact-open-dependency-group-binding
+        progress_sequence: contiguous-from-zero-per-task
+        monotonic_time_ns: provider-ordering-only-host-receipt-authority
+        completed_units: zero-through-total-inclusive
+        total_units: positive-and-constant-per-task
+      unit: provider-declared-monotonic-work-unit
+      constraints: {total_units: positive-and-constant-per-task, completed_units: zero-through-total-inclusive, sequence: contiguous-from-zero, time: monotonic-with-heartbeat-clock, duplicate_or_replay: reject}
+      enforcement:
+        startup_grace_ns: 10000000000
+        sample_window_ns: 5000000000
+        maximum_sample_gap_ns: 10000000000
+        minimum_units_per_second: 1
+        zero_delta_after_grace: reject
+        arithmetic: overflow-safe-u128-cross-multiplication
+        rate_formula: delta_units*1000000000>=delta_time_ns*minimum_units_per_second
+        sample_admission: elapsed-at-least-window-or-terminal
+        rate_check: every-admitted-consecutive-sample-pair
+        equality_at_deadline: accepted
+        sample_time_authority: host-injected-monotonic-clock-at-valid-frame-receipt
+        provider_timestamp_role: ordering-only-not-rate-authority
+        delta_time: current-receipt-ns-minus-previous-receipt-ns
+        overflow: checked-u128-or-fail
+        zero_elapsed: provider.progress-rate
+        maximum_gap: provider.progress-rate
+        terminal_total_required: true
+        failure: provider.progress-rate
+      credit: {counts_toward_output_credit: false, counts_toward_transport_budget: true}
+  resume:
+    const:
+      message_type: 19
+      control_schema: cxxlens.provider-control.resume.v2
+      exact_fields: [schema, kind, provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest, protocol_session_id, task_id, task_input_digest, normalized_invocation_digest, toolchain_digest, environment_digest, sandbox_policy_digest, dependency_group_id, atomic_output_group_id, batch_id, stream_id, highest_contiguous_acked_sequence, staged_digest, token_generation, token_digest]
+      field_types:
+        schema: fixed-string
+        kind: enum
+        provider_id: typed-id
+        provider_version: semantic-version
+        provider_binary_digest: semantic-digest
+        provider_semantic_contract_digest: semantic-digest
+        protocol_session_id: typed-id
+        task_id: typed-id
+        task_input_digest: semantic-digest
+        normalized_invocation_digest: semantic-digest
+        toolchain_digest: semantic-digest
+        environment_digest: semantic-digest
+        sandbox_policy_digest: semantic-digest
+        dependency_group_id: typed-id
+        atomic_output_group_id: typed-id
+        batch_id: typed-id
+        stream_id: uint64
+        highest_contiguous_acked_sequence: uint64
+        staged_digest: semantic-digest
+        token_generation: uint64
+        token_digest: semantic-digest
+      field_constraints:
+        schema: exact-control-schema
+        kind: request-accepted-or-rejected
+        provider_id: exact-provider-binding
+        provider_version: exact-negotiated-provider-version
+        provider_binary_digest: exact-launched-binary-digest
+        provider_semantic_contract_digest: exact-selected-contract-digest
+        protocol_session_id: exact-session-binding
+        task_id: exact-task-binding
+        task_input_digest: exact-task-input-binding
+        normalized_invocation_digest: exact-invocation-binding
+        toolchain_digest: exact-toolchain-binding
+        environment_digest: exact-environment-binding
+        sandbox_policy_digest: exact-sandbox-policy-binding
+        dependency_group_id: exact-open-dependency-group-binding
+        atomic_output_group_id: exact-atomic-output-group-binding
+        batch_id: exact-batch-binding
+        stream_id: exact-stream-binding
+        highest_contiguous_acked_sequence: contiguous-durable-ack
+        staged_digest: exact-staged-prefix-digest
+        token_generation: strictly-increasing-per-task
+        token_digest: canonical-projection-digest
+      kinds: [request, accepted, rejected]
+      token_digest: {domain: cxxlens.provider-resume-token.v1, projection: all-fields-except-token_digest, algorithm: cxxlens-semantic-digest-v2, encoding: cxxlens-canonical-tuple-v1}
+      durability:
+        prerequisite: fsync-confirmed-spill-ack
+        volatile_ack_is_not_authority: true
+        generation: strictly-increasing
+        publication_order: append-spill-fsync-construct-token-publish-token
+        receipt:
+          schema: cxxlens.provider-spill-fsync-receipt.v1
+          exact_fields: [provider_id, protocol_session_id, task_id, stream_id, highest_contiguous_acked_sequence, staged_digest, spill_digest, total_bytes, total_records, fsync_sequence]
+          authority: host-observed-private-spill-port-result
+        atomic_persistence: temp-write-fsync-rename-parent-fsync
+      replay:
+        start: highest_contiguous_acked_sequence-plus-one
+        input_identity: exact-original-task-input-and-selection-binding
+        output_digest: exact-equal-to-original-sealed-prefix
+        duplicate_output: reject
+        gap_or_reorder: provider.resume-replay-invalid
+      acceptance: {exact_provider_and_task_binding: required, exact_group_and_batch_binding: required, exact_stream_and_staged_digest_binding: required, replay_from: highest_contiguous_acked_sequence-plus-one, terminal_or_foreign_token: provider.resume-token-stale, mutation_or_digest_mismatch: provider.resume-replay-invalid, open_dependency_group_adoption: forbidden}
+  spill:
+    const:
+      record_schema: cxxlens.provider-spill-record.v1
+      storage: private-provider-port
+      pathname_authority: forbidden
+      append_only: true
+      binding: [provider_id, protocol_session_id, task_id]
+      framing:
+        encoding: deterministic-cbor-record
+        length_prefix: uint64-big-endian
+        record_bytes: header-plus-payload-and-framing-counted
+        metadata_overhead: included-in-total-quota
+      record:
+        exact_fields: [schema, record_ordinal, task_id, dependency_group_id, atomic_output_group_id, batch_id, stream_id, sequence, payload_bytes, payload_digest, record_digest]
+        field_types: {schema: fixed-string, record_ordinal: uint64, task_id: typed-id, dependency_group_id: typed-id, atomic_output_group_id: typed-id, batch_id: typed-id, stream_id: uint64, sequence: uint64, payload_bytes: bytes, payload_digest: semantic-digest, record_digest: semantic-digest}
+        field_constraints: {schema: exact-record-schema, record_ordinal: contiguous-from-zero, task_id: exact-task-binding, dependency_group_id: exact-open-dependency-group-binding, atomic_output_group_id: exact-atomic-output-group-binding, batch_id: exact-batch-binding, stream_id: exact-stream-binding, sequence: contiguous-wire-sequence, payload_bytes: exact-byte-count-before-allocation, payload_digest: digest-of-exact-payload-bytes, record_digest: digest-of-canonical-record-without-record-digest}
+        digest: {domain: cxxlens.provider-spill-record.v1, projection: all-fields-except-record_digest, algorithm: cxxlens-semantic-digest-v2, encoding: cxxlens-canonical-tuple-v1}
+      limits: {maximum_record_bytes: 16777216, maximum_total_bytes: 67108864, maximum_records: 65536, validate_before_allocation: true, quota_arithmetic: checked-u128-including-framing-and-metadata}
+      durability: {append: exact-byte-count-and-digest, acknowledgement: fsync-before-resume-token, ordering: contiguous-record-ordinal, allocation: validate-header-length-and-digest-before-payload-allocation, torn_last_record: provider.spill-corrupt, corruption_or_gap: provider.spill-corrupt}
+      cleanup: {success: after-final-report-and-token-disposal, failure: after-recovery-classification, cleanup_failure: provider.recovery-failed, retry: forbidden-after-unknown-effect}
+  recovery:
+    const:
+      initial_state: running
+      terminal_states: [completed, failed]
+      states: [running, heartbeat-timeout, progress-rate-failure, cancel-requested, worker-killed, resume-replay, resumed, completed, failed]
+      transition_rules:
+        worker_hang: [heartbeat-timeout, worker-killed, resume-replay, resumed, failed]
+        worker_crash: [worker-killed, resume-replay, resumed, failed]
+        spill_corruption: [failed]
+        stale_token: [failed]
+        cancellation: [cancel-requested, worker-killed, failed]
+        terminal: [completed, failed]
+      transition_matrix:
+        running: {heartbeat-timeout: heartbeat-timeout, progress-rate-failure: progress-rate-failure, cancel-requested: cancel-requested, worker-exit: worker-killed, output-sealed: completed, invalid-heartbeat-clock: failed}
+        heartbeat-timeout: {worker-kill-confirmed: worker-killed}
+        progress-rate-failure: {worker-kill-confirmed: worker-killed}
+        cancel-requested: {cancel-acknowledged: failed, cancel-timeout: worker-killed}
+        worker-killed: {durable-token-valid: resume-replay, durable-token-invalid: failed}
+        resume-replay: {replay-valid: resumed, replay-invalid: failed}
+        resumed: {output-sealed: completed, output-invalid: failed}
+        completed: {}
+        failed: {}
+      publication:
+        prior_published_snapshot: unchanged-on-failure
+        current_dependency_group: rollback
+        prior_adopted_groups: retain-only-if-predeclared-partial-policy
+        transaction: sealed-output-before-snapshot-cas
+        adoption_authority: shared-validator-sealed-output-only
+        replay_duplicate: reject
+        failure_effect: prior-published-snapshot-unchanged
+        success_requires: [all-groups-sealed, coverage-balanced, unresolved-accounted, progress-terminal]
+      no_fallback: {adjacent_provider: forbidden, non-durable_resume: forbidden, manifest_self_claim: forbidden}
   stable_failures:
-    type: array
-    uniqueItems: true
-    minItems: 7
-    items: {type: string, pattern: '^provider\.[a-z0-9-]+$'}
-  qualification: {$ref: '#/$defs/open_object'}
-$defs:
-  open_object:
-    type: object
-    minProperties: 1
-    additionalProperties: true
+    const: [provider.heartbeat-clock-invalid, provider.heartbeat-timeout, provider.progress-rate, provider.resume-token-stale, provider.resume-replay-invalid, provider.spill-corrupt, provider.recovery-failed]
+  qualification:
+    const:
+      schema: cxxlens.provider-ng1-qualification.v1
+      vectors: schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
+      exact_binding: [revision, tree, provider_binary_digest, provider_semantic_contract_digest, protocol_minor, hardening_contract_digest]
+      required_profiles: [static, shared]
+      required_cases: [positive-heartbeat-and-progress, stale-heartbeat, heartbeat-timeout, zero-progress-after-grace, stale-resume-token, foreign-resume-token, spill-corruption, worker-crash-recovery, worker-hang-recovery, cancellation-recovery, permutation-replay, long-run-fault]
+      required_case_outcomes:
+        positive-heartbeat-and-progress: accepted
+        stale-heartbeat: provider.heartbeat-timeout
+        heartbeat-timeout: provider.heartbeat-timeout
+        zero-progress-after-grace: provider.progress-rate
+        stale-resume-token: provider.resume-token-stale
+        foreign-resume-token: provider.resume-token-stale
+        spill-corruption: provider.spill-corrupt
+        worker-crash-recovery: replay-from-ack-plus-one-or-fail-closed
+        worker-hang-recovery: replay-from-durable-ack-or-fail-closed
+        cancellation-recovery: rollback-current-group-and-fail-closed
+        permutation-replay: provider.resume-replay-invalid
+        long-run-fault: accepted-only-with-exact-certificate-or-stable-failure
+      release_claim: exact-measured-certificate-only
+      unavailable_provider: unqualified
+      unavailable_platform: unqualified

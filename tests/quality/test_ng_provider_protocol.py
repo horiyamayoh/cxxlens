@@ -242,6 +242,19 @@ class NgProviderProtocolTest(unittest.TestCase):
         with self.assertRaisesRegex(Ng1ContractError, "qualification"):
             validate_ng1_contract(ROOT, self.contract, changed)
 
+    def test_ng1_schema_is_closed_and_rejects_maturity_or_direction_drift(self) -> None:
+        hardening = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.yaml")
+        schema = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml")
+        changed = copy.deepcopy(hardening)
+        changed["maturity"] = "accepted"
+        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
+            schema_validate(changed, schema, "NG1 hardening contract")
+
+        changed = copy.deepcopy(hardening)
+        changed["heartbeat"]["direction"]["ack"] = "host-to-provider"
+        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
+            schema_validate(changed, schema, "NG1 hardening contract")
+
     @staticmethod
     def task_input_transfer(
         chunks: list[bytes], chunk_bytes: int = 1048576

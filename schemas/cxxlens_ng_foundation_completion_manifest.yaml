@@ -64,6 +64,7 @@ authority_documents:
   - schemas/cxxlens_ng_provider_protocol.yaml
   - schemas/cxxlens_ng_provider_runtime_contract.yaml
   - schemas/cxxlens_ng_provider_ng1_hardening.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
   - schemas/cxxlens_ng_security_profile.yaml
   - schemas/cxxlens_ng_provider_support_matrix.yaml
   - schemas/cxxlens_ng_public_api_catalog.yaml

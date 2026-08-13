@@ -19,23 +19,28 @@ from a manifest or from NG0 tests.
 
 ## Decision proposal
 
-Adopt `schemas/cxxlens_ng_provider_ng1_hardening.yaml` as the exact NG1
-hardening contract. NG1 remains opt-in at protocol minor 1 and preserves all
+Propose adoption of `schemas/cxxlens_ng_provider_ng1_hardening.yaml` as the
+exact NG1 hardening contract. NG1 remains opt-in at protocol minor 1 and preserves all
 NG0 wire, credit, batch, coverage, unresolved, and atomicity invariants.
 
 The contract defines:
 
 - typed heartbeat probe/ack controls bound to provider, session, task, stream,
-  monotonic sequence, and injected monotonic time;
-- deterministic liveness interval/deadline and progress-rate arithmetic;
+  monotonic sequence, host receipt time, and an injected host monotonic clock;
+- deterministic liveness interval/deadline and overflow-safe progress-rate
+  arithmetic using host receipt deltas;
 - durable resume tokens bound to provider binary/semantic identity, task,
-  dependency group, batch, stream, acknowledged sequence, and staged digest;
-- append-only bounded spill records with canonical digests, fsync-before-token,
-  contiguous replay, fail-closed corruption handling, and explicit cleanup;
-- worker crash/hang/cancel recovery states that never adopt an open group or
-  alter the previously published snapshot;
-- exact static/shared and long-run qualification cases bound to one revision,
-  tree, provider identity, protocol minor, and hardening-contract digest.
+  input/selection identity, dependency group, batch, stream, acknowledged
+  sequence, staged digest, and a host-observed fsync receipt;
+- append-only bounded spill records with deterministic framing, canonical
+  digests, checked quota arithmetic, fsync-before-token, contiguous replay,
+  fail-closed corruption handling, and explicit cleanup;
+- an explicit worker crash/hang/cancel transition matrix whose shared sealed
+  output is the only adoption input and never alters the previously published
+  snapshot on failure;
+- exact static/shared and long-run qualification cases plus declarative
+  positive/negative vectors bound to one revision, tree, provider identity,
+  protocol minor, and hardening-contract digest.
 
 Heartbeat and progress controls are transport occurrences and are not claim or
 partition authority. Only the shared typed validator's sealed output groups
@@ -44,12 +49,15 @@ provider, or unavailable platform cannot satisfy NG1 qualification.
 
 ## Consequences
 
-The process port must expose a deterministic clock and bounded spill/recovery
-operations to the NG1 session state machine. The existing completed-process
+The process port must expose a deterministic clock, bounded spill/recovery
+operations, and host-observed durability receipts to the NG1 session state
+machine. The existing completed-process
 `run()` path remains valid for NG0 and cannot be silently reclassified as NG1.
 The public protocol enum may expose message type 23 only together with the
-typed controls, feature negotiation, negative vectors, and catalog/acceptance
-traceability.
+typed controls, feature negotiation, registered failure reservations, executed
+vectors, and catalog/acceptance traceability. Until implementation and
+qualification are complete, those NG1 failures are reserved in the runtime
+authority and are not active C++ terminals.
 
 Failure is fail-closed: heartbeat clock drift, liveness timeout, rate failure,
 stale/foreign/mutated resume, spill corruption, or unknown cleanup effect
@@ -66,6 +74,8 @@ produces a stable failure and leaves the prior published snapshot unchanged.
 ## Acceptance gate
 
 This ADR remains Proposed until #233 records an independent review of the
-schema, checker, state-machine transitions, overflow and replay boundaries,
-and exact negative qualification matrix. Only then may #183 implement or
-advertise NG1.
+closed schema and checker, protocol/report bindings, state-machine transitions,
+clock/rate overflow and replay boundaries, spill durability/cleanup, and exact
+negative qualification matrix. Only after that review may #183 implement NG1;
+only after executed static/shared evidence may the contract maturity change or
+NG1 be advertised.

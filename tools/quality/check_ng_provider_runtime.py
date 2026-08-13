@@ -2149,9 +2149,10 @@ def validate(root: pathlib.Path) -> None:
     }
     jsonschema.Draft202012Validator(report_schema).validate(sample_report)
     stable_terminals = set(contract["terminal"]["stable"])
+    reserved_terminals = set(contract["terminal"].get("reserved_for_ng1", []))
     schema_terminals = set(report_schema["properties"]["terminal"]["enum"])
-    if schema_terminals != stable_terminals:
-        raise ContractError("execution report terminal enum diverges from runtime registry")
+    if schema_terminals != stable_terminals | reserved_terminals:
+        raise ContractError("execution report terminal enum diverges from runtime registry and reservations")
     invalid_report = dict(sample_report)
     invalid_report["terminal"] = "provider.unknown-reason"
     if not list(jsonschema.Draft202012Validator(report_schema).iter_errors(invalid_report)):

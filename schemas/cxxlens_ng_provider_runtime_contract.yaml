@@ -14,6 +14,8 @@ dependencies:
   - schemas/cxxlens_ng_project_catalog_contract.yaml
   - schemas/cxxlens_ng_portable_provider_task_contract.yaml
   - schemas/cxxlens_ng_provider_ng1_hardening.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml
 runtime:
   process_effect_boundary: provider-process-port
   supported_platform:
@@ -287,7 +289,7 @@ protocol_session:
 terminal:
   success_derivation: validated-complete-kind-and-provider.success-and-final-task-complete-frame
   raw_terminal_text_is_not_authority: true
-  report_schema_membership: exact-stable-enum
+  report_schema_membership: active-stable-enum-plus-proposed-ng1-reservations
   stable:
     - provider.success
     - provider.timeout
@@ -316,6 +318,14 @@ terminal:
     - provider.frontend-request-invalid
     - security.sandbox-insufficient
     - security.sandbox-policy-mismatch
+  reserved_for_ng1:
+    - provider.heartbeat-clock-invalid
+    - provider.heartbeat-timeout
+    - provider.progress-rate
+    - provider.resume-token-stale
+    - provider.resume-replay-invalid
+    - provider.spill-corrupt
+    - provider.recovery-failed
   prior_published_snapshot: immutable
   unsealed_output: discarded
   public_frames:

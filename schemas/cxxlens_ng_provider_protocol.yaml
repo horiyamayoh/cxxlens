@@ -269,7 +269,11 @@ structured_control_metadata:
     batch_begin: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id]
     task_complete: [task_id, status]
     task_failed: [error_code, task_id, error_field]
-  unsigned_fields: [schema_negotiate.protocol_minor, input_descriptor.total_bytes, input_descriptor.chunk_bytes, input_descriptor.chunk_count, input_chunk.chunk_index, input_chunk.offset, input_chunk.byte_count, credit.bytes, credit.frames]
+    heartbeat: [schema, kind, provider_id, provider_version, protocol_session_id, task_id, stream_id, heartbeat_sequence, monotonic_time_ns, highest_contiguous_acked_sequence, staged_digest]
+    progress: [schema, task_id, dependency_group_id, progress_sequence, monotonic_time_ns, completed_units, total_units]
+    resume: [schema, kind, provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest, protocol_session_id, task_id, task_input_digest, normalized_invocation_digest, toolchain_digest, environment_digest, sandbox_policy_digest, dependency_group_id, atomic_output_group_id, batch_id, stream_id, highest_contiguous_acked_sequence, staged_digest, token_generation, token_digest]
+  unsigned_fields: [schema_negotiate.protocol_minor, input_descriptor.total_bytes, input_descriptor.chunk_bytes, input_descriptor.chunk_count, input_chunk.chunk_index, input_chunk.offset, input_chunk.byte_count, credit.bytes, credit.frames, heartbeat.stream_id, heartbeat.heartbeat_sequence, heartbeat.monotonic_time_ns, heartbeat.highest_contiguous_acked_sequence, progress.progress_sequence, progress.monotonic_time_ns, progress.completed_units, progress.total_units, resume.stream_id, resume.highest_contiguous_acked_sequence, resume.token_generation]
+  ng1_hardening_contract: schemas/cxxlens_ng_provider_ng1_hardening.yaml
   record_sets:
     common: [schema, record_count, indexed-exact-fields]
     coverage: [kind, id, state, reason]
@@ -473,6 +477,13 @@ failures:
     - provider.batch-invalid
     - provider.batch-state-invalid
     - provider.relation-incompatible
+    - provider.heartbeat-clock-invalid
+    - provider.heartbeat-timeout
+    - provider.progress-rate
+    - provider.resume-token-stale
+    - provider.resume-replay-invalid
+    - provider.spill-corrupt
+    - provider.recovery-failed
   current_dependency_group: rollback
   unsealed_groups: rollback
   prior_adopted_groups: retain-only-if-predeclared-partial-policy

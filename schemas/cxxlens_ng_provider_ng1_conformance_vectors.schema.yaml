@@ -1,0 +1,39 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-ng1-conformance-vectors.v1
+title: cxxlens NG1 provider hardening conformance vectors
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, vectors]
+properties:
+  schema: {const: cxxlens.provider-ng1-conformance-vectors.v1}
+  document_version: {const: '1.0.0'}
+  maturity: {const: proposed}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [contract, decision_issue, implementation_issue]
+    properties:
+      contract: {const: schemas/cxxlens_ng_provider_ng1_hardening.yaml}
+      decision_issue: {const: '#233'}
+      implementation_issue: {const: '#183'}
+  vectors:
+    type: array
+    minItems: 12
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, class, surface, mutation, expected]
+      properties:
+        id: {type: string, pattern: '^[a-z0-9-]+$'}
+        class: {enum: [positive, negative, recovery]}
+        surface: {enum: [heartbeat, progress, resume, spill, recovery, qualification]}
+        mutation: {type: string, minLength: 1}
+        expected:
+          type: object
+          additionalProperties: false
+          required: [decision]
+          properties:
+            decision: {enum: [accepted, rejected, recovery]}
+            reason_code: {type: string, pattern: '^provider\.[a-z0-9-]+$'}
+            outcome: {type: string, minLength: 1}

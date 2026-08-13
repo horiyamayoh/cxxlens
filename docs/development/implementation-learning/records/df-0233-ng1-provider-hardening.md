@@ -18,6 +18,7 @@ authority_refs:
   - docs/design/adr/0038-provider-runtime-protocol-state-validation.md
   - schemas/cxxlens_ng_provider_protocol.yaml
   - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
   - schemas/cxxlens_ng_security_profile.yaml
   - schemas/cxxlens_ng_release_bundle.yaml
 tracking_issue: '#233'
@@ -38,12 +39,13 @@ created: '2026-08-13'
 ## Observation
 
 The accepted Provider Protocol and integrated design require NG1 durable resume,
-heartbeat, progress-rate enforcement, spill staging, hung-worker recovery, and
-long-run qualification. The machine-readable protocol currently names those
-features and reserves message type 23, but it does not define the typed
-heartbeat control fields and direction, deterministic clock/liveness policy,
-progress-rate arithmetic and boundary behavior, durable token projection,
-spill-record integrity/cleanup, or restart/recovery state transitions.
+  heartbeat, progress-rate enforcement, spill staging, hung-worker recovery, and
+  long-run qualification. The machine-readable protocol currently names those
+  features and reserves message type 23, but it does not define the typed
+  heartbeat control fields and direction, host-receipt clock/liveness policy,
+  progress-rate arithmetic and boundary behavior, durable token projection,
+  spill framing/integrity/cleanup, restart/recovery state transitions, or
+  executed negative vectors.
 
 The current C++ runtime stops at message type 22, treats resume as unsupported,
 uses one in-memory process output, and has no production NG1 capability or
@@ -81,8 +83,8 @@ accepted and independently reviewed.
   sample stream.
 - `src/sdk/provider_runtime_internal.hpp` exposes only a completed-process
   output path; no live heartbeat, durable token, spill, or recovery port exists.
-- `schemas/cxxlens_ng_provider_protocol.yaml` requires the NG1 feature names and
-  reserves `23:heartbeat`, but has no typed NG1 lifecycle contract.
+- `schemas/cxxlens_ng_provider_protocol.yaml` now binds the proposed hardening
+  contract and typed registry, but it still has no executed NG1 lifecycle.
 - `schemas/cxxlens_ng_provider_runtime_contract.yaml` has no NG1 resource,
   clock, spill, or recovery authority.
 - Existing protocol/runtime quality tests cover NG0 vectors only; they do not
@@ -103,12 +105,13 @@ accepted and independently reviewed.
 
 ## Recommendation
 
-Accept one exact NG1 contract covering typed heartbeat probe/ack, monotonic
-clock/deadline and progress-rate rules, token bindings, append-only bounded
-spill framing with integrity and cleanup, restart/replay state, stable failure
-codes, and a measured qualification tuple. Then implement the shared state
-machine and connect the live process port before adding any certification
-claim.
+Accept one exact NG1 contract covering typed heartbeat probe/ack, host-receipt
+clock/deadline and progress-rate rules, token bindings with durability receipt,
+append-only bounded spill framing with checked quota/integrity and cleanup,
+restart/replay state, stable failure reservations, and a measured qualification
+tuple plus vectors. Then implement the shared state machine, connect the live
+process port, execute the vector matrix, and bind the static/shared certificate
+before adding any certification claim.
 
 ## Disposition
 
