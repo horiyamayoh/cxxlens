@@ -493,7 +493,8 @@ add_test(NAME unit.sdk-provider-ng1-transport
          COMMAND cxxlens-unit-sdk-provider-ng1-transport)
 set_tests_properties(
   unit.sdk-provider-ng1-transport
-  PROPERTIES LABELS "unit;sdk;provider;ng1;transport;deterministic-cbor;fail-closed")
+  PROPERTIES LABELS
+             "unit;sdk;provider;ng1;transport;deterministic-cbor;fail-closed")
 
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)

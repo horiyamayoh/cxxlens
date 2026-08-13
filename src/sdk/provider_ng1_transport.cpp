@@ -16,7 +16,6 @@ namespace cxxlens::sdk::provider::detail
 	{
 		constexpr std::string_view heartbeat_schema{"cxxlens.provider-control.heartbeat.v1"};
 		constexpr std::string_view progress_schema{"cxxlens.provider-control.progress.v2"};
-		constexpr std::string_view resume_schema{"cxxlens.provider-control.resume.v2"};
 		constexpr std::string_view semantic_digest_prefix{"semantic-v2:sha256:"};
 
 		[[nodiscard]] error transport_error(std::string field, std::string detail)
