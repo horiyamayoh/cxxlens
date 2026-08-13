@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -422,35 +423,62 @@ namespace
 				std::nullopt};
 	}
 
-	[[nodiscard]] bool process_is_running(const pid_t process)
+	[[nodiscard]] bool process_entry_exists(const pid_t process)
 	{
 #if defined(__linux__)
 		std::ifstream status{std::string{"/proc/"} + std::to_string(process) + "/status"};
-		std::string field;
-		while (status >> field)
-		{
-			if (field == "State:")
-			{
-				char state{};
-				status >> state;
-				return state != 'Z';
-			}
-			std::string ignored;
-			std::getline(status, ignored);
-		}
+		return status.good();
 #endif
-		return ::kill(process, 0) == 0;
+		return ::kill(process, 0) == 0 || errno != ESRCH;
 	}
 
 	[[nodiscard]] std::uint64_t descendant_fixture_subprocess_budget()
 	{
 #if defined(__linux__)
+		namespace fs = std::filesystem;
 		rlimit limit{};
 		require(::getrlimit(RLIMIT_NPROC, &limit) == 0,
 				"could not inspect the inherited process-count ceiling");
-		return limit.rlim_max > std::numeric_limits<std::uint64_t>::max()
+		std::error_code iteration_error;
+		std::uint64_t same_uid_threads{};
+		for (fs::directory_iterator entry{fs::path{"/proc"}, iteration_error};
+			 entry != fs::directory_iterator{} && !iteration_error;
+			 entry.increment(iteration_error))
+		{
+			const auto name = entry->path().filename().string();
+			std::uint64_t pid{};
+			const auto [end, parse_error] =
+				std::from_chars(name.data(), name.data() + name.size(), pid);
+			if (parse_error != std::errc{} || end != name.data() + name.size())
+				continue;
+			std::ifstream status{entry->path() / "status"};
+			std::string field;
+			std::uint64_t real_uid{};
+			std::uint64_t threads{1U};
+			bool found_uid{};
+			while (status >> field)
+			{
+				if (field == "Uid:")
+				{
+					found_uid = static_cast<bool>(status >> real_uid);
+				}
+				else if (field == "Threads:")
+					status >> threads;
+				std::string ignored;
+				std::getline(status, ignored);
+			}
+			if (found_uid && real_uid == static_cast<std::uint64_t>(::getuid()))
+				same_uid_threads += threads;
+		}
+		require(!iteration_error, "could not count same-uid threads for timeout fixture");
+		const auto required = same_uid_threads + 2U;
+		const auto maximum = limit.rlim_max > std::numeric_limits<std::uint64_t>::max()
 			? std::numeric_limits<std::uint64_t>::max()
 			: static_cast<std::uint64_t>(limit.rlim_max);
+		const auto requested = std::max(provider_subprocess_budget, required);
+		require(maximum >= requested,
+				"inherited RLIMIT_NPROC cannot accommodate provider timeout fixture");
+		return requested;
 #else
 		return provider_subprocess_budget;
 #endif
@@ -2058,11 +2086,12 @@ namespace
 		namespace fs = std::filesystem;
 		const auto marker = fs::temp_directory_path() /
 			("cxxlens-provider-timeout-grandchild-" + std::to_string(::getpid()) + ".pid");
-		std::error_code ignored;
-		fs::remove(marker, ignored);
+		std::error_code marker_error;
+		fs::remove(marker, marker_error);
+		require(!marker_error, "could not remove stale pipe-holding descendant marker");
 		auto grandchild_request = task(select(executable, "timeout-grandchild:" + marker.string()));
-		// The fixture must fork after launch; the inherited hard ceiling avoids a magic
-		// process-count assumption while still exercising the provider's process budget.
+		// The fixture forks after launch; derive the budget from the inherited ceiling and
+		// current same-UID thread count instead of assuming a fixed host process count.
 		grandchild_request.budget.subprocesses = descendant_fixture_subprocess_budget();
 		grandchild_request.budget.wall_ms = 1000U;
 		const auto grandchild_started = std::chrono::steady_clock::now();
@@ -2073,34 +2102,33 @@ namespace
 		require(grandchild_report && grandchild_report->terminal == "provider.timeout",
 				"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal);
 
-		std::optional<pid_t> holder;
-		const auto marker_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
-		while (!holder && std::chrono::steady_clock::now() < marker_deadline)
-		{
-			std::ifstream marker_input{marker};
-			long long raw_pid{};
-			if (marker_input >> raw_pid && raw_pid > 0 &&
-				raw_pid <= static_cast<long long>(std::numeric_limits<pid_t>::max()))
-				holder = static_cast<pid_t>(raw_pid);
-			else
-				std::this_thread::sleep_for(std::chrono::milliseconds{1});
-		}
-		require(holder.has_value(), "pipe-holding descendant did not publish its pid");
-
-		bool holder_gone = !process_is_running(*holder);
+		std::ifstream marker_input{marker};
+		long long raw_pid{};
+		const bool marker_valid = marker_input >> raw_pid && raw_pid > 0 &&
+			raw_pid <= static_cast<long long>(std::numeric_limits<pid_t>::max());
+		const auto holder =
+			marker_valid ? std::optional<pid_t>{static_cast<pid_t>(raw_pid)} : std::nullopt;
+		bool holder_gone = holder && !process_entry_exists(*holder);
 		const auto reap_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
-		while (!holder_gone && std::chrono::steady_clock::now() < reap_deadline)
+		while (holder && !holder_gone && std::chrono::steady_clock::now() < reap_deadline)
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds{1});
-			holder_gone = !process_is_running(*holder);
+			holder_gone = !process_entry_exists(*holder);
 		}
-		if (!holder_gone)
+		if (holder && !holder_gone)
 			(void)::kill(*holder, SIGKILL);
-		fs::remove(marker, ignored);
+		std::error_code marker_cleanup_error;
+		fs::remove(marker, marker_cleanup_error);
+		require(marker_valid && holder.has_value() && !marker_cleanup_error,
+				"pipe-holding descendant marker was invalid or could not be removed");
 		require(holder_gone,
 				"provider timeout did not terminate the pipe-holding process-group descendant");
-		require(grandchild_elapsed < std::chrono::seconds{4},
-				"provider timeout waited for the pipe-holding descendant instead of closing it");
+		require(grandchild_elapsed < std::chrono::seconds{2},
+				"provider timeout waited for the pipe-holding descendant instead of closing it: " +
+					std::to_string(
+						std::chrono::duration_cast<std::chrono::milliseconds>(grandchild_elapsed)
+							.count()) +
+					"ms");
 	}
 
 	void check_semantic_input_digests(const std::string& executable)

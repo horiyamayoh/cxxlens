@@ -157,19 +157,37 @@ int main(const int argument_count, const char* const* arguments)
 		const auto marker_path = mode.substr(timeout_grandchild_prefix.size());
 		if (marker_path.empty())
 			return EXIT_FAILURE;
+		std::array<int, 2U> ready_pipe{-1, -1};
+		if (::pipe(ready_pipe.data()) != 0)
+			return EXIT_FAILURE;
 		const auto holder = ::fork();
 		if (holder < 0)
 			return EXIT_FAILURE;
 		if (holder == 0)
 		{
+			(void)::close(ready_pipe[0U]);
 			std::ofstream marker{std::string{marker_path}, std::ios::trunc};
 			marker << ::getpid() << '\n';
-			marker.flush();
+			marker.close();
 			if (!marker)
 				::_exit(EXIT_FAILURE);
+			const std::byte ready{0x01};
+			if (::write(ready_pipe[1U], &ready, sizeof(ready)) != sizeof(ready))
+				::_exit(EXIT_FAILURE);
+			(void)::close(ready_pipe[1U]);
 			std::this_thread::sleep_for(std::chrono::seconds{5});
 			::_exit(EXIT_SUCCESS);
 		}
+		(void)::close(ready_pipe[1U]);
+		std::byte ready{};
+		ssize_t received{};
+		do
+		{
+			received = ::read(ready_pipe[0U], &ready, sizeof(ready));
+		} while (received < 0 && errno == EINTR);
+		(void)::close(ready_pipe[0U]);
+		if (received != sizeof(ready))
+			return EXIT_FAILURE;
 		return EXIT_SUCCESS;
 	}
 	if (mode == "output-limit")
