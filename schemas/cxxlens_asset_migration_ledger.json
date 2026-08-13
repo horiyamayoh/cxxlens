@@ -1,5 +1,5 @@
 {
-  "asset_count": 646,
+  "asset_count": 649,
   "assets": [
     {
       "authority": "active",
@@ -3020,6 +3020,20 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/provider_ng1_validation.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/provider_ng1_validation_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/provider_runtime.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4014,6 +4028,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/unit/sdk/provider_ng1_hardening_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/unit/sdk/provider_runtime_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4525,7 +4546,7 @@
     }
   ],
   "classifications": {
-    "active": 610,
+    "active": 613,
     "archived": 35,
     "generated": 1
   },

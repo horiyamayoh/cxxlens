@@ -438,6 +438,21 @@ set_tests_properties(
   unit.sdk-provider-runtime-host-streaming unit.sdk-provider-runtime-receipt
   PROPERTIES LABELS "unit;sdk;provider;protocol;streaming;sealed;security")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-validation
+                            unit/sdk/provider_ng1_hardening_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-validation
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-validation
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-validation
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-ng1-validation
+         COMMAND cxxlens-unit-sdk-provider-ng1-validation)
+set_tests_properties(
+  unit.sdk-provider-ng1-validation
+  PROPERTIES LABELS "unit;sdk;provider;ng1;validation;fail-closed")
+
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)
 target_link_libraries(cxxlens-clang22-provider-normalizer
@@ -924,6 +939,7 @@ add_dependencies(
   cxxlens-public-header-sdk
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
+  cxxlens-unit-sdk-provider-ng1-validation
   cxxlens-unit-sdk-query-runtime
   cxxlens-unit-sdk-sqlite-connection-lifecycle
   cxxlens-unit-sdk-sqlite-default-forwarding-vfs
