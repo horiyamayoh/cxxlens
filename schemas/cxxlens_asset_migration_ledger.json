@@ -1,5 +1,5 @@
 {
-  "asset_count": 654,
+  "asset_count": 655,
   "assets": [
     {
       "authority": "active",
@@ -1411,6 +1411,13 @@
     {
       "authority": "active",
       "path": "docs/development/implementation-learning/records/df-0233-ng1-provider-hardening.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0243-ng1-resume-provider-digest-grammar.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4581,7 +4588,7 @@
     }
   ],
   "classifications": {
-    "active": 618,
+    "active": 619,
     "archived": 35,
     "generated": 1
   },
