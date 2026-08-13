@@ -83,6 +83,7 @@ namespace cxxlens::detail::clang22::materialization
 		std::string atomic_output_group_id;
 		std::string batch_id;
 		std::string batch_digest;
+		std::vector<sdk::provider::batch_column_summary> columns;
 		std::vector<std::string> ordered_chunk_digests;
 		std::uint64_t row_count{};
 		std::string row_set_digest;
@@ -162,10 +163,14 @@ namespace cxxlens::detail::clang22::materialization
 		std::string ordered_chunk_payload_digest_set_digest;
 
 		std::uint64_t raw_frame_stream_bytes{};
+		/** Exact provider stdout bytes retained only for source-private reuse proof. */
+		std::vector<std::byte> raw_frame_stream;
 		std::string raw_frame_stream_digest;
 		std::uint64_t frame_count{};
 		std::string frame_transcript_digest;
 		std::string sealed_transcript_digest;
+		/** Canonical cross-binding of raw-frame and retained semantic transcript evidence. */
+		std::string capture_binding_digest;
 
 		std::vector<detailed_coverage_projection> coverage;
 		std::vector<detailed_unresolved_projection> unresolved;
@@ -297,6 +302,16 @@ namespace cxxlens::detail::clang22::materialization
 		const sealed_materialization_result& materialized,
 		const materialization_v2_1_task_metadata_receipt& metadata,
 		const detailed_report_limits& limits = {});
+
+	/** Encode one bounded task capture for a source-private durable artifact. */
+	[[nodiscard]] sdk::result<std::vector<std::byte>>
+	encode_detailed_task_report_capture(const detailed_task_report_capture& capture,
+										const detailed_report_limits& limits = {});
+
+	/** Strictly decode one durable task capture, rejecting trailing or non-canonical bytes. */
+	[[nodiscard]] sdk::result<detailed_task_report_capture>
+	decode_detailed_task_report_capture(std::span<const std::byte> bytes,
+										const detailed_report_limits& limits = {});
 
 	/** Capture only value-owned facts from the post-publication observation. */
 	[[nodiscard]] sdk::result<detailed_store_report_capture>

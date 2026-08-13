@@ -3793,7 +3793,9 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::result<json_value>
 		publication_json(const prevalidated_materialization_request_v2_1& request,
 						 const materialization_store_observation& observation,
-						 const materialization_rooted_vfs_receipt* rooted_receipt)
+						 const materialization_rooted_vfs_receipt* rooted_receipt,
+						 const public_materialization_prior_artifact_persistence*
+							prior_artifact_persistence)
 		{
 			if (!observation.publication_attempted || observation.publish_call_count != 1U ||
 				observation.first_issue || !observation.publish_returned_record ||
@@ -3874,6 +3876,46 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(std::move(rooted.error()));
 				effect = std::move(*rooted);
 			}
+			if (prior_artifact_persistence == nullptr)
+				return sdk::unexpected({"materialization.report-invalid",
+										"publication.prior_artifact_persistence",
+										"missing"});
+			if (prior_artifact_persistence->committed &&
+				(!prior_artifact_persistence->error_code.empty() ||
+				 !prior_artifact_persistence->error_field.empty() ||
+				 !prior_artifact_persistence->error_detail.empty()))
+				return sdk::unexpected({"materialization.report-invalid",
+										"publication.prior_artifact_persistence",
+										"committed-error"});
+			if (!prior_artifact_persistence->committed &&
+				(!bounded_report_text(prior_artifact_persistence->error_code,
+										 "publication.prior_artifact_persistence.error_code") ||
+				 !bounded_report_text(prior_artifact_persistence->error_field,
+										 "publication.prior_artifact_persistence.error_field") ||
+				 !bounded_report_text(prior_artifact_persistence->error_detail,
+										 "publication.prior_artifact_persistence.error_detail", false)))
+				return sdk::unexpected({"materialization.report-invalid",
+										"publication.prior_artifact_persistence",
+										"unavailable-error"});
+			json_value prior_artifact_error = json_value::null();
+			if (!prior_artifact_persistence->committed)
+			{
+				auto error = make_object({
+					{"code", text_value(prior_artifact_persistence->error_code)},
+					{"field", text_value(prior_artifact_persistence->error_field)},
+					{"detail", text_value(prior_artifact_persistence->error_detail)},
+				});
+				if (!error)
+					return sdk::unexpected(std::move(error.error()));
+				prior_artifact_error = std::move(*error);
+			}
+			auto prior_artifact = make_object({
+				{"state", text_value(prior_artifact_persistence->committed ? "committed"
+																			 : "unavailable")},
+				{"error", std::move(prior_artifact_error)},
+			});
+			if (!prior_artifact)
+				return sdk::unexpected(std::move(prior_artifact.error()));
 			return make_object({
 				{"backend", text_value(observation.backend)},
 				{"selector", std::move(*selector)},
@@ -3905,6 +3947,7 @@ namespace cxxlens::detail::clang22::materialization
 				{"prior_history_retained", json_value::boolean(true)},
 				{"head_effect", text_value("advanced_to_candidate")},
 				{"store_failure", json_value::null()},
+				{"prior_artifact_persistence", std::move(*prior_artifact)},
 				{"sqlite_effect_root_receipt", std::move(effect)},
 				{"sqlite_reopen_status",
 				 text_value(observation.backend == "sqlite" ? "opened" : "not_applicable")},
@@ -4782,6 +4825,8 @@ namespace cxxlens::detail::clang22::materialization
 			input.task_reports != nullptr || input.task_report_spool != nullptr;
 		if (input.prepublication == nullptr)
 			missing.emplace_back("prepublication_projection");
+		if (input.prior_artifact_persistence == nullptr)
+			missing.emplace_back("publication.prior_artifact_persistence");
 		if (input.generated_at.empty())
 			missing.emplace_back("generated_at");
 		for (const auto& [name, _] : required_supplemental)
@@ -4913,7 +4958,10 @@ namespace cxxlens::detail::clang22::materialization
 			if (!store)
 				return sdk::unexpected(std::move(store.error()));
 			derived_store = std::move(*store);
-			auto publication = publication_json(request, *input.store, input.rooted_vfs_receipt);
+			auto publication = publication_json(request,
+										 *input.store,
+										 input.rooted_vfs_receipt,
+										 input.prior_artifact_persistence);
 			if (!publication)
 				return sdk::unexpected(std::move(publication.error()));
 			derived_publication = std::move(*publication);

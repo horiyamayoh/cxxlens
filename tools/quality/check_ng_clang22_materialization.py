@@ -249,7 +249,7 @@ EXPECTED_REQUEST_SCHEMA_CANONICAL_DIGEST = (
     "sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270"
 )
 EXPECTED_REPORT_SCHEMA_CANONICAL_DIGEST = (
-    "sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b"
+    "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520"
 )
 DF_0200_REPORT_SHAPE_ACTIVATION = (
     "request-2.1.0-unchanged-report-private-spool-failure-"
@@ -12879,6 +12879,7 @@ def bind_committed_verified_publication(
         "prior_history_retained": True,
         "head_effect": "advanced_to_candidate",
         "store_failure": None,
+        "prior_artifact_persistence": {"state": "committed", "error": None},
         "sqlite_effect_root_receipt": expected_sqlite_effect_root_receipt(request),
         "sqlite_reopen_status": "opened" if backend == "sqlite" else "not_applicable",
         "recovery_receipt": None,
@@ -13269,6 +13270,7 @@ def sample_report(
             "prior_history_retained": True,
             "head_effect": "advanced_to_candidate",
             "store_failure": None,
+            "prior_artifact_persistence": {"state": "committed", "error": None},
             "sqlite_effect_root_receipt": expected_sqlite_effect_root_receipt(
                 request
             ),
@@ -13567,6 +13569,7 @@ def stale_parent_report(root: pathlib.Path, request: dict[str, Any]) -> dict[str
             },
             "diagnostic_digest": content_digest(b"fixture stale parent"),
         },
+        "prior_artifact_persistence": {"state": "not_attempted", "error": None},
         "sqlite_effect_root_receipt": expected_sqlite_effect_root_receipt(request),
         "sqlite_reopen_status": "opened",
         "recovery_receipt": {
@@ -15874,7 +15877,7 @@ def validate_v2_1_admission_authority_text(
                 "request 2.1.0 shape は不変",
                 "13/19-file occurrence inventory",
                 "`task_sandbox_requirements maxItems: 4096`",
-                "sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b",
+                "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520",
                 "operation-authentic kind×operation matrix",
                 "全 mismatched pair は no-response",
                 "root member の missing/extra",
@@ -15921,7 +15924,7 @@ def validate_v2_1_admission_authority_text(
                 "request 2.1.0 shape は不変",
                 "13/19-file occurrence inventory",
                 "sandbox array bound",
-                "sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b",
+                "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520",
                 "operation-authentic kind×operation matrix",
                 "全 mismatched pair は no-response",
                 "root member missing/extra",

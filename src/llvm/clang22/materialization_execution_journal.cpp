@@ -152,6 +152,8 @@ namespace cxxlens::detail::clang22::materialization
 		std::optional<compact_request_binding> binding;
 		compact_failure_phase phase{compact_failure_phase::input_limit};
 		compact_report_error error;
+		std::uint64_t task_attempt_count{};
+		std::uint64_t task_success_count{};
 		std::uint64_t worker_launch_attempt_count{};
 		std::uint64_t worker_launch_success_count{};
 		compact_store_draft_state store_draft_state{compact_store_draft_state::not_created};
@@ -179,6 +181,9 @@ namespace cxxlens::detail::clang22::materialization
 		compact_failure_phase phase{compact_failure_phase::input_limit};
 		std::optional<compact_request_binding> binding;
 		std::uint64_t actual_task_count{};
+		std::uint64_t task_attempt_count{};
+		std::uint64_t task_success_count{};
+		bool task_in_flight{};
 		std::uint64_t worker_launch_attempt_count{};
 		std::uint64_t worker_launch_success_count{};
 		bool worker_launch_in_flight{};
@@ -224,6 +229,16 @@ namespace cxxlens::detail::clang22::materialization
 	const compact_report_error& compact_failure_authority::error() const noexcept
 	{
 		return state_->error;
+	}
+
+	std::uint64_t compact_failure_authority::task_attempt_count() const noexcept
+	{
+		return state_->task_attempt_count;
+	}
+
+	std::uint64_t compact_failure_authority::task_success_count() const noexcept
+	{
+		return state_->task_success_count;
 	}
 
 	std::uint64_t compact_failure_authority::worker_launch_attempt_count() const noexcept
@@ -377,11 +392,37 @@ namespace cxxlens::detail::clang22::materialization
 							   "installation-binding");
 	}
 
+	sdk::result<void> materialization_execution_journal::record_task_attempt()
+	{
+		if (!state_)
+			return sdk::unexpected(journal_error("task-window", "consumed-journal"));
+		if (state_->phase != compact_failure_phase::worker_launch || state_->task_in_flight ||
+			state_->task_attempt_count >= state_->actual_task_count)
+			return sdk::unexpected(journal_error("task-window", "invalid-attempt"));
+		++state_->task_attempt_count;
+		state_->task_in_flight = true;
+		return {};
+	}
+
+	sdk::result<void> materialization_execution_journal::record_task_success()
+	{
+		if (!state_)
+			return sdk::unexpected(journal_error("task-window", "consumed-journal"));
+		if (state_->phase != compact_failure_phase::worker_launch || !state_->task_in_flight ||
+			state_->worker_launch_in_flight ||
+			state_->task_success_count >= state_->task_attempt_count ||
+			state_->task_attempt_count - state_->task_success_count != 1U)
+			return sdk::unexpected(journal_error("task-window", "success-without-attempt"));
+		++state_->task_success_count;
+		state_->task_in_flight = false;
+		return {};
+	}
+
 	sdk::result<void> materialization_execution_journal::record_worker_launch_attempt()
 	{
 		if (!state_)
 			return sdk::unexpected(journal_error("worker-launch", "consumed-journal"));
-		if (state_->phase != compact_failure_phase::worker_launch ||
+		if (state_->phase != compact_failure_phase::worker_launch || !state_->task_in_flight ||
 			state_->worker_launch_in_flight ||
 			state_->worker_launch_attempt_count >= state_->actual_task_count)
 			return sdk::unexpected(journal_error("worker-launch", "invalid-attempt"));
@@ -396,7 +437,8 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(journal_error("worker-launch", "consumed-journal"));
 		if (state_->phase != compact_failure_phase::worker_launch ||
 			!state_->worker_launch_in_flight ||
-			state_->worker_launch_success_count + 1U != state_->worker_launch_attempt_count)
+			state_->worker_launch_success_count >= state_->worker_launch_attempt_count ||
+			state_->worker_launch_attempt_count - state_->worker_launch_success_count != 1U)
 			return sdk::unexpected(journal_error("worker-launch", "success-without-attempt"));
 		++state_->worker_launch_success_count;
 		state_->worker_launch_in_flight = false;
@@ -407,10 +449,11 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (!state_)
 			return sdk::unexpected(journal_error("worker-launch", "consumed-journal"));
-		if (state_->phase != compact_failure_phase::worker_launch ||
+		if (state_->phase != compact_failure_phase::worker_launch || state_->task_in_flight ||
 			state_->worker_launch_in_flight ||
-			state_->worker_launch_attempt_count != state_->actual_task_count ||
-			state_->worker_launch_success_count != state_->actual_task_count)
+			state_->task_attempt_count != state_->actual_task_count ||
+			state_->task_success_count != state_->actual_task_count ||
+			state_->worker_launch_success_count != state_->worker_launch_attempt_count)
 			return sdk::unexpected(journal_error("worker-launch", "incomplete-task-census"));
 		state_->phase = compact_failure_phase::transcript;
 		return {};
@@ -592,19 +635,29 @@ namespace cxxlens::detail::clang22::materialization
 
 		if (state_->phase == compact_failure_phase::worker_launch)
 		{
-			if (!state_->worker_launch_in_flight || state_->worker_launch_attempt_count == 0U ||
-				state_->worker_launch_attempt_count > state_->actual_task_count ||
-				state_->worker_launch_success_count + 1U != state_->worker_launch_attempt_count)
+			if (!state_->task_in_flight || state_->task_attempt_count == 0U ||
+				state_->task_attempt_count > state_->actual_task_count ||
+				state_->task_success_count >= state_->task_attempt_count ||
+				state_->task_attempt_count - state_->task_success_count != 1U ||
+				state_->worker_launch_attempt_count > state_->task_attempt_count ||
+				(state_->worker_launch_in_flight
+						? state_->worker_launch_success_count >=
+							  state_->worker_launch_attempt_count ||
+							  state_->worker_launch_attempt_count -
+									  state_->worker_launch_success_count != 1U
+						: state_->worker_launch_success_count != state_->worker_launch_attempt_count))
 				return sdk::unexpected(journal_error("compact-failure", "launch-census"));
 		}
 		else if (state_->phase >= compact_failure_phase::transcript)
 		{
-			if (state_->worker_launch_in_flight ||
-				state_->worker_launch_attempt_count != state_->actual_task_count ||
-				state_->worker_launch_success_count != state_->actual_task_count)
+			if (state_->task_in_flight || state_->task_attempt_count != state_->actual_task_count ||
+				state_->task_success_count != state_->actual_task_count ||
+				state_->worker_launch_in_flight ||
+				state_->worker_launch_success_count != state_->worker_launch_attempt_count)
 				return sdk::unexpected(journal_error("compact-failure", "launch-census"));
 		}
-		else if (state_->worker_launch_attempt_count != 0U ||
+		else if (state_->task_attempt_count != 0U || state_->task_success_count != 0U ||
+				 state_->task_in_flight || state_->worker_launch_attempt_count != 0U ||
 				 state_->worker_launch_success_count != 0U || state_->worker_launch_in_flight)
 			return sdk::unexpected(journal_error("compact-failure", "early-launch-census"));
 
@@ -634,6 +687,8 @@ namespace cxxlens::detail::clang22::materialization
 		authority->binding = std::move(state_->binding);
 		authority->phase = state_->phase;
 		authority->error = std::move(error);
+		authority->task_attempt_count = state_->task_attempt_count;
+		authority->task_success_count = state_->task_success_count;
 		authority->worker_launch_attempt_count = state_->worker_launch_attempt_count;
 		authority->worker_launch_success_count = state_->worker_launch_success_count;
 		authority->store_draft_state = state_->store_draft_state;

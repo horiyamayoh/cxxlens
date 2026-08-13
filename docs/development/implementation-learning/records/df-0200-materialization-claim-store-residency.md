@@ -281,7 +281,7 @@ logical canonical v5 remain unchanged. The public catalog changes only by the ad
 SQLite-v3 behavior entry carrying `store.migration-required`; it adds no callable or CLI. Report
 2.1.0 now carries the accepted private spool-failure, occurrence-inventory, and sandbox-bound
 activation. The full parsed report schema canonical JSON digest is
-sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b.
+sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520.
 Private receipts and counters remain outside the public report/API.
 
 A confirmed High blocker requires a physical-format revision: SQLite v2 stores one payload BLOB and the qualified
@@ -347,5 +347,5 @@ and release qualification remain pending.
 2026-07-22: The accepted D5/D6 report-schema activation was applied atomically after the private
 spool phase bindings, reverse closures, occurrence inventory, sandbox bound, and Store overflow
 mapping became executable. Request 2.1.0 remains unchanged; report schema digest
-`sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b` is now the exact binding.
+`sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520` is now the exact binding.
 This activation does not qualify SQLite v3 or production release evidence.

@@ -143,20 +143,23 @@ namespace
 					   std::string interpretation = "company.test",
 					   std::vector<std::string> dependency_groups = {"dependency-1"})
 	{
-		auto task =
-			cxxlens::sdk::provider::task::make({std::string{provider.id()},
-												provider.version(),
-												std::string{provider.semantic_contract_digest()},
-												outputs,
-												{},
-												{interpretation},
-												"observation",
-												"assertion"},
-											   std::move(project),
-											   std::move(outputs),
-											   std::move(condition),
-											   std::move(interpretation),
-											   std::move(dependency_groups));
+		auto offered_outputs = outputs;
+		auto session_interpretation = interpretation;
+		auto session = cxxlens::sdk::provider::provider_session{
+			std::string{provider.id()},
+			provider.version(),
+			std::string{provider.semantic_contract_digest()},
+			std::move(offered_outputs),
+			{},
+			{std::move(session_interpretation)},
+			"observation",
+			"assertion"};
+		auto task = cxxlens::sdk::provider::task::make(std::move(session),
+													   std::move(project),
+													   std::move(outputs),
+													   std::move(condition),
+													   std::move(interpretation),
+													   std::move(dependency_groups));
 		require(task.has_value(), "valid provider task was rejected");
 		return std::move(*task);
 	}

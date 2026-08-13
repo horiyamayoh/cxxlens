@@ -85,6 +85,12 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] static sdk::result<materialization_effect_root> capture_startup();
 		[[nodiscard]] sdk::result<materialization_owned_fd> open_beneath(
 			std::string_view relative_path, int flags, std::uint32_t creation_mode = 0U) const;
+		/** Atomically install one same-directory temporary file without replacing an existing leaf.
+		 */
+		[[nodiscard]] sdk::result<void> rename_beneath(std::string_view temporary_path,
+													   std::string_view final_path) const;
+		/** Remove only a source-private temporary leaf beneath this effect root. */
+		[[nodiscard]] sdk::result<void> unlink_beneath(std::string_view relative_path) const;
 		[[nodiscard]] sdk::result<materialization_owned_fd> duplicate_directory() const;
 		[[nodiscard]] const materialization_file_identity& identity() const noexcept;
 		[[nodiscard]] const std::string& observation_digest() const noexcept;

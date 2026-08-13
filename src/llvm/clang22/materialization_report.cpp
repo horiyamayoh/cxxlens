@@ -263,12 +263,15 @@ namespace cxxlens::detail::clang22::materialization
 				left.atomic_output_group_id() != right.atomic_output_group_id() ||
 				left.batch_id() != right.batch_id() ||
 				left.batch_digest() != right.batch_digest() ||
+				left.columns().size() != right.columns().size() ||
 				left.ordered_chunk_digests().size() != right.ordered_chunk_digests().size() ||
 				left.rows().size() != right.rows().size())
 				return false;
 			for (std::size_t index{}; index < left.ordered_chunk_digests().size(); ++index)
 				if (left.ordered_chunk_digests()[index] != right.ordered_chunk_digests()[index])
 					return false;
+			if (!std::ranges::equal(left.columns(), right.columns()))
+				return false;
 			for (std::size_t index{}; index < left.rows().size(); ++index)
 				if (left.rows()[index].canonical_form() != right.rows()[index].canonical_form())
 					return false;
@@ -1096,6 +1099,9 @@ namespace cxxlens::detail::clang22::materialization
 										"runtime_receipt",
 										"sealed-digest"));
 		if (runtime.raw_stdout_byte_count() == 0U || runtime.decoded_frame_count() == 0U ||
+			outcome.raw_frame_stream.size() != runtime.raw_stdout_byte_count() ||
+			sdk::content_digest(outcome.raw_frame_stream) != runtime.raw_stdout_sha256() ||
+			outcome.raw_frame_stream.size() > limits.max_projection_bytes ||
 			!bounded_text(runtime.raw_stdout_sha256(), limits) ||
 			!bounded_text(runtime.frame_transcript_digest(), limits) ||
 			!bounded_text(runtime.sealed_transcript_digest(), limits))
@@ -1127,6 +1133,7 @@ namespace cxxlens::detail::clang22::materialization
 		capture.ordered_chunk_payload_digest_set_digest =
 			std::string{input.ordered_chunk_digest_set_digest()};
 		capture.raw_frame_stream_bytes = runtime.raw_stdout_byte_count();
+		capture.raw_frame_stream = outcome.raw_frame_stream;
 		capture.raw_frame_stream_digest = std::string{runtime.raw_stdout_sha256()};
 		capture.frame_count = runtime.decoded_frame_count();
 		capture.frame_transcript_digest = std::string{runtime.frame_transcript_digest()};
@@ -1206,7 +1213,8 @@ namespace cxxlens::detail::clang22::materialization
 		for (const auto& batch : materialized.provider_seal().batches())
 		{
 			if (capture.batches.size() >= limits.max_batches_per_task ||
-				batch.ordered_chunk_digests().size() > limits.max_chunks_per_batch)
+				batch.ordered_chunk_digests().size() > limits.max_chunks_per_batch ||
+				batch.columns().size() > limits.max_side_channel_records)
 			{
 				return sdk::unexpected(fail(detailed_report_error_kind::limit_exceeded,
 											"provider_sealed_transcript.batches",
@@ -1230,6 +1238,11 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
 												"provider_sealed_transcript.batches",
 												"chunk-digest-string"));
+			for (const auto& column : batch.columns())
+				if (!bounded_text(column.column_id, limits))
+					return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+												"provider_sealed_transcript.batches",
+												"column-id-string"));
 			detailed_provider_batch_projection output;
 			output.task_id = std::string{batch.task_id()};
 			output.descriptor_id = std::string{batch.descriptor_id()};
@@ -1238,6 +1251,7 @@ namespace cxxlens::detail::clang22::materialization
 			output.atomic_output_group_id = std::string{batch.atomic_output_group_id()};
 			output.batch_id = std::string{batch.batch_id()};
 			output.batch_digest = std::string{batch.batch_digest()};
+			output.columns.assign(batch.columns().begin(), batch.columns().end());
 			output.ordered_chunk_digests.assign(batch.ordered_chunk_digests().begin(),
 												batch.ordered_chunk_digests().end());
 			output.row_count = batch.rows().size();
@@ -1447,6 +1461,8 @@ namespace cxxlens::detail::clang22::materialization
 				!account(capture.raw_frame_stream_digest) ||
 				!account(capture.frame_transcript_digest) ||
 				!account(capture.sealed_transcript_digest) ||
+				!account(capture.capture_binding_digest) ||
+				!add_accounted_bytes(accounted, capture.raw_frame_stream.size(), limit) ||
 				!add_accounted_count(
 					accounted, capture.ordered_chunk_digests.size(), sizeof(std::string), limit))
 				return false;
@@ -1468,15 +1484,23 @@ namespace cxxlens::detail::clang22::materialization
 			{
 				if (batch.rows.size() != batch.row_count ||
 					batch.rows.size() > limits.max_side_channel_records ||
-					batch.ordered_chunk_digests.size() > limits.max_chunks_per_batch)
+					batch.ordered_chunk_digests.size() > limits.max_chunks_per_batch ||
+					batch.columns.size() > limits.max_side_channel_records)
 					return false;
 				if (!account(batch.task_id) || !account(batch.descriptor_id) ||
 					!account(batch.descriptor_digest) || !account(batch.dependency_group_id) ||
 					!account(batch.atomic_output_group_id) || !account(batch.batch_id) ||
 					!account(batch.batch_digest) || !account(batch.row_set_digest) ||
+					!add_accounted_count(accounted,
+										 batch.columns.size(),
+										 sizeof(sdk::provider::batch_column_summary),
+										 limit) ||
 					!add_accounted_count(
 						accounted, batch.ordered_chunk_digests.size(), sizeof(std::string), limit))
 					return false;
+				for (const auto& column : batch.columns)
+					if (!account(column.column_id))
+						return false;
 				for (const auto& value : batch.ordered_chunk_digests)
 					if (!account(value))
 						return false;
@@ -1559,8 +1583,280 @@ namespace cxxlens::detail::clang22::materialization
 			return true;
 		}
 
+		[[nodiscard]] bool
+		valid_raw_frame_capture(const detailed_task_report_capture& capture) noexcept
+		{
+			return capture.raw_frame_stream_bytes != 0U && !capture.raw_frame_stream.empty() &&
+				capture.raw_frame_stream.size() == capture.raw_frame_stream_bytes &&
+				sdk::content_digest(capture.raw_frame_stream) == capture.raw_frame_stream_digest;
+		}
+
+		[[nodiscard]] sdk::result<std::string>
+		capture_binding_digest(const detailed_task_report_capture& capture)
+		{
+			const auto number = [](const std::uint64_t value)
+			{
+				return sdk::canonical_value::from_string(std::to_string(value));
+			};
+			const auto optional_text = [](const std::optional<std::string>& value)
+			{
+				return value ? sdk::canonical_value::from_string(*value)
+							 : sdk::canonical_value::null();
+			};
+			const auto span = [&](const std::optional<observation_v2_primary_span>& value)
+			{
+				if (!value)
+					return sdk::canonical_value::null();
+				return sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string(value->span_id),
+					sdk::canonical_value::from_string(value->snapshot),
+					sdk::canonical_value::from_string(value->file),
+					number(value->begin),
+					number(value->end),
+					sdk::canonical_value::from_string(value->role),
+					sdk::canonical_value::from_boolean(value->read_only),
+				});
+			};
+			const auto rows = [&](const std::vector<sdk::detached_row>& values)
+			{
+				std::vector<sdk::canonical_value> output;
+				output.reserve(values.size());
+				for (const auto& value : values)
+					output.push_back(sdk::canonical_value::from_tuple({
+						sdk::canonical_value::from_string(value.descriptor_id),
+						sdk::canonical_value::from_string(value.canonical_form()),
+					}));
+				return sdk::canonical_value::from_tuple(std::move(output));
+			};
+			std::vector<sdk::canonical_value> batches;
+			batches.reserve(capture.batches.size());
+			for (const auto& batch : capture.batches)
+			{
+				std::vector<sdk::canonical_value> columns;
+				columns.reserve(batch.columns.size());
+				for (const auto& column : batch.columns)
+					columns.push_back(sdk::canonical_value::from_tuple({
+						sdk::canonical_value::from_string(column.column_id),
+						number(column.payload_bytes),
+						number(column.chunk_count),
+					}));
+				std::vector<sdk::canonical_value> chunks;
+				chunks.reserve(batch.ordered_chunk_digests.size());
+				for (const auto& digest : batch.ordered_chunk_digests)
+					chunks.push_back(sdk::canonical_value::from_string(digest));
+				std::vector<sdk::canonical_value> projected_rows;
+				projected_rows.reserve(batch.rows.size());
+				for (const auto& row : batch.rows)
+					projected_rows.push_back(sdk::canonical_value::from_tuple({
+						number(static_cast<std::uint64_t>(row.row_index)),
+						sdk::canonical_value::from_string(row.row_canonical_form),
+						sdk::canonical_value::from_string(row.row_digest),
+					}));
+				batches.push_back(sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string(batch.task_id),
+					sdk::canonical_value::from_string(batch.descriptor_id),
+					sdk::canonical_value::from_string(batch.descriptor_digest),
+					sdk::canonical_value::from_string(batch.dependency_group_id),
+					sdk::canonical_value::from_string(batch.atomic_output_group_id),
+					sdk::canonical_value::from_string(batch.batch_id),
+					sdk::canonical_value::from_string(batch.batch_digest),
+					sdk::canonical_value::from_tuple(std::move(columns)),
+					sdk::canonical_value::from_tuple(std::move(chunks)),
+					number(batch.row_count),
+					sdk::canonical_value::from_string(batch.row_set_digest),
+					sdk::canonical_value::from_tuple(std::move(projected_rows)),
+				}));
+			}
+			std::vector<sdk::canonical_value> observations;
+			observations.reserve(capture.observation_rows.size());
+			for (const auto& row : capture.observation_rows)
+				observations.push_back(sdk::canonical_value::from_tuple({
+					number(static_cast<std::uint64_t>(row.batch_index)),
+					number(static_cast<std::uint64_t>(row.row_index)),
+					sdk::canonical_value::from_string(row.observation_row_digest),
+					sdk::canonical_value::from_boolean(row.exact_equivalence),
+					optional_text(row.limitation),
+					span(row.primary_span),
+				}));
+			std::vector<sdk::canonical_value> coverage;
+			coverage.reserve(capture.coverage.size());
+			for (const auto& value : capture.coverage)
+				coverage.push_back(sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string(value.kind),
+					sdk::canonical_value::from_string(value.id),
+					sdk::canonical_value::from_string(value.state),
+					sdk::canonical_value::from_string(value.reason),
+				}));
+			std::vector<sdk::canonical_value> unresolved;
+			unresolved.reserve(capture.unresolved.size());
+			for (const auto& value : capture.unresolved)
+				unresolved.push_back(sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string(value.code),
+					sdk::canonical_value::from_string(value.subject),
+					sdk::canonical_value::from_string(value.detail),
+				}));
+			std::vector<sdk::canonical_value> evidence;
+			evidence.reserve(capture.evidence.size());
+			for (const auto& value : capture.evidence)
+				evidence.push_back(sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string(value.kind),
+					sdk::canonical_value::from_string(value.subject),
+					sdk::canonical_value::from_string(value.producer),
+					sdk::canonical_value::from_string(value.summary),
+				}));
+			auto encoded = sdk::canonical_binary(sdk::canonical_value::from_tuple({
+				sdk::canonical_value::from_string("cxxlens.clang22.task-capture-binding.v1"),
+				sdk::canonical_value::from_string(capture.raw_frame_stream_digest),
+				sdk::canonical_value::from_string(capture.frame_transcript_digest),
+				sdk::canonical_value::from_string(capture.sealed_transcript_digest),
+				sdk::canonical_value::from_tuple(std::move(batches)),
+				sdk::canonical_value::from_tuple(std::move(observations)),
+				sdk::canonical_value::from_tuple(std::move(coverage)),
+				sdk::canonical_value::from_tuple(std::move(unresolved)),
+				sdk::canonical_value::from_tuple(std::move(evidence)),
+				rows(capture.base_claim_rows),
+				rows(capture.source_span_claim_rows),
+			}));
+			if (!encoded)
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+													"task_spool.capture-binding",
+													"canonical"));
+			const std::string payload{reinterpret_cast<const char*>(encoded->data()), encoded->size()};
+			auto digest = sdk::semantic_digest("cxxlens.clang22.task-capture-binding.v1", payload);
+			if (!digest)
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+													"task_spool.capture-binding",
+													"digest"));
+			return digest;
+		}
+
+		[[nodiscard]] sdk::result<std::string>
+		capture_row_set_digest(const detailed_provider_batch_projection& batch,
+												const detailed_report_limits& limits)
+		{
+			std::string projection;
+			for (std::size_t index{}; index < batch.rows.size(); ++index)
+			{
+				const auto& row = batch.rows[index];
+				if (row.row_index != index || !bounded_text(row.row_canonical_form, limits) ||
+					!sdk::validate_utf8_text(row.row_canonical_form) ||
+						!bounded_text(row.row_digest, limits) ||
+						digest_text(row.row_canonical_form) != row.row_digest)
+					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+														"task_spool.batch.rows",
+														"digest-or-order"));
+				const auto index_text = std::to_string(index);
+				if (projection.size() > limits.max_projection_bytes ||
+					index_text.size() > limits.max_projection_bytes - projection.size())
+					return sdk::unexpected(fail(detailed_report_error_kind::limit_exceeded,
+														"task_spool.batch.rows",
+														"projection-bytes"));
+				const auto remaining = limits.max_projection_bytes - projection.size() - index_text.size();
+				if (remaining < 2U || row.row_canonical_form.size() > remaining - 2U)
+					return sdk::unexpected(fail(detailed_report_error_kind::limit_exceeded,
+														"task_spool.batch.rows",
+														"projection-bytes"));
+				projection.append(index_text);
+				projection.push_back(':');
+				projection.append(row.row_canonical_form);
+				projection.push_back('\n');
+			}
+			return sdk::semantic_digest("cxxlens.clang22.materialization-report.row-set.v1",
+													projection);
+		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_report_capture_semantics(const detailed_task_report_capture& capture,
+												  const detailed_report_limits& limits)
+		{
+			if (!valid_raw_frame_capture(capture) || capture.frame_count == 0U ||
+				capture.batches.size() > limits.max_batches_per_task ||
+				capture.observation_rows.size() > limits.max_side_channel_records)
+				return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+													"task_spool.capture",
+													"raw-or-bounds"));
+			for (const auto& batch : capture.batches)
+			{
+				if (batch.task_id != capture.provider_task_id || batch.row_count != batch.rows.size() ||
+					batch.columns.empty() || batch.columns.size() > limits.max_side_channel_records ||
+					batch.ordered_chunk_digests.size() > limits.max_chunks_per_batch ||
+					(batch.row_count == 0U) != batch.ordered_chunk_digests.empty())
+					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+													"task_spool.batch",
+													"shape"));
+				for (std::size_t index{}; index < batch.columns.size(); ++index)
+					if (!bounded_text(batch.columns[index].column_id, limits) ||
+						(index != 0U && batch.columns[index - 1U].column_id >=
+							batch.columns[index].column_id))
+						return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+														"task_spool.batch.columns",
+														"order"));
+				const sdk::provider::columnar_batch_end terminal{
+					batch.task_id,
+					batch.dependency_group_id,
+					batch.atomic_output_group_id,
+					batch.batch_id,
+					batch.descriptor_id,
+					batch.descriptor_digest,
+					batch.row_count,
+					batch.columns,
+					batch.ordered_chunk_digests,
+					batch.batch_digest};
+				if (sdk::provider::columnar_batch_digest(terminal) != batch.batch_digest)
+					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+													"task_spool.batch",
+													"batch-digest"));
+				auto row_set = capture_row_set_digest(batch, limits);
+				if (!row_set || *row_set != batch.row_set_digest)
+					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+													"task_spool.batch",
+													"row-set-digest"));
+			}
+			for (const auto& row : capture.observation_rows)
+			{
+				if (row.batch_index >= capture.batches.size() ||
+					row.row_index >= capture.batches[row.batch_index].rows.size() ||
+					row.observation_row_digest !=
+						capture.batches[row.batch_index].rows[row.row_index].row_digest ||
+					!bounded_text(row.observation_row_digest, limits) ||
+					(row.exact_equivalence == row.limitation.has_value()))
+					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+													"task_spool.observation",
+													"binding"));
+				if (row.limitation &&
+					(!bounded_text(*row.limitation, limits) || !sdk::validate_utf8_text(*row.limitation)))
+					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+													"task_spool.observation",
+													"limitation"));
+				if (row.primary_span)
+					if (auto valid = validate_primary_span(*row.primary_span, limits); !valid)
+						return sdk::unexpected(std::move(valid.error()));
+			}
+			const auto valid_row = [](const sdk::detached_row& row)
+			{
+				if (row.descriptor_id.empty())
+					return false;
+				for (const auto& [column, cell] : row.cells)
+					if (column.empty() || !sdk::is_valid(cell.type.scalar) ||
+						!sdk::is_valid(cell.state) || !cell.validate())
+						return false;
+				return true;
+			};
+			for (const auto& row : capture.base_claim_rows)
+				if (!valid_row(row))
+					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+													"task_spool.base_rows",
+													"cell"));
+			for (const auto& row : capture.source_span_claim_rows)
+				if (!valid_row(row))
+					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+													"task_spool.source_rows",
+													"cell"));
+			return {};
+		}
+
 		constexpr std::array<char, 8U> report_spool_magic{'C', 'X', 'L', 'D', 'R', 'S', 'P', '1'};
-		constexpr std::uint8_t report_spool_version = 1U;
+		constexpr std::uint8_t report_spool_version = 3U;
 		constexpr std::size_t report_spool_max_tasks = 4096U;
 		constexpr std::size_t report_spool_max_batches = 6U;
 		constexpr std::size_t report_spool_max_chunks = 65536U;
@@ -1767,6 +2063,14 @@ namespace cxxlens::detail::clang22::materialization
 		write_report_capture(report_spool_writer& writer,
 							 const detailed_task_report_capture& capture)
 		{
+			auto binding = capture_binding_digest(capture);
+			if (!binding)
+				return sdk::unexpected(std::move(binding.error()));
+			if (!capture.capture_binding_digest.empty() &&
+				capture.capture_binding_digest != *binding)
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+														"task_spool.capture-binding",
+														"mismatch"));
 			std::array<std::byte, report_spool_magic.size()> magic{};
 			for (std::size_t index{}; index < magic.size(); ++index)
 				magic[index] = static_cast<std::byte>(report_spool_magic[index]);
@@ -1827,10 +2131,17 @@ namespace cxxlens::detail::clang22::materialization
 			if (auto fields = write_fixed_strings({capture.ordered_chunk_payload_digest_set_digest,
 												   capture.raw_frame_stream_digest,
 												   capture.frame_transcript_digest,
-												   capture.sealed_transcript_digest});
+												   capture.sealed_transcript_digest,
+												   *binding});
 				!fields)
 				return fields;
 			if (auto value = writer.u64(capture.raw_frame_stream_bytes); !value)
+				return value;
+			if (auto value =
+					writer.u64(static_cast<std::uint64_t>(capture.raw_frame_stream.size()));
+				!value)
+				return value;
+			if (auto value = writer.bytes(capture.raw_frame_stream); !value)
 				return value;
 			if (auto value = writer.u64(capture.frame_count); !value)
 				return value;
@@ -1872,6 +2183,18 @@ namespace cxxlens::detail::clang22::materialization
 													   batch.batch_digest});
 					!fields)
 					return fields;
+				if (auto count = writer.u64(static_cast<std::uint64_t>(batch.columns.size()));
+					!count)
+					return count;
+				for (const auto& column : batch.columns)
+				{
+					if (auto value = writer.string(column.column_id); !value)
+						return value;
+					if (auto value = writer.u64(column.payload_bytes); !value)
+						return value;
+					if (auto value = writer.u64(column.chunk_count); !value)
+						return value;
+				}
 				if (auto values = writer.strings(batch.ordered_chunk_digests); !values)
 					return values;
 				if (auto value = writer.u64(batch.row_count); !value)
@@ -2029,6 +2352,23 @@ namespace cxxlens::detail::clang22::materialization
 				if (!length)
 					return sdk::unexpected(std::move(length.error()));
 				if (*length > static_cast<std::uint64_t>(limits_.max_string_bytes) ||
+					*length > end_ - offset_ ||
+					*length > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+					return sdk::unexpected(report_spool_failure(
+						detailed_report_error_kind::spool_corrupt, field, "bytes-length"));
+				std::vector<std::byte> value(static_cast<std::size_t>(*length));
+				if (auto read = exact(value); !read)
+					return sdk::unexpected(std::move(read.error()));
+				return value;
+			}
+
+			[[nodiscard]] sdk::result<std::vector<std::byte>>
+			raw_bytes(const std::string_view field)
+			{
+				auto length = u64();
+				if (!length)
+					return sdk::unexpected(std::move(length.error()));
+				if (*length > static_cast<std::uint64_t>(limits_.max_projection_bytes) ||
 					*length > end_ - offset_ ||
 					*length > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
 					return sdk::unexpected(report_spool_failure(
@@ -2308,16 +2648,28 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(std::move(value.error()));
 				capture.ordered_chunk_digests.push_back(std::move(*value));
 			}
-			if (auto fields = read_fixed_strings({&capture.ordered_chunk_payload_digest_set_digest,
-												  &capture.raw_frame_stream_digest,
-												  &capture.frame_transcript_digest,
-												  &capture.sealed_transcript_digest});
+				if (auto fields = read_fixed_strings({&capture.ordered_chunk_payload_digest_set_digest,
+															  &capture.raw_frame_stream_digest,
+															  &capture.frame_transcript_digest,
+															  &capture.sealed_transcript_digest,
+															  &capture.capture_binding_digest});
 				!fields)
 				return sdk::unexpected(std::move(fields.error()));
 			if (auto value = reader.u64(); !value)
 				return sdk::unexpected(std::move(value.error()));
 			else
 				capture.raw_frame_stream_bytes = *value;
+			auto raw_frame_stream = reader.raw_bytes("task_spool.raw_frame_stream");
+			if (!raw_frame_stream)
+				return sdk::unexpected(std::move(raw_frame_stream.error()));
+			capture.raw_frame_stream = std::move(*raw_frame_stream);
+			if (capture.raw_frame_stream_bytes != capture.raw_frame_stream.size() ||
+				capture.raw_frame_stream.empty() ||
+				sdk::content_digest(capture.raw_frame_stream) != capture.raw_frame_stream_digest)
+				return sdk::unexpected(
+					report_spool_failure(detailed_report_error_kind::spool_corrupt,
+										 "task_spool.raw_frame_stream",
+										 "digest-or-size"));
 			if (auto value = reader.u64(); !value)
 				return sdk::unexpected(std::move(value.error()));
 			else
@@ -2381,6 +2733,27 @@ namespace cxxlens::detail::clang22::materialization
 													  &batch.batch_digest});
 					!fields)
 					return sdk::unexpected(std::move(fields.error()));
+				auto column_count =
+					reader.count(limits.max_side_channel_records, "task_spool.batch.columns");
+				if (!column_count)
+					return sdk::unexpected(std::move(column_count.error()));
+				batch.columns.reserve(*column_count);
+				for (std::size_t column_index{}; column_index < *column_count; ++column_index)
+				{
+					sdk::provider::batch_column_summary column;
+					auto id = reader.string("task_spool.batch.column.id");
+					auto payload_bytes = reader.u64();
+					auto chunks = reader.u64();
+					if (!id || !payload_bytes || !chunks)
+						return sdk::unexpected(
+							report_spool_failure(detailed_report_error_kind::spool_corrupt,
+												 "task_spool.batch.column",
+												 "value"));
+					column.column_id = std::move(*id);
+					column.payload_bytes = *payload_bytes;
+					column.chunk_count = *chunks;
+					batch.columns.push_back(std::move(column));
+				}
 				auto chunks = reader.count(limits.max_chunks_per_batch, "task_spool.batch.chunks");
 				if (!chunks)
 					return sdk::unexpected(std::move(chunks.error()));
@@ -2481,6 +2854,14 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(std::move(rows.error()));
 			if (auto rows = read_rows(capture.source_span_claim_rows); !rows)
 				return sdk::unexpected(std::move(rows.error()));
+			if (auto valid = validate_report_capture_semantics(capture, limits); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			auto expected_binding = capture_binding_digest(capture);
+			if (!expected_binding || capture.capture_binding_digest != *expected_binding)
+				return sdk::unexpected(report_spool_failure(
+					detailed_report_error_kind::spool_corrupt,
+					"task_spool.capture-binding",
+					"mismatch"));
 			std::size_t accounted{};
 			if (!account_task_capture(capture, limits, accounted))
 				return sdk::unexpected(report_spool_failure(
@@ -2488,6 +2869,102 @@ namespace cxxlens::detail::clang22::materialization
 			return capture;
 		}
 	} // namespace
+
+	sdk::result<std::vector<std::byte>>
+	encode_detailed_task_report_capture(const detailed_task_report_capture& capture,
+										const detailed_report_limits& limits)
+	{
+		if (!valid_report_spool_limits(limits))
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::invalid_capture, "task_spool.limits", "bounded"));
+		try
+		{
+			if (!valid_raw_frame_capture(capture))
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+											"task_spool.raw_frame_stream",
+											"digest-or-size"));
+			auto semantic = validate_report_capture_semantics(capture, limits);
+			if (!semantic)
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+											semantic.error().field,
+											semantic.error().detail));
+			std::size_t accounted{};
+			if (!account_task_capture(capture, limits, accounted))
+				return sdk::unexpected(fail(
+					detailed_report_error_kind::limit_exceeded, "task_spool.capture", "bounds"));
+			auto storage_result = make_materialization_private_spool();
+			if (!storage_result)
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::spool_io, "task_spool", "create"));
+			auto storage = std::move(*storage_result);
+			report_spool_writer writer{*storage,
+									   static_cast<std::uint64_t>(limits.max_projection_bytes)};
+			if (auto written = write_report_capture(writer, capture); !written)
+				return sdk::unexpected(std::move(written.error()));
+			if (auto sealed = storage->seal(); !sealed)
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::spool_io, "task_spool", "seal"));
+			const auto size = storage->size_bytes();
+			if (size == 0U || size > limits.max_projection_bytes ||
+				size > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::limit_exceeded, "task_spool", "size"));
+			std::vector<std::byte> output(static_cast<std::size_t>(size));
+			std::uint64_t offset{};
+			while (offset < size)
+			{
+				auto read = storage->read_at(
+					offset, std::span<std::byte>{output}.subspan(static_cast<std::size_t>(offset)));
+				if (!read || *read == 0U || static_cast<std::uint64_t>(*read) > size - offset)
+					return sdk::unexpected(
+						fail(detailed_report_error_kind::spool_io, "task_spool", "read"));
+				offset += static_cast<std::uint64_t>(*read);
+			}
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "allocation"));
+		}
+	}
+
+	sdk::result<detailed_task_report_capture>
+	decode_detailed_task_report_capture(const std::span<const std::byte> bytes,
+										const detailed_report_limits& limits)
+	{
+		if (!valid_report_spool_limits(limits) || bytes.empty() ||
+			bytes.size() > limits.max_projection_bytes)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_corrupt, "task_spool", "bounds"));
+		try
+		{
+			auto storage_result = make_materialization_private_spool();
+			if (!storage_result)
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::spool_io, "task_spool", "create"));
+			auto storage = std::move(*storage_result);
+			if (auto appended = storage->append(bytes); !appended)
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::spool_io, "task_spool", "append"));
+			if (auto sealed = storage->seal(); !sealed)
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::spool_io, "task_spool", "seal"));
+			report_spool_reader reader{*storage, 0U, storage->size_bytes(), limits};
+			auto capture = read_report_capture(reader, limits);
+			if (!capture)
+				return sdk::unexpected(std::move(capture.error()));
+			if (reader.offset() != storage->size_bytes())
+				return sdk::unexpected(fail(
+					detailed_report_error_kind::spool_corrupt, "task_spool", "trailing-bytes"));
+			return capture;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_corrupt, "task_spool", "allocation"));
+		}
+	}
 
 	detailed_task_report_replayable_spool::detailed_task_report_replayable_spool(
 		detailed_report_limits limits, std::unique_ptr<materialization_replayable_spool> storage)
@@ -2537,6 +3014,15 @@ namespace cxxlens::detail::clang22::materialization
 				fail(detailed_report_error_kind::limit_exceeded, "task_spool", "count"));
 		try
 		{
+			if (!valid_raw_frame_capture(capture))
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+											"task_spool.raw_frame_stream",
+											"digest-or-size"));
+			auto semantic = validate_report_capture_semantics(capture, limits_);
+			if (!semantic)
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+											semantic.error().field,
+											semantic.error().detail));
 			std::size_t accounted{};
 			if (!account_task_capture(capture, limits_, accounted))
 				return sdk::unexpected(fail(
@@ -3256,6 +3742,8 @@ namespace cxxlens::detail::clang22::materialization
 			{"publication_attempted", json_value::boolean(false)},
 			{"store_draft_state", std::move(*store_state)},
 			{"store_failure_cause", std::move(store_cause)},
+			{"task_attempt_count", json_value::unsigned_integer(authority.task_attempt_count())},
+			{"task_success_count", json_value::unsigned_integer(authority.task_success_count())},
 			{"worker_launch_attempt_count",
 			 json_value::unsigned_integer(authority.worker_launch_attempt_count())},
 			{"worker_launch_success_count",

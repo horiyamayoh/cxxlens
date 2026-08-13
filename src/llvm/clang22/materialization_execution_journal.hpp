@@ -98,6 +98,8 @@ namespace cxxlens::detail::clang22::materialization
 		request_binding() const noexcept;
 		[[nodiscard]] compact_failure_phase phase() const noexcept;
 		[[nodiscard]] const compact_report_error& error() const noexcept;
+		[[nodiscard]] std::uint64_t task_attempt_count() const noexcept;
+		[[nodiscard]] std::uint64_t task_success_count() const noexcept;
 		[[nodiscard]] std::uint64_t worker_launch_attempt_count() const noexcept;
 		[[nodiscard]] std::uint64_t worker_launch_success_count() const noexcept;
 		[[nodiscard]] compact_store_draft_state store_draft_state() const noexcept;
@@ -170,6 +172,11 @@ namespace cxxlens::detail::clang22::materialization
 															 std::uint64_t actual_task_count);
 		[[nodiscard]] sdk::result<void> complete_installation_binding();
 
+		/** Record one authenticated task window, including exact-reuse tasks. */
+		[[nodiscard]] sdk::result<void> record_task_attempt();
+		[[nodiscard]] sdk::result<void> record_task_success();
+
+		/** Record only an actual provider/worker frontend launch. */
 		[[nodiscard]] sdk::result<void> record_worker_launch_attempt();
 		[[nodiscard]] sdk::result<void> record_worker_launch_success();
 		[[nodiscard]] sdk::result<void> complete_worker_launches();
