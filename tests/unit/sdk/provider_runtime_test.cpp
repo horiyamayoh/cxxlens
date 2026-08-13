@@ -23,7 +23,7 @@
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/sdk.hpp>
-#if defined(__linux__)
+#if defined(__linux__) && defined(__GLIBC__)
 #include <sys/resource.h>
 #endif
 #include <sys/socket.h>
@@ -423,18 +423,15 @@ namespace
 				std::nullopt};
 	}
 
+#if defined(__linux__) && defined(__GLIBC__)
 	[[nodiscard]] bool process_entry_exists(const pid_t process)
 	{
-#if defined(__linux__)
 		std::ifstream status{std::string{"/proc/"} + std::to_string(process) + "/status"};
 		return status.good();
-#endif
-		return ::kill(process, 0) == 0 || errno != ESRCH;
 	}
 
 	[[nodiscard]] std::uint64_t descendant_fixture_subprocess_budget()
 	{
-#if defined(__linux__)
 		namespace fs = std::filesystem;
 		rlimit limit{};
 		require(::getrlimit(RLIMIT_NPROC, &limit) == 0,
@@ -479,10 +476,8 @@ namespace
 		require(maximum >= requested,
 				"inherited RLIMIT_NPROC cannot accommodate provider timeout fixture");
 		return requested;
-#else
-		return provider_subprocess_budget;
-#endif
 	}
+#endif
 
 	[[nodiscard]] provider_fallback_tuple fallback_tuple(const provider_candidate& value,
 														 const std::uint32_t priority,
@@ -2083,6 +2078,7 @@ namespace
 		require(std::chrono::steady_clock::now() - timeout_started < std::chrono::seconds{10},
 				"provider timeout regression exceeded the hard anti-hang bound");
 
+#if defined(__linux__) && defined(__GLIBC__)
 		namespace fs = std::filesystem;
 		const auto marker = fs::temp_directory_path() /
 			("cxxlens-provider-timeout-grandchild-" + std::to_string(::getpid()) + ".pid");
@@ -2099,36 +2095,49 @@ namespace
 		const auto grandchild_elapsed = std::chrono::steady_clock::now() - grandchild_started;
 		const auto grandchild_terminal =
 			grandchild_report ? grandchild_report->terminal : grandchild_report.error().code;
+
+		const auto cleanup_descendant = [&]()
+		{
+			std::ifstream marker_input{marker};
+			long long raw_pid{};
+			const bool marker_valid = marker_input >> raw_pid && raw_pid > 0 &&
+				raw_pid <= static_cast<long long>(std::numeric_limits<pid_t>::max());
+			const auto holder =
+				marker_valid ? std::optional<pid_t>{static_cast<pid_t>(raw_pid)} : std::nullopt;
+			bool holder_gone = holder && !process_entry_exists(*holder);
+			const auto reap_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+			while (holder && !holder_gone && std::chrono::steady_clock::now() < reap_deadline)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+				holder_gone = !process_entry_exists(*holder);
+			}
+			if (holder && !holder_gone)
+				(void)::kill(*holder, SIGKILL);
+			const auto killed_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+			while (holder && !holder_gone && std::chrono::steady_clock::now() < killed_deadline)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+				holder_gone = !process_entry_exists(*holder);
+			}
+			std::error_code marker_cleanup_error;
+			fs::remove(marker, marker_cleanup_error);
+			return std::array{
+				marker_valid && holder.has_value(), holder_gone, !marker_cleanup_error};
+		};
+		const auto cleanup = cleanup_descendant();
 		require(grandchild_report && grandchild_report->terminal == "provider.timeout",
 				"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal);
-
-		std::ifstream marker_input{marker};
-		long long raw_pid{};
-		const bool marker_valid = marker_input >> raw_pid && raw_pid > 0 &&
-			raw_pid <= static_cast<long long>(std::numeric_limits<pid_t>::max());
-		const auto holder =
-			marker_valid ? std::optional<pid_t>{static_cast<pid_t>(raw_pid)} : std::nullopt;
-		bool holder_gone = holder && !process_entry_exists(*holder);
-		const auto reap_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
-		while (holder && !holder_gone && std::chrono::steady_clock::now() < reap_deadline)
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds{1});
-			holder_gone = !process_entry_exists(*holder);
-		}
-		if (holder && !holder_gone)
-			(void)::kill(*holder, SIGKILL);
-		std::error_code marker_cleanup_error;
-		fs::remove(marker, marker_cleanup_error);
-		require(marker_valid && holder.has_value() && !marker_cleanup_error,
-				"pipe-holding descendant marker was invalid or could not be removed");
-		require(holder_gone,
+		require(cleanup[0], "pipe-holding descendant marker was invalid");
+		require(cleanup[1],
 				"provider timeout did not terminate the pipe-holding process-group descendant");
+		require(cleanup[2], "pipe-holding descendant marker could not be removed");
 		require(grandchild_elapsed < std::chrono::seconds{2},
 				"provider timeout waited for the pipe-holding descendant instead of closing it: " +
 					std::to_string(
 						std::chrono::duration_cast<std::chrono::milliseconds>(grandchild_elapsed)
 							.count()) +
 					"ms");
+#endif
 	}
 
 	void check_semantic_input_digests(const std::string& executable)

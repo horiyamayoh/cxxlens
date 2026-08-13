@@ -151,6 +151,8 @@ int main(const int argument_count, const char* const* arguments)
 		(void)::raise(SIGSEGV);
 	if (mode == "timeout")
 		std::this_thread::sleep_for(std::chrono::seconds{5});
+
+#if defined(__linux__) && defined(__GLIBC__)
 	constexpr std::string_view timeout_grandchild_prefix = "timeout-grandchild:";
 	if (mode.starts_with(timeout_grandchild_prefix))
 	{
@@ -190,6 +192,7 @@ int main(const int argument_count, const char* const* arguments)
 			return EXIT_FAILURE;
 		return EXIT_SUCCESS;
 	}
+#endif
 	if (mode == "output-limit")
 	{
 		std::cout << std::string(1024U * 1024U, 'x');
