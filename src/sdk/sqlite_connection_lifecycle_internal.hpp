@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -121,6 +122,7 @@ namespace cxxlens::sdk
 		static void release_known_safe(std::shared_ptr<state>& owned) noexcept;
 		void cleanup_noexcept() noexcept;
 
+		static std::atomic<state*> quarantine_head_;
 		std::shared_ptr<state> state_;
 	};
 } // namespace cxxlens::sdk

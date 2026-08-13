@@ -1545,19 +1545,46 @@ namespace cxxlens::sdk
 			const void* open_callback_address{};
 			int (*trusted_close)(sqlite3_file*){};
 			std::shared_ptr<origin_probe_file_node> quarantine_self;
+			std::atomic_bool quarantine_enqueued{false};
+			// Non-owning link; quarantine_self remains the owner for process lifetime.
+			origin_probe_file_node* quarantine_next{};
 			bool close_attempted{};
 		};
 
+		struct origin_probe_quarantine_sink
+		{
+			static_assert(std::atomic<origin_probe_file_node*>::is_always_lock_free);
+			std::atomic<origin_probe_file_node*> head{nullptr};
+		};
+		origin_probe_quarantine_sink origin_probe_quarantine_sink_storage;
+
 		void quarantine_origin_probe(std::shared_ptr<origin_probe_file_node>& node) noexcept
 		{
-			// `quarantine_self` was armed before native xOpen. Dropping the external owner is
-			// allocation-free and leaves the opaque probe and its runtime/backend pins alive.
+			// `quarantine_self` was armed before native xOpen. Keep the quarantined probe reachable
+			// through a process-lifetime, lock-free sink instead of leaving an unreachable
+			// self-cycle behind. The link is non-owning because quarantine_self remains the owner.
+			if (!node)
+				return;
+			bool expected = false;
+			if (!node->quarantine_enqueued.compare_exchange_strong(
+					expected, true, std::memory_order_acq_rel, std::memory_order_acquire))
+			{
+				node.reset();
+				return;
+			}
+			auto* previous =
+				origin_probe_quarantine_sink_storage.head.load(std::memory_order_acquire);
+			do
+			{
+				node->quarantine_next = previous;
+			} while (!origin_probe_quarantine_sink_storage.head.compare_exchange_weak(
+				previous, node.get(), std::memory_order_release, std::memory_order_acquire));
 			node.reset();
 		}
 
 		void release_known_safe_origin_probe(std::shared_ptr<origin_probe_file_node>& node) noexcept
 		{
-			if (node)
+			if (node && !node->quarantine_enqueued.load(std::memory_order_acquire))
 				node->quarantine_self.reset();
 			node.reset();
 		}
