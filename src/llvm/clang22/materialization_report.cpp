@@ -1786,13 +1786,15 @@ namespace cxxlens::detail::clang22::materialization
 					(batch.row_count == 0U) != batch.ordered_chunk_digests.empty())
 					return sdk::unexpected(fail(
 						detailed_report_error_kind::spool_corrupt, "task_spool.batch", "shape"));
-				for (std::size_t index{}; index < batch.columns.size(); ++index)
-					if (!bounded_text(batch.columns[index].column_id, limits) ||
-						(index != 0U &&
-						 batch.columns[index - 1U].column_id >= batch.columns[index].column_id))
+				// The provider seal and batch digest authenticate descriptor order. Preserve
+				// that order here; reject only malformed or duplicate column summaries.
+				std::set<std::string, std::less<>> column_ids;
+				for (const auto& column : batch.columns)
+					if (!bounded_text(column.column_id, limits) ||
+						!column_ids.insert(column.column_id).second)
 						return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
 													"task_spool.batch.columns",
-													"order"));
+													"nonempty-or-duplicate"));
 				const sdk::provider::columnar_batch_end terminal{batch.task_id,
 																 batch.dependency_group_id,
 																 batch.atomic_output_group_id,

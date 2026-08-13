@@ -840,9 +840,13 @@ namespace
 		batch.dependency_group_id = "canonical";
 		batch.atomic_output_group_id = "clang22-atomic";
 		batch.batch_id = "cc.entity.v1-batch";
-		batch.columns = {{"column:test", 42U, 1U}};
+		// Provider batch summaries retain descriptor order, which is not required to be
+		// lexical order (cc.entity starts with entity before canonicalization).
+		batch.columns = {{"cc.entity.v1.entity", 42U, 1U},
+						 {"cc.entity.v1.canonicalization", 42U, 1U}};
 		batch.ordered_chunk_digests = {
-			"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"};
+			"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"};
 		batch.row_count = 1U;
 		const std::string row_form{"{\"row\":\"" + task_id + "\"}"};
 		const auto row_digest =
@@ -1015,9 +1019,11 @@ namespace
 		require(decoded.has_value() && decoded->tasks.size() == 1U &&
 					decoded->tasks.front().identity.canonical_task_ordinal == 0U &&
 					decoded->tasks.front().capture.provider_task_id == "task:artifact" &&
-					decoded->tasks.front().capture.batches.front().columns.size() == 1U &&
+					decoded->tasks.front().capture.batches.front().columns.size() == 2U &&
 					decoded->tasks.front().capture.batches.front().columns.front().column_id ==
-						"column:test",
+						"cc.entity.v1.entity" &&
+					decoded->tasks.front().capture.batches.front().columns.back().column_id ==
+						"cc.entity.v1.canonicalization",
 				"prior artifact codec did not restore the exact task tuple");
 		require(decoded.has_value() && *decoded == bundle,
 				"prior artifact structural equality did not preserve the decoded capture");
@@ -1043,6 +1049,24 @@ namespace
 					semantically_mismatched_encoding.error().detail ==
 						"invalid-capture:spool-corrupt:batch-digest",
 				"task capture encoder accepted a semantically inconsistent batch digest");
+		auto duplicate_column_capture = capture;
+		duplicate_column_capture.batches.front().columns[1U].column_id =
+			duplicate_column_capture.batches.front().columns.front().column_id;
+		auto duplicate_column_encoding =
+			encode_detailed_task_report_capture(duplicate_column_capture);
+		require(!duplicate_column_encoding &&
+					duplicate_column_encoding.error().field == "task_spool.batch.columns" &&
+					duplicate_column_encoding.error().detail ==
+						"invalid-capture:spool-corrupt:nonempty-or-duplicate",
+				"task capture encoder accepted duplicate batch columns");
+		auto empty_column_capture = capture;
+		empty_column_capture.batches.front().columns[1U].column_id.clear();
+		auto empty_column_encoding = encode_detailed_task_report_capture(empty_column_capture);
+		require(!empty_column_encoding &&
+					empty_column_encoding.error().field == "task_spool.batch.columns" &&
+					empty_column_encoding.error().detail ==
+						"invalid-capture:spool-corrupt:nonempty-or-duplicate",
+				"task capture encoder accepted an empty batch column ID");
 		auto invalid_runtime_capture = capture;
 		invalid_runtime_capture.provider_execution_id.clear();
 		auto invalid_runtime_capture_bytes =
