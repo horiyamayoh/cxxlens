@@ -454,9 +454,9 @@ set_tests_properties(
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
   set_tests_properties(
     unit.sdk-provider-runtime-timeout
-    PROPERTIES LABELS "unit;sdk;provider;process;budget;cancellation;regression"
-               TIMEOUT 30
-               SKIP_RETURN_CODE 77)
+    PROPERTIES LABELS
+               "unit;sdk;provider;process;budget;cancellation;regression"
+               TIMEOUT 30 SKIP_RETURN_CODE 77)
 endif()
 set_tests_properties(unit.sdk-provider-runtime-sealed
                      PROPERTIES LABELS "unit;sdk;provider;sealed;adoption")

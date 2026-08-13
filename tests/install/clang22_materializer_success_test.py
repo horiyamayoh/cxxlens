@@ -147,9 +147,12 @@ def main() -> int:
     environment.pop("LD_LIBRARY_PATH", None)
     environment.pop("DYLD_LIBRARY_PATH", None)
     materializer = args.prefix / "bin" / "cxxlens-clang22-materialize"
+    # Keep mutable SQLite files outside the immutable install prefix. The
+    # install-artifact manifest is verified by sibling CTest jobs, so a
+    # journal/WAL sidecar created under the prefix would race that exact file
+    # census and make the package appear to change while it is being checked.
     with tempfile.TemporaryDirectory(
-        dir=args.prefix if args.backend == "sqlite" else None,
-        prefix="clang22-materializer-e2e-",
+        prefix="clang22-materializer-e2e-"
     ) as working_directory:
         completed = subprocess.run(
             [str(materializer)],
