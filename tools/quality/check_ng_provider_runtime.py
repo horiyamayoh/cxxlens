@@ -2014,6 +2014,9 @@ def validate(root: pathlib.Path) -> None:
     report_schema = load(
         root / "schemas/cxxlens_ng_provider_execution_report.schema.yaml"
     )
+    ng1_hardening = load(
+        root / "schemas/cxxlens_ng_provider_ng1_hardening.yaml"
+    )
     jsonschema.Draft202012Validator.check_schema(contract_schema)
     jsonschema.Draft202012Validator(contract_schema).validate(contract)
     protocol = load(root / "schemas/cxxlens_ng_provider_protocol.yaml")
@@ -2151,7 +2154,10 @@ def validate(root: pathlib.Path) -> None:
     stable_terminals = set(contract["terminal"]["stable"])
     reserved_terminals = set(contract["terminal"].get("reserved_for_ng1", []))
     schema_terminals = set(report_schema["properties"]["terminal"]["enum"])
-    if schema_terminals != stable_terminals | reserved_terminals:
+    expected_report_terminals = stable_terminals
+    if ng1_hardening.get("maturity") == "accepted":
+        expected_report_terminals |= reserved_terminals
+    if schema_terminals != expected_report_terminals:
         raise ContractError("execution report terminal enum diverges from runtime registry and reservations")
     invalid_report = dict(sample_report)
     invalid_report["terminal"] = "provider.unknown-reason"

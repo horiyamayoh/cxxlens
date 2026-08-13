@@ -839,6 +839,7 @@ foreach(
         sqlite_store_contract
         sqlite_store_v3_qualification
         provider_protocol
+        provider_ng1_qualification
         provider_runtime
         security_contract
         release_contract

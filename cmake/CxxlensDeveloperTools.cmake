@@ -39,6 +39,7 @@ foreach(
         snapshot_store_contract
         sqlite_store_contract
         provider_protocol
+        provider_ng1_qualification
         security_contract
         provider_runtime)
   string(REPLACE "_" "-" target_suffix "${contract}")
@@ -50,6 +51,47 @@ foreach(
       --root "${CMAKE_CURRENT_SOURCE_DIR}"
     VERBATIM)
 endforeach()
+
+set(CXXLENS_NG1_QUALIFICATION_REPORT
+    ""
+    CACHE
+      FILEPATH
+      "Exact NG1 qualification report to validate when provider evidence is available"
+)
+set(CXXLENS_NG1_PROVIDER_BINARY
+    ""
+    CACHE
+      FILEPATH
+      "Host-measured NG1 provider executable to bind to the qualification report"
+)
+set(CXXLENS_NG1_PROVIDER_SEMANTIC_CONTRACT
+    ""
+    CACHE
+      FILEPATH
+      "Selected provider semantic contract to bind to the qualification report")
+set(_cxxlens_ng1_report_inputs
+    "${CXXLENS_NG1_QUALIFICATION_REPORT}${CXXLENS_NG1_PROVIDER_BINARY}${CXXLENS_NG1_PROVIDER_SEMANTIC_CONTRACT}"
+)
+if(_cxxlens_ng1_report_inputs)
+  if(NOT CXXLENS_NG1_QUALIFICATION_REPORT
+     OR NOT CXXLENS_NG1_PROVIDER_BINARY
+     OR NOT CXXLENS_NG1_PROVIDER_SEMANTIC_CONTRACT)
+    message(
+      FATAL_ERROR
+        "NG1 report mode requires report, provider binary, and semantic contract"
+    )
+  endif()
+  add_custom_target(
+    cxxlens-ng-provider-ng1-qualification-report-check
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_provider_ng1_qualification.py"
+      report --root "${CMAKE_CURRENT_SOURCE_DIR}" --report
+      "${CXXLENS_NG1_QUALIFICATION_REPORT}" --provider-binary
+      "${CXXLENS_NG1_PROVIDER_BINARY}" --provider-semantic-contract
+      "${CXXLENS_NG1_PROVIDER_SEMANTIC_CONTRACT}"
+    VERBATIM)
+endif()
 
 add_custom_target(
   cxxlens-ng-ci-supply-chain-check
@@ -189,6 +231,7 @@ add_dependencies(
   cxxlens-ng-design-feedback-check
   cxxlens-ng-clang22-materialization-check
   cxxlens-ng-provider-protocol-check
+  cxxlens-ng-provider-ng1-qualification-check
   cxxlens-ng-provider-runtime-check
   cxxlens-ng-production-scope-closure-check
   cxxlens-ng-api-development-readiness-check
@@ -210,6 +253,10 @@ add_dependencies(
   cxxlens-runtime-port-check
   cxxlens-sanitizer-coverage-check
   cxxlens-text-lint)
+if(TARGET cxxlens-ng-provider-ng1-qualification-report-check)
+  add_dependencies(cxxlens-quality
+                   cxxlens-ng-provider-ng1-qualification-report-check)
+endif()
 if(TARGET cxxlens-format-check)
   add_dependencies(cxxlens-quality cxxlens-format-check)
 endif()

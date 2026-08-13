@@ -10,6 +10,8 @@ positive/negative evidence exist.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import pathlib
 import sys
 from typing import Any
@@ -27,10 +29,16 @@ PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml")
 EXECUTION_REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_execution_report.schema.yaml"
 )
+SPILL_FSYNC_RECEIPT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml"
+)
 RUNTIME_CONTRACT = pathlib.Path("schemas/cxxlens_ng_provider_runtime_contract.yaml")
 VECTORS = pathlib.Path("schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml")
 VECTORS_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml"
+)
+QUALIFICATION_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml"
 )
 
 
@@ -62,6 +70,13 @@ def expect(actual: Any, expected: Any, path: str) -> None:
         fail(path, f"expected {expected!r}, got {actual!r}")
 
 
+def document_digest(value: Any) -> str:
+    canonical = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
 FEATURES = [
     "durable-resume-token",
     "heartbeat",
@@ -69,6 +84,32 @@ FEATURES = [
     "spill-staging",
     "long-run-fault-qualification",
 ]
+
+EXPECTED_LIFECYCLE = {
+    "host_receipt": {
+        "type": "uint64",
+        "unit": "nanoseconds",
+        "source": "host-injected-monotonic-clock",
+        "capture": "once-before-shared-validation",
+        "authority": "liveness-and-progress-rate",
+        "monotonicity": "non-decreasing-per-protocol-session",
+        "backwards": "provider.heartbeat-clock-invalid",
+    },
+    "session_start": {
+        "event": "validated-schema-negotiate-complete",
+        "receipt": "host-receipt-at-event-boundary",
+        "binding": ["protocol_session_id"],
+    },
+    "task_start": {
+        "event": "validated-task-accepted",
+        "receipt": "host-receipt-at-frame-ingress-before-validation",
+        "binding": ["protocol_session_id", "task_id"],
+    },
+    "task_terminal": {
+        "event": "validated-task-complete-or-task-failed",
+        "receipt": "host-receipt-at-frame-ingress-before-validation",
+    },
+}
 
 
 EXPECTED_HEARTBEAT = {
@@ -133,22 +174,67 @@ EXPECTED_HEARTBEAT = {
         "source": "host-injected-monotonic-clock",
         "unit": "nanoseconds",
         "wall_clock": "forbidden",
-        "provider_timestamp": "ordering-and-diagnostics-only",
-        "receipt_timestamp": "host-observed-before-validation",
-        "future": "provider.heartbeat-clock-invalid",
+        "host_receipt": {
+            "source": "host-injected-monotonic-clock",
+            "capture": "once-before-shared-validation",
+            "authority": "liveness-and-progress-rate",
+        },
+        "provider_timestamp": {
+            "field": "monotonic_time_ns",
+            "clock_domain": "session-host-monotonic",
+            "role": "ordering-and-diagnostics-only",
+            "ordering_scope": ["protocol_session_id", "task_id", "stream_id"],
+            "future": {
+                "predicate": "provider-timestamp-greater-than-frame-host-receipt",
+                "equality": "accepted",
+                "failure": "provider.heartbeat-clock-invalid",
+            },
+            "backwards": {
+                "predicate": "provider-timestamp-less-than-previous-accepted-in-scope",
+                "equality": "accepted",
+                "failure": "provider.heartbeat-clock-invalid",
+            },
+            "baseline_update": "after-full-control-validation-only",
+            "rate_and_liveness_authority": "forbidden",
+        },
         "arithmetic": "checked-u64-subtraction",
-        "backwards": "provider.heartbeat-clock-invalid",
     },
     "liveness": {
         "interval_ns": 1_000_000_000,
         "timeout_ns": 5_000_000_000,
         "startup_grace_ns": 10_000_000_000,
-        "ack_deadline": "timeout-after-last-probe",
-        "deadline": "last-probe-plus-timeout-inclusive",
+        "activation": {"event": "task-start", "initial_state": "no-valid-ack"},
+        "probe_schedule": {
+            "first_probe": "at-task-start",
+            "next_probe": "previous-probe-host-receipt-plus-interval",
+        },
+        "initial_ack_deadline": {
+            "state": "no-valid-ack",
+            "basis": "task-start-host-receipt",
+            "deadline": "checked-add-task-start-host-receipt-and-startup-grace",
+            "accepted_if": "ack-host-receipt-less-than-deadline",
+            "boundary": "deadline-inclusive-failure",
+            "failure": "provider.heartbeat-timeout",
+        },
+        "ack_deadline": {
+            "enabled_if": "first-valid-ack-established",
+            "basis": "latest-probe-host-receipt",
+            "deadline": "checked-add-probe-host-receipt-and-timeout",
+            "accepted_if": "ack-host-receipt-less-than-deadline",
+            "boundary": "timeout-inclusive-failure",
+            "failure": "provider.heartbeat-timeout",
+        },
+        "idle_timeout": {
+            "enabled_if": "first-valid-ack-established",
+            "basis": "last-valid-ack-host-receipt",
+            "rejection": "now-minus-last-valid-ack-receipt-greater-than-or-equal-timeout",
+            "boundary": "timeout-inclusive-failure",
+            "failure": "provider.heartbeat-timeout",
+        },
         "startup_boundary": "grace-inclusive",
         "time_authority": "host-injected-monotonic-clock",
+        "no_valid_ack": "initial-ack-deadline-only",
         "last_valid_ack": "host-receipt-time-of-validated-ack",
-        "timeout_formula": "now_ns-last_valid_ack_received_ns>=timeout_ns",
         "timeout_arithmetic": "checked-u64-subtraction",
         "terminal_grace": "no-heartbeat-required-after-terminal",
         "timeout_result": "provider.heartbeat-timeout",
@@ -200,6 +286,15 @@ EXPECTED_PROGRESS = {
     },
     "enforcement": {
         "startup_grace_ns": 10_000_000_000,
+        "first_sample_deadline": {
+            "state": "no-valid-sample",
+            "basis": "task-start-host-receipt",
+            "deadline": "checked-add-task-start-host-receipt-and-startup-grace",
+            "accepted_if": "valid-sample-host-receipt-less-than-deadline",
+            "boundary": "timeout-inclusive-failure",
+            "terminal_bypass": "forbidden",
+            "failure": "provider.progress-rate",
+        },
         "sample_window_ns": 5_000_000_000,
         "maximum_sample_gap_ns": 10_000_000_000,
         "minimum_units_per_second": 1,
@@ -211,6 +306,10 @@ EXPECTED_PROGRESS = {
         "equality_at_deadline": "accepted",
         "sample_time_authority": "host-injected-monotonic-clock-at-valid-frame-receipt",
         "provider_timestamp_role": "ordering-only-not-rate-authority",
+        "provider_timestamp_future": "provider-timestamp-greater-than-frame-host-receipt-is-provider.heartbeat-clock-invalid",
+        "provider_timestamp_backwards": "provider-timestamp-less-than-previous-accepted-in-scope-is-provider.heartbeat-clock-invalid",
+        "provider_timestamp_scope": ["protocol_session_id", "task_id", "dependency_group_id"],
+        "provider_timestamp_baseline_update": "after-full-control-validation-only",
         "delta_time": "current-receipt-ns-minus-previous-receipt-ns",
         "overflow": "checked-u128-or-fail",
         "zero_elapsed": "provider.progress-rate",
@@ -222,6 +321,57 @@ EXPECTED_PROGRESS = {
         "counts_toward_output_credit": False,
         "counts_toward_transport_budget": True,
     },
+}
+
+EXPECTED_RECEIPT = {
+    "schema": "cxxlens.provider-spill-fsync-receipt.v1",
+    "schema_path": "schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml",
+    "exact_fields": [
+        "schema",
+        "provider_id",
+        "protocol_session_id",
+        "task_id",
+        "stream_id",
+        "highest_contiguous_acked_sequence",
+        "staged_digest",
+        "spill_digest",
+        "total_bytes",
+        "total_records",
+        "fsync_sequence",
+    ],
+    "field_types": {
+        "schema": "fixed-string",
+        "provider_id": "typed-id",
+        "protocol_session_id": "typed-id",
+        "task_id": "typed-id",
+        "stream_id": "uint64",
+        "highest_contiguous_acked_sequence": "uint64",
+        "staged_digest": "semantic-digest",
+        "spill_digest": "semantic-digest",
+        "total_bytes": "uint64",
+        "total_records": "uint64",
+        "fsync_sequence": "positive-uint64",
+    },
+    "field_constraints": {
+        "schema": "exact-receipt-schema",
+        "provider_id": "exact-provider-binding",
+        "protocol_session_id": "exact-session-binding",
+        "task_id": "exact-task-binding",
+        "stream_id": "exact-stream-binding",
+        "highest_contiguous_acked_sequence": "contiguous-durable-ack",
+        "staged_digest": "exact-staged-prefix-digest",
+        "spill_digest": "exact-canonical-spill-prefix-digest",
+        "total_bytes": "checked-cumulative-byte-count",
+        "total_records": "checked-cumulative-record-count",
+        "fsync_sequence": "host-observed-strictly-increasing-positive-sequence",
+    },
+    "digest": {
+        "domain": "cxxlens.provider-spill-prefix.v1",
+        "projection": "canonical-tuple-of-binding-ack-staged-digest-spill-digest-and-cumulative-counters",
+        "algorithm": "cxxlens-semantic-digest-v2",
+        "encoding": "cxxlens-canonical-tuple-v1",
+    },
+    "authority": "host-observed-private-spill-port-result",
 }
 
 EXPECTED_RESUME = {
@@ -308,22 +458,7 @@ EXPECTED_RESUME = {
         "volatile_ack_is_not_authority": True,
         "generation": "strictly-increasing",
         "publication_order": "append-spill-fsync-construct-token-publish-token",
-        "receipt": {
-            "schema": "cxxlens.provider-spill-fsync-receipt.v1",
-            "exact_fields": [
-                "provider_id",
-                "protocol_session_id",
-                "task_id",
-                "stream_id",
-                "highest_contiguous_acked_sequence",
-                "staged_digest",
-                "spill_digest",
-                "total_bytes",
-                "total_records",
-                "fsync_sequence",
-            ],
-            "authority": "host-observed-private-spill-port-result",
-        },
+        "receipt": EXPECTED_RECEIPT,
         "atomic_persistence": "temp-write-fsync-rename-parent-fsync",
     },
     "replay": {
@@ -515,20 +650,30 @@ EXPECTED_STABLE_FAILURES = [
 
 EXPECTED_QUALIFICATION = {
     "schema": "cxxlens.provider-ng1-qualification.v1",
+    "report_schema": "schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml",
+    "checker": "tools/quality/check_ng_provider_ng1_qualification.py",
     "vectors": "schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml",
     "exact_binding": [
         "revision",
         "tree",
         "provider_binary_digest",
+        "provider_binary_digest_source",
         "provider_semantic_contract_digest",
+        "provider_semantic_contract_digest_source",
         "protocol_minor",
+        "protocol_contract_digest",
         "hardening_contract_digest",
+        "hardening_contract_schema_digest",
+        "report_schema_digest",
+        "vectors_digest",
+        "vectors_schema_digest",
     ],
     "required_profiles": ["static", "shared"],
     "required_cases": [
         "positive-heartbeat-and-progress",
         "stale-heartbeat",
         "heartbeat-timeout",
+        "progress-sample-timeout",
         "zero-progress-after-grace",
         "stale-resume-token",
         "foreign-resume-token",
@@ -543,6 +688,7 @@ EXPECTED_QUALIFICATION = {
         "positive-heartbeat-and-progress": "accepted",
         "stale-heartbeat": "provider.heartbeat-timeout",
         "heartbeat-timeout": "provider.heartbeat-timeout",
+        "progress-sample-timeout": "provider.progress-rate",
         "zero-progress-after-grace": "provider.progress-rate",
         "stale-resume-token": "provider.resume-token-stale",
         "foreign-resume-token": "provider.resume-token-stale",
@@ -586,6 +732,7 @@ def validate_ng1_contract(
             "decision_issue": "#233",
             "implementation_issue": "#183",
             "owner": "steward.ng-provider-runtime",
+            "spill_fsync_receipt_schema": SPILL_FSYNC_RECEIPT_SCHEMA.as_posix(),
         },
         "authority",
     )
@@ -601,15 +748,145 @@ def validate_ng1_contract(
         },
         "profile",
     )
+    expect(hardening["lifecycle"], EXPECTED_LIFECYCLE, "lifecycle")
     expect(hardening["heartbeat"], EXPECTED_HEARTBEAT, "heartbeat")
     expect(hardening["progress"], EXPECTED_PROGRESS, "progress")
     expect(hardening["resume"], EXPECTED_RESUME, "resume")
+    receipt_schema = load_yaml(root / SPILL_FSYNC_RECEIPT_SCHEMA)
+    receipt_fields = EXPECTED_RECEIPT["exact_fields"]
+    expect(receipt_schema.get("type"), "object", "spill_fsync_receipt_schema.type")
+    expect(
+        receipt_schema.get("additionalProperties"),
+        False,
+        "spill_fsync_receipt_schema.additionalProperties",
+    )
+    expect(receipt_schema.get("required"), receipt_fields, "spill_fsync_receipt_schema.required")
+    expect(
+        sorted(receipt_schema.get("properties", {})),
+        sorted(receipt_fields),
+        "spill_fsync_receipt_schema.properties",
+    )
+    receipt_digest = "semantic-v2:sha256:" + "0" * 64
+    receipt_instance = {
+        "schema": EXPECTED_RECEIPT["schema"],
+        "provider_id": "provider:test",
+        "protocol_session_id": "session:test",
+        "task_id": "task:test",
+        "stream_id": 1,
+        "highest_contiguous_acked_sequence": 0,
+        "staged_digest": receipt_digest,
+        "spill_digest": receipt_digest,
+        "total_bytes": 0,
+        "total_records": 0,
+        "fsync_sequence": 1,
+    }
+    schema_validate(receipt_instance, receipt_schema, "spill fsync receipt")
+    receipt_validator = jsonschema.Draft202012Validator(receipt_schema)
+    if receipt_validator.is_valid({**receipt_instance, "unexpected": True}):
+        fail("spill_fsync_receipt_schema", "unexpected properties are accepted")
+    if receipt_validator.is_valid({**receipt_instance, "fsync_sequence": 0}):
+        fail("spill_fsync_receipt_schema", "zero fsync sequence is accepted")
+    if receipt_validator.is_valid(
+        {
+            **receipt_instance,
+            "staged_digest": "sha256:" + "0" * 64,
+        }
+    ):
+        fail("spill_fsync_receipt_schema", "legacy sha256 digest is accepted")
     expect(hardening["spill"], EXPECTED_SPILL, "spill")
     expect(hardening["recovery"], EXPECTED_RECOVERY, "recovery")
     expect(hardening["stable_failures"], EXPECTED_STABLE_FAILURES, "stable_failures")
     expect(hardening["qualification"], EXPECTED_QUALIFICATION, "qualification")
+    qualification_schema = load_yaml(root / QUALIFICATION_REPORT_SCHEMA)
+    try:
+        jsonschema.Draft202012Validator.check_schema(qualification_schema)
+    except jsonschema.SchemaError as error:
+        fail("qualification.report_schema", f"invalid schema: {error.message}")
+    expect(
+        qualification_schema.get("$id"),
+        "https://cxxlens.dev/schemas/cxxlens.provider-ng1-qualification.v1",
+        "qualification.report_schema.$id",
+    )
+    qualification_cases = []
+    for case_id in hardening["qualification"]["required_cases"]:
+        outcome = hardening["qualification"]["required_case_outcomes"][case_id]
+        if outcome == "accepted":
+            qualification_cases.append({"id": case_id, "decision": "accepted"})
+        elif outcome.startswith("provider."):
+            qualification_cases.append(
+                {"id": case_id, "decision": "rejected", "reason_code": outcome}
+            )
+        else:
+            qualification_cases.append(
+                {"id": case_id, "decision": "recovery", "outcome": outcome}
+            )
+    qualification_certificate = {
+        "schema": "cxxlens.provider-ng1-qualification.v1",
+        "document_version": "1.0.0",
+        "authority": {
+            "contract": CONTRACT.as_posix(),
+            "vectors": VECTORS.as_posix(),
+            "decision_issue": "#233",
+            "implementation_issue": "#183",
+        },
+        "binding": {
+            "revision": "0" * 40,
+            "tree": "1" * 40,
+            "provider_binary_digest": "sha256:" + "2" * 64,
+            "provider_binary_digest_source": "host-measured-executable-bytes",
+            "provider_semantic_contract_digest": "sha256:" + "3" * 64,
+            "provider_semantic_contract_digest_source": "selected-contract-digest",
+            "protocol_minor": 1,
+            "protocol_contract_digest": document_digest(
+                protocol if protocol is not None else load_yaml(root / PROTOCOL)
+            ),
+            "hardening_contract_digest": document_digest(hardening),
+            "hardening_contract_schema_digest": document_digest(
+                load_yaml(root / CONTRACT_SCHEMA)
+            ),
+            "report_schema_digest": document_digest(qualification_schema),
+            "vectors_digest": document_digest(vectors),
+            "vectors_schema_digest": document_digest(load_yaml(root / VECTORS_SCHEMA)),
+        },
+        "profiles": [
+            {
+                "profile": profile,
+                "status": "green",
+                "evidence_digest": "sha256:" + ("4" if profile == "static" else "5") * 64,
+                "cases": qualification_cases,
+            }
+            for profile in ("static", "shared")
+        ],
+        "status": "green",
+    }
+    schema_validate(
+        qualification_certificate,
+        qualification_schema,
+        "NG1 qualification report",
+    )
+    expect(
+        vectors["authority"].get("binding"),
+        {
+            "state": "authority-only-unbound",
+            "revision": None,
+            "tree": None,
+            "provider_binary_digest": None,
+            "provider_semantic_contract_digest": None,
+            "protocol_minor": 1,
+            "hardening_contract_digest": None,
+        },
+        "qualification.vectors.authority.binding",
+    )
     expected_cases = set(hardening["qualification"]["required_cases"])
-    actual_cases = {vector["id"] for vector in vectors["vectors"]}
+    vector_ids = [vector["id"] for vector in vectors["vectors"]]
+    if len(vector_ids) != len(set(vector_ids)):
+        fail("qualification.vectors", "vector IDs must be unique")
+    if len(vector_ids) != len(expected_cases):
+        fail(
+            "qualification.vectors",
+            f"expected exactly {len(expected_cases)} vectors, got {len(vector_ids)}",
+        )
+    actual_cases = set(vector_ids)
     if actual_cases != expected_cases:
         fail("qualification.vectors", f"case set differs: expected={sorted(expected_cases)}, got={sorted(actual_cases)}")
     for vector in vectors["vectors"]:
@@ -647,7 +924,7 @@ def validate_ng1_contract(
     if spill_limits["maximum_total_bytes"] < spill_limits["maximum_record_bytes"]:
         fail("spill.limits", "total spill budget is below one record")
     if set(EXPECTED_STABLE_FAILURES) != {
-        hardening["heartbeat"]["clock"]["backwards"],
+        hardening["heartbeat"]["clock"]["provider_timestamp"]["backwards"]["failure"],
         hardening["heartbeat"]["liveness"]["timeout_result"],
         hardening["progress"]["enforcement"]["failure"],
         hardening["resume"]["acceptance"]["terminal_or_foreign_token"],
@@ -697,14 +974,17 @@ def validate_ng1_contract(
         fail("protocol.failures", "NG1 stable failures are not registered")
     execution_report = load_yaml(root / EXECUTION_REPORT_SCHEMA)
     terminal_enum = execution_report["properties"]["terminal"]["enum"]
-    if any(code not in terminal_enum for code in EXPECTED_STABLE_FAILURES):
-        fail("execution_report", "NG1 stable failures are not reportable")
     runtime = load_yaml(root / RUNTIME_CONTRACT)
     if hardening["maturity"] == "accepted":
+        if any(code not in terminal_enum for code in EXPECTED_STABLE_FAILURES):
+            fail("execution_report", "accepted NG1 failures are not reportable")
         if any(code not in runtime["terminal"]["stable"] for code in EXPECTED_STABLE_FAILURES):
             fail("runtime", "NG1 stable failures are not runtime terminals")
-    elif set(runtime["terminal"].get("reserved_for_ng1", [])) != set(EXPECTED_STABLE_FAILURES):
-        fail("runtime", "NG1 stable failures are not reserved in runtime authority")
+    else:
+        if any(code in terminal_enum for code in EXPECTED_STABLE_FAILURES):
+            fail("execution_report", "proposed NG1 failures must remain outside the active report enum")
+        if set(runtime["terminal"].get("reserved_for_ng1", [])) != set(EXPECTED_STABLE_FAILURES):
+            fail("runtime", "NG1 stable failures are not reserved in runtime authority")
     return hardening
 
 

@@ -11,14 +11,27 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [contract, decision_issue, implementation_issue]
+    required: [contract, decision_issue, implementation_issue, binding]
     properties:
       contract: {const: schemas/cxxlens_ng_provider_ng1_hardening.yaml}
       decision_issue: {const: '#233'}
       implementation_issue: {const: '#183'}
+      binding:
+        type: object
+        additionalProperties: false
+        required: [state, revision, tree, provider_binary_digest, provider_semantic_contract_digest, protocol_minor, hardening_contract_digest]
+        properties:
+          state: {const: authority-only-unbound}
+          revision: {type: 'null'}
+          tree: {type: 'null'}
+          provider_binary_digest: {type: 'null'}
+          provider_semantic_contract_digest: {type: 'null'}
+          protocol_minor: {const: 1}
+          hardening_contract_digest: {type: 'null'}
   vectors:
     type: array
-    minItems: 12
+    minItems: 13
+    maxItems: 13
     uniqueItems: true
     items:
       type: object
@@ -37,3 +50,27 @@ properties:
             decision: {enum: [accepted, rejected, recovery]}
             reason_code: {type: string, pattern: '^provider\.[a-z0-9-]+$'}
             outcome: {type: string, minLength: 1}
+      allOf:
+        - if:
+            properties: {class: {const: positive}}
+          then:
+            properties:
+              expected:
+                required: [decision]
+                not: {anyOf: [{required: [reason_code]}, {required: [outcome]}]}
+        - if:
+            properties: {class: {const: negative}}
+          then:
+            properties:
+              expected:
+                required: [decision, reason_code]
+                properties: {decision: {const: rejected}}
+                not: {required: [outcome]}
+        - if:
+            properties: {class: {const: recovery}}
+          then:
+            properties:
+              expected:
+                required: [decision, outcome]
+                properties: {decision: {const: recovery}}
+                not: {required: [reason_code]}

@@ -44,13 +44,6 @@ properties:
       - provider.frontend-request-invalid
       - security.sandbox-insufficient
       - security.sandbox-policy-mismatch
-      - provider.heartbeat-clock-invalid
-      - provider.heartbeat-timeout
-      - provider.progress-rate
-      - provider.resume-token-stale
-      - provider.resume-replay-invalid
-      - provider.spill-corrupt
-      - provider.recovery-failed
   provider:
     type: object
     additionalProperties: false
