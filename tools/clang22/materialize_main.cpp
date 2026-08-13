@@ -1402,6 +1402,26 @@ int main(const int argc, char**)
 								  "materialization.report-invalid",
 								  request_subject,
 								  prepublication.error());
+	public_materialization_prior_artifact_persistence prior_artifact_persistence;
+	try
+	{
+		// Allocate the fixed unavailable representation before the irreversible Store boundary.
+		// Post-commit error handling then only changes the boolean state, so an allocation failure
+		// from persistence cannot turn the required structured unavailable report into no response.
+		prior_artifact_persistence.error_code.reserve(64U);
+		prior_artifact_persistence.error_field.reserve(64U);
+		prior_artifact_persistence.error_detail.reserve(64U);
+		prior_artifact_persistence.error_code = "materialization.incremental-artifact-invalid";
+		prior_artifact_persistence.error_field = "publication.prior-artifact";
+		prior_artifact_persistence.error_detail = "persistence-failed";
+	}
+	catch (const std::bad_alloc&)
+	{
+		return emit_failure(std::move(*journal),
+							{"materialization.report-invalid",
+							 request_subject,
+							 "prior-artifact-fallback-allocation"});
+	}
 
 	// Only the bounded publication-independent projection is constructed before the irreversible
 	// Store boundary. Linearize cancellation against that boundary: a signal that wins before this
@@ -1415,7 +1435,6 @@ int main(const int argc, char**)
 	auto postpublication = std::move(*journal).begin_publication();
 	if (!postpublication)
 		return no_response();
-	public_materialization_prior_artifact_persistence prior_artifact_persistence;
 	public_materialization_success_report_input public_input;
 	public_input.request = &*request;
 	public_input.request_globals = &*request_globals;
@@ -1432,17 +1451,18 @@ int main(const int argc, char**)
 	public_input.maximum_report_bytes = report_limits.max_projection_bytes;
 	try
 	{
+		const auto restore_prior_artifact_fallback = [&]()
+		{
+			prior_artifact_persistence.error_code = "materialization.incremental-artifact-invalid";
+			prior_artifact_persistence.error_field = "publication.prior-artifact";
+			prior_artifact_persistence.error_detail = "persistence-failed";
+		};
 		if (claim_request.publication.backend == "memory" ||
 			claim_request.publication.backend == "sqlite")
 		{
 			const auto& store_observation = postpublication->store_observation();
 			if (!store_observation.publish_returned_record)
-			{
-				prior_artifact_persistence.error_code =
-					"materialization.incremental-artifact-invalid";
-				prior_artifact_persistence.error_field = "publication";
 				prior_artifact_persistence.error_detail = "committed-record-missing";
-			}
 			else
 			{
 				try
@@ -1457,29 +1477,36 @@ int main(const int argc, char**)
 						prior_artifact_persistence.committed = true;
 					else
 					{
-						prior_artifact_persistence.error_code = persisted.error().code;
-						prior_artifact_persistence.error_field = persisted.error().field;
-						prior_artifact_persistence.error_detail = persisted.error().detail;
+						try
+						{
+							prior_artifact_persistence.error_code = persisted.error().code;
+							prior_artifact_persistence.error_field = persisted.error().field;
+							prior_artifact_persistence.error_detail = persisted.error().detail;
+						}
+						catch (...)
+						{
+							restore_prior_artifact_fallback();
+						}
 					}
 				}
 				catch (const std::bad_alloc&)
 				{
-					prior_artifact_persistence.error_code =
-						"materialization.incremental-artifact-invalid";
-					prior_artifact_persistence.error_field = "publication.prior-artifact";
-					prior_artifact_persistence.error_detail = "allocation";
+					restore_prior_artifact_fallback();
 				}
 				catch (...)
 				{
-					prior_artifact_persistence.error_code =
-						"materialization.incremental-artifact-invalid";
-					prior_artifact_persistence.error_field = "publication.prior-artifact";
-					prior_artifact_persistence.error_detail = "exception";
+					restore_prior_artifact_fallback();
 				}
 			}
 		}
 		else
 			prior_artifact_persistence.committed = true;
+		if (prior_artifact_persistence.committed)
+		{
+			prior_artifact_persistence.error_code.clear();
+			prior_artifact_persistence.error_field.clear();
+			prior_artifact_persistence.error_detail.clear();
+		}
 		public_input.prior_artifact_persistence = &prior_artifact_persistence;
 		auto public_model = build_public_materialization_success_report(public_input);
 		if (!public_model)

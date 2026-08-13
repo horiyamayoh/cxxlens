@@ -1061,7 +1061,212 @@ namespace cxxlens::detail::clang22::materialization
 			return std::ranges::equal(left.unresolved(), right.unresolved()) &&
 				std::ranges::equal(left.evidence(), right.evidence());
 		}
+
+		[[nodiscard]] bool same_detached_cell(const sdk::detached_cell& left,
+											  const sdk::detached_cell& right)
+		{
+			return left.type == right.type && left.state == right.state &&
+				left.value == right.value && left.unknown_reason == right.unknown_reason;
+		}
+
+		[[nodiscard]] bool same_detached_rows(const std::vector<sdk::detached_row>& left,
+											  const std::vector<sdk::detached_row>& right)
+		{
+			if (left.size() != right.size())
+				return false;
+			for (std::size_t index{}; index < left.size(); ++index)
+			{
+				if (left[index].descriptor_id != right[index].descriptor_id ||
+					left[index].cells.size() != right[index].cells.size())
+					return false;
+				auto left_cell = left[index].cells.begin();
+				auto right_cell = right[index].cells.begin();
+				for (; left_cell != left[index].cells.end(); ++left_cell, ++right_cell)
+					if (left_cell->first != right_cell->first ||
+						!same_detached_cell(left_cell->second, right_cell->second))
+						return false;
+			}
+			return true;
+		}
+
+		[[nodiscard]] bool same_capture(const detailed_task_report_capture& left,
+										const detailed_task_report_capture& right)
+		{
+			if (std::tie(left.provider_task_id,
+						 left.provider_execution_id,
+						 left.project_id,
+						 left.catalog_id,
+						 left.catalog_digest,
+						 left.selected_catalog_compile_unit_id,
+						 left.compile_unit_id,
+						 left.variant_id,
+						 left.toolchain_context_id,
+						 left.toolchain_digest,
+						 left.source_snapshot_id,
+						 left.source_file_id,
+						 left.source_logical_path,
+						 left.source_content_digest,
+						 left.source_size_bytes,
+						 left.source_encoding,
+						 left.source_line_index_id,
+						 left.source_read_only,
+						 left.task_input_digest,
+						 left.condition_universe_id,
+						 left.condition_id,
+						 left.interpretation_domain,
+						 left.input_protocol_major,
+						 left.input_protocol_minor,
+						 left.logical_input_bytes,
+						 left.canonical_chunk_bytes,
+						 left.input_chunk_count,
+						 left.ordered_chunk_payload_digest_set_digest,
+						 left.raw_frame_stream_bytes,
+						 left.raw_frame_stream,
+						 left.raw_frame_stream_digest,
+						 left.frame_count,
+						 left.frame_transcript_digest,
+						 left.sealed_transcript_digest,
+						 left.capture_binding_digest) !=
+				std::tie(right.provider_task_id,
+						 right.provider_execution_id,
+						 right.project_id,
+						 right.catalog_id,
+						 right.catalog_digest,
+						 right.selected_catalog_compile_unit_id,
+						 right.compile_unit_id,
+						 right.variant_id,
+						 right.toolchain_context_id,
+						 right.toolchain_digest,
+						 right.source_snapshot_id,
+						 right.source_file_id,
+						 right.source_logical_path,
+						 right.source_content_digest,
+						 right.source_size_bytes,
+						 right.source_encoding,
+						 right.source_line_index_id,
+						 right.source_read_only,
+						 right.task_input_digest,
+						 right.condition_universe_id,
+						 right.condition_id,
+						 right.interpretation_domain,
+						 right.input_protocol_major,
+						 right.input_protocol_minor,
+						 right.logical_input_bytes,
+						 right.canonical_chunk_bytes,
+						 right.input_chunk_count,
+						 right.ordered_chunk_payload_digest_set_digest,
+						 right.raw_frame_stream_bytes,
+						 right.raw_frame_stream,
+						 right.raw_frame_stream_digest,
+						 right.frame_count,
+						 right.frame_transcript_digest,
+						 right.sealed_transcript_digest,
+						 right.capture_binding_digest))
+				return false;
+			if (left.ordered_chunk_digests != right.ordered_chunk_digests ||
+				left.coverage.size() != right.coverage.size() ||
+				left.unresolved.size() != right.unresolved.size() ||
+				left.evidence.size() != right.evidence.size() ||
+				left.batches.size() != right.batches.size() ||
+				left.observation_rows.size() != right.observation_rows.size())
+				return false;
+			for (std::size_t index{}; index < left.coverage.size(); ++index)
+				if (std::tie(left.coverage[index].kind,
+							 left.coverage[index].id,
+							 left.coverage[index].state,
+							 left.coverage[index].reason) !=
+					std::tie(right.coverage[index].kind,
+							 right.coverage[index].id,
+							 right.coverage[index].state,
+							 right.coverage[index].reason))
+					return false;
+			for (std::size_t index{}; index < left.unresolved.size(); ++index)
+				if (std::tie(left.unresolved[index].code,
+							 left.unresolved[index].subject,
+							 left.unresolved[index].detail) !=
+					std::tie(right.unresolved[index].code,
+							 right.unresolved[index].subject,
+							 right.unresolved[index].detail))
+					return false;
+			for (std::size_t index{}; index < left.evidence.size(); ++index)
+				if (std::tie(left.evidence[index].kind,
+							 left.evidence[index].subject,
+							 left.evidence[index].producer,
+							 left.evidence[index].summary) !=
+					std::tie(right.evidence[index].kind,
+							 right.evidence[index].subject,
+							 right.evidence[index].producer,
+							 right.evidence[index].summary))
+					return false;
+			for (std::size_t index{}; index < left.batches.size(); ++index)
+			{
+				const auto& a = left.batches[index];
+				const auto& b = right.batches[index];
+				if (std::tie(a.task_id,
+							 a.descriptor_id,
+							 a.descriptor_digest,
+							 a.dependency_group_id,
+							 a.atomic_output_group_id,
+							 a.batch_id,
+							 a.batch_digest,
+							 a.columns,
+							 a.ordered_chunk_digests,
+							 a.row_count,
+							 a.row_set_digest) !=
+						std::tie(b.task_id,
+								 b.descriptor_id,
+								 b.descriptor_digest,
+								 b.dependency_group_id,
+								 b.atomic_output_group_id,
+								 b.batch_id,
+								 b.batch_digest,
+								 b.columns,
+								 b.ordered_chunk_digests,
+								 b.row_count,
+								 b.row_set_digest) ||
+					a.rows.size() != b.rows.size())
+					return false;
+				for (std::size_t row{}; row < a.rows.size(); ++row)
+					if (std::tie(a.rows[row].row_index,
+								 a.rows[row].row_canonical_form,
+								 a.rows[row].row_digest) !=
+						std::tie(b.rows[row].row_index,
+								 b.rows[row].row_canonical_form,
+								 b.rows[row].row_digest))
+						return false;
+			}
+			for (std::size_t index{}; index < left.observation_rows.size(); ++index)
+			{
+				const auto& a = left.observation_rows[index];
+				const auto& b = right.observation_rows[index];
+				if (std::tie(a.batch_index,
+							 a.row_index,
+							 a.observation_row_digest,
+							 a.exact_equivalence,
+							 a.limitation,
+							 a.primary_span) !=
+					std::tie(b.batch_index,
+							 b.row_index,
+							 b.observation_row_digest,
+							 b.exact_equivalence,
+							 b.limitation,
+							 b.primary_span))
+					return false;
+			}
+			return same_detached_rows(left.base_claim_rows, right.base_claim_rows) &&
+				same_detached_rows(left.source_span_claim_rows, right.source_span_claim_rows);
+		}
 	} // namespace
+
+	bool materialization_prior_artifact_task::operator==(
+		const materialization_prior_artifact_task& other) const
+	{
+		if (identity != other.identity || state != other.state ||
+			sealed_artifact_digest != other.sealed_artifact_digest)
+			return false;
+
+		return same_capture(capture, other.capture);
+	}
 
 	sdk::result<std::vector<std::byte>>
 	encode_materialization_prior_artifact(const materialization_prior_artifact_bundle& bundle,

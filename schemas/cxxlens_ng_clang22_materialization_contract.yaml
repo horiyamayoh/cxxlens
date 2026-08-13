@@ -1974,7 +1974,19 @@ report:
     compact_failure:
       binding_states: [raw-input-only, request-bound]
       phases: [input-limit, json-decode, request-envelope, request-version, request-schema, request-binding, installation-binding, worker-launch, transcript, materialization-validation, store-open, store-stage, report-construction]
-      exact_effects: [worker-launch-attempt-count, worker-launch-success-count, store-draft-state, head-observation, publication-attempted, committed-transaction-count, prior-history-retained, first-store-failure-cause-or-null]
+      exact_effects: [task-attempt-count, task-success-count, worker-launch-attempt-count, worker-launch-success-count, store-draft-state, head-observation, publication-attempted, committed-transaction-count, prior-history-retained, first-store-failure-cause-or-null]
+      task_census:
+        raw-input-only-and-installation-binding: [task-attempts-zero, task-successes-zero, worker-launch-attempts-zero, worker-launch-successes-zero]
+        worker-launch:
+          task-attempts: one-through-task-count
+          task-successes: task-attempts-minus-one
+          worker-launch-attempts: zero-through-task-attempts
+          worker-launch-successes: worker-launch-attempts-or-minus-one-for-in-flight-launch
+        post-worker-phases:
+          task-attempts: task-count
+          task-successes: task-count
+          worker-launch-attempts: zero-through-task-count
+          worker-launch-successes: worker-launch-attempts
       store_draft_state_authority:
         authority: invocation-logical-unpublished-snapshot-draft-lifecycle-not-sdk-writer-existence
         not_created: no-successful-store-open-adoption
@@ -2197,12 +2209,12 @@ errors:
       input-limit: raw-prefix-exact-limit-plus-one-complete-false
       non-input-limit: exact-complete-raw-bytes
     installation-binding: [launch-attempts-zero, launch-successes-zero, draft-not-created, head-not-observed, store-failure-cause-null]
-    worker-launch: [launch-attempts-one-through-task-count, launch-successes-equals-attempts-minus-one, draft-not-created, head-not-observed, store-failure-cause-null]
-    transcript: [launch-attempts-task-count, launch-successes-task-count, draft-not-created, head-not-observed, store-failure-cause-null]
-    materialization-validation: [launch-attempts-task-count, launch-successes-task-count, draft-not-created, head-not-observed, store-failure-cause-null]
-    store-open: [launch-attempts-task-count, launch-successes-task-count, draft-not-created, head-not-observed, exact-first-store-open-sdk-error]
-    store-stage: [launch-attempts-task-count, launch-successes-task-count, draft-discarded, head-observed-absent-present-or-sdk-error, sdk-error-only-for-exact-head-current-cause, exact-first-stage-sdk-error-for-store-failure-otherwise-null]
-    report-construction: [launch-attempts-task-count, launch-successes-task-count, draft-discarded, head-observed-absent-or-present, publication-not-attempted, store-failure-cause-null]
+    worker-launch: [task-attempts-one-through-task-count, task-successes-attempts-minus-one, launch-attempts-zero-through-task-attempts, launch-successes-attempts-or-minus-one, draft-not-created, head-not-observed, store-failure-cause-null]
+    transcript: [task-attempts-task-count, task-successes-task-count, launch-attempts-zero-through-task-count, launch-successes-equals-attempts, draft-not-created, head-not-observed, store-failure-cause-null]
+    materialization-validation: [task-attempts-task-count, task-successes-task-count, launch-attempts-zero-through-task-count, launch-successes-equals-attempts, draft-not-created, head-not-observed, store-failure-cause-null]
+    store-open: [task-attempts-task-count, task-successes-task-count, launch-attempts-zero-through-task-count, launch-successes-equals-attempts, draft-not-created, head-not-observed, exact-first-store-open-sdk-error]
+    store-stage: [task-attempts-task-count, task-successes-task-count, launch-attempts-zero-through-task-count, launch-successes-equals-attempts, draft-discarded, head-observed-absent-present-or-sdk-error, sdk-error-only-for-exact-head-current-cause, exact-first-stage-sdk-error-for-store-failure-otherwise-null]
+    report-construction: [task-attempts-task-count, task-successes-task-count, launch-attempts-zero-through-task-count, launch-successes-equals-attempts, draft-discarded, head-observed-absent-or-present, publication-not-attempted, store-failure-cause-null]
     successful-launch-count-not-attempt-count: required
   diagnostic_prose_control_flow: forbidden
   unknown_error_code: materialization.report-invalid

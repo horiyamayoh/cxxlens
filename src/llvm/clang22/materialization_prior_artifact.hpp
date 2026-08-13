@@ -39,7 +39,7 @@ namespace cxxlens::detail::clang22::materialization
 		std::string sealed_artifact_digest;
 		detailed_task_report_capture capture;
 
-		[[nodiscard]] bool operator==(const materialization_prior_artifact_task&) const = default;
+		[[nodiscard]] bool operator==(const materialization_prior_artifact_task&) const;
 	};
 
 	/** Publication pointer and immutable task blobs committed by one exact Store generation. */

@@ -976,6 +976,11 @@ namespace
 		bundle.physical_generation = 11U;
 		bundle.parent_publication = "publication:older";
 		const auto capture = replayable_capture("task:artifact");
+		auto capture_bytes = encode_detailed_task_report_capture(capture);
+		require(capture_bytes.has_value(),
+				"prior artifact fixture capture was not canonicalizable");
+		auto canonical_capture = decode_detailed_task_report_capture(*capture_bytes);
+		require(canonical_capture.has_value(), "prior artifact fixture capture did not rehydrate");
 		auto state = prior_artifact_state();
 		auto state_valid = state.validate();
 		require(state_valid.has_value(),
@@ -991,7 +996,7 @@ namespace
 								std::move(state),
 								"materialization.incremental-sealed-artifact:sha256:"
 								"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-								capture});
+								std::move(*canonical_capture)});
 
 		auto encoded = encode_materialization_prior_artifact(bundle);
 		require(encoded.has_value() && !encoded->empty(),
@@ -1006,6 +1011,8 @@ namespace
 					decoded->tasks.front().capture.batches.front().columns.front().column_id ==
 						"column:test",
 				"prior artifact codec did not restore the exact task tuple");
+		require(decoded.has_value() && *decoded == bundle,
+				"prior artifact structural equality did not preserve the decoded capture");
 		auto reencoded = encode_materialization_prior_artifact(*decoded);
 		require(reencoded.has_value() && *reencoded == *encoded,
 				"prior artifact codec did not preserve canonical bytes");

@@ -496,6 +496,40 @@ class NgClang22MaterializationTests(unittest.TestCase):
             request_bytes=request_bytes,
         )
 
+        # A compact authority retains the exact in-flight task and worker census;
+        # it must not collapse a third-task launch failure to a one-task fixture.
+        three_task_request = self.request(translation_unit_count=3)
+        three_task_bytes = materialization.canonical_json(three_task_request)
+        third_launch_failure = materialization.compact_failure_report(
+            three_task_bytes,
+            request=three_task_request,
+            phase="worker-launch",
+            code="materialization.worker-failure",
+            task_attempt_count=3,
+            task_success_count=2,
+            worker_launch_attempt_count=3,
+            worker_launch_success_count=2,
+        )
+        self.validate_report(
+            three_task_request,
+            third_launch_failure,
+            request_bytes=three_task_bytes,
+        )
+
+        # Exact prior-artifact reuse completes the task census without launching
+        # a provider worker; the worker launch ledger is therefore 0/0.
+        reuse_failure = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="transcript",
+            code="materialization.transcript-invalid",
+            task_attempt_count=1,
+            task_success_count=1,
+            worker_launch_attempt_count=0,
+            worker_launch_success_count=0,
+        )
+        self.validate_report(request, reuse_failure, request_bytes=request_bytes)
+
         bound_mutations = {
             "binding": lambda report: report["binding"]["request"].__setitem__(
                 "request_digest", "semantic-v2:sha256:" + "0" * 64
@@ -5225,6 +5259,26 @@ class NgClang22MaterializationTests(unittest.TestCase):
         with self.assertRaisesRegex(
             materialization.MaterializationError,
             "compact store-stage head observation authority differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["report"]["response_union"]["compact_failure"]["task_census"][
+            "post-worker-phases"
+        ]["worker-launch-successes"] = "task-count"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact task census differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["errors"]["compact_effect_matrix"]["transcript"] = [
+            "launch-successes-equals-attempts"
+        ]
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact effect matrix differs",
         ):
             materialization.validate_contract_exact(contract)
 

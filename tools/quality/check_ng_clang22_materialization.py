@@ -7293,9 +7293,38 @@ def validate_contract_exact(
             "materialization.report-invalid",
             "compact report-construction boundary differs",
         )
+    expected_task_census = {
+        "raw-input-only-and-installation-binding": [
+            "task-attempts-zero",
+            "task-successes-zero",
+            "worker-launch-attempts-zero",
+            "worker-launch-successes-zero",
+        ],
+        "worker-launch": {
+            "task-attempts": "one-through-task-count",
+            "task-successes": "task-attempts-minus-one",
+            "worker-launch-attempts": "zero-through-task-attempts",
+            "worker-launch-successes": (
+                "worker-launch-attempts-or-minus-one-for-in-flight-launch"
+            ),
+        },
+        "post-worker-phases": {
+            "task-attempts": "task-count",
+            "task-successes": "task-count",
+            "worker-launch-attempts": "zero-through-task-count",
+            "worker-launch-successes": "worker-launch-attempts",
+        },
+    }
+    if compact_failure.get("task_census") != expected_task_census:
+        fail(
+            "materialization.report-invalid",
+            "compact task census differs",
+        )
     if (
         compact_failure.get("exact_effects")
         != [
+            "task-attempt-count",
+            "task-success-count",
             "worker-launch-attempt-count",
             "worker-launch-success-count",
             "store-draft-state",
@@ -7356,8 +7385,10 @@ def validate_contract_exact(
             "compact prepublication Store cause authority differs",
         )
     if contract["errors"].get("compact_effect_matrix", {}).get("store-stage") != [
-        "launch-attempts-task-count",
-        "launch-successes-task-count",
+        "task-attempts-task-count",
+        "task-successes-task-count",
+        "launch-attempts-zero-through-task-count",
+        "launch-successes-equals-attempts",
         "draft-discarded",
         "head-observed-absent-present-or-sdk-error",
         "sdk-error-only-for-exact-head-current-cause",
@@ -7366,6 +7397,90 @@ def validate_contract_exact(
         fail(
             "materialization.store-failure",
             "compact store-stage head observation authority differs",
+        )
+    expected_compact_effect_matrix = {
+        "raw-input-only": {
+            "all-phases": [
+                "launch-attempts-zero",
+                "launch-successes-zero",
+                "draft-not-created",
+                "head-not-observed",
+                "publication-not-attempted",
+                "commit-zero",
+                "store-failure-cause-null",
+            ],
+            "input-limit": "raw-prefix-exact-limit-plus-one-complete-false",
+            "non-input-limit": "exact-complete-raw-bytes",
+        },
+        "installation-binding": [
+            "launch-attempts-zero",
+            "launch-successes-zero",
+            "draft-not-created",
+            "head-not-observed",
+            "store-failure-cause-null",
+        ],
+        "worker-launch": [
+            "task-attempts-one-through-task-count",
+            "task-successes-attempts-minus-one",
+            "launch-attempts-zero-through-task-attempts",
+            "launch-successes-attempts-or-minus-one",
+            "draft-not-created",
+            "head-not-observed",
+            "store-failure-cause-null",
+        ],
+        "transcript": [
+            "task-attempts-task-count",
+            "task-successes-task-count",
+            "launch-attempts-zero-through-task-count",
+            "launch-successes-equals-attempts",
+            "draft-not-created",
+            "head-not-observed",
+            "store-failure-cause-null",
+        ],
+        "materialization-validation": [
+            "task-attempts-task-count",
+            "task-successes-task-count",
+            "launch-attempts-zero-through-task-count",
+            "launch-successes-equals-attempts",
+            "draft-not-created",
+            "head-not-observed",
+            "store-failure-cause-null",
+        ],
+        "store-open": [
+            "task-attempts-task-count",
+            "task-successes-task-count",
+            "launch-attempts-zero-through-task-count",
+            "launch-successes-equals-attempts",
+            "draft-not-created",
+            "head-not-observed",
+            "exact-first-store-open-sdk-error",
+        ],
+        "store-stage": [
+            "task-attempts-task-count",
+            "task-successes-task-count",
+            "launch-attempts-zero-through-task-count",
+            "launch-successes-equals-attempts",
+            "draft-discarded",
+            "head-observed-absent-present-or-sdk-error",
+            "sdk-error-only-for-exact-head-current-cause",
+            "exact-first-stage-sdk-error-for-store-failure-otherwise-null",
+        ],
+        "report-construction": [
+            "task-attempts-task-count",
+            "task-successes-task-count",
+            "launch-attempts-zero-through-task-count",
+            "launch-successes-equals-attempts",
+            "draft-discarded",
+            "head-observed-absent-or-present",
+            "publication-not-attempted",
+            "store-failure-cause-null",
+        ],
+        "successful-launch-count-not-attempt-count": "required",
+    }
+    if contract["errors"].get("compact_effect_matrix") != expected_compact_effect_matrix:
+        fail(
+            "materialization.report-invalid",
+            "compact effect matrix differs",
         )
     required_lifecycle_acceptance = {
         "streaming-bounded-request-source-and-two-phase-report-construction",
@@ -13619,6 +13734,10 @@ def compact_failure_report(
     store_failure_cause: dict[str, Any] | None = None,
     head_observation: str | None = None,
     observed_head_publication: str | None = None,
+    task_attempt_count: int | None = None,
+    task_success_count: int | None = None,
+    worker_launch_attempt_count: int | None = None,
+    worker_launch_success_count: int | None = None,
 ) -> dict[str, Any]:
     request_bound = request is not None
     launch_attempt_count = int(
@@ -13641,6 +13760,56 @@ def compact_failure_report(
             "store-stage",
             "report-construction",
         }
+    )
+    expected_task_attempt_count = 0
+    expected_task_success_count = 0
+    expected_worker_launch_attempt_count = 0
+    expected_worker_launch_success_count = 0
+    if request_bound:
+        task_count = len(request["tasks"])
+        if phase == "worker-launch":
+            # A worker-phase failure is issued with exactly one in-flight task;
+            # the fixture default models the first task before its worker launch.
+            expected_task_attempt_count = 1
+        elif phase in {
+            "transcript",
+            "materialization-validation",
+            "store-open",
+            "store-stage",
+            "report-construction",
+        }:
+            expected_task_attempt_count = task_count
+            expected_task_success_count = task_count
+        if phase == "worker-launch":
+            expected_worker_launch_attempt_count = 1
+        elif phase in {
+            "transcript",
+            "materialization-validation",
+            "store-open",
+            "store-stage",
+            "report-construction",
+        }:
+            expected_worker_launch_attempt_count = task_count
+            expected_worker_launch_success_count = task_count
+    task_attempt_count = (
+        expected_task_attempt_count
+        if task_attempt_count is None
+        else task_attempt_count
+    )
+    task_success_count = (
+        expected_task_success_count
+        if task_success_count is None
+        else task_success_count
+    )
+    launch_attempt_count = (
+        expected_worker_launch_attempt_count
+        if worker_launch_attempt_count is None
+        else worker_launch_attempt_count
+    )
+    launch_success_count = (
+        expected_worker_launch_success_count
+        if worker_launch_success_count is None
+        else worker_launch_success_count
     )
     if head_observation is None:
         if (
@@ -13671,6 +13840,8 @@ def compact_failure_report(
             "request": _request_binding(request) if request_bound else None,
         },
         "effects": {
+            "task_attempt_count": task_attempt_count,
+            "task_success_count": task_success_count,
             "worker_launch_attempt_count": launch_attempt_count,
             "worker_launch_success_count": launch_success_count,
             "store_draft_state": (
@@ -14085,6 +14256,72 @@ def validate_report(
                 "report-construction",
             }
         )
+        expected_task_attempt_count = 0
+        expected_task_success_count = 0
+        if binding["state"] == "request-bound" and request is not None:
+            task_count = len(request["tasks"])
+            if error["phase"] == "worker-launch":
+                if not 1 <= effects["task_attempt_count"] <= task_count:
+                    fail(
+                        "materialization.report-invalid",
+                        "worker-phase task attempt census is out of range",
+                    )
+                if effects["task_attempt_count"] - effects["task_success_count"] != 1:
+                    fail(
+                        "materialization.report-invalid",
+                        "worker-phase task census is not one in-flight task",
+                    )
+                if not 0 <= effects["worker_launch_attempt_count"] <= effects[
+                    "task_attempt_count"
+                ]:
+                    fail(
+                        "materialization.report-invalid",
+                        "worker-phase launch attempts exceed task attempts",
+                    )
+                if effects["worker_launch_success_count"] not in {
+                    effects["worker_launch_attempt_count"],
+                    effects["worker_launch_attempt_count"] - 1,
+                }:
+                    fail(
+                        "materialization.report-invalid",
+                        "worker-phase launch census is not an authentic in-flight boundary",
+                    )
+            elif error["phase"] in {
+                "transcript",
+                "materialization-validation",
+                "store-open",
+                "store-stage",
+                "report-construction",
+            }:
+                expected_task_attempt_count = task_count
+                expected_task_success_count = task_count
+                if not 0 <= effects["worker_launch_attempt_count"] <= task_count:
+                    fail(
+                        "materialization.report-invalid",
+                        "post-worker launch attempts exceed task count",
+                    )
+                if (
+                    effects["worker_launch_success_count"]
+                    != effects["worker_launch_attempt_count"]
+                ):
+                    fail(
+                        "materialization.report-invalid",
+                        "post-worker launch census is not terminal",
+                    )
+            if error["phase"] == "worker-launch":
+                expected_task_attempt_count = effects["task_attempt_count"]
+                expected_task_success_count = effects["task_success_count"]
+                expected_launch_attempt_count = effects["worker_launch_attempt_count"]
+                expected_launch_success_count = effects["worker_launch_success_count"]
+            elif error["phase"] in {
+                "transcript",
+                "materialization-validation",
+                "store-open",
+                "store-stage",
+                "report-construction",
+            }:
+                expected_launch_attempt_count = effects["worker_launch_attempt_count"]
+                expected_launch_success_count = effects["worker_launch_success_count"]
         expected_draft_state = (
             "discarded"
             if error["phase"] in {"store-stage", "report-construction"}
@@ -14155,7 +14392,9 @@ def validate_report(
                     "pre-Store compact failure claims a Store draft",
                 )
         if (
-            effects["worker_launch_attempt_count"] != expected_launch_attempt_count
+            effects["task_attempt_count"] != expected_task_attempt_count
+            or effects["task_success_count"] != expected_task_success_count
+            or effects["worker_launch_attempt_count"] != expected_launch_attempt_count
             or effects["worker_launch_success_count"] != expected_launch_success_count
             or effects["store_draft_state"] != expected_draft_state
             or effects["publication_attempted"]
