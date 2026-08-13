@@ -40,6 +40,10 @@ from check_ng_provider_protocol import (  # noqa: E402
     validate_task_input_chunks,
     validate_task_input_corpus,
 )
+from check_ng_provider_ng1 import (  # noqa: E402
+    Ng1ContractError,
+    validate_ng1_contract,
+)
 
 
 class NgProviderProtocolTest(unittest.TestCase):
@@ -212,6 +216,44 @@ class NgProviderProtocolTest(unittest.TestCase):
         changed["wire"]["limits"]["payload_bytes"] += 1
         with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
             schema_validate(changed, load_yaml(ROOT / "schemas/cxxlens_ng_provider_protocol.schema.yaml"), "provider protocol")
+
+    def test_ng1_hardening_contract_is_closed_and_cross_bound(self) -> None:
+        hardening = validate_ng1_contract(ROOT, self.contract)
+        self.assertEqual(hardening["maturity"], "proposed")
+        self.assertEqual(
+            hardening["qualification"]["required_cases"].count("long-run-fault"),
+            1,
+        )
+
+    def test_ng1_hardening_rejects_control_and_replay_drift(self) -> None:
+        hardening = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.yaml")
+        changed = copy.deepcopy(hardening)
+        changed["progress"]["enforcement"]["arithmetic"] = "u64-division"
+        with self.assertRaisesRegex(Ng1ContractError, "progress"):
+            validate_ng1_contract(ROOT, self.contract, changed)
+
+        changed = copy.deepcopy(hardening)
+        changed["resume"]["durability"]["prerequisite"] = "volatile-ack"
+        with self.assertRaisesRegex(Ng1ContractError, "resume"):
+            validate_ng1_contract(ROOT, self.contract, changed)
+
+        changed = copy.deepcopy(hardening)
+        changed["qualification"]["unavailable_provider"] = "fallback"
+        with self.assertRaisesRegex(Ng1ContractError, "qualification"):
+            validate_ng1_contract(ROOT, self.contract, changed)
+
+    def test_ng1_schema_is_closed_and_rejects_maturity_or_direction_drift(self) -> None:
+        hardening = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.yaml")
+        schema = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml")
+        changed = copy.deepcopy(hardening)
+        changed["maturity"] = "accepted"
+        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
+            schema_validate(changed, schema, "NG1 hardening contract")
+
+        changed = copy.deepcopy(hardening)
+        changed["heartbeat"]["direction"]["ack"] = "host-to-provider"
+        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
+            schema_validate(changed, schema, "NG1 hardening contract")
 
     @staticmethod
     def task_input_transfer(

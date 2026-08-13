@@ -21,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:3016b9e2ad1f6d0669f005853b29fc8a1a9dfe67d01e6dfc0a069b4bb4546d06
+authority_census_digest: sha256:8b747dd2a8102e93c848ac03d2c0d117cde39119148c2b538188d2b859a79fa5
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
@@ -275,7 +275,8 @@ assignments:
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.ng1-provider-hardening
-      remediation: Implement and independently qualify the accepted NG1 protocol lifecycle and resource features.
+      remediation: Accept and independently review the NG1 hardening authority, then implement and independently qualify the protocol lifecycle and resource features.
+    feedback: [DF-0233]
     surfaces:
       - {domain: provider.message, id: '23:heartbeat'}
       - {domain: provider.profile-feature, id: NG1/durable-resume-token}

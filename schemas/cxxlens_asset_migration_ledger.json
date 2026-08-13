@@ -1,5 +1,5 @@
 {
-  "asset_count": 635,
+  "asset_count": 642,
   "assets": [
     {
       "authority": "active",
@@ -1158,6 +1158,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0099-provider-ng1-hardening.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1397,6 +1404,13 @@
     {
       "authority": "active",
       "path": "docs/development/implementation-learning/records/df-0209-sqlite-reader-late-close-cleanup.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0233-ng1-provider-hardening.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2111,6 +2125,34 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_provider_manifest.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_provider_ng1_hardening.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4245,6 +4287,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_provider_ng1.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_provider_protocol.py",
       "removal_issue": null,
       "replacement": null,
@@ -4448,7 +4497,7 @@
     }
   ],
   "classifications": {
-    "active": 599,
+    "active": 606,
     "archived": 35,
     "generated": 1
   },

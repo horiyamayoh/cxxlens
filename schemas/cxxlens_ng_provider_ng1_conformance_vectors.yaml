@@ -1,0 +1,68 @@
+schema: cxxlens.provider-ng1-conformance-vectors.v1
+document_version: 1.0.0
+maturity: proposed
+authority:
+  contract: schemas/cxxlens_ng_provider_ng1_hardening.yaml
+  decision_issue: '#233'
+  implementation_issue: '#183'
+vectors:
+  - id: positive-heartbeat-and-progress
+    class: positive
+    surface: heartbeat
+    mutation: valid-probe-ack-and-rate-samples
+    expected: {decision: accepted}
+  - id: stale-heartbeat
+    class: negative
+    surface: heartbeat
+    mutation: ack-after-last-probe-deadline
+    expected: {decision: rejected, reason_code: provider.heartbeat-timeout}
+  - id: heartbeat-timeout
+    class: negative
+    surface: heartbeat
+    mutation: no-ack-through-inclusive-timeout-boundary
+    expected: {decision: rejected, reason_code: provider.heartbeat-timeout}
+  - id: zero-progress-after-grace
+    class: negative
+    surface: progress
+    mutation: zero-delta-after-startup-grace
+    expected: {decision: rejected, reason_code: provider.progress-rate}
+  - id: stale-resume-token
+    class: negative
+    surface: resume
+    mutation: lower-generation-or-terminal-token
+    expected: {decision: rejected, reason_code: provider.resume-token-stale}
+  - id: foreign-resume-token
+    class: negative
+    surface: resume
+    mutation: provider-task-or-session-binding-mismatch
+    expected: {decision: rejected, reason_code: provider.resume-token-stale}
+  - id: spill-corruption
+    class: negative
+    surface: spill
+    mutation: torn-record-or-digest-gap
+    expected: {decision: rejected, reason_code: provider.spill-corrupt}
+  - id: worker-crash-recovery
+    class: recovery
+    surface: recovery
+    mutation: worker-exit-after-fsync-confirmed-ack
+    expected: {decision: recovery, outcome: replay-from-ack-plus-one-or-fail-closed}
+  - id: worker-hang-recovery
+    class: recovery
+    surface: recovery
+    mutation: heartbeat-timeout-and-worker-kill
+    expected: {decision: recovery, outcome: replay-from-durable-ack-or-fail-closed}
+  - id: cancellation-recovery
+    class: recovery
+    surface: recovery
+    mutation: cancel-during-open-dependency-group
+    expected: {decision: recovery, outcome: rollback-current-group-and-fail-closed}
+  - id: permutation-replay
+    class: negative
+    surface: resume
+    mutation: duplicate-gap-or-out-of-order-replay
+    expected: {decision: rejected, reason_code: provider.resume-replay-invalid}
+  - id: long-run-fault
+    class: recovery
+    surface: qualification
+    mutation: injected-long-run-clock-worker-and-spill-faults
+    expected: {decision: recovery, outcome: accepted-only-with-exact-certificate-or-stable-failure}

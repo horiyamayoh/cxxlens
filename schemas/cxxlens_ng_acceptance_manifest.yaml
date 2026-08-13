@@ -142,6 +142,10 @@ entries:
       - src/runtime/provider_process_adapter.cpp
       - schemas/cxxlens_ng_provider_protocol.yaml
       - schemas/cxxlens_ng_provider_runtime_contract.yaml
+      - schemas/cxxlens_ng_provider_ng1_hardening.yaml
+      - schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml
+      - schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
+      - schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml
       - schemas/cxxlens_ng_project_catalog_contract.yaml
       - schemas/cxxlens_ng_portable_provider_task_contract.yaml
       - schemas/cxxlens_ng_provider_execution_report.schema.yaml
@@ -168,6 +172,10 @@ entries:
       - schemas/cxxlens_ng_snapshot_store_contract.yaml
       - schemas/cxxlens_ng_provider_protocol.yaml
       - schemas/cxxlens_ng_provider_runtime_contract.yaml
+      - schemas/cxxlens_ng_provider_ng1_hardening.yaml
+      - schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml
+      - schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
+      - schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml
       - schemas/cxxlens_ng_security_profile.yaml
       - schemas/cxxlens_ng_project_catalog_contract.yaml
       - tests/unit/sdk/g5_runtime_test.cpp
