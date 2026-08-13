@@ -112,4 +112,12 @@ namespace cxxlens::detail::clang22::materialization
 	[[nodiscard]] sdk::result<sealed_materialization_result> validate_and_seal_materialization(
 		streamed_validated_materialization_task_request request,
 		sdk::provider::detail::sealed_provider_transcript&& provider_seal);
+
+	/** Re-adopt a provider transcript reconstructed from a validated durable artifact. */
+	[[nodiscard]] sdk::result<sealed_materialization_result> seal_validated_provider_result(
+		const clang22_task_input& worker_input,
+		std::string_view provider_task_id,
+		std::string_view task_input_digest,
+		std::string_view provider_execution_id,
+		sdk::provider::detail::sealed_provider_transcript&& provider_seal);
 } // namespace cxxlens::detail::clang22::materialization

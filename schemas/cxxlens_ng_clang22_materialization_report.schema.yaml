@@ -437,7 +437,7 @@ properties:
   publication:
     type: object
     additionalProperties: false
-    required: [backend, selector, series_id, genesis, expected_parent_publication, observed_parent_publication, observed_parent_record, head_observation, publication_attempted, outcome, partial_policy, candidate_snapshot_id, candidate_identity_state, candidate_identity, invocation_commit_state, committed_transaction_count, invocation_committed_record, terminal_head, candidate_visibility, prior_history_retained, head_effect, store_failure, sqlite_effect_root_receipt, sqlite_reopen_status, recovery_receipt]
+    required: [backend, selector, series_id, genesis, expected_parent_publication, observed_parent_publication, observed_parent_record, head_observation, publication_attempted, outcome, partial_policy, candidate_snapshot_id, candidate_identity_state, candidate_identity, invocation_commit_state, committed_transaction_count, invocation_committed_record, terminal_head, candidate_visibility, prior_history_retained, head_effect, store_failure, prior_artifact_persistence, sqlite_effect_root_receipt, sqlite_reopen_status, recovery_receipt]
     properties:
       backend: {enum: [memory, sqlite]}
       selector: {$ref: '#/$defs/series_selector_fields'}
@@ -479,6 +479,39 @@ properties:
         oneOf:
           - {type: 'null'}
           - {$ref: '#/$defs/store_failure'}
+      prior_artifact_persistence:
+        type: object
+        additionalProperties: false
+        required: [state, error]
+        properties:
+          state: {enum: [committed, unavailable, not_attempted]}
+          error:
+            oneOf:
+              - {type: 'null'}
+              - type: object
+                additionalProperties: false
+                required: [code, field, detail]
+                properties:
+                  code: {type: string, minLength: 1}
+                  field: {type: string, minLength: 1}
+                  detail: {type: string}
+        oneOf:
+          - properties:
+              state: {const: committed}
+              error: {type: 'null'}
+          - properties:
+              state: {const: unavailable}
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, field, detail]
+                properties:
+                  code: {type: string, minLength: 1}
+                  field: {type: string, minLength: 1}
+                  detail: {type: string}
+          - properties:
+              state: {const: not_attempted}
+              error: {type: 'null'}
       sqlite_effect_root_receipt:
         oneOf:
           - {type: 'null'}
@@ -519,6 +552,22 @@ properties:
           properties: {invocation_committed_record: {type: 'null'}}
         else:
           properties: {invocation_committed_record: {$ref: '#/$defs/publication_record'}}
+      - if:
+          properties: {invocation_commit_state: {enum: [not_committed, unknown]}}
+          required: [invocation_commit_state]
+        then:
+          properties:
+            prior_artifact_persistence:
+              properties: {state: {const: not_attempted}}
+              required: [state]
+      - if:
+          properties: {invocation_commit_state: {const: committed}}
+          required: [invocation_commit_state]
+        then:
+          properties:
+            prior_artifact_persistence:
+              properties: {state: {enum: [committed, unavailable]}}
+              required: [state]
       - if:
           properties: {candidate_visibility: {const: present_by_invocation}}
           required: [candidate_visibility]
@@ -1439,8 +1488,10 @@ $defs:
   effect_ledger:
     type: object
     additionalProperties: false
-    required: [worker_launch_attempt_count, worker_launch_success_count, store_draft_state, head_observation, observed_head_publication, publication_attempted, committed_transaction_count, prior_history_retained, store_failure_cause]
+    required: [task_attempt_count, task_success_count, worker_launch_attempt_count, worker_launch_success_count, store_draft_state, head_observation, observed_head_publication, publication_attempted, committed_transaction_count, prior_history_retained, store_failure_cause]
     properties:
+      task_attempt_count: {type: integer, minimum: 0}
+      task_success_count: {type: integer, minimum: 0}
       worker_launch_attempt_count: {type: integer, minimum: 0}
       worker_launch_success_count: {type: integer, minimum: 0}
       store_draft_state: {enum: [not-created, discarded]}

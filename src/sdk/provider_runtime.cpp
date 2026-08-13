@@ -962,6 +962,12 @@ namespace cxxlens::sdk::provider
 			return sealed_transcript_receipt_digest(task_id, terminal, sealed);
 		}
 
+		result<std::string>
+		provider_frame_transcript_receipt_digest(const std::span<const frame> frames)
+		{
+			return frame_transcript_receipt_digest(frames);
+		}
+
 		std::uint64_t provider_runtime_receipt::raw_stdout_byte_count() const noexcept
 		{
 			return raw_stdout_byte_count_;
@@ -1398,6 +1404,7 @@ namespace cxxlens::sdk::provider
 													 std::string atomic_output_group_id,
 													 std::string batch_id,
 													 std::string batch_digest,
+													 std::vector<batch_column_summary> columns,
 													 std::vector<std::string> ordered_chunk_digests,
 													 std::vector<detached_row> rows)
 			: task_id_{std::move(task_id)}, descriptor_id_{std::move(descriptor_id)},
@@ -1405,6 +1412,7 @@ namespace cxxlens::sdk::provider
 			  dependency_group_id_{std::move(dependency_group_id)},
 			  atomic_output_group_id_{std::move(atomic_output_group_id)},
 			  batch_id_{std::move(batch_id)}, batch_digest_{std::move(batch_digest)},
+			  columns_{std::move(columns)},
 			  ordered_chunk_digests_{std::move(ordered_chunk_digests)}, rows_{std::move(rows)}
 		{
 		}
@@ -1436,6 +1444,10 @@ namespace cxxlens::sdk::provider
 		std::string_view sealed_provider_batch::batch_digest() const noexcept
 		{
 			return batch_digest_;
+		}
+		std::span<const batch_column_summary> sealed_provider_batch::columns() const noexcept
+		{
+			return columns_;
 		}
 		std::span<const std::string> sealed_provider_batch::ordered_chunk_digests() const noexcept
 		{
@@ -1471,6 +1483,118 @@ namespace cxxlens::sdk::provider
 		std::span<const evidence_item> sealed_provider_transcript::evidence() const noexcept
 		{
 			return evidence_;
+		}
+
+		result<sealed_provider_transcript>
+		rehydrate_provider_transcript(std::string task_id,
+									  const std::span<const relation_descriptor> output_descriptors,
+									  std::vector<sealed_provider_batch_replay> batches,
+									  std::vector<coverage_unit> coverage,
+									  std::vector<unresolved_item> unresolved,
+									  std::vector<evidence_item> evidence)
+		{
+			const auto fail = [&](std::string field, std::string detail = {})
+			{
+				return cxxlens::sdk::unexpected(
+					runtime_error("provider.replay-invalid", std::move(field), std::move(detail)));
+			};
+			if (task_id.empty() || task_id.contains('\0') || batches.empty() ||
+				batches.size() != output_descriptors.size())
+				return fail("transcript", "shape");
+			std::vector<sealed_provider_batch> sealed_batches;
+			sealed_batches.reserve(batches.size());
+			for (std::size_t index{}; index < batches.size(); ++index)
+			{
+				auto& input = batches[index];
+				const auto& descriptor = output_descriptors[index];
+				if (input.task_id != task_id || input.descriptor_id != descriptor.id ||
+					input.descriptor_digest != descriptor.descriptor_digest ||
+					input.dependency_group_id.empty() || input.atomic_output_group_id.empty() ||
+					input.batch_id.empty() || input.batch_id.contains('\0') ||
+					!protocol_digest(input.batch_digest))
+					return fail("batch", "binding");
+				for (const auto& digest : input.ordered_chunk_digests)
+					if (!protocol_digest(digest))
+						return fail("batch", "chunk-digest");
+				if (input.columns.size() != descriptor.columns.size())
+					return fail("batch", "column-shape");
+				std::uint64_t summarized_chunks{};
+				for (std::size_t column_index{}; column_index < input.columns.size();
+					 ++column_index)
+				{
+					const auto& summary = input.columns[column_index];
+					if (summary.column_id != descriptor.columns[column_index].id ||
+						(summary.chunk_count == 0U) != input.rows.empty() ||
+						summary.chunk_count >
+							std::numeric_limits<std::uint64_t>::max() - summarized_chunks)
+						return fail("batch", "column-summary");
+					summarized_chunks += summary.chunk_count;
+				}
+				if (summarized_chunks != input.ordered_chunk_digests.size())
+					return fail("batch", "chunk-count");
+				for (const auto& row : input.rows)
+				{
+					if (row.descriptor_id != descriptor.id)
+						return fail("batch", "row-descriptor");
+					if (auto valid = validate_row(descriptor, row); !valid)
+						return fail("batch", "row-validation");
+					if (descriptor.domain_identity.result_column)
+						if (auto valid = validate_domain_identity(descriptor, row); !valid)
+							return fail("batch", "row-domain");
+				}
+				columnar_batch_end batch_end{task_id,
+											 input.dependency_group_id,
+											 input.atomic_output_group_id,
+											 input.batch_id,
+											 input.descriptor_id,
+											 input.descriptor_digest,
+											 static_cast<std::uint64_t>(input.rows.size()),
+											 input.columns,
+											 input.ordered_chunk_digests,
+											 input.batch_digest};
+				if (columnar_batch_digest(batch_end) != input.batch_digest)
+					return fail("batch", "batch-digest");
+				sealed_batches.push_back(
+					sealed_provider_batch{std::move(input.task_id),
+										  std::move(input.descriptor_id),
+										  std::move(input.descriptor_digest),
+										  std::move(input.dependency_group_id),
+										  std::move(input.atomic_output_group_id),
+										  std::move(input.batch_id),
+										  std::move(input.batch_digest),
+										  std::move(input.columns),
+										  std::move(input.ordered_chunk_digests),
+										  std::move(input.rows)});
+			}
+
+			static const std::set<std::string_view> coverage_states{
+				"covered", "excluded", "failed", "not_applicable", "unresolved"};
+			std::set<std::pair<std::string, std::string>> coverage_keys;
+			bool task_covered{};
+			for (const auto& item : coverage)
+			{
+				if (item.kind.empty() || item.id.empty() || item.kind.contains('\0') ||
+					item.id.contains('\0') || !coverage_states.contains(item.state) ||
+					!coverage_keys.emplace(item.kind, item.id).second)
+					return fail("coverage", "record");
+				task_covered = task_covered ||
+					(item.kind == "task" && item.id == task_id && item.state == "covered");
+			}
+			if (!task_covered)
+				return fail("coverage", "task");
+			for (const auto& item : unresolved)
+				if (!namespaced(item.code) || item.code.contains('\0') || item.subject.empty() ||
+					item.subject.contains('\0') || item.detail.contains('\0'))
+					return fail("unresolved", "record");
+			for (const auto& item : evidence)
+				if (!namespaced(item.kind) || item.kind.contains('\0') || item.subject.empty() ||
+					item.subject.contains('\0') || item.producer.empty() ||
+					item.producer.contains('\0') || item.summary.contains('\0'))
+					return fail("evidence", "record");
+			return sealed_provider_transcript{std::move(sealed_batches),
+											  std::move(coverage),
+											  std::move(unresolved),
+											  std::move(evidence)};
 		}
 
 		const std::optional<sealed_provider_transcript>&
@@ -1851,6 +1975,7 @@ namespace cxxlens::sdk::provider
 													  batch->atomic_output_group_id,
 													  batch->id,
 													  batch_terminal->batch_digest,
+													  batch_terminal->columns,
 													  batch->ordered_chunk_digests,
 													  std::move(rows)});
 						batch.reset();
@@ -2427,6 +2552,7 @@ namespace cxxlens::sdk::provider
 			report.environment_digest = request.environment_digest;
 			report.measured_executable_digest = std::move(output.measured_executable_digest);
 			report.sandbox = std::move(output.sandbox);
+			report.raw_frame_stream = std::move(output.standard_output);
 			report.frames = std::move(*frames);
 			report.exit_code = output.exit_code;
 			report.termination_signal = output.termination_signal;

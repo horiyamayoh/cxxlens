@@ -1,5 +1,5 @@
 {
-  "asset_count": 649,
+  "asset_count": 651,
   "assets": [
     {
       "authority": "active",
@@ -2740,6 +2740,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_prior_artifact.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_prior_artifact.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_public_report.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4546,7 +4560,7 @@
     }
   ],
   "classifications": {
-    "active": 613,
+    "active": 615,
     "archived": 35,
     "generated": 1
   },

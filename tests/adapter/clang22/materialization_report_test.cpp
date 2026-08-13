@@ -15,9 +15,14 @@
 #include <vector>
 
 #include <cxxlens/sdk.hpp>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "llvm/clang22/materialization_json.hpp"
+#include "llvm/clang22/materialization_prior_artifact.hpp"
 #include "llvm/clang22/materialization_public_report.hpp"
+#include "llvm/clang22/materialization_rooted_vfs.hpp"
+#include "sdk/provider_runtime_internal.hpp"
 
 namespace
 {
@@ -32,6 +37,18 @@ namespace
 			std::exit(1);
 		}
 	}
+
+	class artifact_transcript_sink final : public sdk::provider::frame_sink
+	{
+	  public:
+		sdk::result<void> write(const std::span<const std::byte> bytes) override
+		{
+			transcript.insert(transcript.end(), bytes.begin(), bytes.end());
+			return {};
+		}
+
+		std::vector<std::byte> transcript;
+	};
 
 	template <class Journal>
 	concept compact_failure_capable = requires(Journal&& journal) {
@@ -57,6 +74,12 @@ namespace
 			cxxlens::sdk::content_digest(std::as_bytes(std::span{raw_request})),
 			true,
 		};
+	}
+
+	[[nodiscard]] std::string provider_execution_id_fixture(const std::string_view task_id)
+	{
+		return "provider-execution:" +
+			sdk::content_digest(std::as_bytes(std::span{task_id.data(), task_id.size()}));
 	}
 
 	[[nodiscard]] compact_request_binding request_binding()
@@ -87,8 +110,10 @@ namespace
 								const std::uint64_t task_count)
 	{
 		for (std::uint64_t index{}; index < task_count; ++index)
-			require(journal.record_worker_launch_attempt().has_value() &&
-						journal.record_worker_launch_success().has_value(),
+			require(journal.record_task_attempt().has_value() &&
+						journal.record_worker_launch_attempt().has_value() &&
+						journal.record_worker_launch_success().has_value() &&
+						journal.record_task_success().has_value(),
 					"journal rejected one authenticated worker launch");
 		require(journal.complete_worker_launches().has_value(),
 				"journal rejected the complete worker census");
@@ -391,12 +416,17 @@ namespace
 	void exact_worker_census_is_journal_owned()
 	{
 		auto journal = bound_journal(3U);
-		require(journal.record_worker_launch_attempt().has_value() &&
+		require(journal.record_task_attempt().has_value() &&
+					journal.record_worker_launch_attempt().has_value() &&
 					journal.record_worker_launch_success().has_value() &&
+					journal.record_task_success().has_value() &&
 					!journal.complete_worker_launches(),
 				"journal accepted an incomplete worker census");
-		require(journal.record_worker_launch_attempt().has_value() &&
+		require(journal.record_task_attempt().has_value() &&
+					journal.record_worker_launch_attempt().has_value() &&
 					journal.record_worker_launch_success().has_value() &&
+					journal.record_task_success().has_value() &&
+					journal.record_task_attempt().has_value() &&
 					journal.record_worker_launch_attempt().has_value(),
 				"journal rejected the third worker launch attempt");
 		auto authority = std::move(journal).issue_compact_failure(
@@ -407,7 +437,9 @@ namespace
 		auto parsed = parse_json_object(report->substr(0U, report->size() - 1U));
 		require(parsed.has_value(), "worker compact report did not parse");
 		const auto& effects = required_member(parsed->root(), "effects");
-		require(required_unsigned(effects, "worker_launch_attempt_count") == 3U &&
+		require(required_unsigned(effects, "task_attempt_count") == 3U &&
+					required_unsigned(effects, "task_success_count") == 2U &&
+					required_unsigned(effects, "worker_launch_attempt_count") == 3U &&
 					required_unsigned(effects, "worker_launch_success_count") == 2U &&
 					required_string(effects, "store_draft_state") == "not-created" &&
 					required_string(effects, "head_observation") == "not-observed",
@@ -424,7 +456,8 @@ namespace
 	void coordinator_failure_must_use_worker_phase_code()
 	{
 		auto journal = bound_journal(1U);
-		require(journal.record_worker_launch_attempt().has_value(),
+		require(journal.record_task_attempt().has_value() &&
+					journal.record_worker_launch_attempt().has_value(),
 				"coordinator failure journal did not open the worker launch window");
 		auto unmapped = std::move(journal).issue_compact_failure(
 			{"materialization.incremental-invalid", "worker", "receipt-validation"});
@@ -439,6 +472,22 @@ namespace
 					mapped->error().diagnostic.find("materialization.coverage-incomplete") !=
 						std::string::npos,
 				"journal did not retain a typed coordinator failure under its allowed worker code");
+	}
+
+	void exact_reuse_is_not_a_worker_launch()
+	{
+		auto journal = bound_journal(1U);
+		require(journal.record_task_attempt().has_value() &&
+					journal.record_task_success().has_value() &&
+					journal.complete_worker_launches().has_value(),
+				"journal rejected the zero-frontend-execution reuse window");
+		auto authority = std::move(journal).issue_compact_failure(
+			{"materialization.transcript-invalid", "transcript", "reuse-receipt"});
+		require(authority.has_value() && authority->task_attempt_count() == 1U &&
+					authority->task_success_count() == 1U &&
+					authority->worker_launch_attempt_count() == 0U &&
+					authority->worker_launch_success_count() == 0U,
+				"reuse journal conflated task windows with frontend launches");
 	}
 
 	[[nodiscard]] std::string typed_store_cause_preserves_exact_detail()
@@ -658,7 +707,7 @@ namespace
 
 		detailed_task_report_capture task;
 		task.provider_task_id = "task:test";
-		task.provider_execution_id = "execution:test";
+		task.provider_execution_id = provider_execution_id_fixture(task.provider_task_id);
 		task.selected_catalog_compile_unit_id = "compile-unit:selected";
 		task.compile_unit_id = "compile-unit:final";
 		task.task_input_digest =
@@ -675,9 +724,9 @@ namespace
 			"sha256:3333333333333333333333333333333333333333333333333333333333333333";
 		task.frame_count = 1U;
 		task.frame_transcript_digest =
-			"sha256:4444444444444444444444444444444444444444444444444444444444444444";
+			"semantic-v2:sha256:4444444444444444444444444444444444444444444444444444444444444444";
 		task.sealed_transcript_digest =
-			"sha256:5555555555555555555555555555555555555555555555555555555555555555";
+			"semantic-v2:sha256:5555555555555555555555555555555555555555555555555555555555555555";
 		task.batches.push_back(
 			{"task:test",
 			 "descriptor:test",
@@ -686,6 +735,7 @@ namespace
 			 "atomic:test",
 			 "batch:test",
 			 "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+			 {},
 			 {},
 			 0U,
 			 "sha256:8888888888888888888888888888888888888888888888888888888888888888",
@@ -705,7 +755,7 @@ namespace
 	{
 		detailed_task_report_capture capture;
 		capture.provider_task_id = "task:test";
-		capture.provider_execution_id = "execution:test";
+		capture.provider_execution_id = provider_execution_id_fixture(capture.provider_task_id);
 
 		detailed_report_limits byte_limits;
 		byte_limits.max_projection_bytes = 128U;
@@ -737,7 +787,7 @@ namespace
 	{
 		detailed_task_report_capture capture;
 		capture.provider_task_id = task_id;
-		capture.provider_execution_id = "execution:" + task_id;
+		capture.provider_execution_id = provider_execution_id_fixture(task_id);
 		capture.project_id = "project:test";
 		capture.catalog_id = "catalog:test";
 		capture.catalog_digest =
@@ -771,14 +821,14 @@ namespace
 			"sha256:5555555555555555555555555555555555555555555555555555555555555555"};
 		capture.ordered_chunk_payload_digest_set_digest =
 			"sha256:6666666666666666666666666666666666666666666666666666666666666666";
-		capture.raw_frame_stream_bytes = 7U;
-		capture.raw_frame_stream_digest =
-			"sha256:7777777777777777777777777777777777777777777777777777777777777777";
+		capture.raw_frame_stream = {std::byte{'r'}, std::byte{'a'}, std::byte{'w'}};
+		capture.raw_frame_stream_bytes = capture.raw_frame_stream.size();
+		capture.raw_frame_stream_digest = sdk::content_digest(capture.raw_frame_stream);
 		capture.frame_count = 1U;
 		capture.frame_transcript_digest =
-			"sha256:8888888888888888888888888888888888888888888888888888888888888888";
+			"semantic-v2:sha256:8888888888888888888888888888888888888888888888888888888888888888";
 		capture.sealed_transcript_digest =
-			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+			"semantic-v2:sha256:9999999999999999999999999999999999999999999999999999999999999999";
 		capture.coverage.push_back({"canonical", "coverage:test", "complete", ""});
 		capture.unresolved.push_back({"provider.unavailable", task_id, "observation unavailable"});
 		capture.evidence.push_back({"provider", task_id, "clang22", "sealed"});
@@ -790,26 +840,43 @@ namespace
 		batch.dependency_group_id = "canonical";
 		batch.atomic_output_group_id = "clang22-atomic";
 		batch.batch_id = "cc.entity.v1-batch";
-		batch.batch_digest =
-			"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+		// Provider batch summaries retain descriptor order, which is not required to be
+		// lexical order (cc.entity starts with entity before canonicalization).
+		batch.columns = {{"cc.entity.v1.entity", 42U, 1U},
+						 {"cc.entity.v1.canonicalization", 42U, 1U}};
 		batch.ordered_chunk_digests = {
-			"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"};
+			"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"};
 		batch.row_count = 1U;
-		batch.row_set_digest =
-			"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
-		batch.rows.push_back(
-			{0U,
-			 "{\"row\":\"" + task_id + "\"}",
-			 "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"});
+		const std::string row_form{"{\"row\":\"" + task_id + "\"}"};
+		const auto row_digest =
+			sdk::content_digest(std::as_bytes(std::span{row_form.data(), row_form.size()}));
+		batch.rows.push_back({0U, row_form, row_digest});
+		const auto row_set_digest = sdk::semantic_digest(
+			"cxxlens.clang22.materialization-report.row-set.v1", "0:" + row_form + "\n");
+		require(row_set_digest.has_value(), "report capture fixture row-set digest failed");
+		batch.row_set_digest = *row_set_digest;
+		batch.batch_digest = sdk::provider::columnar_batch_digest({batch.task_id,
+																   batch.dependency_group_id,
+																   batch.atomic_output_group_id,
+																   batch.batch_id,
+																   batch.descriptor_id,
+																   batch.descriptor_digest,
+																   batch.row_count,
+																   batch.columns,
+																   batch.ordered_chunk_digests,
+																   {}});
 		capture.batches.push_back(std::move(batch));
+		auto span_id = sdk::source_span_identity("snapshot:test", "file:test", 1U, 2U, "expansion");
+		require(span_id.has_value(), "report capture fixture span identity failed");
 		capture.observation_rows.push_back(
 			{0U,
 			 0U,
-			 "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			 row_digest,
 			 false,
 			 std::string{"provider-unavailable"},
 			 observation_v2_primary_span{
-				 "span:test", "snapshot:test", "file:test", 1U, 2U, "expansion", true}});
+				 *span_id, "snapshot:test", "file:test", 1U, 2U, "expansion", true}});
 		sdk::detached_row row;
 		row.descriptor_id = "cc.entity.v1";
 		row.cells.emplace("boolean", sdk::detached_cell::boolean(true));
@@ -879,6 +946,615 @@ namespace
 						sdk::error{
 							"materialization.report-invalid", "task_spool", "spool-io:lifecycle"},
 				"report capture spool accepted a post-seal append");
+	}
+
+	[[nodiscard]] sdk::incremental::partition_state prior_artifact_state()
+	{
+		const auto digest = [](const char value)
+		{
+			return std::string{"sha256:"} + std::string(64U, value);
+		};
+		sdk::incremental::input_fingerprint input{digest('a'),
+												  digest('b'),
+												  digest('c'),
+												  digest('d'),
+												  digest('e'),
+												  digest('f'),
+												  digest('1'),
+												  digest('2'),
+												  digest('3'),
+												  digest('4'),
+												  digest('5'),
+												  digest('6'),
+												  digest('7'),
+												  digest('8'),
+												  "normalizer:v1",
+												  digest('9'),
+												  digest('a'),
+												  "precision:exact"};
+		return {"partition:artifact-test", std::move(input), digest('b'), digest('c'), false};
+	}
+
+	void prior_artifact_codec_is_canonical_and_bounded()
+	{
+		auto built_engine = engine();
+		auto bundle_selector = selector(built_engine);
+		materialization_prior_artifact_bundle bundle;
+		bundle.selector = bundle_selector;
+		bundle.series_id = bundle_selector.id();
+		bundle.publication_id = "publication:artifact-parent";
+		bundle.snapshot_id = "snapshot:artifact-parent";
+		bundle.sequence = 7U;
+		bundle.physical_generation = 11U;
+		bundle.parent_publication = "publication:older";
+		const auto capture = replayable_capture("task:artifact");
+		auto capture_bytes = encode_detailed_task_report_capture(capture);
+		require(capture_bytes.has_value(),
+				"prior artifact fixture capture was not canonicalizable");
+		auto canonical_capture = decode_detailed_task_report_capture(*capture_bytes);
+		require(canonical_capture.has_value(), "prior artifact fixture capture did not rehydrate");
+		auto state = prior_artifact_state();
+		auto state_valid = state.validate();
+		require(state_valid.has_value(),
+				"prior artifact fixture state is invalid" +
+					(state_valid ? std::string{}
+								 : " (" + state_valid.error().field + ":" +
+							 state_valid.error().detail + ")"));
+		bundle.tasks.push_back({{0U,
+								 capture.provider_task_id,
+								 capture.task_input_digest,
+								 capture.selected_catalog_compile_unit_id,
+								 capture.compile_unit_id},
+								std::move(state),
+								"materialization.incremental-sealed-artifact:sha256:"
+								"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+								std::move(*canonical_capture)});
+
+		auto encoded = encode_materialization_prior_artifact(bundle);
+		require(encoded.has_value() && !encoded->empty(),
+				"prior artifact codec rejected the bounded fixture" +
+					(encoded ? std::string{}
+							 : " (" + encoded.error().field + ":" + encoded.error().detail + ")"));
+		auto decoded = decode_materialization_prior_artifact(*encoded);
+		require(decoded.has_value() && decoded->tasks.size() == 1U &&
+					decoded->tasks.front().identity.canonical_task_ordinal == 0U &&
+					decoded->tasks.front().capture.provider_task_id == "task:artifact" &&
+					decoded->tasks.front().capture.batches.front().columns.size() == 2U &&
+					decoded->tasks.front().capture.batches.front().columns.front().column_id ==
+						"cc.entity.v1.entity" &&
+					decoded->tasks.front().capture.batches.front().columns.back().column_id ==
+						"cc.entity.v1.canonicalization",
+				"prior artifact codec did not restore the exact task tuple");
+		require(decoded.has_value() && *decoded == bundle,
+				"prior artifact structural equality did not preserve the decoded capture");
+		auto reencoded = encode_materialization_prior_artifact(*decoded);
+		require(reencoded.has_value() && *reencoded == *encoded,
+				"prior artifact codec did not preserve canonical bytes");
+		auto mismatched_capture = capture;
+		mismatched_capture.capture_binding_digest = "semantic-v2:sha256:" + std::string(64U, '0');
+		auto mismatched_capture_encoding = encode_detailed_task_report_capture(mismatched_capture);
+		require(!mismatched_capture_encoding &&
+					mismatched_capture_encoding.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "task_spool.capture-binding",
+								   "transcript-mismatch:mismatch"},
+				"task capture encoder accepted a cross-bound capture digest");
+		auto semantically_mismatched_capture = capture;
+		semantically_mismatched_capture.batches.front().batch_digest =
+			"sha256:" + std::string(64U, '0');
+		auto semantically_mismatched_encoding =
+			encode_detailed_task_report_capture(semantically_mismatched_capture);
+		require(!semantically_mismatched_encoding &&
+					semantically_mismatched_encoding.error().field == "task_spool.batch" &&
+					semantically_mismatched_encoding.error().detail ==
+						"invalid-capture:spool-corrupt:batch-digest",
+				"task capture encoder accepted a semantically inconsistent batch digest");
+		auto duplicate_column_capture = capture;
+		duplicate_column_capture.batches.front().columns[1U].column_id =
+			duplicate_column_capture.batches.front().columns.front().column_id;
+		auto duplicate_column_encoding =
+			encode_detailed_task_report_capture(duplicate_column_capture);
+		require(!duplicate_column_encoding &&
+					duplicate_column_encoding.error().field == "task_spool.batch.columns" &&
+					duplicate_column_encoding.error().detail ==
+						"invalid-capture:spool-corrupt:nonempty-or-duplicate",
+				"task capture encoder accepted duplicate batch columns");
+		auto empty_column_capture = capture;
+		empty_column_capture.batches.front().columns[1U].column_id.clear();
+		auto empty_column_encoding = encode_detailed_task_report_capture(empty_column_capture);
+		require(!empty_column_encoding &&
+					empty_column_encoding.error().field == "task_spool.batch.columns" &&
+					empty_column_encoding.error().detail ==
+						"invalid-capture:spool-corrupt:nonempty-or-duplicate",
+				"task capture encoder accepted an empty batch column ID");
+		auto invalid_runtime_capture = capture;
+		invalid_runtime_capture.provider_execution_id.clear();
+		auto invalid_runtime_capture_bytes =
+			encode_detailed_task_report_capture(invalid_runtime_capture);
+		require(invalid_runtime_capture_bytes.has_value(),
+				"runtime-receipt decoder fixture could not encode its source spool");
+		auto forged_envelope = sdk::canonical_binary_decode(*encoded);
+		require(forged_envelope.has_value() && forged_envelope->tuple.size() == 3U,
+				"runtime-receipt decoder fixture envelope was not canonical");
+		auto forged_body = sdk::canonical_binary_decode(forged_envelope->tuple[1U].byte_string);
+		require(forged_body.has_value() && forged_body->tuple.size() == 5U &&
+					forged_body->tuple[4U].tuple.size() == 1U,
+				"runtime-receipt decoder fixture body was not canonical");
+		forged_body->tuple[4U].tuple[0U].tuple[3U].byte_string = *invalid_runtime_capture_bytes;
+		auto forged_body_bytes = sdk::canonical_binary(*forged_body);
+		require(forged_body_bytes.has_value(),
+				"runtime-receipt decoder fixture body could not be re-encoded");
+		forged_envelope->tuple[1U].byte_string = *forged_body_bytes;
+		forged_envelope->tuple[2U].text = sdk::content_digest(*forged_body_bytes);
+		auto forged_bytes = sdk::canonical_binary(*forged_envelope);
+		require(forged_bytes.has_value(),
+				"runtime-receipt decoder fixture envelope could not be re-encoded");
+		auto runtime_rejected = decode_materialization_prior_artifact(*forged_bytes);
+		require(!runtime_rejected &&
+					runtime_rejected.error() ==
+						sdk::error{"materialization.incremental-artifact-invalid",
+								   "task.capture",
+								   "runtime-receipt"},
+				"artifact decoder admitted a missing provider runtime receipt");
+
+		auto corrupted = *encoded;
+		corrupted[corrupted.size() / 2U] = static_cast<std::byte>(
+			static_cast<unsigned char>(corrupted[corrupted.size() / 2U]) ^ 1U);
+		require(!decode_materialization_prior_artifact(corrupted),
+				"prior artifact codec accepted a corrupted envelope");
+		auto trailing = *encoded;
+		trailing.push_back(std::byte{0});
+		require(!decode_materialization_prior_artifact(trailing),
+				"prior artifact codec accepted trailing bytes");
+		materialization_prior_artifact_limits limited;
+		limited.max_tasks = 1U;
+		require(decode_materialization_prior_artifact(*encoded, limited).has_value(),
+				"prior artifact codec confused a task upper bound with an exact count");
+		limited.max_total_capture_bytes = 1U;
+		require(!encode_materialization_prior_artifact(bundle, limited),
+				"prior artifact codec ignored its aggregate capture budget");
+	}
+
+	void sqlite_prior_artifact_sidecar_is_selector_bound()
+	{
+		temporary_working_directory directory;
+		auto root = materialization_effect_root::capture_startup();
+		require(root.has_value(), "SQLite prior artifact test could not capture the effect root");
+		auto built_engine = engine();
+		auto bundle_selector = selector(built_engine);
+		auto publication = publication_request(bundle_selector);
+		publication.backend = "sqlite";
+		publication.genesis = false;
+		publication.expected_parent_publication = "publication:artifact-grandparent";
+		publication.sqlite_path = "store.db";
+		const auto capture = replayable_capture("task:memory-artifact");
+		auto state = prior_artifact_state();
+		materialization_prior_artifact_task task{
+			{0U,
+			 capture.provider_task_id,
+			 capture.task_input_digest,
+			 capture.selected_catalog_compile_unit_id,
+			 capture.compile_unit_id},
+			std::move(state),
+			"materialization.incremental-sealed-artifact:sha256:"
+			"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			capture};
+		sdk::publication_record record;
+		record.publication_id = "publication:memory-artifact";
+		record.series_id = publication.series_id;
+		record.snapshot_id = "snapshot:memory-artifact";
+		record.sequence = 1U;
+		record.physical_generation = 1U;
+		record.parent_publication = publication.expected_parent_publication;
+		record.state = sdk::publication_state::committed;
+		materialization_store_observation observation;
+		observation.backend = publication.backend;
+		observation.selector = publication.selector;
+		observation.series_id = publication.series_id;
+		observation.expected_parent_publication = publication.expected_parent_publication;
+		observation.writer_begin_call_count = 1U;
+		observation.publication_attempted = true;
+		observation.publish_call_count = 1U;
+		observation.candidate_manifest = sdk::snapshot_manifest{};
+		observation.candidate_manifest->id = record.snapshot_id;
+		observation.candidate_identity =
+			materialization_publication_candidate{record.publication_id,
+												  record.series_id,
+												  record.snapshot_id,
+												  record.sequence,
+												  record.parent_publication};
+		observation.publish_returned_record = record;
+		auto capture_spool_result = detailed_task_report_replayable_spool::create();
+		require(capture_spool_result.has_value(),
+				"SQLite prior artifact capture spool could not be created");
+		auto capture_spool = std::move(*capture_spool_result);
+		require(capture_spool.append(capture).has_value() && capture_spool.seal().has_value(),
+				"SQLite prior artifact capture spool could not be sealed");
+		materialization_prior_artifact_task_metadata task_metadata{
+			task.identity, task.state, task.sealed_artifact_digest, capture.provider_execution_id};
+		auto persisted = persist_materialization_prior_artifact(
+			*root, publication, record, observation, capture_spool, {std::move(task_metadata)});
+		require(persisted.has_value(), "SQLite prior artifact was not retained after commit");
+		auto weak_execution_metadata = materialization_prior_artifact_task_metadata{
+			task.identity, task.state, task.sealed_artifact_digest, "execution:weak"};
+		auto weak_execution =
+			persist_materialization_prior_artifact(*root,
+												   publication,
+												   record,
+												   observation,
+												   capture_spool,
+												   {std::move(weak_execution_metadata)});
+		require(!weak_execution &&
+					weak_execution.error() ==
+						sdk::error{"materialization.incremental-artifact-invalid",
+								   "bundle.tasks",
+								   "identity-or-order"},
+				"SQLite prior artifact admitted a non-canonical provider execution ID");
+		auto locator_digest = sdk::content_digest(
+			std::as_bytes(std::span{record.publication_id.data(), record.publication_id.size()}));
+		require(locator_digest.starts_with("sha256:"),
+				"SQLite prior artifact locator digest invalid");
+		const auto sidecar_path =
+			std::string{"store.db.cxxlens-incremental-v1-"} + locator_digest.substr(7U);
+		auto sidecar = root->open_beneath(sidecar_path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+		require(sidecar.has_value(), "SQLite prior artifact sidecar was not installed");
+		auto identity = materialization_fd_identity(sidecar->get(), true);
+		require(identity.has_value() && identity->size_bytes != 0U,
+				"SQLite prior artifact sidecar has no stable size");
+		std::vector<std::byte> sidecar_bytes(static_cast<std::size_t>(identity->size_bytes));
+		std::size_t offset{};
+		while (offset < sidecar_bytes.size())
+		{
+			const auto count = ::read(
+				sidecar->get(), sidecar_bytes.data() + offset, sidecar_bytes.size() - offset);
+			require(count > 0, "SQLite prior artifact sidecar could not be read");
+			offset += static_cast<std::size_t>(count);
+		}
+		materialization_prior_artifact_bundle expected_bundle;
+		expected_bundle.selector = publication.selector;
+		expected_bundle.series_id = record.series_id;
+		expected_bundle.publication_id = record.publication_id;
+		expected_bundle.snapshot_id = record.snapshot_id;
+		expected_bundle.sequence = record.sequence;
+		expected_bundle.physical_generation = record.physical_generation;
+		expected_bundle.parent_publication = record.parent_publication;
+		expected_bundle.tasks.push_back(task);
+		auto expected_bytes = encode_materialization_prior_artifact(expected_bundle);
+		std::size_t first_difference{};
+		while (first_difference < sidecar_bytes.size() &&
+			   first_difference < (expected_bytes ? expected_bytes->size() : 0U) &&
+			   sidecar_bytes[first_difference] == (*expected_bytes)[first_difference])
+			++first_difference;
+		require(expected_bytes.has_value() && sidecar_bytes == *expected_bytes,
+				"streamed SQLite prior artifact differs from canonical vector encoding" +
+					(expected_bytes ? " (size=" + std::to_string(sidecar_bytes.size()) + "/" +
+							 std::to_string(expected_bytes->size()) + ")"
+									: " (canonical encoding failed)") +
+					(first_difference < sidecar_bytes.size()
+						 ? " first=" + std::to_string(first_difference)
+						 : std::string{}));
+		auto loaded = decode_materialization_prior_artifact(sidecar_bytes);
+		require(loaded.has_value() && loaded->publication_id == record.publication_id &&
+					loaded->tasks.size() == 1U,
+				"SQLite prior artifact sidecar did not restore the exact publication" +
+					(loaded ? std::string{}
+							: " (" + loaded.error().field + ":" + loaded.error().detail + ")"));
+		auto other_selector = bundle_selector;
+		other_selector.channel_id = "other-channel";
+		auto other_publication = publication;
+		other_publication.selector = other_selector;
+		other_publication.series_id = other_selector.id();
+		auto other_record = record;
+		other_record.series_id = other_publication.series_id;
+		materialization_store_observation other_observation = observation;
+		other_observation.selector = other_publication.selector;
+		other_observation.series_id = other_publication.series_id;
+		other_observation.candidate_manifest->id = other_record.snapshot_id;
+		other_observation.candidate_identity->series_id = other_record.series_id;
+		other_observation.publish_returned_record = other_record;
+		materialization_prior_artifact_task_metadata other_task_metadata{
+			task.identity, task.state, task.sealed_artifact_digest, capture.provider_execution_id};
+		auto selector_conflict =
+			persist_materialization_prior_artifact(*root,
+												   other_publication,
+												   other_record,
+												   other_observation,
+												   capture_spool,
+												   {std::move(other_task_metadata)});
+		require(!selector_conflict &&
+					selector_conflict.error() ==
+						sdk::error{"materialization.incremental-artifact-invalid",
+								   "sidecar",
+								   "immutable-conflict"},
+				"SQLite prior artifact sidecar crossed an unrelated selector boundary");
+		auto memory_publication = publication_request(bundle_selector);
+		auto memory_loaded =
+			load_materialization_prior_artifact(*root, built_engine, memory_publication);
+		require(memory_loaded.has_value() && !memory_loaded->has_value(),
+				"memory prior artifact API exposed a process-local cache as durable reuse");
+	}
+
+	void sqlite_prior_artifact_loads_after_store_close()
+	{
+		temporary_working_directory directory;
+		auto root = materialization_effect_root::capture_startup();
+		require(root.has_value(), "SQLite close/reopen test could not capture the effect root");
+		auto built_engine = engine();
+		auto bundle_selector = selector(built_engine);
+		auto parent_request = publication_request(bundle_selector);
+		parent_request.backend = "sqlite";
+		parent_request.sqlite_path = "store.db";
+
+		auto capture = replayable_capture("task:sqlite-reopen");
+		auto state = prior_artifact_state();
+		materialization_prior_artifact_task task{
+			{0U,
+			 capture.provider_task_id,
+			 capture.task_input_digest,
+			 capture.selected_catalog_compile_unit_id,
+			 capture.compile_unit_id},
+			std::move(state),
+			"materialization.incremental-sealed-artifact:sha256:"
+			"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			capture};
+		materialization_prior_artifact_task_metadata task_metadata{
+			task.identity, task.state, task.sealed_artifact_digest, capture.provider_execution_id};
+
+		sdk::publication_record current_record;
+		{
+			auto opener = materialization_rooted_store_opener::create(*root);
+			require(opener.has_value(), "SQLite close/reopen test could not create rooted opener");
+			auto store = (*opener)->open_sqlite(*parent_request.sqlite_path, built_engine);
+			require(store.has_value(), "SQLite close/reopen test could not open the Store");
+
+			auto publish = [&](const validated_publication_request& request,
+							   std::string universe) -> sdk::snapshot_handle
+			{
+				auto plan = store_plan(built_engine, request, std::move(universe));
+				auto writer = store->begin(std::move(plan.draft));
+				require(writer.has_value(), "SQLite close/reopen test could not begin a writer");
+				for (auto& partition_value : plan.partitions)
+				{
+					auto staged = writer->stage(std::move(partition_value));
+					require(staged.has_value(),
+							"SQLite close/reopen test could not stage a partition" +
+								(staged ? std::string{}
+										: " (" + staged.error().code + ":" + staged.error().field +
+										 ":" + staged.error().detail + ")"));
+				}
+				require(writer->validate().has_value(),
+						"SQLite close/reopen test could not validate a publication");
+				auto published = writer->publish();
+				require(published.has_value(),
+						"SQLite close/reopen test could not publish a publication");
+				return std::move(*published);
+			};
+
+			auto parent = publish(parent_request, "universe-materialization-compact-test");
+			auto current_request = parent_request;
+			current_request.genesis = false;
+			current_request.expected_parent_publication = parent.publication().publication_id;
+			auto current = publish(current_request, "universe-materialization-compact-test");
+			current_record = current.publication();
+
+			materialization_store_observation observation;
+			observation.backend = current_request.backend;
+			observation.selector = current_request.selector;
+			observation.series_id = current_request.series_id;
+			observation.expected_parent_publication = current_request.expected_parent_publication;
+			observation.writer_begin_call_count = 1U;
+			observation.publication_attempted = true;
+			observation.publish_call_count = 1U;
+			observation.candidate_manifest = current.manifest();
+			observation.candidate_identity =
+				materialization_publication_candidate{current_record.publication_id,
+													  current_record.series_id,
+													  current_record.snapshot_id,
+													  current_record.sequence,
+													  current_record.parent_publication};
+			observation.publish_returned_record = current_record;
+
+			auto capture_spool_result = detailed_task_report_replayable_spool::create();
+			require(capture_spool_result.has_value(),
+					"SQLite close/reopen capture spool could not be created");
+			auto capture_spool = std::move(*capture_spool_result);
+			require(capture_spool.append(capture).has_value() && capture_spool.seal().has_value(),
+					"SQLite close/reopen capture spool could not be sealed");
+			require(persist_materialization_prior_artifact(*root,
+														   current_request,
+														   current_record,
+														   observation,
+														   capture_spool,
+														   {task_metadata})
+						.has_value(),
+					"SQLite prior artifact was not persisted for close/reopen test");
+		}
+
+		auto load_request = parent_request;
+		load_request.genesis = false;
+		load_request.expected_parent_publication = current_record.publication_id;
+		auto loaded = load_materialization_prior_artifact(*root, built_engine, load_request);
+		require(loaded.has_value() && loaded->has_value(),
+				"SQLite prior artifact did not load after the Store was closed");
+		auto& replay_bundle = loaded->value();
+		require(replay_bundle.publication.publication_id == current_record.publication_id &&
+					replay_bundle.publication.snapshot_id == current_record.snapshot_id &&
+					replay_bundle.tasks.size() == 1U && replay_bundle.captures.has_value(),
+				"SQLite close/reopen load lost the exact publication/task metadata");
+		require(replay_bundle.tasks.front().provider_execution_id == capture.provider_execution_id,
+				"SQLite close/reopen load lost the provider execution binding");
+
+		std::optional<detailed_task_report_capture> replayed;
+		auto replayed_one = replay_bundle.captures->replay_one(
+			0U,
+			[&](detailed_task_report_capture&& value) -> sdk::result<void>
+			{
+				replayed = std::move(value);
+				return {};
+			});
+		require(replayed_one.has_value() && replayed.has_value() &&
+					replayed->provider_task_id == capture.provider_task_id &&
+					replayed->provider_execution_id == capture.provider_execution_id &&
+					replayed->raw_frame_stream_digest == capture.raw_frame_stream_digest,
+				"SQLite close/reopen load could not replay one sealed task");
+	}
+
+	void prior_artifact_rehydration_reproves_raw_semantics()
+	{
+		auto capture = replayable_capture("task:raw-reproof");
+		sdk::provider::manifest provider_manifest;
+		provider_manifest.provider_id = "provider:raw-reproof";
+		provider_manifest.provider_version = {1U, 0U, 0U};
+		artifact_transcript_sink sink;
+		sdk::provider::protocol_writer writer{sink};
+		const sdk::provider::protocol_credit credit{64U * 1024U * 1024U, 65536U};
+		writer.grant_credit(credit);
+		auto hello = sdk::provider::encode_control_text(provider_manifest.canonical_json());
+		auto schema =
+			sdk::provider::encode_schema_negotiate_metadata({"cxxlens.provider-protocol.v1", 0U});
+		auto accepted = sdk::provider::encode_task_accepted_metadata(
+			{provider_manifest.provider_id,
+			 provider_manifest.provider_version.string(),
+			 capture.provider_task_id});
+		const std::vector<sdk::provider::coverage_unit> coverage{
+			{"task", capture.provider_task_id, "covered", {}}};
+		const std::vector<sdk::provider::unresolved_item> unresolved;
+		const std::vector<sdk::provider::evidence_item> evidence;
+		auto coverage_control = sdk::provider::encode_coverage_metadata(coverage);
+		auto unresolved_control = sdk::provider::encode_unresolved_metadata(unresolved);
+		auto evidence_control = sdk::provider::encode_evidence_metadata(evidence);
+		auto complete = sdk::provider::encode_task_complete_metadata({capture.provider_task_id});
+		require(hello && schema && accepted && coverage_control && unresolved_control &&
+					evidence_control && complete,
+				"raw reproof fixture could not encode its lifecycle controls");
+		const auto send_control = [&](const sdk::provider::message_type type,
+									  const std::vector<std::byte>& control,
+									  const std::uint16_t flags = 0U)
+		{
+			auto sent = writer.send(
+				type, std::span<const std::byte>{control}, std::span<const std::byte>{}, flags);
+			require(sent.has_value(), "raw reproof fixture could not write a lifecycle frame");
+		};
+		send_control(sdk::provider::message_type::hello, *hello);
+		send_control(sdk::provider::message_type::schema_negotiate, *schema);
+		send_control(sdk::provider::message_type::task_accepted, *accepted);
+		send_control(sdk::provider::message_type::coverage_chunk, *coverage_control);
+		send_control(sdk::provider::message_type::unresolved_chunk, *unresolved_control);
+		send_control(sdk::provider::message_type::progress, *evidence_control);
+		send_control(sdk::provider::message_type::task_complete,
+					 *complete,
+					 static_cast<std::uint16_t>(sdk::provider::frame_flag::end_of_stream));
+		auto frames = sdk::provider::decode_frame_stream(sink.transcript);
+		require(frames.has_value(), "raw reproof fixture transcript could not be decoded");
+		auto frame_receipt =
+			sdk::provider::detail::provider_frame_transcript_receipt_digest(*frames);
+		require(frame_receipt.has_value(), "raw reproof fixture frame receipt failed");
+		capture.raw_frame_stream = sink.transcript;
+		capture.raw_frame_stream_bytes = capture.raw_frame_stream.size();
+		capture.raw_frame_stream_digest = sdk::content_digest(capture.raw_frame_stream);
+		capture.frame_count = frames->size();
+		capture.frame_transcript_digest = *frame_receipt;
+		capture.capture_binding_digest.clear();
+		capture.coverage = {{"task", capture.provider_task_id, "covered", {}}};
+		capture.unresolved.clear();
+		capture.evidence.clear();
+		capture.observation_rows.clear();
+		capture.base_claim_rows.clear();
+		capture.source_span_claim_rows.clear();
+
+		const auto output_descriptor = descriptor();
+		const auto& output_column = output_descriptor.columns.front();
+		sdk::detached_row row{output_descriptor.id, {}};
+		row.cells.emplace(output_column.id,
+						  sdk::detached_cell::typed("company_compact_item_id", "item:raw-reproof"));
+		require(sdk::validate_row(output_descriptor, row).has_value(),
+				"raw reproof fixture row is invalid");
+		detailed_provider_batch_projection batch;
+		batch.task_id = capture.provider_task_id;
+		batch.descriptor_id = output_descriptor.id;
+		batch.descriptor_digest = output_descriptor.descriptor_digest;
+		batch.dependency_group_id = "canonical";
+		batch.atomic_output_group_id = "raw-reproof";
+		batch.batch_id = "batch:raw-reproof";
+		batch.columns = {{output_column.id, 1U, 1U}};
+		batch.ordered_chunk_digests = {
+			"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
+		batch.row_count = 1U;
+		const auto row_form = row.canonical_form();
+		batch.rows.push_back(
+			{0U,
+			 row_form,
+			 sdk::content_digest(std::as_bytes(std::span{row_form.data(), row_form.size()}))});
+		auto row_set = sdk::semantic_digest("cxxlens.clang22.materialization-report.row-set.v1",
+											"0:" + row_form + "\n");
+		require(row_set.has_value(), "raw reproof fixture row-set receipt failed");
+		batch.row_set_digest = *row_set;
+		batch.batch_digest = sdk::provider::columnar_batch_digest({batch.task_id,
+																   batch.dependency_group_id,
+																   batch.atomic_output_group_id,
+																   batch.batch_id,
+																   batch.descriptor_id,
+																   batch.descriptor_digest,
+																   batch.row_count,
+																   batch.columns,
+																   batch.ordered_chunk_digests,
+																   {}});
+		capture.batches = {std::move(batch)};
+
+		auto state = prior_artifact_state();
+		materialization_prior_artifact_task artifact{
+			{0U,
+			 capture.provider_task_id,
+			 capture.task_input_digest,
+			 capture.selected_catalog_compile_unit_id,
+			 capture.compile_unit_id},
+			std::move(state),
+			"materialization.incremental-sealed-artifact:sha256:"
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			std::move(capture)};
+		validated_task_request current;
+		current.provider_task_id = artifact.identity.provider_task_id;
+		current.provider_execution_id = artifact.capture.provider_execution_id;
+		current.task_input_digest = artifact.identity.task_input_digest;
+		auto& input = current.worker_input;
+		input.project_catalog.catalog_id = artifact.capture.catalog_id;
+		input.project_catalog.catalog_digest = artifact.capture.catalog_digest;
+		input.selected_catalog_compile_unit = artifact.capture.selected_catalog_compile_unit_id;
+		input.compile_unit = artifact.capture.compile_unit_id;
+		input.project = artifact.capture.project_id;
+		input.variant = artifact.capture.variant_id;
+		input.toolchain_context = artifact.capture.toolchain_context_id;
+		input.toolchain_digest = artifact.capture.toolchain_digest;
+		input.source_snapshot = artifact.capture.source_snapshot_id;
+		input.file = artifact.capture.source_file_id;
+		input.logical_path = artifact.capture.source_logical_path;
+		input.source_content_digest = artifact.capture.source_content_digest;
+		input.source_size_bytes = artifact.capture.source_size_bytes;
+		input.source_encoding = artifact.capture.source_encoding;
+		input.line_index = artifact.capture.source_line_index_id;
+		input.source_read_only = artifact.capture.source_read_only;
+		input.condition_universe = artifact.capture.condition_universe_id;
+		input.condition = artifact.capture.condition_id;
+		input.interpretation = artifact.capture.interpretation_domain;
+		std::array output_descriptors{output_descriptor};
+		auto rehydrated = rehydrate_materialization_prior_artifact(
+			artifact,
+			0U,
+			current,
+			provider_manifest,
+			std::span<const sdk::relation_descriptor>{output_descriptors},
+			credit,
+			sdk::provider::protocol_limits{});
+		const auto rehydration_failure = rehydrated ? std::string{"success"}
+													: rehydrated.error().code + "/" +
+				rehydrated.error().field + "/" + rehydrated.error().detail;
+		require(!rehydrated &&
+					rehydrated.error() ==
+						sdk::error{"materialization.incremental-artifact-invalid",
+								   "task.capture",
+								   "raw-semantic-binding"},
+				"prior artifact rehydration did not reject a raw/capture semantic mismatch: " +
+					rehydration_failure);
 	}
 
 	[[nodiscard]] detailed_success_report_model valid_detailed_success_model()
@@ -958,6 +1634,18 @@ namespace
 					rejected.error().detail.find("missing=request") != std::string::npos &&
 					rejected.error().detail.find(",raw_input_observation") != std::string::npos,
 				"public success report accepted absent execution authority");
+		public_materialization_prior_artifact_persistence unavailable{
+			false,
+			"materialization.incremental-artifact-invalid",
+			"publication.prior-artifact",
+			"sidecar-write-failed"};
+		input.prior_artifact_persistence = &unavailable;
+		auto still_rejected = build_public_materialization_success_report(input);
+		require(
+			!still_rejected &&
+				still_rejected.error().detail.find(
+					"missing=publication.prior_artifact_persistence") == std::string::npos,
+			"public success report did not admit an explicit unavailable prior-artifact status");
 	}
 } // namespace
 
@@ -1016,11 +1704,16 @@ int main(const int argument_count, const char* const* arguments)
 	spool_failure_phases_are_closed();
 	exact_worker_census_is_journal_owned();
 	coordinator_failure_must_use_worker_phase_code();
+	exact_reuse_is_not_a_worker_launch();
 	static_cast<void>(typed_store_cause_preserves_exact_detail());
 	static_cast<void>(failed_head_observation_is_four_state_and_path_bound());
 	store_stage_and_publication_boundary_are_closed();
 	bounded_detailed_projection_never_promotes_unverified_store();
 	report_capture_spool_replays_one_task_at_a_time();
+	prior_artifact_codec_is_canonical_and_bounded();
+	sqlite_prior_artifact_sidecar_is_selector_bound();
+	sqlite_prior_artifact_loads_after_store_close();
+	prior_artifact_rehydration_reproves_raw_semantics();
 	detailed_report_capacity_reservation_is_compositional_and_closed();
 	public_success_report_requires_all_authority_inputs();
 

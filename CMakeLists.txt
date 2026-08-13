@@ -412,6 +412,7 @@ add_library(
   src/llvm/clang22/materialization_incremental_coordinator.cpp
   src/llvm/clang22/materialization_incremental_receipt.cpp
   src/llvm/clang22/materialization_incremental_ingress.cpp
+  src/llvm/clang22/materialization_prior_artifact.cpp
   src/llvm/clang22/materialization_claim_stream.cpp
   src/llvm/clang22/materialization_bounded_claim_source.cpp
   src/llvm/clang22/materialization_store.cpp

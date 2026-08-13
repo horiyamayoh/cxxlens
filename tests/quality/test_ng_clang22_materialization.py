@@ -496,6 +496,40 @@ class NgClang22MaterializationTests(unittest.TestCase):
             request_bytes=request_bytes,
         )
 
+        # A compact authority retains the exact in-flight task and worker census;
+        # it must not collapse a third-task launch failure to a one-task fixture.
+        three_task_request = self.request(translation_unit_count=3)
+        three_task_bytes = materialization.canonical_json(three_task_request)
+        third_launch_failure = materialization.compact_failure_report(
+            three_task_bytes,
+            request=three_task_request,
+            phase="worker-launch",
+            code="materialization.worker-failure",
+            task_attempt_count=3,
+            task_success_count=2,
+            worker_launch_attempt_count=3,
+            worker_launch_success_count=2,
+        )
+        self.validate_report(
+            three_task_request,
+            third_launch_failure,
+            request_bytes=three_task_bytes,
+        )
+
+        # Exact prior-artifact reuse completes the task census without launching
+        # a provider worker; the worker launch ledger is therefore 0/0.
+        reuse_failure = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="transcript",
+            code="materialization.transcript-invalid",
+            task_attempt_count=1,
+            task_success_count=1,
+            worker_launch_attempt_count=0,
+            worker_launch_success_count=0,
+        )
+        self.validate_report(request, reuse_failure, request_bytes=request_bytes)
+
         bound_mutations = {
             "binding": lambda report: report["binding"]["request"].__setitem__(
                 "request_digest", "semantic-v2:sha256:" + "0" * 64
@@ -3392,8 +3426,42 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             self.validate_report(sqlite_request, sqlite_report)
 
+        sqlite_unavailable = self.report(sqlite_request)
+        sqlite_unavailable["publication"]["prior_artifact_persistence"] = {
+            "state": "unavailable",
+            "error": {
+                "code": "materialization.incremental-artifact-invalid",
+                "field": "sidecar",
+                "detail": "immutable-conflict",
+            },
+        }
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "SQLite prior artifact persistence"
+        ):
+            self.validate_report(sqlite_request, sqlite_unavailable)
+
         memory_request = self.request("static", "memory")
         memory_report = self.report(memory_request)
+        self.assertEqual(
+            memory_report["publication"]["prior_artifact_persistence"],
+            {
+                "state": "unavailable",
+                "error": {
+                    "code": "materialization.incremental-artifact-invalid",
+                    "field": "memory",
+                    "detail": "process-lifetime-only",
+                },
+            },
+        )
+        false_memory_claim = copy.deepcopy(memory_report)
+        false_memory_claim["publication"]["prior_artifact_persistence"] = {
+            "state": "committed",
+            "error": None,
+        }
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "memory prior artifact persistence"
+        ):
+            self.validate_report(memory_request, false_memory_claim)
         memory_report["publication"]["sqlite_reopen_status"] = "opened"
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization report"
@@ -5229,6 +5297,26 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.validate_contract_exact(contract)
 
         contract = copy.deepcopy(accepted)
+        contract["report"]["response_union"]["compact_failure"]["task_census"][
+            "post-worker-phases"
+        ]["worker-launch-successes"] = "task-count"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact task census differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["errors"]["compact_effect_matrix"]["transcript"] = [
+            "launch-successes-equals-attempts"
+        ]
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact effect matrix differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
         contract["acceptance"].append("bounded-spool-before-publication")
         with self.assertRaisesRegex(
             materialization.MaterializationError,
@@ -6261,7 +6349,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             (
                 "design-legacy-report-schema-digest",
                 design_text.replace(
-                    "sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b",
+                    "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520",
                     "sha256:96c11ba8518075abed8e57c08bd38c10907b9d195ec1daafdb4fd0d57a583941",
                     1,
                 ),

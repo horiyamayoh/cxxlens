@@ -1441,7 +1441,7 @@ $defs:
         implementation_and_acceptance: may-proceed-under-accepted-option-a-not-qualified-until-required-evidence
       d6_compatibility:
         contract_version: 2.1.0-accepted-df-0200-option-a-authority
-        report_schema_canonical_json_digest: sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b
+        report_schema_canonical_json_digest: sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520
         public_headers_signatures_and_inventory: unchanged
         public_catalog: additive-sqlite-v3-behavior-entry-with-store.migration-required-no-new-callable
         request_and_report_shape: request-2.1.0-unchanged-report-private-spool-failure-occurrence-inventory-sandbox-bounds-activated

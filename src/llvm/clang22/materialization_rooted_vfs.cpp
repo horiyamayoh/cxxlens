@@ -36,6 +36,7 @@
 #include "sdk/store_backend_lifetime_internal.hpp"
 
 #if defined(__linux__)
+#include <linux/fs.h>
 #include <linux/memfd.h>
 #include <linux/openat2.h>
 #include <sys/syscall.h>
@@ -3303,6 +3304,76 @@ namespace cxxlens::detail::clang22::materialization
 											  const std::uint32_t creation_mode) const
 	{
 		return open_materialization_beneath(directory_.get(), relative_path, flags, creation_mode);
+	}
+
+	sdk::result<void>
+	materialization_effect_root::rename_beneath(const std::string_view temporary_path,
+												const std::string_view final_path) const
+	{
+		if (auto valid = validate_materialization_relative_path(temporary_path, 4095U, true);
+			!valid)
+			return sdk::unexpected(std::move(valid.error()));
+		if (auto valid = validate_materialization_relative_path(final_path, 4095U, true); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		const auto temporary_separator = temporary_path.rfind('/');
+		const auto final_separator = final_path.rfind('/');
+		const auto temporary_parent = temporary_separator == std::string_view::npos
+			? std::string_view{}
+			: temporary_path.substr(0U, temporary_separator);
+		const auto final_parent = final_separator == std::string_view::npos
+			? std::string_view{}
+			: final_path.substr(0U, final_separator);
+		if (temporary_parent != final_parent)
+			return sdk::unexpected(rooted_error("rename", "different-parent"));
+		const auto temporary_leaf = temporary_path.substr(
+			temporary_separator == std::string_view::npos ? 0U : temporary_separator + 1U);
+		const auto final_leaf = final_path.substr(
+			final_separator == std::string_view::npos ? 0U : final_separator + 1U);
+		if (temporary_leaf.empty() || final_leaf.empty())
+			return sdk::unexpected(rooted_error("rename", "empty-leaf"));
+		auto parent = temporary_parent.empty()
+			? duplicate_directory()
+			: open_beneath(temporary_parent, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+		if (!parent)
+			return sdk::unexpected(std::move(parent.error()));
+#if defined(__linux__) && defined(SYS_renameat2) && defined(RENAME_NOREPLACE)
+		const std::string temporary_leaf_string{temporary_leaf};
+		const std::string final_leaf_string{final_leaf};
+		if (::syscall(SYS_renameat2,
+					  parent->get(),
+					  temporary_leaf_string.c_str(),
+					  parent->get(),
+					  final_leaf_string.c_str(),
+					  RENAME_NOREPLACE) != 0)
+			return sdk::unexpected(rooted_error("renameat2", std::to_string(errno)));
+		return {};
+#else
+		return sdk::unexpected(rooted_error("renameat2", "unsupported-platform"));
+#endif
+	}
+
+	sdk::result<void>
+	materialization_effect_root::unlink_beneath(const std::string_view relative_path) const
+	{
+		if (auto valid = validate_materialization_relative_path(relative_path, 4095U, true); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		const auto separator = relative_path.rfind('/');
+		const auto parent_path = separator == std::string_view::npos
+			? std::string_view{}
+			: relative_path.substr(0U, separator);
+		const auto leaf =
+			relative_path.substr(separator == std::string_view::npos ? 0U : separator + 1U);
+		if (leaf.empty())
+			return sdk::unexpected(rooted_error("unlink", "empty-leaf"));
+		const std::string leaf_string{leaf};
+		auto parent = parent_path.empty()
+			? duplicate_directory()
+			: open_beneath(parent_path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+		if (!parent)
+			return sdk::unexpected(std::move(parent.error()));
+		if (::unlinkat(parent->get(), leaf_string.c_str(), 0) != 0)
+			return sdk::unexpected(rooted_error("unlinkat", std::to_string(errno)));
+		return {};
 	}
 
 	sdk::result<materialization_owned_fd> materialization_effect_root::duplicate_directory() const
