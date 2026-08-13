@@ -17516,7 +17516,8 @@ def validate_sqlite_effect_root_implementation_text(
         "sqlite_connection_lifecycle::release_known_safe(",
     )
     if normalized_body_contents(release_body) != (
-        "if(owned)owned->quarantine_self.reset();owned.reset();"
+        "if(owned&&!owned->quarantine_enqueued.load(std::memory_order_acquire))"
+        "owned->quarantine_self.reset();owned.reset();"
     ):
         fail(
             "materialization.sqlite-effect-root-invalid",

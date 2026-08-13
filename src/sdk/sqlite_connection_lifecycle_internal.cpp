@@ -18,7 +18,13 @@ namespace cxxlens::sdk
 		sqlite_close_v2_callback close_v2{};
 		sqlite_connection_lifetime_pins pins;
 		std::shared_ptr<state> quarantine_self;
+		std::atomic_bool quarantine_enqueued{false};
+		// Non-owning link; quarantine_self remains the owner for process lifetime.
+		state* quarantine_next{};
 	};
+
+	std::atomic<sqlite_connection_lifecycle::state*> sqlite_connection_lifecycle::quarantine_head_{
+		nullptr};
 
 	namespace
 	{
@@ -183,15 +189,33 @@ namespace cxxlens::sdk
 											const sqlite_connection_quarantine_reason reason,
 											const std::optional<int> sqlite_code) noexcept
 	{
-		// `quarantine_self` was armed before native code could fill the open-result slot.
-		// Dropping this external owner is allocation-free and leaves the connection and pins alive.
-		owned.reset();
+		// `quarantine_self` was armed before native code could fill the open-result slot. Keep the
+		// quarantined state reachable through a process-lifetime sink instead of leaving an
+		// unreachable self-cycle behind.
+		if (owned)
+		{
+			static_assert(std::atomic<state*>::is_always_lock_free);
+			bool expected = false;
+			if (!owned->quarantine_enqueued.compare_exchange_strong(
+					expected, true, std::memory_order_acq_rel, std::memory_order_acquire))
+			{
+				owned.reset();
+				return sqlite_quarantined_connection{reason, sqlite_code};
+			}
+			auto* previous = quarantine_head_.load(std::memory_order_acquire);
+			do
+			{
+				owned->quarantine_next = previous;
+			} while (!quarantine_head_.compare_exchange_weak(
+				previous, owned.get(), std::memory_order_release, std::memory_order_acquire));
+			owned.reset();
+		}
 		return sqlite_quarantined_connection{reason, sqlite_code};
 	}
 
 	void sqlite_connection_lifecycle::release_known_safe(std::shared_ptr<state>& owned) noexcept
 	{
-		if (owned)
+		if (owned && !owned->quarantine_enqueued.load(std::memory_order_acquire))
 			owned->quarantine_self.reset();
 		owned.reset();
 	}
