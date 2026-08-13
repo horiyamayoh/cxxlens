@@ -58,13 +58,13 @@ namespace
 
 	void test_heartbeat_liveness_and_sequence()
 	{
-		auto state = ng1_heartbeat_state::create(heartbeat_binding(), 100U);
+		auto state = ng1_heartbeat_state::create(heartbeat_binding(), 1'000U);
 		require(state.has_value(), "heartbeat state creation failed");
-		require(state->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 100U, 100U),
+		require(state->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 1'000U, 1'000U),
 							  0U,
 							  digest("staged")),
 				"heartbeat probe was rejected");
-		require(state->accept(heartbeat_sample(ng1_heartbeat_kind::ack, 0U, 101U, 1'000U),
+		require(state->accept(heartbeat_sample(ng1_heartbeat_kind::ack, 0U, 1'001U, 1'001U),
 							  0U,
 							  digest("staged")),
 				"heartbeat ack was rejected");
@@ -103,6 +103,24 @@ namespace
 		require(!backwards_result &&
 					backwards_result.error().code == "provider.heartbeat-clock-invalid",
 				"backwards provider heartbeat timestamp was accepted");
+
+		auto future = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
+		require(future.has_value(), "future heartbeat state creation failed");
+		auto future_result = future->accept(
+			heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 1U, 0U), 0U, digest("staged"));
+		require(!future_result && future_result.error().code == "provider.heartbeat-clock-invalid",
+				"future provider heartbeat timestamp was accepted");
+
+		auto initial_deadline = ng1_heartbeat_state::create(heartbeat_binding(), 100U);
+		require(initial_deadline.has_value(), "initial ACK deadline state creation failed");
+		auto initial_deadline_result = initial_deadline->accept(
+			heartbeat_sample(
+				ng1_heartbeat_kind::ack, 0U, 100U + 10'000'000'000U, 100U + 10'000'000'000U),
+			0U,
+			digest("staged"));
+		require(!initial_deadline_result &&
+					initial_deadline_result.error().code == "provider.heartbeat-timeout",
+				"initial ACK at the startup deadline was accepted");
 
 		auto late_ack = ng1_heartbeat_state::create(heartbeat_binding(), 100U);
 		require(late_ack.has_value(), "late-ack heartbeat state creation failed");
@@ -150,6 +168,20 @@ namespace
 
 	void test_progress_rate_and_terminal_boundaries()
 	{
+		auto future = ng1_progress_state::create("task:test", "dependency:test", 0U);
+		require(future.has_value(), "future progress state creation failed");
+		auto future_result = future->observe(progress_sample(0U, 1U, 0U, 0U));
+		require(!future_result && future_result.error().code == "provider.heartbeat-clock-invalid",
+				"future provider progress timestamp was accepted");
+
+		auto initial_deadline = ng1_progress_state::create("task:test", "dependency:test", 0U);
+		require(initial_deadline.has_value(), "initial progress deadline state creation failed");
+		auto initial_deadline_result =
+			initial_deadline->observe(progress_sample(0U, 10'000'000'000U, 10'000'000'000U, 0U));
+		require(!initial_deadline_result &&
+					initial_deadline_result.error().code == "provider.progress-rate",
+				"initial progress sample at the startup deadline was accepted");
+
 		auto state = ng1_progress_state::create("task:test", "dependency:test", 0U);
 		require(state.has_value(), "progress state creation failed");
 		require(state->observe(progress_sample(0U, 0U, 0U, 0U)), "initial progress sample failed");
@@ -164,7 +196,7 @@ namespace
 		auto zero_elapsed = ng1_progress_state::create("task:test", "dependency:test", 0U);
 		require(zero_elapsed.has_value() && zero_elapsed->observe(progress_sample(0U, 0U, 0U, 0U)),
 				"zero-elapsed progress setup failed");
-		auto zero_elapsed_result = zero_elapsed->observe(progress_sample(1U, 1U, 0U, 1U));
+		auto zero_elapsed_result = zero_elapsed->observe(progress_sample(1U, 0U, 0U, 1U));
 		require(!zero_elapsed_result &&
 					zero_elapsed_result.error().code == "provider.progress-rate",
 				"zero-elapsed progress sample was accepted");
@@ -274,6 +306,19 @@ namespace
 	void test_resume_binding_and_projection()
 	{
 		const auto binding = resume_binding();
+		auto unknown_kind = make_resume_token(binding);
+		unknown_kind.kind = static_cast<ng1_resume_kind>(255U);
+		auto unknown_kind_result = ng1_resume_token_digest(unknown_kind);
+		require(!unknown_kind_result &&
+					unknown_kind_result.error().code == "provider.resume-replay-invalid",
+				"unknown resume kind was accepted");
+
+		auto zero_fsync = make_fsync_receipt(binding, 4U, digest("staged"), 0U);
+		auto zero_fsync_result = zero_fsync.validate();
+		require(!zero_fsync_result &&
+					zero_fsync_result.error().code == "provider.resume-token-stale",
+				"zero fsync sequence was accepted");
+
 		auto state = ng1_resume_state::create(binding);
 		require(state.has_value(), "resume state creation failed");
 		const auto token = make_resume_token(binding);

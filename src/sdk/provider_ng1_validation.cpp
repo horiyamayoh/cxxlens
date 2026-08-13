@@ -176,6 +176,9 @@ namespace cxxlens::sdk::provider::detail
 
 	result<void> ng1_session_binding::validate() const
 	{
+		if (provider_version.major == 0U)
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "provider_version", "major-zero"));
 		for (const auto [value, field] :
 			 std::array{std::pair{std::string_view{provider_id}, std::string_view{"provider_id"}},
 						std::pair{std::string_view{protocol_session_id},
@@ -220,6 +223,8 @@ namespace cxxlens::sdk::provider::detail
 		if (sample.host_receipt_time_ns < started_at_ns_)
 			return unexpected(ng1_error(
 				"heartbeat-clock-invalid", "host_receipt_time_ns", "before-session-start"));
+		if (sample.provider_monotonic_time_ns > sample.host_receipt_time_ns)
+			return unexpected(ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "future"));
 		if (last_host_receipt_time_ns_ && sample.host_receipt_time_ns < *last_host_receipt_time_ns_)
 			return unexpected(
 				ng1_error("heartbeat-clock-invalid", "host_receipt_time_ns", "backwards"));
@@ -246,6 +251,18 @@ namespace cxxlens::sdk::provider::detail
 		}
 		else
 		{
+			if (!last_valid_ack_received_ns_)
+			{
+				const auto since_start = checked_elapsed(sample.host_receipt_time_ns,
+														 started_at_ns_,
+														 "heartbeat-clock-invalid",
+														 "host_receipt_time_ns");
+				if (!since_start)
+					return unexpected(std::move(since_start.error()));
+				if (*since_start >= heartbeat_startup_grace_ns)
+					return unexpected(ng1_error(
+						"heartbeat-timeout", "host_receipt_time_ns", "startup-deadline-reached"));
+			}
 			if (last_probe_host_receipt_ns_)
 			{
 				const auto since_probe = checked_elapsed(sample.host_receipt_time_ns,
@@ -296,6 +313,16 @@ namespace cxxlens::sdk::provider::detail
 					ng1_error("heartbeat-timeout", "now_ns", "startup-grace-expired"));
 			return {};
 		}
+		if (last_probe_host_receipt_ns_)
+		{
+			const auto since_probe = checked_elapsed(
+				now_ns, *last_probe_host_receipt_ns_, "heartbeat-clock-invalid", "now_ns");
+			if (!since_probe)
+				return unexpected(std::move(since_probe.error()));
+			if (*since_probe >= heartbeat_timeout_ns)
+				return unexpected(
+					ng1_error("heartbeat-timeout", "now_ns", "probe-deadline-reached"));
+		}
 		const auto since_ack = checked_elapsed(
 			now_ns, *last_valid_ack_received_ns_, "heartbeat-clock-invalid", "now_ns");
 		if (!since_ack)
@@ -342,6 +369,8 @@ namespace cxxlens::sdk::provider::detail
 			return unexpected(ng1_error("progress-rate", "total_units", "changed"));
 		if (sample.host_receipt_time_ns < started_at_ns_)
 			return unexpected(ng1_error("progress-rate", "host_receipt_time_ns", "before-start"));
+		if (sample.provider_monotonic_time_ns > sample.host_receipt_time_ns)
+			return unexpected(ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "future"));
 		if (last_host_receipt_time_ns_ && sample.host_receipt_time_ns < *last_host_receipt_time_ns_)
 			return unexpected(ng1_error("progress-rate", "host_receipt_time_ns", "backwards"));
 		if (last_provider_time_ns_ && sample.provider_monotonic_time_ns < *last_provider_time_ns_)
@@ -354,6 +383,18 @@ namespace cxxlens::sdk::provider::detail
 			return valid;
 		if (terminal_sample && sample.completed_units != sample.total_units)
 			return unexpected(ng1_error("progress-rate", "completed_units", "terminal-not-total"));
+		if (!last_host_receipt_time_ns_)
+		{
+			const auto since_start = checked_elapsed(sample.host_receipt_time_ns,
+													 started_at_ns_,
+													 "progress-rate",
+													 "host_receipt_time_ns");
+			if (!since_start)
+				return unexpected(std::move(since_start.error()));
+			if (*since_start >= progress_startup_grace_ns)
+				return unexpected(
+					ng1_error("progress-rate", "host_receipt_time_ns", "startup-deadline-reached"));
+		}
 
 		auto next_rate_checkpoint_receipt_ns = rate_checkpoint_receipt_ns_;
 		auto next_rate_checkpoint_completed_units = rate_checkpoint_completed_units_;
@@ -430,6 +471,8 @@ namespace cxxlens::sdk::provider::detail
 
 	result<void> ng1_resume_binding::validate() const
 	{
+		if (provider_version.major == 0U)
+			return unexpected(ng1_error("resume-token-stale", "provider_version", "major-zero"));
 		for (const auto [value, field] :
 			 std::array{std::pair{std::string_view{provider_id}, std::string_view{"provider_id"}},
 						std::pair{std::string_view{protocol_session_id},
@@ -468,6 +511,9 @@ namespace cxxlens::sdk::provider::detail
 			return unexpected(ng1_error("resume-replay-invalid", "schema", "unexpected"));
 		if (auto valid = token.binding.validate(); !valid)
 			return unexpected(std::move(valid.error()));
+		if (token.kind != ng1_resume_kind::request && token.kind != ng1_resume_kind::accepted &&
+			token.kind != ng1_resume_kind::rejected)
+			return unexpected(ng1_error("resume-replay-invalid", "kind", "unknown"));
 		if (auto valid =
 				valid_digest(token.staged_digest, "staged_digest", "resume-replay-invalid");
 			!valid)
@@ -515,6 +561,8 @@ namespace cxxlens::sdk::provider::detail
 			return unexpected(std::move(valid.error()));
 		if (auto valid = valid_digest(spill_digest, "spill_digest", "resume-token-stale"); !valid)
 			return unexpected(std::move(valid.error()));
+		if (fsync_sequence == 0U)
+			return unexpected(ng1_error("resume-token-stale", "fsync_sequence", "zero"));
 		return {};
 	}
 
