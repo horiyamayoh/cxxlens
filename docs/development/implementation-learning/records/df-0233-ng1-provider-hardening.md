@@ -31,7 +31,7 @@ review:
   author: codex-agent-ng1-authority
   reviewer: codex-self-review-ng1-2026-08-13
   refs:
-    - https://github.com/horiyamayoh/cxxlens/issues/233#issuecomment-5274871535
+    - https://github.com/horiyamayoh/cxxlens/issues/233#issuecomment-5274938939
 created: '2026-08-13'
 ---
 
