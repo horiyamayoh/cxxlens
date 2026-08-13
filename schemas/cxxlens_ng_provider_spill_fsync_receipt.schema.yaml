@@ -1,0 +1,42 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-spill-fsync-receipt.v1
+title: cxxlens NG1 host-observed spill fsync receipt
+type: object
+additionalProperties: false
+required:
+  - schema
+  - provider_id
+  - protocol_session_id
+  - task_id
+  - stream_id
+  - highest_contiguous_acked_sequence
+  - staged_digest
+  - spill_digest
+  - total_bytes
+  - total_records
+  - fsync_sequence
+properties:
+  schema: {const: cxxlens.provider-spill-fsync-receipt.v1}
+  provider_id: {$ref: '#/$defs/strong_id'}
+  protocol_session_id: {$ref: '#/$defs/strong_id'}
+  task_id: {$ref: '#/$defs/strong_id'}
+  stream_id: {$ref: '#/$defs/u64'}
+  highest_contiguous_acked_sequence: {$ref: '#/$defs/u64'}
+  staged_digest: {$ref: '#/$defs/semantic_digest'}
+  spill_digest: {$ref: '#/$defs/semantic_digest'}
+  total_bytes: {$ref: '#/$defs/u64'}
+  total_records: {$ref: '#/$defs/u64'}
+  fsync_sequence: {type: integer, minimum: 1, maximum: 18446744073709551615}
+$defs:
+  strong_id:
+    type: string
+    minLength: 1
+    maxLength: 512
+    pattern: '^[^\u0000-\u001f\u007f]+$'
+  u64:
+    type: integer
+    minimum: 0
+    maximum: 18446744073709551615
+  semantic_digest:
+    type: string
+    pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'

@@ -244,16 +244,35 @@ class NgProviderProtocolTest(unittest.TestCase):
 
     def test_ng1_schema_is_closed_and_rejects_maturity_or_direction_drift(self) -> None:
         hardening = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.yaml")
-        schema = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml")
+        hardening_schema = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml")
         changed = copy.deepcopy(hardening)
         changed["maturity"] = "accepted"
         with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
-            schema_validate(changed, schema, "NG1 hardening contract")
+            schema_validate(changed, hardening_schema, "NG1 hardening contract")
 
         changed = copy.deepcopy(hardening)
         changed["heartbeat"]["direction"]["ack"] = "host-to-provider"
         with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
-            schema_validate(changed, schema, "NG1 hardening contract")
+            schema_validate(changed, hardening_schema, "NG1 hardening contract")
+
+    def test_ng1_vector_schema_enforces_class_specific_expected_fields(self) -> None:
+        vectors = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml")
+        schema = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml")
+
+        changed = copy.deepcopy(vectors)
+        changed["vectors"][0]["expected"]["reason_code"] = "provider.invalid"
+        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
+            schema_validate(changed, schema, "NG1 conformance vectors")
+
+        changed = copy.deepcopy(vectors)
+        del changed["vectors"][1]["expected"]["reason_code"]
+        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
+            schema_validate(changed, schema, "NG1 conformance vectors")
+
+        changed = copy.deepcopy(vectors)
+        changed["vectors"][8]["expected"]["reason_code"] = "provider.invalid"
+        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
+            schema_validate(changed, schema, "NG1 conformance vectors")
 
     @staticmethod
     def task_input_transfer(

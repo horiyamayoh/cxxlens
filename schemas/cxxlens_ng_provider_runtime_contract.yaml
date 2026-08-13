@@ -289,7 +289,7 @@ protocol_session:
 terminal:
   success_derivation: validated-complete-kind-and-provider.success-and-final-task-complete-frame
   raw_terminal_text_is_not_authority: true
-  report_schema_membership: active-stable-enum-plus-proposed-ng1-reservations
+  report_schema_membership: active-stable-enum-only
   stable:
     - provider.success
     - provider.timeout
