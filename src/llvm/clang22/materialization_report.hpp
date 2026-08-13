@@ -239,6 +239,10 @@ namespace cxxlens::detail::clang22::materialization
 		/** Replay all records, one decoded capture at a time. The spool remains replayable. */
 		[[nodiscard]] sdk::result<void> replay(const consumer& consume) const;
 
+		/** Replay one indexed record without decoding the other captures. */
+		[[nodiscard]] sdk::result<void> replay_one(std::size_t task_index,
+												   const consumer& consume) const;
+
 		[[nodiscard]] std::size_t task_count() const noexcept;
 		[[nodiscard]] std::uint64_t spooled_bytes() const noexcept;
 		[[nodiscard]] bool sealed() const noexcept;

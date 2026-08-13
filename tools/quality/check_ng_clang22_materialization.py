@@ -8095,6 +8095,33 @@ def validate_contract_exact(
         "stale_parent": "materialization.stale-parent",
         "sqlite_validation": "close-and-reopen-database-before-success-report",
         "publication_authority": "committed-store-record-not-tool-report",
+        "post_commit_prior_artifact": {
+            "authority": "source-private-durable-reuse-write-after-committed-store-observation",
+            "success_report_field": "publication.prior_artifact_persistence",
+            "states": ["committed", "unavailable", "not_attempted"],
+            "not_attempted": "no-exact-committed-store-record-or-commit-authority",
+            "capture_residency": {
+                "request_owner": "sealed-replayable-task-report-spool",
+                "artifact_index": "metadata-only",
+                "persistence_replay": "one-task-at-a-time",
+                "cross_binding": "task-count-ordinal-identity-provider-execution-state-digest",
+            },
+            "memory_backend": {
+                "process_lifetime": "unrecoverable-after-tool-exit",
+                "production_report": "unavailable",
+                "unavailable_error": {
+                    "code": "materialization.incremental-artifact-invalid",
+                    "field": "memory",
+                    "detail": "process-lifetime-only",
+                },
+            },
+            "sqlite_backend": {
+                "production_report": "committed-only",
+                "post_commit_failure": "exit-two-no-response",
+            },
+            "publication_success_is_not_suppressed": "memory-process-lifetime-unavailable-only",
+            "unavailable_error": "exact-code-field-detail",
+        },
     }
     if any(publication.get(key) != value for key, value in required_publication.items()):
         fail("materialization.store-failure", "publication/CAS contract differs")
@@ -12949,6 +12976,35 @@ def validate_committed_verified_reopened_store(
         )
 
 
+def expected_prior_artifact_persistence(backend: str) -> dict[str, Any]:
+    if backend == "memory":
+        return {
+            "state": "unavailable",
+            "error": {
+                "code": "materialization.incremental-artifact-invalid",
+                "field": "memory",
+                "detail": "process-lifetime-only",
+            },
+        }
+    return {"state": "committed", "error": None}
+
+
+def validate_prior_artifact_persistence_status(publication: dict[str, Any]) -> None:
+    status = publication["prior_artifact_persistence"]
+    if publication["backend"] == "memory":
+        if status != expected_prior_artifact_persistence("memory"):
+            fail(
+                "materialization.store-failure",
+                "memory prior artifact persistence must be unavailable",
+            )
+        return
+    if status != expected_prior_artifact_persistence("sqlite"):
+        fail(
+            "materialization.store-failure",
+            "SQLite prior artifact persistence must be committed after publication",
+        )
+
+
 def bind_committed_verified_publication(
     request: dict[str, Any],
     report: dict[str, Any],
@@ -12994,7 +13050,7 @@ def bind_committed_verified_publication(
         "prior_history_retained": True,
         "head_effect": "advanced_to_candidate",
         "store_failure": None,
-        "prior_artifact_persistence": {"state": "committed", "error": None},
+        "prior_artifact_persistence": expected_prior_artifact_persistence(backend),
         "sqlite_effect_root_receipt": expected_sqlite_effect_root_receipt(request),
         "sqlite_reopen_status": "opened" if backend == "sqlite" else "not_applicable",
         "recovery_receipt": None,
@@ -13385,7 +13441,7 @@ def sample_report(
             "prior_history_retained": True,
             "head_effect": "advanced_to_candidate",
             "store_failure": None,
-            "prior_artifact_persistence": {"state": "committed", "error": None},
+            "prior_artifact_persistence": expected_prior_artifact_persistence(backend),
             "sqlite_effect_root_receipt": expected_sqlite_effect_root_receipt(
                 request
             ),
@@ -14804,6 +14860,7 @@ def validate_report(
     if outcome == "committed_verified":
         expected = {"store": expected_store}
         bind_committed_verified_publication(request, expected)
+        validate_prior_artifact_persistence_status(publication)
         if publication["backend"] == "sqlite":
             # The rooted-VFS observation is operational evidence captured from the
             # startup directory capability.  It is intentionally not a semantic

@@ -15,6 +15,8 @@
 #include <vector>
 
 #include <cxxlens/sdk.hpp>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "llvm/clang22/materialization_json.hpp"
 #include "llvm/clang22/materialization_prior_artifact.hpp"
@@ -72,6 +74,12 @@ namespace
 			cxxlens::sdk::content_digest(std::as_bytes(std::span{raw_request})),
 			true,
 		};
+	}
+
+	[[nodiscard]] std::string provider_execution_id_fixture(const std::string_view task_id)
+	{
+		return "provider-execution:" +
+			sdk::content_digest(std::as_bytes(std::span{task_id.data(), task_id.size()}));
 	}
 
 	[[nodiscard]] compact_request_binding request_binding()
@@ -699,7 +707,7 @@ namespace
 
 		detailed_task_report_capture task;
 		task.provider_task_id = "task:test";
-		task.provider_execution_id = "execution:test";
+		task.provider_execution_id = provider_execution_id_fixture(task.provider_task_id);
 		task.selected_catalog_compile_unit_id = "compile-unit:selected";
 		task.compile_unit_id = "compile-unit:final";
 		task.task_input_digest =
@@ -747,7 +755,7 @@ namespace
 	{
 		detailed_task_report_capture capture;
 		capture.provider_task_id = "task:test";
-		capture.provider_execution_id = "execution:test";
+		capture.provider_execution_id = provider_execution_id_fixture(capture.provider_task_id);
 
 		detailed_report_limits byte_limits;
 		byte_limits.max_projection_bytes = 128U;
@@ -779,7 +787,7 @@ namespace
 	{
 		detailed_task_report_capture capture;
 		capture.provider_task_id = task_id;
-		capture.provider_execution_id = "execution:" + task_id;
+		capture.provider_execution_id = provider_execution_id_fixture(task_id);
 		capture.project_id = "project:test";
 		capture.catalog_id = "catalog:test";
 		capture.catalog_digest =
@@ -1083,14 +1091,18 @@ namespace
 				"prior artifact codec ignored its aggregate capture budget");
 	}
 
-	void memory_prior_artifact_cache_is_selector_bound()
+	void sqlite_prior_artifact_sidecar_is_selector_bound()
 	{
 		temporary_working_directory directory;
 		auto root = materialization_effect_root::capture_startup();
-		require(root.has_value(), "memory prior artifact test could not capture the effect root");
+		require(root.has_value(), "SQLite prior artifact test could not capture the effect root");
 		auto built_engine = engine();
 		auto bundle_selector = selector(built_engine);
 		auto publication = publication_request(bundle_selector);
+		publication.backend = "sqlite";
+		publication.genesis = false;
+		publication.expected_parent_publication = "publication:artifact-grandparent";
+		publication.sqlite_path = "store.db";
 		const auto capture = replayable_capture("task:memory-artifact");
 		auto state = prior_artifact_state();
 		materialization_prior_artifact_task task{
@@ -1109,6 +1121,7 @@ namespace
 		record.snapshot_id = "snapshot:memory-artifact";
 		record.sequence = 1U;
 		record.physical_generation = 1U;
+		record.parent_publication = publication.expected_parent_publication;
 		record.state = sdk::publication_state::committed;
 		materialization_store_observation observation;
 		observation.backend = publication.backend;
@@ -1127,21 +1140,239 @@ namespace
 												  record.sequence,
 												  record.parent_publication};
 		observation.publish_returned_record = record;
-		auto persisted =
-			persist_materialization_prior_artifact(*root, publication, record, observation, {task});
-		require(persisted.has_value(), "memory prior artifact was not retained after commit");
-		auto loaded = load_materialization_prior_artifact(*root, built_engine, publication);
-		require(loaded.has_value() && loaded->has_value() &&
-					loaded->value().publication_id == record.publication_id &&
-					loaded->value().tasks.size() == 1U,
-				"memory prior artifact was not restored by exact selector");
+		auto capture_spool_result = detailed_task_report_replayable_spool::create();
+		require(capture_spool_result.has_value(),
+				"SQLite prior artifact capture spool could not be created");
+		auto capture_spool = std::move(*capture_spool_result);
+		require(capture_spool.append(capture).has_value() && capture_spool.seal().has_value(),
+				"SQLite prior artifact capture spool could not be sealed");
+		materialization_prior_artifact_task_metadata task_metadata{
+			task.identity, task.state, task.sealed_artifact_digest, capture.provider_execution_id};
+		auto persisted = persist_materialization_prior_artifact(
+			*root, publication, record, observation, capture_spool, {std::move(task_metadata)});
+		require(persisted.has_value(), "SQLite prior artifact was not retained after commit");
+		auto weak_execution_metadata = materialization_prior_artifact_task_metadata{
+			task.identity, task.state, task.sealed_artifact_digest, "execution:weak"};
+		auto weak_execution =
+			persist_materialization_prior_artifact(*root,
+												   publication,
+												   record,
+												   observation,
+												   capture_spool,
+												   {std::move(weak_execution_metadata)});
+		require(!weak_execution &&
+					weak_execution.error() ==
+						sdk::error{"materialization.incremental-artifact-invalid",
+								   "bundle.tasks",
+								   "identity-or-order"},
+				"SQLite prior artifact admitted a non-canonical provider execution ID");
+		auto locator_digest = sdk::content_digest(
+			std::as_bytes(std::span{record.publication_id.data(), record.publication_id.size()}));
+		require(locator_digest.starts_with("sha256:"),
+				"SQLite prior artifact locator digest invalid");
+		const auto sidecar_path =
+			std::string{"store.db.cxxlens-incremental-v1-"} + locator_digest.substr(7U);
+		auto sidecar = root->open_beneath(sidecar_path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+		require(sidecar.has_value(), "SQLite prior artifact sidecar was not installed");
+		auto identity = materialization_fd_identity(sidecar->get(), true);
+		require(identity.has_value() && identity->size_bytes != 0U,
+				"SQLite prior artifact sidecar has no stable size");
+		std::vector<std::byte> sidecar_bytes(static_cast<std::size_t>(identity->size_bytes));
+		std::size_t offset{};
+		while (offset < sidecar_bytes.size())
+		{
+			const auto count = ::read(
+				sidecar->get(), sidecar_bytes.data() + offset, sidecar_bytes.size() - offset);
+			require(count > 0, "SQLite prior artifact sidecar could not be read");
+			offset += static_cast<std::size_t>(count);
+		}
+		materialization_prior_artifact_bundle expected_bundle;
+		expected_bundle.selector = publication.selector;
+		expected_bundle.series_id = record.series_id;
+		expected_bundle.publication_id = record.publication_id;
+		expected_bundle.snapshot_id = record.snapshot_id;
+		expected_bundle.sequence = record.sequence;
+		expected_bundle.physical_generation = record.physical_generation;
+		expected_bundle.parent_publication = record.parent_publication;
+		expected_bundle.tasks.push_back(task);
+		auto expected_bytes = encode_materialization_prior_artifact(expected_bundle);
+		std::size_t first_difference{};
+		while (first_difference < sidecar_bytes.size() &&
+			   first_difference < (expected_bytes ? expected_bytes->size() : 0U) &&
+			   sidecar_bytes[first_difference] == (*expected_bytes)[first_difference])
+			++first_difference;
+		require(expected_bytes.has_value() && sidecar_bytes == *expected_bytes,
+				"streamed SQLite prior artifact differs from canonical vector encoding" +
+					(expected_bytes ? " (size=" + std::to_string(sidecar_bytes.size()) + "/" +
+							 std::to_string(expected_bytes->size()) + ")"
+									: " (canonical encoding failed)") +
+					(first_difference < sidecar_bytes.size()
+						 ? " first=" + std::to_string(first_difference)
+						 : std::string{}));
+		auto loaded = decode_materialization_prior_artifact(sidecar_bytes);
+		require(loaded.has_value() && loaded->publication_id == record.publication_id &&
+					loaded->tasks.size() == 1U,
+				"SQLite prior artifact sidecar did not restore the exact publication" +
+					(loaded ? std::string{}
+							: " (" + loaded.error().field + ":" + loaded.error().detail + ")"));
 		auto other_selector = bundle_selector;
 		other_selector.channel_id = "other-channel";
-		auto other_publication = publication_request(other_selector);
-		auto unrelated =
-			load_materialization_prior_artifact(*root, built_engine, other_publication);
-		require(unrelated.has_value() && !unrelated->has_value(),
-				"memory prior artifact crossed an unrelated selector boundary");
+		auto other_publication = publication;
+		other_publication.selector = other_selector;
+		other_publication.series_id = other_selector.id();
+		auto other_record = record;
+		other_record.series_id = other_publication.series_id;
+		materialization_store_observation other_observation = observation;
+		other_observation.selector = other_publication.selector;
+		other_observation.series_id = other_publication.series_id;
+		other_observation.candidate_manifest->id = other_record.snapshot_id;
+		other_observation.candidate_identity->series_id = other_record.series_id;
+		other_observation.publish_returned_record = other_record;
+		materialization_prior_artifact_task_metadata other_task_metadata{
+			task.identity, task.state, task.sealed_artifact_digest, capture.provider_execution_id};
+		auto selector_conflict =
+			persist_materialization_prior_artifact(*root,
+												   other_publication,
+												   other_record,
+												   other_observation,
+												   capture_spool,
+												   {std::move(other_task_metadata)});
+		require(!selector_conflict &&
+					selector_conflict.error() ==
+						sdk::error{"materialization.incremental-artifact-invalid",
+								   "sidecar",
+								   "immutable-conflict"},
+				"SQLite prior artifact sidecar crossed an unrelated selector boundary");
+		auto memory_publication = publication_request(bundle_selector);
+		auto memory_loaded =
+			load_materialization_prior_artifact(*root, built_engine, memory_publication);
+		require(memory_loaded.has_value() && !memory_loaded->has_value(),
+				"memory prior artifact API exposed a process-local cache as durable reuse");
+	}
+
+	void sqlite_prior_artifact_loads_after_store_close()
+	{
+		temporary_working_directory directory;
+		auto root = materialization_effect_root::capture_startup();
+		require(root.has_value(), "SQLite close/reopen test could not capture the effect root");
+		auto built_engine = engine();
+		auto bundle_selector = selector(built_engine);
+		auto parent_request = publication_request(bundle_selector);
+		parent_request.backend = "sqlite";
+		parent_request.sqlite_path = "store.db";
+
+		auto capture = replayable_capture("task:sqlite-reopen");
+		auto state = prior_artifact_state();
+		materialization_prior_artifact_task task{
+			{0U,
+			 capture.provider_task_id,
+			 capture.task_input_digest,
+			 capture.selected_catalog_compile_unit_id,
+			 capture.compile_unit_id},
+			std::move(state),
+			"materialization.incremental-sealed-artifact:sha256:"
+			"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			capture};
+		materialization_prior_artifact_task_metadata task_metadata{
+			task.identity, task.state, task.sealed_artifact_digest, capture.provider_execution_id};
+
+		sdk::publication_record current_record;
+		{
+			auto opener = materialization_rooted_store_opener::create(*root);
+			require(opener.has_value(), "SQLite close/reopen test could not create rooted opener");
+			auto store = (*opener)->open_sqlite(*parent_request.sqlite_path, built_engine);
+			require(store.has_value(), "SQLite close/reopen test could not open the Store");
+
+			auto publish = [&](const validated_publication_request& request,
+							   std::string universe) -> sdk::snapshot_handle
+			{
+				auto plan = store_plan(built_engine, request, std::move(universe));
+				auto writer = store->begin(std::move(plan.draft));
+				require(writer.has_value(), "SQLite close/reopen test could not begin a writer");
+				for (auto& partition_value : plan.partitions)
+				{
+					auto staged = writer->stage(std::move(partition_value));
+					require(staged.has_value(),
+							"SQLite close/reopen test could not stage a partition" +
+								(staged ? std::string{}
+										: " (" + staged.error().code + ":" + staged.error().field +
+										 ":" + staged.error().detail + ")"));
+				}
+				require(writer->validate().has_value(),
+						"SQLite close/reopen test could not validate a publication");
+				auto published = writer->publish();
+				require(published.has_value(),
+						"SQLite close/reopen test could not publish a publication");
+				return std::move(*published);
+			};
+
+			auto parent = publish(parent_request, "universe-materialization-compact-test");
+			auto current_request = parent_request;
+			current_request.genesis = false;
+			current_request.expected_parent_publication = parent.publication().publication_id;
+			auto current = publish(current_request, "universe-materialization-compact-test");
+			current_record = current.publication();
+
+			materialization_store_observation observation;
+			observation.backend = current_request.backend;
+			observation.selector = current_request.selector;
+			observation.series_id = current_request.series_id;
+			observation.expected_parent_publication = current_request.expected_parent_publication;
+			observation.writer_begin_call_count = 1U;
+			observation.publication_attempted = true;
+			observation.publish_call_count = 1U;
+			observation.candidate_manifest = current.manifest();
+			observation.candidate_identity =
+				materialization_publication_candidate{current_record.publication_id,
+													  current_record.series_id,
+													  current_record.snapshot_id,
+													  current_record.sequence,
+													  current_record.parent_publication};
+			observation.publish_returned_record = current_record;
+
+			auto capture_spool_result = detailed_task_report_replayable_spool::create();
+			require(capture_spool_result.has_value(),
+					"SQLite close/reopen capture spool could not be created");
+			auto capture_spool = std::move(*capture_spool_result);
+			require(capture_spool.append(capture).has_value() && capture_spool.seal().has_value(),
+					"SQLite close/reopen capture spool could not be sealed");
+			require(persist_materialization_prior_artifact(*root,
+														   current_request,
+														   current_record,
+														   observation,
+														   capture_spool,
+														   {task_metadata})
+						.has_value(),
+					"SQLite prior artifact was not persisted for close/reopen test");
+		}
+
+		auto load_request = parent_request;
+		load_request.genesis = false;
+		load_request.expected_parent_publication = current_record.publication_id;
+		auto loaded = load_materialization_prior_artifact(*root, built_engine, load_request);
+		require(loaded.has_value() && loaded->has_value(),
+				"SQLite prior artifact did not load after the Store was closed");
+		auto& replay_bundle = loaded->value();
+		require(replay_bundle.publication.publication_id == current_record.publication_id &&
+					replay_bundle.publication.snapshot_id == current_record.snapshot_id &&
+					replay_bundle.tasks.size() == 1U && replay_bundle.captures.has_value(),
+				"SQLite close/reopen load lost the exact publication/task metadata");
+		require(replay_bundle.tasks.front().provider_execution_id == capture.provider_execution_id,
+				"SQLite close/reopen load lost the provider execution binding");
+
+		std::optional<detailed_task_report_capture> replayed;
+		auto replayed_one = replay_bundle.captures->replay_one(
+			0U,
+			[&](detailed_task_report_capture&& value) -> sdk::result<void>
+			{
+				replayed = std::move(value);
+				return {};
+			});
+		require(replayed_one.has_value() && replayed.has_value() &&
+					replayed->provider_task_id == capture.provider_task_id &&
+					replayed->provider_execution_id == capture.provider_execution_id &&
+					replayed->raw_frame_stream_digest == capture.raw_frame_stream_digest,
+				"SQLite close/reopen load could not replay one sealed task");
 	}
 
 	void prior_artifact_rehydration_reproves_raw_semantics()
@@ -1456,7 +1687,8 @@ int main(const int argument_count, const char* const* arguments)
 	bounded_detailed_projection_never_promotes_unverified_store();
 	report_capture_spool_replays_one_task_at_a_time();
 	prior_artifact_codec_is_canonical_and_bounded();
-	memory_prior_artifact_cache_is_selector_bound();
+	sqlite_prior_artifact_sidecar_is_selector_bound();
+	sqlite_prior_artifact_loads_after_store_close();
 	prior_artifact_rehydration_reproves_raw_semantics();
 	detailed_report_capacity_reservation_is_compositional_and_closed();
 	public_success_report_requires_all_authority_inputs();

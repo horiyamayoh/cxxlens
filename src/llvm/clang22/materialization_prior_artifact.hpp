@@ -31,6 +31,15 @@ namespace cxxlens::detail::clang22::materialization
 		std::size_t max_string_bytes{16U * 1024U * 1024U};
 	};
 
+	/** Task metadata retained while the detailed capture remains in a sealed replay spool. */
+	struct materialization_prior_artifact_task_metadata
+	{
+		materialization_incremental_task_identity identity;
+		sdk::incremental::partition_state state;
+		std::string sealed_artifact_digest;
+		std::string provider_execution_id;
+	};
+
 	/** One task result retained with its exact invalidation state and planner identity. */
 	struct materialization_prior_artifact_task
 	{
@@ -61,6 +70,17 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] bool operator==(const materialization_prior_artifact_bundle&) const = default;
 	};
 
+	/**
+	 * Source-private loaded view: publication/task metadata stays resident while detailed captures
+	 * remain in one sealed replay spool and are decoded only for the task being reused.
+	 */
+	struct materialization_prior_artifact_replay_bundle
+	{
+		materialization_prior_artifact_bundle publication;
+		std::vector<materialization_prior_artifact_task_metadata> tasks;
+		std::optional<detailed_task_report_replayable_spool> captures;
+	};
+
 	/** Canonical, versioned envelope used by the source-private durable sidecar. */
 	[[nodiscard]] sdk::result<std::vector<std::byte>>
 	encode_materialization_prior_artifact(const materialization_prior_artifact_bundle& bundle,
@@ -71,20 +91,21 @@ namespace cxxlens::detail::clang22::materialization
 	decode_materialization_prior_artifact(std::span<const std::byte> bytes,
 										  const materialization_prior_artifact_limits& limits = {});
 
-	/** Load the exact parent publication blob; an absent blob is the only cold-start result. */
-	[[nodiscard]] sdk::result<std::optional<materialization_prior_artifact_bundle>>
+	/** Load exact parent metadata and a sealed capture spool; an absent blob is cold start. */
+	[[nodiscard]] sdk::result<std::optional<materialization_prior_artifact_replay_bundle>>
 	load_materialization_prior_artifact(const materialization_effect_root& root,
 										const sdk::relation_engine& engine,
 										const validated_publication_request& publication,
 										const materialization_prior_artifact_limits& limits = {});
 
-	/** Persist an immutable publication-keyed blob only after Store commit verification. */
+	/** Persist task metadata while replaying detailed captures one task at a time. */
 	[[nodiscard]] sdk::result<void> persist_materialization_prior_artifact(
 		const materialization_effect_root& root,
 		const validated_publication_request& publication,
 		const sdk::publication_record& committed_record,
 		const materialization_store_observation& observation,
-		std::vector<materialization_prior_artifact_task> tasks,
+		const detailed_task_report_replayable_spool& captures,
+		std::vector<materialization_prior_artifact_task_metadata> tasks,
 		const materialization_prior_artifact_limits& limits = {});
 
 	/** Rehydrate only after the current task identity and output descriptors are supplied. */

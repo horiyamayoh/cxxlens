@@ -3426,8 +3426,42 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             self.validate_report(sqlite_request, sqlite_report)
 
+        sqlite_unavailable = self.report(sqlite_request)
+        sqlite_unavailable["publication"]["prior_artifact_persistence"] = {
+            "state": "unavailable",
+            "error": {
+                "code": "materialization.incremental-artifact-invalid",
+                "field": "sidecar",
+                "detail": "immutable-conflict",
+            },
+        }
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "SQLite prior artifact persistence"
+        ):
+            self.validate_report(sqlite_request, sqlite_unavailable)
+
         memory_request = self.request("static", "memory")
         memory_report = self.report(memory_request)
+        self.assertEqual(
+            memory_report["publication"]["prior_artifact_persistence"],
+            {
+                "state": "unavailable",
+                "error": {
+                    "code": "materialization.incremental-artifact-invalid",
+                    "field": "memory",
+                    "detail": "process-lifetime-only",
+                },
+            },
+        )
+        false_memory_claim = copy.deepcopy(memory_report)
+        false_memory_claim["publication"]["prior_artifact_persistence"] = {
+            "state": "committed",
+            "error": None,
+        }
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "memory prior artifact persistence"
+        ):
+            self.validate_report(memory_request, false_memory_claim)
         memory_report["publication"]["sqlite_reopen_status"] = "opened"
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization report"

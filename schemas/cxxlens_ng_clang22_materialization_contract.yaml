@@ -1786,7 +1786,22 @@ publication:
     success_report_field: publication.prior_artifact_persistence
     states: [committed, unavailable, not_attempted]
     not_attempted: no-exact-committed-store-record-or-commit-authority
-    publication_success_is_not_suppressed: true
+    capture_residency:
+      request_owner: sealed-replayable-task-report-spool
+      artifact_index: metadata-only
+      persistence_replay: one-task-at-a-time
+      cross_binding: task-count-ordinal-identity-provider-execution-state-digest
+    memory_backend:
+      process_lifetime: unrecoverable-after-tool-exit
+      production_report: unavailable
+      unavailable_error:
+        code: materialization.incremental-artifact-invalid
+        field: memory
+        detail: process-lifetime-only
+    sqlite_backend:
+      production_report: committed-only
+      post_commit_failure: exit-two-no-response
+    publication_success_is_not_suppressed: memory-process-lifetime-unavailable-only
     unavailable_error: exact-code-field-detail
   attribution_rule: publication-identity-presence-does-not-prove-which-concurrent-invocation-committed
   outcomes:

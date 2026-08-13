@@ -581,7 +581,7 @@ namespace
 		const validated_materialization_request& request,
 		const std::string_view worker_digest,
 		const std::string_view worker_semantics_digest,
-		const std::optional<materialization_prior_artifact_bundle>& prior)
+		const std::optional<materialization_prior_artifact_replay_bundle>& prior)
 	{
 		std::vector<sdk::incremental::partition_candidate> candidates;
 		std::vector<sdk::incremental::partition_state> states;
@@ -610,8 +610,7 @@ namespace
 					archived->identity.provider_task_id == request.tasks[index].provider_task_id &&
 					archived->identity.task_input_digest ==
 						request.tasks[index].task_input_digest &&
-					archived->capture.provider_execution_id ==
-						request.tasks[index].provider_execution_id &&
+					archived->provider_execution_id == request.tasks[index].provider_execution_id &&
 					archived->identity.selected_catalog_compile_unit_id ==
 						request.tasks[index].worker_input.selected_catalog_compile_unit &&
 					archived->identity.final_relation_compile_unit_id ==
@@ -648,8 +647,7 @@ namespace
 					archived->identity.provider_task_id == request.tasks[index].provider_task_id &&
 					archived->identity.task_input_digest ==
 						request.tasks[index].task_input_digest &&
-					archived->capture.provider_execution_id ==
-						request.tasks[index].provider_execution_id &&
+					archived->provider_execution_id == request.tasks[index].provider_execution_id &&
 					archived->identity.selected_catalog_compile_unit_id ==
 						request.tasks[index].worker_input.selected_catalog_compile_unit &&
 					archived->identity.final_relation_compile_unit_id ==
@@ -779,7 +777,7 @@ namespace
 			detailed_task_report_replayable_spool& task_reports,
 			const std::vector<sdk::relation_descriptor>& output_descriptors,
 			const detailed_report_limits& report_limits,
-			const materialization_prior_artifact_bundle* prior_artifact,
+			const materialization_prior_artifact_replay_bundle* prior_artifact,
 			std::string request_id,
 			const materialization_producer_authority& producer_authority,
 			const materialization_guarantee_authority& guarantee_authority)
@@ -866,18 +864,17 @@ namespace
 				capture_detailed_task_report(*outcome, *sealed, task_metadata, report_limits_);
 			if (!task_report)
 				return sdk::unexpected(std::move(task_report.error()));
-			auto archived_capture = *task_report;
 			if (auto appended = task_reports_.append(std::move(*task_report)); !appended)
 				return sdk::unexpected(std::move(appended.error()));
 
 			auto artifact_digest = seal_materialization_incremental_artifact_digest(*sealed);
 			if (!artifact_digest)
 				return sdk::unexpected(std::move(artifact_digest.error()));
-			artifact_tasks_.push_back(
-				materialization_prior_artifact_task{binding.task_identity,
-													*binding.partitions.front().current_state,
-													*artifact_digest,
-													std::move(archived_capture)});
+			artifact_tasks_.push_back(materialization_prior_artifact_task_metadata{
+				binding.task_identity,
+				*binding.partitions.front().current_state,
+				*artifact_digest,
+				task_metadata.provider_execution_id});
 			auto events =
 				materialization_incremental_result_event_projections(legacy_request_,
 																	 request_task_index,
@@ -949,7 +946,7 @@ namespace
 					  const validated_task_request& task,
 					  const materialization_incremental_task_binding& binding) override
 		{
-			if (!prior_artifact_ || binding.partitions.size() != 1U ||
+			if (!prior_artifact_ || !prior_artifact_->captures || binding.partitions.size() != 1U ||
 				!binding.partitions.front().current_state ||
 				!binding.partitions.front().prior_artifact)
 				return sdk::unexpected(sdk::error{
@@ -971,6 +968,21 @@ namespace
 					binding.partitions.front().prior_artifact->sealed_artifact_digest)
 				return sdk::unexpected(sdk::error{
 					"materialization.incremental-invalid", "executor", "reuse-identity"});
+			std::optional<detailed_task_report_capture> archived_capture;
+			auto replayed = prior_artifact_->captures->replay_one(
+				static_cast<std::size_t>(std::distance(prior_artifact_->tasks.begin(), archived)),
+				[&](detailed_task_report_capture&& capture) -> sdk::result<void>
+				{
+					archived_capture = std::move(capture);
+					return {};
+				});
+			if (!replayed || !archived_capture)
+				return sdk::unexpected(
+					sdk::error{"materialization.incremental-invalid", "executor", "prior-capture"});
+			materialization_prior_artifact_task archived_task{archived->identity,
+															  archived->state,
+															  archived->sealed_artifact_digest,
+															  std::move(*archived_capture)};
 			auto next = task_cursor_.next();
 			if (!next)
 				return sdk::unexpected(std::move(next.error()));
@@ -998,7 +1010,7 @@ namespace
 			if (!process_request)
 				return sdk::unexpected(std::move(process_request.error()));
 			auto sealed = rehydrate_materialization_prior_artifact(
-				*archived,
+				archived_task,
 				request_task_index,
 				task,
 				selection_.selected_candidate().description,
@@ -1012,7 +1024,7 @@ namespace
 			if (!artifact_digest || *artifact_digest != archived->sealed_artifact_digest)
 				return sdk::unexpected(sdk::error{
 					"materialization.incremental-invalid", "executor", "reuse-artifact-digest"});
-			if (auto appended = task_reports_.append(archived->capture); !appended)
+			if (auto appended = task_reports_.append(archived_task.capture); !appended)
 				return sdk::unexpected(std::move(appended.error()));
 			auto events =
 				materialization_incremental_result_event_projections(legacy_request_,
@@ -1033,11 +1045,11 @@ namespace
 			auto task_receipt = make_materialization_incremental_task_receipt(
 				legacy_request_,
 				request_task_index,
-				archived->capture.raw_frame_stream_bytes,
-				archived->capture.raw_frame_stream_digest,
-				archived->capture.frame_count,
-				archived->capture.frame_transcript_digest,
-				archived->capture.sealed_transcript_digest,
+				archived_task.capture.raw_frame_stream_bytes,
+				archived_task.capture.raw_frame_stream_digest,
+				archived_task.capture.frame_count,
+				archived_task.capture.frame_transcript_digest,
+				archived_task.capture.sealed_transcript_digest,
 				std::span<const materialization_incremental_event_projection>{*events});
 			if (!task_receipt)
 				return sdk::unexpected(std::move(task_receipt.error()));
@@ -1070,7 +1082,11 @@ namespace
 														  result,
 														  seal);
 			};
-			artifact_tasks_.push_back(*archived);
+			artifact_tasks_.push_back(materialization_prior_artifact_task_metadata{
+				binding.task_identity,
+				*binding.partitions.front().current_state,
+				archived->sealed_artifact_digest,
+				archived->provider_execution_id});
 			task_success_pending_ = true;
 			task_worker_launch_pending_ = false;
 			return materialization_incremental_task_reuse{
@@ -1097,7 +1113,7 @@ namespace
 			return close_pending_task();
 		}
 
-		[[nodiscard]] std::vector<materialization_prior_artifact_task>
+		[[nodiscard]] std::vector<materialization_prior_artifact_task_metadata>
 		release_prior_artifact_tasks() &&
 		{
 			return std::move(artifact_tasks_);
@@ -1133,8 +1149,8 @@ namespace
 		bool task_worker_launch_pending_{};
 		const std::vector<sdk::relation_descriptor>& output_descriptors_;
 		detailed_report_limits report_limits_;
-		const materialization_prior_artifact_bundle* prior_artifact_{};
-		std::vector<materialization_prior_artifact_task> artifact_tasks_;
+		const materialization_prior_artifact_replay_bundle* prior_artifact_{};
+		std::vector<materialization_prior_artifact_task_metadata> artifact_tasks_;
 		std::string request_id_;
 		const materialization_producer_authority& producer_authority_;
 		const materialization_guarantee_authority& guarantee_authority_;
@@ -1405,9 +1421,9 @@ int main(const int argc, char**)
 	public_materialization_prior_artifact_persistence prior_artifact_persistence;
 	try
 	{
-		// Allocate the fixed unavailable representation before the irreversible Store boundary.
-		// Post-commit error handling then only changes the boolean state, so an allocation failure
-		// from persistence cannot turn the required structured unavailable report into no response.
+		// Allocate the memory-backend unavailable representation before the irreversible Store
+		// boundary. SQLite persistence failures after publication are exit-two/no-response events;
+		// they must never be downgraded into a success report.
 		prior_artifact_persistence.error_code.reserve(64U);
 		prior_artifact_persistence.error_field.reserve(64U);
 		prior_artifact_persistence.error_detail.reserve(64U);
@@ -1451,56 +1467,40 @@ int main(const int argc, char**)
 	public_input.maximum_report_bytes = report_limits.max_projection_bytes;
 	try
 	{
-		const auto restore_prior_artifact_fallback = [&]()
+		if (claim_request.publication.backend == "memory")
 		{
+			// The memory backend is intentionally process-local.  This installed tool consumes one
+			// request and exits, so reporting a committed memory artifact would falsely claim a
+			// subsequent invocation can recover it.
 			prior_artifact_persistence.error_code = "materialization.incremental-artifact-invalid";
-			prior_artifact_persistence.error_field = "publication.prior-artifact";
-			prior_artifact_persistence.error_detail = "persistence-failed";
-		};
-		if (claim_request.publication.backend == "memory" ||
-			claim_request.publication.backend == "sqlite")
+			prior_artifact_persistence.error_field = "memory";
+			prior_artifact_persistence.error_detail = "process-lifetime-only";
+		}
+		else if (claim_request.publication.backend == "sqlite")
 		{
 			const auto& store_observation = postpublication->store_observation();
 			if (!store_observation.publish_returned_record)
-				prior_artifact_persistence.error_detail = "committed-record-missing";
-			else
+				return no_response();
+			try
 			{
-				try
-				{
-					auto persisted = persist_materialization_prior_artifact(
-						*effect_root,
-						claim_request.publication,
-						*store_observation.publish_returned_record,
-						store_observation,
-						std::move(artifact_tasks));
-					if (persisted)
-						prior_artifact_persistence.committed = true;
-					else
-					{
-						try
-						{
-							prior_artifact_persistence.error_code = persisted.error().code;
-							prior_artifact_persistence.error_field = persisted.error().field;
-							prior_artifact_persistence.error_detail = persisted.error().detail;
-						}
-						catch (...)
-						{
-							restore_prior_artifact_fallback();
-						}
-					}
-				}
-				catch (const std::bad_alloc&)
-				{
-					restore_prior_artifact_fallback();
-				}
-				catch (...)
-				{
-					restore_prior_artifact_fallback();
-				}
+				auto persisted = persist_materialization_prior_artifact(
+					*effect_root,
+					claim_request.publication,
+					*store_observation.publish_returned_record,
+					store_observation,
+					task_reports,
+					std::move(artifact_tasks));
+				if (!persisted)
+					return no_response();
 			}
+			catch (...)
+			{
+				return no_response();
+			}
+			prior_artifact_persistence.committed = true;
 		}
 		else
-			prior_artifact_persistence.committed = true;
+			return no_response();
 		if (prior_artifact_persistence.committed)
 		{
 			prior_artifact_persistence.error_code.clear();

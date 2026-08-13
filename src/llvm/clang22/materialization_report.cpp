@@ -3096,28 +3096,42 @@ namespace cxxlens::detail::clang22::materialization
 		if (!storage_ || poisoned_ || !sealed_ || !consume)
 			return sdk::unexpected(
 				fail(detailed_report_error_kind::spool_io, "task_spool", "replay-lifecycle"));
+		for (std::size_t index{}; index < record_offsets_.size(); ++index)
+		{
+			if (auto accepted = replay_one(index, consume); !accepted)
+				return accepted;
+		}
+		return {};
+	}
+
+	sdk::result<void>
+	detailed_task_report_replayable_spool::replay_one(const std::size_t task_index,
+													  const consumer& consume) const
+	{
+		if (!storage_ || poisoned_ || !sealed_ || !consume)
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_io, "task_spool", "replay-lifecycle"));
+		if (task_index >= record_offsets_.size())
+			return sdk::unexpected(
+				fail(detailed_report_error_kind::spool_corrupt, "task_spool.offset", "missing"));
 		try
 		{
-			for (std::size_t index{}; index < record_offsets_.size(); ++index)
-			{
-				const auto begin = record_offsets_[index];
-				const auto end = index + 1U < record_offsets_.size() ? record_offsets_[index + 1U]
-																	 : spooled_bytes_;
-				if (begin >= end || end > spooled_bytes_)
-					return sdk::unexpected(fail(
-						detailed_report_error_kind::spool_corrupt, "task_spool.offset", "order"));
-				report_spool_reader reader{*storage_, begin, end, limits_};
-				auto capture = read_report_capture(reader, limits_);
-				if (!capture)
-					return sdk::unexpected(std::move(capture.error()));
-				if (reader.offset() != end)
-					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-												"task_spool.record",
-												"trailing-bytes"));
-				if (auto accepted = consume(std::move(*capture)); !accepted)
-					return accepted;
-			}
-			return {};
+			const auto begin = record_offsets_[task_index];
+			const auto end = task_index + 1U < record_offsets_.size()
+				? record_offsets_[task_index + 1U]
+				: spooled_bytes_;
+			if (begin >= end || end > spooled_bytes_)
+				return sdk::unexpected(
+					fail(detailed_report_error_kind::spool_corrupt, "task_spool.offset", "order"));
+			report_spool_reader reader{*storage_, begin, end, limits_};
+			auto capture = read_report_capture(reader, limits_);
+			if (!capture)
+				return sdk::unexpected(std::move(capture.error()));
+			if (reader.offset() != end)
+				return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
+											"task_spool.record",
+											"trailing-bytes"));
+			return consume(std::move(*capture));
 		}
 		catch (const std::bad_alloc&)
 		{
