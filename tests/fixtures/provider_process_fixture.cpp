@@ -4,6 +4,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <iterator>
 #include <limits>
@@ -150,13 +151,22 @@ int main(const int argument_count, const char* const* arguments)
 		(void)::raise(SIGSEGV);
 	if (mode == "timeout")
 		std::this_thread::sleep_for(std::chrono::seconds{5});
-	if (mode == "timeout-grandchild")
+	constexpr std::string_view timeout_grandchild_prefix = "timeout-grandchild:";
+	if (mode.starts_with(timeout_grandchild_prefix))
 	{
+		const auto marker_path = mode.substr(timeout_grandchild_prefix.size());
+		if (marker_path.empty())
+			return EXIT_FAILURE;
 		const auto holder = ::fork();
 		if (holder < 0)
 			return EXIT_FAILURE;
 		if (holder == 0)
 		{
+			std::ofstream marker{std::string{marker_path}, std::ios::trunc};
+			marker << ::getpid() << '\n';
+			marker.flush();
+			if (!marker)
+				::_exit(EXIT_FAILURE);
 			std::this_thread::sleep_for(std::chrono::seconds{5});
 			::_exit(EXIT_SUCCESS);
 		}

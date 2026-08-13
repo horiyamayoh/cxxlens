@@ -22,6 +22,9 @@
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/sdk.hpp>
+#if defined(__linux__)
+#include <sys/resource.h>
+#endif
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -417,6 +420,40 @@ namespace
 				{sandbox_assurance::enforced, baseline_policy().policy_digest()},
 				true,
 				std::nullopt};
+	}
+
+	[[nodiscard]] bool process_is_running(const pid_t process)
+	{
+#if defined(__linux__)
+		std::ifstream status{std::string{"/proc/"} + std::to_string(process) + "/status"};
+		std::string field;
+		while (status >> field)
+		{
+			if (field == "State:")
+			{
+				char state{};
+				status >> state;
+				return state != 'Z';
+			}
+			std::string ignored;
+			std::getline(status, ignored);
+		}
+#endif
+		return ::kill(process, 0) == 0;
+	}
+
+	[[nodiscard]] std::uint64_t descendant_fixture_subprocess_budget()
+	{
+#if defined(__linux__)
+		rlimit limit{};
+		require(::getrlimit(RLIMIT_NPROC, &limit) == 0,
+				"could not inspect the inherited process-count ceiling");
+		return limit.rlim_max > std::numeric_limits<std::uint64_t>::max()
+			? std::numeric_limits<std::uint64_t>::max()
+			: static_cast<std::uint64_t>(limit.rlim_max);
+#else
+		return provider_subprocess_budget;
+#endif
 	}
 
 	[[nodiscard]] provider_fallback_tuple fallback_tuple(const provider_candidate& value,
@@ -2009,23 +2046,61 @@ namespace
 		auto processes = make_system_provider_process_port();
 		require(processes != nullptr, "system provider process port unavailable");
 		process_provider_runtime runtime{*processes};
-		for (const auto mode :
-			 {std::string_view{"timeout"}, std::string_view{"timeout-grandchild"}})
+		auto timeout_request = task(select(executable, "timeout"));
+		timeout_request.budget.wall_ms = 25U;
+		const auto timeout_started = std::chrono::steady_clock::now();
+		auto timeout_report = runtime.execute(timeout_request);
+		require(timeout_report && timeout_report->terminal == "provider.timeout",
+				"provider timeout regression lost the typed timeout terminal");
+		require(std::chrono::steady_clock::now() - timeout_started < std::chrono::seconds{10},
+				"provider timeout regression exceeded the hard anti-hang bound");
+
+		namespace fs = std::filesystem;
+		const auto marker = fs::temp_directory_path() /
+			("cxxlens-provider-timeout-grandchild-" + std::to_string(::getpid()) + ".pid");
+		std::error_code ignored;
+		fs::remove(marker, ignored);
+		auto grandchild_request = task(select(executable, "timeout-grandchild:" + marker.string()));
+		// The fixture must fork after launch; the inherited hard ceiling avoids a magic
+		// process-count assumption while still exercising the provider's process budget.
+		grandchild_request.budget.subprocesses = descendant_fixture_subprocess_budget();
+		grandchild_request.budget.wall_ms = 1000U;
+		const auto grandchild_started = std::chrono::steady_clock::now();
+		auto grandchild_report = runtime.execute(grandchild_request);
+		const auto grandchild_elapsed = std::chrono::steady_clock::now() - grandchild_started;
+		const auto grandchild_terminal =
+			grandchild_report ? grandchild_report->terminal : grandchild_report.error().code;
+		require(grandchild_report && grandchild_report->terminal == "provider.timeout",
+				"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal);
+
+		std::optional<pid_t> holder;
+		const auto marker_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+		while (!holder && std::chrono::steady_clock::now() < marker_deadline)
 		{
-			auto request = task(select(executable, std::string{mode}));
-			request.budget.wall_ms = 25U;
-			if (mode == "timeout-grandchild")
-				// The fixture forks a pipe-holding helper under the provider process.
-				request.budget.subprocesses = 16U;
-			const auto started = std::chrono::steady_clock::now();
-			auto report = runtime.execute(request);
-			const auto elapsed = std::chrono::steady_clock::now() - started;
-			require(report && report->terminal == "provider.timeout",
-					"provider timeout regression lost the typed timeout terminal: " +
-						std::string{mode});
-			require(elapsed < std::chrono::seconds{10},
-					"provider timeout regression exceeded the hard anti-hang bound");
+			std::ifstream marker_input{marker};
+			long long raw_pid{};
+			if (marker_input >> raw_pid && raw_pid > 0 &&
+				raw_pid <= static_cast<long long>(std::numeric_limits<pid_t>::max()))
+				holder = static_cast<pid_t>(raw_pid);
+			else
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
 		}
+		require(holder.has_value(), "pipe-holding descendant did not publish its pid");
+
+		bool holder_gone = !process_is_running(*holder);
+		const auto reap_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+		while (!holder_gone && std::chrono::steady_clock::now() < reap_deadline)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{1});
+			holder_gone = !process_is_running(*holder);
+		}
+		if (!holder_gone)
+			(void)::kill(*holder, SIGKILL);
+		fs::remove(marker, ignored);
+		require(holder_gone,
+				"provider timeout did not terminate the pipe-holding process-group descendant");
+		require(grandchild_elapsed < std::chrono::seconds{4},
+				"provider timeout waited for the pipe-holding descendant instead of closing it");
 	}
 
 	void check_semantic_input_digests(const std::string& executable)
