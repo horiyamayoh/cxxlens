@@ -7,11 +7,13 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <iterator>
 #include <limits>
 #include <optional>
 #include <ranges>
+#include <sstream>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -24,7 +26,13 @@
 #include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/sdk.hpp>
 #if defined(__linux__) && defined(__GLIBC__)
+#include <sys/syscall.h>
+#endif
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+#include <poll.h>
 #include <sys/resource.h>
+#include <sys/wait.h>
 #endif
 #include <sys/socket.h>
 #include <unistd.h>
@@ -423,14 +431,132 @@ namespace
 				std::nullopt};
 	}
 
-#if defined(__linux__) && defined(__GLIBC__)
-	[[nodiscard]] bool process_entry_exists(const pid_t process)
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+	[[nodiscard]] std::optional<std::uint64_t> process_start_time(const pid_t process)
 	{
-		std::ifstream status{std::string{"/proc/"} + std::to_string(process) + "/status"};
-		return status.good();
+		std::ifstream stat{std::string{"/proc/"} + std::to_string(process) + "/stat"};
+		std::string line;
+		if (!std::getline(stat, line))
+			return std::nullopt;
+		const auto closing_name = line.rfind(')');
+		if (closing_name == std::string::npos || closing_name + 2U >= line.size())
+			return std::nullopt;
+		std::istringstream fields{line.substr(closing_name + 2U)};
+		char state{};
+		if (!(fields >> state))
+			return std::nullopt;
+		for (std::uint32_t field = 4U; field <= 22U; ++field)
+		{
+			std::uint64_t value{};
+			if (!(fields >> value))
+				return std::nullopt;
+			if (field == 22U)
+				return value;
+		}
+		return std::nullopt;
 	}
 
-	[[nodiscard]] std::uint64_t descendant_fixture_subprocess_budget()
+	[[nodiscard]] int open_pidfd(const pid_t process)
+	{
+		return static_cast<int>(::syscall(SYS_pidfd_open, process, 0U));
+	}
+
+	[[nodiscard]] bool pidfd_exited(const int pidfd)
+	{
+		siginfo_t status{};
+		if (::waitid(P_PIDFD, static_cast<id_t>(pidfd), &status, WEXITED | WNOHANG | WNOWAIT) ==
+				0 &&
+			status.si_pid != 0)
+			return true;
+		pollfd descriptor{pidfd, POLLIN | POLLHUP | POLLERR, 0};
+		const auto polled = ::poll(&descriptor, 1U, 0);
+		return polled > 0 && (descriptor.revents & (POLLIN | POLLHUP | POLLERR)) != 0;
+	}
+
+	[[nodiscard]] bool wait_pidfd_exit(const int pidfd, const std::chrono::milliseconds timeout)
+	{
+		const auto deadline = std::chrono::steady_clock::now() + timeout;
+		while (!pidfd_exited(pidfd) && std::chrono::steady_clock::now() < deadline)
+		{
+			pollfd descriptor{pidfd, POLLIN | POLLHUP | POLLERR, 0};
+			(void)::poll(&descriptor, 1U, 10);
+		}
+		return pidfd_exited(pidfd);
+	}
+
+	[[nodiscard]] bool process_is_zombie(const pid_t process)
+	{
+		std::ifstream stat{std::string{"/proc/"} + std::to_string(process) + "/stat"};
+		std::string line;
+		if (!std::getline(stat, line))
+			return false;
+		const auto closing_name = line.rfind(')');
+		return closing_name != std::string::npos && closing_name + 2U < line.size() &&
+			line[closing_name + 2U] == 'Z';
+	}
+
+	[[nodiscard]] bool kill_pidfd(const int pidfd)
+	{
+		return ::syscall(SYS_pidfd_send_signal, pidfd, SIGKILL, nullptr, 0U) == 0;
+	}
+
+	[[nodiscard]] bool pidfd_runtime_available()
+	{
+		const auto pidfd = open_pidfd(::getpid());
+		if (pidfd < 0)
+			return false;
+		const bool can_signal = ::syscall(SYS_pidfd_send_signal, pidfd, 0, nullptr, 0U) == 0;
+		(void)::close(pidfd);
+		return can_signal;
+	}
+
+	struct holder_observation
+	{
+		bool valid{};
+		int pidfd{-1};
+		pid_t pid{};
+		std::uint64_t start_time{};
+	};
+
+	struct descendant_observation
+	{
+		holder_observation holder;
+		holder_observation sentinel;
+	};
+
+	[[nodiscard]] std::optional<holder_observation>
+	observe_descendant(const std::filesystem::path& marker)
+	{
+		std::ifstream marker_input{marker};
+		long long raw_pid{};
+		std::uint64_t raw_start_time{};
+		if (!(marker_input >> raw_pid >> raw_start_time) || raw_pid <= 0 || raw_start_time == 0 ||
+			raw_pid > static_cast<long long>(std::numeric_limits<pid_t>::max()))
+			return std::nullopt;
+		const auto pid = static_cast<pid_t>(raw_pid);
+		const auto pidfd = open_pidfd(pid);
+		if (pidfd < 0)
+			return std::nullopt;
+		const auto actual_start_time = process_start_time(pid);
+		if (!actual_start_time || *actual_start_time != raw_start_time)
+		{
+			(void)::close(pidfd);
+			return std::nullopt;
+		}
+		return holder_observation{true, pidfd, pid, raw_start_time};
+	}
+
+	[[nodiscard]] bool process_exit_observed(const holder_observation& observation)
+	{
+		if (pidfd_exited(observation.pidfd))
+			return true;
+		const auto start_time = process_start_time(observation.pid);
+		return start_time && *start_time == observation.start_time &&
+			process_is_zombie(observation.pid);
+	}
+
+	[[nodiscard]] std::optional<std::uint64_t> descendant_fixture_subprocess_budget()
 	{
 		namespace fs = std::filesystem;
 		rlimit limit{};
@@ -468,13 +594,14 @@ namespace
 				same_uid_threads += threads;
 		}
 		require(!iteration_error, "could not count same-uid threads for timeout fixture");
-		const auto required = same_uid_threads + 2U;
+		const auto required = same_uid_threads + 3U;
+		constexpr std::uint64_t scheduling_margin = 4U;
 		const auto maximum = limit.rlim_max > std::numeric_limits<std::uint64_t>::max()
 			? std::numeric_limits<std::uint64_t>::max()
 			: static_cast<std::uint64_t>(limit.rlim_max);
-		const auto requested = std::max(provider_subprocess_budget, required);
-		require(maximum >= requested,
-				"inherited RLIMIT_NPROC cannot accommodate provider timeout fixture");
+		const auto requested = std::max(provider_subprocess_budget, required + scheduling_margin);
+		if (maximum < requested)
+			return std::nullopt;
 		return requested;
 	}
 #endif
@@ -2064,7 +2191,7 @@ namespace
 				"diagnostic record budget diverged by framing or execution surface");
 	}
 
-	void check_timeout_regression(const std::string& executable)
+	bool check_timeout_regression(const std::string& executable)
 	{
 		auto processes = make_system_provider_process_port();
 		require(processes != nullptr, "system provider process port unavailable");
@@ -2078,66 +2205,133 @@ namespace
 		require(std::chrono::steady_clock::now() - timeout_started < std::chrono::seconds{10},
 				"provider timeout regression exceeded the hard anti-hang bound");
 
-#if defined(__linux__) && defined(__GLIBC__)
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
 		namespace fs = std::filesystem;
 		const auto marker = fs::temp_directory_path() /
 			("cxxlens-provider-timeout-grandchild-" + std::to_string(::getpid()) + ".pid");
 		std::error_code marker_error;
 		fs::remove(marker, marker_error);
 		require(!marker_error, "could not remove stale pipe-holding descendant marker");
+		const auto holder_marker = fs::path{marker.string() + ".holder"};
+		const auto sentinel_marker = fs::path{marker.string() + ".sentinel"};
+		fs::remove(holder_marker, marker_error);
+		require(!marker_error, "could not remove stale holder descendant marker");
+		fs::remove(sentinel_marker, marker_error);
+		require(!marker_error, "could not remove stale sentinel descendant marker");
 		auto grandchild_request = task(select(executable, "timeout-grandchild:" + marker.string()));
 		// The fixture forks after launch; derive the budget from the inherited ceiling and
 		// current same-UID thread count instead of assuming a fixed host process count.
-		grandchild_request.budget.subprocesses = descendant_fixture_subprocess_budget();
+		const auto subprocess_budget = descendant_fixture_subprocess_budget();
+		if (!subprocess_budget)
+			return false;
+		grandchild_request.budget.subprocesses = *subprocess_budget;
 		grandchild_request.budget.wall_ms = 1000U;
+		std::promise<descendant_observation> holder_promise;
+		auto holder_future = holder_promise.get_future();
+		std::thread holder_watcher{
+			[marker, promise = std::move(holder_promise)]() mutable
+			{
+				const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+				while (std::chrono::steady_clock::now() < deadline)
+				{
+					auto holder = observe_descendant(marker.string() + ".holder");
+					auto sentinel = observe_descendant(marker.string() + ".sentinel");
+					if (holder && sentinel)
+					{
+						promise.set_value({std::move(*holder), std::move(*sentinel)});
+						return;
+					}
+					if (holder)
+						(void)::close(holder->pidfd);
+					if (sentinel)
+						(void)::close(sentinel->pidfd);
+					std::this_thread::sleep_for(std::chrono::milliseconds{1});
+				}
+				promise.set_value({});
+			},
+		};
 		const auto grandchild_started = std::chrono::steady_clock::now();
 		auto grandchild_report = runtime.execute(grandchild_request);
 		const auto grandchild_elapsed = std::chrono::steady_clock::now() - grandchild_started;
 		const auto grandchild_terminal =
 			grandchild_report ? grandchild_report->terminal : grandchild_report.error().code;
-
-		const auto cleanup_descendant = [&]()
+		const auto cleanup_descendant = [&](const descendant_observation observation)
 		{
-			std::ifstream marker_input{marker};
-			long long raw_pid{};
-			const bool marker_valid = marker_input >> raw_pid && raw_pid > 0 &&
-				raw_pid <= static_cast<long long>(std::numeric_limits<pid_t>::max());
-			const auto holder =
-				marker_valid ? std::optional<pid_t>{static_cast<pid_t>(raw_pid)} : std::nullopt;
-			bool holder_gone = holder && !process_entry_exists(*holder);
-			const auto reap_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
-			while (holder && !holder_gone && std::chrono::steady_clock::now() < reap_deadline)
+			const bool holder_valid = observation.holder.valid;
+			const bool sentinel_valid = observation.sentinel.valid;
+			const bool holder_exited_before_cleanup =
+				holder_valid && process_exit_observed(observation.holder);
+			const bool sentinel_exited_before_cleanup =
+				sentinel_valid && process_exit_observed(observation.sentinel);
+			bool holder_exited_after_cleanup = holder_exited_before_cleanup;
+			bool sentinel_exited_after_cleanup = sentinel_exited_before_cleanup;
+			if (holder_valid && !holder_exited_after_cleanup)
 			{
-				std::this_thread::sleep_for(std::chrono::milliseconds{1});
-				holder_gone = !process_entry_exists(*holder);
+				(void)kill_pidfd(observation.holder.pidfd);
+				holder_exited_after_cleanup =
+					wait_pidfd_exit(observation.holder.pidfd, std::chrono::seconds{2});
 			}
-			if (holder && !holder_gone)
-				(void)::kill(*holder, SIGKILL);
-			const auto killed_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
-			while (holder && !holder_gone && std::chrono::steady_clock::now() < killed_deadline)
+			if (sentinel_valid && !sentinel_exited_after_cleanup)
 			{
-				std::this_thread::sleep_for(std::chrono::milliseconds{1});
-				holder_gone = !process_entry_exists(*holder);
+				(void)kill_pidfd(observation.sentinel.pidfd);
+				sentinel_exited_after_cleanup =
+					wait_pidfd_exit(observation.sentinel.pidfd, std::chrono::seconds{2});
 			}
+			if (holder_valid)
+				(void)::close(observation.holder.pidfd);
+			if (sentinel_valid)
+				(void)::close(observation.sentinel.pidfd);
 			std::error_code marker_cleanup_error;
 			fs::remove(marker, marker_cleanup_error);
-			return std::array{
-				marker_valid && holder.has_value(), holder_gone, !marker_cleanup_error};
+			std::error_code holder_marker_cleanup_error;
+			fs::remove(holder_marker, holder_marker_cleanup_error);
+			std::error_code sentinel_marker_cleanup_error;
+			fs::remove(sentinel_marker, sentinel_marker_cleanup_error);
+			return std::array{holder_valid,
+							  sentinel_valid,
+							  holder_exited_before_cleanup,
+							  sentinel_exited_before_cleanup,
+							  holder_exited_after_cleanup,
+							  sentinel_exited_after_cleanup,
+							  !marker_cleanup_error && !holder_marker_cleanup_error &&
+								  !sentinel_marker_cleanup_error};
 		};
-		const auto cleanup = cleanup_descendant();
+		const auto descendants = holder_future.get();
+		holder_watcher.join();
+		auto observed_descendants = descendants;
+		if (!observed_descendants.holder.valid)
+			if (auto holder = observe_descendant(holder_marker))
+				observed_descendants.holder = std::move(*holder);
+		if (!observed_descendants.sentinel.valid)
+			if (auto sentinel = observe_descendant(sentinel_marker))
+				observed_descendants.sentinel = std::move(*sentinel);
+		const auto cleanup = cleanup_descendant(observed_descendants);
 		require(grandchild_report && grandchild_report->terminal == "provider.timeout",
 				"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal);
-		require(cleanup[0], "pipe-holding descendant marker was invalid");
-		require(cleanup[1],
-				"provider timeout did not terminate the pipe-holding process-group descendant");
-		require(cleanup[2], "pipe-holding descendant marker could not be removed");
-		require(grandchild_elapsed < std::chrono::seconds{2},
+		require(cleanup[0] && cleanup[1],
+				"pipe-holding process-group descendant identities could not be observed");
+		require(
+			cleanup[2] && cleanup[3],
+			std::string{
+				"provider timeout did not terminate the pipe-holding process-group descendant: "} +
+				"after-cleanup-holder=" + std::to_string(cleanup[4]) +
+				" after-cleanup-sentinel=" + std::to_string(cleanup[5]) +
+				" budget=" + std::to_string(*subprocess_budget) + " elapsed=" +
+				std::to_string(
+					std::chrono::duration_cast<std::chrono::milliseconds>(grandchild_elapsed)
+						.count()) +
+				"ms");
+		require(cleanup[4] && cleanup[5], "pipe-holding descendants cleanup failed");
+		require(cleanup[6], "pipe-holding descendant markers could not be removed");
+		require(grandchild_elapsed < std::chrono::seconds{4},
 				"provider timeout waited for the pipe-holding descendant instead of closing it: " +
 					std::to_string(
 						std::chrono::duration_cast<std::chrono::milliseconds>(grandchild_elapsed)
 							.count()) +
 					"ms");
 #endif
+		return true;
 	}
 
 	void check_semantic_input_digests(const std::string& executable)
@@ -2224,8 +2418,14 @@ int main(const int argument_count, const char* const* arguments)
 	}
 	if (argument_count == 3 && std::string_view{arguments[1]} == "--timeout-regression")
 	{
-		check_timeout_regression(arguments[2]);
-		return 0;
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+		if (!pidfd_runtime_available())
+			return 77;
+		return check_timeout_regression(arguments[2]) ? 0 : 77;
+#else
+		return 77;
+#endif
 	}
 	require(argument_count == 2, "provider process fixture path missing");
 	const std::string executable{arguments[1]};

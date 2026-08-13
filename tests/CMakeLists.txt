@@ -418,10 +418,21 @@ check_cxx_source_compiles(
 #ifndef __GLIBC__
 #error "The provider process adapter requires glibc"
 #endif
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#ifndef SYS_pidfd_open
+#error "The timeout regression requires pidfd_open"
+#endif
+#ifndef SYS_pidfd_send_signal
+#error "The timeout regression requires pidfd_send_signal"
+#endif
+#ifndef P_PIDFD
+#error "The timeout regression requires P_PIDFD"
+#endif
 int main() { return 0; }
 ]=]
-  CXXLENS_TEST_HAS_LINUX_GLIBC)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC)
+  CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
   add_test(NAME unit.sdk-provider-runtime-timeout
            COMMAND cxxlens-unit-sdk-provider-runtime --timeout-regression
                    "$<TARGET_FILE:cxxlens-provider-process-fixture>")
@@ -440,11 +451,12 @@ set_tests_properties(
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     PROCESSORS 2)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
   set_tests_properties(
     unit.sdk-provider-runtime-timeout
     PROPERTIES LABELS "unit;sdk;provider;process;budget;cancellation;regression"
-               TIMEOUT 30)
+               TIMEOUT 30
+               SKIP_RETURN_CODE 77)
 endif()
 set_tests_properties(unit.sdk-provider-runtime-sealed
                      PROPERTIES LABELS "unit;sdk;provider;sealed;adoption")
