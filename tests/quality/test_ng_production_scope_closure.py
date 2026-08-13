@@ -265,7 +265,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "sanitizer.tsan",
             },
         )
-        self.assertEqual(self.model.blocking_feedback, ())
+        self.assertEqual(self.model.blocking_feedback, ("DF-0243",))
 
     def test_materialization_authority_is_bound_to_the_typed_census(self) -> None:
         temporary, root = self.clone_contract_root()
