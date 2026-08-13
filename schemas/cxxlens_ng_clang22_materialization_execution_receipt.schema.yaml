@@ -1,0 +1,39 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.clang22-materialization-execution-receipt.v1
+title: cxxlens Clang 22 materialization external execution receipt
+type: object
+additionalProperties: false
+required:
+  - schema
+  - actual_exit_status
+  - exact_stdout_byte_count
+  - stdout_sha256
+  - parsed_response_count
+  - stderr_sha256
+properties:
+  schema: {const: cxxlens.clang22-materialization-execution-receipt.v1}
+  actual_exit_status: {type: integer}
+  exact_stdout_byte_count:
+    type: integer
+    minimum: 0
+    maximum: 1073741824
+  stdout_sha256: {$ref: '#/$defs/digest'}
+  parsed_response_count: {type: integer}
+  stderr_sha256: {$ref: '#/$defs/digest'}
+oneOf:
+  - title: passed detailed response
+    properties:
+      actual_exit_status: {const: 0}
+      exact_stdout_byte_count: {minimum: 1}
+      parsed_response_count: {const: 1}
+  - title: schema-valid failure response
+    properties:
+      actual_exit_status: {const: 1}
+      exact_stdout_byte_count: {minimum: 1}
+      parsed_response_count: {const: 1}
+  - title: no authoritative response
+    properties:
+      actual_exit_status: {const: 2}
+      parsed_response_count: {const: 0}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}

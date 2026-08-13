@@ -1,10 +1,12 @@
 schema: cxxlens.ng-release-qualification.v1
-document_version: 1.3.0
+document_version: 1.7.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   adr: docs/design/adr/0091-distribution-1-production-qualification.md
-  amendments: [docs/design/adr/0096-clang22-installed-materialization-boundary.md]
+  amendments:
+    - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+    - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
   owner_issue: '#167'
 binding:
   release: distribution-1.0
@@ -21,6 +23,7 @@ prerequisites:
   readiness_evidence: cxxlens.ng-api-development-readiness-report.v1
   public_callable_evidence: cxxlens.ng-public-callable-inventory-report.v1
   r4_evidence: cxxlens.ng-g5-qualification-report.v1
+  sqlite_store_v3_evidence: cxxlens.ng-sqlite-store-v3-qualification-report.v1
   release_evaluation_evidence: cxxlens.ng-release-qualification-evaluation-report.v1
   same_revision: required
 package:
@@ -39,6 +42,9 @@ package:
     - share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
     - share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
     - share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+    - share/cxxlens/schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml
+    - share/cxxlens/schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
+    - share/cxxlens/materialization/clang22/occurrence-v1.json
     - share/cxxlens/schemas/cxxlens_ng_release_qualification.yaml
 materialization:
   tool: cxxlens-clang22-materialize
@@ -46,8 +52,21 @@ materialization:
   contract_schema: schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
   request_schema: schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
   report_schema: schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+  occurrence_manifest_schema: schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
+  occurrence_manifest_path: share/cxxlens/materialization/clang22/occurrence-v1.json
   request_filename: cxxlens-clang22-materialization-request.json
   report_filename: cxxlens-clang22-materialization-report.json
+  execution_receipt_filename: cxxlens-clang22-materialization-execution-receipt.json
+  execution_receipt_schema: schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml
+  execution_receipt:
+    schema: cxxlens.clang22-materialization-execution-receipt.v1
+    encoding: strict-json-single-object
+    maximum_bytes: 65536
+    fields: [actual_exit_status, exact_stdout_byte_count, stdout_sha256, parsed_response_count, stderr_sha256]
+    report_cross_binding: exact-stdout-bytes-equal-report-artifact
+    qualified: {actual_exit_status: 0, parsed_response_count: 1}
+    schema_valid_failure: {actual_exit_status: 1, parsed_response_count: 1, release_eligible: false}
+    no_response_failure: {actual_exit_status: 2, parsed_response_count: 0, release_eligible: false}
   configurations: [static, shared]
   cardinality: exactly-one-per-configuration-and-backend
   relocated_installed_execution: required
@@ -60,7 +79,22 @@ materialization:
     encoding: canonical-json-sorted-keys-no-whitespace
     projection: [configuration, reports]
     backend_order: [memory, sqlite]
-    report_entry_fields: [backend, report_digest]
+    report_entry_fields: [backend, report_digest, execution_receipt_digest]
+sqlite_store_v3_qualification:
+  authority: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+  report_schema: schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml
+  checker: tools/quality/check_ng_sqlite_store_v3_qualification.py
+  report_filename: cxxlens-ng-sqlite-store-v3-qualification-report.json
+  report_artifact: cxxlens-ng-sqlite-store-v3-qualification-${revision}
+  maximum_bytes: 16777216
+  status: required
+  binding: exact-revision-source-tree-schema-contract-artifact-and-report-set-digests
+  configurations: [static, shared]
+  required_cases:
+    - current-v3.0.0-cold-reopen
+    - v2.6.0-read-only-zero-mutation
+    - compact-v2.6.0-to-v3.0.0-same-semantic-digest
+    - limit-length-exceeding-valid-canonical-v5-reopened-parity
 provider:
   provider_id: cxxlens.clang22.reference
   provider_version: 1.0.0
@@ -104,7 +138,7 @@ claim_policy:
   required_claim_fields: [capabilities, guarantee, security_profile_digest, evidence_digest]
   pending_or_wildcard: forbidden
   unlisted_surface: unsupported
-  tuple_evidence_projection: [install_manifest, materialization_report_set, g5_report, security_report, public_callable_report, configuration]
+  tuple_evidence_projection: [install_manifest, installed_worker, materialization_tool, materialization_request_artifacts, materialization_report_set, materialization_contract, sqlite_store_v3_qualification, g5_report, security_report, public_callable_report, configuration]
 required_artifacts:
   - LICENSE
   - NOTICE
@@ -112,10 +146,14 @@ required_artifacts:
   - schemas/cxxlens_ng_release_qualification.schema.yaml
   - schemas/cxxlens_ng_release_qualification_report.schema.yaml
   - schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml
+  - schemas/cxxlens_ng_sqlite_store_contract.yaml
+  - schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml
   - schemas/cxxlens_ng_clang22_materialization_contract.yaml
   - schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
   - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
   - schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml
+  - schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
   - schemas/cxxlens_ng_production_scope_closure.yaml
   - schemas/cxxlens_ng_production_scope_closure.schema.yaml
   - schemas/cxxlens_ng_production_scope_closure_report.schema.yaml
@@ -139,6 +177,8 @@ required_artifacts:
   - tests/unit/sdk/provider_runtime_test.cpp
   - examples/sdk/clang22_native_provider.cpp
   - tools/quality/check_ng_release_qualification.py
+  - tools/quality/check_ng_sqlite_store_v3_qualification.py
+  - tools/quality/produce_ng_sqlite_store_v3_qualification.py
   - tools/quality/check_ng_clang22_materialization.py
   - tests/quality/test_ng_clang22_materialization.py
   - tests/quality/test_ng_release_qualification.py
@@ -148,5 +188,6 @@ required_artifacts:
   - docs/design/adr/0091-distribution-1-production-qualification.md
   - docs/design/adr/0095-production-scope-closure.md
   - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
   - docs/support-matrix.md
   - .github/workflows/quality.yml

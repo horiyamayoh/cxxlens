@@ -17,7 +17,7 @@ int main()
 		 "file:input.cpp",
 		 "input.cpp",
 		 "int target(); int main(){ return target(); }",
-		 {"-std=c++23"}},
+		 {"clang++", "-std=c++23", "input.cpp"}},
 		[&](cxxlens::provider::clang22::borrowed_translation_unit&) -> cxxlens::sdk::result<void>
 		{
 			visited = true;

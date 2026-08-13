@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -38,6 +39,8 @@ namespace
 	using cxxlens::detail::clang22::detached_observation;
 	using cxxlens::detail::clang22::observation_batch;
 	using cxxlens::detail::clang22::observation_kind;
+	using cxxlens::detail::clang22::materialization::observation_v2_primary_span;
+	using cxxlens::detail::clang22::materialization::observation_v2_task_authority;
 
 	constexpr std::string_view clang_contract{
 		"sha256:1111111111111111111111111111111111111111111111111111111111111111"};
@@ -102,7 +105,17 @@ namespace
 		value.kind = observation_kind::entity;
 		value.compile_unit = "cu-" + std::string(64U, 'a');
 		value.semantic_key = std::move(semantic_key);
-		value.source_span_id = "span-" + std::string(63U, 'd') + source_suffix;
+		const auto begin = static_cast<std::uint64_t>(source_suffix - '0') * 10U;
+		auto span = source_span_identity(
+			"source-snapshot:integration", "file:integration", begin, begin + 8U, "declaration");
+		require(span.has_value(), "integration entity source span identity failed");
+		value.primary_span = observation_v2_primary_span{std::move(*span),
+														 "source-snapshot:integration",
+														 "file:integration",
+														 begin,
+														 begin + 8U,
+														 "declaration",
+														 false};
 		value.payload.emplace("symbol.kind", "function");
 		value.payload.emplace("symbol.qualified_name", std::move(qualified_name));
 		value.payload.emplace("symbol.signature", "void ()");
@@ -116,7 +129,17 @@ namespace
 		value.kind = observation_kind::call;
 		value.compile_unit = "cu-" + std::string(64U, 'a');
 		value.semantic_key = std::move(semantic_key);
-		value.source_span_id = "span-" + std::string(63U, 'e') + source_suffix;
+		const auto begin = static_cast<std::uint64_t>(source_suffix - '0') * 10U;
+		auto span = source_span_identity(
+			"source-snapshot:integration", "file:integration", begin, begin + 8U, "expression");
+		require(span.has_value(), "integration call source span identity failed");
+		value.primary_span = observation_v2_primary_span{std::move(*span),
+														 "source-snapshot:integration",
+														 "file:integration",
+														 begin,
+														 begin + 8U,
+														 "expression",
+														 false};
 		value.payload.emplace("call.kind", "direct_function");
 		value.payload.emplace("call.caller", callee);
 		value.payload.emplace("call.direct_callee", std::move(callee));
@@ -131,11 +154,15 @@ namespace
 		observation_batch entity_batch;
 		entity_batch.unit = "cu-" + std::string(64U, 'a');
 		entity_batch.variant = "variant-" + std::string(64U, 'b');
+		entity_batch.materialization_authority = observation_v2_task_authority{
+			entity_batch.unit, "source-snapshot:integration", "file:integration", 1024U};
 		entity_batch.observations.push_back(
 			entity_observation("clang-usr:target-a", qualified_name, '1'));
 		observation_batch call_batch;
 		call_batch.unit = "cu-" + std::string(64U, 'c');
 		call_batch.variant = entity_batch.variant;
+		call_batch.materialization_authority = observation_v2_task_authority{
+			call_batch.unit, "source-snapshot:integration", "file:integration", 1024U};
 		auto first_call = call_observation("call:caller:1", "clang-usr:target-a", '1');
 		first_call.compile_unit = call_batch.unit;
 		call_batch.observations.push_back(std::move(first_call));

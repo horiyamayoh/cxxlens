@@ -32,6 +32,10 @@ dynamic descriptor は authority JSONを持たないため empty contract digest
 dynamic descriptor の未設定 digestだけを補完し、authority-bearing descriptor の未設定/stale digestは補完せず
 拒否する。registry digest は canonical descriptor ID と bound descriptor digestから構成する。
 
+過去に relation name を inventory key として生成された registry digest は corrected descriptor-ID digest の alias ではない。旧 digest に bind
+された persisted series は compatible legacy engine でのみ read/current とし、新 engine は cross-digest append や silent migration を拒否する。
+明示した migration contract がない限り旧 series は read-only history として扱う。
+
 ## Consequences
 
 - generated runtime fieldを変更して trusted digestを保持する impersonation は失敗する。

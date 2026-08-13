@@ -22,6 +22,7 @@ INSTALL_DATABASES = {
     "sdk_consumer-build/compile_commands.json",
     "clang22_sdk_consumer-build/compile_commands.json",
     "examples-consumer-build/compile_commands.json",
+    "real_project_consumer-build/compile_commands.json",
 }
 
 

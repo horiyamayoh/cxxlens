@@ -8,8 +8,14 @@
 #include <vector>
 
 #include <cxxlens/provider/clang22.hpp>
+#include <cxxlens/relations/build_compile_unit.hpp>
+#include <cxxlens/relations/build_project.hpp>
+#include <cxxlens/relations/build_toolchain_context.hpp>
+#include <cxxlens/relations/build_variant.hpp>
+#include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/source_file.hpp>
 #include <cxxlens/relations/source_span.hpp>
 
 #include "llvm/clang22/provider_worker.hpp"
@@ -27,6 +33,218 @@ namespace
 			std::exit(1);
 		}
 	}
+
+	[[nodiscard]] clang22_task_source_receipt source_receipt(const std::span<const std::byte> bytes)
+	{
+		std::vector<sdk::canonical_value> offsets{sdk::canonical_value::from_integer(0)};
+		for (std::size_t index{}; index < bytes.size(); ++index)
+			if (bytes[index] == std::byte{'\n'})
+				offsets.push_back(
+					sdk::canonical_value::from_integer(static_cast<std::int64_t>(index + 1U)));
+		const auto digest = sdk::content_digest(bytes);
+		const std::array fields{
+			sdk::canonical_value::from_string("cxxlens.byte-line-index.v1"),
+			sdk::canonical_value::from_string(digest),
+			sdk::canonical_value::from_integer(static_cast<std::int64_t>(bytes.size())),
+			sdk::canonical_value::from_tuple(std::move(offsets)),
+		};
+		auto line_index = sdk::canonical_identity_digest("line-index", fields);
+		require(line_index.has_value(), "test source-spool line-index receipt failed");
+		return {bytes.size(), digest, std::move(*line_index)};
+	}
+
+	[[nodiscard]] std::string base64_encode(const std::span<const std::byte> bytes)
+	{
+		constexpr std::string_view alphabet{
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
+		std::string output;
+		output.reserve(((bytes.size() + 2U) / 3U) * 4U);
+		for (std::size_t offset{}; offset < bytes.size(); offset += 3U)
+		{
+			const auto count = std::min<std::size_t>(3U, bytes.size() - offset);
+			std::uint32_t word =
+				static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[offset])) << 16U;
+			if (count > 1U)
+				word |=
+					static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[offset + 1U]))
+					<< 8U;
+			if (count > 2U)
+				word |= std::to_integer<std::uint8_t>(bytes[offset + 2U]);
+			output.push_back(alphabet[(word >> 18U) & 0x3fU]);
+			output.push_back(alphabet[(word >> 12U) & 0x3fU]);
+			output.push_back(count > 1U ? alphabet[(word >> 6U) & 0x3fU] : '=');
+			output.push_back(count > 2U ? alphabet[word & 0x3fU] : '=');
+		}
+		return output;
+	}
+
+	class fragmented_task_source final : public clang22_task_source_replay
+	{
+	  public:
+		explicit fragmented_task_source(
+			const std::string& value,
+			const std::size_t fragment,
+			const bool sealed = true,
+			std::optional<clang22_task_source_receipt> receipt = std::nullopt)
+			: bytes_{std::as_bytes(std::span{value})}, fragment_{fragment},
+			  receipt_{receipt ? std::move(*receipt) : source_receipt(bytes_)}, sealed_{sealed}
+		{
+		}
+
+		sdk::result<std::size_t> read_at(const std::uint64_t offset,
+										 std::span<std::byte> destination) override
+		{
+			if (offset > bytes_.size())
+				return sdk::unexpected(sdk::error{"test.task-source", "offset", {}});
+			const auto count = std::min(
+				{destination.size(), fragment_, bytes_.size() - static_cast<std::size_t>(offset)});
+			std::ranges::copy(std::span{bytes_}.subspan(static_cast<std::size_t>(offset), count),
+							  destination.begin());
+			return count;
+		}
+
+		[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+		{
+			return bytes_.size();
+		}
+
+		[[nodiscard]] bool sealed() const noexcept override
+		{
+			return sealed_;
+		}
+
+		[[nodiscard]] const clang22_task_source_receipt& receipt() const noexcept override
+		{
+			return receipt_;
+		}
+
+	  private:
+		std::span<const std::byte> bytes_;
+		std::size_t fragment_{};
+		clang22_task_source_receipt receipt_;
+		bool sealed_{};
+	};
+
+	class fragmented_task_replay final : public clang22_task_input_replay
+	{
+	  public:
+		fragmented_task_replay(const std::span<const std::byte> bytes,
+							   const std::size_t fragment,
+							   const bool sealed = true,
+							   const std::optional<std::uint64_t> reported_size = std::nullopt)
+			: bytes_{bytes}, fragment_{fragment},
+			  reported_size_{reported_size.value_or(bytes.size())}, sealed_{sealed}
+		{
+		}
+
+		sdk::result<std::size_t> read_at(const std::uint64_t offset,
+										 std::span<std::byte> destination) override
+		{
+			if (offset > bytes_.size())
+				return sdk::unexpected(sdk::error{"test.task-replay", "offset", {}});
+			const auto count = std::min(
+				{destination.size(), fragment_, bytes_.size() - static_cast<std::size_t>(offset)});
+			std::ranges::copy(std::span{bytes_}.subspan(static_cast<std::size_t>(offset), count),
+							  destination.begin());
+			return count;
+		}
+
+		[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+		{
+			return reported_size_;
+		}
+
+		[[nodiscard]] bool sealed() const noexcept override
+		{
+			return sealed_;
+		}
+
+	  private:
+		std::span<const std::byte> bytes_;
+		std::size_t fragment_{};
+		std::uint64_t reported_size_{};
+		bool sealed_{};
+	};
+
+	class vector_source_spool final : public clang22_task_source_spool
+	{
+	  public:
+		sdk::result<void> append(const std::span<const std::byte> bytes) override
+		{
+			if (sealed_)
+				return sdk::unexpected(sdk::error{"test.source-spool", "append", "sealed"});
+			bytes_.insert(bytes_.end(), bytes.begin(), bytes.end());
+			return {};
+		}
+
+		sdk::result<clang22_task_source_receipt> seal() override
+		{
+			if (sealed_)
+				return sdk::unexpected(sdk::error{"test.source-spool", "seal", "duplicate"});
+			receipt_ = source_receipt(bytes_);
+			sealed_ = true;
+			return receipt_;
+		}
+
+		sdk::result<std::size_t> read_at(const std::uint64_t offset,
+										 std::span<std::byte> destination) override
+		{
+			if (!sealed_ || offset > bytes_.size())
+				return sdk::unexpected(sdk::error{"test.source-spool", "read", {}});
+			const auto count =
+				std::min(destination.size(), bytes_.size() - static_cast<std::size_t>(offset));
+			std::ranges::copy(std::span{bytes_}.subspan(static_cast<std::size_t>(offset), count),
+							  destination.begin());
+			return count;
+		}
+
+		[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+		{
+			return bytes_.size();
+		}
+
+		[[nodiscard]] bool sealed() const noexcept override
+		{
+			return sealed_;
+		}
+
+		[[nodiscard]] const clang22_task_source_receipt& receipt() const noexcept override
+		{
+			return receipt_;
+		}
+
+		[[nodiscard]] std::span<const std::byte> bytes() const noexcept
+		{
+			return bytes_;
+		}
+
+	  private:
+		std::vector<std::byte> bytes_;
+		clang22_task_source_receipt receipt_;
+		bool sealed_{};
+	};
+
+	class vector_task_sink final : public clang22_task_input_sink
+	{
+	  public:
+		sdk::result<void> append(const std::span<const std::byte> bytes) override
+		{
+			value.insert(value.end(), bytes.begin(), bytes.end());
+			return {};
+		}
+
+		std::vector<std::byte> value;
+	};
+
+	class failing_task_sink final : public clang22_task_input_sink
+	{
+	  public:
+		sdk::result<void> append(std::span<const std::byte>) override
+		{
+			return sdk::unexpected(
+				sdk::error{"materialization.spool-failure", "task.v3", "injected-write"});
+		}
+	};
 
 	[[nodiscard]] sdk::detached_cell
 	symbol_cell(const sdk::scalar_kind kind, std::string parameter, std::string value)
@@ -61,6 +279,36 @@ namespace
 				std::nullopt};
 	}
 
+	void set_primary_span(detached_observation& value,
+						  std::string snapshot,
+						  std::string file,
+						  const std::uint64_t begin,
+						  const std::uint64_t end,
+						  std::string role,
+						  const bool read_only = false)
+	{
+		auto identity = sdk::source_span_identity(snapshot, file, begin, end, role);
+		require(identity.has_value(), "test source span identity failed");
+		value.primary_span = materialization::observation_v2_primary_span{
+			std::move(*identity),
+			std::move(snapshot),
+			std::move(file),
+			begin,
+			end,
+			std::move(role),
+			read_only,
+		};
+	}
+
+	void bind_source_authority(observation_batch& value,
+							   std::string snapshot = "source-snapshot:one",
+							   std::string file = "file:stable",
+							   const std::uint64_t source_size = 4096U)
+	{
+		value.materialization_authority = materialization::observation_v2_task_authority{
+			value.unit, std::move(snapshot), std::move(file), source_size};
+	}
+
 	[[nodiscard]] detached_observation observation(const observation_kind kind,
 												   std::string semantic_key)
 	{
@@ -68,7 +316,13 @@ namespace
 		value.kind = kind;
 		value.compile_unit = "cu-" + std::string(64U, 'a');
 		value.semantic_key = std::move(semantic_key);
-		value.source_span_id = "span-" + std::string(64U, 'd');
+		if (kind != observation_kind::type)
+			set_primary_span(value,
+							 "source-snapshot:one",
+							 "file:stable",
+							 10U,
+							 18U,
+							 kind == observation_kind::entity ? "declaration" : "expression");
 		return value;
 	}
 
@@ -77,10 +331,10 @@ namespace
 		observation_batch value;
 		value.unit = "cu-" + std::string(64U, 'a');
 		value.variant = "variant-" + std::string(64U, 'b');
+		bind_source_authority(value);
 
 		auto entity = observation(observation_kind::entity, "clang-usr:target");
-		entity.source_span_id = *sdk::source_span_identity(
-			"source-snapshot:one", "file:stable", 10U, 18U, "declaration");
+		set_primary_span(entity, "source-snapshot:one", "file:stable", 10U, 18U, "declaration");
 		entity.payload.emplace("symbol.kind", "function");
 		entity.payload.emplace("symbol.qualified_name", "ns::target");
 		entity.payload.emplace("symbol.signature", "int ()");
@@ -89,8 +343,7 @@ namespace
 		type.payload.emplace("type.canonical", "int");
 
 		auto call = observation(observation_kind::call, "call:main:12");
-		call.source_span_id = *sdk::source_span_identity(
-			"source-snapshot:one", "file:stable", 10U, 18U, "expression");
+		set_primary_span(call, "source-snapshot:one", "file:stable", 10U, 18U, "expression");
 		call.payload.emplace("call.kind", "direct_function");
 		call.payload.emplace("call.direct_callee", "clang-usr:target");
 		call.payload.emplace("call.direct_callee_kind", "function");
@@ -101,6 +354,405 @@ namespace
 		return value;
 	}
 
+	[[nodiscard]] clang22_task_input
+	task_input(std::string source = "int target(); int main(){ return target(); }")
+	{
+		const std::vector<std::string> arguments{"clang++", "-std=c++23"};
+		auto invocation = sdk::canonical_binary(sdk::canonical_value::from_tuple({
+			sdk::canonical_value::from_string("cxxlens.clang22.effective-invocation.v1"),
+			sdk::canonical_value::from_string("project://workspace"),
+			sdk::canonical_value::from_tuple({sdk::canonical_value::from_string("clang++"),
+											  sdk::canonical_value::from_string("-std=c++23")}),
+		}));
+		require(invocation.has_value(), "task invocation projection failed");
+		const std::string invocation_bytes{reinterpret_cast<const char*>(invocation->data()),
+										   invocation->size()};
+		auto invocation_digest =
+			sdk::semantic_digest("cxxlens.clang22.effective-invocation.v1", invocation_bytes);
+		require(invocation_digest.has_value(), "task invocation digest failed");
+		const auto source_digest = sdk::content_digest(std::as_bytes(std::span{source}));
+		const std::string environment_digest =
+			"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+		auto catalog = sdk::project_catalog::make(
+			"project://workspace",
+			environment_digest,
+			{{"catalog-unit:alpha", *invocation_digest, source_digest, environment_digest},
+			 {"catalog-unit:beta",
+			  "sha256:abababababababababababababababababababababababababababababababab",
+			  "sha256:bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc",
+			  environment_digest}});
+		require(catalog.has_value(), "task project catalog failed");
+		clang22_task_input output;
+		output.project_catalog = std::move(*catalog);
+		output.selected_catalog_compile_unit = "catalog-unit:alpha";
+		output.toolchain_digest =
+			"semantic-v2:sha256:"
+			"7f3c5aa5ac281a5c00cf543ae51a36941a043f79b08988d4b928dcd9befb8c3c";
+		output.toolchain = {
+			"toolchain-family:clang",
+			"toolchain-version:22.0.0",
+			"target:x86_64-linux-gnu",
+			"sha256:2222222222222222222222222222222222222222222222222222222222222222",
+			std::nullopt,
+			"sha256:3333333333333333333333333333333333333333333333333333333333333333",
+			"sha256:4444444444444444444444444444444444444444444444444444444444444444",
+		};
+		output.variant_authority = {
+			"language:cxx",
+			"standard:cxx23",
+			"target:x86_64-linux-gnu",
+			"sha256:5555555555555555555555555555555555555555555555555555555555555555",
+			"sha256:6666666666666666666666666666666666666666666666666666666666666666",
+			"sha256:7777777777777777777777777777777777777777777777777777777777777777",
+		};
+		output.normalized_invocation_digest = std::move(*invocation_digest);
+		output.environment_digest = environment_digest;
+		output.language = "language:cxx";
+		output.working_directory = "project://workspace";
+		output.condition_universe = "condition-universe:alpha";
+		output.condition = "condition:alpha";
+		output.interpretation = "cc.clang22-canonical-1";
+		output.logical_path = "project://input.cpp";
+		output.source_content_digest = source_digest;
+		output.source_content_base64 = base64_encode(std::as_bytes(std::span{source}));
+		output.source_size_bytes = source.size();
+		output.source_encoding = "utf8";
+		output.source_read_only = true;
+		output.source = source;
+		output.arguments = arguments;
+		output.requested_descriptors = {
+			"cc.call_direct_target.v1",
+			"cc.call_site.v1",
+			"cc.entity.v1",
+			"frontend.clang22.call_observation.v2",
+			"frontend.clang22.entity_observation.v2",
+			"frontend.clang22.type_observation.v2",
+		};
+		output.dependency_groups = {"canonical", "observation"};
+		output.sandbox = {
+			"enforced",
+			"sha256:8888888888888888888888888888888888888888888888888888888888888888",
+		};
+
+		const auto derive = [](const sdk::relation_descriptor& descriptor,
+							   sdk::result<sdk::detached_row> row,
+							   const std::string& message)
+		{
+			require(row.has_value(), message + " row failed");
+			auto identity = sdk::derive_domain_identity(descriptor, *row);
+			require(identity.has_value(), message + " identity failed");
+			return *identity;
+		};
+		const std::array file_projection{
+			sdk::canonical_value::from_string("project"),
+			sdk::canonical_value::from_string("input.cpp"),
+			sdk::canonical_value::from_string("cxxlens.logical-path.v1"),
+		};
+		auto file = sdk::canonical_identity_digest("file", file_projection);
+		require(file.has_value(), "task file identity failed");
+		output.file = std::move(*file);
+		const std::array line_index_projection{
+			sdk::canonical_value::from_string("cxxlens.byte-line-index.v1"),
+			sdk::canonical_value::from_string(output.source_content_digest),
+			sdk::canonical_value::from_integer(static_cast<std::int64_t>(source.size())),
+			sdk::canonical_value::from_tuple({sdk::canonical_value::from_integer(0)}),
+		};
+		auto line_index = sdk::canonical_identity_digest("line-index", line_index_projection);
+		require(line_index.has_value(), "task line-index identity failed");
+		output.line_index = std::move(*line_index);
+
+		using project_relation = cxxlens::build::relations::project;
+		project_relation::builder project_builder;
+		require(project_builder
+					.set<project_relation::project_column>(
+						sdk::detached_cell::typed("project_id", "pending"))
+					.has_value(),
+				"task project result binding failed");
+		require(project_builder
+					.set<project_relation::catalog>(
+						sdk::detached_cell::typed("catalog_id", output.project_catalog.catalog_id))
+					.has_value(),
+				"task project catalog binding failed");
+		require(project_builder
+					.set<project_relation::catalog_digest>(symbol_cell(
+						sdk::scalar_kind::digest, {}, output.project_catalog.catalog_digest))
+					.has_value(),
+				"task project catalog digest binding failed");
+		require(project_builder
+					.set<project_relation::logical_root>(sdk::detached_cell::typed(
+						"logical_path_id", output.project_catalog.logical_root))
+					.has_value(),
+				"task project logical-root binding failed");
+		require(project_builder
+					.set<project_relation::environment_digest>(symbol_cell(
+						sdk::scalar_kind::digest, {}, output.project_catalog.environment_digest))
+					.has_value(),
+				"task project environment binding failed");
+		output.project = derive(
+			project_relation::descriptor(), std::move(project_builder).finish(), "task project");
+
+		using toolchain_relation = cxxlens::build::relations::toolchain_context;
+		toolchain_relation::builder toolchain_builder;
+		require(toolchain_builder
+					.set<toolchain_relation::toolchain>(
+						sdk::detached_cell::typed("toolchain_context_id", "pending"))
+					.has_value(),
+				"task toolchain result binding failed");
+		require(toolchain_builder
+					.set<toolchain_relation::family>(symbol_cell(sdk::scalar_kind::open_symbol,
+																 "build.toolchain-family/1",
+																 output.toolchain.family))
+					.has_value(),
+				"task toolchain family binding failed");
+		require(toolchain_builder
+					.set<toolchain_relation::exact_version>(
+						sdk::detached_cell::utf8(output.toolchain.exact_version))
+					.has_value(),
+				"task toolchain version binding failed");
+		require(toolchain_builder
+					.set<toolchain_relation::target_triple>(
+						sdk::detached_cell::utf8(output.toolchain.target_triple))
+					.has_value(),
+				"task toolchain target binding failed");
+		require(toolchain_builder
+					.set<toolchain_relation::builtin_headers_digest>(symbol_cell(
+						sdk::scalar_kind::digest, {}, output.toolchain.builtin_headers_digest))
+					.has_value(),
+				"task toolchain builtin binding failed");
+		require(toolchain_builder
+					.set<toolchain_relation::abi_digest>(
+						symbol_cell(sdk::scalar_kind::digest, {}, output.toolchain.abi_digest))
+					.has_value(),
+				"task toolchain ABI binding failed");
+		require(toolchain_builder
+					.set<toolchain_relation::plugin_spec_digest>(symbol_cell(
+						sdk::scalar_kind::digest, {}, output.toolchain.plugin_spec_digest))
+					.has_value(),
+				"task toolchain plugin binding failed");
+		output.toolchain_context = derive(toolchain_relation::descriptor(),
+										  std::move(toolchain_builder).finish(),
+										  "task toolchain");
+
+		using variant_relation = cxxlens::build::relations::variant;
+		variant_relation::builder variant_builder;
+		require(variant_builder
+					.set<variant_relation::variant_column>(
+						sdk::detached_cell::typed("build_variant_id", "pending"))
+					.has_value(),
+				"task variant result binding failed");
+		require(variant_builder
+					.set<variant_relation::project>(
+						sdk::detached_cell::typed("project_id", output.project))
+					.has_value(),
+				"task variant project binding failed");
+		require(variant_builder
+					.set<variant_relation::toolchain>(
+						sdk::detached_cell::typed("toolchain_context_id", output.toolchain_context))
+					.has_value(),
+				"task variant toolchain binding failed");
+		require(variant_builder
+					.set<variant_relation::language>(symbol_cell(sdk::scalar_kind::open_symbol,
+																 "build.language/1",
+																 output.variant_authority.language))
+					.has_value(),
+				"task variant language binding failed");
+		require(variant_builder
+					.set<variant_relation::language_standard>(
+						symbol_cell(sdk::scalar_kind::open_symbol,
+									"build.language-standard/1",
+									output.variant_authority.language_standard))
+					.has_value(),
+				"task variant language-standard binding failed");
+		require(variant_builder
+					.set<variant_relation::target_triple>(
+						sdk::detached_cell::utf8(output.variant_authority.target_triple))
+					.has_value(),
+				"task variant target binding failed");
+		require(variant_builder
+					.set<variant_relation::predefined_macros_digest>(
+						symbol_cell(sdk::scalar_kind::digest,
+									{},
+									output.variant_authority.predefined_macros_digest))
+					.has_value(),
+				"task variant predefined-macros binding failed");
+		require(
+			variant_builder
+				.set<variant_relation::include_search_digest>(symbol_cell(
+					sdk::scalar_kind::digest, {}, output.variant_authority.include_search_digest))
+				.has_value(),
+			"task variant include-search binding failed");
+		require(
+			variant_builder
+				.set<variant_relation::semantic_flags_digest>(symbol_cell(
+					sdk::scalar_kind::digest, {}, output.variant_authority.semantic_flags_digest))
+				.has_value(),
+			"task variant semantic-flags binding failed");
+		output.variant = derive(
+			variant_relation::descriptor(), std::move(variant_builder).finish(), "task variant");
+
+		using source_relation = cxxlens::source::relations::file;
+		source_relation::builder source_builder;
+		require(source_builder
+					.set<source_relation::snapshot>(
+						sdk::detached_cell::typed("source_snapshot_id", "pending"))
+					.has_value(),
+				"task source result binding failed");
+		require(source_builder
+					.set<source_relation::file_column>(
+						sdk::detached_cell::typed("file_id", output.file))
+					.has_value(),
+				"task source file binding failed");
+		require(source_builder
+					.set<source_relation::project>(
+						sdk::detached_cell::typed("project_id", output.project))
+					.has_value(),
+				"task source project binding failed");
+		require(source_builder
+					.set<source_relation::logical_path>(
+						sdk::detached_cell::typed("logical_path_id", output.logical_path))
+					.has_value(),
+				"task source logical-path binding failed");
+		require(source_builder
+					.set<source_relation::content>(
+						symbol_cell(sdk::scalar_kind::digest, {}, output.source_content_digest))
+					.has_value(),
+				"task source content binding failed");
+		require(source_builder
+					.set<source_relation::size>(
+						sdk::detached_cell::unsigned_integer(output.source_size_bytes))
+					.has_value(),
+				"task source size binding failed");
+		require(source_builder
+					.set<source_relation::encoding>(symbol_cell(
+						sdk::scalar_kind::open_symbol, "source.encoding/1", output.source_encoding))
+					.has_value(),
+				"task source encoding binding failed");
+		require(source_builder
+					.set<source_relation::line_index>(
+						sdk::detached_cell::typed("line_index_id", output.line_index))
+					.has_value(),
+				"task source line-index binding failed");
+		require(source_builder
+					.set<source_relation::read_only>(
+						sdk::detached_cell::boolean(output.source_read_only))
+					.has_value(),
+				"task source read-only binding failed");
+		output.source_snapshot = derive(
+			source_relation::descriptor(), std::move(source_builder).finish(), "task source");
+
+		using compile_unit_relation = cxxlens::build::relations::compile_unit;
+		compile_unit_relation::builder compile_unit_builder;
+		require(compile_unit_builder
+					.set<compile_unit_relation::compile_unit_column>(
+						sdk::detached_cell::typed("compile_unit_id", "pending"))
+					.has_value(),
+				"task compile-unit result binding failed");
+		require(compile_unit_builder
+					.set<compile_unit_relation::project>(
+						sdk::detached_cell::typed("project_id", output.project))
+					.has_value(),
+				"task compile-unit project binding failed");
+		require(compile_unit_builder
+					.set<compile_unit_relation::main_source>(
+						sdk::detached_cell::typed("source_snapshot_id", output.source_snapshot))
+					.has_value(),
+				"task compile-unit source binding failed");
+		require(compile_unit_builder
+					.set<compile_unit_relation::variant>(
+						sdk::detached_cell::typed("build_variant_id", output.variant))
+					.has_value(),
+				"task compile-unit variant binding failed");
+		require(compile_unit_builder
+					.set<compile_unit_relation::toolchain>(
+						sdk::detached_cell::typed("toolchain_context_id", output.toolchain_context))
+					.has_value(),
+				"task compile-unit toolchain binding failed");
+		require(compile_unit_builder
+					.set<compile_unit_relation::effective_invocation_digest>(symbol_cell(
+						sdk::scalar_kind::digest, {}, output.normalized_invocation_digest))
+					.has_value(),
+				"task compile-unit invocation binding failed");
+		require(compile_unit_builder
+					.set<compile_unit_relation::language>(symbol_cell(
+						sdk::scalar_kind::open_symbol, "build.language/1", output.language))
+					.has_value(),
+				"task compile-unit language binding failed");
+		require(compile_unit_builder
+					.set<compile_unit_relation::working_directory>(
+						sdk::detached_cell::typed("logical_path_id", output.working_directory))
+					.has_value(),
+				"task compile-unit working-directory binding failed");
+		output.compile_unit = derive(compile_unit_relation::descriptor(),
+									 std::move(compile_unit_builder).finish(),
+									 "task compile unit");
+		return output;
+	}
+
+	[[nodiscard]] std::vector<sdk::relation_descriptor> exact_task_descriptors()
+	{
+		return {
+			cxxlens::cc::relations::call_direct_target::descriptor(),
+			cxxlens::cc::relations::call_site::descriptor(),
+			cxxlens::cc::relations::entity::descriptor(),
+			call_observation_descriptor(),
+			entity_observation_descriptor(),
+			type_observation_descriptor(),
+		};
+	}
+
+	void output_plan_contract()
+	{
+		const std::vector<provider_output_binding> expected{
+			{provider_output_slot::call_direct_target, "cc.call_direct_target.v1", "canonical"},
+			{provider_output_slot::call_site, "cc.call_site.v1", "canonical"},
+			{provider_output_slot::entity, "cc.entity.v1", "canonical"},
+			{provider_output_slot::call_observation,
+			 "frontend.clang22.call_observation.v2",
+			 "observation"},
+			{provider_output_slot::entity_observation,
+			 "frontend.clang22.entity_observation.v2",
+			 "observation"},
+			{provider_output_slot::type_observation,
+			 "frontend.clang22.type_observation.v2",
+			 "observation"},
+		};
+		auto plan = provider_output_plan();
+		require(plan == expected && validate_provider_output_plan(plan).has_value(),
+				"worker output plan differs from canonical-then-observation authority");
+		std::vector<std::string> groups;
+		for (const auto& binding : plan)
+			if (groups.empty() || groups.back() != binding.dependency_group)
+				groups.push_back(binding.dependency_group);
+		require(groups == std::vector<std::string>{"canonical", "observation"},
+				"worker dependency groups differ from exact contract order");
+		auto descriptors = exact_task_descriptors();
+		require(descriptors.size() == plan.size(), "task/output descriptor count differs");
+		for (std::size_t index{}; index < plan.size(); ++index)
+			require(descriptors[index].id == plan[index].descriptor_id,
+					"task descriptor order differs from worker output order");
+
+		auto missing = plan;
+		missing.pop_back();
+		require(!validate_provider_output_plan(missing), "missing output slot was accepted");
+
+		auto duplicate = plan;
+		duplicate[1U] = duplicate[0U];
+		require(!validate_provider_output_plan(duplicate), "duplicate output slot was accepted");
+
+		auto extra = plan;
+		extra.push_back(plan.front());
+		require(!validate_provider_output_plan(extra), "extra output slot was accepted");
+
+		auto reordered = plan;
+		std::swap(reordered[0U], reordered[1U]);
+		require(!validate_provider_output_plan(reordered), "reordered output slots were accepted");
+
+		auto regrouped = plan;
+		regrouped[3U].dependency_group = "canonical";
+		require(!validate_provider_output_plan(regrouped),
+				"dependency-group boundary drift was accepted");
+	}
+
 	[[nodiscard]] detached_observation redeclaration(std::string semantic_key,
 													 std::string signature,
 													 const std::uint64_t begin,
@@ -108,8 +760,8 @@ namespace
 													 const bool canonical)
 	{
 		auto value = observation(observation_kind::entity, std::move(semantic_key));
-		value.source_span_id = *sdk::source_span_identity(
-			"source-snapshot:one", "file:stable", begin, begin + 8U, "declaration");
+		set_primary_span(
+			value, "source-snapshot:one", "file:stable", begin, begin + 8U, "declaration");
 		value.payload.emplace("symbol.kind", "function");
 		value.payload.emplace("symbol.qualified_name", "ns::redeclared");
 		value.payload.emplace("symbol.signature", std::move(signature));
@@ -128,6 +780,16 @@ namespace
 		return *value;
 	}
 
+	[[nodiscard]] bool boolean_cell(const sdk::detached_row& row, const std::string& column)
+	{
+		const auto found = row.cells.find(column);
+		require(found != row.cells.end() && found->second.value.has_value(),
+				"expected boolean identity cell");
+		const auto* value = std::get_if<bool>(&*found->second.value);
+		require(value != nullptr, "expected boolean identity value");
+		return *value;
+	}
+
 	[[nodiscard]] std::vector<std::byte> bytes_cell(const sdk::detached_row& row,
 													const std::string& column)
 	{
@@ -143,12 +805,12 @@ namespace
 	{
 		std::string output;
 		for (const auto* rows : {
+				 &batch.direct_targets,
+				 &batch.call_sites,
+				 &batch.entities,
+				 &batch.call_observations,
 				 &batch.entity_observations,
 				 &batch.type_observations,
-				 &batch.call_observations,
-				 &batch.entities,
-				 &batch.call_sites,
-				 &batch.direct_targets,
 			 })
 			for (const auto& row : *rows)
 				output += row.canonical_form() + '\n';
@@ -178,6 +840,7 @@ int main()
 	using namespace cxxlens::detail::clang22;
 	using cxxlens::provider::clang22::detached_source_span;
 	using cxxlens::provider::clang22::source_range_identity;
+	output_plan_contract();
 
 	const source_range_identity source_identity{"source-snapshot:one", "file:stable", "expression"};
 	auto span = sdk::source_span_identity(
@@ -309,12 +972,21 @@ int main()
 	observation_batch fallback_batch;
 	fallback_batch.unit = "cu-" + std::string(64U, 'f');
 	fallback_batch.variant = "variant-" + std::string(64U, 'e');
+	bind_source_authority(fallback_batch, "source-snapshot:fallback", "file:fallback");
 	auto fallback_entity_int =
 		redeclaration(integer_overload->semantic_key, "void (int)", 10U, true, true);
 	auto fallback_entity_double =
 		redeclaration(double_overload->semantic_key, "void (double)", 30U, true, true);
 	fallback_entity_int.compile_unit = fallback_batch.unit;
 	fallback_entity_double.compile_unit = fallback_batch.unit;
+	set_primary_span(
+		fallback_entity_int, "source-snapshot:fallback", "file:fallback", 10U, 18U, "declaration");
+	set_primary_span(fallback_entity_double,
+					 "source-snapshot:fallback",
+					 "file:fallback",
+					 30U,
+					 38U,
+					 "declaration");
 	fallback_entity_int.payload.emplace("symbol.identity_confidence", "structural-fallback");
 	fallback_entity_double.payload.emplace("symbol.identity_confidence", "structural-fallback");
 	const auto fallback_call = [&](const declaration_identity& identity,
@@ -323,8 +995,8 @@ int main()
 	{
 		auto value = observation(observation_kind::call, "call:fallback:" + std::to_string(begin));
 		value.compile_unit = fallback_batch.unit;
-		value.source_span_id = *sdk::source_span_identity(
-			"source-snapshot:fallback", "file:fallback", begin, begin + 4U, "expression");
+		set_primary_span(
+			value, "source-snapshot:fallback", "file:fallback", begin, begin + 4U, "expression");
 		value.payload.emplace("call.kind", "direct_function");
 		value.payload.emplace("call.direct_callee", identity.semantic_key);
 		value.payload.emplace("call.direct_callee_kind", "function");
@@ -365,8 +1037,12 @@ int main()
 	auto opaque_batch = fallback_batch;
 	opaque_batch.observations = {observation(observation_kind::call, "call:opaque")};
 	opaque_batch.observations.front().compile_unit = opaque_batch.unit;
-	opaque_batch.observations.front().source_span_id = *sdk::source_span_identity(
-		"source-snapshot:fallback", "file:fallback", 90U, 94U, "expression");
+	set_primary_span(opaque_batch.observations.front(),
+					 "source-snapshot:fallback",
+					 "file:fallback",
+					 90U,
+					 94U,
+					 "expression");
 	opaque_batch.observations.front().payload.emplace("call.kind", "direct_function");
 	opaque_batch.observations.front().payload.emplace("call.unresolved_reason",
 													  "callee-identity-unavailable");
@@ -379,22 +1055,298 @@ int main()
 				opaque_result->unresolved.front().code == "provider.call-kind-target-inconsistent",
 			"unanchored fallback fabricated or silently omitted a direct target");
 
-	clang22_task_input task{
-		"cu-" + std::string(64U, 'a'),
-		"variant-" + std::string(64U, 'b'),
-		"source-snapshot-" + std::string(64U, 'c'),
-		"file-" + std::string(64U, 'd'),
-		"input.cpp",
-		"int target(); int main(){ return target(); }",
-		{"-std=c++23"},
-	};
+	auto task = task_input();
 	auto encoded = encode_task_input(task);
 	require(encoded.has_value(), "task input encoding failed");
+	auto streaming_task = task;
+	streaming_task.source.clear();
+	streaming_task.source_content_base64.clear();
+	for (const auto fragment : {1U, 2U, 3U, 7U, 64U})
+	{
+		fragmented_task_source source{task.source, fragment};
+		vector_task_sink sink;
+		auto receipt = encode_task_input_streaming(streaming_task, source, sink);
+		require(receipt && receipt->source_size_bytes == task.source.size() &&
+					receipt->canonical_base64_bytes == task.source_content_base64.size() &&
+					receipt->task_input_bytes == encoded->size() && sink.value == *encoded,
+				"streaming task.v3 replay differs across source fragmentation");
+	}
+	{
+		fragmented_task_source source{task.source, 7U};
+		failing_task_sink sink;
+		auto failure = encode_task_input_streaming(
+			streaming_task, streaming_task.project_catalog, source, sink);
+		require(!failure && failure.error().code == "materialization.spool-failure" &&
+					failure.error().detail == "injected-write",
+				"streaming task.v3 encoding erased a typed spool failure");
+	}
+	{
+		fragmented_task_source unsealed{task.source, 7U, false};
+		vector_task_sink sink;
+		require(!encode_task_input_streaming(streaming_task, unsealed, sink),
+				"streaming task.v3 encoder accepted an unsealed source replay");
+	}
+	{
+		auto stale = source_receipt(std::as_bytes(std::span{task.source}));
+		stale.content_digest =
+			"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+		fragmented_task_source drift{task.source, 7U, true, std::move(stale)};
+		vector_task_sink sink;
+		require(!encode_task_input_streaming(streaming_task, drift, sink),
+				"streaming task.v3 encoder accepted source bytes under a stale sealed receipt");
+	}
+	const auto task_input_digest = sdk::content_digest(*encoded);
+	require(task_input_digest ==
+				"sha256:1a54c7f79747653e0395330797ff72823892443faa74417085eaa16d23111395",
+			"task.v3 bytes differ from the materialization checker oracle: " + task_input_digest);
 	auto decoded = decode_task_input(*encoded);
 	require(decoded && decoded->source_snapshot == task.source_snapshot &&
 				decoded->file == task.file && decoded->source == task.source &&
-				decoded->arguments == task.arguments,
+				decoded->arguments == task.arguments &&
+				decoded->project_catalog.catalog_id == task.project_catalog.catalog_id &&
+				decoded->selected_catalog_compile_unit == task.selected_catalog_compile_unit &&
+				decoded->compile_unit == task.compile_unit,
 			"task input did not round trip");
+	for (const auto fragment : {1U, 2U, 3U, 7U, 64U, 65535U, 1048576U})
+	{
+		fragmented_task_replay replay{*encoded, fragment};
+		vector_source_spool source_spool;
+		auto streamed = decode_task_input_streaming(replay, source_spool);
+		require(streamed && streamed->input.source.empty() &&
+					streamed->input.source_content_base64.empty() &&
+					streamed->input.source_snapshot == task.source_snapshot &&
+					streamed->source == source_receipt(std::as_bytes(std::span{task.source})) &&
+					streamed->canonical_base64_bytes == task.source_content_base64.size() &&
+					streamed->task_input_bytes == encoded->size() && source_spool.sealed() &&
+					std::ranges::equal(source_spool.bytes(), std::as_bytes(std::span{task.source})),
+				"streaming task.v3 decode retained source bytes or changed across short reads");
+	}
+	{
+		auto chunked_task = task_input(std::string((1024U * 1024U) + 3U, 'x'));
+		auto chunked_encoded = encode_task_input(chunked_task);
+		require(chunked_encoded && chunked_encoded->size() > 1024U * 1024U,
+				"task.v3 1 MiB chunk-boundary fixture did not cross the boundary");
+		fragmented_task_replay replay{*chunked_encoded, 1024U * 1024U};
+		vector_source_spool source_spool;
+		auto streamed = decode_task_input_streaming(replay, source_spool);
+		require(streamed && streamed->task_input_bytes == chunked_encoded->size() &&
+					streamed->source.size_bytes == chunked_task.source_size_bytes &&
+					std::ranges::equal(source_spool.bytes(),
+									   std::as_bytes(std::span{chunked_task.source})),
+				"streaming task.v3 decode changed bytes across a canonical 1 MiB chunk boundary");
+	}
+	{
+		fragmented_task_replay replay{*encoded, 7U, false};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted an unsealed replay");
+	}
+	{
+		fragmented_task_replay replay{*encoded, 7U, true, 64U * 1024U * 1024U};
+		vector_source_spool source_spool;
+		auto maximum = decode_task_input_streaming(replay, source_spool);
+		require(!maximum && maximum.error().detail != "maximum-bytes",
+				"streaming task.v3 decoder rejected the exact 64 MiB boundary as oversized");
+	}
+	{
+		fragmented_task_replay replay{*encoded, 7U, true, (64U * 1024U * 1024U) + 1U};
+		vector_source_spool source_spool;
+		auto oversized = decode_task_input_streaming(replay, source_spool);
+		require(!oversized && oversized.error().detail == "maximum-bytes",
+				"streaming task.v3 decoder did not fail closed above 64 MiB");
+	}
+	{
+		auto trailing_stream = *encoded;
+		trailing_stream.push_back(std::byte{0});
+		fragmented_task_replay replay{trailing_stream, 3U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted trailing canonical bytes");
+	}
+	{
+		auto zero_item_length = *encoded;
+		require(zero_item_length.size() > 17U,
+				"task.v3 fixture is too small for canonical framing mutation");
+		std::ranges::fill(std::span{zero_item_length}.subspan(9U, 8U), std::byte{0});
+		fragmented_task_replay replay{zero_item_length, 1U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted a zero-length canonical tuple item");
+	}
+	{
+		auto invalid_base64 = *encoded;
+		const auto spelling = std::as_bytes(std::span{task.source_content_base64});
+		auto found = std::search(
+			invalid_base64.begin(), invalid_base64.end(), spelling.begin(), spelling.end());
+		require(found != invalid_base64.end(), "task.v3 base64 fixture spelling was not found");
+		*found = std::byte{'!'};
+		fragmented_task_replay replay{invalid_base64, 2U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted an invalid base64 alphabet");
+	}
+	{
+		auto source_mutation = *encoded;
+		const auto spelling = std::as_bytes(std::span{task.source_content_base64});
+		auto found = std::search(
+			source_mutation.begin(), source_mutation.end(), spelling.begin(), spelling.end());
+		require(found != source_mutation.end(), "task.v3 source mutation spelling was not found");
+		*found = std::byte{'b'};
+		fragmented_task_replay replay{source_mutation, 65535U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted source bytes under a stale digest");
+	}
+	auto condition_ref = provider_condition_ref_id(task);
+	require(condition_ref &&
+				*condition_ref ==
+					"condition-ref:semantic-v2:sha256:"
+					"40b414b417b0bd33e233c1c075fc69a57e7feb85d1530ab97b3799c25693f125",
+			"worker condition-ref differs from the materialization checker oracle");
+	auto portable_task = reconstruct_provider_task(
+		task,
+		exact_task_descriptors(),
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111");
+	require(portable_task &&
+				portable_task->task_id ==
+					"task:semantic-v2:sha256:"
+					"e7c1019d793afd1de2ae0228b452a48205523d29ec43e16632835032fc0c59bf" &&
+				portable_task->project.catalog_id == task.project_catalog.catalog_id &&
+				portable_task->condition == *condition_ref,
+			"worker portable task differs from the shared/Python task identity oracle: " +
+				(portable_task ? portable_task->task_id
+							   : portable_task.error().code + "/" + portable_task.error().field +
+						 "/" + portable_task.error().detail));
+	{
+		fragmented_task_replay replay{*encoded, 3U};
+		vector_source_spool source_spool;
+		auto streamed = decode_task_input_streaming(replay, source_spool);
+		auto streamed_condition = streamed
+			? provider_condition_ref_id(streamed->input, streamed->source)
+			: sdk::result<std::string>{
+				  sdk::unexpected(sdk::error{"sdk.test-setup", "streamed-task", {}})};
+		require(streamed && streamed_condition && *streamed_condition == *condition_ref,
+				"spool-backed task.v3 authority lost its condition identity");
+		auto external_catalog = std::move(streamed->input.project_catalog);
+		const auto* catalog_entries = external_catalog.compile_units.data();
+		vector_task_sink reference_sink;
+		auto reference_encoding = encode_task_input_streaming(
+			streamed->input, external_catalog, source_spool, reference_sink);
+		auto reference_task_id = reconstruct_provider_task_id(
+			streamed->input,
+			external_catalog,
+			streamed->source,
+			exact_task_descriptors(),
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111");
+		require(
+			reference_encoding && reference_sink.value == *encoded && reference_task_id &&
+				*reference_task_id == portable_task->task_id &&
+				streamed->input.project_catalog.compile_units.empty() &&
+				external_catalog.compile_units.data() == catalog_entries,
+			"catalog-reference task.v3 admission copied/mutated the catalog or changed identity");
+	}
+	auto condition_drift = task;
+	condition_drift.condition_universe = "condition-universe:drift";
+	auto drift_ref = provider_condition_ref_id(condition_drift);
+	auto drift_encoding = encode_task_input(condition_drift);
+	auto drift_task = reconstruct_provider_task(
+		condition_drift,
+		exact_task_descriptors(),
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111");
+	require(drift_ref && drift_encoding && *drift_ref != *condition_ref && drift_task &&
+				drift_task->task_id != portable_task->task_id &&
+				sdk::content_digest(*drift_encoding) != sdk::content_digest(*encoded),
+			"condition-universe drift retained the old condition-ref or task input identity");
+	auto semantic_contract_drift = reconstruct_provider_task(
+		task,
+		exact_task_descriptors(),
+		"sha256:2222222222222222222222222222222222222222222222222222222222222222");
+	require(semantic_contract_drift && semantic_contract_drift->task_id != portable_task->task_id,
+			"provider semantic-contract drift retained the old portable task identity");
+	auto catalog_drift = task;
+	catalog_drift.environment_digest =
+		"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+	require(!encode_task_input(catalog_drift),
+			"selected catalog entry environment drift was accepted");
+	auto toolchain_digest_drift = task;
+	toolchain_digest_drift.toolchain_digest =
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111";
+	require(!encode_task_input(toolchain_digest_drift),
+			"toolchain base-claim row digest drift was accepted");
+	auto final_alias = task;
+	final_alias.compile_unit = final_alias.selected_catalog_compile_unit;
+	require(!encode_task_input(final_alias),
+			"catalog-local identity was accepted as the final relation identity");
+	auto final_identity_drift = task;
+	final_identity_drift.compile_unit = "compile-unit:drift";
+	require(!encode_task_input(final_identity_drift),
+			"non-derived final compile-unit identity was accepted");
+	auto file_identity_drift = task;
+	file_identity_drift.file = "file:drift";
+	require(!encode_task_input(file_identity_drift),
+			"non-derived logical file identity was accepted");
+	auto non_nfc_path = task;
+	non_nfc_path.logical_path = "project://cafe\xCC\x81.cpp";
+	auto non_nfc_encoding = encode_task_input(non_nfc_path);
+	require(!non_nfc_encoding && non_nfc_encoding.error().field == "source.logical_path",
+			"non-NFC source logical path did not fail at the path authority boundary");
+	auto control_path = task;
+	control_path.logical_path = "project://bad\npath.cpp";
+	auto control_path_encoding = encode_task_input(control_path);
+	require(!control_path_encoding && control_path_encoding.error().field == "source.logical_path",
+			"source logical path accepted a schema-forbidden control scalar");
+	auto line_index_identity_drift = task;
+	line_index_identity_drift.line_index = "line-index:drift";
+	require(!encode_task_input(line_index_identity_drift),
+			"non-derived byte line-index identity was accepted");
+	auto variant_identity_drift = task;
+	variant_identity_drift.variant = "build-variant:drift";
+	require(!encode_task_input(variant_identity_drift),
+			"non-derived build variant identity was accepted");
+	auto legacy_projection = sdk::canonical_binary_decode(*encoded);
+	require(legacy_projection.has_value(), "task.v3 test projection did not decode");
+	legacy_projection->tuple[0U].text = "cxxlens.clang22.task.v2";
+	auto legacy_encoding = sdk::canonical_binary(*legacy_projection);
+	require(legacy_encoding && !decode_task_input(*legacy_encoding),
+			"legacy task.v2 marker remained adoptable");
+	auto trailing = *encoded;
+	trailing.push_back(std::byte{0});
+	require(!decode_task_input(trailing), "task.v3 accepted trailing bytes");
+	for (const auto& [source, canonical, noncanonical] :
+		 std::array{std::array<std::string_view, 3U>{"a", "YQ==", "YR=="},
+					std::array<std::string_view, 3U>{"ab", "YWI=", "YWJ="}})
+	{
+		auto canonical_task = task_input(std::string{source});
+		require(canonical_task.source_content_base64 == canonical,
+				"task.v3 canonical Base64 fixture differs");
+		auto canonical_encoding = encode_task_input(canonical_task);
+		require(canonical_encoding.has_value(), "canonical Base64 task.v3 fixture was rejected");
+
+		auto noncanonical_task = canonical_task;
+		noncanonical_task.source_content_base64 = noncanonical;
+		require(!encode_task_input(noncanonical_task),
+				"task.v3 encoder accepted non-zero discarded Base64 padding bits");
+
+		auto mutated_encoding = *canonical_encoding;
+		const auto canonical_bytes = std::as_bytes(std::span{canonical});
+		auto found = std::search(mutated_encoding.begin(),
+								 mutated_encoding.end(),
+								 canonical_bytes.begin(),
+								 canonical_bytes.end());
+		require(found != mutated_encoding.end(), "task.v3 canonical Base64 spelling was not found");
+		std::ranges::copy(std::as_bytes(std::span{noncanonical}), found);
+		require(!decode_task_input(mutated_encoding),
+				"task.v3 decoder accepted non-zero discarded Base64 padding bits");
+
+		fragmented_task_replay replay{mutated_encoding, 1U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted non-zero discarded Base64 padding bits");
+	}
+	auto trailing_lf_task = task;
+	trailing_lf_task.source_content_base64.push_back('\n');
+	require(!encode_task_input(trailing_lf_task),
+			"task.v3 encoder accepted trailing non-alphabet Base64 data");
 	auto missing_source_authority = task;
 	missing_source_authority.source_snapshot.clear();
 	require(!encode_task_input(missing_source_authority),
@@ -410,6 +1362,31 @@ int main()
 			"exact Clang observation canonicalization failed");
 	require(string_cell(exact->call_sites.front(), "cc.call_site.v1.source") == *span,
 			"worker call-site hard reference differs from base source.span identity");
+	auto missing_primary_bundle = batch();
+	missing_primary_bundle.observations.front().primary_span.reset();
+	missing_primary_bundle.observations.back().primary_span.reset();
+	auto missing_primary_result = canonicalize_provider_batch(
+		missing_primary_bundle,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(missing_primary_result && !missing_primary_result->exact_equivalence &&
+				missing_primary_result->entity_observations.size() == 1U &&
+				missing_primary_result->call_observations.size() == 1U &&
+				missing_primary_result->entities.size() == 1U &&
+				missing_primary_result->call_sites.empty() &&
+				missing_primary_result->direct_targets.empty() &&
+				missing_primary_result->unresolved.size() == 2U &&
+				missing_primary_result->unresolved[0U].code == "provider.source-unavailable" &&
+				missing_primary_result->unresolved[1U].code == "provider.source-unavailable" &&
+				!boolean_cell(missing_primary_result->entity_observations.front(),
+							  "frontend.clang22.entity_observation.v2.exact_equivalence") &&
+				!boolean_cell(missing_primary_result->call_observations.front(),
+							  "frontend.clang22.call_observation.v2.exact_equivalence") &&
+				string_cell(missing_primary_result->entity_observations.front(),
+							"frontend.clang22.entity_observation.v2.limitation") ==
+					string_cell(missing_primary_result->call_observations.front(),
+								"frontend.clang22.call_observation.v2.limitation"),
+			"missing primary source authority was dropped or reported as exact");
 	const auto& entity_row = exact->entities.front();
 	const auto& call_row = exact->call_sites.front();
 	require(
@@ -514,6 +1491,7 @@ int main()
 	observation_batch redeclaration_batch;
 	redeclaration_batch.unit = "cu-" + std::string(64U, 'a');
 	redeclaration_batch.variant = "variant-" + std::string(64U, 'b');
+	bind_source_authority(redeclaration_batch);
 	redeclaration_batch.observations = {
 		redeclaration("clang-usr:redeclared", "void ()", 10U, false, true),
 		redeclaration("clang-usr:redeclared", "void ()", 40U, true, false),
@@ -528,9 +1506,9 @@ int main()
 				canonical_redeclaration->unresolved.empty() &&
 				!canonical_redeclaration->entities.front().cells.contains("cc.entity.v1.anchor") &&
 				string_cell(canonical_redeclaration->entity_observations.front(),
-							"frontend.clang22.entity_observation.v1.source") !=
+							"frontend.clang22.entity_observation.v2.observation") !=
 					string_cell(canonical_redeclaration->entity_observations.back(),
-								"frontend.clang22.entity_observation.v1.source"),
+								"frontend.clang22.entity_observation.v2.observation"),
 			"redeclaration occurrences were not separated from one semantic entity");
 	auto reversed_redeclarations = redeclaration_batch;
 	std::ranges::reverse(reversed_redeclarations.observations);
@@ -593,6 +1571,7 @@ int main()
 
 	auto cross_tu = batch();
 	cross_tu.unit = "cu-" + std::string(64U, 'c');
+	cross_tu.materialization_authority->final_relation_compile_unit_id = cross_tu.unit;
 	cross_tu.observations.erase(std::ranges::remove_if(cross_tu.observations,
 													   [](const detached_observation& value)
 													   {
@@ -621,8 +1600,13 @@ int main()
 							   })
 			.begin(),
 		relocated_definition.observations.end());
-	relocated_definition.observations.front().source_span_id = *sdk::source_span_identity(
-		"source-snapshot:relocated", "file:definition", 400U, 440U, "declaration");
+	set_primary_span(relocated_definition.observations.front(),
+					 "source-snapshot:relocated",
+					 "file:definition",
+					 400U,
+					 440U,
+					 "declaration");
+	bind_source_authority(relocated_definition, "source-snapshot:relocated", "file:definition");
 	auto relocated_definition_result = canonicalize_provider_batch(
 		relocated_definition,
 		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -665,13 +1649,15 @@ int main()
 		observation_batch entity_only;
 		entity_only.unit = "cu-" + std::string(63U, 'e') + std::to_string(index);
 		entity_only.variant = cross_tu.variant;
+		bind_source_authority(entity_only, "source-snapshot:definitions", "file:definitions");
 		auto entity = observation(observation_kind::entity, identity_case.semantic_key);
 		entity.compile_unit = entity_only.unit;
-		entity.source_span_id = *sdk::source_span_identity("source-snapshot:definitions",
-														   "file:definitions",
-														   100U + index * 20U,
-														   110U + index * 20U,
-														   "declaration");
+		set_primary_span(entity,
+						 "source-snapshot:definitions",
+						 "file:definitions",
+						 100U + index * 20U,
+						 110U + index * 20U,
+						 "declaration");
 		entity.payload.emplace("symbol.kind", identity_case.entity_kind);
 		entity.payload.emplace("symbol.signature", identity_case.signature);
 		entity_only.observations.push_back(std::move(entity));
@@ -679,6 +1665,7 @@ int main()
 		observation_batch call_only;
 		call_only.unit = "cu-" + std::string(63U, 'f') + std::to_string(index);
 		call_only.variant = cross_tu.variant;
+		bind_source_authority(call_only);
 		auto call = observation(observation_kind::call, "call:cross-tu:" + std::to_string(index));
 		call.compile_unit = call_only.unit;
 		call.payload.emplace("call.kind", identity_case.call_kind);
@@ -702,14 +1689,14 @@ int main()
 				"cross-TU overload/template/member/operator target did not join entity");
 	}
 	auto macro_calls = cross_tu;
-	macro_calls.observations.front().source_origin_chain = {
-		"macro-spelling:/checkout/include/macros.hpp:10:18",
-		"macro-spelling:include/wrapper.hpp:20:28",
+	macro_calls.observations.front().origins = {
+		{"macro-spelling", "project://include/macros.hpp", 10, 18, true},
+		{"macro-spelling", "project://include/wrapper.hpp", 20, 28, true},
 	};
 	auto second_expansion = macro_calls.observations.front();
 	second_expansion.semantic_key = "call:macro-expansion:two";
-	second_expansion.source_span_id =
-		*sdk::source_span_identity("source-snapshot:one", "file:stable", 30U, 42U, "expression");
+	set_primary_span(
+		second_expansion, "source-snapshot:one", "file:stable", 30U, 42U, "expression");
 	macro_calls.observations.push_back(std::move(second_expansion));
 	auto macro_result = canonicalize_provider_batch(
 		macro_calls,
@@ -719,18 +1706,18 @@ int main()
 				macro_result->direct_targets.size() == 2U &&
 				macro_result->call_observations.size() == 2U &&
 				!bytes_cell(macro_result->call_observations.front(),
-							"frontend.clang22.call_observation.v1.source_origin_chain")
+							"frontend.clang22.call_observation.v2.source_origin_chain")
 					 .empty() &&
 				string_cell(macro_result->call_sites.front(), "cc.call_site.v1.call") !=
 					string_cell(macro_result->call_sites.back(), "cc.call_site.v1.call"),
 			"distinct macro expansion offsets were deduplicated or lost their origin chain");
 	auto repeated_macro = cross_tu;
 	repeated_macro.observations.front().semantic_key = "call:macro-twice";
-	repeated_macro.observations.front().source_origin_chain = {
-		"macro-spelling:/checkout/include/macros.hpp:10:18"};
+	repeated_macro.observations.front().origins = {
+		{"macro-spelling", "project://include/macros.hpp", 10, 18, true}};
 	auto second_spelling_call = repeated_macro.observations.front();
-	second_spelling_call.source_origin_chain = {
-		"macro-spelling:/checkout/include/macros.hpp:28:36"};
+	second_spelling_call.origins = {
+		{"macro-spelling", "project://include/macros.hpp", 28, 36, true}};
 	require(observation_dedup_key(repeated_macro.observations.front()) !=
 				observation_dedup_key(second_spelling_call),
 			"distinct macro spelling occurrences share the pre-normalization dedup key");
@@ -757,10 +1744,10 @@ int main()
 			"same-expansion macro call IDs depend on observation input order");
 
 	auto whitespace_shifted = repeated_macro;
-	whitespace_shifted.observations.front().source_origin_chain.front() =
-		"macro-spelling:/checkout/include/macros.hpp:14:22";
-	whitespace_shifted.observations.back().source_origin_chain.front() =
-		"macro-spelling:/checkout/include/macros.hpp:42:50";
+	whitespace_shifted.observations.front().origins.front().begin = 14;
+	whitespace_shifted.observations.front().origins.front().end = 22;
+	whitespace_shifted.observations.back().origins.front().begin = 42;
+	whitespace_shifted.observations.back().origins.front().end = 50;
 	auto whitespace_shifted_result = canonicalize_provider_batch(
 		whitespace_shifted,
 		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -774,12 +1761,11 @@ int main()
 		"whitespace/comment spelling offset shift changed stable macro call ordinals");
 
 	auto two_twice_expansions = repeated_macro;
-	const auto second_invocation_source =
-		*sdk::source_span_identity("source-snapshot:one", "file:stable", 50U, 62U, "expression");
 	for (const auto& call : repeated_macro.observations)
 	{
 		auto second_invocation_call = call;
-		second_invocation_call.source_span_id = second_invocation_source;
+		set_primary_span(
+			second_invocation_call, "source-snapshot:one", "file:stable", 50U, 62U, "expression");
 		two_twice_expansions.observations.push_back(std::move(second_invocation_call));
 	}
 	auto two_twice_result = canonicalize_provider_batch(
@@ -803,7 +1789,7 @@ int main()
 			"same-expansion distinct callees were not preserved once each");
 	auto relocated_macro = macro_calls;
 	for (auto& call : relocated_macro.observations)
-		call.source_origin_chain.front() = "macro-spelling:/relocated/include/macros.hpp:10:18";
+		call.origins.front().logical_path = "project://relocated/include/macros.hpp";
 	auto relocated_macro_result = canonicalize_provider_batch(
 		relocated_macro,
 		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -812,8 +1798,90 @@ int main()
 				string_cell(relocated_macro_result->call_sites.front(), "cc.call_site.v1.call") ==
 					string_cell(macro_result->call_sites.front(), "cc.call_site.v1.call") &&
 				string_cell(relocated_macro_result->call_sites.back(), "cc.call_site.v1.call") ==
-					string_cell(macro_result->call_sites.back(), "cc.call_site.v1.call"),
-			"macro origin root relocation changed semantic call identities");
+					string_cell(macro_result->call_sites.back(), "cc.call_site.v1.call") &&
+				string_cell(relocated_macro_result->call_observations.front(),
+							"frontend.clang22.call_observation.v2.observation") !=
+					string_cell(macro_result->call_observations.front(),
+								"frontend.clang22.call_observation.v2.observation"),
+			"native macro origin did not bind observation authority or changed semantic call IDs");
+	auto source_policy_changed = macro_calls;
+	source_policy_changed.observations.front().primary_span->read_only =
+		!source_policy_changed.observations.front().primary_span->read_only;
+	require(observation_dedup_key(source_policy_changed.observations.front()) !=
+				observation_dedup_key(macro_calls.observations.front()),
+			"primary source policy is a hidden input outside the native-v2 dedup key");
+	auto source_policy_result = canonicalize_provider_batch(
+		source_policy_changed,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(source_policy_result &&
+				string_cell(source_policy_result->call_observations.front(),
+							"frontend.clang22.call_observation.v2.observation") !=
+					string_cell(macro_result->call_observations.front(),
+								"frontend.clang22.call_observation.v2.observation"),
+			"primary source read-only policy was not bound into observation authority");
+
+	auto origin_order = cross_tu;
+	origin_order.observations.front().origins = {
+		{"macro-expansion", "project://include/outer.hpp", 20, 28, true},
+		{"macro-spelling", "project://include/inner.hpp", 10, 18, true},
+	};
+	auto reversed_origin_order = origin_order;
+	std::ranges::reverse(reversed_origin_order.observations.front().origins);
+	require(observation_dedup_key(origin_order.observations.front()) !=
+				observation_dedup_key(reversed_origin_order.observations.front()),
+			"origin-chain order is absent from the native-v2 dedup key");
+	auto origin_order_result = canonicalize_provider_batch(
+		origin_order,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	auto reversed_origin_order_result = canonicalize_provider_batch(
+		reversed_origin_order,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(origin_order_result && reversed_origin_order_result &&
+				string_cell(origin_order_result->call_sites.front(), "cc.call_site.v1.call") ==
+					string_cell(reversed_origin_order_result->call_sites.front(),
+								"cc.call_site.v1.call") &&
+				string_cell(origin_order_result->call_observations.front(),
+							"frontend.clang22.call_observation.v2.observation") !=
+					string_cell(reversed_origin_order_result->call_observations.front(),
+								"frontend.clang22.call_observation.v2.observation"),
+			"origin-chain order was normalized away or leaked into the standard call ID");
+	auto decoded_reversed_origin = materialization::decode_observation_v2_row(
+		reversed_origin_order_result->call_observations.front(),
+		*reversed_origin_order.materialization_authority);
+	require(decoded_reversed_origin &&
+				decoded_reversed_origin->origin_chain ==
+					reversed_origin_order.observations.front().origins,
+			"origin-chain order was not preserved through the v2 row codec");
+	auto duplicate_origin = origin_order;
+	duplicate_origin.observations.front().origins = {
+		origin_order.observations.front().origins.front(),
+		origin_order.observations.front().origins.front(),
+	};
+	auto duplicate_origin_result = canonicalize_provider_batch(
+		duplicate_origin,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	auto decoded_duplicate_origin = duplicate_origin_result
+		? materialization::decode_observation_v2_row(
+			  duplicate_origin_result->call_observations.front(),
+			  *duplicate_origin.materialization_authority)
+		: sdk::result<materialization::decoded_observation_v2_row>{
+			  sdk::unexpected(sdk::error{"sdk.test-setup", "duplicate-origin", {}})};
+	require(decoded_duplicate_origin && decoded_duplicate_origin->origin_chain.size() == 2U &&
+				decoded_duplicate_origin->origin_chain.front() ==
+					decoded_duplicate_origin->origin_chain.back(),
+			"duplicate native origins were deduplicated or dropped");
+	auto writable_origin = origin_order;
+	writable_origin.observations.front().origins.front().read_only = false;
+	require(!writable_origin.observations.front().validate() &&
+				!canonicalize_provider_batch(
+					writable_origin,
+					"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+					true),
+			"writable native origin passed detached or batch validation");
 
 	auto reordered = batch();
 	std::ranges::reverse(reordered.observations);
@@ -828,8 +1896,7 @@ int main()
 	auto inserted_call = batch();
 	auto unrelated = inserted_call.observations.back();
 	unrelated.semantic_key = "call:unrelated-prefix";
-	unrelated.source_span_id =
-		*sdk::source_span_identity("source-snapshot:one", "file:stable", 1U, 5U, "expression");
+	set_primary_span(unrelated, "source-snapshot:one", "file:stable", 1U, 5U, "expression");
 	inserted_call.observations.insert(inserted_call.observations.begin(), std::move(unrelated));
 	auto inserted_result = canonicalize_provider_batch(
 		inserted_call,
@@ -860,6 +1927,28 @@ int main()
 				string_cell(same_span_result->call_sites.front(), "cc.call_site.v1.call") !=
 					string_cell(same_span_result->call_sites.back(), "cc.call_site.v1.call"),
 			"same-span canonical tie-break was absent or input-order dependent");
+	auto framing_collision = batch();
+	framing_collision.observations.clear();
+	auto newline_semantic = observation(observation_kind::call, "a\n1:k0:");
+	newline_semantic.payload.clear();
+	auto payload_semantic = observation(observation_kind::call, "a");
+	payload_semantic.payload.clear();
+	payload_semantic.payload.emplace("k", "");
+	require(newline_semantic.canonical_form() != payload_semantic.canonical_form(),
+			"native-v2 order key collides across semantic-key and payload framing");
+	framing_collision.observations = {newline_semantic, payload_semantic};
+	auto framing_result = canonicalize_provider_batch(
+		framing_collision,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	std::ranges::reverse(framing_collision.observations);
+	auto reversed_framing_result = canonicalize_provider_batch(
+		framing_collision,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(framing_result && reversed_framing_result && framing_result->call_sites.size() == 2U &&
+				canonical_batch(*framing_result) == canonical_batch(*reversed_framing_result),
+			"native-v2 framing collision made call ordinals input-order dependent");
 
 	auto indirect = cross_tu;
 	indirect.observations.front().payload.erase("call.direct_callee");

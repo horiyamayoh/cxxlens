@@ -69,6 +69,14 @@ namespace
 		auto row = std::move(builder).finish();
 		if (!row)
 			std::exit(EXIT_FAILURE);
+		const auto& descriptor = relation::descriptor();
+		auto identity = derive_domain_identity(descriptor, *row);
+		if (!identity)
+			std::exit(EXIT_FAILURE);
+		row->cells.at("company.lock.acquire.v1.acquire") =
+			detached_cell::typed("company_lock_acquire_id", std::move(*identity));
+		if (!validate_domain_identity(descriptor, *row))
+			std::exit(EXIT_FAILURE);
 		return std::move(*row);
 	}
 

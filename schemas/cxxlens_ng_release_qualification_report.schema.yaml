@@ -21,7 +21,7 @@ properties:
   prerequisites:
     type: object
     additionalProperties: false
-    required: [gates, migrations, foundation_report_digest, readiness_report_digest, public_callable_report_digest, g5_report_digest, materialization_contract_digest, release_evaluation_report_digest, same_revision]
+    required: [gates, migrations, foundation_report_digest, readiness_report_digest, public_callable_report_digest, g5_report_digest, materialization_contract_digest, sqlite_store_v3_qualification, release_evaluation_report_digest, same_revision]
     properties:
       gates: {const: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5, gate.release]}
       migrations: {const: [R0, R1, R2, R3, R4]}
@@ -30,6 +30,7 @@ properties:
       public_callable_report_digest: {$ref: '#/$defs/digest'}
       g5_report_digest: {$ref: '#/$defs/digest'}
       materialization_contract_digest: {$ref: '#/$defs/digest'}
+      sqlite_store_v3_qualification: {$ref: '#/$defs/sqlite_store_v3_qualification'}
       release_evaluation_report_digest: {$ref: '#/$defs/digest'}
       same_revision: {const: true}
   packages:
@@ -156,3 +157,14 @@ properties:
 $defs:
   digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+  sqlite_store_v3_qualification:
+    type: object
+    additionalProperties: false
+    required: [revision, source_tree, report_digest, report_set_digest, report_schema_digest, sqlite_contract_digest]
+    properties:
+      revision: {$ref: '#/$defs/revision'}
+      source_tree: {$ref: '#/$defs/revision'}
+      report_digest: {$ref: '#/$defs/digest'}
+      report_set_digest: {$ref: '#/$defs/digest'}
+      report_schema_digest: {$ref: '#/$defs/digest'}
+      sqlite_contract_digest: {$ref: '#/$defs/digest'}

@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
+import functools
 import hashlib
 import json
 import re
@@ -50,6 +52,33 @@ EVIDENCE_CONTRACTS = (
     "schemas/cxxlens_ng_query_conformance_vectors.yaml",
     "schemas/cxxlens_ng_security_conformance_vectors.yaml",
 )
+
+REQUIRED_FEEDBACK_ASSIGNMENT_BINDINGS = {
+    "DF-0205": frozenset(
+        {
+            "scope.clang22-installed-adoption-gap",
+            "scope.sqlite-store-v3-gap",
+        }
+    ),
+    "DF-0206": frozenset(
+        {
+            "scope.clang22-installed-adoption-gap",
+            "scope.sqlite-store-v3-gap",
+        }
+    ),
+    "DF-0207": frozenset(
+        {
+            "scope.clang22-installed-adoption-gap",
+            "scope.sqlite-store-v3-gap",
+        }
+    ),
+    "DF-0208": frozenset(
+        {
+            "scope.clang22-installed-adoption-gap",
+            "scope.sqlite-store-v3-gap",
+        }
+    ),
+}
 
 CLANG22_MATERIALIZATION_CONTRACT = "schemas/cxxlens_ng_clang22_materialization_contract.yaml"
 CLANG22_MATERIALIZATION_TOOL = "cxxlens-clang22-materialize"
@@ -255,9 +284,14 @@ def fail(message: str) -> None:
     raise ContractError(message)
 
 
+@functools.lru_cache(maxsize=64)
+def _parse_yaml(text: str) -> Any:
+    return yaml.safe_load(text)
+
+
 def load_yaml(path: Path) -> Any:
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
+        return copy.deepcopy(_parse_yaml(path.read_text(encoding="utf-8")))
     except (OSError, yaml.YAMLError) as error:
         fail(f"cannot load {path}: {error}")
 
@@ -1064,6 +1098,22 @@ def validate_repository(root: Path | str) -> ValidatedModel:
     unknown_feedback = sorted((referenced_feedback | exclusions) - set(all_records))
     if unknown_feedback:
         fail(f"manifest references unknown design feedback: {unknown_feedback}")
+    feedback_assignments = {
+        feedback: frozenset(
+            assignment["id"]
+            for assignment in manifest["assignments"]
+            if feedback in assignment.get("feedback", [])
+        )
+        for feedback in referenced_feedback
+    }
+    for feedback, required_assignments in REQUIRED_FEEDBACK_ASSIGNMENT_BINDINGS.items():
+        actual_assignments = feedback_assignments.get(feedback, frozenset())
+        if actual_assignments != required_assignments:
+            fail(
+                "required design-feedback assignment binding differs: "
+                f"{feedback} expected={sorted(required_assignments)} "
+                f"actual={sorted(actual_assignments)}"
+            )
     nonblocking_unaccepted = sorted(
         feedback
         for feedback in referenced_feedback - set(records)

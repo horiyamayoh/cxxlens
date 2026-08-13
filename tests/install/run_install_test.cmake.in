@@ -40,6 +40,9 @@ if(PHASE STREQUAL "prepare")
   set(staging_prefix "${test_root}/prefix")
   set(install_prefix "${staging_prefix}")
   execute_process(
+    COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+            cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
 
@@ -66,11 +69,13 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
+      "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml"
       "${install_prefix}/share/doc/cxxlens/LICENSE"
       "${install_prefix}/share/doc/cxxlens/NOTICE"
       "${install_prefix}/bin/cxxlens-provider-scaffold"
       "${install_prefix}/bin/cxxlens-sdk-doctor"
-      "${install_prefix}/bin/cxxlens-clang-worker-22")
+      "${install_prefix}/bin/cxxlens-clang-worker-22"
+      "${install_prefix}/bin/cxxlens-clang22-materialize")
     if(NOT EXISTS "${required}")
       message(
         FATAL_ERROR "installed next-generation artifact is missing: ${required}"
@@ -178,6 +183,31 @@ if(PHASE STREQUAL "shared-runtime-layout"
 endif()
 
 if(PHASE STREQUAL "shared-runtime-layout")
+  return()
+endif()
+
+if(PHASE STREQUAL "clang22-materializer-success")
+  set(materialization_evidence_dir "${test_root}/materialization-evidence")
+  file(REMOVE_RECURSE "${materialization_evidence_dir}")
+  foreach(materialization_backend IN ITEMS memory sqlite)
+    execute_process(
+      COMMAND
+        "@Python3_EXECUTABLE@"
+        "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_success_test.py"
+        --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
+        --backend "${materialization_backend}" --translation-unit-count 2
+        --evidence-dir "${materialization_evidence_dir}" COMMAND_ERROR_IS_FATAL
+        ANY)
+  endforeach()
+  execute_process(
+    COMMAND
+      "@Python3_EXECUTABLE@"
+      "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/check_ng_clang22_install_matrix.py"
+      --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --evidence-dir
+      "${materialization_evidence_dir}" --output
+      "${materialization_evidence_dir}/configuration-evidence.json"
+      COMMAND_ERROR_IS_FATAL ANY)
+  message(STATUS "installed Clang 22 evidence: ${materialization_evidence_dir}")
   return()
 endif()
 

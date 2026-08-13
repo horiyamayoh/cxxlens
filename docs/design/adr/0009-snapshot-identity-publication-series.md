@@ -65,13 +65,15 @@ catalog-only lookup、selector の silent default、series を跨ぐ newest/firs
 publication は copy-on-write transaction と compare-and-swap series head を使う。staged/validating object は
 reader に見せず、失敗時は head を変更しない。reader handle は publication の物理 generation を pin する。
 compaction と format migration は別 generation に書き、semantic digest を再検証してから locator を atomically
-swap する。pinned generation は handle 解放まで回収しない。current head の corruption は prior head への silent
+swap する。全 publication に同じ generation を付けず、prior resolver order で distinct な checked generation を割り当てる。SQLite は write
+transaction 内の full committed authority censusを replacement set として一 commit で置換し、memory/SQLite とも resolver order を保存する。
+pinned generation は handle 解放まで回収しない。current head の corruption は prior head への silent
 fallback を行わず structured failure とし、明示的に開いた intact prior publication は引き続き読める。
 
 Issue #131 により semantic snapshot ID の `open` も publication record 集合を authority とする。同じ snapshot ID の
 committed record を publication sequence、physical generation の順で解決してから corrupt state と decoded payload の exact bindingを
 検査する。選択された最新 record が corrupt または payload unavailable なら `store.snapshot-corrupt` とし、古い publicationへ
-fallbackしない。`canonical_export`、query bind、derived basis lookup はこの checked resolver または exact
+fallbackしない。同じ sequence/generation の異 publication ID が候補なら `store.snapshot-ambiguous` とする。`canonical_export`、query bind、derived basis lookup はこの checked resolver または exact
 `open_publication` を使用する。staged/rejected/rolled-back record は semantic open の候補にしない。
 
 snapshot format は semantic snapshot ID に含めない。exact-compatible reader または登録済み deterministic

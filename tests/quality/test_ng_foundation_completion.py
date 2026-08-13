@@ -25,6 +25,7 @@ from check_ng_foundation_completion import (  # noqa: E402
     run_audit_checker,
     validate_audit_report,
     validate_documents,
+    validate_versions,
 )
 from collect_toolchain_provenance import (  # noqa: E402
     file_digest,
@@ -110,6 +111,14 @@ class NgFoundationCompletionTest(unittest.TestCase):
 
     def test_static_foundation_contract_is_complete(self) -> None:
         self.assertEqual(self.manifest["maturity"], "implemented")
+
+    def test_provider_protocol_version_drift_is_rejected(self) -> None:
+        expected = copy.deepcopy(self.manifest["version_contracts"])
+        expected["provider_protocol"] = "1.0.0"
+        with self.assertRaisesRegex(
+            CompletionError, "foundation version contract differs"
+        ):
+            validate_versions(ROOT, expected)
 
     def test_report_binds_clean_revision_tree_and_zero_audits(self) -> None:
         report = self.report()

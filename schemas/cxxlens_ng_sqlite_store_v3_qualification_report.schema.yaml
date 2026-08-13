@@ -1,0 +1,703 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-sqlite-store-v3-qualification-report.v1
+title: cxxlens SQLite v3 and v2 migration qualification report
+type: object
+additionalProperties: false
+required:
+  - schema
+  - report_schema_digest
+  - revision
+  - source_tree
+  - sqlite_contract_digest
+  - configurations
+  - report_set_digest
+  - status
+properties:
+  schema: {const: cxxlens.ng-sqlite-store-v3-qualification-report.v1}
+  report_schema_digest: {$ref: '#/$defs/digest'}
+  revision: {$ref: '#/$defs/revision'}
+  source_tree: {$ref: '#/$defs/revision'}
+  sqlite_contract_digest: {$ref: '#/$defs/digest'}
+  configurations:
+    type: array
+    minItems: 2
+    maxItems: 2
+    uniqueItems: true
+    prefixItems:
+      - {$ref: '#/$defs/static_configuration'}
+      - {$ref: '#/$defs/shared_configuration'}
+    items: false
+  report_set_digest: {$ref: '#/$defs/digest'}
+  status: {const: green}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+  uint64: {type: integer, minimum: 0, maximum: 18446744073709551615}
+  positive_uint64: {type: integer, minimum: 1, maximum: 18446744073709551615}
+  measurement_method:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - version
+      - operating_system
+      - process_model
+      - wall_elapsed_source
+      - peak_rss_source
+      - disk_source
+      - chunk_census_source
+    properties:
+      id: {const: cxxlens.sqlite-store-v3-linux-parent-observation}
+      version: {const: 1.0.0}
+      operating_system: {const: linux}
+      process_model: {const: parent-observed-child}
+      wall_elapsed_source: {const: clock-monotonic-nanoseconds}
+      peak_rss_source: {const: wait4-rusage-ru-maxrss-kibibytes}
+      disk_source: {const: held-file-family-fstat-byte-count}
+      chunk_census_source: {const: independent-read-only-sqlite-row-scan}
+  process_measurement:
+    type: object
+    additionalProperties: false
+    required: [exit_status, wall_elapsed_ns, peak_rss_kib, os_peak_rss_bytes]
+    properties:
+      exit_status: {const: 0}
+      wall_elapsed_ns: {$ref: '#/$defs/uint64'}
+      peak_rss_kib: {$ref: '#/$defs/positive_uint64'}
+      os_peak_rss_bytes: {$ref: '#/$defs/positive_uint64'}
+  disk_census:
+    type: object
+    additionalProperties: false
+    required: [main_bytes, wal_bytes, shm_bytes, journal_bytes, total_bytes]
+    properties:
+      main_bytes: {$ref: '#/$defs/uint64'}
+      wal_bytes: {$ref: '#/$defs/uint64'}
+      shm_bytes: {$ref: '#/$defs/uint64'}
+      journal_bytes: {$ref: '#/$defs/uint64'}
+      total_bytes: {$ref: '#/$defs/uint64'}
+  chunk_publication:
+    type: object
+    additionalProperties: false
+    required:
+      - publication_id
+      - generation
+      - payload_byte_count
+      - payload_chunk_count
+      - payload_checksum
+    properties:
+      publication_id: {type: string, minLength: 1, maxLength: 1024}
+      generation: {$ref: '#/$defs/uint64'}
+      payload_byte_count: {$ref: '#/$defs/uint64'}
+      payload_chunk_count: {$ref: '#/$defs/uint64'}
+      payload_checksum: {$ref: '#/$defs/digest'}
+  chunk_row:
+    type: object
+    additionalProperties: false
+    required:
+      - publication_id
+      - generation
+      - chunk_ordinal
+      - byte_offset
+      - byte_count
+      - chunk_checksum
+    properties:
+      publication_id: {type: string, minLength: 1, maxLength: 1024}
+      generation: {$ref: '#/$defs/uint64'}
+      chunk_ordinal: {$ref: '#/$defs/uint64'}
+      byte_offset: {$ref: '#/$defs/uint64'}
+      byte_count: {type: integer, minimum: 1, maximum: 8388608}
+      chunk_checksum: {$ref: '#/$defs/digest'}
+  v3_chunk_inventory:
+    type: object
+    additionalProperties: false
+    required: [profile, publications, chunks]
+    properties:
+      profile: {const: cxxlens.sqlite-payload-chunks.v1}
+      publications:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/chunk_publication'}
+      chunks:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/chunk_row'}
+  v2_chunk_inventory:
+    type: object
+    additionalProperties: false
+    required: [profile, publications, chunks]
+    properties:
+      profile: {const: cxxlens.sqlite-v2-single-blob-not-applicable}
+      publications: {const: []}
+      chunks: {const: []}
+  chunk_inventory:
+    oneOf:
+      - {$ref: '#/$defs/v3_chunk_inventory'}
+      - {$ref: '#/$defs/v2_chunk_inventory'}
+  chunk_census:
+    type: object
+    additionalProperties: false
+    required:
+      - profile
+      - chunked_publication_count
+      - zero_payload_publication_count
+      - logical_payload_bytes
+      - declared_chunk_count
+      - observed_chunk_row_count
+      - observed_chunk_bytes
+      - maximum_chunk_bytes_observed
+      - nonfinal_chunk_row_count
+      - final_chunk_row_count
+    properties:
+      profile:
+        enum:
+          - cxxlens.sqlite-payload-chunks.v1
+          - cxxlens.sqlite-v2-single-blob-not-applicable
+      chunked_publication_count: {$ref: '#/$defs/uint64'}
+      zero_payload_publication_count: {$ref: '#/$defs/uint64'}
+      logical_payload_bytes: {$ref: '#/$defs/uint64'}
+      declared_chunk_count: {$ref: '#/$defs/uint64'}
+      observed_chunk_row_count: {$ref: '#/$defs/uint64'}
+      observed_chunk_bytes: {$ref: '#/$defs/uint64'}
+      maximum_chunk_bytes_observed:
+        type: integer
+        minimum: 0
+        maximum: 8388608
+      nonfinal_chunk_row_count: {$ref: '#/$defs/uint64'}
+      final_chunk_row_count: {$ref: '#/$defs/uint64'}
+  file_entry_absent:
+    type: object
+    additionalProperties: false
+    required: [state, byte_count, sha256]
+    properties:
+      state: {const: absent}
+      byte_count: {const: 0}
+      sha256: {type: 'null'}
+  file_entry_present:
+    type: object
+    additionalProperties: false
+    required: [state, byte_count, sha256]
+    properties:
+      state: {const: present}
+      byte_count: {$ref: '#/$defs/uint64'}
+      sha256: {$ref: '#/$defs/digest'}
+  file_entry:
+    oneOf:
+      - {$ref: '#/$defs/file_entry_absent'}
+      - {$ref: '#/$defs/file_entry_present'}
+  file_family_observation:
+    type: object
+    additionalProperties: false
+    required: [main, wal, shm, journal, directory_entries]
+    properties:
+      main: {$ref: '#/$defs/file_entry'}
+      wal: {$ref: '#/$defs/file_entry'}
+      shm: {$ref: '#/$defs/file_entry'}
+      journal: {$ref: '#/$defs/file_entry'}
+      directory_entries:
+        type: array
+        uniqueItems: true
+        items: {type: string, minLength: 1, maxLength: 4096}
+  raw_evidence:
+    type: object
+    additionalProperties: false
+    required:
+      - schema
+      - configuration
+      - case_id
+      - backend_scope
+      - method
+      - process
+      - disk
+      - chunk_inventory
+      - observations
+    properties:
+      schema: {const: cxxlens.sqlite-store-v3-raw-evidence.v1}
+      configuration: {enum: [static, shared]}
+      case_id:
+        enum:
+          - current-v3.0.0-cold-reopen
+          - v2.6.0-read-only-zero-mutation
+          - compact-v2.6.0-to-v3.0.0-same-semantic-digest
+          - limit-length-exceeding-valid-canonical-v5-reopened-parity
+      backend_scope: {enum: [sqlite, memory-sqlite-parity]}
+      method: {$ref: '#/$defs/measurement_method'}
+      process: {$ref: '#/$defs/process_measurement'}
+      disk: {$ref: '#/$defs/disk_census'}
+      chunk_inventory: {$ref: '#/$defs/chunk_inventory'}
+      observations: {type: object}
+  v3_open_observation:
+    type: object
+    additionalProperties: false
+    required:
+      - physical_format
+      - readable_format
+      - metadata_digest
+      - canonical_ddl_digest
+      - semantic_projection_digest
+    properties:
+      physical_format: {const: cxxlens.sqlite-semantic-store.v3}
+      readable_format: {const: 3.0.0}
+      metadata_digest: {$ref: '#/$defs/digest'}
+      canonical_ddl_digest: {$ref: '#/$defs/digest'}
+      semantic_projection_digest: {$ref: '#/$defs/digest'}
+  current_v3_observations:
+    type: object
+    additionalProperties: false
+    required: [initial_open, cold_reopen]
+    properties:
+      initial_open: {$ref: '#/$defs/v3_open_observation'}
+      cold_reopen: {$ref: '#/$defs/v3_open_observation'}
+  v2_read_only_observations:
+    type: object
+    additionalProperties: false
+    required:
+      - physical_format
+      - reported_readable_format
+      - direct_open
+      - migration_required
+      - semantic_projection_digest
+      - begin_result
+      - before
+      - after
+    properties:
+      physical_format: {const: cxxlens.sqlite-semantic-store.v2}
+      reported_readable_format: {const: 2.6.0}
+      direct_open: {const: true}
+      migration_required: {const: true}
+      semantic_projection_digest: {$ref: '#/$defs/digest'}
+      begin_result:
+        const:
+          code: store.migration-required
+          field: sqlite-physical-format
+          detail: cxxlens.sqlite-semantic-store.v2-to-v3
+      before: {$ref: '#/$defs/file_family_observation'}
+      after: {$ref: '#/$defs/file_family_observation'}
+  migration_projection:
+    type: object
+    additionalProperties: false
+    required:
+      - physical_format
+      - semantic_projection_digest
+      - non_generation_payload_projection_digest
+      - generation_census
+      - committed_payload_schema_census
+      - noncommitted_census
+      - noncommitted_census_digest
+    properties:
+      physical_format:
+        enum: [cxxlens.sqlite-semantic-store.v2, cxxlens.sqlite-semantic-store.v3]
+      semantic_projection_digest: {$ref: '#/$defs/digest'}
+      non_generation_payload_projection_digest: {$ref: '#/$defs/digest'}
+      generation_census:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/migration_generation_row'}
+      committed_payload_schema_census:
+        type: array
+        minItems: 5
+        maxItems: 5
+        uniqueItems: true
+        items: {$ref: '#/$defs/committed_payload_schema_row'}
+      noncommitted_census:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/noncommitted_row'}
+      noncommitted_census_digest: {$ref: '#/$defs/digest'}
+  migration_generation_row:
+    type: object
+    additionalProperties: false
+    required: [publication_id, sequence, state, generation]
+    properties:
+      publication_id: {type: string, minLength: 1, maxLength: 1024}
+      sequence: {$ref: '#/$defs/uint64'}
+      state: {type: integer, minimum: 0, maximum: 5}
+      generation: {$ref: '#/$defs/uint64'}
+  committed_payload_schema_row:
+    type: object
+    additionalProperties: false
+    required: [publication_id, payload_schema]
+    properties:
+      publication_id: {type: string, minLength: 1, maxLength: 1024}
+      payload_schema:
+        enum:
+          - cxxlens.ng-snapshot-payload.v1
+          - cxxlens.ng-snapshot-payload.v2
+          - cxxlens.ng-snapshot-payload.v3
+          - cxxlens.ng-snapshot-payload.v4
+          - cxxlens.ng-snapshot-payload.v5
+  noncommitted_row:
+    type: object
+    additionalProperties: false
+    required:
+      - publication_id
+      - series_id
+      - snapshot_id
+      - sequence
+      - generation
+      - parent
+      - state
+      - payload_checksum
+      - payload_byte_count
+      - raw_payload_digest
+      - payload_schema
+      - diagnostic_classification
+    properties:
+      publication_id: {type: string, minLength: 1, maxLength: 1024}
+      series_id: {type: string, minLength: 1, maxLength: 1024}
+      snapshot_id: {type: string, minLength: 1, maxLength: 1024}
+      sequence: {$ref: '#/$defs/uint64'}
+      generation: {$ref: '#/$defs/uint64'}
+      parent:
+        oneOf:
+          - {type: 'null'}
+          - {type: string, minLength: 1, maxLength: 1024}
+      state:
+        type: integer
+        minimum: 0
+        maximum: 5
+        not: {const: 3}
+      payload_checksum: {$ref: '#/$defs/digest'}
+      payload_byte_count: {$ref: '#/$defs/uint64'}
+      raw_payload_digest: {$ref: '#/$defs/digest'}
+      payload_schema:
+        oneOf:
+          - type: 'null'
+          - enum:
+              - cxxlens.ng-snapshot-payload.v1
+              - cxxlens.ng-snapshot-payload.v2
+              - cxxlens.ng-snapshot-payload.v3
+              - cxxlens.ng-snapshot-payload.v4
+              - cxxlens.ng-snapshot-payload.v5
+      diagnostic_classification:
+        enum:
+          - stored-full-checksum-mismatch
+          - payload-decode-failure
+          - valid-noncommitted
+  migration_observations:
+    type: object
+    additionalProperties: false
+    required:
+      - trigger
+      - begin_immediate_count
+      - source
+      - target
+      - cold_reopen
+      - committed_replacement_count
+      - generation_mapping_digest
+      - contiguous_committed_generation_replacement
+      - noncommitted_generation_preserved
+      - committed_payload_schema_census_digest
+      - noncommitted_census_digest
+      - diagnostic_noncommitted_count
+      - committed_payload_schemas_preserved
+      - noncommitted_rows_preserved
+      - canonical_ddl_digest
+    properties:
+      trigger: {const: snapshot-store-compact}
+      begin_immediate_count: {const: 1}
+      source: {$ref: '#/$defs/migration_projection'}
+      target: {$ref: '#/$defs/migration_projection'}
+      cold_reopen: {$ref: '#/$defs/migration_projection'}
+      committed_replacement_count: {$ref: '#/$defs/positive_uint64'}
+      generation_mapping_digest: {$ref: '#/$defs/digest'}
+      contiguous_committed_generation_replacement: {const: true}
+      noncommitted_generation_preserved: {const: true}
+      committed_payload_schema_census_digest: {$ref: '#/$defs/digest'}
+      noncommitted_census_digest: {$ref: '#/$defs/digest'}
+      diagnostic_noncommitted_count: {$ref: '#/$defs/positive_uint64'}
+      committed_payload_schemas_preserved: {const: true}
+      noncommitted_rows_preserved: {const: true}
+      canonical_ddl_digest: {$ref: '#/$defs/digest'}
+  parity_projection:
+    type: object
+    additionalProperties: false
+    required: [semantic_projection_digest, canonical_export_digest, query_projection_digest]
+    properties:
+      semantic_projection_digest: {$ref: '#/$defs/digest'}
+      canonical_export_digest: {$ref: '#/$defs/digest'}
+      query_projection_digest: {$ref: '#/$defs/digest'}
+  limit_parity_observations:
+    type: object
+    additionalProperties: false
+    required:
+      - sqlite_limit_length_bytes
+      - logical_payload_bytes
+      - canonical_v5_payload_digest
+      - maximum_resident_payload_buffer_bytes
+      - memory
+      - sqlite
+      - cold_reopen_sqlite
+    properties:
+      sqlite_limit_length_bytes:
+        type: integer
+        minimum: 16777216
+        maximum: 18446744073709551615
+      logical_payload_bytes:
+        type: integer
+        minimum: 16777217
+        maximum: 18446744073709551615
+      canonical_v5_payload_digest: {$ref: '#/$defs/digest'}
+      maximum_resident_payload_buffer_bytes:
+        type: integer
+        minimum: 1
+        maximum: 8388608
+      memory: {$ref: '#/$defs/parity_projection'}
+      sqlite: {$ref: '#/$defs/parity_projection'}
+      cold_reopen_sqlite: {$ref: '#/$defs/parity_projection'}
+  current_v3_raw_evidence:
+    allOf:
+      - {$ref: '#/$defs/raw_evidence'}
+      - properties:
+          case_id: {const: current-v3.0.0-cold-reopen}
+          backend_scope: {const: sqlite}
+          chunk_inventory: {$ref: '#/$defs/v3_chunk_inventory'}
+          observations: {$ref: '#/$defs/current_v3_observations'}
+  v2_read_only_raw_evidence:
+    allOf:
+      - {$ref: '#/$defs/raw_evidence'}
+      - properties:
+          case_id: {const: v2.6.0-read-only-zero-mutation}
+          backend_scope: {const: sqlite}
+          chunk_inventory: {$ref: '#/$defs/v2_chunk_inventory'}
+          observations: {$ref: '#/$defs/v2_read_only_observations'}
+  migration_raw_evidence:
+    allOf:
+      - {$ref: '#/$defs/raw_evidence'}
+      - properties:
+          case_id: {const: compact-v2.6.0-to-v3.0.0-same-semantic-digest}
+          backend_scope: {const: sqlite}
+          chunk_inventory: {$ref: '#/$defs/v3_chunk_inventory'}
+          observations: {$ref: '#/$defs/migration_observations'}
+  limit_parity_raw_evidence:
+    allOf:
+      - {$ref: '#/$defs/raw_evidence'}
+      - properties:
+          case_id: {const: limit-length-exceeding-valid-canonical-v5-reopened-parity}
+          backend_scope: {const: memory-sqlite-parity}
+          chunk_inventory: {$ref: '#/$defs/v3_chunk_inventory'}
+          observations: {$ref: '#/$defs/limit_parity_observations'}
+  operational_measurement:
+    type: object
+    additionalProperties: false
+    required: [method, os_peak_rss_bytes, wall_elapsed_ns, disk_bytes, chunk_census]
+    properties:
+      method: {$ref: '#/$defs/measurement_method'}
+      os_peak_rss_bytes: {$ref: '#/$defs/positive_uint64'}
+      wall_elapsed_ns: {$ref: '#/$defs/uint64'}
+      disk_bytes: {$ref: '#/$defs/disk_census'}
+      chunk_census: {$ref: '#/$defs/chunk_census'}
+  current_v3_measurement:
+    type: object
+    additionalProperties: false
+    required:
+      - operational
+      - physical_format
+      - readable_format
+      - metadata_digest
+      - canonical_ddl_digest
+      - chunk_profile
+      - cold_reopen_validated
+      - semantic_projection_digest
+    properties:
+      operational: {$ref: '#/$defs/operational_measurement'}
+      physical_format: {const: cxxlens.sqlite-semantic-store.v3}
+      readable_format: {const: 3.0.0}
+      metadata_digest: {$ref: '#/$defs/digest'}
+      canonical_ddl_digest: {$ref: '#/$defs/digest'}
+      chunk_profile: {const: cxxlens.sqlite-payload-chunks.v1}
+      cold_reopen_validated: {const: true}
+      semantic_projection_digest: {$ref: '#/$defs/digest'}
+  v2_read_only_measurement:
+    type: object
+    additionalProperties: false
+    required:
+      - operational
+      - physical_format
+      - reported_readable_format
+      - direct_open
+      - migration_required
+      - semantic_projection_digest
+      - main_wal_journal_bytes_unchanged
+      - shm_presence_and_size_unchanged
+      - sidecar_create_delete_or_resize
+      - directory_entry_set_unchanged
+      - begin_result
+    properties:
+      operational: {$ref: '#/$defs/operational_measurement'}
+      physical_format: {const: cxxlens.sqlite-semantic-store.v2}
+      reported_readable_format: {const: 2.6.0}
+      direct_open: {const: true}
+      migration_required: {const: true}
+      semantic_projection_digest: {$ref: '#/$defs/digest'}
+      main_wal_journal_bytes_unchanged: {const: true}
+      shm_presence_and_size_unchanged: {const: true}
+      sidecar_create_delete_or_resize: {const: false}
+      directory_entry_set_unchanged: {const: true}
+      begin_result:
+        const:
+          code: store.migration-required
+          field: sqlite-physical-format
+          detail: cxxlens.sqlite-semantic-store.v2-to-v3
+  migration_measurement:
+    type: object
+    additionalProperties: false
+    required:
+      - operational
+      - source_format
+      - target_format
+      - trigger
+      - one_begin_immediate
+      - pre_semantic_projection_digest
+      - post_semantic_projection_digest
+      - semantic_projection_equal
+      - physical_generation_only_payload_transition
+      - committed_replacement_count
+      - generation_mapping_digest
+      - contiguous_committed_generation_replacement
+      - noncommitted_generation_preserved
+      - committed_payload_schema_census_digest
+      - noncommitted_census_digest
+      - diagnostic_noncommitted_count
+      - committed_payload_schemas_preserved
+      - noncommitted_rows_preserved
+      - canonical_ddl_digest
+      - cold_reopen_validated
+    properties:
+      operational: {$ref: '#/$defs/operational_measurement'}
+      source_format: {const: cxxlens.sqlite-semantic-store.v2}
+      target_format: {const: cxxlens.sqlite-semantic-store.v3}
+      trigger: {const: snapshot-store-compact}
+      one_begin_immediate: {const: true}
+      pre_semantic_projection_digest: {$ref: '#/$defs/digest'}
+      post_semantic_projection_digest: {$ref: '#/$defs/digest'}
+      semantic_projection_equal: {const: true}
+      physical_generation_only_payload_transition: {const: true}
+      committed_replacement_count: {$ref: '#/$defs/positive_uint64'}
+      generation_mapping_digest: {$ref: '#/$defs/digest'}
+      contiguous_committed_generation_replacement: {const: true}
+      noncommitted_generation_preserved: {const: true}
+      committed_payload_schema_census_digest: {$ref: '#/$defs/digest'}
+      noncommitted_census_digest: {$ref: '#/$defs/digest'}
+      diagnostic_noncommitted_count: {$ref: '#/$defs/positive_uint64'}
+      committed_payload_schemas_preserved: {const: true}
+      noncommitted_rows_preserved: {const: true}
+      canonical_ddl_digest: {$ref: '#/$defs/digest'}
+      cold_reopen_validated: {const: true}
+  limit_parity_measurement:
+    type: object
+    additionalProperties: false
+    required:
+      - operational
+      - sqlite_limit_length_bytes
+      - logical_payload_bytes
+      - payload_exceeds_sqlite_limit_length
+      - canonical_v5_payload_digest
+      - maximum_chunk_bytes
+      - maximum_resident_payload_buffer_bytes
+      - bounded_streaming_verified
+      - memory_semantic_projection_digest
+      - sqlite_semantic_projection_digest
+      - semantic_projection_equal
+      - canonical_export_equal
+      - query_projection_equal
+      - cold_reopen_validated
+    properties:
+      operational: {$ref: '#/$defs/operational_measurement'}
+      sqlite_limit_length_bytes:
+        type: integer
+        minimum: 16777216
+        maximum: 18446744073709551615
+      logical_payload_bytes:
+        type: integer
+        minimum: 16777217
+        maximum: 18446744073709551615
+      payload_exceeds_sqlite_limit_length: {const: true}
+      canonical_v5_payload_digest: {$ref: '#/$defs/digest'}
+      maximum_chunk_bytes: {const: 8388608}
+      maximum_resident_payload_buffer_bytes:
+        type: integer
+        minimum: 1
+        maximum: 8388608
+      bounded_streaming_verified: {const: true}
+      memory_semantic_projection_digest: {$ref: '#/$defs/digest'}
+      sqlite_semantic_projection_digest: {$ref: '#/$defs/digest'}
+      semantic_projection_equal: {const: true}
+      canonical_export_equal: {const: true}
+      query_projection_equal: {const: true}
+      cold_reopen_validated: {const: true}
+  case_result:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - backend_scope
+      - result
+      - raw_evidence
+      - raw_evidence_digest
+      - evidence_digest
+      - measurement
+    properties:
+      id:
+        enum:
+          - current-v3.0.0-cold-reopen
+          - v2.6.0-read-only-zero-mutation
+          - compact-v2.6.0-to-v3.0.0-same-semantic-digest
+          - limit-length-exceeding-valid-canonical-v5-reopened-parity
+      backend_scope: {enum: [sqlite, memory-sqlite-parity]}
+      result: {const: passed}
+      raw_evidence: {type: object}
+      raw_evidence_digest: {$ref: '#/$defs/digest'}
+      evidence_digest: {$ref: '#/$defs/digest'}
+      measurement: {type: object}
+  case_results:
+    type: array
+    minItems: 4
+    maxItems: 4
+    uniqueItems: true
+    prefixItems:
+      - allOf:
+          - {$ref: '#/$defs/case_result'}
+          - properties:
+              id: {const: current-v3.0.0-cold-reopen}
+              backend_scope: {const: sqlite}
+              raw_evidence: {$ref: '#/$defs/current_v3_raw_evidence'}
+              measurement: {$ref: '#/$defs/current_v3_measurement'}
+      - allOf:
+          - {$ref: '#/$defs/case_result'}
+          - properties:
+              id: {const: v2.6.0-read-only-zero-mutation}
+              backend_scope: {const: sqlite}
+              raw_evidence: {$ref: '#/$defs/v2_read_only_raw_evidence'}
+              measurement: {$ref: '#/$defs/v2_read_only_measurement'}
+      - allOf:
+          - {$ref: '#/$defs/case_result'}
+          - properties:
+              id: {const: compact-v2.6.0-to-v3.0.0-same-semantic-digest}
+              backend_scope: {const: sqlite}
+              raw_evidence: {$ref: '#/$defs/migration_raw_evidence'}
+              measurement: {$ref: '#/$defs/migration_measurement'}
+      - allOf:
+          - {$ref: '#/$defs/case_result'}
+          - properties:
+              id: {const: limit-length-exceeding-valid-canonical-v5-reopened-parity}
+              backend_scope: {const: memory-sqlite-parity}
+              raw_evidence: {$ref: '#/$defs/limit_parity_raw_evidence'}
+              measurement: {$ref: '#/$defs/limit_parity_measurement'}
+    items: false
+  static_configuration:
+    type: object
+    additionalProperties: false
+    required: [configuration, backends, cases]
+    properties:
+      configuration: {const: static}
+      backends: {const: [memory, sqlite]}
+      cases: {$ref: '#/$defs/case_results'}
+  shared_configuration:
+    type: object
+    additionalProperties: false
+    required: [configuration, backends, cases]
+    properties:
+      configuration: {const: shared}
+      backends: {const: [memory, sqlite]}
+      cases: {$ref: '#/$defs/case_results'}

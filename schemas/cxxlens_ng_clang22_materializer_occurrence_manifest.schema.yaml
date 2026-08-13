@@ -1,0 +1,238 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
+title: cxxlens installed Clang 22 materializer occurrence manifest
+description: >-
+  Source-private, co-located occurrence authority for one installed materializer.
+  occurrence_payload_digest is recomputed as SHA-256 over canonical JSON of
+  every other manifest field; the manifest never inventories its
+  own bytes.  The external install-artifact manifest remains the full-prefix
+  witness and includes this manifest file.  Package-owned runtime DSOs are
+  inventoried only for shared packages; external system libraries remain
+  toolchain/runtime evidence and are not occurrence-manifest entries.
+type: object
+additionalProperties: false
+required:
+  - schema
+  - manifest_version
+  - source_revision
+  - source_tree
+  - package_configuration
+  - files
+  - occurrence_payload_digest
+properties:
+  schema: {const: cxxlens.clang22-materializer-occurrence-manifest.v1}
+  manifest_version: {const: 1.0.0}
+  source_revision: {$ref: '#/$defs/revision'}
+  source_tree: {$ref: '#/$defs/revision'}
+  package_configuration: {enum: [static, shared]}
+  files:
+    type: array
+    minItems: 13
+    maxItems: 19
+    uniqueItems: true
+    items: {$ref: '#/$defs/file'}
+  occurrence_payload_digest: {$ref: '#/$defs/digest'}
+allOf:
+  - if:
+      properties: {package_configuration: {const: static}}
+      required: [package_configuration]
+    then:
+      properties:
+        files: {$ref: '#/$defs/static_files'}
+    else:
+      properties:
+        files: {$ref: '#/$defs/shared_files'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+  file:
+    type: object
+    additionalProperties: false
+    required: [role, path, digest]
+    properties:
+      role: {type: string}
+      path:
+        type: string
+        minLength: 1
+        maxLength: 4095
+        pattern: '^(?!/)(?!.*(?:^|/)\.\.?(?:/|$))(?!.*//)[^\u0000\\]+$'
+      digest: {$ref: '#/$defs/digest'}
+  materializer:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: materializer-executable}
+          path: {const: bin/cxxlens-clang22-materialize}
+        required: [role, path]
+  worker:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: worker-executable}
+          path: {const: bin/cxxlens-clang-worker-22}
+        required: [role, path]
+  relation_registry:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: relation-registry}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_relation_registry.yaml}
+        required: [role, path]
+  project_catalog_contract:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: project-catalog-contract}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_project_catalog_contract.yaml}
+        required: [role, path]
+  portable_provider_task_contract:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: portable-provider-task-contract}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_portable_provider_task_contract.yaml}
+        required: [role, path]
+  provider_protocol:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: provider-protocol}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_provider_protocol.yaml}
+        required: [role, path]
+  provider_runtime_contract:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: provider-runtime-contract}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_provider_runtime_contract.yaml}
+        required: [role, path]
+  snapshot_store_contract:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: snapshot-store-contract}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_snapshot_store_contract.yaml}
+        required: [role, path]
+  sqlite_store_contract:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: sqlite-store-contract}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_sqlite_store_contract.yaml}
+        required: [role, path]
+  materialization_contract:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: materialization-contract}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml}
+        required: [role, path]
+  materialization_contract_schema:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: materialization-contract-schema}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml}
+        required: [role, path]
+  materialization_request_schema:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: materialization-request-schema}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml}
+        required: [role, path]
+  materialization_report_schema:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: materialization-report-schema}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml}
+        required: [role, path]
+  runtime_base:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: base}
+          path: {type: string, pattern: '^(?:lib|lib64)/libcxxlens_base\.so(?:\.[0-9]+)*$'}
+        required: [role, path]
+  runtime_kernel:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: kernel}
+          path: {type: string, pattern: '^(?:lib|lib64)/libcxxlens_kernel\.so(?:\.[0-9]+)*$'}
+        required: [role, path]
+  runtime_query:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: query}
+          path: {type: string, pattern: '^(?:lib|lib64)/libcxxlens_query\.so(?:\.[0-9]+)*$'}
+        required: [role, path]
+  runtime_recipes:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: recipes}
+          path: {type: string, pattern: '^(?:lib|lib64)/libcxxlens_recipes\.so(?:\.[0-9]+)*$'}
+        required: [role, path]
+  runtime_provider_sdk:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: provider-sdk}
+          path: {type: string, pattern: '^(?:lib|lib64)/libcxxlens_provider_sdk\.so(?:\.[0-9]+)*$'}
+        required: [role, path]
+  runtime_clang22_provider_sdk:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: clang22-provider-sdk}
+          path: {type: string, pattern: '^(?:lib|lib64)/libcxxlens_clang22_provider_sdk\.so(?:\.[0-9]+)*$'}
+        required: [role, path]
+  static_files:
+    type: array
+    minItems: 13
+    maxItems: 13
+    uniqueItems: true
+    prefixItems:
+      - {$ref: '#/$defs/materializer'}
+      - {$ref: '#/$defs/worker'}
+      - {$ref: '#/$defs/relation_registry'}
+      - {$ref: '#/$defs/project_catalog_contract'}
+      - {$ref: '#/$defs/portable_provider_task_contract'}
+      - {$ref: '#/$defs/provider_protocol'}
+      - {$ref: '#/$defs/provider_runtime_contract'}
+      - {$ref: '#/$defs/snapshot_store_contract'}
+      - {$ref: '#/$defs/sqlite_store_contract'}
+      - {$ref: '#/$defs/materialization_contract'}
+      - {$ref: '#/$defs/materialization_contract_schema'}
+      - {$ref: '#/$defs/materialization_request_schema'}
+      - {$ref: '#/$defs/materialization_report_schema'}
+    items: false
+  shared_files:
+    type: array
+    minItems: 19
+    maxItems: 19
+    uniqueItems: true
+    prefixItems:
+      - {$ref: '#/$defs/materializer'}
+      - {$ref: '#/$defs/worker'}
+      - {$ref: '#/$defs/relation_registry'}
+      - {$ref: '#/$defs/project_catalog_contract'}
+      - {$ref: '#/$defs/portable_provider_task_contract'}
+      - {$ref: '#/$defs/provider_protocol'}
+      - {$ref: '#/$defs/provider_runtime_contract'}
+      - {$ref: '#/$defs/snapshot_store_contract'}
+      - {$ref: '#/$defs/sqlite_store_contract'}
+      - {$ref: '#/$defs/materialization_contract'}
+      - {$ref: '#/$defs/materialization_contract_schema'}
+      - {$ref: '#/$defs/materialization_request_schema'}
+      - {$ref: '#/$defs/materialization_report_schema'}
+      - {$ref: '#/$defs/runtime_base'}
+      - {$ref: '#/$defs/runtime_kernel'}
+      - {$ref: '#/$defs/runtime_query'}
+      - {$ref: '#/$defs/runtime_recipes'}
+      - {$ref: '#/$defs/runtime_provider_sdk'}
+      - {$ref: '#/$defs/runtime_clang22_provider_sdk'}
+    items: false

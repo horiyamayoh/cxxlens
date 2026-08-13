@@ -360,6 +360,7 @@ namespace cxxlens::sdk
 		friend result<snapshot_store> make_in_memory_snapshot_store(relation_engine);
 		friend result<snapshot_store> open_sqlite_snapshot_store(const std::string&,
 																 relation_engine);
+		friend struct snapshot_store_backend_lifetime_access;
 		friend result<void> mark_publication_corrupt_for_testing(snapshot_store&, std::string_view);
 		friend result<void> rewrite_publication_payload_for_testing(
 			snapshot_store&, std::string_view, std::string_view, std::string_view, std::size_t);
@@ -380,8 +381,8 @@ namespace cxxlens::sdk
 	class snapshot_writer
 	{
 	  public:
-		snapshot_writer(snapshot_writer&&) noexcept = default;
-		snapshot_writer& operator=(snapshot_writer&&) noexcept = default;
+		snapshot_writer(snapshot_writer&&) noexcept;
+		snapshot_writer& operator=(snapshot_writer&&) noexcept;
 		snapshot_writer(const snapshot_writer&) = delete;
 		snapshot_writer& operator=(const snapshot_writer&) = delete;
 		~snapshot_writer();

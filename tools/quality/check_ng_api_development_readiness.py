@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime
+import functools
 import hashlib
 import json
 import pathlib
@@ -113,9 +115,20 @@ def fail(message: str) -> None:
     raise ReadinessError(message)
 
 
+@functools.lru_cache(maxsize=8)
+def _parse_public_callable_inventory(text: str) -> dict[str, Any]:
+    value = yaml.safe_load(text)
+    if not isinstance(value, dict):
+        fail("public callable inventory is not a mapping")
+    return value
+
+
 def load_document(path: pathlib.Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
-    value = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+    if path.name == PUBLIC_CALLABLE_INVENTORY.name:
+        value = copy.deepcopy(_parse_public_callable_inventory(text))
+    else:
+        value = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
     if not isinstance(value, dict):
         fail(f"expected mapping: {path}")
     return value
@@ -409,7 +422,7 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
         (
             "release-evaluation",
             evaluation_config,
-            ["g5-qualification"],
+            ["g5-qualification", "sqlite-store-v3-qualification"],
             "github.event_name == 'push' && github.ref == 'refs/heads/main'",
             {"if", "needs", "runs-on", "outputs", "steps"},
         ),
@@ -557,7 +570,7 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     terminal_job = workflow_job("production-scope-closure")
     required_job_markers = {
         "release-evaluation": (
-            "needs: [g5-qualification]",
+            "needs: [g5-qualification, sqlite-store-v3-qualification]",
             "qualification: ${{ steps.evaluate.outputs.qualification }}",
             '--github-output "${GITHUB_OUTPUT}"',
         ),
@@ -611,12 +624,12 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     common_setup_steps = [
         {
             "uses": (
-                "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+                "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
             )
         },
         {
             "uses": (
-                "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065"
+                "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
             ),
             "with": {"python-version": "3.12.11"},
         },

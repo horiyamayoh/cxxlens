@@ -1,0 +1,145 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schema/ng/df-0200-claim-batch-differential-corpus.schema.yaml
+title: DF-0200 claim_batch differential corpus normalized projection
+description: >-
+  Schema for the normalized representation of the immutable TSV artifact. The
+  TSV grammar is fixed by the artifact header and the authority contract; the
+  quality checker parses it without repairing, reordering, or inferring fields.
+x-cxxlens-artifact-binding:
+  path: schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv
+  raw_sha256: sha256:f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
+type: object
+additionalProperties: false
+required:
+  - format
+  - artifact_version
+  - schema_path
+  - source_api
+  - census
+  - cases
+properties:
+  format:
+    const: cxxlens.df-0200.claim-batch-differential-corpus.tsv.v1
+  artifact_version:
+    const: 1.0.0
+  schema_path:
+    const: schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.schema.yaml
+  source_api:
+    const: cxxlens::sdk::claim_batch::commit
+  census:
+    type: object
+    additionalProperties: false
+    required:
+      - case_count
+      - success_count
+      - error_count
+      - added_claim_count
+      - existing_claim_count
+      - projection_byte_count
+      - projection_digest
+    properties:
+      case_count:
+        const: 10
+      success_count:
+        const: 9
+      error_count:
+        const: 1
+      added_claim_count:
+        const: 17
+      existing_claim_count:
+        const: 16
+      projection_byte_count:
+        type: integer
+        minimum: 1
+      projection_digest:
+        type: string
+        pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'
+  cases:
+    type: array
+    minItems: 10
+    maxItems: 10
+    items:
+      $ref: '#/$defs/case'
+$defs:
+  hex_bytes:
+    type: string
+    pattern: '^(?:[0-9a-f]{2})*$'
+  template_ids:
+    type: array
+    items:
+      type: string
+      pattern: '^[a-z][a-z0-9-]+$'
+  case:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - equivalence_group
+      - verdict_group
+      - added_templates
+      - existing_templates
+      - input_encoding_hex
+      - outcome
+      - error_code
+      - error_field
+      - error_detail
+      - claim_count
+      - unresolved_count
+      - conflict_count
+      - differential_count
+      - output_encoding_hex
+      - expected_tuple_encoding_hex
+      - verdict_encoding_hex
+    properties:
+      id:
+        enum:
+          - hard-missing
+          - soft-unresolved-exact-duplicate
+          - metadata-distinct-occurrences
+          - one-shot-conflict-forward
+          - one-shot-conflict-reverse
+          - split-new-existing-conflict
+          - existing-existing-non-reclassification
+          - new-existing-same-payload
+          - new-existing-disjoint
+          - new-existing-cross-domain-differential
+      equivalence_group:
+        type: string
+      verdict_group:
+        type: string
+      added_templates:
+        $ref: '#/$defs/template_ids'
+        minItems: 1
+      existing_templates:
+        $ref: '#/$defs/template_ids'
+      input_encoding_hex:
+        $ref: '#/$defs/hex_bytes'
+        minLength: 2
+      outcome:
+        enum: [success, error]
+      error_code:
+        type: string
+      error_field:
+        type: string
+      error_detail:
+        type: string
+      claim_count:
+        type: integer
+        minimum: 0
+      unresolved_count:
+        type: integer
+        minimum: 0
+      conflict_count:
+        type: integer
+        minimum: 0
+      differential_count:
+        type: integer
+        minimum: 0
+      output_encoding_hex:
+        $ref: '#/$defs/hex_bytes'
+      expected_tuple_encoding_hex:
+        $ref: '#/$defs/hex_bytes'
+        minLength: 2
+      verdict_encoding_hex:
+        $ref: '#/$defs/hex_bytes'
+        minLength: 2

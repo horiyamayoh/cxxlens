@@ -1887,7 +1887,9 @@ checked add-one だけで進める。最大値からの publish/SQLite head CAS/
 にする。global generation の authority は checksum、publication identity、decoded record、semantic graph の検証を
 完了した committed record だけであり、corrupt および非 committed record の値を採用しない。SQLite physical minor
 2.6 は `INT64_MAX` を超える u64 を負の two's-complement INTEGER として可逆保存し、比較は decode 後の logical u64
-に対して行う。
+に対して行う。SQLite の publish と compact は同じ `BEGIN IMMEDIATE` 内 authority census を allocation authority とし、process-local
+generation を使わない。publish は global max + 1、compact は authority publication 数ぶんの checked contiguous range を取り、prior
+`(sequence, physical_generation, publication_id)` order で distinct generation を割り当てる。overflow は transaction 全体を rollback する。
 
 ### 15.2 Snapshot manifest
 
@@ -2053,17 +2055,25 @@ staged/validating object を current として採用しない。
 ### 15.10 Reader pin、compaction、format、corruption
 
 compaction は copy-on-write physical generation を作り、physical checksum、semantic snapshot digest、closure binding
-を再検証してから locator を atomically swap する。失敗時は prior generation を維持し、pinned generation は最後の
-handle 解放まで回収しない。
+を再検証してから locator を atomically swap する。SQLite では stale な process-local map ではなく write transaction 内の full committed authority
+census を replacement set とし、全 payload replacement を一 commit に含める。各 publication に distinct な increasing generation を割り当てて
+`open(snapshot)` resolver order を保存し、一件でも validation/allocation/write に失敗すれば prior generation 全体を維持する。process memory と pin token は
+DB commit 後だけ committed census へ入れ替え、eager decode 済みの process-local pinned generation は最後の handle 解放まで回収しない。
+SQLite の旧 durable chunk rows は validated locator swap と同じ transaction 内で削除し、commit 後の retired row は corruption とする。
+cursor は durable chunks を lazy に読まないため、この DB row reclamation は handle/cursor lifetime を短縮しない。
 
-snapshot format は semantic snapshot ID から独立する。compatible major/minor を直接開くか、登録済みの
-deterministic migration chain だけを使用する。migration/compaction 後の semantic digest が元と異なる場合は commit
+snapshot format は semantic snapshot ID から独立する。SQLite は exact current v3.0.0 または exact schema/codec と
+typed diagnostic classification を満たす read-only v2.6 capability だけを直接開き、generic same-major/minor compatibility を
+推測しない。mutation は exact current format または登録済みの deterministic migration chain だけを使用する。
+migration/compaction 後の semantic digest が元と異なる場合は commit
 しない。current head が corrupt な場合は prior head へ silent fallback せず structured failure を返す。caller が
 明示した intact prior publication は読み続けられ、repair は新しい validated physical generation として publish する。
 
 Issue #131 により `open(snapshot_id)` は decoded payload map ではなく committed publication record 集合から、publication sequence、
 physical generation の順で最新 record を一意に解決する。その record の corrupt state、payload存在、record/payload/snapshot ID bindingを
 検査し、一つでも不一致なら `store.snapshot-corrupt` として古い同一 semantic snapshot publicationへ fallbackしない。
+同じ `(publication sequence, physical generation)` を持つ異 publication ID が同じ snapshot にあれば
+`store.snapshot-ambiguous` として fail closed にする。
 `canonical_export`、query bind、derived basis lookupも同じ checked resolverまたは exact publication resolverを使用し、memory/SQLiteで
 同じ verdict と reason codeを返す。明示した intact prior publicationだけは引き続き読み出せる。
 
@@ -2090,10 +2100,671 @@ semantic integrity を宣言してはならない。duplicate snapshot 比較は
 
 Issue #132 は SQLite physical minor 2.5.0 に durable `cxxlens_ng_series_head` を追加する。Issue #148 は minor 2.6.0
 で sequence/generation の全 u64 domain を可逆な signed INTEGER encoding と checked increment で閉じる。publish は
-`BEGIN IMMEDIATE` transaction 内で DB head の current publication/sequence と expected parentを再照合し、immutable publication
-`INSERT` と head updateを同一 commitに含める。別 store instance が先に commitした場合、後続 writerは
-`store.publication-conflict` で rollbackし、memory record/headは更新しない。publish path の `INSERT OR REPLACE` は禁止し、同一
-publication ID の異 payloadによる上書きを許さない。
+`BEGIN IMMEDIATE` transaction 内で全 committed authority record から各 series の正規 head を再導出し、durable head table の ID/sequence と exact
+比較してから expected parentを再照合し、global generation allocation、immutable publication `INSERT`、head updateを同一 commitに含める。history が
+あるのに head row がない、同じ parent ID なのに sequence が違う、duplicate publication ID がある場合は corruption とし、親だけが外部 advance した
+正規 CAS race だけを `store.publication-conflict` とする。別 store instance が先に commitした場合、後続 writerは rollbackし、memory record/headは
+更新しない。publish path の `INSERT OR REPLACE` は禁止し、同一 publication ID の異 payloadによる上書きを許さない。
+
+Issue #200 / ADR 0097 は SQLite current physical format を
+`cxxlens.sqlite-semantic-store.v3` / `3.0.0` とする。publication payload は 8 MiB の bounded BLOB chunk に分割し、
+`(publication_id, generation, chunk_ordinal)`、canonical byte offset、exact chunk/full checksum、logical byte/chunk
+census を authority とする。fresh/current v3 と v2 `compact()` だけは runtime `SQLITE_LIMIT_LENGTH` 16 MiB 以上と
+SQLite 3.37.0 以上を要求するが、これは public request cap ではない。v2 diagnostic read にはこの新しい floor を課さない。
+prepared binary statement と bounded canonical-v5 source/sink を使用し、SQL hex literal、`hex(payload)`、row/page order、
+全 payload/chunk の resident collection を authority にしない。
+fresh v3 initialization は bound-VFS bootstrap と exclusive-lock時の exact-empty receipt再検査後、journal effectをarmする直前に
+bootstrap前から保持したpreinit absent/exact-empty anchor、actual target-main identity/directory binding、raw size/digest、sidecar
+census、expected empty-v3を同じimmutable receiptへsealし、transaction外でWALを
+set/verifyする。arm後のfaultはmain WAL headerまたはWAL/SHM/journal residueを残し得るがschema/metadata/marker/semantic/
+diagnostic authority writeは行わず、confirmed close後のreceipt-aware total classifierでexact empty、current-v3、unsafe stateを
+分ける。一つの `BEGIN IMMEDIATE` 内で WAL/empty anchor、exact six DDL、three non-marker metadata rows、physical-format marker last、
+empty-census validation、commit を行い、partial authorityをsuccess扱いしない。
+nonexistent mainのbootstrapはregular/equivalent objectをexclusive createし、held zero-byte file full sync、authenticated parent
+namespace sync、identity/size/digest再検査をSQLite RW/no-create handoffより先に行う。sync failureではdelete/retry/openせず、残った
+empty fileをauthorityにしない。filesystem mainとsidecarはVFS ABIに加えてsame-object identity/entry/census/held read/hash/
+file+parent syncを提供するtyped observation capabilityを必須とし、generic supplied VFSやspecial fileをDB access前に拒否する。
+filesystem writer openはowned forwarding VFSがlocal `pOutFlags`をexact integer zeroで初期化し、そのnonnull addressを
+underlying `xOpen`へ渡す。input `SQLITE_OPEN_MAIN_DB|SQLITE_OPEN_READWRITE` requestと、成功時だけreturned flagsを記録して、
+returned `SQLITE_OPEN_READONLY` bitがclearである
+ことをlimit/lock/journal/recovery/store effectより前に証明する。失敗は
+`store.sqlite-failure / open / read-write-required`でありfallback/retryしない。
+全`sqlite3_open_v2` profileはnon-OKとnonnull raw handleの同時returnを扱い、nullならcloseせず、nonnullならstatementを作らず
+exactly one `sqlite3_close_v2`を試す。close OKは選択済みopen error、non-OK/unknownはhandleとruntime/VFS pinのquarantineへ閉じ、
+unregister/reopen/retryしない。fresh raw bootstrapのdurable zero-byte mainだけは残り得るがformat/Store authorityにはしない。
+actual limit/identity/synchronous/epoch gate failureは、filesystemのreceipt seal前なら一回closeだけ、seal後またはcoordination/journal
+effect後ならfinalize/必要時一回rollback/一回close後のphase classifier、`:memory:`ならreceipt/reclassifierなしの一回closeへ分ける。
+close non-OKはquarantineし、`BEGIN IMMEDIATE`後のdriftはzero authority writeのまま該当publish/compaction/migration/fresh-init
+precommit規則へ委譲する。
+
+Issue #202 / DF-0202 の receiptless normalization interruption profile は、exact proposal
+`b6cbb86347e02c4b374d7991a1f78d2535789ced` の独立 review により disposable qualification
+implementation だけを accepted authority とする。canonical/user source または production path は、
+別の accepted production profile と qualification が完了するまで activate しない。対象 crash model は、
+underlying VFS callback が成功して呼出側へ戻った境界での process
+termination だけである。power loss、torn/partial sector write、kernel/device cache、callback 内 termination、
+unqualified filesystem reorder は含まず、これらを callback-boundary evidence から推測しない。cold raw classifier は
+SQLite open、recovery、checkpoint、SHM create、delete、cleanup を行わず、namespace epoch 開始後の
+retained authenticated parent fd 相対 `getdents`、`fstatat(AT_SYMLINK_NOFOLLOW)`、
+`openat(O_NOFOLLOW)` または同じ typed semantics、続く held regular file の `fstat`、streaming
+bytes と identity/entry だけから次の有限 family の candidate または unresolved を返す。host path
+の再解決を classifier authority にしない。
+
+| Family | exact cold topology |
+| --- | --- |
+| `F0` | byte-exact current pre-form main（WAL header 2/2）+ sidecar absent |
+| `FZ` | byte-exact current pre-form または post-form main + size-zero WAL、SHM/journal absent |
+| `FP` | pre-form main + derived normalization journal の exact non-hot callback-boundary prefix、WAL/SHM absent |
+| `FH` | pre-form またはpost-form main + exact preimage record を持つ valid hot journal、WAL/SHM absent |
+| `FI` | post-form main + first 28 bytes zero の exact invalidated journal body、WAL/SHM absent |
+| `FO` | byte-exact current post-form main（rollback header 1/1）+ sidecar absent |
+
+pre-formはcomplete-valid WAL-header 2/2 exact-empty current main、post-formはcomplete-valid
+rollback-header 1/1 exact-empty current mainである。receiptless post-form単独から未知のpre bytes、
+normalizer由来、operation historyを復元せず、preからのdeterministic post relationはlive receipt
+またはexact journal preimagesがあるbranchだけで検証する。
+
+precedence は main 不在+sidecar を orphan として最初に拒否し、main+journal+WAL/SHM absent
+だけを generic `journal-present` より先に `FP/FH/FI` raw classifier へ送る。journal と
+WAL/SHM の混在は family 外として拒否する。main+WAL+SHM は ordinary active-WAL、SHM-only は
+incomplete、nonzero WAL-only は ordinary WAL-only route を維持する。size-zero WAL-only は `FZ`
+を main の exact bytes により `FZ-pre` と `FZ-post` へ先に分け、`FZ-pre` は bound zero-WAL を
+coordination object とする新しい live-receipted normalizer、`FZ-post` は typed zero-WAL cleanup
+後の rollback-empty fresh anchor へ送る。sidecar absent は pre-form を `F0`、post-form を
+`FO` とし、それ以外を既存 format/journal-mode result へ閉じる。extra sidecar、ambiguous/truncated
+prefix、identity/byte drift、unavailable observation は candidate を受理せず、fallback や cleanup を
+行わない。
+
+`FP` は journal cleanup 後、`FH` は専用 recovery connection が exact preimage replay、journal
+delete、durable parent sync、one-shot predelegation WAL-open barrier、confirmed close を終えた後、それぞれ
+`F0` を独立再検証して新しい live receipt の normalizer を開始する。`FZ-pre` も同様に現在の
+zero-WAL identity を source receipt に bind して開始する。`FI` と `FZ-post` は sidecar cleanup 後、
+`FO` はそのまま、complete rollback-mode exact-empty を独立検証して ordinary fresh anchor を新しく
+sealする。cold `F0/FZ/FP/FH/FI/FO` から過去の operation history、candidate、receipt、completed
+normalization edge を復元してはならない。特に `FO/FI/FZ-post` は fresh anchor にはなれても、
+normalization success の証明ではない。live invocation で pre-effect/full receipts、permitted effect、
+confirmed close、exact poststate を連結できた場合だけ、その invocation の internal completed edge を
+sealでき、どの family route も Store/public success を直接返さない。
+
+source cleanup は private validation、continuous parent namespace epoch、main の
+`SHARED`→`EXCLUSIVE` lock と under-lock byte recheck の後だけ行う。retained authenticated parent
+directory capability と known sidecar leaf を使い、unlink 直前の current leaf が regular file で
+expected identity と一致することを観測して fd-relative path unlink を一回だけ行う。これは
+§17.6 の authenticated-known-path authority であり、final check と unlink の間の concurrent leaf
+rebind に対する exact-object deletion guarantee ではない。rebind-at-unlink では path effect が既に
+起きた可能性があるため、post-effect durability/authority opaque、no Store、no retry、no handoff、
+no second snapshot とする。全 sidecar deletion は同じ retained parent fd の別個の full `fsync`
+成功と post-census を handoff より前に必須とし、`xDelete(syncDir=1)` の success を durability
+receipt にしない。この規則は `FP/FI/FZ-post` cleanup、`FH` recovery delete、normalizer の
+coordination WAL delete と terminal journal delete のすべてに適用する。coordination WAL deleteは
+journal createより前に独立したparent-sync receiptをsealする。normalizer は最初の rollback-journal sync 後かつ valid
+header/main write 前にも authenticated parent namespace sync を要求し、その失敗を post-journal/
+pre-main opaque totality に閉じる。
+
+journal parser の SQLite pager checksum と large-sector grammar は family candidate の supporting
+integrity evidenceに限る。decoded page size `P`、qualified effective sector size `S`、database page
+count、pending-byte locking page から `Q=(S>P ? S/P : 1)` と record set を導出し、先頭
+`Q` pages（locking pageを除く）の exact preimageを扱う。nonce+sparse checksum は incomplete-write
+guardであってprovenance、main binding、page bytes、success authorityを代替しない。固定 `S`、一 record
+仮定、parent filesystemからの device profile推測を禁止し、SQLite build、`xSectorSize`、
+`xDeviceCharacteristics`、VFS/backend/filesystem profile と全 parameterized `S/P/page-count/record-set`
+matrix をbindする。admitted `S<=65536`、`512<=P<=65536`では`Q<=128`に対してpending-byte locking page
+`L=floor(0x40000000/P)+1>=16385`なので、`L>Q`を全pairで機械的に証明し、存在しないcrossingを
+実行vectorにしない。代わりにsynthetic record-set negativeで`L`を注入したcandidateを拒否する。
+
+authorization は二層である。proposal acceptance 前は authority edit、read-only audit、temporary
+investigation probeだけを許す。exact proposal の independent acceptance 後は raw classifier、
+typed filesystem/VFS ports、effect gates、one-shot barrier、fault harness、およびfixture-scoped
+cleanup/recovery/normalizerを実装し、そのsource effectを明示作成したisolated disposable
+qualification fixture にだけ発行してよい。fixture authorityはharness
+だけがisolated disposable rootの作成後にmintするnonforgeable capabilityとし、retained root
+identity/lifetime、exact fixture locator、qualification run id、selected runtime/VFS/device/build
+profile、許可family/effect/fault scheduleへbindする。path、environment、public flag、report field、
+self-asserted booleanから導出できず、serializeせず、internal qualification-only entrypointだけが
+受理してrun終了時にrevokeする。public locatorまたはproduction APIからmint・注入・到達できない。
+canonical/user source と
+production activation は、repository-tracked harness/build/toolchain、static/shared Cxxlens runners が
+実際に load する同一 SQLite DSO identity/source-id/hash、VFS/build/device/filesystem profile、全
+callback boundary・parameterized large-sector・parent-sync・rebind-at-unlink・recrash/idempotence matrix、
+canonical report digest、independent counterexample review が揃い、draft profile が accepted profile
+へ置換されるまで fail closed とする。Cxxlens の static/shared runner labels から static SQLite
+runtime を推測せず、genuinely static SQLite image は別 profile/matrix を要求する。
+
+exact public locator `:memory:` は filesystem canonicalization 前に ephemeral fresh-v3 branch とし、sidecar、v2/migration、
+close 後 persistence を持たない。embedded NUL またはplatform pathへlosslessに表現不能なnonempty inputはruntime/filesystem
+access前にzero-effectの`store.sqlite-failure / sqlite-locator / invalid-filesystem-path`で拒否する。それ以外のvalid inputは
+URIでなくfilesystem pathとし、runtime/VFS bind後のpinned `xFullPathname`とfile identityへbindしてuser URI/queryをpass
+throughしない。base classifierはexact empty、mixed v2/v3、declared v2、declared current-v3、unknown nonemptyをdisjointに
+分類し、declared current-v3だけをv3 symbol/version gateへ進める。exact v2.6.0 は side-effect-free に direct open できる read-only predecessor
+とする。active-WAL source は bound nonmutating census が readable WAL+SHM を識別した後、最初の underlying SQLite source `xOpen`、
+SHM map、authority read より前に `sqlite-source-shm-readonly-unix-uri-v1` capability が成立した場合だけ開く。この capability は
+loader-origin を証明した SQLite Unix default VFS または同じ contract を持つ typed exact equivalent に限定し、actual runtime、VFS、filesystem
+profile の target source に触れない scratch WAL/SHM behavioral qualification が source SHM の初回 map でも initialize、truncate、extend、
+create、delete、resize を行わないことを証明する。この active-WAL branch だけは同じ pinned runtime handle から
+`sqlite3_sourceid`、`sqlite3_uri_parameter`、`sqlite3_uri_key` を追加で解決する。quiescent exact-v2 diagnostic readにはこの
+branch-specific symbol/version/behavioral gateを課さない。application が生成する URI は exact
+`file:<uppercase-percent-encoded-canonical-absolute-path>?mode=ro&cache=private&readonly_shm=1` とし、
+`READONLY|URI|PRIVATECACHE|FULLMUTEX`、explicit owned VFS alias で開く。`vfs`、`immutable`、user URI/query と未知 parameter は禁止し、owned
+VFS の main `xOpen` callback receipt が underlying `xOpen` を delegateする前に exact parameter set と canonical path を確認する。capability
+または receipt を証明できなければ underlying source `xOpen`、SHM map、authority read を行わず fail closed とする。
+
+scratch の producer/cold/active locator は retained directory descriptor から `/proc/self/fd` 経由で解決し、qualification 専用の
+exact `xFullPathname` arm だけがこの locator を保持する。host pathname の再解決を qualification authority にしない。target の
+held main/WAL/SHM object は各 object の typed filesystem profile が retained parent と scratch profile に exact 一致することを要求し、
+parent filesystem だけから推測しない。qualification unavailable/failure の public result は stage に依存しない exact
+`store.backend-unavailable / sqlite / source-shm-readonly-qualification` とし、source `xOpen`、map、authority read、fallback はゼロである。
+
+target callback が検証する logical URI は canonical absolute path のまま保持する一方、native main/WAL/SHM resolution は qualification
+receipt に bind した一つの retained parent-fd locator だけへ内部投影する。target `xFullPathname` 前から eager read transaction 終了前まで
+parent namespace の create/delete/move/watch-loss/queue-overflow を監視し、content modify/attrib は外部 writer の正当な coordination として
+watch 対象にしない。native map 前後に fd-relative exact census と watch を検査し、event、loss、identity drift があれば native mapping を
+non-removing unmap して SQLite へ返さず fail closed とする。target main/WAL/SHM は retained parent directory の direct regular entry
+に限定し、proof を bound source census に seal して main header oracle その他の target source read より前に検証する。symlink その他の
+間接参照は native callback 前にも再確認して拒否する。これにより leaf または ancestor の A-to-B-to-A replacement を
+endpoint equality だけで受理しない。
+epoch 開始後は logical host path を census や identity receipt のためにも再解決せず、retained parent-fd と held object receipt だけを使う。
+
+同 capability の forwarding `xShmMap` は native VFS の最初および後続の `extend=0` call を毎回 delegate する。caller の
+`extend=1` も最初と後続のどちらでも native VFS へ `extend=0` として delegateし、extension request自体は渡さない。
+`SQLITE_READONLY_CANTINIT`+null と exact `SQLITE_READONLY`+non-null mapping の transition は保持し、`READONLY`+null は
+CANTINITへ正規化する。一度 READONLY-family を外へ返した後も後続 map を抑止する permanent latch は持たない。qualified readonly-SHM
+profile で native `SQLITE_OK` が返ることは mapping の null/non-null を問わず backend protocol violation として fail closed にし、READONLYへ
+変換しない。writer attach 後の正当な transition は CANTINIT+null から exact READONLY+non-null である。generic non-profile caller の
+`extend=0`+OK semantics は変更しない。この per-file READONLY-family state は成功した delegated `xShmUnmap` でだけ reset する。
+
+DF-0205 の `cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` は Issue #205 の
+exact proposal `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb` を
+<https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584> の独立 review
+(`P0=0 / P1=0 / P2=0`) が `accepted-authority-implementation-pending` としてacceptした authority amendmentである。
+schema の `same_process_writer_mapping_lease_proposal` key は reviewed exact artifact/history として保持し、
+acceptance pendingを意味しない。この acceptance はinternal implementationを認可するが、distinct exact
+implementation commitと全counterexample matrixの独立 reviewが完了するまでcurrent sourceのblanket
+`SQLITE_OK` rejectionを変更せず、productionをblockする。同じloaded SQLite Unix runtimeで既存writerのinode-bound
+SHM mappingが再利用される場合に限り、accepted narrow exception authorityはwriter native map前のlocal
+non-authoritative attempt、exact OK+nonnullとpost-map receipt後のregistry pending、current-v3 Store
+writer gate完了後のlive leaseという順で成立し、reader delegation前にprocess-global cross-alias
+registryのexactly one leaseからin-flight pinを取得する。registry pendingをnative delegation前に
+installしない。mint eligibleなのはowned-forwarding production `MAIN_DB`のinput/returned flagsが
+READWRITEかつREADONLY/CREATEなしと証明されたcurrent-v3 writerだけで、qualification/diagnostic/
+temporary/raw external/readonly/non-main/private recovery/normalization/CREATE handleはmintしない。
+pending単独、PID/path/VFS name/pointer equality、post-hoc endpoint equality、connection sharingは
+authorityではない。
+
+Issue #206 / DF-0206 の実装監査は、同じ `sqlite3_file` attachmentで複数pageのwriter
+`xShmMap`が成功し得る一方、native `xShmUnmap`はcomplete attachmentを一 callbackで解放するという
+cardinalityをaccepted DF-0205 authorityが未定義であることを示した。ADR 0097 とSQLite/Snapshot
+contract/schema mirrorの `cxxlens.sqlite.writer-shm-native-attachment.v1` は
+exact proposal `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` を Issue #206 の独立
+semantic/structural review
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> が
+`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) として accept した
+writer-only amendment である。map callbackごとの
+pair/effect/page authorityを保持しつつ、checked non-reusable attachment identityに属するcomplete
+post-native/pending/live member setを一回のnative unmapへatomicにbindし、cross-attachment/partial
+group、outcome複製、duplicate cleanupを拒否する。internal writer attachment-group state machine と
+focused tests の実装だけを認可し、production VFS binding と reader grouping は認可しない。既存
+blanket native OK rejectionを変更しない。
+
+exact proposal `3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` の独立 review は
+`P0=0 / P1=2 / P2=1` でrejectした。non-last attachmentが唯一supportしたpageのfresh-reader
+authorityと、map-before-gate group snapshot対later-map admissionのtotal orderが未定義だったためである。
+revised proposalは各live attachment groupのexact page-support setを保持し、non-last cleanup後に残存
+support unionからfresh-reader-admissible page setをatomicに再計算する。support zeroのpageは既存exact
+handoffのsealed lifetimeを除きfresh admission不可とし、live attachmentのfresh map/resealだけで復活する。
+non-last groupのhideで他groupからのsupportがzeroになるpageについて、hide前にadmit済みのreader
+predelegationはno-map resolution、confirmed reader cleanup、またはsealed pinからexact handoffへの
+promotionまでcleanup blockerとする。same-threadは待たずwriter unmapをdelegateせずquarantineし、
+other-threadはregistry mutex外のbounded ordered wait後にexact recheckする。timeout、unknown、identity
+drift、unconfirmed cleanupはretryしない。別groupのsupportが残るpageのinflightと確立済みhandoffは
+blockerではなく、handoffをfresh support、transfer、successor authorityにはしない。
+cleanup済みreceiptはtransferせず、sealed SHM sizeはpage authorityと分離したmonotonic physical
+observationとして保持する。gate completionとlater mapは一つのregistry state boundaryでtotal-orderし、
+map-winningはbounded blocker、gate-winningはcallback return前promotionとする。timeout、unknown、
+open-epoch driftはcomplete groupをhide/quarantineし、successful gate後にboundary前pendingを残さない。
+`9011b22` review時のenclosing lease digestは
+`sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550` である。
+reader-predelegation orderingを加えたcurrent digest
+`sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`
+は四つのmirror/checkerへbindする。この exact revision は
+`bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` として
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> の独立
+semantic/structural reviewに合格した。review receiptとaccepted statusを加えたcurrent enclosing
+lease digestはDF-0206 accepted checkpointとして
+`sha256:e522cbbe3c6bb9bf2ed645816941f1921f5884eacc36360e8dc546b779bded29`
+である。この acceptance は writer-only であり、DF-0207 の reader authority または production
+activation を推移的に認可しない。
+
+Issue #207 / DF-0207 のread-only implementation auditは、同じreader `sqlite3_file`のdifferent-page
+mapが別handoffを作る一方、native `xShmUnmap`はreader attachment全体を一回で解放するcardinality
+gapを記録する。DF-0206のwriter-only proposal/reviewはreader groupをtransitively認可しない。
+reader attachment authorityとdistinct exact implementation/matrix reviewが完了するまでreader grouping、
+production reader exception、VFS activation、qualificationをblockし、一native outcomeを複製しない。
+
+四つのSQLite/Snapshot contract/schema mirrorに置く
+`reader_native_attachment_amendment_proposal` /
+`cxxlens.sqlite.reader-shm-native-attachment.v1` は Issue #207 / DF-0207 の
+`accepted-authority-implementation-pending` reader-only amendmentである。exact proposal commit
+`636ef43803665e9999b38b9c33bd3afdbb6b4460` とsemantic digest
+`sha256:a342d01379b7d6e3c9a162dc02cf260942c4dc96783e941333c1aa2a1eeef8f0` は
+Issue #207 のfresh independent exact-commit review
+<https://github.com/horiyamayoh/cxxlens/issues/207#issuecomment-5125815049> で
+`P0=0 / P1=0 / P2=0` としてacceptされた。receiptを加えたcurrent amendment digestは
+`sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6`、
+enclosing lease digestは
+`sha256:f42cb94b284b2af1683d7fe573ef0a9b9d6d6706d111bf0f97d8d22a554edab5`
+である。
+accepted DF-0205/DF-0206/DF-0208 subtree、current blanket native `SQLITE_OK` rejection、production
+VFS、public C++ APIを変更しない。checked reader attachment identityはprocess/runtime/VFS/file
+family、reader aliasとdistinct lifetime pin、connection、main `native_file_node` / `xOpen`、
+open epoch、writer mapping generation、observed SHM object/direct-entry/device/mount、callback cohort、
+non-reusable attachment epochへbindする。path、`sqlite3_file*`、connection、page pointer、generationの
+いずれかのequalityからgroupを再構成しない。このidentityはactive proposal groupまたはexact
+same-process live local writer generation候補だけにmintする。SQLiteへ入る前に、active group、
+local proposal候補、ordinary/existing predecessor、rejectを排他的に分類し、別processまたはlocal
+generationなしの通常readはproposal reservationを一切作らず既存byte-semantic routeへ渡す。
+
+成功callbackごとのexact receiptは保持するが、live memberはgenerationのauthoritative tupleと一致する
+unique pageごと、attachment handoff、generation lifetime count、unmap ownerはgroupごとに一つとする。
+same-page exact revalidationはcallback auditを追加し、同じtransaction/sessionのuse ownerを再利用する。
+別sessionだけが別ownerを持ち、member、page support、handoff、cleanup authorityをmintしない。
+different-pageはactive writer leaseからfresh predelegationを
+得た場合だけjoinでき、retirement開始前にadmit済みのpinだけが開始後に完了できる。map admission、
+unmap cut、close cut、terminal commitは一つのchecked non-reusable sequence domainでtotal-orderし、
+cut-firstはnative map前にreject、map-firstは全precut attemptのterminal後にcomplete member/effect
+censusをregistryから再導出する。same-thread/reentrantは待たずnative effectを起こさずquarantineし、
+other-threadだけがmutex外でbounded wait後にexact recheckする。
+
+local proposal候補のdeterminate mapped returnなら、member eligibilityより先にcallback/open epochと
+observed native objectへbindしたcleanup-only ownerを一つsealする。predecessor rowとexisting groupは
+これをmintしない。これはgroup/member/pointer authorityではなく、validation成功時にだけlive
+identityへpromoteし、unpublished first-map failure時は一度だけcleanupへconsumeする。
+member/revalidation receipt、exact session ownerのmint/reuse、pointer coverageとoutward
+eligibility、map terminalは一つのregistry commitで全てpublishするか何もpublishしない。cutが先なら
+`SQLITE_IOERR`+nullと一つのcleanup lineage、commitが先ならvisible ownerがcutをblockする。
+
+SQLiteは`Wal.apWiData`のcached pointerを後続transactionで`xShmMap`なしに再利用できる。このため
+authority-read entryでSQLite APIを呼ぶ前にsession reservationを作り、active groupならその場で
+distinct session ownerへpromoteして全cached useをcoverする。first mapはreservationをownerへpromoteし、
+predecessorは既存routeへtransferし、no-pointer failureはconsume、ambiguityはtombstoneへ移す。
+`xShmLock`やpointer observationからownerを遅延生成しない。normal unmap/全close routeは全session
+reservationとattachmentへpublishされた全eager use-session ownerがexact transaction
+terminal receiptでdrain済みであることを要求する。unpublished first-mapのexact mapped validation
+failureだけはzero published member/use ownerを再確認してproactive unmapでき、confirmed cleanup時だけ
+one-shot logical teardown acknowledgementをinstallする。既存memberまたはuse ownerがあるlater-map
+failureはgroupをhideして`SQLITE_IOERR`+nullを返すがunmapを延期し、use-owner setがemptyになった後の
+一回のSQLite unmapまたはcloseへsole ownerを渡す。ambiguous first mapはgroupを捏造せず
+open-epoch/reservation-scoped opaque custodyを作り、group countとは別のfamily exclusion countで
+successorをprocess lifetime blockする。そのhandleの後続unmap/closeはzero-call `SQLITE_IOERR`であり、
+pre-native peerをrejectし、native-start済みpeerは既存cleanup/quarantine、established peerはowned
+drainだけへ閉じる。confirmed unmapは全memberを一度にretireしgroup countと
+readonly latchを一度だけ更新する。non-OK/throw/unknown、close ambiguityはexact family/runtime/VFS/
+generationをquarantineしてretryせず、fresh admissionを止めつつ他のalready-owned cleanup/drainだけを
+許す。map/group/use/cleanup/ack/close/cut/wait/terminal/pinをclosed custody enumで管理し、全kindが
+consumed、exact successor、durable tombstoneのいずれかへ一意に移るまでrelease/wakeup/compaction/
+unregister/unloadしない。compact success tombstoneもprocess lifetimeのnon-reusable token/stale
+rejectionを保持する。
+
+ordinary predecessorの`SQLITE_READONLY`+nonnull、base `SQLITE_READONLY`+nullからnormalizeする
+`SQLITE_READONLY_CANTINIT`+null、exact CANTINIT/nullは既存rowを維持する。local proposal reservationが
+これらへ移った後もproposal authorityをblockし、既存routeのconfirmed unmap/closeでだけretireする。
+proposal group形成後のREADONLY/non-nullは二つ目のcleanup ownerを作らずgroupをhideして
+`SQLITE_IOERR`+nullとdeferred sole group cleanupへ閉じる。`SQLITE_OK`+null等のprotocol-invalid pairは
+zero-effectならreservationを閉じ、mappedなら一つのcleanup lineage、不明ならquarantineへ全域化する。
+将来production reviewを通過したadmitted `SQLITE_OK`+nonnullだけが`SQLITE_READONLY`+same pointerへ
+project可能で、denial、validation failure、ambiguity、`SQLITE_OK`+null、unleased `SQLITE_OK`は
+`SQLITE_IOERR`+nullである。このacceptanceはinternal reader group/map/member/revalidation、
+callback/session lifetime、unmap/close state machine、registry gate、focused testsだけを認可する。
+production/VFS/native-OK activationはexact
+implementationとcomplete counterexample matrixのdistinct independent reviewまでblockする。
+
+Issue #208 / DF-0208 の
+`cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、map-before-gate cleanupへexact negative evidenceと
+sole cleanup authorityを与えるaccepted writer-only amendmentである。四つのSQLite/Snapshot
+contract/schema mirrorの `writer_gate_outcome_evidence_amendment_proposal` は、exact proposal
+`bd2505f26d0d45b7bfa785a533c308ab957b11aa` を Issue #208 のfresh independent semantic/structural
+review <https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571> が
+`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) としてacceptしたことをexact
+receiptへbindする。このacceptanceはinternal gate outcome evidence/state machine、registry cut/callback
+cleanupとfocused testsだけを認可する。accepted DF-0206 fieldsとreader-predelegation ordering fenceを
+変更せず、DF-0207 reader grouping、production/VFS binding、public API、native OK projectionへ推移認可しない。
+
+gate outcome evidenceとregistry cut executionを二軸に分ける。validator issuerはprocess/runtime/VFS/
+file-family/alias/connection/main native node+`xOpen`/open epoch、expected attachment epoch reservation、
+closed profile、issuer control epoch、attempt tokenへbindした一つのmove-only ownerに、success、
+typed determinate failure、terminal indeterminateのexactly-one kindをregistry transfer前にsealする。
+sealed kindはimmutableであり、cut executionのtimeout、drift、continuation abandonment、internal failureから
+再seal/reclassifyしない。caller lifecycleは
+`open -> issuer_sealed_kind -> transferred_to_registry`、registryは別のone-shot continuation ownerを持つ。
+unaccepted owner dropはownerだけをconsumeし、open dropからoutcomeをmintせず、既存DF-0206 member owner/
+cleanup obligationをcancel、merge、transfer、dischargeしない。validator-sealed abandonmentだけがtyped
+terminal outcomeであり、post-cut abandonmentはkindを保った `cut_execution_indeterminate` になる。
+
+profile `cxxlens.sqlite.current-v3-writer-gate.v1` は同名canonical domainと
+`cxxlens-canonical-tuple-v1-length-framed` encodingで、six ordered stagesごとのauthority path、
+expected/observed values、typed receipt、
+allowed/observed effects、closed resultを保持する。Store writer-open stageはnonforgeable factory-success
+control edge、`post_format_prewrite/no-candidate-yet`、zero schema/metadata/payload/head/counter write、
+commit、allocation、process-visible publication effectを要求する。determinate failureとterminal
+indeterminateの双方が全passed prefix直後のfirst-nonpass adjacencyを持ち、terminalはclosed
+locus/stage phaseを記録してlater stageを実行しない。missing/extra/unclassified effectはterminal
+indeterminateとする。各stage resultはclosed enum
+`passed | typed_determinate_failure | terminal_indeterminate` のexactly oneであり、ordered stageと
+closed failure enumはexact bijectionを持つ。six passedだけがpositive、passed prefix直後のbijective
+failureだけがtyped failure、closed locusとstage/phaseが一致するterminal resultだけがterminal
+indeterminateとなる。unknown result、wrong-stage failure、prefix/outcome不一致、terminal locus不一致は
+non-authorizing invalid evidenceとする。passed/failure stageはobserved value、typed receipt、observed
+effectのfull bundleを持つ。at-stage terminalはslotを
+`observed-value: not_observed | exact_present`、
+`authority-receipt: not_issued | exact_present`、
+`observed-effect: not_executed | started_outcome_unresolved | exact_present` とtag付けする。before-valueは
+全negative tag、`after-value-before-effect`はvalue/receipt present+effect not-executed、
+`after-effect-start-before-effect-result`はstart permit/partial transcript付き
+`started_outcome_unresolved`、`after-effect-before-stage-result`は全presentである。
+`observation_commit`、`effect_start_commit`、`effect_result_commit`が各boundaryをatomic publishし、
+value present/receipt not-issuedの中間はunreachableとする。
+expected policy/allowed effectは全entered stageで必須、negative tagはpayloadなし、present tagはexact
+payload、started tagはexact partial payload必須で、tag/payloadをlength-framed evidenceへbindする。
+phase/tag/payload不一致は拒否する。
+canonical bytesだけがequality/authorityで、SHA-256は
+acceleration keyである。
+
+native attachmentはone-shot expected epoch reservationとobserved `absent`/`present`を分け、
+reservationを
+`reserved | claimed_inflight | consumed_to_present | revoked | quarantined` のclosed graphにする。
+empty positiveはstill-reserved reservationとexact live close ownerをretainし、first callbackはregistry
+mutex下の`claim_and_form_dual`で`reserved -> claimed_inflight`、shared callback owner/control epoch、
+member sequence、native/member prestart projections、ordinary routes、一unused delegation permitを一つの
+`atomically_dual_bound` formationとしてatomic publishする。claim-onlyまたはpartial peer formationは通常
+routeへ入らずzero-effect invalid-partial sinkへ進み、`start_existing_dual`だけがcomplete formationをnative
+へdelegateする。same-thread/reentrant contenderはwaitもnative callもせず拒否し、other-thread
+contenderはoriginal ownerのterminalを一回bounded waitしてmutex下で再検証する。contender timeoutは
+original claim/reservation/late obligationを変更しない。exact present identityとrevocation epochの一致だけが
+`consumed_to_present` を完成し、confirmed no-mapは`revoked`、mapped mismatchまたはeligibility revocation後の
+mapped resultはDF-0206 cleanupへrouteし、throw/unknown/abandonmentは`quarantined`とsole unfired late
+lineageを残す。map-before-gate presentは既にconsume済みreceiptを再consumeせず、terminal reservationを
+reclaim/reissue/rebindしない。
+
+member admissionとcutは同じprocess registry epochのchecked monotonic non-reusable sequence domainを共有し、
+同じmutex下でunique sequenceとvisibilityをatomicにする。exhaustionはowner transfer/cut publication前に
+registry admissionをquarantineし、既存member ownerを保持してnative/close callゼロとする。first
+acceptanceはissuer-sealed kindを変えず、`member_admission_sequence < cut_sequence` のsame-attachment
+inflight/post-native/pending全件をcut universeとしてfreezeする。各blockerをmutex外で一回bounded resolveし、
+mutex下でterminal native classificationを再検査する。memberはnative stateだけを
+`exact_no_native_mapping | exact_native_mapping | terminal_native_outcome_unresolved` に分類し、cleanup
+authorityを埋め込まない。全件terminal後だけauthoritative stateからcomplete final groupを再導出し、
+cut universe対native censusのone-to-one coverage、attachment-wide cleanup authority census
+`exact_live_attachment_owner | not_applicable_no_mapping | absent | ambiguous`、およびorthogonalな
+close census `exact_live_connection_open_epoch_owner | absent | ambiguous` を別々に確定する。member
+receiptやcaller spanからownerをmintしない。coverage completeはmembershipだけを証明し、
+zero unresolvedとselected dispatch cellの全required ownerを同時に満たすまでeffect-readyではない。
+一件でもunresolvedならwhole cutを`cut_execution_indeterminate`へrouteし、unfired late lineageを一つだけ
+installする。missing/extra/duplicate/cross-boundまたはinconsistentなcoverage/censusは21 effect rowの外で
+whole scopeをzero-native/zero-close quarantineし、一つのinvalid-coverage tombstoneをconsumeして
+unresolved/operational/sealed rowへfall throughしない。cut-time snapshot/subsetからsealed promotion/failure、cleanup owner、native call、closeを
+発行しない。cut executionは
+`cut_open -> resolving_cut_universe -> effect_ready -> completed` と各nonterminalから
+`cut_execution_indeterminate` へのclosed graphを持つ。complete-group publicationまたはwhole effect-owner
+transferとcut terminalをatomicに確定し、positive effectはcompleted transitionでだけ許可する。execution
+uncertaintyはincomplete coverageから新しいsubset effectを開始せず、consume済みnative effectをtombstoneに
+する。後続cleanup callbackは独立lineageでcut terminalを変更しない。later mapはcompleted positiveだけが
+bounded wait後gate-before-mapへ進み、他はnative前で拒否する。
+
+native dispatchは
+permanent-unresolved fence、live-positive scope rewrite、mapping-identity-integrity fence、
+coverage-integrity fence、unresolved fence、current `cut_execution_indeterminate` operational matrix、
+sealed outcome matrixの順とする。dispatch domainは
+`waiting_no_effect | decision_unfired | terminal_or_consumed_reentry` のclosed partitionである。
+cut-open、final rederivation/coverage未完のresolving、unresolved cut-indeterminateはzero row/zero permitで
+waitする。complete final group、exact coverage、zero unresolved、closed consistent authority cellを持つ
+resolvingはzero effect/zero consumeで`effect_ready`へ入り、effect-ready+unfiredが15 sealed rowの一つ、
+同条件のcut-indeterminate terminalは6 operational rowの一つを選ぶ。valid sealed rowは
+effect-ready→completed、invalid 7 rowは同じtokenで
+cut-indeterminate+named close/drain/zero actionをatomicに完了し、operational rowを再選択しない。
+zero-call/quarantineを含む全rowは`unfired -> consumed_tombstone`をdecisionと同時にconsumeする。
+completed/consumed再入はzero row/zero effect/replay rejectである。positiveはall-no-map+valid reserved+exact closeでeligibility、
+またはmapped+consumed+exact attachment/closeでwhole-group promotionを行い、cleanup zeroでownerをretainする。
+positiveのrequired owner欠落はcompletedにせずoperational indeterminateへrouteする。determinate failureは
+all-no-map+exact closeでclose-only、mapped+exact attachment/closeでunmap→confirmed success後closeとなり、
+mappedでclose欠落ならone drain/no close、attachment owner欠落ならguessed call zeroである。terminal
+indeterminateはall-no-mapでexact closeならone close、absentならzero、ambiguousならcut indeterminate、
+mappedでexact attachmentならone drain/no close、absentならzero、ambiguousならcut indeterminateとする。
+operational indeterminateはall-no-map+exact closeだけcloseし、close absent/ambiguousはzero call、mapped+
+exact attachmentだけone drain/no close、attachment absent/ambiguousはzero guessed callとする。すべての
+no-map failure/terminal/operational/late rowはstill-reserved expected attachmentをatomic revokeする。
+
+late lineageはexact expected reservationへbindし、observed attachmentを
+`absent | present_exact | unresolved` のtagged stateとして保持する。unknown identityから
+`present_exact`を推測しない。`absent`はexpected reservation/callback cohortへbindしたexact terminal no-map
+receiptまたはvalid pre-start cancellation receiptを必須とする。同じcallback owner/control epochがnative callback開始前にfuture native effect
+impossibleを証明したexact cancellationだけをno-mapへnormalizeし、callback-started/unknown、caller cancel、
+timeout、abandonmentはunresolvedのままとする。postcut claimのexact cancellationはregistry mutex下で
+`claimed_inflight -> revoked`をatomicにconsumeする。すべてのbound callbackがterminalまたはexact cancelledになる
+までinvocation permitはzeroで、permanent unresolvedはzero-call quarantineを維持する。
+
+`precut-unresolved-cut` はcut universe/final group/orthogonal censusesとshared unfired cut-indeterminate
+dispatch ownerへbindする。complete rederivation+exact coverage+zero unresolved+closed cell後だけ該当
+operational rowへsubmitし、invalid coverageはglobal zero-effect tombstoneで終える。
+`postcut_claim_derived_nonpromotion_cleanup_decision` はcompleted-positive receipt、exact
+reservation/claim owner/control
+epoch/callback、DF0205 `pending_install`/`post_map_seal` receipts、complete DF0206 attachment censusへ別に
+bindし、original empty cut census/close owner/consumed dispatchをaudit context以外に使わない。元claim
+ownerをdistinct one-shot decision lineageへ変換し、no-map/cancelはzero effectでconsumeする。exact mappedは
+required receiptsとzero-live-memberを証明するcomplete censusが揃い、same-attachment cleanup instanceのpreseal/live/sealed/invoked/
+terminal/tombstone全state authoritative countがzeroの場合だけ、same ownerをmutex下で一つのnew sealed
+DF0206 `post_native_failure_without_live_member` cleanup instanceへtransformする。既存instanceが全stateで
+一つでもある、またはauthority missing/ambiguousならjoinせずzero-call quarantineする。close、新owner、
+DF0208 row、completed cut変更は禁止する。original completed terminal後のfirst exact bound receiptは有効で、
+cross-kind/cross-bound/duplicate/own tombstone後だけを拒否する。
+
+native effect authorityはDF0208 selected rowとこのpostcut claim-derived DF0206 transferのclosed disjoint
+unionで、overlap/reconstruction/reuseしない。close/drain/unmap outcomeとinternal cleanup commitはsealed
+gate kindとcut terminalの双方を変えない。
+
+live positiveとsame-attempt failureのcontradictionはsealed outcomeの適用だけを拒否して
+`cut_execution_indeterminate` とし、既存accepted DF-0206 live group/lifetimes/attachment owner/close
+owner/cleanup ownerをdispatch targetとauthority censusの双方から除外する。frozen cut universe/tokenは
+変更せず、全tokenを既存live groupまたはresidualへexact total disjoint projectionし、既存側もone-to-one
+accountした上でresidual new-attempt cutを
+mutex下で再導出し、unresolvedならownerをunfiredで保持、invalid coverageならzero-effect tombstone、
+complete+zero unresolvedならresidual operational rowを同じtokenで一回consumeする。original live ownerへ
+fall throughしない。new gate/issuer/fresh admissionだけをquarantineし、既存live groupの
+native-file/runtime/VFS/connection cleanup-only lifetime pinsとDF-0206 one-shot cleanup authorityを保持する。
+DF-0208はhide/revoke/unmap/close/dischargeしない。native invocation permitはcall前に
+consumeし、failure/unknown/internal commit failureからeffectを再発行しない。writer groupはreader handoffを
+含まず、DF-0207 reader authorityまたはproductionを推移認可しない。
+
+normal admissionはdurable prior-cut state、active slot phase、work kindと、reservation-bearing workの
+`claim_and_form_dual | start_existing_dual` exactly-one substepを同時に検査する。cutでfreeze済みtokenは
+immutable fresh/dual originに従い
+`fresh_member_start | fresh_terminal_resolution | dual_shared_start | dual_terminal_resolution`
+exactly-one stepだけを選び、cross-origin step、再claim、late formationを拒否する。
+
+mapped terminalはmapping identity tagとexact actualまたはopaque observed lifetime pinを同じterminal
+commitでbindする。fresh unsafe tokenは`live_origin_tombstone | retired_identity_tombstone`だけを持ち、
+registry mutex下のsole retirement transitionはstate/pins/retirement receiptだけを変更する。fence-firstでは
+既設typed reason/member tag/quarantine reference/terminal-route bindingをbyte-identicalに保持し、
+retirement-firstではretired formへの後続fenceがそれらをexactly once bindしてpinを再構成しない。dual
+nonpromotionは一つのcomposite pin custody cellを共有し、fence-first/cleanup-first、ownerlessまたは
+independent DF-0206 retirement、zero-live-pin terminal proofをclosed transitionで扱う。
+
+各cut terminalはchecked nonreusable generation付きdurable latest recordをslot release/wakeup前にinstallまたは
+replaceする。後続dispatch consumptionは同じgenerationだけをupdateし、fresh/dual custodyとpostcut
+continuationのcomplete transfer後にだけrelease/wakeupをatomic publishする。stale generation、incomplete
+custody、terminal record未installではslotをreleaseしない。
+
+reviewed proposal semantic digestは
+`sha256:30fd6d29224e9707bbdf0f72b585d75c726f361e97ce6ed730dd608f985fa728`、review時の
+enclosing lease canonical digestは
+`sha256:79f31929806955fceeb373739b5f67b8395525bb77d57f8886f6f0c559bcd89f` である。
+accepted statusとexact review receiptだけを加えたcurrent DF-0208 semantic digestは
+`sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb`、current enclosing lease
+canonical digestは
+`sha256:a3cbda5086921c6e804cc6bd054a5f638900ee7d177ee35dbac79ae1c83abca5` である。
+
+local attemptはnative writer map前にwriter generation/first-writer cohort in-flight pinを取得し、
+pre-statより先に別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace watchを
+開始する。registry mutexはnative callback越しに保持しない。pre-existing SHMはnamespace event zeroを
+共通に要求し、`{0,0}` attemptはpre/post exact same direct entry/object/mount/size、authenticated
+`{1,1}` attemptはpre/post exact same direct entry/object/mountに加え、requested mapping rangeが
+preallocatedならexact size equalityとzero effect、それ以外はrangeに対応するexact monotonic size
+extensionだけを許す。absent SHMはauthenticated `{1,1}` attemptによるexpected
+leafのexact one `IN_CREATE`とexact post-create direct regular object/entry/mount/sizeだけを許し、
+`{0,0}` attemptでは許さない。それ以外、indirection、watch loss/overflow、A-to-B-to-A、またはtrusted
+equivalentを持たない非Linux profileはmint不可とする。post-mapでretained parent、既存main/WAL
+native-file-node/`xOpen` receipt、SHM native attachment/stat-only object/entryをsealし、epoch/watchを
+pending→live holder→in-flight→handoffへ継承してlast holder/handoffまで保持する。endpoint
+identity/pointerだけでcontinuityを代替しない。
+
+map-before-gateではnative OK+nonnullとpost receipt後のpendingをwriter gate completionがpromoteする。
+gate failureはpending remove後にtrusted non-removing unmap(0)とcloseをexact outcome付きで試し、
+non-OK/unknownならopaque handle/lease/runtime/VFS/generationをquarantineしてretryしない。
+gate-before-mapではgateがexact connection/open epochのimmutable eligibilityだけをinstallし、後続mapが
+local attempt→native result→pendingを経た後にeligibilityを再検査してpromoteする。eligibility単独は
+mapping/reader authorityではない。closeまたはopen epoch/format/head/counter/WAL/synchronous/runtime/
+VFS/file-family driftはeligibilityを先にrevokeし、stale pendingをpromoteしない。
+gate-before-mapのfirst mapはnative OK後かつouter writer callbackがOKを返す前にpending→eligibility
+recheck→live promotionを完了し、失敗はnon-removing unmap(0)+outer `SQLITE_IOERR`、ambiguityは
+quarantineとする。後段Store gateへ延期しない。
+
+writer map receiptはcaller/delegated `extend` pairとeffect transcriptを各callback attemptおよび
+resulting holderへexactにbindし、mapping generation keyには含めず、各値を0/1に限定する。`{1,1}`は
+authenticated RW `MAIN_DB`+exact WAL write-lock/effect gateの下でgeneration install/join/new pageを
+許し、pre-existing SHMではpreallocated requested rangeのzero-size-effectまたはrangeに対応するexact
+monotonic size extension、absent SHMではexpected direct createをwrapper call/result、namespace、pre/post stat
+object/entry/mount/size、WAL-lock history、pinned source ID/callback transcriptで証明する。underlying
+syscall provenanceやcaller intentだけをeffect authorityにしない。`{0,0}`はpre-existing direct
+SHM、pre/post exact size equality、zero effect transcriptだけをpendingにでき、full current-v3 gate後に
+だけpromote/joinする。`{1,0}` effect-denied downgrade、`{0,1}`、他値はmint/pending/join不可である。
+same-page joinは各holder固有のvalid pair/effect receiptとpointer/page/range/current sealed sizeの
+一致を要求するが、holder間のpair equalityを要求せず、`{1,1}` holderと`{0,0}` holderは両方向に
+cross-holder joinできる。same-generation new-page/growthはmapping-page setとsealed SHM sizeをatomic
+更新して全readerを最新generation-size receiptへbindする。
+
+leaseはnon-reusable process-instance identity（PID-onlyは禁止し、pidfd/process-start witness、fork
+child invalidationとPID reuse rejectionを含む）、shared dl/runtime image/object/digest/source ID/load
+generation/callback cohort、underlying VFS pointer/version/`pAppData`/registration epoch、aliasごとに
+異なるwriter/reader `sqlite_api` runtime-lifetime identityとmove-only pin、exact
+`xOpen`/`xShmMap`/`xShmUnmap` callback identity、filesystem/device/mount profile、retained parent
+directory FD、既存main/WAL native-file-node/`xOpen` receipt、SHM native attachment/stat-only
+object+direct-entry receipt、continuous namespace-watch epoch、SHM
+page/size/offset/pointer/post-writer-map size/mapping-page set、non-reused mapping generationを
+generation identityへbindする。caller/delegated extend pair、wrapper-observable effect census、
+holder generationは各attempt/resulting holder固有のreceiptとして同じgenerationへ関連付けるが、
+generation keyにはしない。fork、runtime unload、VFS unregister/re-register、callback/app-data drift、watch
+loss/overflow/event、replacement/A-to-B-to-A、unmap/remap、pointer ABAはleaseをrevive不能にretireする。
+final size equalityだけをno-effect authorityにしない。main device/inodeが同じでもhardlink/path/
+retained-parent alias、またはWAL/SHM sidecar leaf/entry family mismatchはrejectする。
+aliasごとのruntime lifetime identity equalityをcross-alias cohort keyにしない。simultaneous first
+writersはcohort in-flightで一つのgeneration install/joinへtotal orderし、W2 callbackのjoin/failが
+確定する前にW1 last holderをretireしない。SQLite lockがliveになり得る間はduplicate main/WAL/SHM
+target FDをopen/closeせず、native main/WAL closeはleaseをrevoke/retireする。memory pinはclosed OS
+handleをauthorityに戻さない。
+
+retired/retiring prior mapping generationにreader handoffが一件でも残るexact file familyでは、その
+handoffと同じpageか異なるpageかを問わず、family全体のsuccessor writer map/pending/promotion/new
+generationをadmitしない。predelegateで観測できればnative map前にfail closed、postdelegate raceで
+判明すればnon-removing unmapとlifecycle quarantineを行いretryしない。prior mapping generationの
+全page handoff drain後だけfamilyにfresh generationを開始する。W1/G1 handoff中にW2が同じpointer、
+またはcontrolled VFSで異なるpage pointerを得てもcontinuityではなく、handoffはsuccessor authorityを
+mintしない。successor rejectionはouter `SQLITE_IOERR`、既存
+`store.sqlite-failure / database / preserve-sqlite-runtime-diagnostic`、retryable falseでありsilent/
+internal retryしない。
+
+reader in-flight pinはnative callback returnまでwriter mappingを保持し、exact native attachmentと
+post-map receiptが成立した場合だけone-page/one-callbackのper-reader handoffへ昇格する。native
+`SQLITE_OK`+non-null後にprocess/runtime/VFS/file-family/namespace/generation/pin、latest atomic
+mapping-page set/sealed SHM size、requested page+size、same pointer、same SHM sizeを再検査し、reader callがinitialize/create/truncate/extend/delete/
+resizeを一切行わなかったことを証明した場合だけexact `SQLITE_READONLY`+same pointerへprojectし、
+`SQLITE_OK`を外へpass throughしない。missing/pending/retiring/ambiguous/cross-process/stale lease、
+`SQLITE_OK`+null、fork/PID reuse、page/size/pointer/identity/effect drift、unknown outcomeは従来の
+protocol-violationへfail closedにする。
+
+last writer unmap/closeは先にnew admissionを止め、writer cohort in-flightがjoin/failへ、reader
+predelegation in-flightがhandoff/failureへ確定するまでだけ待つ。異なるthreadだけがbounded/ordered
+waitできる。callback thread identity/reentrancy depth/active tokenをbindし、same-thread reentrant
+retirementは待たずexact outer `SQLITE_IOERR`とopaque handle/lease/generation quarantineへ進み、
+unmap successを捏造せずretryしない。別thread timeout/unknownもquarantineする。handoff確立後はreader自身のnative SHM attachmentがmappingを保持するため
+writer native unmap/closeをdelegateでき、handoffはwriterより長生きしてreader自身のsuccessful
+delegated unmapまでruntime/VFS teardownをpinする。同じreader connectionのlater exact already-mapped
+callbackはsame page/size/pointer/generationのexisting handoffをnew authorityなしで再検査できるが、
+別reader/pageまたは異なるmapping tupleはactive writer leaseからnew admissionを必要とし、handoffから
+transitively mintできない。callback中に
+registry mutexを保持せず、handoff lifetime全体についてwriter closeをblockしたりnative unmap successを
+捏造しない。native lifecycle ambiguityはconnection/runtime/VFSをquarantineする。
+
+exact proposal は独立 review でaccept済みなので、internal registry/callback gates/testsの実装を開始できる。
+acceptanceだけではproduction exceptionをactivateせず、current sourceはblanket native `SQLITE_OK`
+rejectionを維持する。production activationは二つのlive StoreのCAS winner/loser、materialization race、cross-process CAS、
+CANTINIT/READONLY regression、およびfork/PID reuse、holder/in-flight/handoff/unmap race、ABA、
+runtime/VFS/image/app-data/callback、object/entry/mount/namespace、page/pointer/route-specific size/effect、
+extend pair全分類、simultaneous first-writer join/mismatch、W2 in-flight対W1 retire、new-page atomic
+size、duplicate target FD lock-loss、native close後memory pin、unknown outcome、same-thread reentrant
+retirement、different-thread wait timeout、controlled VFSでprior-generation handoffとは異なるpageへの
+successor map rejectionの全matrixをexact implementationへbindした別の
+independent counterexample review後だけ許す。public C++ API、snapshot/publication identity、error
+tuple、generic non-profile semanticsは変更しない。
+qualification scratch/map-sequence validatorはleaseを保持しないためnative OK terminal ruleを維持し、
+production `qualified_source_shm_map_route`のexact lease receipt付きcallbackだけがOK→READONLYを使える。
+
+CANTINIT 時は connection を閉じず、同じ connection と `WAL_READ_LOCK(0)` のまま SQLite heap WAL-index を使い、
+held main/WAL/SHM identity、WAL header/salt、lock、complete eager decode を一つの receipt に bind する。post-close digest/endpoint-only copy、
+別 connection への fallback、arbitrary-error fallback は禁止する。active-WAL はこの一つの explicit read transaction、quiescent source は held
+descriptor から検証済み private copy を用い、いずれも format/schema/metadata/publication/payload/head と complete eager decode を一 snapshot で読み、
+probe を閉じる。open 時の DDL、persistent
+PRAGMA、metadata write、implicit migration を禁止し、`compatibility()` は
+`{sqlite, 2.6.0, direct_open=true, migration_required=true}` を返す。`begin()` は既存input draft validationをzero-effectで先に
+行い、valid inputだけをinternal writer/draft allocation前に exact
+`store.migration-required / sqlite-physical-format / cxxlens.sqlite-semantic-store.v2-to-v3` で拒否し、既存
+`compact()` だけが明示的な v2→v3 migration trigger である。migration は一つの `BEGIN IMMEDIATE` 内で v2 全 authority を
+initial eager state の全 semantic/diagnostic row/head anchor に対する exact または valid descendant として再検証し、valid
+non-descendant replacement は no-write concurrent-authority-change とする。shadow v3 objects を独立 replay し、既存 compaction
+orderでprior fully validated committed maximum+1から+countまでのdistinct contiguous generationをcommitted row
+だけに割り当てる。noncommitted row は全publication column、raw bytes/checksum/diagnostic verdictを保持する。shadow rename は canonical
+`sqlite_schema.sql` を作れないため禁止し、shadow 検証後に legacy objects を drop、exact six canonical DDL statements で
+final objects を作成、bounded copy、final validation、shadow drop、v3 marker last、cold-reopen DDL digest の順に閉じる。
+recovery authorityは `cxxlens.sqlite-authority-state.v1`、`cxxlens.sqlite-authorized-descendant.v1`、
+`cxxlens.sqlite-terminal-reclassifier.v1` にbindする。state equalityはstorage class/value bytes、format/DDL/metadata、全publication/
+chunk/head、committed generation maximum、diagnostic verdictのlength-framed canonical bytesをbyte-for-byte比較し、digestは
+accelerationだけに使う。committed setがemptyならmaximumはcanonical tagged none、nonemptyならtagged some(exact u64 max)であり、
+noneをzeroへ写すのはchecked equation内だけでstate equalityには使わない。`some(0)`はnoneとbyte-distinctで、row付きnoneまたは
+rowなしsomeはinvalid censusである。descendantはlegacy-v2 publish/nonempty whole compaction、registered migration、v3 publish/nonempty whole
+compactionだけのclosureであり、diagnostic row追加・削除・rewriteを許さない。判定はgeneration distance回replayせず、source/target
+からsame-format no-reset/final compact `k`とv2→v3 migration-last `m`/final-v3 `(m,k)`をrow-count範囲だけ列挙する。
+`C=target max-source max-added publish count-migration population`を一つのchecked residualとし、migration-lastは
+`[max(1,S),m]`、final compactは`k`を一回引いて`[max(1,S),k]`で解く。v2→v3のpopulationは`<m`をv2、`>m`をv3、
+`=m`をcanonical v2へ割り当てるが、edge existence queryでは`m`を両segmentへ含める。interval residual `D`は
+`q=ceil(D/b) <= floor(D/a)`、`d=D div q`、`r=D mod q`から高々二つのrun countと別tagのfinal edgeへ圧縮する。
+同populationでもfinal edgeはresidual runへcoalesceせず、migration boundaryの可換性は各rowの最終v3 projectionをbyte-exactに検査する。
+受理はbyte-valid candidateのexistence、報告witnessはlexicographically first、format別compact edge bitはlegal population `p`を一つ
+強制して`D-p`を同じsolverで解く全representationのexistenceとする。candidate `(m,k)`とforced `p`を含むworkを
+`(committed-row-count+1)^3 + canonical-byte-count`、storageをlinearに閉じる。legacy v2 operatorはalready-running predecessor
+raceのrecognition-onlyである。whole resetはsequence/prior-generationのstable rank transformであり、nonzero population runは
+最初のrank transformだけを実行し、残るcountはfixed-point orderを保ったchecked maximum offsetとして圧縮する。
+committed generation rewriteはdeclared payload parserが一つのschema-specific 8-byte BE fieldを
+特定し、old value、prefix/suffix、decode/re-encodeを証明する。
+
+post-format precommit failureのprewrite receiptはactual writer main file instance/directory entry、full prestate canonical
+bytes+digest、operation kind/phaseをbindし、candidate完成前はcandidateを持たない。candidate IDとexact projectionが完成した後だけ
+candidate profileへ不可変に拡張し、COMMIT結果不明はそのcomplete candidate profileを必須とする。fresh-initはpreinit absent/exact-empty
+anchor、actual target main identity/directory binding、pre-arm raw size/digest/sidecar census、expected empty-v3をjournal arming前にsealする
+別profileであり、post-format authority receiptとして扱わない。
+finalize/rollback後の`close_v2`が非OK/不明ならconnection/runtime/VFSをquarantineしてreopenせずpoisonする。confirmed close後だけ
+main/namespaceを先に検査し、namespace observation I/O failureまたはnonregular/non-equivalent objectならreclassifier unavailableに閉じる。
+その後journal、stable unreadable WAL/required SHM、SHM-onlyを選択済みphaseのopaque、WAL+SHMをactive snapshot、WAL-onlyを
+private recovery、no-sidecarをquiescent copyとしてtotal classifyする。initializationだけはsame-main exact emptyをclassification-onlyで
+admitしStore stateにinstallせず、publish/compactionはcurrent-v3、migrationはv2/current-v3 exact/authorized stateだけをinstallする。
+`:memory:` uncertaintyはfilesystem receipt/reclassifierを使わずfinalize後に一回closeし、OKならsole DBを破棄、non-OKならquarantine
+する。publish
+COMMIT unknownは常にdatabase/opaque、migrationはproofにexactly one migration edgeがあればsuccess、v2のままならopaque、v3
+compactionはexact expected projectionまたはpositive locked-census populationのnonempty compaction edgeがあればsuccess、なければ
+opaqueとする。publish candidateはattempted physical projectionだけでなく、same immutable logical identityを別authorized generation/
+chunksで持つvalid descendantもadmitする。precommitの`compact()`もidempotent postconditionを使い、edgeが証明されなければ元errorを
+保つ。zero committed authorityのv3 compactはno-write/no-COMMITで、filesystemはconfirmed-close reclassification、exact
+`:memory:` はhealthy rollback/finalize後にsole connectionを保持するno-close successである。
+canonical payload
+schema と committed physical-generation 以外の payload bytes、semantic/publication/snapshot ID、request/report 2.1、public
+signature、cursor lifetime は変えない。durable old chunk は successful transaction 内で除去するが、eager decoded process
+generation は最後の pin まで保持し、noncommitted row/chunk は通常 compaction でも byte-exact に維持する。
 
 Issue #91 / ADR 0034 により closure certificate の独立 validator は `partition_manifest` 単体を subject にしてはならない。
 manifest と exact `snapshot_partition_binding` を検証済みの `partition_certificate_subject` に結合し、condition、interpretation、
@@ -2244,13 +2915,24 @@ dependency group だけを許可し、provider が rejection を無視しても 
 
 Issue #182 / ADR 0096 により installed Clang 22 materialization の provider-specific task authority は public C++ factory ではなく、
 provider-owned executable `cxxlens-clang22-materialize` と strict JSON の
-`cxxlens.clang22-materialization-contract.v1` / request/report v1 に置く。tool は exact project catalog census から全 compile-unit task を
+`cxxlens.clang22-materialization-contract.v2` / request/response v2 に置く。machine contract document、`tool.interface_version`、request、report の
+exact version は `2.1.0` とする。
+v2 response は complete detailed report と phase-authentic compact
+failure の closed union であり、未実装・未 qualification の v1 を silent migrate しない。tool は exact project catalog census から全 compile-unit task を
 bottom-up に導出し、caller-supplied task ID、descriptor digest、group、implicit default、adjacent version fallback を受理しない。catalog entry の
 ID は project より上流の catalog-local input ID、`build.compile_unit` ID は project/variant/source/toolchain/invocation から導出する final relation ID
 として分離し、entry digest と relation payload の exact mapping を保持する。全 TU task は同じ validated global catalog に基づくため同じ generic
 task ID を共有し得るが、task input digest と provider execution ID は TU ごとに exact に異なり、report は三者の tuple で対応付ける。
 provider execution ID は installed binary occurrence を含む physical report identity であり、base claim の semantic producer/provenance/set digest
 には入れない。base semantic mapping は task/input/selected catalog entry/final relation ID を保持し、static/shared execution evidence は別に bind する。
+
+DF-0194 により、complete detailed report は Store publication boundary を挟む bounded two-phase で完成させる。publication 前には sealed DAG、Store
+candidate、publication-independent report projection の独立検証と bounded postpublication tail capacity の予約までを必須とし、未確定の publication record、
+physical generation、reopen receipt を予測または placeholder で埋めない。exactly one publish attempt 後に actual outcome と exact reopen evidence を加えて
+一つの final private spool を full schema/semantic validation し、その完了前には stdout を書かない。publish attempt 後の report finalization または transport
+failure は compact zero-effect response に downgrade せず exit 2 / no authoritative response とし、commit 済みなら Store record だけを recovery authority
+とする。DF-0194 amendment は lifecycle boundary だけを更新し、request/report v2 shape、identity、public Store API は変更しない。
+一方、DF-0195〜DF-0197 の exact report leaf、installed occurrence、chunked input authority は request/report の minor 2.1 shape として明示する。
 
 installed specialization の portable condition は ordered `(condition universe ID, condition ID)` を
 `["cxxlens.clang22.condition-ref.v1", condition universe ID, condition ID]` として
@@ -2275,12 +2957,132 @@ worker input は exact `cxxlens.clang22.task.v3` codec とし、tool が request
 catalog entry ID、final relation compile-unit ID、payload と digest を生成する。worker は shared catalog factory で global catalog と generic task ID を
 再構成し、selected entry の invocation/source/environment と final relation mapping を検証してから output に final relation ID を使う。
 旧 codec、caller-authored payload、task ID 下の payload mutation は fail closed に拒否する。
-v3 payload は shared `cxxlens-canonical-tuple-v1` の signed `int64` integer domain を使うため、installed JSON v1 の正の budget 値は
+v3 payload は shared `cxxlens-canonical-tuple-v1` の signed `int64` integer domain を使うため、installed JSON v2 の正の budget 値は
 `1..INT64_MAX` に限定し、それを超える値は worker launch 前に拒否する。public `execution_budget` の `uint64` surface 自体は変更しない。
 
-request/report raw byte は BOM のない exact UTF-8 の top-level JSON object 一件だけとする。任意 depth の duplicate member、invalid UTF-8、BOM、
+DF-0197 により installed materializer は Provider Protocol `1.1` と required feature `task-input-chunks-v1` を必須とし、minor 0 の inline
+`open_task` payload へ fallback しない。task.v3 の logical bytes と `task_input_digest` は変えず、minor 1 host sequence を exact
+`hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk*, credit, close` とする。`open_task` payload は empty、descriptor control は
+exact `{task_id,input_digest,total_bytes,chunk_bytes,chunk_count}`、chunk control は exact
+`{task_id,input_digest,chunk_index,offset,byte_count}` とし、ordered chunk payload の concatenation だけを logical input occurrence とする。
+canonical chunk は 1 MiB、logical input は最大 64 MiB、chunk は最大 64、既存 per-frame 16 MiB limit は変更しない。contiguous index/offset、
+non-final size、final remainder、total bytes、streaming SHA-256、task/input binding と task.v3 decode/bottom-up binding がすべて完了するまで
+`task_accepted` を禁止する。host encoder、worker decoder、process runtime、conformance validator は一つの incremental state machine を共有し、
+production path で full logical input vector を materialize しない。raw host frames/spool、ambient path/FD/environment/shared-memory side channel は
+semantic task または adoption authority ではない。
+
+DF-0196 により installed physical occurrence は schema `cxxlens.clang22-materializer-occurrence-manifest.v1`、fixed path
+`share/cxxlens/materialization/clang22/occurrence-v1.json` の source-private manifest で認証する。manifest payload は source revision/tree、package
+configuration、closed role/path/digest inventory を持ち、自身を inventory に含めず self-digest field を除いた canonical payload を hash する。external
+install-artifact manifest は occurrence manifest bytes を含む relocated prefix 全体の独立 witness とし、その full-prefix digest を request/semantic
+snapshot identity に入れない。
+
+Linux runtime は `/proc/self/exe` から actual regular/non-deleted executable object を open し、prefix の exact
+`bin/cxxlens-clang22-materialize` と同じ device/inode object であることを検証する。prefix dirfd から manifest-declared worker/authority paths を
+`openat2` beneath/no-symlinks/no-magiclinks で開き、hash 前後の stable FD stat と exact bytes digest を worker/Store effect 前に照合する。
+各 role は measurement 中の同じ verified byte stream から exactly one の private memfd snapshot へ copy し、digest と size の照合後に
+write/grow/shrink と seal 追加を不可逆に封じる。以後の worker/schema/DSO consumption は retained sealed snapshot の独立 read-only handle だけを使い、
+installed path または mutable inode を再利用しない。同じ role の反復 open は同じ sealed inode の handle だけを増やし、artifact bytes を再 copy しない。
+snapshot 作成・copy・seal・再検証を完了できない環境は effect 前に拒否するため、measurement 後の rename または in-place mutation は実行 bytes を
+変えられない。
+`argv[0]`、`PATH`、request 自己申告、build-tree shadow、symlink/magic-link は occurrence authority ではない。report は requested と measured
+occurrence を分離し、external full-prefix witness が measured occurrence manifest bytes を cross-bind する。
+
+process invocation は `argc == 1` のみを受理し、`argv[0]` を path/identity authority にしない。unexpected option/operand は stdin を読まず、
+worker/Store/file effect を行わず、stdout zero bytes / exit 2 とする。
+
+request/response raw byte は BOM のない exact UTF-8 の top-level JSON object 一件だけとする。stdin は request-level で 1 GiB を上限とし、decode 前に最大
+limit+1 bytes だけを消費する。limit 内は complete input の count/digest、超過時は exactly limit+1 consumed prefix の count/digest と
+`complete: false` を response に残し、未読 bytes を主張しない。任意 depth の duplicate member、invalid UTF-8、BOM、
 non-finite number、object 以外の top-level value、二つ目または trailing JSON value を effect 前に拒否し、last-key-wins decoder や authority YAML
 loader を transport に流用しない。この lexical verdict は materialization tool/checker と release evidence ingestion が同じ strict loader で所有する。
+first failure は byte limit、strict JSON object、`schema`/`request_version` envelope、version dispatch、selected full schema、derived identity/binding の順で
+決める。raw request は一つの immutable bounded private spool へ保存する。pass 1 は DOM なしで lexical/envelope/version を検証し、pass 2 は同じ
+spool を replay して selected-v2 schema、bottom-up binding、strict JSON decoded string から source spool への streaming base64 decode を行う。
+raw token spelling を decoded base64 authority とせず、global catalog は一つの immutable value、task は compact spool-backed index とし、canonical
+order で一 task/input/output window ずつ replay、seal、破棄する。
+
+pass 1 の generic array count と non-envelope string length は raw 1 GiB reachability だけで閉じ、selected schema の path-specific `maxItems` や
+source-Base64 `maxLength` を generic lexical limit として追加しない。resident duplicate-name ledger を持つ object member は 4096、depth は 64、member name は
+UTF-8 256 bytes の明示 lexical ceiling とする。top-level `tasks` と `trust_policy.task_sandbox_requirements` は selected schema が `maxItems: 4096` を
+所有するため、4097 件目の後も strict lexical scan と version dispatch を完了してから `request-schema` / `materialization.request-invalid` で拒否する。
+trust requirement の exact `uniqueItems` と 4096 件 catalog compile-unit の uniqueness は、schema 検証済み fixed member の bounded string-view tuple を
+sort して隣接比較する O(N log N) とし、attacker-controlled O(N^2) equality と巨大 canonical copy を禁止する。`schema` / `request_version` の値は
+expected literal の decoded UTF-8 length+1（43 / 6 bytes）だけを保持し、長い envelope value でも全 input の lexical validation と version precedence を
+完了する。
+
+`tasks.uniqueItems` と execution tuple uniqueness は full payload を補助 spool に保持せず、SHA-256 raw 32 bytes、logical length、task ordinal、raw
+offset/length の fixed 64-byte private-spool recordを一回読み取って sort する。同 digest/length の候補だけ raw task を replay し、左 metadata を
+collision-only sealed memfd に移す。seal 後に左 canonical metadata の exact size/content を bounded reverse read で再照合し、その authority が閉じてから
+DOM を破棄して右の一 window と比較する。Base64 は JSON escape decode 後の string、execution は exact
+three-string tuple を比較し、digest-only equality と全 header の O(N^2) scan を禁止する。
+
+Issue #181 / DF-0197 の security addendum により、この path の private spool は Linux の
+`memfd_create(..., MFD_CLOEXEC | MFD_ALLOW_SEALING)` だけで作る。pathname、`mkstemp`、unlink 済み mutable inode への fallback は禁止する。
+seal は `F_ADD_SEALS` で `F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL` を追加し、直後の `F_GET_SEALS` で全 required bits を
+確認する。その kernel seal 後に `fstat` の actual size と append census を照合し、sealed bytes の SHA-256 と append transcript の incremental
+SHA-256 を照合してからだけ logical sealed state とする。seal 前に同一 UID から `/proc/<pid>/fd/<fd>` 経由で content、grow、shrink を変更されても、
+この size/content binding の不一致を source-private no-response として effect 前に拒否する。compile target に必要な Linux memfd/seal capability がない、create/add/get が失敗する、または
+required bit が欠ける場合は、最初の raw spool create/add/get/required-bit observation を capability gate として worker、Store、file effect 前に
+拒否する。compile-time absence と missing-bit contradiction は no-response、port の actual create/add/get syscall failure は raw observation 後の active phase だけ
+phase-authentic stable failure とする。互換性のための mutable fallback を
+設けない。
+
+raw observation を確立できない最初の capture spool failure は exit 2 / no response とする。sealed raw observation 後の raw/global/task replay、task-index、
+source spool、task.v3 spool、identity digest、uniqueness auxiliary に対して port が返した actual create/append/seal/read/digest I/O/hash failure は stable `materialization.spool-failure` とする。
+lexical raw/task-index は `json-decode`、selected schema の global/task/source/index/uniqueItems は `request-schema`、full schema 後の source/task.v3/
+identity/task-index/execution uniqueness は `request-binding` に固定する。Base64 grammar、shape、schema 所有 ceiling だけを request invalidity とする。
+stable failure は port が返した actual I/O/hash failure に限定する。allocation kind、または成功した read/seal/digest の count、sealed state、
+record census/ordinal/raw span、receipt/digest grammar が証明済み authority と矛盾する場合は内部 corruption/invariant breach とする。
+operation-authentic kind×operation matrix は `input_read×read`、`spool_write×(write|spool)`、
+`spool_seal|spool_create|spool_rewind×spool`、`spool_read×(read|spool)`、`digest_update|digest_finalize×hash` だけを stable とし、
+configuration/buffer-allocation と全 mismatched pair は no-response とする。selected replay で root member の missing/extra、または task/source/
+`content_base64` の missing/non-string を `request-schema` 中に観測した場合は `materialization.request-invalid`、同じ contradiction を
+`request-binding` 中に観測した場合は no-response とする。collision reverse read の actual read failure だけは phase-authentic stable failure、
+successful write-drop、size/count drift、zero/over-report、content corruption は no-response とする。
+proved bound breach、phase-opaque allocation failure、内部 corruption/invariant breach、compact response unsafe は stable report schema に露出しない source-private no-response signal とし、
+driver/runtime は exit 2 / stdout zero にする。valid request の infrastructure failure を `materialization.request-invalid` や
+`materialization.io-failure` / `materialization.resource-limit` / `materialization.internal-failure` へ変換しない。
+
+selected-schema replay の `67,108,864` byte window は raw token spelling の ceiling ではなく、semantic JSON token replay の内部
+window とする。replay は insignificant whitespace を破棄し、JSON string を decoded UTF-8 へ戻して minimal JSON escaping だけを再適用し、
+integer spelling を同じ値の canonical decimal へ正規化する。global form では `tasks=[]`、task metadata form では
+`source.content_base64=""` を代入する。closed/required/local-ref/`allOf` intersection/`oneOf` maximum をたどる selected schema
+derivation により、global selected-schema canonical maximum は `10,420,985` bytes、task metadata maximum は `8,463,179` bytes、
+window margin はそれぞれ `56,687,879` bytes と `58,645,685` bytes である。projection の derivation digest は
+request schema 全体を parsed YAML→key-sorted compact canonical JSON とした fingerprint
+`sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270` を含み、
+`sha256:ff9baf9982f909d8a4f51c46f53637af6980a7d06728dfa65794ffc1eebf816d` に固定する。したがって whitespace、等価な
+Unicode escape、長い zero exponent などの raw-spelling inflation は replay window に算入せず、1 GiB raw transport reachability を
+縮小しない。schema walk、substitution、normalization、bound、parse result がこの証明と矛盾する場合と allocation failure は
+source-private no-response とし、port が返した actual I/O/hash failure だけを上記 phase-authentic `materialization.spool-failure` にする。
+
+Issue #181 / DF-0199 により `source.content_base64` の decoded JSON string は RFC 4648 standard alphabet、required padding、zero discarded
+padding bits を満たす canonical spelling 一つだけを受理する。JSON token 上の `=` と `\u003d` のような escape 差は同じ decoded string として
+同じ request/task identity を持つが、同じ source bytes へ decode できても non-zero discarded padding bits を持つ spelling は selected-v2 schema で
+derived identity/binding より前に拒否する。source authority は decoded bytes/count/content digest/line index であり、task.v3 の
+`content_base64` は sealed source bytes から一意に再生成した canonical spelling と request decoded string の exact 一致を独立検証して投影する。
+spelling alias を別 task identity として受理せず、raw request token を task authority に昇格させない。
+
+この補正は protected `main` 未 merge、production materializer 未実装、qualification 未実施の active v2.1 unit 内で行うため exact version
+`2.1.0` を維持する。canonical または qualified な外部 2.1 producer/consumer が見つかった場合はこの versioning 判断を reject し、明示的な
+successor version と migration boundary を再審議する。
+
+task は最大 4096、task ごとの decoded source は 16 MiB、aggregate source は 512 MiB、response は 1 GiB、JSON depth は 64、object member は 4096、member name は
+UTF-8 256 bytes、strong ID は 512 Unicode scalar / UTF-8 2048 bytes、logical path は UTF-8 4096 bytes、SQLite relative path は UTF-8
+4095 bytes、argv は最大 4096 items / item UTF-8 2048 bytes とする。retained-memory formula は one shared catalog + fixed parser/chunk buffers +
+one task-index window + one decoded source + one output-validation window とする。raw request、aggregate source、全 task payload、
+`task_count * catalog_count` catalog copies を resident memory に保持せず、task index/bulk occurrence は private spool に置く。task index 自体は task 数に
+比例し得るため absolute task-count-independent RSS は主張しない。
+
+publication 前に完成させるのは sealed DAG/Store candidate と publication-independent report projection の独立検証、および全 applicable outcome、final
+framing、exact SDK receipt、bounded diagnostic が 1 GiB 内に収まる checked tail-capacity reservation までである。completed response、publication record、
+physical generation、reopen receipt をこの時点で主張しない。prepublication construction failure は schema-valid compact zero-effect response を完成できる
+場合だけ exit 1、できなければ exit 2 / no response とする。publish attempt 後は actual outcome から final spool を完成・full schema/semantic validate
+して初めて stdout を書き、allocation/spool/validation failure を compact response へ downgrade しない。
+schema-valid failure response は exit 1、passed detailed response は exit 0、stdout transport 自体の failure は response authority なしの exit 2 とする。
+publication 前の response construction failure だけが zero-effect compact failure を使用できる。commit 後の broken stdout を zero-commit と偽らず、
+その場合は committed Store record が recovery authority であり、response missing の run は release evidence にしない。
 
 この installed tool は新しい public Clang-specific C++ host bridge でも general provider adoption API でもない。既存 portable task/runtime/native
 SDK は protocol authoring/conformance surface のまま維持し、installed JSON contract の task construction と publication semantics を public
@@ -2365,6 +3167,94 @@ source span、claim、hard reference、coverage が検証されるまでこの v
 diagnostic/evidence に限定し、row reconstruction、claim construction、Store adoption の authority にしない。downstream re-decode、private codec の
 複製、diagnostic substring による制御を禁止し、sealed result を public C++ API として export しない。
 
+#### DF-0200 proposed incremental claim / Store residency resolution
+
+Issue #181 / DF-0200 の Option A は Issue #200 の fresh user decision として選択済みだが、contradiction resolution は
+distinct independent review 中である。exact binding が受理されるまでは blocked implementation を開始せず、受理後も
+実装・四象限 qualification の完了を先取りして qualified と宣言してはならない。claims oracle 失敗を
+materializer semantics digest の retarget で閉じてはならない。Snapshot Store contract/checker は
+resolution ID cxxlens.df-0200.incremental-claim-store.v1 と ingress object を self-contained hardcoded authority として検証し、Clang 22
+materialization checker だけが downstream から Store binding を照合する。generic Store checker が materialization contract を load する reverse
+dependency は禁止する。
+
+1. **D1 — independent claim oracle:** qualification 中の public sdk::claim_batch::commit resident control flow は production incremental control flow と
+   独立な bounded reference とする。共有可能なのは canonical codec、identity function、field validator だけであり、commit control flow、reference/conflict/
+   differential verdict logic は共有しない。pre-refactor の canonical claim-batch v2 bytes と verdict を
+   cxxlens.df-0200.claim-batch-differential-corpus.v1 として freeze し、current public API と production path の双方を比較する。corpus は added/existing、
+   new-existing hard/soft reference・conflict・differential、existing-existing non-reclassification、one-shot/split parity、入力 permutation、exact duplicate、
+   metadata-distinct occurrence を閉じ、独立 review なしの再生成を禁止する。
+   固定 artifact は `schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv`、raw SHA-256
+   `f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836`、10 case / success 9 / error 1 とし、専用 C++ CTest が
+   current public `sdk::claim_batch::commit` の全 input、success/error tuple、full output、verdict bytesを実行照合する。production path比較はaccepted activationで必須とする。
+2. **D2 — move-only lifecycle and codec:** begin、canonical-next consume_task(sealed_materialization_result&&)、finalize() && だけを受理し、task seal は一件ずつ
+   破棄する。final source は cxxlens.df-0200.partition-event-stream.v1 の move-only replay source とする。codec は big-endian、canonical tuple v1 を使う。
+   86-byte CXLPEV01 header、kind-u8 / key-length-u64be / payload-length-u64be / key / payload / SHA-256 checksum frame、112-byte CXLPEEND trailer を exact とし、
+   kind code 1..7 を partition-begin、claim-occurrence、detached-row、claim-annotation、coverage、unresolved、partition-end に固定する。全 event の key/payload
+   projection、full-byte order、unknown/missing/reordered/truncated/trailing/checksum failure を閉じる。
+   canonical tuple tag/type/cardinality、全collectionのorder/dedup、全field orderを固定し、stream sequence、frame、trailer frames/prefix、
+   task/partition/global event と claim/row/coverage/unresolved の各aggregateに専用domainを割り当てる。aggregateはu64 countとlength-framed full canonical
+   projectionをbindする。oracle入力のexact duplicate claim occurrenceは独立claim lawでcollapse、metadata-distinct same-contentはpreserveし、final full-event duplicateはrejectする。
+3. **D3 — independent completeness and Store ingress:** completeness authority は event stream 自身の header/trailer ではなく、externally validated request と
+   sealed execution journal/task receipts である。task/partition/event/claim/row/coverage/unresolved の census+digest、segment/run/merge manifest、
+   byte/record/seal receipt を exact equality で照合し、internally self-consistent な whole-partition drop も拒否する。Store はこれら external authorities と
+   full-byte codec を独立 replay してから一 candidate / 一 publish / zero partial visibility を維持する。semantic-version component だけを u32 とし、
+   selected requestはprovider dispatch前にcanonical taskごとexactly one entry digestをsealし、各task receiptは自身のtask ID/ordinalへcross-checkする。
+   pre-encoder oracleはimmutable sealed task resultからencoderと独立にfull event projectionを列挙し、共有はcodec/identity/field validatorだけとする。
+   task receiptはsuccessful-sealとProvider Runtime raw stdout/frame/sealed transcript authorityをbindし、task resultはreceipt sealとstream sealの後だけ破棄する。
+   task receiptはpre-existing selected-entryだけを参照し、全task後のcycle-free execution-journal receipt-setがordered task sealsをbindする。streamとend/trailerを
+   同時編集してもfixed receiptが、stream/receipt/task seal/final setを相関編集してもimmutable final-setまたはselected-entry bindingが拒否する。
+   Storeはraw stdout digest/frame censusとreceipt partition/event full-projection digestをstream replayにexact比較する。
+   canonical v5 collection count は u64 とする。現行 1M/10M decoder cap は authority ceiling ではなく bounded streaming で除去する legacy guard である。
+   u64 超は exact tuple partition_stage / store.counter-overflow / materialization-v5-collection-count / empty detail とし、
+   store-stage / materialization.store-failure、draft discarded に写像する。
+4. **D4 — exact framing and bounds:** framed record の logical bytes は kind、key/payload length、key/payload bytes、checksum 全体で、segment/spool 跨ぎを禁止する。
+   append 前に framed length、segment、spool、aggregate を u128 で検査する。segment は half-open、end は次 segment の {index,0}、final EOF は
+   segment index が segment count と等しく offset が zero の pair に canonicalize する。segment rollover 後も収まらなければ record boundary で次 spool に移し、aggregate census は u128 とする。
+   8 MiB 超 record は streamed singleton run、full-byte comparator は二 cursor 合計64 KiB、merge は16 input + 1 output + 1 metadata = 18 FD とする。
+   u128 overflow test は max+1 value を構築せず checked operands で起こす。proved limit/report-invalid は I/O より先、actual private spool ENOSPC は
+   in-range 証明後だけである。report limit は1 GiBである。
+5. **D5 — phase-authentic publication outcomes:** materialization.spool-failure は private prepublication spool の actual port I/O/hash/ENOSPC に限る。
+   2026-07-22 の accepted activation は三 phase binding、request-bound reverse closure、partition_stage counter-overflow tuple、full report-schema canonical digest を一つの
+   change で atomically 更新した。request 2.1.0 shape は不変で、report 2.1.0 には private spool-failure、13/19-file occurrence inventory、
+   `task_sandbox_requirements maxItems: 4096` だけを activation した。SQLite writer_publish の ENOSPC/SQLITE_TOOBIG は既存
+   writer_publish / store.sqlite-failure / database / opaque と publication_outcome_unknown を維持する。publish handle 返却後の検証 failure は安全に response
+   を構築できる場合 committed_unverified detailed response とする。exit 2 / stdout zero は response を安全に構築できない spool/allocation/report transport
+   failure または successful receipt/checked arithmetic contradiction に限定する。
+6. **D6 — accepted SQLite Option A authority; report-schema activation applied, qualification pending:** request 2.1.0、public signatures、claim/Store identity、logical canonical v5 は変更しない。
+   report 2.1.0 は private spool-failure phase/code closure、13/19-file occurrence inventory、sandbox array bound を activation し、
+   full parsed report-schema canonical JSON digest は sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b に固定する。
+   SQLite v2 single payload BLOB と runtime MAX_LENGTH 1,000,000,000 は required limit-adjacent passed memory/SQLite parity を満たさないため、
+   selected alternative A と ADR 0097 に従い physical v3.0.0 の 8 MiB chunk table、16 MiB runtime floor、exact v2.6.0 read-only direct-open、
+   `compact()` の deterministic COW migration を実装する。v2 `begin()` は exact
+   `store.migration-required / sqlite-physical-format / cxxlens.sqlite-semantic-store.v2-to-v3` とし、implicit migration と新 public migration API を禁止する。
+   physical-generation 以外の canonical payload bytes、semantic/publication/snapshot ID、accepted request set、cursor lifetime は不変である。
+   `store.migration-required` は additive public Store result state として catalog/error docs に追加する。Alternative B と parity weakening は rejected である。
+
+反証は frozen corpus/current public API differential、whole-partition drop、codec unknown/missing/reorder/truncation、全 census/digest/manifest/receipt、
+record/segment/spool/u64/u128/fan-in/report boundary、exact Store overflow tuple、private spool fault、writer_publish outcome-unknown、
+committed_unverified、4096-task one-live-seal、memory/SQLite/static/shared parity、v3 chunk corruption、v2 zero-mutation read、COW migration fault matrix、
+single-BLOB limit 超の cold-reopen を含む。DF-0200 acceptance は実装着手 authority であり、これらの evidence 前に implemented/qualified と扱わない。
+
+DF-0195 により successful Clang 22 transcript の coverage は transport と semantic の二 plane に分ける。transport は exact
+`{kind: task, id: <provider task ID>, state: covered, reason: ""}` 一件、semantic は canonical order の `cc.call-extraction`、`cc.entity`、
+`frontend.clang22.observation` 各一件で同じ task ID、covered、empty reason とする。generic shared validator は specialization-blind のまま transport
+record を要求し、four-record set を losslessly retain する。specialization seal は semantic 三件を独立検証し、missing/duplicate/extra/renamed/
+wrong-task/non-covered/nonempty-reason を拒否する。report は per-task/global の両 record set と digest を別々に保持し、global transport count は
+task count、semantic count は `3 * task_count` とする。semantic guarantee census は三 semantic records を数えるが transport record を捨てない。
+
+runtime-private task receipt は decode/move 前の provider stdout frame stream の exact byte count/SHA-256、decoded frame count、domain
+`cxxlens.provider-frame-transcript.v2` の frame transcript digest、domain `cxxlens.provider-sealed-transcript.v1` の sealed transcript digest を持ち、
+後二者は immutable seal と同じ shared validation pass から導出する。public `process_execution_report::semantic_digest()` をこの receipt の alias、
+raw/frame/sealed authority、または adoption authority にしない。task result はこれに加え、task.v3 codec、logical byte count/digest、canonical
+1 MiB chunk size、chunk count、ordered chunk payload digest-set digest の input-transfer receipt を bind する。
+
+materialization guarantee は closed profile `cxxlens.clang22-materialization-guarantee-profile.v1` と同名 domain の profile digest に bind する。
+assumptions は exact `[]`、verification modalities は registered-symbol grammar を通る exact canonical order の
+`[clang22.materialization-sealed.v1, provider.transcript-sealed.v1, sdk.claim-envelope-validated.v1]` とし、caller/report builder mutation や未知
+`future-modality` を拒否する。`successful-publication`、`query-parity`、`store-reopen` は prepublication claim modality にせず、postpublication
+occurrence evidence/report receipt に保持する。exact guarantee は closed profile、exact transport task coverage、balanced semantic coverage、zero
+non-exact observation census、blocking unresolved zero、exact task/six-batch/full-span/provenance seal の全成立を要求する。
+
 materialization report は `frontend.clang22.call_observation.v2`、`entity_observation.v2`、`type_observation.v2` ごとに
 `observation_equivalence_census` を持つ。batch は row ごとの
 `{observation_row_digest, final_relation_compile_unit_id, originating_task, exact_equivalence, limitation, limitation_digest}` を row digest と
@@ -2388,15 +3278,17 @@ provenance edge をすべて empty に正規化する。zero/nonzero row count �
 group は
 `cxxlens.clang22-group-batch-set.v1` domain で physical task execution key
 `[provider_task_id, task_input_digest, provider_execution_id]`、group metadata、descriptor-contract order の batch summary を bind する。
-task の `side_channel_components` は coverage/unresolved/evidence/guarantee fragment digest を持ち、`side_channel_digest` は
+task の `side_channel_components` は transport coverage、semantic coverage、unresolved、evidence、closed-profile guarantee fragment digest を持ち、`side_channel_digest` は
 `cxxlens.clang22-task-side-channels.v1`、`task_result_digest` は `cxxlens.clang22-task-result.v1` domain で task/input/execution、
-selected catalog/final relation ID、terminal/transcript、group、side channel を bind する。adoption の task-result set は
+selected catalog/final relation ID、terminal/input-transfer/runtime transcript receipt、group、side channel を bind する。adoption の task-result set は
 `cxxlens.clang22-task-result-set.v1`、raw-frame set は `cxxlens.clang22-raw-frame-set.v1` domain で task execution key 順に再計算する。
-global coverage/unresolved/evidence は
-`cxxlens.clang22-global-coverage.v1`、`cxxlens.clang22-global-unresolved.v1`、`cxxlens.clang22-global-evidence.v1` domain で typed summary と
+global transport coverage/semantic coverage/unresolved/evidence は
+`cxxlens.clang22-global-transport-coverage.v1`、`cxxlens.clang22-global-coverage.v1`、`cxxlens.clang22-global-unresolved.v1`、
+`cxxlens.clang22-global-evidence.v1` domain で typed summary と
 semantic-task-key-sorted component leaves を bind する。semantic task key は exact
 `[provider_task_id, task_input_digest, selected_catalog_compile_unit_id, compile_unit_id]` であり、`provider_execution_id` を除外する。
-guarantee も `cxxlens.clang22-materialization-guarantee.v1` domain で同じ semantic key 順の task fragments を bind し、static/shared の
+guarantee も `cxxlens.clang22-materialization-guarantee.v1` domain で exact profile ID/digest、四 global side-channel digest、同じ semantic key 順の
+task fragments を bind し、static/shared の
 physical execution 差を global side-channel/guarantee または semantic base set へ混入させない。claim content stage set は
 `cxxlens.clang22-claim-stage-content-set.v1` domain で descriptor と semantic-task-key-sorted
 `{semantic_task_key, row_count, row_bindings}` を、provenance stage set は `cxxlens.clang22-claim-stage-provenance-set.v1` domain で
@@ -2406,8 +3298,46 @@ stage leaf から導出し、static/shared で identical とする。guarantee �
 逆流させず循環を禁止する。report schema は top-level digest/self-hashing root を持たない。validator は leaf から global
 provenance と base-guarantee cross-binding まで bottom-up に再計算し、schema-valid な任意 digest、stale child、edge swap、count drift を
 Store publication と release evidence の前に拒否する。release layer は validation 後の complete canonical report artifact bytes/value を外部
-`report_digest` に hash し、configuration と backend order `[memory, sqlite]` の `{backend, report_digest}` から external
-`report_set_digest` を導出する。どちらも materialization report 内に保持しない。
+`report_digest` に hash する。各 invocation の companion execution receipt は actual exit status、exact stdout byte count/SHA-256、parsed response count、
+stderr SHA-256 を保持し、qualified evidence は exit 0、one response、stdout と report artifact の exact byte equality を要求する。
+configuration と backend order `[memory, sqlite]` の `{backend, report_digest, execution_receipt_digest}` から external
+`report_set_digest` を導出する。これらは materialization report 内に保持しない。
+
+Issue #181 / DF-0192 により v2 request/report は Registry identity を raw authority-file digest、全 21 relation の
+`authority_registry_digest`、exact admitted 12 descriptor の `engine_registry_digest` に分離する。engine inventory は canonical descriptor ID と
+runtime descriptor digest の UTF-8 sorted rows、`cxxlens.relation-registry.v1` domain で導出し、relation name、duplicate ID、authority digest alias を
+拒否する。request は engine generation、named interpretation/trust policy、Store の exact seven-field selector と SDK-derived series ID を持ち、全 task
+を selector と同じ condition universe に限定する。named trust policy は protocol major/minor の直後に exact required feature list
+`[task-input-chunks-v1]` を投影する。memory は fresh genesis/sequence 1 のみ、SQLite は fresh genesis または exact same-series head の
+checked append とし、release matrix は fresh genesis で backend/configuration independent の selector、snapshot、publication identity を要求する。
+
+claim は一つの physical-independent direct materialization basis から始めるが、canonical/base claim は SDK `make_canonical_claim()` が precursor content と
+transform semantics から生成する actual per-claim basis を保持する。detached row ref は descriptor と exact canonical row bytes、SDK claim occurrence は
+semantic key/assertion/content と full producer/basis/provenance/guarantee envelopeを bind する singleton claim-batch digest、report claim ref は role とその digest
+から導出する。hidden precursor は cc/base assertion だけ、stored observation は assertion、stored cc/base は canonical claim とし、canonicalization edge を
+exactly one 対応させる。materialization task/row/evidence origin は SDK occurrence と分離した association ID に losslessly 保持し、complete final batch は全
+stored final occurrence と zero unresolved/conflict/differential disagreement を証明する。
+
+final occurrences は relation、scope、condition、interpretation、producer semantics、actual input-basis digest、precision、assumption-set の八 field で partition
+し、full occurrence ref 数、unique content 数、origin association 数を別々に検証する。mandatory zero-row relation も deterministic empty basis と
+coverage-only partition を持ち、reopened snapshot から exact zero を読めるようにする。detailed report は full partition/snapshot/publication projection と
+`current(selector)`、`open_publication(candidate)`、`open(candidate snapshot)` の三 path receiptを持つ。前二 path は semantic publication fields と、
+compaction による monotonic physical-generation transitionを検査する。`open(snapshot)` は別 series record を返し得るため full record equalityを要求せず、
+SDK returned record の requested snapshot binding と三 path の semantic snapshot projectionを検査する。SDK にない publication census、opaque fixture ID、
+identity-recomputed/path-agree boolean だけの証拠を禁止する。qualified publication は exact covered、unresolved zero、closure zero の direct path に限定する。
+
+Issue #181 / DF-0191 により v2 report schema は `detailed` と `compact_failure` の closed union とする。compact failure は raw-input-only または full
+request-bound の last authenticated boundary、phase/code、Store/head/effect ledger だけを持ち、未完成の task/claim/publication evidence を捏造しない。
+Issue #181 / DF-0198 により compact head observation は `not-observed`、`absent`、`present`、`sdk-error` の closed state とする。
+`head_current` が exact `store.current-not-found` を返した場合だけ `absent`、それ以外の SDK error は `sdk-error` とし、どちらも
+`observed_head_publication` は null とする。cause は authenticated operation `head_current` と access path `current-selector` を保持し、absence の推測、
+架空 record、path 消去を禁止する。他の publication 前 compact cause の access path は null とする。
+detailed failure は complete materialization/candidate snapshot を passed と同じ bottom-up validator に通した後、disjoint な `rejected_stale`、
+`rejected_store_failure`、`publication_outcome_unknown`、`committed_unverified` のいずれかに限定する。SQLite の phase-opaque
+`store.sqlite-failure` は phase-opaque であるため、close/reopen 後の candidate absence も zero commit を証明しない。candidate の
+absence/presence や open failure にかかわらず outcome unknown とし、recovery observation と invocation attribution を分離する。
+publish が full record を返した後の Store path/error/projection mismatch は committed attribution を維持し、全 path status、成功 projection、最初の typed
+SDK error または expected/actual mismatch digestを保持する。release evidence は passed detailed response だけを受理する。
 
 closure candidate は engine/schema-specific validator を通るまで authority ではない。
 
@@ -2438,17 +3368,97 @@ plugin、variant language/standard/target/macro/include/semantic flags、source 
 project/main-source/variant/toolchain/effective-invocation/language/working-directory を caller ID から推測しない。`normalized_invocation_digest` は
 §17.4 の `cxxlens.clang22.effective-invocation.v1` ordered projection から再計算して
 `build.compile_unit.effective_invocation_digest` へ exact に写像し、各 domain identity、condition/interpretation/provenance/evidence/guarantee
-envelope と hard reference を bottom-up に再計算する。semantic producer identity は executable/interface/distribution/source revision/tree だけへ
-投影し、installed binary/configuration/prefix digest は report installation/provider/authority evidence が別に bind する。従って static/shared の
+envelope と hard reference を bottom-up に再計算する。semantic producer identity は executable/interface/distribution/source revision/tree と accepted
+materialization authority digest census へ
+投影し、installed binary/configuration/measured occurrence は report installation/provider/authority evidence が別に bind する。従って static/shared の
 semantic base set と snapshot identity を一致させたまま physical producer occurrence を失わない。
 
 observation v2 の full primary-span bundle から host が `source.span` identity と row を独立再計算して canonical group の hard reference 検証より
 先に同じ draft へ置く。独立した standard-origin authority がなければ `source.span.origin` は absent とし、provider origin-chain bytes から合成しない。
 report は six base descriptor ごとの canonical count/set digest と全 base set digest を保持し、release matrix の全 run で同じ semantic base set を
 要求する。worker output に第七の `source.span` descriptor を追加しない。
+
+SQLite path は process start 時、request parse 前に一度 open した current-working-directory dirfd を effect root とする。absolute/root/drive、empty、
+`.`、`..`、NUL、backslash、double separator、normalization change を含まない canonical relative UTF-8 だけを受理する。source-private rooted SQLite
+VFS は database、WAL、SHM、journal のすべてを captured dirfd から `openat2` beneath/no-symlinks/no-magiclinks と leaf no-follow で解決し、
+ambient CWD fallback や lexical-only check を禁止する。rooted-vfs receipt は operational evidence として report に保持し、snapshot/backend-parity
+semantic identity には含めない。必要な kernel/VFS assurance がない環境は Store effect 前に fail closed とする。
+
+rooted SQLite VFS は process-local の named non-default VFS として登録し、返却済み Store が保持する source-private type-erased backend lifetime token を
+SQLite connection の完全な破棄まで解放しない。必須の破棄順序は SQLite connection close、VFS unregister、captured root dirfd close、SQLite library
+release であり、opener の先行破棄後も Store operation は同じ captured authority を使用する。active main database の exact relative path は refcount で
+認証し、最後の main-database close で新規 authority acquisition を revoke し、pending open と in-flight lease がすべて drain した後だけ entry を除去する。
+backend lifetime bridge は installed public header に callable signature を追加せず、shared tool が kernel DSO を参照するための source-private
+default-visibility access class に閉じる。この internal DSO linkage symbol は catalog 対象の public C++ API または supported external ABI ではない。
+access class は `snapshot_store` の bridge-specific な唯一の friend type とし、exactly one static `open_sqlite` member だけを持つ。method 単体の
+visibility override を禁止し、required static/shared build-test は rooted VFS target の link と実行を両構成で検証する。
+named file namespace は active main database とそこから導出した WAL、SHM、journal に閉じ、named
+`xOpen` は main database、main journal、write-ahead log だけ、anonymous `xOpen` は temporary database、transient database、temporary journal、
+subjournal だけを受理する。`xShmMap` / `xShmUnmap` は active authenticated main-database handle だけに許可し、anonymous temporary または named
+non-main handle からの SHM path construction/deletion を拒否する。`xAccess` / `xDelete` は active main database またはその known sidecar だけを
+認証し、closed database、suffix-only path、unknown suffix を拒否する。
+
+SDK の `sqlite3_open_v2` が返した raw connection は return 直後から stack RAII guard が所有し、open-error diagnostic の materialization と heap owner
+construction の両方を通じて保持する。heap `sqlite_database` owner の構築完了後だけ ownership を noexcept transfer し、allocation exception が backend
+lifetime token より長く raw connection を残すことを禁止する。
+
+SQLite に渡す database name は public request bytes そのものではなく、`/cxxlens-rooted-vfs-v1/` synthetic name と exact relative path の連結だけとし、
+named callback はこの prefix のない name を拒否する。leading `:` / `file:` reserved name は SQLite URI parsing より前かつ Store effect 前に拒否する。
+`xDlOpen` / `xDlSym` / `xDlClose` / `xDlError` は dynamic-library load、symbol lookup、close、ambient diagnostic を委任せず、null / no-op /
+bounded empty diagnostic に閉じる。`xSetSystemCall` / `xGetSystemCall` / `xNextSystemCall` も replacement と discovery を公開せず、NOTFOUND または
+null に閉じる。
+
+named `SQLITE_OPEN_DELETEONCLOSE` は file effect 前に拒否し、DELETEONCLOSE を必要とする closed transient role は anonymous pathname-unreachable
+private memfd だけで処理する。opener は request path state、receipt、synthetic name を SDK / SQLite effect 前に割り当て、VFS の main database open は
+pending reservation、file create、noexcept active commit の順とする。失敗した reservation は cancel し、pending entry は sidecar authority を与えない。
+`xOpen` は入口で
+`sqlite3_file.pMethods = nullptr` と output flags zero を公開し、全 fallible work と construction が成功した最後にだけ method table を設定する。全 C ABI
+callback は C++ exception を外へ漏らさず、C++ construction と owned resource に ownership leak を残さず、callback-specific typed SQLite result に閉じる。
+partial handle state は後続 `xClose` / `xShmUnmap` が所有して解放する場合を許す。
+既に認証済みの filesystem syscall effect は transactional rollback を一律には主張せず、`SQLITE_FCNTL_HAS_MOVED` の allocation または再認証 failure は
+`SQLITE_OK` と moved one に保守的に閉じる。failure output は `xOpen` の pMethods null / flags zero、`xAccess` の exists zero、`xFullPathname` の
+first byte NUL、`xShmMap` / `xFetch` の pointer null、`SQLITE_FCNTL_HAS_MOVED` の moved one だけを fallible work より前に初期化し、他の error output は
+unspecified とする。
+
+active main database と known sidecar の認証には、check から filesystem effect 完了まで last-close revocation と直列化する authority lease を必須とする。
+最後の close は新規 lease を原子的に拒否し、既に取得済みの lease は effect 完了後に drain する。named open と `xAccess` は nonblocking open と
+regular-file verdict を必須とし、FIFO、device、directory を database/sidecar として扱わない。`xDelete` は captured root 内の authenticated known path を
+authority とし、path unlink の直前に current leaf の regular-file observation を要求する。quiescent な non-regular leaf は除去しないが、concurrent leaf
+rebind に対する exact-object deletion guarantee は主張しない。
+named path の parent directory は captured root dirfd 自身の duplicate、または captured root dirfd から `openat2` beneath で取得時に認証し、leaf effect はその retained authenticated parent-directory
+capability 相対に限定する。parent capability 取得後の concurrent ancestor rename / mount relocation はその capability を revoke せず、effect 時点にも当該
+directory が current namespace の captured-root path 下から到達可能であることは主張しない。取得時に beneath でない parent、または identity が一致しない leaf
+への authority は与えない。
+開かれた named journal / WAL handle は base path を capability として固定せず、`xRead`、`xWrite`、`xTruncate`、`xSync`、`xFileSize`、`xLock`、
+`xUnlock`、`xCheckReservedLock`、`xFileControl`、`xShmLock` の前に active base-database lease を再取得する。`xShmMap` / `xShmUnmap` は main database
+only とし、`xSectorSize`、`xDeviceCharacteristics`、`xShmBarrier`、`xFetch`、`xUnfetch` は effect を持たない advisory callback とする。最後の
+main-database close 後は既存 sidecar FD の effectful callback を拒否し、`xClose` だけは無条件に owned resource を解放する。
+`SQLITE_FCNTL_HAS_MOVED` は opened main-database FD identity と captured root から再解決した current path identity を比較し、missing、rename、replacement、
+再認証 failure を moved と報告する。
+
 一 request の target backend は memory または SQLite の exactly one とし、全 task/group/backend validation の完了後だけ expected-parent CAS を
-伴う一回の transaction で publish する。stale parent またはいずれか一件の failure で draft 全体を破棄する。同じ semantic request の matched
-memory run と close/reopen SQLite run は同じ semantic snapshot/partition/query digest を生成しなければならない。
+伴う一回の transaction で publish する。memory は fresh genesis に限定し、SQLite append は exact selector head を先に検証する。commit 前と証明できる
+stale/counter/identity/hash/corrupt-authority failure だけが draft を破棄して zero commit を主張する。phase-opaque SQLite failure は recovery outcome を保持し、
+publish success 後の verification failure は committed publication を維持する。fresh genesis の同じ semantic request を使う matched memory run と close/reopen SQLite run は
+同じ semantic snapshot/partition/query/publication digest を生成しなければならない。
+
+Store outcome は `{authenticated operation, backend, exact SDK code, exact field, authority-declared stable detail}` で分類し、diagnostic prose を
+control に使わない。publication 前の `configuration/store_open/head_current/writer_begin/partition_stage/closure_stage/writer_validate` failure は
+phase-authentic compact zero-effect とする。SQLite `writer_publish` の exact mapping は次で閉じる。
+
+- `store.publication-conflict` / `exact-series-id` / empty → `rejected_stale`
+- `store.counter-overflow` / `publication_sequence|physical_generation` / empty → `rejected_store_failure: counter_overflow`
+- `store.hash-collision` / `exact-candidate-snapshot-id` / empty → `rejected_store_failure: hash_collision`
+- `store.snapshot-ambiguous` / `exact-snapshot-id` / empty → `rejected_store_failure: persistence_corrupt`
+- `store.sqlite-failure` / `database` / opaque exact diagnostic occurrence → `publication_outcome_unknown: persistence_io`
+- `store.corrupt` / `sqlite` / exact `backend|column-count|publication-row|series-head-count|series-head|series-head-sequence` → persistence corrupt
+- `store.corrupt` / `exact-publication-id` / exact `authority-record|duplicate-publication-id|parent|parent-sequence` → persistence corrupt
+- `store.corrupt` / `exact-series-id` / exact `duplicate-sequence|series-roots|series-head-cas` → persistence corrupt
+
+`publish()` returned handle の exact record が commit proof であり、その後の reopen/current/open/verification error または projection mismatch は
+`committed_unverified` として最初の cause と全 successful projection を保持する。successful call の mismatch に架空の SDK error を付けない。
+`store.transaction-state/publish/""`、`store.corrupt/publication/identity`、`store.publish-stale-parent`、memory publish error、上記にない
+SQLite writer-publish tuple は invariant breach の exit 2 / no authoritative response とし、recovery observation で outcome を再分類しない。
 
 `batch_end` は descriptor 順の全 column ID、payload byte length、chunk count と、frame emission 順の
 chunk digest 列を保持する。host は各 column の contiguous row offset、monotonic chunk index、同一最終 row count、
@@ -2624,6 +3634,7 @@ adoptable state からだけ遷移できる。in-process logical stream と wire
 
 ### 18.3 Version
 
+- current protocol: `1.1.0`
 - protocol major mismatch: reject
 - same major minor: feature negotiation
 - unknown required feature: reject
@@ -2655,11 +3666,18 @@ grammar は decode 後に検証する。evidence は summary を含む4 fieldを
 execution report identity から落としてはならない。portable worker、process fixture、testing harness、shared host validator は同じ
 typed encoder/decoder を使用する。
 
-Issue #140 / ADR 0071 により逆方向の host-to-provider handshake も共有 state validator を迂回しない。accepted transcript は
-stream 1、sequence 0..4、flags 0 の `hello_ack, schema_negotiate, open_task, credit, close` exact 5 frameだけである。canonical
-manifest、negotiated schema/minor、task ID、task input/invocation/toolchain/environment digest、payload content digest、credit、close bindingを
-独立 launcher authority と照合する。process runtime は共有 encoderを使用し、Clang worker/fixtureはpayload decode前に共有 validatorを
-通す。invalid host transcriptはoutputなしでfail closedとし、frontend failure terminalは長いtask IDでも共有typed encoderを使用する。
+Issue #140 / ADR 0071 と DF-0197 により逆方向の host-to-provider handshake も共有 incremental state validator を迂回しない。profile は
+negotiated protocol minor と required feature set で閉じる。minor 0 は generic compatibility の stream 1、flags 0、sequence 0..4、
+`hello_ack, schema_negotiate, open_task, credit, close` exact five-frame profileを維持し、payload は `open_task` だけに許す。minor 1 + required
+`task-input-chunks-v1` は stream 1、flags 0、contiguous sequence の
+`hello_ack, schema_negotiate, open_task(empty payload), input_descriptor, input_chunk*, credit, close` とし、payload は `input_chunk` だけに許す。
+fixed prefix sequence は 0..3、chunk sequence は `4 + chunk_index`、credit は `4 + chunk_count`、close は `5 + chunk_count` とする。
+installed Clang 22 materializer は minor 1 profile だけを要求し、minor 0 へ fallback しない。
+
+両 profile は canonical manifest、negotiated schema/minor/features、task ID、task input/invocation/toolchain/environment digest、payload content digest、
+credit、close binding を独立 launcher authority と照合する。process runtime は共有 encoderを使用し、Clang worker/fixtureは semantic payload use 前に
+共有 validatorを通す。invalid host transcriptは task acceptance/output なしで fail closedとし、frontend failure terminalは長い task IDでも共有 typed
+encoderを使用する。minor 0 の public vector API は shared incremental core 上の bounded wrapper として signature を維持する。
 
 ADR 0040 により、decoder は major/minor/flags を public frame に保持し、session negotiation で選んだ exact
 major/minor と全 frame を照合する。reserved bit と unknown required extension は reject し、codec 未交渉の
@@ -2712,6 +3730,22 @@ ADR 0045 の execution report terminal は runtime contract の stable registry 
 - bounded candidate set
 
 host absolute path を identity としない。
+
+Protocol 1.1 の `task-input-chunks-v1` は logical task input を authenticated ordered chunk sequence で運ぶ。`input_descriptor` は exact
+five fields `{task_id,input_digest,total_bytes,chunk_bytes,chunk_count}`、`input_chunk` は exact five fields
+`{task_id,input_digest,chunk_index,offset,byte_count}` を deterministic typed CBOR map として持つ。canonical chunk size は 1 MiB、logical input は
+最大 64 MiB、chunk count は最大 64 とし、既存 frame payload ceiling 16 MiB は変更しない。zero input は total/chunk count zero、chunk frame zero、
+empty SHA-256 とする。
+
+chunk index は 0 から連続、offset は prior byte count の和、non-final byte count は exact chunk size、final は 1..chunk size とする。descriptor と
+全 chunk の task/input ID、control byte count、fixed-header payload SHA-256、ordered concatenation total、streaming SHA-256 を照合し、shared seal と
+semantic task decoder が成功してからだけ `task_accepted` を許す。missing、duplicate、reordered、overlap、extra、short、truncated、digest mismatch、
+limit exceeded、terminal 後の chunk を task acceptance 前に拒否する。input bytes/frame は descriptor profile limit であり provider output credit ではなく、
+stdout/stderr `transport_bytes` accounting とも分離する。
+
+host encoder、worker decoder、process runtime、conformance validator は transition/digest/length/budget state を共有する。raw frames と spool は
+diagnostic transport occurrence で、semantic authority は shared seal 後の detached decoded task だけである。production は全 logical input を public vector
+adapterへ materialize せず、ambient path/FD/environment/shared memory transfer を禁止する。
 
 ### 18.6 Budget
 
@@ -4270,9 +5304,12 @@ group-level table だけで complete を宣言しない。
 #### G4 — Provider isolation
 
 - protocol negotiation
+- Protocol 1.1 `task-input-chunks-v1` shared incremental input seal
 - exact Clang 22 worker
-- installed `cxxlens-clang22-materialize` strict JSON request/report contract
+- installed `cxxlens-clang22-materialize` strict JSON request/report 2.1 contract
+- exact argc、measured occurrence manifest、rooted SQLite effect VFS
 - exact six-descriptor/all-task/all-group sealed materialization
+- transport/semantic coverage planes、raw/frame/sealed receipts、closed guarantee profile
 - raw-frame diagnostic-only boundary
 - host-owned full-bundle `source.span` materialization
 - one expected-parent transaction with memory/reopened-SQLite parity
@@ -4343,17 +5380,28 @@ relation、interpretation、toolchain、platform/configuration と capability、
 推測してはならない。
 
 Issue #182 / ADR 0096 の Clang 22 production evidence は、同一 exact revision/tree の relocated `static` / `shared` configuration と
-`memory` / `sqlite` backend の直積四件について、`cxxlens.clang22-materialization-report.v1` を各 combination exactly one 要求する。
+`memory` / `sqlite` backend の直積四件について、`cxxlens.clang22-materialization-report.v2` exact version `2.1.0` の passed detailed response を各 combination exactly one
+要求する。
 一 report は一 backend の一 transaction だけを表し、SQLite report は close/reopen 後の検証を必須とする。release evaluation は四件の
 configuration/backend identity と digest を保持し、strict GR の各 production tuple evidence digest は同一 configuration の memory/SQLite
-complete report artifact 二件の external canonical report-set digest を含む。missing、extra、duplicate、configuration/backend swap、tool/worker/prefix/task/descriptor/group/store
+complete report artifact 二件の external canonical report-set digest を含む。missing、extra、duplicate、configuration/backend swap、tool/worker/measured-occurrence/task/descriptor/group/store
 binding mismatch、backend snapshot/canonical-export/query digest 不一致、三 observation census のいずれかの non-exact count、blocking unresolved、
 full-span precondition failure、または in-report DAG の terminal cross-binding までの bottom-up 再計算不一致では tuple を生成しない。
 exact four report の全てが production exact precondition を満たし、その complete canonical artifact の external report digest が configuration ごとの
 report-set digest に bind されるまで production support を宣言しない。
 
+各 run は source-private occurrence manifest `share/cxxlens/materialization/clang22/occurrence-v1.json` の measured tool/worker/authority occurrence と、
+occurrence manifest bytes を含む external full-prefix install witness を cross-bind する。strict argc、rooted SQLite VFS receipt、Protocol 1.1
+`task-input-chunks-v1` transfer receipt、runtime raw/frame/sealed transcript receipt、transport/semantic coverage 二 plane、closed guarantee profile を
+report と external execution receipt から再計算する。request-only installation assertion、public process semantic digest、raw frame、query/reopen receiptを
+prepublication claim guarantee の代用にしない。
+
+scale/resource evidence は one-task、4096-task、16 MiB source、512 MiB aggregate source、1 GiB raw request、arbitrary short reads を含み、retained
+memory が one shared catalog + fixed buffers + one task/index/source/output window の式に従うことを測定する。raw request、aggregate source、全 task payload、
+task-count-times-catalog-count copies の resident retention、spool failure 後の effect、minor-0 materializer fallback があれば `not-qualified` とする。
+
 Issue #182 の authority-only rollout では、materializer 自身の production-scope assignment が exact
-`scope.clang22-installed-adoption-gap` / `#181` / `[DF-0182, DF-0187]` の `tracked-gap` である間だけ、normal release evaluation は request/report/set の
+`scope.clang22-installed-adoption-gap` / `#181` / `[DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200, DF-0205, DF-0206, DF-0207, DF-0208]` の `tracked-gap` である間だけ、normal release evaluation は request/report/set の
 exact zero を typed `tracked-gap-empty` として受理し、materializer executable 一件だけを install census から除外する。partial evidence、full
 matrix の先行、schema/worker の欠落は拒否する。同 assignment が `included` / `qualified` になった後は、他の tracked gap によって全体が
 `classified-with-gaps` のままでも例外を解除し、installed executable と exact four co-located request/report pairs、two report-set digest を
@@ -4507,8 +5555,18 @@ first-wins、major fallback は行わない。
 
 判定は必ず `supported`、`migration-required`、`unsupported` のいずれかと structured reason code を返す。
 same-major の新しい minor はその axis policy が許す場合だけ利用でき、古い minor は exact migration path が
-ある場合だけ `migration-required` になる。major mismatch、missing axis、unknown required feature、digest
+ある場合だけ `migration-required` になる。axis major mismatch は常に `unsupported` である。唯一のbackend artifact例外は
+snapshot-format capability-bundle axisを`3.0.0`のまま保ち、exact context feature
+`sqlite-store-artifact-v2.6.0-pre-migration`に対して`sqlite-store-readable-format` coordinateの
+`compact-v2.6.0-to-v3.0.0` registered migrationを適用する場合である。この例外は
+`snapshot_store::compact()` による明示 migration だけを `migration-required` とし、generic major fallback、
+implicit migration、別の from/to tuple への類推を認可しない。missing axis、unknown required feature、digest
 mismatch は `unsupported` である。unknown optional feature は利用不能のまま report に保持する。
+ここで snapshot-format axis の version `3.0.0` は backend-qualified feature と exact contract digest を束ねる release
+capability-bundle version であり、memory readable 2.6.0、SQLite current 3.0.0、SQLite predecessor 2.6.0 の direct Store
+tuple は feature projection である。current binaryはmemory direct、SQLite v3 direct、v2 read-only、explicit compact handlerを
+truthfully全て提示し、pre-migration DB stateだけをbackend artifact contextで示す。backend tupleやartifact versionをaxis versionと
+相互代入したり、migration判定のためcapabilityを隠してはならない。
 
 `inspect` は side-effect-free な契約判定を行う。`doctor` は同じ判定に runtime qualification evidence を
 加え、未 qualified release を `compat.release-not-qualified` として拒否する。両者とも fallback の有無を
@@ -4653,9 +5711,12 @@ canonical vector、fuzz corpus を通過しなければならない。
 
 ### OD-002 SQLite physical schema
 
-ADR 0013 / Issue #68 で解決済み。exact publication/series metadata を normalized table、semantic manifest と
-pointer-free detached row を versioned canonical binary payload に置く hybrid とする。checksum と semantic digest を
-open/compaction 時に再検証し、physical generation は reader pin が解放されるまで回収しない。旧
+ADR 0013 / Issue #68 の hybrid と ADR 0097 / Issue #200 の current physical v3 で解決済み。exact publication/series
+metadata を normalized table、semantic manifest と pointer-free detached row を versioned canonical binary payload に置く。
+v3 は payload を `(publication_id, generation, chunk_ordinal)` の bounded chunk table に保存し、checksum、chunk census、
+semantic digest を open/compaction/migration 時に再検証する。exact v2.6 は read-only direct-open と既存 `compact()` の
+deterministic COW migration だけを許す。validated locator swap と同じ transaction で旧 durable chunk を除去し、
+eager decode 済み process generation だけを reader pin 解放まで保持する。旧
 `cxxlens.sqlite-fact-store.v1` は source を変更しない一方向 adapter のみ許可し、Issue #72 で撤去する。physical
 schema、path、page/index order は public API と semantic snapshot identity へ漏らさない。
 

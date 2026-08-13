@@ -5,6 +5,7 @@
 - Decision owner: provider-runtime
 - Decision issue: #64
 - Tracking issue: #56
+- Clarification feedback: DF-0197 / #197
 
 ## Context
 
@@ -46,6 +47,18 @@ reuse/invalidation key は provider semantic contract digest と provider binary
 ID/version の rebuild を同一 binary と推定しない。将来の binary equivalence relaxation は Issue #65 の署名付き
 certification contract と別 ADR を必要とする。
 
+DF-0197 / Issue #197 により Provider Protocol current は 1.1.0 とする。minor 0 の host input は従来どおり
+`hello_ack, schema_negotiate, open_task, credit, close` の exact 5 frame で、payload は `open_task` だけに許す。
+minor 1 は `required_features: [task-input-chunks-v1]` による negotiation を必須とし、`open_task` の payload を空にして、
+続く `input_descriptor` と 0 件以上の `input_chunk` で同じ logical task input bytes を運ぶ。chunk payload は最大 1 MiB、
+logical input は最大 64 MiB、chunk は最大 64 件とし、既存の 16 MiB frame payload limit は変更しない。
+
+descriptor は task/input digest、total bytes、chunk bytes、chunk count、各 chunk は task/input digest、zero-based index、
+contiguous offset、byte count を exact deterministic CBOR control へ bind する。各 frame payload digest と全 chunk の streaming
+SHA-256 を検証し、exact length/digest を seal して task decoder が成功するまで `task_accepted` を送らない。zero input は
+total/count 0 の descriptor と SHA-256(empty) を持ち chunk を送らない。provider output credit は input budget と分離し、
+ambient path/FD/environment/shared-memory input を authority にしない。
+
 trusted in-process provider と out-of-process provider は同じ logical stream state machine、batch/group validator、
 coverage/unresolved/failure contract を通る。in-process path が wire bytes の encode/decode を省略しても、semantic
 frame と conformance decision を bypass してはならない。
@@ -53,6 +66,7 @@ frame と conformance decision を bypass してはならない。
 ## Consequences
 
 - provider は全出力を memory vector に保持せず、credit 内の column chunk だけを保持すればよい。
+- 1.1 task input も全体 vector を production transport に要求せず、共有 incremental state/digest/budget core を使用する。
 - Arrow/Protobuf 等の大規模 mandatory runtime dependency は NG0 kernel に入らない。
 - wire major、relation schema、provider semantics、binary identity は独立 version axis のまま保たれる。
 - compression/encryption、durable cross-process resume、remote transport は NG1 profile で negotiation する。

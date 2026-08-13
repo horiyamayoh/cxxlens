@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import itertools
 import pathlib
 import sys
@@ -34,6 +35,10 @@ from check_ng_provider_protocol import (  # noqa: E402
     schema_validate,
     surface_parity,
     validate_all,
+    validate_contract_shape,
+    validate_shared_coverage_records,
+    validate_task_input_chunks,
+    validate_task_input_corpus,
 )
 
 
@@ -191,6 +196,13 @@ class NgProviderProtocolTest(unittest.TestCase):
         self.assertEqual(result["stable_rejections"], len(corpus["cases"]))
         self.assertEqual(result["crashes"], 0)
 
+    def test_minor_one_task_input_corpus_has_actual_positive_and_negative_data(self) -> None:
+        corpus = load_yaml(ROOT / "schemas/cxxlens_ng_provider_fuzz_corpus.yaml")
+        self.assertEqual(
+            validate_task_input_corpus(corpus),
+            {"cases": 7, "accepted": 1, "stable_rejections": 6},
+        )
+
     def test_manifest_and_task_examples_are_schema_valid(self) -> None:
         schema_validate(sample_manifest(), load_yaml(ROOT / "schemas/cxxlens_ng_provider_manifest.schema.yaml"), "manifest")
         schema_validate(sample_task(), load_yaml(ROOT / "schemas/cxxlens_ng_provider_task.schema.yaml"), "task")
@@ -200,6 +212,218 @@ class NgProviderProtocolTest(unittest.TestCase):
         changed["wire"]["limits"]["payload_bytes"] += 1
         with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
             schema_validate(changed, load_yaml(ROOT / "schemas/cxxlens_ng_provider_protocol.schema.yaml"), "provider protocol")
+
+    @staticmethod
+    def task_input_transfer(
+        chunks: list[bytes], chunk_bytes: int = 1048576
+    ) -> dict[str, object]:
+        hasher = hashlib.sha256()
+        for chunk in chunks:
+            hasher.update(chunk)
+        input_digest = "sha256:" + hasher.hexdigest()
+        task_id = "task:input-test"
+        total_bytes = sum(len(chunk) for chunk in chunks)
+        occurrences = []
+        offset = 0
+        for index, payload in enumerate(chunks):
+            occurrences.append(
+                {
+                    "sequence": 4 + index,
+                    "control": {
+                        "schema": "cxxlens.provider-control.input-chunk.v1",
+                        "task_id": task_id,
+                        "input_digest": input_digest,
+                        "chunk_index": index,
+                        "offset": offset,
+                        "byte_count": len(payload),
+                    },
+                    "payload": payload,
+                    "payload_digest": "sha256:"
+                    + hashlib.sha256(payload).hexdigest(),
+                }
+            )
+            offset += len(payload)
+        return {
+            "protocol_minor": 1,
+            "features": ["task-input-chunks-v1"],
+            "task_id": task_id,
+            "input_digest": input_digest,
+            "descriptor": {
+                "sequence": 3,
+                "control": {
+                    "schema": "cxxlens.provider-control.input-descriptor.v1",
+                    "task_id": task_id,
+                    "input_digest": input_digest,
+                    "total_bytes": total_bytes,
+                    "chunk_bytes": chunk_bytes,
+                    "chunk_count": len(chunks),
+                },
+            },
+            "chunks": occurrences,
+            "credit_sequence": 4 + len(chunks),
+            "close_sequence": 5 + len(chunks),
+        }
+
+    def test_task_input_chunk_boundaries_and_maximum_seal(self) -> None:
+        for total_bytes in (0, 1, 1048575, 1048576, 1048577):
+            payload = b"x" * total_bytes
+            chunks = [
+                payload[offset : offset + 1048576]
+                for offset in range(0, total_bytes, 1048576)
+            ]
+            sealed = validate_task_input_chunks(self.task_input_transfer(chunks))
+            self.assertTrue(sealed["sealed"])
+            self.assertEqual(sealed["total_bytes"], total_bytes)
+        maximum_chunk = b"m" * 1048576
+        maximum = validate_task_input_chunks(
+            self.task_input_transfer([maximum_chunk] * 64)
+        )
+        self.assertEqual(maximum["total_bytes"], 67108864)
+        self.assertEqual(maximum["chunk_count"], 64)
+
+    def test_task_input_chunk_mutations_fail_closed(self) -> None:
+        def changed(mutator: object) -> dict[str, object]:
+            value = self.task_input_transfer([b"abcd", b"e"], chunk_bytes=4)
+            assert callable(mutator)
+            mutator(value)
+            return value
+
+        mutations = (
+            lambda value: value["descriptor"]["control"].__setitem__("extra", 0),
+            lambda value: value["descriptor"]["control"].__setitem__("schema", "wrong"),
+            lambda value: value["descriptor"]["control"].__setitem__("chunk_count", 1),
+            lambda value: value.__setitem__("chunks", value["chunks"][:-1]),
+            lambda value: value.__setitem__("chunks", [value["chunks"][0]] * 2),
+            lambda value: value.__setitem__("chunks", list(reversed(value["chunks"]))),
+            lambda value: value["chunks"][0]["control"].__setitem__("chunk_index", 1),
+            lambda value: value["chunks"][1]["control"].__setitem__("offset", 3),
+            lambda value: value["chunks"][0]["control"].__setitem__("byte_count", 3),
+            lambda value: value["chunks"][0].__setitem__("payload_digest", "sha256:" + "0" * 64),
+            lambda value: value["chunks"][0]["control"].__setitem__("task_id", "task:splice"),
+            lambda value: value.__setitem__("features", []),
+            lambda value: value.__setitem__("protocol_minor", 0),
+            lambda value: value.__setitem__("credit_sequence", 99),
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                with self.assertRaises(ProviderContractError):
+                    validate_task_input_chunks(changed(mutation))
+
+        digest_drift = self.task_input_transfer([b"abcd", b"e"], chunk_bytes=4)
+        other_digest = "sha256:" + "0" * 64
+        digest_drift["input_digest"] = other_digest
+        digest_drift["descriptor"]["control"]["input_digest"] = other_digest
+        for chunk in digest_drift["chunks"]:
+            chunk["control"]["input_digest"] = other_digest
+        with self.assertRaisesRegex(ProviderContractError, "task-binding-mismatch"):
+            validate_task_input_chunks(digest_drift)
+
+        oversized = self.task_input_transfer([])
+        oversized["descriptor"]["control"]["total_bytes"] = 67108865
+        with self.assertRaisesRegex(ProviderContractError, "logical input limit"):
+            validate_task_input_chunks(oversized)
+
+    def test_task_input_authority_rejects_profile_or_budget_drift(self) -> None:
+        drifts = []
+        changed = copy.deepcopy(self.contract)
+        changed["profiles"]["NG0"]["required"].remove("task-input-chunks-v1")
+        drifts.append(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["host_to_provider_state_machine"]["minor_profiles"]["1.0"][
+            "exact_frames"
+        ].insert(3, "input_descriptor")
+        drifts.append(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["host_to_provider_state_machine"]["minor_profiles"]["1.1"][
+            "required_features"
+        ] = []
+        drifts.append(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["task_input_transfer"]["limits"]["maximum_input_chunks"] = 65
+        drifts.append(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["task_input_transfer"]["budget_separation"]["credit"] = "input-and-output"
+        drifts.append(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["task_input_transfer"]["authority_boundary"][
+            "ambient_path-fd-environment-shared-memory-side-channel"
+        ] = "allowed"
+        drifts.append(changed)
+        for changed in drifts:
+            with self.assertRaisesRegex(
+                ProviderContractError, "task-input-authority-invalid"
+            ):
+                validate_contract_shape(changed)
+
+    def test_shared_validator_requires_transport_and_retains_unknown_semantics(self) -> None:
+        task_id = "task:coverage-test"
+        records = [
+            {"kind": "task", "id": task_id, "state": "covered", "reason": ""},
+            {
+                "kind": "future.specialization|opaque",
+                "id": "semantic:\u20ac\U0001f600",
+                "state": "unresolved",
+                "reason": "retain|without\ninterpretation\0",
+            },
+        ]
+        retained = validate_shared_coverage_records(task_id, records)
+        self.assertEqual(retained, records)
+        self.assertIsNot(retained, records)
+        self.assertEqual(retained[1], records[1])
+
+    def test_shared_transport_coverage_mutations_fail_closed(self) -> None:
+        task_id = "task:coverage-test"
+        transport = {
+            "kind": "task",
+            "id": task_id,
+            "state": "covered",
+            "reason": "",
+        }
+
+        def changed(field: str, value: str) -> list[dict[str, str]]:
+            record = copy.deepcopy(transport)
+            record[field] = value
+            return [record]
+
+        mutations = (
+            [],
+            [transport, copy.deepcopy(transport)],
+            changed("kind", "renamed-task"),
+            changed("id", "task:wrong"),
+            changed("state", "failed"),
+            changed("reason", "nonempty"),
+            [transport, {**transport, "id": "task:wrong"}],
+            [{**transport, "extra": "forbidden"}],
+        )
+        for records in mutations:
+            with self.subTest(records=records):
+                with self.assertRaisesRegex(
+                    ProviderContractError, "coverage-incomplete"
+                ):
+                    validate_shared_coverage_records(task_id, records)
+
+    def test_shared_coverage_authority_rejects_drop_or_interpretation_drift(self) -> None:
+        drifts = []
+        changed = copy.deepcopy(self.contract)
+        changed["shared_transcript_coverage"]["specialization_awareness"] = (
+            "clang22-aware"
+        )
+        drifts.append(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["shared_transcript_coverage"]["non_transport_records"][
+            "unknown_or_extra_semantic"
+        ] = "discard"
+        drifts.append(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["shared_transcript_coverage"]["task_transport_record"][
+            "cardinality"
+        ] = "optional"
+        drifts.append(changed)
+        for changed in drifts:
+            with self.assertRaisesRegex(
+                ProviderContractError, "coverage-authority-invalid"
+            ):
+                validate_contract_shape(changed)
 
 
 if __name__ == "__main__":
