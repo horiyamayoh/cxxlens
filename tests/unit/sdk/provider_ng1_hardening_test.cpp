@@ -76,11 +76,11 @@ namespace
 
 		auto startup = ng1_heartbeat_state::create(heartbeat_binding(), 100U);
 		require(startup.has_value(), "startup heartbeat state creation failed");
-		require(startup->check_liveness(100U + 10'000'000'000U),
-				"heartbeat startup grace boundary was rejected");
-		auto startup_timeout = startup->check_liveness(100U + 10'000'000'001U);
+		require(startup->check_liveness(100U + 10'000'000'000U - 1U),
+				"heartbeat startup grace before-boundary was rejected");
+		auto startup_timeout = startup->check_liveness(100U + 10'000'000'000U);
 		require(!startup_timeout && startup_timeout.error().code == "provider.heartbeat-timeout",
-				"heartbeat startup grace expiry was accepted");
+				"heartbeat startup grace boundary was accepted");
 
 		auto duplicate = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
 		require(duplicate.has_value(), "duplicate heartbeat state creation failed");

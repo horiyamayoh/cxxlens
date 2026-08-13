@@ -308,7 +308,7 @@ namespace cxxlens::sdk::provider::detail
 			return unexpected(std::move(elapsed.error()));
 		if (!last_valid_ack_received_ns_)
 		{
-			if (*elapsed > heartbeat_startup_grace_ns)
+			if (*elapsed >= heartbeat_startup_grace_ns)
 				return unexpected(
 					ng1_error("heartbeat-timeout", "now_ns", "startup-grace-expired"));
 			return {};
