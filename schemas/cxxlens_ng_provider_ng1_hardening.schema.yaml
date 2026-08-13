@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.provider-ng1-hardening.v1
 title: cxxlens NG1 provider hardening contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, profile, heartbeat, progress, resume, spill, recovery, stable_failures, qualification]
+required: [schema, document_version, maturity, authority, profile, lifecycle, heartbeat, progress, resume, spill, recovery, stable_failures, qualification]
 properties:
   schema: {const: cxxlens.provider-ng1-hardening.v1}
   document_version: {const: '1.0.0'}
@@ -26,6 +26,27 @@ properties:
       required_features: [durable-resume-token, heartbeat, progress-rate-enforcement, spill-staging, long-run-fault-qualification]
       capability_claim: exact-certified-qualification-only
       manifest_self_claim_authority: forbidden
+  lifecycle:
+    const:
+      host_receipt:
+        type: uint64
+        unit: nanoseconds
+        source: host-injected-monotonic-clock
+        capture: once-before-shared-validation
+        authority: liveness-and-progress-rate
+        monotonicity: non-decreasing-per-protocol-session
+        backwards: provider.heartbeat-clock-invalid
+      session_start:
+        event: validated-schema-negotiate-complete
+        receipt: host-receipt-at-event-boundary
+        binding: [protocol_session_id]
+      task_start:
+        event: validated-task-accepted
+        receipt: host-receipt-at-frame-ingress-before-validation
+        binding: [protocol_session_id, task_id]
+      task_terminal:
+        event: validated-task-complete-or-task-failed
+        receipt: host-receipt-at-frame-ingress-before-validation
   heartbeat:
     const:
       message_type: 23
@@ -59,21 +80,50 @@ properties:
       kinds: [probe, ack]
       identity_binding: [provider_id, provider_version, protocol_session_id, task_id, stream_id]
       sequence: {starts_at: 0, namespace: per-session-and-direction, contiguous: required, duplicate: reject, replay: reject}
-      clock: {source: host-injected-monotonic-clock, unit: nanoseconds, wall_clock: forbidden, provider_timestamp: ordering-and-diagnostics-only, receipt_timestamp: host-observed-before-validation, future: provider.heartbeat-clock-invalid, arithmetic: checked-u64-subtraction, backwards: provider.heartbeat-clock-invalid}
+      clock:
+        source: host-injected-monotonic-clock
+        unit: nanoseconds
+        wall_clock: forbidden
+        host_receipt: {source: host-injected-monotonic-clock, capture: once-before-shared-validation, authority: liveness-and-progress-rate}
+        provider_timestamp:
+          field: monotonic_time_ns
+          clock_domain: session-host-monotonic
+          role: ordering-and-diagnostics-only
+          ordering_scope: [protocol_session_id, task_id, stream_id]
+          future: {predicate: provider-timestamp-greater-than-frame-host-receipt, equality: accepted, failure: provider.heartbeat-clock-invalid}
+          backwards: {predicate: provider-timestamp-less-than-previous-accepted-in-scope, equality: accepted, failure: provider.heartbeat-clock-invalid}
+          baseline_update: after-full-control-validation-only
+          rate_and_liveness_authority: forbidden
+        arithmetic: checked-u64-subtraction
       liveness:
         interval_ns: 1000000000
         timeout_ns: 5000000000
         startup_grace_ns: 10000000000
+        activation: {event: task-start, initial_state: no-valid-ack}
+        probe_schedule: {first_probe: at-task-start, next_probe: previous-probe-host-receipt-plus-interval}
+        initial_ack_deadline:
+          state: no-valid-ack
+          basis: task-start-host-receipt
+          deadline: checked-add-task-start-host-receipt-and-startup-grace
+          accepted_if: ack-host-receipt-less-than-deadline
+          boundary: deadline-inclusive-failure
+          failure: provider.heartbeat-timeout
         ack_deadline:
-          basis: last-probe-host-receipt
-          rejection: ack-receipt-minus-last-probe-receipt-greater-than-or-equal-timeout
+          enabled_if: first-valid-ack-established
+          basis: latest-probe-host-receipt
+          deadline: checked-add-probe-host-receipt-and-timeout
+          accepted_if: ack-host-receipt-less-than-deadline
           boundary: timeout-inclusive-failure
+          failure: provider.heartbeat-timeout
         idle_timeout:
+          enabled_if: first-valid-ack-established
           basis: last-valid-ack-host-receipt
           rejection: now-minus-last-valid-ack-receipt-greater-than-or-equal-timeout
           boundary: timeout-inclusive-failure
+          failure: provider.heartbeat-timeout
         startup_boundary: grace-inclusive
         time_authority: host-injected-monotonic-clock
+        no_valid_ack: initial-ack-deadline-only
         last_valid_ack: host-receipt-time-of-validated-ack
         timeout_arithmetic: checked-u64-subtraction
         terminal_grace: no-heartbeat-required-after-terminal
@@ -105,9 +155,12 @@ properties:
       enforcement:
         startup_grace_ns: 10000000000
         first_sample_deadline:
+          state: no-valid-sample
           basis: task-start-host-receipt
-          rejection: no-valid-sample-at-or-after-start-plus-startup-grace
+          deadline: checked-add-task-start-host-receipt-and-startup-grace
+          accepted_if: valid-sample-host-receipt-less-than-deadline
           boundary: timeout-inclusive-failure
+          terminal_bypass: forbidden
           failure: provider.progress-rate
         sample_window_ns: 5000000000
         maximum_sample_gap_ns: 10000000000
@@ -120,6 +173,10 @@ properties:
         equality_at_deadline: accepted
         sample_time_authority: host-injected-monotonic-clock-at-valid-frame-receipt
         provider_timestamp_role: ordering-only-not-rate-authority
+        provider_timestamp_future: provider-timestamp-greater-than-frame-host-receipt-is-provider.heartbeat-clock-invalid
+        provider_timestamp_backwards: provider-timestamp-less-than-previous-accepted-in-scope-is-provider.heartbeat-clock-invalid
+        provider_timestamp_scope: [protocol_session_id, task_id, dependency_group_id]
+        provider_timestamp_baseline_update: after-full-control-validation-only
         delta_time: current-receipt-ns-minus-previous-receipt-ns
         overflow: checked-u128-or-fail
         zero_elapsed: provider.progress-rate
@@ -256,8 +313,10 @@ properties:
   qualification:
     const:
       schema: cxxlens.provider-ng1-qualification.v1
+      report_schema: schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml
+      checker: tools/quality/check_ng_provider_ng1_qualification.py
       vectors: schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
-      exact_binding: [revision, tree, provider_binary_digest, provider_semantic_contract_digest, protocol_minor, hardening_contract_digest]
+      exact_binding: [revision, tree, provider_binary_digest, provider_binary_digest_source, provider_semantic_contract_digest, provider_semantic_contract_digest_source, protocol_minor, hardening_contract_digest, report_schema_digest, vectors_digest]
       required_profiles: [static, shared]
       required_cases: [positive-heartbeat-and-progress, stale-heartbeat, heartbeat-timeout, progress-sample-timeout, zero-progress-after-grace, stale-resume-token, foreign-resume-token, spill-corruption, worker-crash-recovery, worker-hang-recovery, cancellation-recovery, permutation-replay, long-run-fault]
       required_case_outcomes:

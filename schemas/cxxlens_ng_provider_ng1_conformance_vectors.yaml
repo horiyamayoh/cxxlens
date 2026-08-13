@@ -5,6 +5,14 @@ authority:
   contract: schemas/cxxlens_ng_provider_ng1_hardening.yaml
   decision_issue: '#233'
   implementation_issue: '#183'
+  binding:
+    state: authority-only-unbound
+    revision: null
+    tree: null
+    provider_binary_digest: null
+    provider_semantic_contract_digest: null
+    protocol_minor: 1
+    hardening_contract_digest: null
 vectors:
   - id: positive-heartbeat-and-progress
     class: positive

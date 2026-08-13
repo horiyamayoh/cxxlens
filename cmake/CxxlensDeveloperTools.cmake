@@ -39,6 +39,7 @@ foreach(
         snapshot_store_contract
         sqlite_store_contract
         provider_protocol
+        provider_ng1_qualification
         security_contract
         provider_runtime)
   string(REPLACE "_" "-" target_suffix "${contract}")

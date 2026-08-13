@@ -1,5 +1,5 @@
 {
-  "asset_count": 643,
+  "asset_count": 645,
   "assets": [
     {
       "authority": "active",
@@ -2159,6 +2159,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_provider_protocol.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -4301,6 +4308,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_provider_ng1_qualification.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_provider_protocol.py",
       "removal_issue": null,
       "replacement": null,
@@ -4504,7 +4518,7 @@
     }
   ],
   "classifications": {
-    "active": 607,
+    "active": 609,
     "archived": 35,
     "generated": 1
   },

@@ -38,6 +38,5 @@ $defs:
     minimum: 0
     maximum: 18446744073709551615
   semantic_digest:
-    oneOf:
-      - {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
-      - {type: string, pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'}
+    type: string
+    pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'
