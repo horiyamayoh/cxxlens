@@ -198,7 +198,8 @@ namespace cxxlens::sdk::provider::detail
 	}
 
 	result<void> ng1_heartbeat_state::accept(const ng1_heartbeat_sample& sample,
-											 const std::uint64_t highest_observed_sequence)
+											 const std::uint64_t highest_observed_sequence,
+											 const std::string_view host_observed_staged_digest)
 	{
 		if (terminal_)
 			return unexpected(
@@ -207,9 +208,15 @@ namespace cxxlens::sdk::provider::detail
 			return unexpected(ng1_error("heartbeat-clock-invalid", "schema", "unexpected"));
 		if (sample.binding != binding_)
 			return unexpected(ng1_error("heartbeat-clock-invalid", "binding", "mismatch"));
+		if (!valid_semantic_digest(host_observed_staged_digest))
+			return unexpected(ng1_error(
+				"heartbeat-clock-invalid", "host_observed_staged_digest", "invalid-digest"));
 		if (!valid_semantic_digest(sample.staged_digest))
 			return unexpected(
 				ng1_error("heartbeat-clock-invalid", "staged_digest", "invalid-digest"));
+		if (sample.staged_digest != host_observed_staged_digest)
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "staged_digest", "host-state-mismatch"));
 		if (sample.host_receipt_time_ns < started_at_ns_)
 			return unexpected(ng1_error(
 				"heartbeat-clock-invalid", "host_receipt_time_ns", "before-session-start"));
@@ -235,9 +242,22 @@ namespace cxxlens::sdk::provider::detail
 											"ahead-of-observed"));
 			last_probe_sequence_ = next_sequence;
 			last_probe_provider_time_ns_ = sample.provider_monotonic_time_ns;
+			last_probe_host_receipt_ns_ = sample.host_receipt_time_ns;
 		}
 		else
 		{
+			if (last_probe_host_receipt_ns_)
+			{
+				const auto since_probe = checked_elapsed(sample.host_receipt_time_ns,
+														 *last_probe_host_receipt_ns_,
+														 "heartbeat-clock-invalid",
+														 "host_receipt_time_ns");
+				if (!since_probe)
+					return unexpected(std::move(since_probe.error()));
+				if (*since_probe >= heartbeat_timeout_ns)
+					return unexpected(ng1_error(
+						"heartbeat-timeout", "host_receipt_time_ns", "ack-deadline-reached"));
+			}
 			if (last_ack_provider_time_ns_ &&
 				sample.provider_monotonic_time_ns < *last_ack_provider_time_ns_)
 				return unexpected(

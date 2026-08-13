@@ -60,9 +60,13 @@ namespace
 	{
 		auto state = ng1_heartbeat_state::create(heartbeat_binding(), 100U);
 		require(state.has_value(), "heartbeat state creation failed");
-		require(state->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 100U, 100U), 0U),
+		require(state->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 100U, 100U),
+							  0U,
+							  digest("staged")),
 				"heartbeat probe was rejected");
-		require(state->accept(heartbeat_sample(ng1_heartbeat_kind::ack, 0U, 101U, 1'000U), 0U),
+		require(state->accept(heartbeat_sample(ng1_heartbeat_kind::ack, 0U, 101U, 1'000U),
+							  0U,
+							  digest("staged")),
 				"heartbeat ack was rejected");
 		require(state->check_liveness(1'000U + 5'000'000'000U - 1U),
 				"heartbeat before inclusive deadline was rejected");
@@ -80,22 +84,46 @@ namespace
 
 		auto duplicate = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
 		require(duplicate.has_value(), "duplicate heartbeat state creation failed");
-		require(duplicate->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U),
+		require(duplicate->accept(
+					heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U, digest("staged")),
 				"initial heartbeat probe failed");
-		auto duplicate_result =
-			duplicate->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U);
+		auto duplicate_result = duplicate->accept(
+			heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U, digest("staged"));
 		require(!duplicate_result && duplicate_result.error().code == "provider.heartbeat-sequence",
 				"duplicate heartbeat sequence was accepted");
 
 		auto backwards = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
 		require(backwards.has_value(), "backwards heartbeat state creation failed");
-		require(backwards->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 10U, 10U), 0U),
+		require(backwards->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 10U, 10U),
+								  0U,
+								  digest("staged")),
 				"heartbeat ordering setup failed");
-		auto backwards_result =
-			backwards->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 1U, 9U, 11U), 0U);
+		auto backwards_result = backwards->accept(
+			heartbeat_sample(ng1_heartbeat_kind::probe, 1U, 9U, 11U), 0U, digest("staged"));
 		require(!backwards_result &&
 					backwards_result.error().code == "provider.heartbeat-clock-invalid",
 				"backwards provider heartbeat timestamp was accepted");
+
+		auto late_ack = ng1_heartbeat_state::create(heartbeat_binding(), 100U);
+		require(late_ack.has_value(), "late-ack heartbeat state creation failed");
+		require(late_ack->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 100U, 100U),
+								 0U,
+								 digest("staged")),
+				"late-ack heartbeat probe setup failed");
+		auto late_ack_result = late_ack->accept(
+			heartbeat_sample(ng1_heartbeat_kind::ack, 0U, 101U, 100U + 5'000'000'000U),
+			0U,
+			digest("staged"));
+		require(!late_ack_result && late_ack_result.error().code == "provider.heartbeat-timeout",
+				"ack after the latest probe deadline was accepted");
+
+		auto staged_mismatch = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
+		require(staged_mismatch.has_value(), "staged-digest heartbeat state creation failed");
+		auto staged_mismatch_result = staged_mismatch->accept(
+			heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U, digest("host-staged"));
+		require(!staged_mismatch_result &&
+					staged_mismatch_result.error().code == "provider.heartbeat-clock-invalid",
+				"heartbeat staged digest not bound to host state");
 
 		auto terminal = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
 		require(terminal.has_value() && terminal->mark_terminal(),

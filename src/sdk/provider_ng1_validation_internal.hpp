@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include <cxxlens/sdk/provider.hpp>
 
@@ -54,7 +55,8 @@ namespace cxxlens::sdk::provider::detail
 																std::uint64_t started_at_ns);
 
 		[[nodiscard]] result<void> accept(const ng1_heartbeat_sample& sample,
-										  std::uint64_t highest_observed_sequence);
+										  std::uint64_t highest_observed_sequence,
+										  std::string_view host_observed_staged_digest);
 		[[nodiscard]] result<void> check_liveness(std::uint64_t now_ns) const;
 		[[nodiscard]] result<void> mark_terminal() noexcept;
 
@@ -70,6 +72,7 @@ namespace cxxlens::sdk::provider::detail
 		std::optional<std::uint64_t> last_ack_sequence_;
 		std::optional<std::uint64_t> last_probe_provider_time_ns_;
 		std::optional<std::uint64_t> last_ack_provider_time_ns_;
+		std::optional<std::uint64_t> last_probe_host_receipt_ns_;
 		std::optional<std::uint64_t> last_host_receipt_time_ns_;
 		std::optional<std::uint64_t> last_valid_ack_received_ns_;
 		bool terminal_{};
