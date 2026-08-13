@@ -3790,12 +3790,11 @@ namespace cxxlens::detail::clang22::materialization
 			});
 		}
 
-		[[nodiscard]] sdk::result<json_value>
-		publication_json(const prevalidated_materialization_request_v2_1& request,
-						 const materialization_store_observation& observation,
-						 const materialization_rooted_vfs_receipt* rooted_receipt,
-						 const public_materialization_prior_artifact_persistence*
-							prior_artifact_persistence)
+		[[nodiscard]] sdk::result<json_value> publication_json(
+			const prevalidated_materialization_request_v2_1& request,
+			const materialization_store_observation& observation,
+			const materialization_rooted_vfs_receipt* rooted_receipt,
+			const public_materialization_prior_artifact_persistence* prior_artifact_persistence)
 		{
 			if (!observation.publication_attempted || observation.publish_call_count != 1U ||
 				observation.first_issue || !observation.publish_returned_record ||
@@ -3889,11 +3888,12 @@ namespace cxxlens::detail::clang22::materialization
 										"committed-error"});
 			if (!prior_artifact_persistence->committed &&
 				(!bounded_report_text(prior_artifact_persistence->error_code,
-										 "publication.prior_artifact_persistence.error_code") ||
+									  "publication.prior_artifact_persistence.error_code") ||
 				 !bounded_report_text(prior_artifact_persistence->error_field,
-										 "publication.prior_artifact_persistence.error_field") ||
+									  "publication.prior_artifact_persistence.error_field") ||
 				 !bounded_report_text(prior_artifact_persistence->error_detail,
-										 "publication.prior_artifact_persistence.error_detail", false)))
+									  "publication.prior_artifact_persistence.error_detail",
+									  false)))
 				return sdk::unexpected({"materialization.report-invalid",
 										"publication.prior_artifact_persistence",
 										"unavailable-error"});
@@ -3910,8 +3910,8 @@ namespace cxxlens::detail::clang22::materialization
 				prior_artifact_error = std::move(*error);
 			}
 			auto prior_artifact = make_object({
-				{"state", text_value(prior_artifact_persistence->committed ? "committed"
-																			 : "unavailable")},
+				{"state",
+				 text_value(prior_artifact_persistence->committed ? "committed" : "unavailable")},
 				{"error", std::move(prior_artifact_error)},
 			});
 			if (!prior_artifact)
@@ -4958,10 +4958,8 @@ namespace cxxlens::detail::clang22::materialization
 			if (!store)
 				return sdk::unexpected(std::move(store.error()));
 			derived_store = std::move(*store);
-			auto publication = publication_json(request,
-										 *input.store,
-										 input.rooted_vfs_receipt,
-										 input.prior_artifact_persistence);
+			auto publication = publication_json(
+				request, *input.store, input.rooted_vfs_receipt, input.prior_artifact_persistence);
 			if (!publication)
 				return sdk::unexpected(std::move(publication.error()));
 			derived_publication = std::move(*publication);

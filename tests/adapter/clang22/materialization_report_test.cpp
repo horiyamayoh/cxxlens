@@ -837,23 +837,23 @@ namespace
 			"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"};
 		batch.row_count = 1U;
 		const std::string row_form{"{\"row\":\"" + task_id + "\"}"};
-		const auto row_digest = sdk::content_digest(
-			std::as_bytes(std::span{row_form.data(), row_form.size()}));
+		const auto row_digest =
+			sdk::content_digest(std::as_bytes(std::span{row_form.data(), row_form.size()}));
 		batch.rows.push_back({0U, row_form, row_digest});
 		const auto row_set_digest = sdk::semantic_digest(
 			"cxxlens.clang22.materialization-report.row-set.v1", "0:" + row_form + "\n");
 		require(row_set_digest.has_value(), "report capture fixture row-set digest failed");
 		batch.row_set_digest = *row_set_digest;
 		batch.batch_digest = sdk::provider::columnar_batch_digest({batch.task_id,
-			batch.dependency_group_id,
-			batch.atomic_output_group_id,
-			batch.batch_id,
-			batch.descriptor_id,
-			batch.descriptor_digest,
-			batch.row_count,
-			batch.columns,
-			batch.ordered_chunk_digests,
-			{}});
+																   batch.dependency_group_id,
+																   batch.atomic_output_group_id,
+																   batch.batch_id,
+																   batch.descriptor_id,
+																   batch.descriptor_digest,
+																   batch.row_count,
+																   batch.columns,
+																   batch.ordered_chunk_digests,
+																   {}});
 		capture.batches.push_back(std::move(batch));
 		auto span_id = sdk::source_span_identity("snapshot:test", "file:test", 1U, 2U, "expansion");
 		require(span_id.has_value(), "report capture fixture span identity failed");
@@ -861,10 +861,10 @@ namespace
 			{0U,
 			 0U,
 			 row_digest,
-				 false,
-				 std::string{"provider-unavailable"},
-				 observation_v2_primary_span{
-					 *span_id, "snapshot:test", "file:test", 1U, 2U, "expansion", true}});
+			 false,
+			 std::string{"provider-unavailable"},
+			 observation_v2_primary_span{
+				 *span_id, "snapshot:test", "file:test", 1U, 2U, "expansion", true}});
 		sdk::detached_row row;
 		row.descriptor_id = "cc.entity.v1";
 		row.cells.emplace("boolean", sdk::detached_cell::boolean(true));
@@ -1010,15 +1010,13 @@ namespace
 		require(reencoded.has_value() && *reencoded == *encoded,
 				"prior artifact codec did not preserve canonical bytes");
 		auto mismatched_capture = capture;
-		mismatched_capture.capture_binding_digest =
-			"semantic-v2:sha256:" + std::string(64U, '0');
-		auto mismatched_capture_encoding =
-			encode_detailed_task_report_capture(mismatched_capture);
+		mismatched_capture.capture_binding_digest = "semantic-v2:sha256:" + std::string(64U, '0');
+		auto mismatched_capture_encoding = encode_detailed_task_report_capture(mismatched_capture);
 		require(!mismatched_capture_encoding &&
 					mismatched_capture_encoding.error() ==
 						sdk::error{"materialization.report-invalid",
-										   "task_spool.capture-binding",
-										   "transcript-mismatch:mismatch"},
+								   "task_spool.capture-binding",
+								   "transcript-mismatch:mismatch"},
 				"task capture encoder accepted a cross-bound capture digest");
 		auto semantically_mismatched_capture = capture;
 		semantically_mismatched_capture.batches.front().batch_digest =
@@ -1043,8 +1041,7 @@ namespace
 		require(forged_body.has_value() && forged_body->tuple.size() == 5U &&
 					forged_body->tuple[4U].tuple.size() == 1U,
 				"runtime-receipt decoder fixture body was not canonical");
-		forged_body->tuple[4U].tuple[0U].tuple[3U].byte_string =
-			*invalid_runtime_capture_bytes;
+		forged_body->tuple[4U].tuple[0U].tuple[3U].byte_string = *invalid_runtime_capture_bytes;
 		auto forged_body_bytes = sdk::canonical_binary(*forged_body);
 		require(forged_body_bytes.has_value(),
 				"runtime-receipt decoder fixture body could not be re-encoded");
@@ -1057,8 +1054,8 @@ namespace
 		require(!runtime_rejected &&
 					runtime_rejected.error() ==
 						sdk::error{"materialization.incremental-artifact-invalid",
-									   "task.capture",
-									   "runtime-receipt"},
+								   "task.capture",
+								   "runtime-receipt"},
 				"artifact decoder admitted a missing provider runtime receipt");
 
 		auto corrupted = *encoded;
@@ -1116,15 +1113,15 @@ namespace
 		observation.publish_call_count = 1U;
 		observation.candidate_manifest = sdk::snapshot_manifest{};
 		observation.candidate_manifest->id = record.snapshot_id;
-		observation.candidate_identity = materialization_publication_candidate{
-			record.publication_id,
-			record.series_id,
-			record.snapshot_id,
-			record.sequence,
-			record.parent_publication};
+		observation.candidate_identity =
+			materialization_publication_candidate{record.publication_id,
+												  record.series_id,
+												  record.snapshot_id,
+												  record.sequence,
+												  record.parent_publication};
 		observation.publish_returned_record = record;
-		auto persisted = persist_materialization_prior_artifact(
-			*root, publication, record, observation, {task});
+		auto persisted =
+			persist_materialization_prior_artifact(*root, publication, record, observation, {task});
 		require(persisted.has_value(), "memory prior artifact was not retained after commit");
 		auto loaded = load_materialization_prior_artifact(*root, built_engine, publication);
 		require(loaded.has_value() && loaded->has_value() &&
@@ -1151,8 +1148,8 @@ namespace
 		const sdk::provider::protocol_credit credit{64U * 1024U * 1024U, 65536U};
 		writer.grant_credit(credit);
 		auto hello = sdk::provider::encode_control_text(provider_manifest.canonical_json());
-		auto schema = sdk::provider::encode_schema_negotiate_metadata(
-			{"cxxlens.provider-protocol.v1", 0U});
+		auto schema =
+			sdk::provider::encode_schema_negotiate_metadata({"cxxlens.provider-protocol.v1", 0U});
 		auto accepted = sdk::provider::encode_task_accepted_metadata(
 			{provider_manifest.provider_id,
 			 provider_manifest.provider_version.string(),
@@ -1169,13 +1166,11 @@ namespace
 					evidence_control && complete,
 				"raw reproof fixture could not encode its lifecycle controls");
 		const auto send_control = [&](const sdk::provider::message_type type,
-										 const std::vector<std::byte>& control,
-										 const std::uint16_t flags = 0U)
+									  const std::vector<std::byte>& control,
+									  const std::uint16_t flags = 0U)
 		{
-			auto sent = writer.send(type,
-							 std::span<const std::byte>{control},
-							 std::span<const std::byte>{},
-							 flags);
+			auto sent = writer.send(
+				type, std::span<const std::byte>{control}, std::span<const std::byte>{}, flags);
 			require(sent.has_value(), "raw reproof fixture could not write a lifecycle frame");
 		};
 		send_control(sdk::provider::message_type::hello, *hello);
@@ -1184,12 +1179,13 @@ namespace
 		send_control(sdk::provider::message_type::coverage_chunk, *coverage_control);
 		send_control(sdk::provider::message_type::unresolved_chunk, *unresolved_control);
 		send_control(sdk::provider::message_type::progress, *evidence_control);
-	send_control(sdk::provider::message_type::task_complete,
+		send_control(sdk::provider::message_type::task_complete,
 					 *complete,
 					 static_cast<std::uint16_t>(sdk::provider::frame_flag::end_of_stream));
 		auto frames = sdk::provider::decode_frame_stream(sink.transcript);
 		require(frames.has_value(), "raw reproof fixture transcript could not be decoded");
-		auto frame_receipt = sdk::provider::detail::provider_frame_transcript_receipt_digest(*frames);
+		auto frame_receipt =
+			sdk::provider::detail::provider_frame_transcript_receipt_digest(*frames);
 		require(frame_receipt.has_value(), "raw reproof fixture frame receipt failed");
 		capture.raw_frame_stream = sink.transcript;
 		capture.raw_frame_stream_bytes = capture.raw_frame_stream.size();
@@ -1208,7 +1204,7 @@ namespace
 		const auto& output_column = output_descriptor.columns.front();
 		sdk::detached_row row{output_descriptor.id, {}};
 		row.cells.emplace(output_column.id,
-						 sdk::detached_cell::typed("company_compact_item_id", "item:raw-reproof"));
+						  sdk::detached_cell::typed("company_compact_item_id", "item:raw-reproof"));
 		require(sdk::validate_row(output_descriptor, row).has_value(),
 				"raw reproof fixture row is invalid");
 		detailed_provider_batch_projection batch;
@@ -1223,24 +1219,24 @@ namespace
 			"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
 		batch.row_count = 1U;
 		const auto row_form = row.canonical_form();
-		batch.rows.push_back({0U,
-							 row_form,
-							 sdk::content_digest(std::as_bytes(std::span{row_form.data(), row_form.size()}))});
-		auto row_set = sdk::semantic_digest(
-			"cxxlens.clang22.materialization-report.row-set.v1", "0:" + row_form + "\n");
+		batch.rows.push_back(
+			{0U,
+			 row_form,
+			 sdk::content_digest(std::as_bytes(std::span{row_form.data(), row_form.size()}))});
+		auto row_set = sdk::semantic_digest("cxxlens.clang22.materialization-report.row-set.v1",
+											"0:" + row_form + "\n");
 		require(row_set.has_value(), "raw reproof fixture row-set receipt failed");
 		batch.row_set_digest = *row_set;
-		batch.batch_digest = sdk::provider::columnar_batch_digest({
-			batch.task_id,
-			batch.dependency_group_id,
-			batch.atomic_output_group_id,
-			batch.batch_id,
-			batch.descriptor_id,
-			batch.descriptor_digest,
-			batch.row_count,
-			batch.columns,
-			batch.ordered_chunk_digests,
-			{}});
+		batch.batch_digest = sdk::provider::columnar_batch_digest({batch.task_id,
+																   batch.dependency_group_id,
+																   batch.atomic_output_group_id,
+																   batch.batch_id,
+																   batch.descriptor_id,
+																   batch.descriptor_digest,
+																   batch.row_count,
+																   batch.columns,
+																   batch.ordered_chunk_digests,
+																   {}});
 		capture.batches = {std::move(batch)};
 
 		auto state = prior_artifact_state();
@@ -1287,15 +1283,14 @@ namespace
 			std::span<const sdk::relation_descriptor>{output_descriptors},
 			credit,
 			sdk::provider::protocol_limits{});
-		const auto rehydration_failure = rehydrated
-			? std::string{"success"}
-			: rehydrated.error().code + "/" + rehydrated.error().field + "/" +
-				rehydrated.error().detail;
+		const auto rehydration_failure = rehydrated ? std::string{"success"}
+													: rehydrated.error().code + "/" +
+				rehydrated.error().field + "/" + rehydrated.error().detail;
 		require(!rehydrated &&
 					rehydrated.error() ==
 						sdk::error{"materialization.incremental-artifact-invalid",
-									   "task.capture",
-									   "raw-semantic-binding"},
+								   "task.capture",
+								   "raw-semantic-binding"},
 				"prior artifact rehydration did not reject a raw/capture semantic mismatch: " +
 					rehydration_failure);
 	}
@@ -1384,10 +1379,11 @@ namespace
 			"sidecar-write-failed"};
 		input.prior_artifact_persistence = &unavailable;
 		auto still_rejected = build_public_materialization_success_report(input);
-		require(!still_rejected &&
-					still_rejected.error().detail.find(
-						"missing=publication.prior_artifact_persistence") == std::string::npos,
-				"public success report did not admit an explicit unavailable prior-artifact status");
+		require(
+			!still_rejected &&
+				still_rejected.error().detail.find(
+					"missing=publication.prior_artifact_persistence") == std::string::npos,
+			"public success report did not admit an explicit unavailable prior-artifact status");
 	}
 } // namespace
 

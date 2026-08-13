@@ -1,6 +1,6 @@
 #include <algorithm>
-#include <atomic>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstddef>
@@ -50,7 +50,7 @@ namespace
 	};
 
 	static_assert(std::atomic<std::uint8_t>::is_always_lock_free,
-		"the production signal boundary requires a lock-free atomic");
+				  "the production signal boundary requires a lock-free atomic");
 	std::atomic<std::uint8_t> production_boundary{
 		static_cast<std::uint8_t>(production_boundary_state::open)};
 
@@ -404,7 +404,7 @@ namespace
 		request.limits.supported_flags =
 			static_cast<std::uint16_t>(sdk::provider::frame_flag::end_of_stream);
 		const auto checked_add = [](const std::uint64_t lhs,
-												const std::uint64_t rhs) -> std::optional<std::uint64_t>
+									const std::uint64_t rhs) -> std::optional<std::uint64_t>
 		{
 			if (rhs > std::numeric_limits<std::uint64_t>::max() - lhs)
 				return std::nullopt;
@@ -414,10 +414,10 @@ namespace
 		if (output_credit)
 			output_credit = checked_add(*output_credit, 32U);
 		if (!output_credit)
-			return sdk::unexpected(sdk::error{
-				"materialization.report-invalid", "output-credit", "budget-overflow"});
+			return sdk::unexpected(
+				sdk::error{"materialization.report-invalid", "output-credit", "budget-overflow"});
 		request.output_credit = {std::max<std::uint64_t>(request.budget.output_bytes, 1U),
-			std::max<std::uint64_t>(*output_credit, 1U)};
+								 std::max<std::uint64_t>(*output_credit, 1U)};
 		request.cancellation = cancellation;
 		return request;
 	}
@@ -792,7 +792,7 @@ namespace
 			  cancellation_watcher_{
 				  [this](const std::stop_token stop)
 				  {
-					while (!stop.stop_requested() && !production_cancellation_requested())
+					  while (!stop.stop_requested() && !production_cancellation_requested())
 						  std::this_thread::sleep_for(std::chrono::milliseconds{10});
 					  if (!stop.stop_requested())
 						  cancellation_source_.request_stop();
@@ -1079,7 +1079,7 @@ namespace
 
 		[[nodiscard]] bool cancellation_requested() const noexcept override
 		{
-				if (production_cancellation_requested())
+			if (production_cancellation_requested())
 				cancellation_source_.request_stop();
 			return cancellation_source_.stop_requested();
 		}
@@ -1407,10 +1407,9 @@ int main(const int argc, char**)
 	// Store boundary. Linearize cancellation against that boundary: a signal that wins before this
 	// CAS prevents publish(), while a signal arriving after it is deliberately post-publication.
 	if (!begin_production_publication_gate())
-		return emit_failure(std::move(*journal),
-							{"materialization.report-invalid",
-							 request_subject,
-							 "cancelled-before-publication"});
+		return emit_failure(
+			std::move(*journal),
+			{"materialization.report-invalid", request_subject, "cancelled-before-publication"});
 	// The detailed report consumes the post-publication observation and must match this
 	// prepublication authority before emitting success.
 	auto postpublication = std::move(*journal).begin_publication();

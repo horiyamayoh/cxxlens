@@ -641,11 +641,11 @@ namespace cxxlens::detail::clang22::materialization
 				state_->task_attempt_count - state_->task_success_count != 1U ||
 				state_->worker_launch_attempt_count > state_->task_attempt_count ||
 				(state_->worker_launch_in_flight
-						? state_->worker_launch_success_count >=
-							  state_->worker_launch_attempt_count ||
-							  state_->worker_launch_attempt_count -
-									  state_->worker_launch_success_count != 1U
-						: state_->worker_launch_success_count != state_->worker_launch_attempt_count))
+					 ? state_->worker_launch_success_count >= state_->worker_launch_attempt_count ||
+						 state_->worker_launch_attempt_count -
+								 state_->worker_launch_success_count !=
+							 1U
+					 : state_->worker_launch_success_count != state_->worker_launch_attempt_count))
 				return sdk::unexpected(journal_error("compact-failure", "launch-census"));
 		}
 		else if (state_->phase >= compact_failure_phase::transcript)

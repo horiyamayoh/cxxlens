@@ -1007,7 +1007,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<void>
 		validate_bundle_runtime_receipts(const materialization_prior_artifact_bundle& bundle,
-										  const materialization_prior_artifact_limits& limits)
+										 const materialization_prior_artifact_limits& limits)
 		{
 			if (auto valid = validate_bundle(bundle, limits); !valid)
 				return valid;
@@ -1128,70 +1128,70 @@ namespace cxxlens::detail::clang22::materialization
 		try
 		{
 			auto decoded = sdk::canonical_binary_decode(artifact_bytes);
-		if (!decoded)
-			return sdk::unexpected(artifact_error("envelope", "canonical"));
-		auto envelope_encoded = sdk::canonical_binary(*decoded);
-		if (!envelope_encoded || envelope_encoded->size() != artifact_bytes.size() ||
-			!std::ranges::equal(*envelope_encoded, artifact_bytes))
-			return sdk::unexpected(artifact_error("envelope", "noncanonical"));
-		auto envelope = tuple(*decoded, 3U, "envelope");
-		if (!envelope)
-			return sdk::unexpected(std::move(envelope.error()));
-		auto schema = string((*envelope)[0U], "envelope.schema");
-		auto body_bytes = bytes((*envelope)[1U], "envelope.body");
-		auto expected_digest = string((*envelope)[2U], "envelope.digest");
-		if (!schema || !body_bytes || !expected_digest || *schema != artifact_schema ||
-			!canonical_content_digest(*expected_digest) ||
-			sdk::content_digest(*body_bytes) != *expected_digest)
-			return sdk::unexpected(artifact_error("envelope", "digest-or-schema"));
-		auto body = sdk::canonical_binary_decode(*body_bytes);
-		if (!body)
-			return sdk::unexpected(artifact_error("body", "canonical"));
-		auto body_encoded = sdk::canonical_binary(*body);
-		if (!body_encoded || *body_encoded != *body_bytes)
-			return sdk::unexpected(artifact_error("body", "noncanonical"));
-		auto body_fields = tuple(*body, 5U, "body");
-		if (!body_fields)
-			return sdk::unexpected(std::move(body_fields.error()));
-		auto body_schema = string((*body_fields)[0U], "body.schema");
-		auto version = integer((*body_fields)[1U], "body.version");
-		auto selector = decode_selector((*body_fields)[2U]);
-		auto publication = decode_publication((*body_fields)[3U]);
-		auto tasks = bounded_tuple((*body_fields)[4U], limits.max_tasks, "body.tasks");
-		if (!body_schema || !version || !selector || !publication || !tasks ||
-			*body_schema != artifact_schema || *version != artifact_version)
-			return sdk::unexpected(artifact_error("body", "field"));
-		materialization_prior_artifact_bundle output;
-		output.schema = std::move(*body_schema);
-		output.version = static_cast<std::uint32_t>(*version);
-		output.selector = std::move(*selector);
-		output.series_id = std::get<1>(*publication);
-		output.publication_id = std::get<0>(*publication);
-		output.snapshot_id = std::get<2>(*publication);
-		output.sequence = std::get<3>(*publication);
-		output.physical_generation = std::get<4>(*publication);
-		output.parent_publication = std::get<5>(*publication);
-		output.publication_state = std::get<6>(*publication);
-		output.publication_corrupt = std::get<7>(*publication);
-		output.tasks.reserve(tasks->size());
-		std::size_t total_capture_bytes{};
-		for (const auto& value : *tasks)
-		{
-			auto task = decode_task(value, limits);
-			if (!task)
-				return sdk::unexpected(std::move(task.error()));
-			auto encoded_capture =
-				encode_detailed_task_report_capture(task->capture, capture_limits(limits));
-			if (!encoded_capture || encoded_capture->size() > limits.max_capture_bytes ||
-				encoded_capture->size() > limits.max_total_capture_bytes ||
-				total_capture_bytes > limits.max_total_capture_bytes - encoded_capture->size())
-				return sdk::unexpected(artifact_error("task.capture", "aggregate-limit"));
-			total_capture_bytes += encoded_capture->size();
-			output.tasks.push_back(std::move(*task));
-		}
-		if (auto valid = validate_bundle_runtime_receipts(output, limits); !valid)
-			return sdk::unexpected(std::move(valid.error()));
-		return output;
+			if (!decoded)
+				return sdk::unexpected(artifact_error("envelope", "canonical"));
+			auto envelope_encoded = sdk::canonical_binary(*decoded);
+			if (!envelope_encoded || envelope_encoded->size() != artifact_bytes.size() ||
+				!std::ranges::equal(*envelope_encoded, artifact_bytes))
+				return sdk::unexpected(artifact_error("envelope", "noncanonical"));
+			auto envelope = tuple(*decoded, 3U, "envelope");
+			if (!envelope)
+				return sdk::unexpected(std::move(envelope.error()));
+			auto schema = string((*envelope)[0U], "envelope.schema");
+			auto body_bytes = bytes((*envelope)[1U], "envelope.body");
+			auto expected_digest = string((*envelope)[2U], "envelope.digest");
+			if (!schema || !body_bytes || !expected_digest || *schema != artifact_schema ||
+				!canonical_content_digest(*expected_digest) ||
+				sdk::content_digest(*body_bytes) != *expected_digest)
+				return sdk::unexpected(artifact_error("envelope", "digest-or-schema"));
+			auto body = sdk::canonical_binary_decode(*body_bytes);
+			if (!body)
+				return sdk::unexpected(artifact_error("body", "canonical"));
+			auto body_encoded = sdk::canonical_binary(*body);
+			if (!body_encoded || *body_encoded != *body_bytes)
+				return sdk::unexpected(artifact_error("body", "noncanonical"));
+			auto body_fields = tuple(*body, 5U, "body");
+			if (!body_fields)
+				return sdk::unexpected(std::move(body_fields.error()));
+			auto body_schema = string((*body_fields)[0U], "body.schema");
+			auto version = integer((*body_fields)[1U], "body.version");
+			auto selector = decode_selector((*body_fields)[2U]);
+			auto publication = decode_publication((*body_fields)[3U]);
+			auto tasks = bounded_tuple((*body_fields)[4U], limits.max_tasks, "body.tasks");
+			if (!body_schema || !version || !selector || !publication || !tasks ||
+				*body_schema != artifact_schema || *version != artifact_version)
+				return sdk::unexpected(artifact_error("body", "field"));
+			materialization_prior_artifact_bundle output;
+			output.schema = std::move(*body_schema);
+			output.version = static_cast<std::uint32_t>(*version);
+			output.selector = std::move(*selector);
+			output.series_id = std::get<1>(*publication);
+			output.publication_id = std::get<0>(*publication);
+			output.snapshot_id = std::get<2>(*publication);
+			output.sequence = std::get<3>(*publication);
+			output.physical_generation = std::get<4>(*publication);
+			output.parent_publication = std::get<5>(*publication);
+			output.publication_state = std::get<6>(*publication);
+			output.publication_corrupt = std::get<7>(*publication);
+			output.tasks.reserve(tasks->size());
+			std::size_t total_capture_bytes{};
+			for (const auto& value : *tasks)
+			{
+				auto task = decode_task(value, limits);
+				if (!task)
+					return sdk::unexpected(std::move(task.error()));
+				auto encoded_capture =
+					encode_detailed_task_report_capture(task->capture, capture_limits(limits));
+				if (!encoded_capture || encoded_capture->size() > limits.max_capture_bytes ||
+					encoded_capture->size() > limits.max_total_capture_bytes ||
+					total_capture_bytes > limits.max_total_capture_bytes - encoded_capture->size())
+					return sdk::unexpected(artifact_error("task.capture", "aggregate-limit"));
+				total_capture_bytes += encoded_capture->size();
+				output.tasks.push_back(std::move(*task));
+			}
+			if (auto valid = validate_bundle_runtime_receipts(output, limits); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return output;
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -1296,36 +1296,37 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<void>
 	persist_materialization_prior_artifact(const materialization_effect_root& root,
-												   const validated_publication_request& publication,
-												   const sdk::publication_record& committed_record,
-												   const materialization_store_observation& observation,
-												   std::vector<materialization_prior_artifact_task> tasks,
-												   const materialization_prior_artifact_limits& limits)
-		{
-			if ((publication.backend != "memory" && publication.backend != "sqlite") ||
+										   const validated_publication_request& publication,
+										   const sdk::publication_record& committed_record,
+										   const materialization_store_observation& observation,
+										   std::vector<materialization_prior_artifact_task> tasks,
+										   const materialization_prior_artifact_limits& limits)
+	{
+		if ((publication.backend != "memory" && publication.backend != "sqlite") ||
 			(publication.backend == "sqlite" && !publication.sqlite_path) ||
 			(publication.backend == "memory" &&
-				 (!publication.genesis || publication.expected_parent_publication ||
-				  publication.sqlite_path)) ||
-				observation.backend != publication.backend ||
-				observation.selector != publication.selector ||
-				observation.series_id != publication.series_id ||
-				observation.expected_parent_publication != publication.expected_parent_publication ||
-				observation.writer_begin_call_count != 1U || !observation.publication_attempted ||
-				observation.publish_call_count != 1U || observation.first_issue ||
-				!observation.candidate_manifest || !observation.candidate_identity ||
-				!observation.publish_returned_record ||
-				*observation.publish_returned_record != committed_record ||
-				observation.candidate_manifest->id != committed_record.snapshot_id ||
-				observation.candidate_identity->publication_id != committed_record.publication_id ||
-				observation.candidate_identity->series_id != committed_record.series_id ||
-				observation.candidate_identity->snapshot_id != committed_record.snapshot_id ||
-				observation.candidate_identity->sequence != committed_record.sequence ||
-				observation.candidate_identity->parent_publication != committed_record.parent_publication ||
-				committed_record.state != sdk::publication_state::committed ||
-				committed_record.corrupt || committed_record.series_id != publication.series_id ||
-				committed_record.publication_id.empty() ||
-				committed_record.parent_publication != publication.expected_parent_publication)
+			 (!publication.genesis || publication.expected_parent_publication ||
+			  publication.sqlite_path)) ||
+			observation.backend != publication.backend ||
+			observation.selector != publication.selector ||
+			observation.series_id != publication.series_id ||
+			observation.expected_parent_publication != publication.expected_parent_publication ||
+			observation.writer_begin_call_count != 1U || !observation.publication_attempted ||
+			observation.publish_call_count != 1U || observation.first_issue ||
+			!observation.candidate_manifest || !observation.candidate_identity ||
+			!observation.publish_returned_record ||
+			*observation.publish_returned_record != committed_record ||
+			observation.candidate_manifest->id != committed_record.snapshot_id ||
+			observation.candidate_identity->publication_id != committed_record.publication_id ||
+			observation.candidate_identity->series_id != committed_record.series_id ||
+			observation.candidate_identity->snapshot_id != committed_record.snapshot_id ||
+			observation.candidate_identity->sequence != committed_record.sequence ||
+			observation.candidate_identity->parent_publication !=
+				committed_record.parent_publication ||
+			committed_record.state != sdk::publication_state::committed ||
+			committed_record.corrupt || committed_record.series_id != publication.series_id ||
+			committed_record.publication_id.empty() ||
+			committed_record.parent_publication != publication.expected_parent_publication)
 			return sdk::unexpected(artifact_error("sidecar", "publication"));
 		materialization_prior_artifact_bundle bundle;
 		bundle.selector = publication.selector;
@@ -1428,8 +1429,8 @@ namespace cxxlens::detail::clang22::materialization
 			sdk::content_digest(artifact.capture.raw_frame_stream) !=
 				artifact.capture.raw_frame_stream_digest)
 			return sdk::unexpected(artifact_error("task.capture", "raw-frame-stream"));
-		auto frames = sdk::provider::decode_frame_stream(artifact.capture.raw_frame_stream,
-												 protocol_limits);
+		auto frames =
+			sdk::provider::decode_frame_stream(artifact.capture.raw_frame_stream, protocol_limits);
 		if (!frames || frames->size() != artifact.capture.frame_count)
 			return sdk::unexpected(artifact_error("task.capture", "frame-stream-decode"));
 		auto frame_digest =
@@ -1449,8 +1450,8 @@ namespace cxxlens::detail::clang22::materialization
 		};
 		auto raw_validation = sdk::provider::detail::validate_provider_transcript(
 			raw_validation_request, *frames, protocol_limits);
-		if (!raw_validation || raw_validation->kind !=
-					sdk::provider::detail::transcript_terminal_kind::complete ||
+		if (!raw_validation ||
+			raw_validation->kind != sdk::provider::detail::transcript_terminal_kind::complete ||
 			!raw_validation->sealed())
 			return sdk::unexpected(artifact_error("task.capture", "raw-semantic-reproof"));
 		try
@@ -1516,13 +1517,14 @@ namespace cxxlens::detail::clang22::materialization
 			if (!same_sealed_provider_transcript(*raw_validation->sealed(), *transcript))
 				return sdk::unexpected(artifact_error("task.capture", "raw-semantic-binding"));
 			auto result = seal_validated_provider_result(current_task.worker_input,
-															 current_task.provider_task_id,
+														 current_task.provider_task_id,
 														 current_task.task_input_digest,
 														 current_task.provider_execution_id,
 														 std::move(*transcript));
 			if (!result)
 				return sdk::unexpected(std::move(result.error()));
-			if (!same_sealed_provider_transcript(*raw_validation->sealed(), result->provider_seal()))
+			if (!same_sealed_provider_transcript(*raw_validation->sealed(),
+												 result->provider_seal()))
 				return sdk::unexpected(artifact_error("task.capture", "raw-semantic-binding"));
 			auto digest = seal_materialization_incremental_artifact_digest(*result);
 			if (!digest || *digest != artifact.sealed_artifact_digest)

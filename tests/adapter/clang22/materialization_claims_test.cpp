@@ -627,9 +627,9 @@ namespace
 		require(claims.has_value(),
 				"claim construction failed: " + (claims ? std::string{} : failure(claims.error())));
 		require(claims->materializer_semantics_digest() ==
-					"semantic-v2:sha256:"
-					"7d56439aa9b50e8e9bab5878eb4ba47349755dd016ef83f99e2ef939b3587222" &&
-				claims->direct_basis_digest() ==
+						"semantic-v2:sha256:"
+						"7d56439aa9b50e8e9bab5878eb4ba47349755dd016ef83f99e2ef939b3587222" &&
+					claims->direct_basis_digest() ==
 						"semantic-v2:sha256:"
 						"d0e937d3443c202b6859375fe9387c85408366da5999f057e54c1518f412b69d" &&
 					claims->canonical_adoption_transform_digest() ==

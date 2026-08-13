@@ -1719,20 +1719,21 @@ namespace cxxlens::detail::clang22::materialization
 			}));
 			if (!encoded)
 				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
-													"task_spool.capture-binding",
-													"canonical"));
-			const std::string payload{reinterpret_cast<const char*>(encoded->data()), encoded->size()};
+											"task_spool.capture-binding",
+											"canonical"));
+			const std::string payload{reinterpret_cast<const char*>(encoded->data()),
+									  encoded->size()};
 			auto digest = sdk::semantic_digest("cxxlens.clang22.task-capture-binding.v1", payload);
 			if (!digest)
 				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
-													"task_spool.capture-binding",
-													"digest"));
+											"task_spool.capture-binding",
+											"digest"));
 			return digest;
 		}
 
 		[[nodiscard]] sdk::result<std::string>
 		capture_row_set_digest(const detailed_provider_batch_projection& batch,
-												const detailed_report_limits& limits)
+							   const detailed_report_limits& limits)
 		{
 			std::string projection;
 			for (std::size_t index{}; index < batch.rows.size(); ++index)
@@ -1740,77 +1741,77 @@ namespace cxxlens::detail::clang22::materialization
 				const auto& row = batch.rows[index];
 				if (row.row_index != index || !bounded_text(row.row_canonical_form, limits) ||
 					!sdk::validate_utf8_text(row.row_canonical_form) ||
-						!bounded_text(row.row_digest, limits) ||
-						digest_text(row.row_canonical_form) != row.row_digest)
+					!bounded_text(row.row_digest, limits) ||
+					digest_text(row.row_canonical_form) != row.row_digest)
 					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-														"task_spool.batch.rows",
-														"digest-or-order"));
+												"task_spool.batch.rows",
+												"digest-or-order"));
 				const auto index_text = std::to_string(index);
 				if (projection.size() > limits.max_projection_bytes ||
 					index_text.size() > limits.max_projection_bytes - projection.size())
 					return sdk::unexpected(fail(detailed_report_error_kind::limit_exceeded,
-														"task_spool.batch.rows",
-														"projection-bytes"));
-				const auto remaining = limits.max_projection_bytes - projection.size() - index_text.size();
+												"task_spool.batch.rows",
+												"projection-bytes"));
+				const auto remaining =
+					limits.max_projection_bytes - projection.size() - index_text.size();
 				if (remaining < 2U || row.row_canonical_form.size() > remaining - 2U)
 					return sdk::unexpected(fail(detailed_report_error_kind::limit_exceeded,
-														"task_spool.batch.rows",
-														"projection-bytes"));
+												"task_spool.batch.rows",
+												"projection-bytes"));
 				projection.append(index_text);
 				projection.push_back(':');
 				projection.append(row.row_canonical_form);
 				projection.push_back('\n');
 			}
 			return sdk::semantic_digest("cxxlens.clang22.materialization-report.row-set.v1",
-													projection);
+										projection);
 		}
 
 		[[nodiscard]] sdk::result<void>
 		validate_report_capture_semantics(const detailed_task_report_capture& capture,
-												  const detailed_report_limits& limits)
+										  const detailed_report_limits& limits)
 		{
 			if (!valid_raw_frame_capture(capture) || capture.frame_count == 0U ||
 				capture.batches.size() > limits.max_batches_per_task ||
 				capture.observation_rows.size() > limits.max_side_channel_records)
 				return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-													"task_spool.capture",
-													"raw-or-bounds"));
+											"task_spool.capture",
+											"raw-or-bounds"));
 			for (const auto& batch : capture.batches)
 			{
-				if (batch.task_id != capture.provider_task_id || batch.row_count != batch.rows.size() ||
-					batch.columns.empty() || batch.columns.size() > limits.max_side_channel_records ||
+				if (batch.task_id != capture.provider_task_id ||
+					batch.row_count != batch.rows.size() || batch.columns.empty() ||
+					batch.columns.size() > limits.max_side_channel_records ||
 					batch.ordered_chunk_digests.size() > limits.max_chunks_per_batch ||
 					(batch.row_count == 0U) != batch.ordered_chunk_digests.empty())
-					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-													"task_spool.batch",
-													"shape"));
+					return sdk::unexpected(fail(
+						detailed_report_error_kind::spool_corrupt, "task_spool.batch", "shape"));
 				for (std::size_t index{}; index < batch.columns.size(); ++index)
 					if (!bounded_text(batch.columns[index].column_id, limits) ||
-						(index != 0U && batch.columns[index - 1U].column_id >=
-							batch.columns[index].column_id))
+						(index != 0U &&
+						 batch.columns[index - 1U].column_id >= batch.columns[index].column_id))
 						return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-														"task_spool.batch.columns",
-														"order"));
-				const sdk::provider::columnar_batch_end terminal{
-					batch.task_id,
-					batch.dependency_group_id,
-					batch.atomic_output_group_id,
-					batch.batch_id,
-					batch.descriptor_id,
-					batch.descriptor_digest,
-					batch.row_count,
-					batch.columns,
-					batch.ordered_chunk_digests,
-					batch.batch_digest};
+													"task_spool.batch.columns",
+													"order"));
+				const sdk::provider::columnar_batch_end terminal{batch.task_id,
+																 batch.dependency_group_id,
+																 batch.atomic_output_group_id,
+																 batch.batch_id,
+																 batch.descriptor_id,
+																 batch.descriptor_digest,
+																 batch.row_count,
+																 batch.columns,
+																 batch.ordered_chunk_digests,
+																 batch.batch_digest};
 				if (sdk::provider::columnar_batch_digest(terminal) != batch.batch_digest)
 					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-													"task_spool.batch",
-													"batch-digest"));
+												"task_spool.batch",
+												"batch-digest"));
 				auto row_set = capture_row_set_digest(batch, limits);
 				if (!row_set || *row_set != batch.row_set_digest)
 					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-													"task_spool.batch",
-													"row-set-digest"));
+												"task_spool.batch",
+												"row-set-digest"));
 			}
 			for (const auto& row : capture.observation_rows)
 			{
@@ -1821,13 +1822,14 @@ namespace cxxlens::detail::clang22::materialization
 					!bounded_text(row.observation_row_digest, limits) ||
 					(row.exact_equivalence == row.limitation.has_value()))
 					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-													"task_spool.observation",
-													"binding"));
+												"task_spool.observation",
+												"binding"));
 				if (row.limitation &&
-					(!bounded_text(*row.limitation, limits) || !sdk::validate_utf8_text(*row.limitation)))
+					(!bounded_text(*row.limitation, limits) ||
+					 !sdk::validate_utf8_text(*row.limitation)))
 					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-													"task_spool.observation",
-													"limitation"));
+												"task_spool.observation",
+												"limitation"));
 				if (row.primary_span)
 					if (auto valid = validate_primary_span(*row.primary_span, limits); !valid)
 						return sdk::unexpected(std::move(valid.error()));
@@ -1844,14 +1846,13 @@ namespace cxxlens::detail::clang22::materialization
 			};
 			for (const auto& row : capture.base_claim_rows)
 				if (!valid_row(row))
-					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-													"task_spool.base_rows",
-													"cell"));
+					return sdk::unexpected(fail(
+						detailed_report_error_kind::spool_corrupt, "task_spool.base_rows", "cell"));
 			for (const auto& row : capture.source_span_claim_rows)
 				if (!valid_row(row))
 					return sdk::unexpected(fail(detailed_report_error_kind::spool_corrupt,
-													"task_spool.source_rows",
-													"cell"));
+												"task_spool.source_rows",
+												"cell"));
 			return {};
 		}
 
@@ -2069,8 +2070,8 @@ namespace cxxlens::detail::clang22::materialization
 			if (!capture.capture_binding_digest.empty() &&
 				capture.capture_binding_digest != *binding)
 				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
-														"task_spool.capture-binding",
-														"mismatch"));
+											"task_spool.capture-binding",
+											"mismatch"));
 			std::array<std::byte, report_spool_magic.size()> magic{};
 			for (std::size_t index{}; index < magic.size(); ++index)
 				magic[index] = static_cast<std::byte>(report_spool_magic[index]);
@@ -2648,11 +2649,11 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(std::move(value.error()));
 				capture.ordered_chunk_digests.push_back(std::move(*value));
 			}
-				if (auto fields = read_fixed_strings({&capture.ordered_chunk_payload_digest_set_digest,
-															  &capture.raw_frame_stream_digest,
-															  &capture.frame_transcript_digest,
-															  &capture.sealed_transcript_digest,
-															  &capture.capture_binding_digest});
+			if (auto fields = read_fixed_strings({&capture.ordered_chunk_payload_digest_set_digest,
+												  &capture.raw_frame_stream_digest,
+												  &capture.frame_transcript_digest,
+												  &capture.sealed_transcript_digest,
+												  &capture.capture_binding_digest});
 				!fields)
 				return sdk::unexpected(std::move(fields.error()));
 			if (auto value = reader.u64(); !value)
@@ -2858,10 +2859,10 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(std::move(valid.error()));
 			auto expected_binding = capture_binding_digest(capture);
 			if (!expected_binding || capture.capture_binding_digest != *expected_binding)
-				return sdk::unexpected(report_spool_failure(
-					detailed_report_error_kind::spool_corrupt,
-					"task_spool.capture-binding",
-					"mismatch"));
+				return sdk::unexpected(
+					report_spool_failure(detailed_report_error_kind::spool_corrupt,
+										 "task_spool.capture-binding",
+										 "mismatch"));
 			std::size_t accounted{};
 			if (!account_task_capture(capture, limits, accounted))
 				return sdk::unexpected(report_spool_failure(
