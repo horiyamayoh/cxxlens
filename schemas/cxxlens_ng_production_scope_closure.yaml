@@ -276,7 +276,7 @@ assignments:
     gap:
       finding: scope.tracked-gap.ng1-provider-hardening
       remediation: The NG1 hardening authority is accepted and independently reviewed; implement and independently qualify the protocol lifecycle and resource features in #183 before promoting this tracked gap.
-    feedback: [DF-0233]
+    feedback: [DF-0233, DF-0243]
     surfaces:
       - {domain: provider.message, id: '23:heartbeat'}
       - {domain: provider.profile-feature, id: NG1/durable-resume-token}
