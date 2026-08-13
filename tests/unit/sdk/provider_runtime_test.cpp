@@ -2009,15 +2009,23 @@ namespace
 		auto processes = make_system_provider_process_port();
 		require(processes != nullptr, "system provider process port unavailable");
 		process_provider_runtime runtime{*processes};
-		auto request = task(select(executable, "timeout"));
-		request.budget.wall_ms = 25U;
-		const auto started = std::chrono::steady_clock::now();
-		auto report = runtime.execute(request);
-		const auto elapsed = std::chrono::steady_clock::now() - started;
-		require(report && report->terminal == "provider.timeout",
-				"provider timeout regression lost the typed timeout terminal");
-		require(elapsed < std::chrono::seconds{10},
-				"provider timeout regression exceeded the hard anti-hang bound");
+		for (const auto mode :
+			 {std::string_view{"timeout"}, std::string_view{"timeout-grandchild"}})
+		{
+			auto request = task(select(executable, std::string{mode}));
+			request.budget.wall_ms = 25U;
+			if (mode == "timeout-grandchild")
+				// The fixture forks a pipe-holding helper under the provider process.
+				request.budget.subprocesses = 16U;
+			const auto started = std::chrono::steady_clock::now();
+			auto report = runtime.execute(request);
+			const auto elapsed = std::chrono::steady_clock::now() - started;
+			require(report && report->terminal == "provider.timeout",
+					"provider timeout regression lost the typed timeout terminal: " +
+						std::string{mode});
+			require(elapsed < std::chrono::seconds{10},
+					"provider timeout regression exceeded the hard anti-hang bound");
+		}
 	}
 
 	void check_semantic_input_digests(const std::string& executable)

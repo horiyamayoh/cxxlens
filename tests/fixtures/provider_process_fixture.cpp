@@ -16,6 +16,7 @@
 #include <cxxlens/sdk/provider.hpp>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 namespace
 {
@@ -149,6 +150,18 @@ int main(const int argument_count, const char* const* arguments)
 		(void)::raise(SIGSEGV);
 	if (mode == "timeout")
 		std::this_thread::sleep_for(std::chrono::seconds{5});
+	if (mode == "timeout-grandchild")
+	{
+		const auto holder = ::fork();
+		if (holder < 0)
+			return EXIT_FAILURE;
+		if (holder == 0)
+		{
+			std::this_thread::sleep_for(std::chrono::seconds{5});
+			::_exit(EXIT_SUCCESS);
+		}
+		return EXIT_SUCCESS;
+	}
 	if (mode == "output-limit")
 	{
 		std::cout << std::string(1024U * 1024U, 'x');
