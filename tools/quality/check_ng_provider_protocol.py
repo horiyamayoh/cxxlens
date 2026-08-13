@@ -17,6 +17,8 @@ from typing import Any
 import jsonschema
 import yaml
 
+from check_ng_provider_ng1 import validate_ng1_contract
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CONTRACT = pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml")
@@ -1222,6 +1224,7 @@ def validate_design(root: pathlib.Path) -> None:
 def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any]], int, int]:
     contract = load_yaml(root / CONTRACT)
     schema_validate(contract, load_yaml(root / CONTRACT_SCHEMA), "provider protocol")
+    validate_ng1_contract(root, contract)
     schema_validate(sample_manifest(), load_yaml(root / MANIFEST_SCHEMA), "provider manifest")
     schema_validate(sample_task(), load_yaml(root / TASK_SCHEMA), "provider task")
     corpus = load_yaml(root / FUZZ)

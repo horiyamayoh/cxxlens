@@ -1,0 +1,237 @@
+schema: cxxlens.provider-ng1-hardening.v1
+document_version: 1.0.0
+maturity: proposed
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  protocol: schemas/cxxlens_ng_provider_protocol.yaml
+  runtime: schemas/cxxlens_ng_provider_runtime_contract.yaml
+  decision_adr: docs/design/adr/0099-provider-ng1-hardening.md
+  decision_issue: '#233'
+  implementation_issue: '#183'
+  owner: steward.ng-provider-runtime
+
+profile:
+  id: NG1
+  protocol_major: 1
+  protocol_minor: 1
+  required_features:
+    - durable-resume-token
+    - heartbeat
+    - progress-rate-enforcement
+    - spill-staging
+    - long-run-fault-qualification
+  capability_claim: exact-certified-qualification-only
+  manifest_self_claim_authority: forbidden
+
+heartbeat:
+  message_type: 23
+  control_schema: cxxlens.provider-control.heartbeat.v1
+  direction:
+    probe: host-to-provider
+    ack: provider-to-host
+  exact_fields:
+    - schema
+    - kind
+    - provider_id
+    - provider_version
+    - protocol_session_id
+    - task_id
+    - stream_id
+    - heartbeat_sequence
+    - monotonic_time_ns
+    - highest_contiguous_acked_sequence
+    - staged_digest
+  kinds: [probe, ack]
+  identity_binding:
+    - provider_id
+    - provider_version
+    - protocol_session_id
+    - task_id
+    - stream_id
+  sequence:
+    starts_at: 0
+    contiguous: required
+    duplicate: reject
+    replay: reject
+  clock:
+    source: injected-monotonic-clock
+    unit: nanoseconds
+    wall_clock: forbidden
+    backwards: provider.heartbeat-clock-invalid
+  liveness:
+    interval_ns: 1000000000
+    timeout_ns: 5000000000
+    startup_grace_ns: 10000000000
+    ack_deadline: timeout-after-last-probe
+    terminal_grace: no-heartbeat-required-after-terminal
+    timeout_result: provider.heartbeat-timeout
+  credit:
+    counts_toward_output_credit: false
+    counts_toward_transport_budget: true
+    max_control_bytes: 65536
+
+progress:
+  message_type: 17
+  control_schema: cxxlens.provider-control.progress.v2
+  exact_fields:
+    - schema
+    - task_id
+    - dependency_group_id
+    - progress_sequence
+    - monotonic_time_ns
+    - completed_units
+    - total_units
+  unit: provider-declared-monotonic-work-unit
+  constraints:
+    total_units: positive-and-constant-per-task
+    completed_units: zero-through-total-inclusive
+    sequence: contiguous-from-zero
+    time: monotonic-with-heartbeat-clock
+    duplicate_or_replay: reject
+  enforcement:
+    startup_grace_ns: 10000000000
+    sample_window_ns: 5000000000
+    maximum_sample_gap_ns: 10000000000
+    minimum_units_per_second: 1
+    zero_delta_after_grace: reject
+    arithmetic: overflow-safe-u128-cross-multiplication
+    terminal_total_required: true
+    failure: provider.progress-rate
+  credit:
+    counts_toward_output_credit: false
+    counts_toward_transport_budget: true
+
+resume:
+  message_type: 19
+  control_schema: cxxlens.provider-control.resume.v2
+  exact_fields:
+    - schema
+    - kind
+    - provider_id
+    - provider_version
+    - provider_binary_digest
+    - provider_semantic_contract_digest
+    - protocol_session_id
+    - task_id
+    - dependency_group_id
+    - atomic_output_group_id
+    - batch_id
+    - stream_id
+    - highest_contiguous_acked_sequence
+    - staged_digest
+    - token_generation
+    - token_digest
+  kinds: [request, accepted, rejected]
+  token_digest:
+    domain: cxxlens.provider-resume-token.v1
+    projection: all-fields-except-token_digest
+    algorithm: cxxlens-semantic-digest-v2
+  durability:
+    prerequisite: fsync-confirmed-spill-ack
+    volatile_ack_is_not_authority: true
+    generation: strictly-increasing
+  acceptance:
+    exact_provider_and_task_binding: required
+    exact_group_and_batch_binding: required
+    exact_stream_and_staged_digest_binding: required
+    replay_from: highest_contiguous_acked_sequence-plus-one
+    terminal_or_foreign_token: provider.resume-token-stale
+    mutation_or_digest_mismatch: provider.resume-replay-invalid
+    open_dependency_group_adoption: forbidden
+
+spill:
+  record_schema: cxxlens.provider-spill-record.v1
+  storage: private-provider-port
+  pathname_authority: forbidden
+  append_only: true
+  record:
+    exact_fields:
+      - schema
+      - record_ordinal
+      - task_id
+      - dependency_group_id
+      - atomic_output_group_id
+      - batch_id
+      - stream_id
+      - sequence
+      - payload_bytes
+      - payload_digest
+      - record_digest
+    digest:
+      domain: cxxlens.provider-spill-record.v1
+      projection: all-fields-except-record_digest
+      algorithm: cxxlens-semantic-digest-v2
+  limits:
+    maximum_record_bytes: 16777216
+    maximum_total_bytes: 67108864
+    maximum_records: 65536
+    validate_before_allocation: true
+  durability:
+    append: exact-byte-count-and-digest
+    acknowledgement: fsync-before-resume-token
+    ordering: contiguous-record-ordinal
+    torn_last_record: provider.spill-corrupt
+    corruption_or_gap: provider.spill-corrupt
+  cleanup:
+    success: after-final-report-and-token-disposal
+    failure: after-recovery-classification
+    cleanup_failure: provider.recovery-failed
+    retry: forbidden-after-unknown-effect
+
+recovery:
+  states:
+    - running
+    - heartbeat-timeout
+    - progress-rate-failure
+    - cancel-requested
+    - worker-killed
+    - resume-replay
+    - resumed
+    - completed
+    - failed
+  transition_rules:
+    worker_hang: [heartbeat-timeout, worker-killed, resume-replay, resumed, failed]
+    worker_crash: [worker-killed, resume-replay, resumed, failed]
+    spill_corruption: [failed]
+    stale_token: [failed]
+    cancellation: [cancel-requested, worker-killed, failed]
+    terminal: [completed, failed]
+  publication:
+    prior_published_snapshot: unchanged-on-failure
+    current_dependency_group: rollback
+    prior_adopted_groups: retain-only-if-predeclared-partial-policy
+    success_requires: [all-groups-sealed, coverage-balanced, unresolved-accounted, progress-terminal]
+  no_fallback:
+    adjacent_provider: forbidden
+    non-durable_resume: forbidden
+    manifest_self_claim: forbidden
+
+stable_failures:
+  - provider.heartbeat-clock-invalid
+  - provider.heartbeat-timeout
+  - provider.progress-rate
+  - provider.resume-token-stale
+  - provider.resume-replay-invalid
+  - provider.spill-corrupt
+  - provider.recovery-failed
+
+qualification:
+  schema: cxxlens.provider-ng1-qualification.v1
+  exact_binding: [revision, tree, provider_binary_digest, provider_semantic_contract_digest, protocol_minor, hardening_contract_digest]
+  required_profiles: [static, shared]
+  required_cases:
+    - positive-heartbeat-and-progress
+    - stale-heartbeat
+    - heartbeat-timeout
+    - zero-progress-after-grace
+    - stale-resume-token
+    - foreign-resume-token
+    - spill-corruption
+    - worker-crash-recovery
+    - worker-hang-recovery
+    - cancellation-recovery
+    - permutation-replay
+    - long-run-fault
+  release_claim: exact-measured-certificate-only
+  unavailable_provider: unqualified
+  unavailable_platform: unqualified

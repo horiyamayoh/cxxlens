@@ -74,6 +74,7 @@ properties:
           - spill-staging
           - long-run-fault-qualification
         fixed_point: explicit-monotone-contract-only
+        hardening_contract: schemas/cxxlens_ng_provider_ng1_hardening.yaml
   wire:
     type: object
     additionalProperties: false

@@ -37,6 +37,7 @@ PACKAGE_PATHS = (
     "docs/design/adr/0096-clang22-installed-materialization-boundary.md",
     "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md",
     "docs/design/adr/0098-explicit-static-relation-projection.md",
+    "docs/design/adr/0099-provider-ng1-hardening.md",
     "docs/design/catalogs/README.md",
     "schemas/cxxlens_ng_claim_envelope.schema.yaml",
     "schemas/cxxlens_ng_relation_registry.yaml",

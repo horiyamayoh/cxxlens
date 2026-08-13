@@ -72,6 +72,7 @@
 | [0095](0095-production-scope-closure.md) | exact-once production scope closure and staged qualification |
 | [0096](0096-clang22-installed-materialization-boundary.md) | provider-owned Clang 22 installed materialization boundary |
 | [0098](0098-explicit-static-relation-projection.md) | explicit generated relation static projection |
+| [0099](0099-provider-ng1-hardening.md) | provider NG1 hardening lifecycle and evidence |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

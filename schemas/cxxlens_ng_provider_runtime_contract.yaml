@@ -13,6 +13,7 @@ dependencies:
   - schemas/cxxlens_ng_snapshot_store_contract.yaml
   - schemas/cxxlens_ng_project_catalog_contract.yaml
   - schemas/cxxlens_ng_portable_provider_task_contract.yaml
+  - schemas/cxxlens_ng_provider_ng1_hardening.yaml
 runtime:
   process_effect_boundary: provider-process-port
   supported_platform:

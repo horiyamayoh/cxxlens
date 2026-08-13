@@ -1,0 +1,50 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-ng1-hardening.v1
+title: cxxlens NG1 provider hardening contract
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, profile, heartbeat, progress, resume, spill, recovery, stable_failures, qualification]
+properties:
+  schema: {const: cxxlens.provider-ng1-hardening.v1}
+  document_version: {const: 1.0.0}
+  maturity: {enum: [proposed, accepted]}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, protocol, runtime, decision_adr, decision_issue, implementation_issue, owner]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      protocol: {const: schemas/cxxlens_ng_provider_protocol.yaml}
+      runtime: {const: schemas/cxxlens_ng_provider_runtime_contract.yaml}
+      decision_adr: {const: docs/design/adr/0099-provider-ng1-hardening.md}
+      decision_issue: {const: '#233'}
+      implementation_issue: {const: '#183'}
+      owner: {const: steward.ng-provider-runtime}
+  profile:
+    type: object
+    additionalProperties: false
+    required: [id, protocol_major, protocol_minor, required_features, capability_claim, manifest_self_claim_authority]
+    properties:
+      id: {const: NG1}
+      protocol_major: {const: 1}
+      protocol_minor: {const: 1}
+      required_features:
+        const: [durable-resume-token, heartbeat, progress-rate-enforcement, spill-staging, long-run-fault-qualification]
+      capability_claim: {const: exact-certified-qualification-only}
+      manifest_self_claim_authority: {const: forbidden}
+  heartbeat: {$ref: '#/$defs/open_object'}
+  progress: {$ref: '#/$defs/open_object'}
+  resume: {$ref: '#/$defs/open_object'}
+  spill: {$ref: '#/$defs/open_object'}
+  recovery: {$ref: '#/$defs/open_object'}
+  stable_failures:
+    type: array
+    uniqueItems: true
+    minItems: 7
+    items: {type: string, pattern: '^provider\.[a-z0-9-]+$'}
+  qualification: {$ref: '#/$defs/open_object'}
+$defs:
+  open_object:
+    type: object
+    minProperties: 1
+    additionalProperties: true
