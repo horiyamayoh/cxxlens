@@ -44,6 +44,7 @@
     "profiles": {
       "compiler": [
         "clang-22",
+        "clang-format-22",
         "libclang-rt-22-dev",
         "llvm-22"
       ],
@@ -56,6 +57,7 @@
       ],
       "static-analysis": [
         "clang-22",
+        "clang-format-22",
         "clang-tidy-22",
         "llvm-22"
       ]
