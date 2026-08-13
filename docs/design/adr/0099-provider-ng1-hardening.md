@@ -1,6 +1,6 @@
 # ADR 0099: Provider NG1 hardening lifecycle and evidence
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-13
 - Decision owner: steward.ng-provider-runtime
 - Decision issue: #233
@@ -17,10 +17,10 @@ does not define the typed lifecycle semantics needed to implement or certify
 them. The existing runtime is NG0-oriented and must not infer NG1 capability
 from a manifest or from NG0 tests.
 
-## Decision proposal
+## Decision
 
-Propose adoption of `schemas/cxxlens_ng_provider_ng1_hardening.yaml` as the
-exact NG1 hardening contract. NG1 remains opt-in at protocol minor 1 and preserves all
+Adopt `schemas/cxxlens_ng_provider_ng1_hardening.yaml` as the exact NG1
+hardening authority. NG1 remains opt-in at protocol minor 1 and preserves all
 NG0 wire, credit, batch, coverage, unresolved, and atomicity invariants.
 
 The contract defines:
@@ -77,8 +77,8 @@ Failure is fail-closed: heartbeat clock drift, liveness timeout, rate failure,
 stale/foreign/mutated resume, spill corruption, or unknown cleanup effect
 produces a stable failure and leaves the prior published snapshot unchanged.
 
-While this ADR is Proposed, NG1 failure reservations remain outside the active
-execution-report terminal enum and outside the C++ runtime terminal registry;
+While NG1 maturity remains Proposed, NG1 failure reservations remain outside
+the active execution-report terminal enum and outside the C++ runtime terminal registry;
 the host-observed receipt schema and the conformance vectors are authority
 inputs, not production qualification evidence.
 
@@ -95,10 +95,13 @@ inputs, not production qualification evidence.
 
 ## Acceptance gate
 
-This ADR remains Proposed until #233 records an independent review of the
-closed schema and checker, protocol/report bindings, state-machine transitions,
-clock/rate overflow and replay boundaries, spill durability/cleanup, the
-semantic-v2 receipt digest boundary, and exact negative qualification matrix.
-Only after that review may #183 implement NG1; only after executed
-static/shared evidence with the exact report binding may the contract maturity
-change or NG1 be advertised.
+The authority decision was accepted by #233 after the closed schema and
+checker, protocol/report bindings, state-machine transitions, clock/rate
+overflow and replay boundaries, spill durability/cleanup, semantic-v2 receipt
+digest boundary, and exact negative qualification matrix received independent
+review at the exact merged-main source `df89c776d65184d393980a78543ca8a081c60a91`
+with tree `d7b638d7727bb926b35dd0562dd1520b24cd3557`. #183 may now implement
+the accepted private contract. The contract maturity remains Proposed, and
+NG1 cannot be advertised or activated until executed static/shared process,
+spill, recovery, fault, and long-run evidence is bound by the exact report
+schema and measured provider identity.
