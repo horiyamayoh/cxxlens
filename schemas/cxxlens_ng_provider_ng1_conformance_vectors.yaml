@@ -21,6 +21,11 @@ vectors:
     surface: heartbeat
     mutation: no-ack-through-inclusive-timeout-boundary
     expected: {decision: rejected, reason_code: provider.heartbeat-timeout}
+  - id: progress-sample-timeout
+    class: negative
+    surface: progress
+    mutation: no-valid-sample-through-inclusive-startup-grace
+    expected: {decision: rejected, reason_code: provider.progress-rate}
   - id: zero-progress-after-grace
     class: negative
     surface: progress

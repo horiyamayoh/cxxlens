@@ -1,5 +1,5 @@
 {
-  "asset_count": 642,
+  "asset_count": 643,
   "assets": [
     {
       "authority": "active",
@@ -2181,6 +2181,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_provider_runtime_contract.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4497,7 +4504,7 @@
     }
   ],
   "classifications": {
-    "active": 606,
+    "active": 607,
     "archived": 35,
     "generated": 1
   },

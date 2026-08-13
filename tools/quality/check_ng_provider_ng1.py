@@ -27,6 +27,9 @@ PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml")
 EXECUTION_REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_execution_report.schema.yaml"
 )
+SPILL_FSYNC_RECEIPT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml"
+)
 RUNTIME_CONTRACT = pathlib.Path("schemas/cxxlens_ng_provider_runtime_contract.yaml")
 VECTORS = pathlib.Path("schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml")
 VECTORS_SCHEMA = pathlib.Path(
@@ -143,12 +146,19 @@ EXPECTED_HEARTBEAT = {
         "interval_ns": 1_000_000_000,
         "timeout_ns": 5_000_000_000,
         "startup_grace_ns": 10_000_000_000,
-        "ack_deadline": "timeout-after-last-probe",
-        "deadline": "last-probe-plus-timeout-inclusive",
+        "ack_deadline": {
+            "basis": "last-probe-host-receipt",
+            "rejection": "ack-receipt-minus-last-probe-receipt-greater-than-or-equal-timeout",
+            "boundary": "timeout-inclusive-failure",
+        },
+        "idle_timeout": {
+            "basis": "last-valid-ack-host-receipt",
+            "rejection": "now-minus-last-valid-ack-receipt-greater-than-or-equal-timeout",
+            "boundary": "timeout-inclusive-failure",
+        },
         "startup_boundary": "grace-inclusive",
         "time_authority": "host-injected-monotonic-clock",
         "last_valid_ack": "host-receipt-time-of-validated-ack",
-        "timeout_formula": "now_ns-last_valid_ack_received_ns>=timeout_ns",
         "timeout_arithmetic": "checked-u64-subtraction",
         "terminal_grace": "no-heartbeat-required-after-terminal",
         "timeout_result": "provider.heartbeat-timeout",
@@ -200,6 +210,12 @@ EXPECTED_PROGRESS = {
     },
     "enforcement": {
         "startup_grace_ns": 10_000_000_000,
+        "first_sample_deadline": {
+            "basis": "task-start-host-receipt",
+            "rejection": "no-valid-sample-at-or-after-start-plus-startup-grace",
+            "boundary": "timeout-inclusive-failure",
+            "failure": "provider.progress-rate",
+        },
         "sample_window_ns": 5_000_000_000,
         "maximum_sample_gap_ns": 10_000_000_000,
         "minimum_units_per_second": 1,
@@ -222,6 +238,57 @@ EXPECTED_PROGRESS = {
         "counts_toward_output_credit": False,
         "counts_toward_transport_budget": True,
     },
+}
+
+EXPECTED_RECEIPT = {
+    "schema": "cxxlens.provider-spill-fsync-receipt.v1",
+    "schema_path": "schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml",
+    "exact_fields": [
+        "schema",
+        "provider_id",
+        "protocol_session_id",
+        "task_id",
+        "stream_id",
+        "highest_contiguous_acked_sequence",
+        "staged_digest",
+        "spill_digest",
+        "total_bytes",
+        "total_records",
+        "fsync_sequence",
+    ],
+    "field_types": {
+        "schema": "fixed-string",
+        "provider_id": "typed-id",
+        "protocol_session_id": "typed-id",
+        "task_id": "typed-id",
+        "stream_id": "uint64",
+        "highest_contiguous_acked_sequence": "uint64",
+        "staged_digest": "semantic-digest",
+        "spill_digest": "semantic-digest",
+        "total_bytes": "uint64",
+        "total_records": "uint64",
+        "fsync_sequence": "positive-uint64",
+    },
+    "field_constraints": {
+        "schema": "exact-receipt-schema",
+        "provider_id": "exact-provider-binding",
+        "protocol_session_id": "exact-session-binding",
+        "task_id": "exact-task-binding",
+        "stream_id": "exact-stream-binding",
+        "highest_contiguous_acked_sequence": "contiguous-durable-ack",
+        "staged_digest": "exact-staged-prefix-digest",
+        "spill_digest": "exact-canonical-spill-prefix-digest",
+        "total_bytes": "checked-cumulative-byte-count",
+        "total_records": "checked-cumulative-record-count",
+        "fsync_sequence": "host-observed-strictly-increasing-positive-sequence",
+    },
+    "digest": {
+        "domain": "cxxlens.provider-spill-prefix.v1",
+        "projection": "canonical-tuple-of-binding-ack-staged-digest-spill-digest-and-cumulative-counters",
+        "algorithm": "cxxlens-semantic-digest-v2",
+        "encoding": "cxxlens-canonical-tuple-v1",
+    },
+    "authority": "host-observed-private-spill-port-result",
 }
 
 EXPECTED_RESUME = {
@@ -308,22 +375,7 @@ EXPECTED_RESUME = {
         "volatile_ack_is_not_authority": True,
         "generation": "strictly-increasing",
         "publication_order": "append-spill-fsync-construct-token-publish-token",
-        "receipt": {
-            "schema": "cxxlens.provider-spill-fsync-receipt.v1",
-            "exact_fields": [
-                "provider_id",
-                "protocol_session_id",
-                "task_id",
-                "stream_id",
-                "highest_contiguous_acked_sequence",
-                "staged_digest",
-                "spill_digest",
-                "total_bytes",
-                "total_records",
-                "fsync_sequence",
-            ],
-            "authority": "host-observed-private-spill-port-result",
-        },
+        "receipt": EXPECTED_RECEIPT,
         "atomic_persistence": "temp-write-fsync-rename-parent-fsync",
     },
     "replay": {
@@ -529,6 +581,7 @@ EXPECTED_QUALIFICATION = {
         "positive-heartbeat-and-progress",
         "stale-heartbeat",
         "heartbeat-timeout",
+        "progress-sample-timeout",
         "zero-progress-after-grace",
         "stale-resume-token",
         "foreign-resume-token",
@@ -543,6 +596,7 @@ EXPECTED_QUALIFICATION = {
         "positive-heartbeat-and-progress": "accepted",
         "stale-heartbeat": "provider.heartbeat-timeout",
         "heartbeat-timeout": "provider.heartbeat-timeout",
+        "progress-sample-timeout": "provider.progress-rate",
         "zero-progress-after-grace": "provider.progress-rate",
         "stale-resume-token": "provider.resume-token-stale",
         "foreign-resume-token": "provider.resume-token-stale",
@@ -586,6 +640,7 @@ def validate_ng1_contract(
             "decision_issue": "#233",
             "implementation_issue": "#183",
             "owner": "steward.ng-provider-runtime",
+            "spill_fsync_receipt_schema": SPILL_FSYNC_RECEIPT_SCHEMA.as_posix(),
         },
         "authority",
     )
@@ -604,6 +659,40 @@ def validate_ng1_contract(
     expect(hardening["heartbeat"], EXPECTED_HEARTBEAT, "heartbeat")
     expect(hardening["progress"], EXPECTED_PROGRESS, "progress")
     expect(hardening["resume"], EXPECTED_RESUME, "resume")
+    receipt_schema = load_yaml(root / SPILL_FSYNC_RECEIPT_SCHEMA)
+    receipt_fields = EXPECTED_RECEIPT["exact_fields"]
+    expect(receipt_schema.get("type"), "object", "spill_fsync_receipt_schema.type")
+    expect(
+        receipt_schema.get("additionalProperties"),
+        False,
+        "spill_fsync_receipt_schema.additionalProperties",
+    )
+    expect(receipt_schema.get("required"), receipt_fields, "spill_fsync_receipt_schema.required")
+    expect(
+        sorted(receipt_schema.get("properties", {})),
+        sorted(receipt_fields),
+        "spill_fsync_receipt_schema.properties",
+    )
+    receipt_digest = "semantic-v2:sha256:" + "0" * 64
+    receipt_instance = {
+        "schema": EXPECTED_RECEIPT["schema"],
+        "provider_id": "provider:test",
+        "protocol_session_id": "session:test",
+        "task_id": "task:test",
+        "stream_id": 1,
+        "highest_contiguous_acked_sequence": 0,
+        "staged_digest": receipt_digest,
+        "spill_digest": receipt_digest,
+        "total_bytes": 0,
+        "total_records": 0,
+        "fsync_sequence": 1,
+    }
+    schema_validate(receipt_instance, receipt_schema, "spill fsync receipt")
+    receipt_validator = jsonschema.Draft202012Validator(receipt_schema)
+    if receipt_validator.is_valid({**receipt_instance, "unexpected": True}):
+        fail("spill_fsync_receipt_schema", "unexpected properties are accepted")
+    if receipt_validator.is_valid({**receipt_instance, "fsync_sequence": 0}):
+        fail("spill_fsync_receipt_schema", "zero fsync sequence is accepted")
     expect(hardening["spill"], EXPECTED_SPILL, "spill")
     expect(hardening["recovery"], EXPECTED_RECOVERY, "recovery")
     expect(hardening["stable_failures"], EXPECTED_STABLE_FAILURES, "stable_failures")
@@ -697,14 +786,17 @@ def validate_ng1_contract(
         fail("protocol.failures", "NG1 stable failures are not registered")
     execution_report = load_yaml(root / EXECUTION_REPORT_SCHEMA)
     terminal_enum = execution_report["properties"]["terminal"]["enum"]
-    if any(code not in terminal_enum for code in EXPECTED_STABLE_FAILURES):
-        fail("execution_report", "NG1 stable failures are not reportable")
     runtime = load_yaml(root / RUNTIME_CONTRACT)
     if hardening["maturity"] == "accepted":
+        if any(code not in terminal_enum for code in EXPECTED_STABLE_FAILURES):
+            fail("execution_report", "accepted NG1 failures are not reportable")
         if any(code not in runtime["terminal"]["stable"] for code in EXPECTED_STABLE_FAILURES):
             fail("runtime", "NG1 stable failures are not runtime terminals")
-    elif set(runtime["terminal"].get("reserved_for_ng1", [])) != set(EXPECTED_STABLE_FAILURES):
-        fail("runtime", "NG1 stable failures are not reserved in runtime authority")
+    else:
+        if any(code in terminal_enum for code in EXPECTED_STABLE_FAILURES):
+            fail("execution_report", "proposed NG1 failures must remain outside the active report enum")
+        if set(runtime["terminal"].get("reserved_for_ng1", [])) != set(EXPECTED_STABLE_FAILURES):
+            fail("runtime", "NG1 stable failures are not reserved in runtime authority")
     return hardening
 
 

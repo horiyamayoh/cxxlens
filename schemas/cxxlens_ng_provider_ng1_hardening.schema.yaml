@@ -17,6 +17,7 @@ properties:
       decision_issue: '#233'
       implementation_issue: '#183'
       owner: steward.ng-provider-runtime
+      spill_fsync_receipt_schema: schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml
   profile:
     const:
       id: NG1
@@ -63,12 +64,17 @@ properties:
         interval_ns: 1000000000
         timeout_ns: 5000000000
         startup_grace_ns: 10000000000
-        ack_deadline: timeout-after-last-probe
-        deadline: last-probe-plus-timeout-inclusive
+        ack_deadline:
+          basis: last-probe-host-receipt
+          rejection: ack-receipt-minus-last-probe-receipt-greater-than-or-equal-timeout
+          boundary: timeout-inclusive-failure
+        idle_timeout:
+          basis: last-valid-ack-host-receipt
+          rejection: now-minus-last-valid-ack-receipt-greater-than-or-equal-timeout
+          boundary: timeout-inclusive-failure
         startup_boundary: grace-inclusive
         time_authority: host-injected-monotonic-clock
         last_valid_ack: host-receipt-time-of-validated-ack
-        timeout_formula: now_ns-last_valid_ack_received_ns>=timeout_ns
         timeout_arithmetic: checked-u64-subtraction
         terminal_grace: no-heartbeat-required-after-terminal
         timeout_result: provider.heartbeat-timeout
@@ -98,6 +104,11 @@ properties:
       constraints: {total_units: positive-and-constant-per-task, completed_units: zero-through-total-inclusive, sequence: contiguous-from-zero, time: monotonic-with-heartbeat-clock, duplicate_or_replay: reject}
       enforcement:
         startup_grace_ns: 10000000000
+        first_sample_deadline:
+          basis: task-start-host-receipt
+          rejection: no-valid-sample-at-or-after-start-plus-startup-grace
+          boundary: timeout-inclusive-failure
+          failure: provider.progress-rate
         sample_window_ns: 5000000000
         maximum_sample_gap_ns: 10000000000
         minimum_units_per_second: 1
@@ -174,7 +185,11 @@ properties:
         publication_order: append-spill-fsync-construct-token-publish-token
         receipt:
           schema: cxxlens.provider-spill-fsync-receipt.v1
-          exact_fields: [provider_id, protocol_session_id, task_id, stream_id, highest_contiguous_acked_sequence, staged_digest, spill_digest, total_bytes, total_records, fsync_sequence]
+          schema_path: schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml
+          exact_fields: [schema, provider_id, protocol_session_id, task_id, stream_id, highest_contiguous_acked_sequence, staged_digest, spill_digest, total_bytes, total_records, fsync_sequence]
+          field_types: {schema: fixed-string, provider_id: typed-id, protocol_session_id: typed-id, task_id: typed-id, stream_id: uint64, highest_contiguous_acked_sequence: uint64, staged_digest: semantic-digest, spill_digest: semantic-digest, total_bytes: uint64, total_records: uint64, fsync_sequence: positive-uint64}
+          field_constraints: {schema: exact-receipt-schema, provider_id: exact-provider-binding, protocol_session_id: exact-session-binding, task_id: exact-task-binding, stream_id: exact-stream-binding, highest_contiguous_acked_sequence: contiguous-durable-ack, staged_digest: exact-staged-prefix-digest, spill_digest: exact-canonical-spill-prefix-digest, total_bytes: checked-cumulative-byte-count, total_records: checked-cumulative-record-count, fsync_sequence: host-observed-strictly-increasing-positive-sequence}
+          digest: {domain: cxxlens.provider-spill-prefix.v1, projection: canonical-tuple-of-binding-ack-staged-digest-spill-digest-and-cumulative-counters, algorithm: cxxlens-semantic-digest-v2, encoding: cxxlens-canonical-tuple-v1}
           authority: host-observed-private-spill-port-result
         atomic_persistence: temp-write-fsync-rename-parent-fsync
       replay:
@@ -244,11 +259,12 @@ properties:
       vectors: schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
       exact_binding: [revision, tree, provider_binary_digest, provider_semantic_contract_digest, protocol_minor, hardening_contract_digest]
       required_profiles: [static, shared]
-      required_cases: [positive-heartbeat-and-progress, stale-heartbeat, heartbeat-timeout, zero-progress-after-grace, stale-resume-token, foreign-resume-token, spill-corruption, worker-crash-recovery, worker-hang-recovery, cancellation-recovery, permutation-replay, long-run-fault]
+      required_cases: [positive-heartbeat-and-progress, stale-heartbeat, heartbeat-timeout, progress-sample-timeout, zero-progress-after-grace, stale-resume-token, foreign-resume-token, spill-corruption, worker-crash-recovery, worker-hang-recovery, cancellation-recovery, permutation-replay, long-run-fault]
       required_case_outcomes:
         positive-heartbeat-and-progress: accepted
         stale-heartbeat: provider.heartbeat-timeout
         heartbeat-timeout: provider.heartbeat-timeout
+        progress-sample-timeout: provider.progress-rate
         zero-progress-after-grace: provider.progress-rate
         stale-resume-token: provider.resume-token-stale
         foreign-resume-token: provider.resume-token-stale

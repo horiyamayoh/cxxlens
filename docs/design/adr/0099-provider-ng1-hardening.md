@@ -28,10 +28,14 @@ The contract defines:
 - typed heartbeat probe/ack controls bound to provider, session, task, stream,
   monotonic sequence, host receipt time, and an injected host monotonic clock;
 - deterministic liveness interval/deadline and overflow-safe progress-rate
-  arithmetic using host receipt deltas;
+  arithmetic using host receipt deltas; an acknowledgement is rejected at or
+  beyond the latest probe receipt plus the inclusive timeout, idle liveness is
+  measured from the last validated acknowledgement, and a first progress
+  sample is required by the task-start grace deadline;
 - durable resume tokens bound to provider binary/semantic identity, task,
   input/selection identity, dependency group, batch, stream, acknowledged
-  sequence, staged digest, and a host-observed fsync receipt;
+  sequence, staged digest, and a host-observed fsync receipt defined by the
+  closed `schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml`;
 - append-only bounded spill records with deterministic framing, canonical
   digests, checked quota arithmetic, fsync-before-token, contiguous replay,
   fail-closed corruption handling, and explicit cleanup;
@@ -62,6 +66,11 @@ authority and are not active C++ terminals.
 Failure is fail-closed: heartbeat clock drift, liveness timeout, rate failure,
 stale/foreign/mutated resume, spill corruption, or unknown cleanup effect
 produces a stable failure and leaves the prior published snapshot unchanged.
+
+While this ADR is Proposed, NG1 failure reservations remain outside the active
+execution-report terminal enum and outside the C++ runtime terminal registry;
+the host-observed receipt schema and the conformance vectors are authority
+inputs, not production qualification evidence.
 
 ## Alternatives rejected
 

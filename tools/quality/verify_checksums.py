@@ -83,6 +83,7 @@ PACKAGE_PATHS = (
     "schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml",
     "schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml",
     "schemas/cxxlens_ng_provider_execution_report.schema.yaml",
+    "schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml",
     "schemas/cxxlens_ng_clang22_materialization_contract.yaml",
     "schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
     "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",

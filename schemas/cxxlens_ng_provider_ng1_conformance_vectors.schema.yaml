@@ -18,7 +18,7 @@ properties:
       implementation_issue: {const: '#183'}
   vectors:
     type: array
-    minItems: 12
+    minItems: 13
     uniqueItems: true
     items:
       type: object
