@@ -52,7 +52,8 @@ The contract defines:
   positive/negative vectors plus the closed
   `schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml`, whose
   measured report binds one revision, tree, provider identity, protocol minor,
-  hardening-contract digest, report-schema digest, and vector digest. The
+  protocol-contract digest, hardening-contract digest, report-schema digest,
+  vector document/schema digests, and host-measurement provenance. The
   checked-in vectors are explicitly authority-only and provider-unbound.
 
 Heartbeat and progress controls are transport occurrences and are not claim or

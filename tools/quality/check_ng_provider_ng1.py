@@ -661,9 +661,11 @@ EXPECTED_QUALIFICATION = {
         "provider_semantic_contract_digest",
         "provider_semantic_contract_digest_source",
         "protocol_minor",
+        "protocol_contract_digest",
         "hardening_contract_digest",
         "report_schema_digest",
         "vectors_digest",
+        "vectors_schema_digest",
     ],
     "required_profiles": ["static", "shared"],
     "required_cases": [
@@ -834,9 +836,13 @@ def validate_ng1_contract(
             "provider_semantic_contract_digest": "sha256:" + "3" * 64,
             "provider_semantic_contract_digest_source": "selected-contract-digest",
             "protocol_minor": 1,
+            "protocol_contract_digest": document_digest(
+                protocol if protocol is not None else load_yaml(root / PROTOCOL)
+            ),
             "hardening_contract_digest": document_digest(hardening),
             "report_schema_digest": document_digest(qualification_schema),
             "vectors_digest": document_digest(vectors),
+            "vectors_schema_digest": document_digest(load_yaml(root / VECTORS_SCHEMA)),
         },
         "profiles": [
             {

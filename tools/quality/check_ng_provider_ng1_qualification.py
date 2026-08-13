@@ -13,8 +13,10 @@ import jsonschema
 
 from check_ng_provider_ng1 import (
     CONTRACT,
+    PROTOCOL,
     QUALIFICATION_REPORT_SCHEMA,
     VECTORS,
+    VECTORS_SCHEMA,
     Ng1ContractError,
     document_digest,
     load_yaml,
@@ -84,6 +86,14 @@ def validate_report(
         fail("report schema digest is stale")
     if binding["vectors_digest"] != document_digest(load_yaml(root / VECTORS)):
         fail("conformance vectors digest is stale")
+    if binding["vectors_schema_digest"] != document_digest(
+        load_yaml(root / VECTORS_SCHEMA)
+    ):
+        fail("conformance vectors schema digest is stale")
+    if binding["protocol_contract_digest"] != document_digest(
+        load_yaml(root / PROTOCOL)
+    ):
+        fail("provider protocol digest is stale")
     if binding["hardening_contract_digest"] != document_digest(
         load_yaml(root / CONTRACT)
     ):

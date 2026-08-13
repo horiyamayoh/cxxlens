@@ -33,9 +33,11 @@ properties:
       - provider_semantic_contract_digest
       - provider_semantic_contract_digest_source
       - protocol_minor
+      - protocol_contract_digest
       - hardening_contract_digest
       - report_schema_digest
       - vectors_digest
+      - vectors_schema_digest
     properties:
       revision: {$ref: '#/$defs/revision'}
       tree: {$ref: '#/$defs/revision'}
@@ -44,9 +46,11 @@ properties:
       provider_semantic_contract_digest: {$ref: '#/$defs/digest'}
       provider_semantic_contract_digest_source: {const: selected-contract-digest}
       protocol_minor: {const: 1}
+      protocol_contract_digest: {$ref: '#/$defs/digest'}
       hardening_contract_digest: {$ref: '#/$defs/digest'}
       report_schema_digest: {$ref: '#/$defs/digest'}
       vectors_digest: {$ref: '#/$defs/digest'}
+      vectors_schema_digest: {$ref: '#/$defs/digest'}
   profiles:
     type: array
     minItems: 2
