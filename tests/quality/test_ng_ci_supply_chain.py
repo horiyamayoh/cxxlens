@@ -62,6 +62,14 @@ class NgCiSupplyChainTest(unittest.TestCase):
             "libclang-rt-22-dev", self.lock["llvm"]["profiles"]["compiler"]
         )
 
+    def test_configure_profiles_contain_required_clang_format(self) -> None:
+        self.assertIn(
+            "clang-format-22", self.lock["llvm"]["profiles"]["compiler"]
+        )
+        self.assertIn(
+            "clang-format-22", self.lock["llvm"]["profiles"]["static-analysis"]
+        )
+
     def test_llvm_package_revision_is_exactly_locked(self) -> None:
         self.assertEqual(self.lock["llvm"]["expected_release"], "22.1.8")
         self.assertEqual(
