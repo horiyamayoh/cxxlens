@@ -190,6 +190,7 @@ add_dependencies(
   cxxlens-ng-design-feedback-check
   cxxlens-ng-clang22-materialization-check
   cxxlens-ng-provider-protocol-check
+  cxxlens-ng-provider-ng1-qualification-check
   cxxlens-ng-provider-runtime-check
   cxxlens-ng-production-scope-closure-check
   cxxlens-ng-api-development-readiness-check
