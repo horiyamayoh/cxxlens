@@ -35,6 +35,7 @@ properties:
       - protocol_minor
       - protocol_contract_digest
       - hardening_contract_digest
+      - hardening_contract_schema_digest
       - report_schema_digest
       - vectors_digest
       - vectors_schema_digest
@@ -48,6 +49,7 @@ properties:
       protocol_minor: {const: 1}
       protocol_contract_digest: {$ref: '#/$defs/digest'}
       hardening_contract_digest: {$ref: '#/$defs/digest'}
+      hardening_contract_schema_digest: {$ref: '#/$defs/digest'}
       report_schema_digest: {$ref: '#/$defs/digest'}
       vectors_digest: {$ref: '#/$defs/digest'}
       vectors_schema_digest: {$ref: '#/$defs/digest'}

@@ -316,7 +316,7 @@ properties:
       report_schema: schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml
       checker: tools/quality/check_ng_provider_ng1_qualification.py
       vectors: schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
-      exact_binding: [revision, tree, provider_binary_digest, provider_binary_digest_source, provider_semantic_contract_digest, provider_semantic_contract_digest_source, protocol_minor, protocol_contract_digest, hardening_contract_digest, report_schema_digest, vectors_digest, vectors_schema_digest]
+      exact_binding: [revision, tree, provider_binary_digest, provider_binary_digest_source, provider_semantic_contract_digest, provider_semantic_contract_digest_source, protocol_minor, protocol_contract_digest, hardening_contract_digest, hardening_contract_schema_digest, report_schema_digest, vectors_digest, vectors_schema_digest]
       required_profiles: [static, shared]
       required_cases: [positive-heartbeat-and-progress, stale-heartbeat, heartbeat-timeout, progress-sample-timeout, zero-progress-after-grace, stale-resume-token, foreign-resume-token, spill-corruption, worker-crash-recovery, worker-hang-recovery, cancellation-recovery, permutation-replay, long-run-fault]
       required_case_outcomes:

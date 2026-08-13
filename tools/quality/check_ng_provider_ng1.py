@@ -663,6 +663,7 @@ EXPECTED_QUALIFICATION = {
         "protocol_minor",
         "protocol_contract_digest",
         "hardening_contract_digest",
+        "hardening_contract_schema_digest",
         "report_schema_digest",
         "vectors_digest",
         "vectors_schema_digest",
@@ -840,6 +841,9 @@ def validate_ng1_contract(
                 protocol if protocol is not None else load_yaml(root / PROTOCOL)
             ),
             "hardening_contract_digest": document_digest(hardening),
+            "hardening_contract_schema_digest": document_digest(
+                load_yaml(root / CONTRACT_SCHEMA)
+            ),
             "report_schema_digest": document_digest(qualification_schema),
             "vectors_digest": document_digest(vectors),
             "vectors_schema_digest": document_digest(load_yaml(root / VECTORS_SCHEMA)),
@@ -874,7 +878,15 @@ def validate_ng1_contract(
         "qualification.vectors.authority.binding",
     )
     expected_cases = set(hardening["qualification"]["required_cases"])
-    actual_cases = {vector["id"] for vector in vectors["vectors"]}
+    vector_ids = [vector["id"] for vector in vectors["vectors"]]
+    if len(vector_ids) != len(set(vector_ids)):
+        fail("qualification.vectors", "vector IDs must be unique")
+    if len(vector_ids) != len(expected_cases):
+        fail(
+            "qualification.vectors",
+            f"expected exactly {len(expected_cases)} vectors, got {len(vector_ids)}",
+        )
+    actual_cases = set(vector_ids)
     if actual_cases != expected_cases:
         fail("qualification.vectors", f"case set differs: expected={sorted(expected_cases)}, got={sorted(actual_cases)}")
     for vector in vectors["vectors"]:
