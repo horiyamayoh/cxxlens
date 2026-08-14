@@ -4472,15 +4472,16 @@ namespace cxxlens::detail::clang22::materialization
 						  const materialization_occurrence_manifest& manifest,
 						  const materialization_occurrence_receipt& receipt)
 		{
-			if (tool.occurrence_manifest_digest.empty() || receipt.schema != "rooted-occurrence-v1" ||
-				receipt.manifest_file_digest.empty() ||
+			if (tool.occurrence_manifest_digest.empty() ||
+				receipt.schema != "rooted-occurrence-v1" || receipt.manifest_file_digest.empty() ||
 				tool.occurrence_manifest_digest != receipt.manifest_file_digest ||
 				receipt.occurrence_payload_digest.empty() || receipt.inventory_digest.empty() ||
 				receipt.prefix_device_inode_observation_digest.empty() ||
 				receipt.files.size() != manifest.files.size() ||
 				manifest.package_configuration.empty() || manifest.files.empty())
-				return sdk::unexpected(
-					{"materialization.report-invalid", "installation", "occurrence-receipt-binding"});
+				return sdk::unexpected({"materialization.report-invalid",
+										"installation",
+										"occurrence-receipt-binding"});
 			if (receipt.occurrence_payload_digest != manifest.occurrence_payload_digest ||
 				receipt.inventory_digest != manifest.inventory_digest)
 				return sdk::unexpected({"materialization.report-invalid",

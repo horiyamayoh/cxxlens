@@ -1100,9 +1100,8 @@ namespace cxxlens::detail::clang22::materialization
 										"sealed-digest"));
 		auto expected_frame_digest =
 			sdk::provider::detail::provider_frame_transcript_receipt_digest(
-			std::span<const sdk::provider::frame>{outcome.frames});
-		if (!expected_frame_digest ||
-			*expected_frame_digest != runtime.frame_transcript_digest() ||
+				std::span<const sdk::provider::frame>{outcome.frames});
+		if (!expected_frame_digest || *expected_frame_digest != runtime.frame_transcript_digest() ||
 			runtime.decoded_frame_count() != outcome.frames.size())
 			return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
 										"runtime_receipt",

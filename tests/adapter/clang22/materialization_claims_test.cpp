@@ -23,8 +23,8 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 
-#include "llvm/clang22/materialization_claim_stream.hpp"
 #include "llvm/clang22/materialization_bounded_claim_source.hpp"
+#include "llvm/clang22/materialization_claim_stream.hpp"
 #include "llvm/clang22/materialization_incremental_coordinator.hpp"
 #include "llvm/clang22/materialization_incremental_ingress.hpp"
 #include "llvm/clang22/materialization_incremental_receipt.hpp"
@@ -2757,12 +2757,12 @@ namespace
 																	producer,
 																	guarantee);
 		require(published && published->store().publication_attempted &&
-			published->publication_verified() &&
-			published->store().publish_call_count == 1U &&
-			published->store().publish_returned_record.has_value() &&
-			published->store().verification_store.has_value() &&
-			!published->store().first_issue.has_value(),
-			"incremental coordinator did not retain a successful Store publication receipt");
+					published->publication_verified() &&
+					published->store().publish_call_count == 1U &&
+					published->store().publish_returned_record.has_value() &&
+					published->store().verification_store.has_value() &&
+					!published->store().first_issue.has_value(),
+				"incremental coordinator did not retain a successful Store publication receipt");
 	}
 
 	void check_bounded_adoption_fail_closed(const validated_materialization_request& request,
