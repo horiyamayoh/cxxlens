@@ -359,6 +359,8 @@ namespace cxxlens::sdk::provider::detail
 		if (sample.staged_digest != host_observed_staged_digest)
 			return unexpected(
 				ng1_error("heartbeat-clock-invalid", "staged_digest", "host-state-mismatch"));
+		if (sample.kind != ng1_heartbeat_kind::probe && sample.kind != ng1_heartbeat_kind::ack)
+			return unexpected(ng1_error("heartbeat-clock-invalid", "kind", "unknown"));
 		if (sample.host_receipt_time_ns < started_at_ns_)
 			return unexpected(ng1_error(
 				"heartbeat-clock-invalid", "host_receipt_time_ns", "before-session-start"));

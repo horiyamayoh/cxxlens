@@ -98,6 +98,20 @@ namespace
 		require(!duplicate_result && duplicate_result.error().code == "provider.heartbeat-sequence",
 				"duplicate heartbeat sequence was accepted");
 
+		auto unknown_kind = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
+		require(unknown_kind.has_value(), "unknown heartbeat kind state creation failed");
+		auto unknown_kind_result = unknown_kind->accept(
+			heartbeat_sample(static_cast<ng1_heartbeat_kind>(255U), 0U, 0U, 0U),
+			0U,
+			digest("staged"));
+		require(!unknown_kind_result &&
+					unknown_kind_result.error().code == "provider.heartbeat-clock-invalid" &&
+					unknown_kind_result.error().field == "kind",
+				"unknown heartbeat kind was treated as an acknowledgement");
+		require(unknown_kind->accept(
+						heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U, digest("staged")),
+				"unknown heartbeat kind mutated validator state");
+
 		auto backwards = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
 		require(backwards.has_value(), "backwards heartbeat state creation failed");
 		require(backwards->accept(heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 10U, 10U),
