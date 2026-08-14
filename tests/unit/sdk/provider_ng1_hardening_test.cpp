@@ -109,7 +109,7 @@ namespace
 					unknown_kind_result.error().field == "kind",
 				"unknown heartbeat kind was treated as an acknowledgement");
 		require(unknown_kind->accept(
-						heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U, digest("staged")),
+					heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U, digest("staged")),
 				"unknown heartbeat kind mutated validator state");
 
 		auto backwards = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
