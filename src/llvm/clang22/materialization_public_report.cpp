@@ -19,15 +19,7 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		using object = json_value::object_type;
 
-		struct claim_batch_status
-		{
-			std::string content_digest;
-			std::uint64_t claim_count{};
-			std::uint64_t unresolved_count{};
-			std::uint64_t conflict_count{};
-			std::uint64_t differential_disagreement_count{};
-			std::size_t partition_count{};
-		};
+		using claim_batch_status = materialization_bounded_claim_batch_status;
 
 		using report_partition_consumer =
 			std::function<sdk::result<void>(const materialization_claim_partition&)>;
@@ -181,42 +173,10 @@ namespace cxxlens::detail::clang22::materialization
 				}
 				if (bounded_ == nullptr)
 					return sdk::unexpected({"materialization.report-invalid", "claims", "missing"});
-				std::vector<sdk::claim> claims;
-				std::uint64_t unresolved{};
-				std::size_t partitions{};
-				auto replayed = bounded_->replay(
-					[&](sdk::partition_draft draft) -> sdk::result<void>
-					{
-						++partitions;
-						if (draft.unresolved.size() >
-							std::numeric_limits<std::uint64_t>::max() - unresolved)
-							return sdk::unexpected({"materialization.report-invalid",
-													"claims.unresolved",
-													"overflow"});
-						unresolved += static_cast<std::uint64_t>(draft.unresolved.size());
-						claims.insert(claims.end(),
-									  std::make_move_iterator(draft.claims.begin()),
-									  std::make_move_iterator(draft.claims.end()));
-						return {};
-					});
-				if (!replayed)
-					return sdk::unexpected(std::move(replayed.error()));
-				if (unresolved != 0U)
-					return claim_batch_status{"",
-											  static_cast<std::uint64_t>(claims.size()),
-											  unresolved,
-											  0U,
-											  0U,
-											  partitions};
-				auto digest = sdk::claim_batch_content_digest(claims, {}, {}, {});
-				if (!digest)
-					return sdk::unexpected(std::move(digest.error()));
-				return claim_batch_status{std::move(*digest),
-										  static_cast<std::uint64_t>(claims.size()),
-										  0U,
-										  0U,
-										  0U,
-										  partitions};
+				auto status = bounded_->claim_batch_status();
+				if (!status)
+					return sdk::unexpected(std::move(status.error()));
+				return std::move(*status);
 			}
 
 		  private:

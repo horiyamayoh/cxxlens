@@ -1924,6 +1924,31 @@ namespace
 		auto full_reference =
 			construct_materialization_claims(request, full_reference_seals, producer, guarantee);
 		require(full_reference.has_value(), "full recomputation reference failed");
+		auto bounded_status = warm->bounded_claim_source().claim_batch_status();
+		require(
+			bounded_status &&
+				bounded_status->content_digest ==
+					full_reference->final_claim_batch().content_digest &&
+				bounded_status->claim_count ==
+					static_cast<std::uint64_t>(full_reference->final_claim_batch().claims.size()) &&
+				bounded_status->unresolved_count ==
+					static_cast<std::uint64_t>(
+						full_reference->final_claim_batch().unresolved.size()) &&
+				bounded_status->conflict_count ==
+					static_cast<std::uint64_t>(
+						full_reference->final_claim_batch().conflicts.size()) &&
+				bounded_status->differential_disagreement_count ==
+					static_cast<std::uint64_t>(
+						full_reference->final_claim_batch().differential_disagreements.size()) &&
+				bounded_status->partition_count == full_reference->partitions().size(),
+			"bounded claim status differs from the independent full recomputation");
+		auto repeated_bounded_status = warm->bounded_claim_source().claim_batch_status();
+		require(repeated_bounded_status &&
+					repeated_bounded_status->content_digest == bounded_status->content_digest &&
+					repeated_bounded_status->claim_count == bounded_status->claim_count &&
+					repeated_bounded_status->unresolved_count == bounded_status->unresolved_count &&
+					repeated_bounded_status->partition_count == bounded_status->partition_count,
+				"bounded claim status was not replayable");
 
 		std::vector<sdk::partition_draft> warm_partitions;
 		std::vector<sdk::unresolved_reference> warm_unresolved;
