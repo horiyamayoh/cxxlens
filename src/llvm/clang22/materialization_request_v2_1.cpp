@@ -3237,8 +3237,8 @@ namespace cxxlens::detail::clang22::materialization
 		if (!binding->input.source.empty() || !binding->input.source_content_base64.empty())
 			return sdk::unexpected(invalid("task", "metadata-source-residency"));
 		auto metadata = metadata_receipt(*binding, index);
-		return materialization_v2_1_task_metadata_binding{
-			std::move(binding->input), std::move(metadata)};
+		return materialization_v2_1_task_metadata_binding{std::move(binding->input),
+														  std::move(metadata)};
 	}
 
 	sdk::result<prevalidated_materialization_request_v2_1> prevalidate_materialization_request_v2_1(
