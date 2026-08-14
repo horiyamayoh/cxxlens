@@ -7,6 +7,7 @@ import codecs
 import copy
 import hashlib
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -24,6 +25,40 @@ from relation_idl_compiler import (  # noqa: E402
 
 
 class NgClang22MaterializationTests(unittest.TestCase):
+    def test_clang22_worker_kernel_source_closure_matches_kernel(self) -> None:
+        root_cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        worker_cmake = (
+            ROOT / "cmake/CxxlensClangTargets.cmake"
+        ).read_text(encoding="utf-8")
+
+        def sources_for_target(document: str, target: str) -> set[str]:
+            match = re.search(
+                rf"add_library\s*\(\s*{re.escape(target)}(?=\s|\))"
+                rf"(?P<body>.*?)\)",
+                document,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"missing CMake target declaration: {target}")
+            return set(
+                re.findall(
+                    r"\bsrc/[A-Za-z0-9_./-]+\.cpp\b", match.group("body")
+                )
+            )
+
+        kernel_sources = sources_for_target(root_cmake, "cxxlens_kernel")
+        worker_sources = sources_for_target(
+            worker_cmake, "cxxlens_clang22_worker_kernel_internal"
+        )
+        monotonic_clock_source = "src/runtime/monotonic_clock_port.cpp"
+        self.assertIn(monotonic_clock_source, kernel_sources)
+        self.assertEqual(
+            worker_sources,
+            kernel_sources,
+            "Clang 22 private worker kernel source closure drifted: "
+            f"missing={sorted(kernel_sources - worker_sources)}, "
+            f"extra={sorted(worker_sources - kernel_sources)}",
+        )
+
     def test_baseline_recovery_installed_surface_bindings_are_fail_closed(self) -> None:
         documents = {
             "root_cmake": (ROOT / materialization.ROOT_CMAKE).read_text(
