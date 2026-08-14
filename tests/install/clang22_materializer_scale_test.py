@@ -424,6 +424,21 @@ def installed_input_transfer_receipt(stdout_path: pathlib.Path) -> dict[str, Any
         ) from error
 
 
+def attach_installed_input_transfer_receipt(
+    process: dict[str, Any], stdout_path: pathlib.Path
+) -> None:
+    """Attach the receipt only after the installed process passed its boundary.
+
+    A failed installed invocation is expected to emit a compact failure report,
+    which intentionally has no task result or input-transfer receipt.  Reading
+    that failure as though it were a success report obscures the owning worker
+    failure with a false "receipt missing" error.
+    """
+
+    if process["status"] == "passed":
+        process["input_transfer"] = installed_input_transfer_receipt(stdout_path)
+
+
 def scenario_input(
     root: pathlib.Path,
     oracle: Any,
@@ -558,8 +573,8 @@ def run() -> int:
                 oracle,
                 run_directory / scenario_id / "installed" / "stdout",
             )
-            installed["input_transfer"] = installed_input_transfer_receipt(
-                run_directory / scenario_id / "installed" / "stdout"
+            attach_installed_input_transfer_receipt(
+                installed, run_directory / scenario_id / "installed" / "stdout"
             )
             installed["input_artifact"] = copy_if_requested(
                 installed_path, output, True

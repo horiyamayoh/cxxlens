@@ -187,6 +187,34 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	};
 
+	/** Source-private v2.1 execution seam consumed by the installed coordinator path. */
+	class materialization_incremental_v2_1_task_executor
+	{
+	  public:
+		virtual ~materialization_incremental_v2_1_task_executor() = default;
+
+		[[nodiscard]] virtual sdk::result<materialization_incremental_task_execution>
+		execute(std::size_t request_task_index,
+				materialization_v2_1_task_execution& task,
+				const materialization_incremental_task_binding& binding) = 0;
+
+		[[nodiscard]] virtual sdk::result<materialization_incremental_task_reuse>
+		load_reusable(std::size_t request_task_index,
+					  materialization_v2_1_task_execution& task,
+					  const materialization_incremental_task_binding& binding) = 0;
+
+		[[nodiscard]] virtual bool cancellation_requested() const noexcept = 0;
+
+		/** Production v2.1 may derive typed Store partitions from sealed event projections. */
+		[[nodiscard]] virtual bool dynamic_typed_partition_ids() const noexcept
+		{
+			return false;
+		}
+
+		/** Flush the executor's final task/journal transition after the cursor is exhausted. */
+		[[nodiscard]] virtual sdk::result<void> finalize_pending() = 0;
+	};
+
 	/** Compute the complete source-private digest bound by a reuse or execution receipt. */
 	[[nodiscard]] sdk::result<std::string>
 	seal_materialization_incremental_artifact_digest(const sealed_materialization_result& result);
@@ -308,6 +336,15 @@ namespace cxxlens::detail::clang22::materialization
 			materialization_incremental_task_executor& executor,
 			const materialization_producer_authority& producer_authority,
 			const materialization_guarantee_authority& guarantee_authority);
+
+		friend sdk::result<sealed_materialization_incremental_result>
+		run_materialization_incremental_coordinator_v2_1(
+			validated_materialization_request_v2_1& request,
+			const sdk::incremental::materialization_plan& plan,
+			std::vector<materialization_incremental_task_binding> bindings,
+			materialization_incremental_v2_1_task_executor& executor,
+			const materialization_v2_1_claim_authority& claim_authority,
+			const materialization_incremental_selected_request_binding_set& binding_set);
 	};
 
 	/** Coordinator result plus the exact Store observation, including any publication issue. */
@@ -362,6 +399,19 @@ namespace cxxlens::detail::clang22::materialization
 		const sdk::incremental::materialization_plan& plan,
 		std::span<const materialization_incremental_task_binding> bindings,
 		const materialization_v2_1_task_cursor_consumer& consumer);
+
+	/**
+	 * Execute the installed v2.1 task cursor through the common coordinator-owned ingress and
+	 * census boundary. Full recomputation parity is intentionally not inferred by this API.
+	 */
+	[[nodiscard]] sdk::result<sealed_materialization_incremental_result>
+	run_materialization_incremental_coordinator_v2_1(
+		validated_materialization_request_v2_1& request,
+		const sdk::incremental::materialization_plan& plan,
+		std::vector<materialization_incremental_task_binding> bindings,
+		materialization_incremental_v2_1_task_executor& executor,
+		const materialization_v2_1_claim_authority& claim_authority,
+		const materialization_incremental_selected_request_binding_set& binding_set);
 
 	/**
 	 * Execute or reuse a validated plan and construct claims only from the complete ordered result

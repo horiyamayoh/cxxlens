@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 import tempfile
@@ -102,6 +103,45 @@ class NgClang22MaterializationScaleTests(unittest.TestCase):
             assert artifact is not None
             self.assertEqual(artifact["path"], "inputs/request.json")
             self.assertEqual(checker.artifact_bytes(report, artifact), source.read_bytes())
+
+    def test_failed_installed_process_does_not_claim_a_success_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            stdout = root / "stdout"
+            stdout.write_text(
+                '{"response_kind":"compact_failure","result":"failed",'
+                '"task_results":null}',
+                encoding="utf-8",
+            )
+            process = {"status": "failed"}
+            scale.attach_installed_input_transfer_receipt(process, stdout)
+            self.assertNotIn("input_transfer", process)
+
+    def test_installed_success_receipt_is_bound_to_the_producer_task_result(self) -> None:
+        receipt = {
+            "protocol_version": "1.1.0",
+            "required_feature": "task-input-chunks-v1",
+            "task_input_codec": "cxxlens.clang22.task.v3",
+            "logical_input_bytes": 1,
+            "logical_input_digest": "sha256:" + "a" * 64,
+            "canonical_chunk_bytes": 1 << 20,
+            "chunk_count": 1,
+            "ordered_chunk_payload_digest_set_digest": "semantic-v2:sha256:" + "b" * 64,
+        }
+        response = {
+            "response_kind": "detailed",
+            "result": "passed",
+            "task_results": [{"input_transfer": receipt}],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            stdout = pathlib.Path(directory) / "stdout"
+            stdout.write_text(json.dumps(response), encoding="utf-8")
+            process = {"status": "passed"}
+            scale.attach_installed_input_transfer_receipt(process, stdout)
+            self.assertEqual(
+                process["input_transfer"],
+                checker.input_transfer_receipt_from_response(response, "one-task"),
+            )
 
     def test_raw_limit_rejection_requires_exact_driver_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

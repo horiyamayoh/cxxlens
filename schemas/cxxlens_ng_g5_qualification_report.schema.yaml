@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-g5-qualification-report.v1
 title: cxxlens exact-SHA G5 qualification report
 type: object
 additionalProperties: false
-required: [schema, result, generated_at, run_url, git, authority_digests, runtime_test, performance]
+required: [schema, result, generated_at, run_url, git, authority_digests, runtime_test, performance, production_coordinator]
 properties:
   schema: {const: cxxlens.ng-g5-qualification-report.v1}
   result: {const: passed}
@@ -33,9 +33,10 @@ properties:
   performance:
     type: object
     additionalProperties: false
-    required: [schema, fixture, method, budgets, metrics_us, environment]
+    required: [schema, source, fixture, method, budgets, metrics_us, environment]
     properties:
       schema: {const: cxxlens.g5-performance.v1}
+      source: {const: synthetic-planner}
       fixture: {const: {partitions: 2048, edges: 512}}
       method: {const: {clock: steady_clock, repetitions: 5, statistic: median}}
       budgets: {const: {max_iterations: 513, max_edges: 512}}
@@ -54,3 +55,136 @@ properties:
           compiler: {type: string, minLength: 1}
           operating_system: {type: string, minLength: 1}
           architecture: {type: string, minLength: 1}
+  production_coordinator:
+    $ref: '#/$defs/production_coordinator_evidence'
+$defs:
+  sha256_digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  materialization_artifact_digest:
+    type: string
+    pattern: '^materialization\.incremental-sealed-artifact:sha256:[0-9a-f]{64}$'
+  materialization_partition_set_digest:
+    type: string
+    pattern: '^materialization\.incremental-task-partition-set:sha256:[0-9a-f]{64}$'
+  evidence_git:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, branch, clean]
+    properties:
+      revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+      tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+      branch: {type: string, minLength: 1}
+      clean: {const: true}
+  production_execution_run:
+    type: object
+    additionalProperties: false
+    required:
+      - planned_provider_executions
+      - actual_provider_executions
+      - actual_recomputed_partition_count
+      - warm_zero
+      - affected_only
+      - exact_inputs_unchanged
+      - executed_partition_ids
+      - executed_provider_task_ids
+      - executed_provider_execution_ids
+      - executed_artifact_digests
+      - executed_task_partition_set_digests
+    properties:
+      planned_provider_executions: {type: integer, minimum: 0}
+      actual_provider_executions: {type: integer, minimum: 0}
+      actual_recomputed_partition_count: {type: integer, minimum: 0}
+      warm_zero: {type: boolean}
+      affected_only: {type: boolean}
+      exact_inputs_unchanged: {type: boolean}
+      executed_partition_ids:
+        type: array
+        items: {type: string, minLength: 1}
+      executed_provider_task_ids:
+        type: array
+        items: {type: string, minLength: 1}
+      executed_provider_execution_ids:
+        type: array
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+      executed_artifact_digests:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/materialization_artifact_digest'}
+      executed_task_partition_set_digests:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/materialization_partition_set_digest'}
+  production_coordinator_evidence:
+    type: object
+    additionalProperties: false
+    required:
+      - schema
+      - evidence_status
+      - producer
+      - git
+      - execution_census
+      - publication
+      - reopen
+      - independent_recompute
+    properties:
+      schema: {const: cxxlens.ng-g5-production-coordinator-evidence.v1}
+      evidence_status: {const: observed}
+      producer:
+        type: object
+        additionalProperties: false
+        required: [kind, synthetic_planner_evidence, interface, binary_digest, report_digest]
+        properties:
+          kind: {const: production-coordinator}
+          synthetic_planner_evidence: {const: false}
+          interface: {const: run_materialization_incremental_coordinator_and_publish}
+          binary_digest: {$ref: '#/$defs/sha256_digest'}
+          report_digest: {$ref: '#/$defs/sha256_digest'}
+      git:
+        $ref: '#/$defs/evidence_git'
+      execution_census:
+        type: object
+        additionalProperties: false
+        required:
+          - schema
+          - total_planned_provider_executions
+          - total_actual_provider_executions
+          - total_actual_recomputed_partition_count
+          - warm_zero
+          - affected_only
+        properties:
+          schema: {const: cxxlens.ng-g5-production-execution-census.v1}
+          total_planned_provider_executions: {type: integer, minimum: 1}
+          total_actual_provider_executions: {type: integer, minimum: 1}
+          total_actual_recomputed_partition_count: {type: integer, minimum: 1}
+          warm_zero:
+            $ref: '#/$defs/production_execution_run'
+          affected_only:
+            $ref: '#/$defs/production_execution_run'
+      publication:
+        type: object
+        additionalProperties: false
+        required: [backend, attempted, outcome, verified, publish_call_count, committed_transaction_count]
+        properties:
+          backend: {const: sqlite}
+          attempted: {const: true}
+          outcome: {const: committed_verified}
+          verified: {const: true}
+          publish_call_count: {const: 1}
+          committed_transaction_count: {const: 1}
+      reopen:
+        type: object
+        additionalProperties: false
+        required: [attempted, outcome, verified]
+        properties:
+          attempted: {const: true}
+          outcome: {const: opened}
+          verified: {const: true}
+      independent_recompute:
+        type: object
+        additionalProperties: false
+        required: [status, canonical_parity]
+        properties:
+          status: {const: passed}
+          canonical_parity: {const: passed}

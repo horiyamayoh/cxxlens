@@ -6441,7 +6441,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             (
                 "design-legacy-report-schema-digest",
                 design_text.replace(
-                    "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520",
+                    "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96",
                     "sha256:96c11ba8518075abed8e57c08bd38c10907b9d195ec1daafdb4fd0d57a583941",
                     1,
                 ),

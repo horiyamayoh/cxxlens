@@ -1,5 +1,5 @@
 {
-  "asset_count": 663,
+  "asset_count": 664,
   "assets": [
     {
       "authority": "active",
@@ -4567,6 +4567,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/produce_ng_g5_production_evidence.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/produce_ng_sqlite_store_v3_qualification.py",
       "removal_issue": null,
       "replacement": null,
@@ -4644,7 +4651,7 @@
     }
   ],
   "classifications": {
-    "active": 627,
+    "active": 628,
     "archived": 35,
     "generated": 1
   },

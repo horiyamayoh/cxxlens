@@ -163,6 +163,9 @@ SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME = (
     "cxxlens-ng-sqlite-store-v3-qualification-report.json"
 )
 SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES = 16_777_216
+NIGHTLY_EVIDENCE_FILENAME = "nightly-evidence-set.json"
+NIGHTLY_EVIDENCE_MAX_BYTES = 16_777_216
+QUALITY_OWNERSHIP_MANIFEST = pathlib.Path("schemas/cxxlens_ng_quality_ownership.yaml")
 
 
 class ReleaseQualificationError(ValueError):
@@ -376,6 +379,60 @@ def digest(path: pathlib.Path) -> str:
 
 def canonical_digest(value: Any) -> str:
     return digest_bytes(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode())
+
+
+def verify_nightly_evidence(
+    root: pathlib.Path, evidence: pathlib.Path, git: dict[str, Any]
+) -> dict[str, Any]:
+    """Require one successful, exact-SHA aggregate from the Nightly workflow."""
+
+    if not evidence.is_dir():
+        fail(f"exact-main Nightly evidence directory is missing: {evidence}")
+    report_path = find_one(evidence, NIGHTLY_EVIDENCE_FILENAME)
+    raw = read_bounded_artifact(
+        report_path, "exact-main Nightly evidence aggregate", NIGHTLY_EVIDENCE_MAX_BYTES
+    )
+    try:
+        report = json.loads(raw)
+    except json.JSONDecodeError as error:
+        fail(f"exact-main Nightly evidence aggregate is not JSON: {error}")
+    if not isinstance(report, dict):
+        fail("exact-main Nightly evidence aggregate is not an object")
+    if (
+        report.get("schema") != "cxxlens.quality-evidence-set.v1"
+        or report.get("mode") != "owners:nightly"
+        or report.get("result") != "passed"
+    ):
+        fail("exact-main Nightly evidence aggregate is not a passed owners:nightly set")
+    if report.get("revision") != git["revision"] or report.get("tree") != git["tree"]:
+        fail("exact-main Nightly evidence aggregate is not from the release revision/tree")
+
+    ownership = load(root / QUALITY_OWNERSHIP_MANIFEST)
+    expected_record_count = sum(
+        len(check["configurations"])
+        for check in ownership.get("checks", [])
+        if check.get("owner") == "nightly"
+    )
+    evidence_ids = report.get("evidence_ids")
+    if (
+        expected_record_count <= 0
+        or not isinstance(evidence_ids, list)
+        or len(evidence_ids) != expected_record_count
+        or evidence_ids != sorted(set(evidence_ids))
+        or any(
+            not isinstance(evidence_id, str)
+            or not evidence_id.startswith("quality-evidence:")
+            for evidence_id in evidence_ids
+        )
+    ):
+        fail("exact-main Nightly evidence aggregate has an incomplete evidence ID census")
+    if report.get("set_digest") != canonical_digest(evidence_ids):
+        fail("exact-main Nightly evidence aggregate set digest differs")
+    return {
+        "path": report_path,
+        "digest": digest_bytes(raw),
+        "report": report,
+    }
 
 
 def git_output(root: pathlib.Path, *arguments: str) -> str:
@@ -1050,19 +1107,41 @@ def validate_documents(
     for marker in (
         "needs: [g5-qualification, sqlite-store-v3-qualification]",
         "check_ng_release_qualification.py evaluate",
+        "--nightly-evidence-dir build/release-evaluation-nightly",
         '--github-output "${GITHUB_OUTPUT}"',
         "qualification: ${{ steps.evaluate.outputs.qualification }}",
     ):
         if marker not in evaluation_job.group("body"):
             fail(f"release evaluation workflow marker is missing: {marker}")
     for marker in (
+        "id: nightly-run",
+        'gh api --method GET',
+        'actions/workflows/nightly.yml/runs',
+        "-f head_sha=\"${GITHUB_SHA}\"",
+        "-f status=completed",
+        'name: cxxlens-nightly-evidence-${{ github.sha }}',
+        'github-token: ${{ github.token }}',
+        'repository: ${{ github.repository }}',
+        'run-id: ${{ steps.nightly-run.outputs.run-id }}',
+    ):
+        if marker not in evaluation_job.group("body"):
+            fail(f"exact-main Nightly evidence workflow marker is missing: {marker}")
+    for marker in (
         "needs: [release-evaluation]",
         "needs.release-evaluation.outputs.qualification == 'qualified'",
         "check_ng_release_qualification.py report",
         "--evaluation ",
+        "--nightly-evidence-dir build/release-qualification-input",
     ):
         if marker not in strict_job.group("body"):
             fail(f"strict release qualification workflow marker is missing: {marker}")
+    if "actions: read" not in workflow:
+        fail("release qualification workflow cannot read cross-workflow artifacts")
+    if (
+        "name: cxxlens-nightly-evidence-consumed-${{ github.sha }}" not in evaluation_job.group("body")
+        or "build/release-evaluation-nightly/nightly-evidence-set.json" not in evaluation_job.group("body")
+    ):
+        fail("release evaluation does not retain the Nightly evidence for strict revalidation")
     if "-DCXXLENS_BUILD_DOCS=ON" not in workflow:
         fail("release qualification workflow omits Doxygen production build")
     install = (root / "tests/install/run_install_test.cmake.in").read_text(encoding="utf-8")
@@ -2263,10 +2342,16 @@ def collect_release_evidence(
     evidence: pathlib.Path,
     security_path: pathlib.Path,
     expected_revision: str,
+    nightly_evidence: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     """Validate exact-SHA inputs without constructing either release report."""
 
     git = require_exact_clean_main(root, expected_revision)
+    nightly_evidence_binding = (
+        verify_nightly_evidence(root, nightly_evidence, git)
+        if nightly_evidence is not None
+        else None
+    )
     sqlite_store_v3_qualification = verify_sqlite_store_v3_qualification(
         root, manifest, evidence, git
     )
@@ -2385,6 +2470,7 @@ def collect_release_evidence(
         "security_path": security_path,
         "security": security,
         "sqlite_store_v3_qualification": sqlite_store_v3_qualification,
+        "nightly_evidence": nightly_evidence_binding,
     }
 
 
@@ -2591,9 +2677,15 @@ def make_report(
     expected_revision: str,
     generated_at: str,
     evaluation_path: pathlib.Path | None = None,
+    nightly_evidence_dir: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     evidence = collect_release_evidence(
-        root, manifest, evidence_dir, security_path, expected_revision
+        root,
+        manifest,
+        evidence_dir,
+        security_path,
+        expected_revision,
+        nightly_evidence_dir,
     )
     if evidence["scope_inventory"]["closure_status"] != "qualified":
         fail("strict GR report requires production scope with no tracked or blocked gaps")
@@ -2639,9 +2731,15 @@ def make_evaluation_report(
     run_url: str,
     expected_revision: str,
     generated_at: str,
+    nightly_evidence_dir: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     evidence = collect_release_evidence(
-        root, manifest, evidence_dir, security_path, expected_revision
+        root,
+        manifest,
+        evidence_dir,
+        security_path,
+        expected_revision,
+        nightly_evidence_dir,
     )
     qualified = evidence["scope_inventory"]["closure_status"] == "qualified"
     report = {
@@ -2677,6 +2775,7 @@ def main() -> int:
     )
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     parser.add_argument("--evidence-dir", type=pathlib.Path)
+    parser.add_argument("--nightly-evidence-dir", type=pathlib.Path)
     parser.add_argument("--security-report", type=pathlib.Path)
     parser.add_argument("--evaluation", type=pathlib.Path)
     parser.add_argument("--gr", type=pathlib.Path)
@@ -2709,6 +2808,11 @@ def main() -> int:
                     f"{arguments.command} requires evidence, security report, output, "
                     "run URL, and expected revision"
                 )
+            if arguments.nightly_evidence_dir is None:
+                fail(
+                    f"{arguments.command} requires --nightly-evidence-dir from the "
+                    "exact-main Nightly workflow run"
+                )
             if arguments.command == "report" and arguments.evaluation is None:
                 fail("report requires a qualified evaluation artifact")
             generated_at = arguments.generated_at or datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
@@ -2721,6 +2825,7 @@ def main() -> int:
                     arguments.run_url,
                     arguments.expected_revision,
                     generated_at,
+                    arguments.nightly_evidence_dir.resolve(),
                 )
             else:
                 report = make_report(
@@ -2732,6 +2837,7 @@ def main() -> int:
                     arguments.expected_revision,
                     generated_at,
                     arguments.evaluation.resolve(),
+                    arguments.nightly_evidence_dir.resolve(),
                 )
             arguments.output.parent.mkdir(parents=True, exist_ok=True)
             arguments.output.write_text(json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")

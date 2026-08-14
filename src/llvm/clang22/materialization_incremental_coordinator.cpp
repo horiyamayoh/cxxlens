@@ -180,6 +180,19 @@ namespace cxxlens::detail::clang22::materialization
 				task.metadata.final_relation_compile_unit_id;
 		}
 
+		[[nodiscard]] bool
+		result_matches_v2_1_task(const sealed_materialization_result& result,
+								 const materialization_v2_1_task_execution& task) noexcept
+		{
+			return result.provider_task_id() == task.metadata.provider_task_id &&
+				result.task_input_digest() == task.metadata.task_input_digest &&
+				result.provider_execution_id() == task.metadata.provider_execution_id &&
+				result.selected_catalog_compile_unit_id() ==
+				task.metadata.selected_catalog_compile_unit_id &&
+				result.final_relation_compile_unit_id() ==
+				task.metadata.final_relation_compile_unit_id;
+		}
+
 		[[nodiscard]] sdk::error execution_error(const std::string_view detail)
 		{
 			return sdk::error{
@@ -437,6 +450,325 @@ namespace cxxlens::detail::clang22::materialization
 		catch (...)
 		{
 			return sdk::unexpected(coordinator_error("cursor", "exception"));
+		}
+	}
+
+	sdk::result<sealed_materialization_incremental_result>
+	run_materialization_incremental_coordinator_v2_1(
+		validated_materialization_request_v2_1& request,
+		const sdk::incremental::materialization_plan& plan,
+		std::vector<materialization_incremental_task_binding> bindings,
+		materialization_incremental_v2_1_task_executor& executor,
+		const materialization_v2_1_claim_authority& claim_authority,
+		const materialization_incremental_selected_request_binding_set& binding_set)
+	{
+		try
+		{
+			if (auto valid = plan.validate(); !valid)
+				return sdk::unexpected(coordinator_error("plan", "plan-validation"));
+			const auto task_count = request.request().task_count();
+			if (task_count == 0U || task_count > std::numeric_limits<std::size_t>::max() ||
+				bindings.size() != static_cast<std::size_t>(task_count))
+				return sdk::unexpected(coordinator_error("tasks", "exact-census"));
+
+			const auto task_count_size = static_cast<std::size_t>(task_count);
+			std::vector<const materialization_incremental_task_binding*> by_task(task_count_size);
+			std::map<std::string, const sdk::incremental::plan_entry*, std::less<>> plan_entries;
+			for (const auto& entry : plan.entries)
+				if (!plan_entries.emplace(entry.partition_id, &entry).second)
+					return sdk::unexpected(
+						coordinator_error("plan.entries", "duplicate-partition"));
+
+			std::set<std::string, std::less<>> binding_ids;
+			std::vector<std::optional<sdk::incremental::action>> task_actions(task_count_size);
+			std::uint64_t recompute_partition_count{};
+			std::uint64_t recompute_task_count{};
+			for (auto& binding : bindings)
+			{
+				const auto task_index = binding.task_identity.canonical_task_ordinal;
+				if (task_index >= task_count_size || binding.partitions.empty() ||
+					by_task[task_index] != nullptr ||
+					!std::ranges::is_sorted(
+						binding.partitions,
+						{},
+						&materialization_incremental_partition_binding::partition_id))
+					return sdk::unexpected(coordinator_error("bindings", "task-partition-order"));
+
+				std::optional<sdk::incremental::action> task_action;
+				for (const auto& partition : binding.partitions)
+				{
+					const auto plan_entry = plan_entries.find(partition.partition_id);
+					if (!sdk::validate_strong_id(partition.partition_id) ||
+						plan_entry == plan_entries.end() ||
+						!binding_ids.insert(partition.partition_id).second ||
+						!partition.current_state || !partition.current_state->validate() ||
+						partition.current_state->partition_id != partition.partition_id)
+						return sdk::unexpected(
+							coordinator_error("bindings", "partition-task-mismatch"));
+					if (task_action && *task_action != plan_entry->second->decision)
+						return sdk::unexpected(
+							coordinator_error("bindings", "mixed-task-decisions"));
+					task_action = plan_entry->second->decision;
+					if (*task_action == sdk::incremental::action::recompute)
+						++recompute_partition_count;
+				}
+				task_actions[task_index] = task_action;
+				if (*task_action == sdk::incremental::action::recompute)
+					++recompute_task_count;
+				by_task[task_index] = &binding;
+			}
+			if (std::ranges::any_of(by_task,
+									[](const auto* binding)
+									{
+										return binding == nullptr;
+									}))
+				return sdk::unexpected(coordinator_error("bindings", "missing-task"));
+
+			std::set<std::string, std::less<>> plan_ids;
+			for (const auto& [partition_id, entry] : plan_entries)
+			{
+				(void)entry;
+				plan_ids.insert(partition_id);
+			}
+			if (binding_ids != plan_ids ||
+				recompute_partition_count != plan.frontend_provider_executions)
+				return sdk::unexpected(coordinator_error("bindings", "plan-partition-census"));
+
+			auto ingress_begin = materialization_incremental_ingress::begin_dynamic(
+				request, claim_authority, binding_set);
+			if (!ingress_begin)
+				return sdk::unexpected(coordinator_error("ingress", ingress_begin.error().detail));
+			std::optional<materialization_incremental_ingress> ingress{std::move(*ingress_begin)};
+			auto bounded_source = materialization_bounded_claim_source::begin(claim_authority);
+			if (!bounded_source)
+				return sdk::unexpected(
+					coordinator_error("claim-source", bounded_source.error().detail));
+
+			materialization_incremental_execution_census census{plan.frontend_provider_executions,
+																recompute_task_count,
+																0U,
+																0U,
+																plan.warm_zero,
+																{},
+																{},
+																{},
+																{},
+																{},
+																{}};
+			std::set<std::string, std::less<>> provider_execution_ids;
+			const auto consume_output =
+				[&](auto output,
+					const std::size_t task_index,
+					const sdk::incremental::action action,
+					materialization_v2_1_task_execution& task,
+					const materialization_incremental_task_binding& binding) -> sdk::result<void>
+			{
+				const auto expected_provider_calls =
+					action == sdk::incremental::action::recompute ? 1U : 0U;
+				const auto& expected_partitions = binding.partitions;
+				std::vector<std::string> expected_partition_ids;
+				expected_partition_ids.reserve(expected_partitions.size());
+				for (const auto& partition : expected_partitions)
+					expected_partition_ids.push_back(partition.partition_id);
+				if (output.receipt.provider_call_count != expected_provider_calls ||
+					!result_matches_v2_1_task(output.result, task) ||
+					output.receipt.provider_task_id != output.result.provider_task_id() ||
+					output.receipt.provider_execution_id != output.result.provider_execution_id() ||
+					(!executor.dynamic_typed_partition_ids() &&
+					 output.receipt.covered_partition_ids != expected_partition_ids) ||
+					!output.receipt.pre_encoder_seal)
+					return sdk::unexpected(coordinator_error("executor", "sealed-result-mismatch"));
+				if (!provider_execution_ids.insert(output.receipt.provider_execution_id).second)
+					return sdk::unexpected(coordinator_error("executor", "duplicate-execution-id"));
+				auto artifact_digest =
+					seal_materialization_incremental_artifact_digest(output.result);
+				if (!artifact_digest || *artifact_digest != output.receipt.sealed_artifact_digest)
+					return sdk::unexpected(
+						coordinator_error("executor", "artifact-receipt-mismatch"));
+				auto pre_encoder = std::move(*output.receipt.pre_encoder_seal);
+				if (pre_encoder.result_artifact_digest != *artifact_digest ||
+					pre_encoder.partition_ids != output.receipt.covered_partition_ids ||
+					pre_encoder.task_partition_set_digest !=
+						output.receipt.task_partition_set_digest)
+					return sdk::unexpected(
+						coordinator_error("receipt", "pre-encoder-seal-mismatch"));
+				auto partition_digest = seal_materialization_incremental_task_partition_set_digest(
+					output.receipt.covered_partition_ids);
+				if (!partition_digest ||
+					*partition_digest != output.receipt.task_partition_set_digest)
+					return sdk::unexpected(coordinator_error("receipt", "partition-set-mismatch"));
+				if (auto valid = validate_materialization_incremental_task_receipt(
+						claim_authority, binding_set, task_index, task, pre_encoder.task_receipt);
+					!valid)
+					return sdk::unexpected(std::move(valid.error()));
+				auto events = materialization_incremental_result_event_projections(
+					claim_authority,
+					task_index,
+					task,
+					output.result,
+					output.receipt.covered_partition_ids);
+				if (!events)
+					return sdk::unexpected(coordinator_error("receipt", "oracle-unavailable"));
+				const auto& supplied = pre_encoder.task_receipt;
+				auto expected = make_materialization_incremental_task_receipt(
+					claim_authority,
+					binding_set,
+					task_index,
+					task,
+					supplied.provider_stdout_byte_count,
+					supplied.provider_stdout_sha256,
+					supplied.decoded_provider_frame_count,
+					supplied.provider_frame_transcript_digest,
+					supplied.provider_sealed_transcript_digest,
+					std::span<const materialization_incremental_event_projection>{*events});
+				if (!expected || *expected != supplied)
+					return sdk::unexpected(
+						coordinator_error("receipt", "pre-encoder-seal-mismatch"));
+				if (!output.encode_partition_spools)
+					return sdk::unexpected(
+						coordinator_error("executor", "missing-delayed-encoder"));
+				auto encoded_spools = output.encode_partition_spools(output.result, pre_encoder);
+				if (!encoded_spools)
+					return sdk::unexpected(std::move(encoded_spools.error()));
+				auto task_claims = construct_materialization_bounded_task_claims(
+					claim_authority, task_index, task, output.result);
+				if (!task_claims)
+					return sdk::unexpected(std::move(task_claims.error()));
+				materialization_incremental_task_ingress ingress_task{
+					std::move(output.result),
+					std::move(pre_encoder.task_receipt),
+					std::move(*encoded_spools)};
+				if (auto consumed = std::move(*ingress).consume_task(task, std::move(ingress_task));
+					!consumed)
+					return sdk::unexpected(std::move(consumed.error()));
+				if (auto consumed = bounded_source->consume_task(std::move(*task_claims));
+					!consumed)
+					return sdk::unexpected(std::move(consumed.error()));
+				if (action == sdk::incremental::action::recompute)
+				{
+					++census.actual_provider_executions;
+					census.executed_partition_ids.insert(
+						census.executed_partition_ids.end(),
+						output.receipt.covered_partition_ids.begin(),
+						output.receipt.covered_partition_ids.end());
+					census.executed_provider_task_ids.push_back(output.receipt.provider_task_id);
+					census.executed_provider_execution_ids.push_back(
+						output.receipt.provider_execution_id);
+					census.executed_artifact_digests.push_back(
+						output.receipt.sealed_artifact_digest);
+					census.executed_task_partition_set_digests.push_back(
+						output.receipt.task_partition_set_digest);
+					census.actual_recomputed_partition_count +=
+						output.receipt.covered_partition_ids.size();
+				}
+				return {};
+			};
+
+			auto cursor_run = run_materialization_incremental_v2_1_task_cursor(
+				request,
+				plan,
+				std::span<const materialization_incremental_task_binding>{bindings},
+				[&](const std::size_t task_index,
+					const sdk::incremental::action action,
+					materialization_v2_1_task_execution& task,
+					const materialization_incremental_task_binding& binding) -> sdk::result<void>
+				{
+					if (action == sdk::incremental::action::reuse)
+					{
+						auto reused = executor.load_reusable(task_index, task, binding);
+						if (!reused)
+							return sdk::unexpected(std::move(reused.error()));
+						return consume_output(
+							std::move(*reused), task_index, action, task, binding);
+					}
+					if (executor.cancellation_requested())
+						return sdk::unexpected(coordinator_error("executor", "cancelled"));
+					auto executed = executor.execute(task_index, task, binding);
+					if (!executed)
+						return sdk::unexpected(std::move(executed.error()));
+					return consume_output(std::move(*executed), task_index, action, task, binding);
+				});
+			if (!cursor_run)
+				return sdk::unexpected(std::move(cursor_run.error()));
+			if (auto finalized = executor.finalize_pending(); !finalized)
+				return sdk::unexpected(std::move(finalized.error()));
+			if (executor.cancellation_requested())
+				return sdk::unexpected(coordinator_error("executor", "cancelled"));
+			const auto sort_values = [](auto& values)
+			{
+				std::ranges::sort(values);
+			};
+			const auto sort_unique = [&](auto& values)
+			{
+				sort_values(values);
+				return std::ranges::adjacent_find(values) == values.end();
+			};
+			sort_values(census.executed_partition_ids);
+			sort_values(census.executed_provider_task_ids);
+			const bool execution_unique = sort_unique(census.executed_provider_execution_ids);
+			const bool artifact_unique = sort_unique(census.executed_artifact_digests);
+			const bool partition_digest_unique =
+				sort_unique(census.executed_task_partition_set_digests);
+			const bool census_valid =
+				census.actual_provider_executions == census.planned_provider_task_executions &&
+				census.executed_partition_ids.size() == census.actual_recomputed_partition_count &&
+				census.executed_provider_task_ids.size() == census.actual_provider_executions &&
+				census.executed_provider_execution_ids.size() ==
+					census.actual_provider_executions &&
+				census.executed_artifact_digests.size() == census.actual_provider_executions &&
+				census.executed_task_partition_set_digests.size() ==
+					census.actual_provider_executions &&
+				execution_unique && artifact_unique && partition_digest_unique &&
+				census.warm_zero == (census.actual_provider_executions == 0U);
+			if (!census_valid)
+			{
+				const auto detail = std::string{"planned="} +
+					std::to_string(census.planned_provider_executions) +
+					",planned-tasks=" + std::to_string(census.planned_provider_task_executions) +
+					",actual=" + std::to_string(census.actual_provider_executions) +
+					",partitions=" + std::to_string(census.actual_recomputed_partition_count) +
+					",ids=" + std::to_string(census.executed_partition_ids.size()) +
+					",tasks=" + std::to_string(census.executed_provider_task_ids.size()) +
+					",executions=" + std::to_string(census.executed_provider_execution_ids.size()) +
+					",artifacts=" + std::to_string(census.executed_artifact_digests.size()) +
+					",partition-digests=" +
+					std::to_string(census.executed_task_partition_set_digests.size()) +
+					",warm-zero=" + (census.warm_zero ? "true" : "false") +
+					",execution-unique=" + (execution_unique ? "true" : "false") +
+					",artifact-unique=" + (artifact_unique ? "true" : "false") +
+					",partition-digest-unique=" + (partition_digest_unique ? "true" : "false");
+				return sdk::unexpected(coordinator_error("execution", detail));
+			}
+
+			auto ingress_result = std::move(*ingress).finalize_with_claim_stream();
+			if (!ingress_result)
+				return sdk::unexpected(coordinator_error("receipt", ingress_result.error().detail));
+			census.execution_journal_receipt = ingress_result->journal;
+			auto claim_stream = materialization_claim_stream_source::begin(
+				request.identity().materialization_request_id,
+				task_count,
+				ingress_result->journal,
+				std::move(ingress_result->claim_stream_tasks));
+			if (!claim_stream)
+				return sdk::unexpected(
+					coordinator_error("claim-stream", claim_stream.error().detail));
+			auto bounded = std::move(*bounded_source).finalize();
+			if (!bounded)
+				return sdk::unexpected(coordinator_error("claim-source", bounded.error().detail));
+			return sealed_materialization_incremental_result{
+				std::move(*bounded), std::move(census), std::move(*claim_stream)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(coordinator_error("allocation", "unavailable"));
+		}
+		catch (const std::length_error&)
+		{
+			return sdk::unexpected(coordinator_error("allocation", "unavailable"));
+		}
+		catch (...)
+		{
+			return sdk::unexpected(execution_error("unexpected"));
 		}
 	}
 

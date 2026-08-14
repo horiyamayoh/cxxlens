@@ -573,7 +573,7 @@ codec/completeness/counter/SQLite-decision binding を照合する。generic Sto
   sandbox array boundだけを追加する。SQLite writer_publish ENOSPC/SQLITE_TOOBIGは既存の store.sqlite-failure/database/opaque と
   publication_outcome_unknown、返却済handle後の検証failureはsafeなら committed_unverified を保つ。exit 2 はresponse-unsafe failureまたは
   successful receipt/arithmetic contradictionだけである。
-- **D6/accepted Option A; report-schema activation applied, qualification pending:** report schema digestは sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520。
+- **D6/accepted Option A; report-schema activation applied, qualification pending:** report schema digestは sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96。
   SQLite v2 single BLOB/MAX_LENGTH 1,000,000,000 はlimit-adjacent passed parityを満たさないため、ADR 0097 の
   `cxxlens.sqlite-semantic-store.v3` / 3.0.0、8 MiB chunk、16 MiB runtime floor、exact v2.6 read-only dual-read、
   `compact()` deterministic COW migration を採用する。v2 `begin()` は exact

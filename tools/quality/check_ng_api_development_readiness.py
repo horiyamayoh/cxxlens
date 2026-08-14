@@ -476,6 +476,21 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
         },
         "release-evaluation evidence download",
     )
+    nightly_download_index = require_action_step(
+        evaluation_config,
+        {
+            "name": "Download exact-main Nightly evidence",
+            "uses": download_action,
+            "with": {
+                "name": "cxxlens-nightly-evidence-${{ github.sha }}",
+                "github-token": "${{ github.token }}",
+                "repository": "${{ github.repository }}",
+                "run-id": "${{ steps.nightly-run.outputs.run-id }}",
+                "path": "build/release-evaluation-nightly",
+            },
+        },
+        "exact-main Nightly evidence download",
+    )
     evaluation_upload_index = require_action_step(
         evaluation_config,
         {
@@ -606,6 +621,9 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     evaluation_step = configured_step(
         evaluation_config, "Evaluate exact-SHA distribution 1.0 qualification"
     )
+    nightly_run_step = configured_step(
+        evaluation_config, "Locate the exact-main Nightly evidence run"
+    )
     strict_step = configured_step(
         strict_config, "Generate exact-SHA distribution 1.0 GR report"
     )
@@ -641,11 +659,13 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
         },
     ]
     if (
-        len(evaluation_steps) != 6
+        len(evaluation_steps) != 9
         or evaluation_steps[:3] != common_setup_steps
-        or evaluation_download_index != 3
-        or evaluation_steps.index(evaluation_step) != 4
-        or evaluation_upload_index != 5
+        or evaluation_steps.index(nightly_run_step) != 3
+        or nightly_download_index != 4
+        or evaluation_download_index != 5
+        or evaluation_steps.index(evaluation_step) != 6
+        or evaluation_upload_index != 7
     ):
         fail("release-evaluation workflow step order differs")
     if (
@@ -668,6 +688,11 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     ):
         fail("terminal production-scope workflow step order differs")
     for step, expected_keys, name in (
+        (
+            nightly_run_step,
+            {"name", "id", "env", "run"},
+            "exact-main Nightly evidence lookup",
+        ),
         (evaluation_step, {"name", "id", "run"}, "release evaluation"),
         (strict_step, {"name", "run"}, "strict release qualification"),
         (
@@ -727,6 +752,8 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
             ".",
             "--evidence-dir",
             "build/release-evaluation-input",
+            "--nightly-evidence-dir",
+            "build/release-evaluation-nightly",
             "--security-report",
             "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json",
             "--output",
@@ -746,6 +773,8 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
         "--root",
         ".",
         "--evidence-dir",
+        "build/release-qualification-input",
+        "--nightly-evidence-dir",
         "build/release-qualification-input",
         "--security-report",
         "build/release-qualification-input/"

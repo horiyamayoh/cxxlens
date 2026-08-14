@@ -233,6 +233,37 @@ def main() -> int:
     }:
         fail("installed success report provider binding differs")
 
+    incremental_execution = report["incremental_execution"]
+    if (
+        incremental_execution["schema"]
+        != "cxxlens.ng-g5-production-execution-census.v1"
+        or incremental_execution["planned_provider_executions"]
+        != len(request["tasks"])
+        or incremental_execution["planned_provider_task_executions"]
+        != len(request["tasks"])
+        or incremental_execution["actual_provider_executions"]
+        != len(request["tasks"])
+        or incremental_execution["warm_zero"]
+    ):
+        fail("installed success report incremental execution census differs")
+    if (
+        incremental_execution["actual_recomputed_partition_count"]
+        != len(incremental_execution["executed_partition_ids"])
+        or len(incremental_execution["executed_provider_task_ids"])
+        != len(request["tasks"])
+        or len(incremental_execution["executed_provider_execution_ids"])
+        != len(request["tasks"])
+        or len(
+            set(incremental_execution["executed_provider_execution_ids"])
+        )
+        != len(request["tasks"])
+        or len(incremental_execution["executed_artifact_digests"])
+        != len(request["tasks"])
+        or len(incremental_execution["executed_task_partition_set_digests"])
+        != len(request["tasks"])
+    ):
+        fail("installed success report incremental execution receipt census differs")
+
     publication = report["publication"]
     if (
         publication["backend"] != args.backend

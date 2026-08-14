@@ -350,6 +350,7 @@ namespace
 		std::ofstream output{path, std::ios::binary | std::ios::trunc};
 		require(output.good(), "benchmark report could not be opened");
 		output << "{\"schema\":\"cxxlens.g5-performance.v1\","
+			   << "\"source\":\"synthetic-planner\","
 			   << "\"fixture\":{\"partitions\":" << partition_count << ",\"edges\":" << edge_count
 			   << "},\"method\":{\"clock\":\"steady_clock\",\"repetitions\":" << repetitions
 			   << ",\"statistic\":\"median\"},"

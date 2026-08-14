@@ -249,7 +249,7 @@ EXPECTED_REQUEST_SCHEMA_CANONICAL_DIGEST = (
     "sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270"
 )
 EXPECTED_REPORT_SCHEMA_CANONICAL_DIGEST = (
-    "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520"
+    "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96"
 )
 DF_0200_REPORT_SHAPE_ACTIVATION = (
     "request-2.1.0-unchanged-report-private-spool-failure-"
@@ -13301,6 +13301,33 @@ def sample_report(
     }
     provenance["edge_set_digest"] = "pending"
     exact_request_bytes = canonical_json(request) if request_bytes is None else request_bytes
+    incremental_execution = {
+        "schema": "cxxlens.ng-g5-production-execution-census.v1",
+        "planned_provider_executions": task_count,
+        "planned_provider_task_executions": task_count,
+        "actual_provider_executions": task_count,
+        "actual_recomputed_partition_count": task_count,
+        "warm_zero": False,
+        "executed_partition_ids": [
+            f"partition:fixture:{index}" for index in range(task_count)
+        ],
+        "executed_provider_task_ids": [
+            result["provider_task_id"] for result in task_results
+        ],
+        "executed_provider_execution_ids": [
+            result["provider_execution_id"] for result in task_results
+        ],
+        "executed_artifact_digests": [
+            "materialization.incremental-sealed-artifact:sha256:"
+            + f"{index + 1:064x}"
+            for index in range(task_count)
+        ],
+        "executed_task_partition_set_digests": [
+            "materialization.incremental-task-partition-set:sha256:"
+            + f"{index + 1:064x}"
+            for index in range(task_count)
+        ],
+    }
     report = {
         "schema": "cxxlens.clang22-materialization-report.v2",
         "report_version": MATERIALIZATION_VERSION,
@@ -13459,6 +13486,7 @@ def sample_report(
             "reopen_attempt": None,
             "failure": None,
         },
+        "incremental_execution": incremental_execution,
         "authority_digests": copy.deepcopy(authority_bindings(root)),
         "error": None,
     }
@@ -16178,7 +16206,7 @@ def validate_v2_1_admission_authority_text(
                 "request 2.1.0 shape は不変",
                 "13/19-file occurrence inventory",
                 "`task_sandbox_requirements maxItems: 4096`",
-                "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520",
+                "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96",
                 "operation-authentic kind×operation matrix",
                 "全 mismatched pair は no-response",
                 "root member の missing/extra",
@@ -16225,7 +16253,7 @@ def validate_v2_1_admission_authority_text(
                 "request 2.1.0 shape は不変",
                 "13/19-file occurrence inventory",
                 "sandbox array bound",
-                "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520",
+                "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96",
                 "operation-authentic kind×operation matrix",
                 "全 mismatched pair は no-response",
                 "root member missing/extra",

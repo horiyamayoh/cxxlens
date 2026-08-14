@@ -21,6 +21,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = pathlib.Path("schemas/cxxlens_ng_g5_qualification.yaml")
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_g5_qualification.schema.yaml")
 REPORT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_g5_qualification_report.schema.yaml")
+MATERIALIZATION_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
+)
 ACCEPTANCE = pathlib.Path("schemas/cxxlens_ng_acceptance_manifest.yaml")
 PUBLIC_API = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.yaml")
 QUERY_CONTRACT = pathlib.Path("schemas/cxxlens_ng_logical_query_contract.yaml")
@@ -44,6 +47,16 @@ def load(path: pathlib.Path) -> dict[str, Any]:
     return value
 
 
+def load_json(path: pathlib.Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        fail(f"production coordinator evidence is not valid JSON: {path}: {error}")
+    if not isinstance(value, dict):
+        fail(f"production coordinator evidence is not an object: {path}")
+    return value
+
+
 def validate_schema(value: Any, schema: dict[str, Any], label: str) -> None:
     try:
         jsonschema.Draft202012Validator.check_schema(schema)
@@ -55,41 +68,177 @@ def validate_schema(value: Any, schema: dict[str, Any], label: str) -> None:
         fail(f"{label} schema validation failed: {error.message}")
 
 
+def validate_schema_definition(schema: dict[str, Any], label: str) -> None:
+    try:
+        jsonschema.Draft202012Validator.check_schema(schema)
+    except jsonschema.SchemaError as error:
+        fail(f"{label} schema definition is invalid: {error.message}")
+
+
 def sha256(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def validate_evidence_policy(manifest: dict[str, Any]) -> None:
+    expected = {
+        "schema": "cxxlens.ng-g5-production-coordinator-evidence.v1",
+        "input": "required",
+        "source": "production-coordinator-only",
+        "synthetic_planner_evidence": "non-qualifying",
+        "exact_binding": ["revision", "tree", "branch", "clean"],
+        "required_observations": [
+            "actual-provider-execution-census",
+            "warm-zero",
+            "affected-only",
+            "publication-outcome",
+            "reopen-outcome",
+        ],
+    }
+    actual = manifest.get("provider_hardening", {}).get("evidence_ownership", {}).get(
+        "production_coordinator"
+    )
+    if actual != expected:
+        fail("G5 production-coordinator evidence ownership policy differs")
+
+
+def validate_production_coordinator_evidence(
+    root: pathlib.Path,
+    evidence_path: pathlib.Path | None,
+    expected_revision: str | None = None,
+    production_binary: pathlib.Path | None = None,
+    production_report: pathlib.Path | None = None,
+) -> dict[str, Any]:
+    if evidence_path is None:
+        fail("production-coordinator evidence input is required")
+    if not evidence_path.is_file():
+        fail(f"production-coordinator evidence input is missing: {evidence_path}")
+
+    report_schema = load(root / REPORT_SCHEMA)
+    evidence_schema = dict(report_schema.get("$defs", {}).get("production_coordinator_evidence", {}))
+    if not evidence_schema:
+        fail("G5 report schema omits production-coordinator evidence definition")
+    evidence_schema["$defs"] = report_schema.get("$defs", {})
+    validate_schema_definition(report_schema, "G5 report")
+    evidence = load_json(evidence_path)
+    validate_schema(evidence, evidence_schema, "production-coordinator evidence")
+
+    actual_git = git_state(root)
+    evidence_git = evidence["git"]
+    if evidence_git != actual_git:
+        fail(
+            "production-coordinator evidence is not bound to the exact local SHA/tree/state: "
+            f"evidence={evidence_git}, actual={actual_git}"
+        )
+    if expected_revision is not None and evidence_git["revision"] != expected_revision:
+        fail(
+            "production-coordinator evidence revision differs from expected SHA: "
+            f"{evidence_git['revision']} != {expected_revision}"
+        )
+
+    if (production_binary is None) != (production_report is None):
+        fail("production binary and production report inputs must be supplied together")
+    if production_binary is not None and production_report is not None:
+        if (
+            production_binary.is_symlink()
+            or not production_binary.is_file()
+            or production_report.is_symlink()
+            or not production_report.is_file()
+        ):
+            fail("production binary/report inputs must be regular files")
+        if sha256(production_binary) != evidence["producer"]["binary_digest"]:
+            fail("production coordinator binary digest does not match the evidence")
+        if sha256(production_report) != evidence["producer"]["report_digest"]:
+            fail("production coordinator report digest does not match the evidence")
+        report = load_json(production_report)
+        validate_schema(
+            report,
+            load(root / MATERIALIZATION_REPORT_SCHEMA),
+            "production coordinator report",
+        )
+        if report.get("response_kind") != "detailed" or report.get("result") != "passed":
+            fail("production coordinator report is not a detailed passed response")
+        report_census = report.get("incremental_execution")
+        if not isinstance(report_census, dict):
+            fail("production coordinator report lacks incremental execution census")
+        affected_only = evidence["execution_census"]["affected_only"]
+        for field in (
+            "planned_provider_executions",
+            "actual_provider_executions",
+            "actual_recomputed_partition_count",
+            "warm_zero",
+            "executed_partition_ids",
+            "executed_provider_task_ids",
+            "executed_provider_execution_ids",
+            "executed_artifact_digests",
+            "executed_task_partition_set_digests",
+        ):
+            if report_census.get(field) != affected_only.get(field):
+                fail(f"production coordinator report census differs for {field}")
+        publication = report.get("publication", {})
+        if (
+            publication.get("backend") != "sqlite"
+            or publication.get("outcome") != "committed_verified"
+            or publication.get("committed_transaction_count")
+            != evidence["publication"]["committed_transaction_count"]
+            or publication.get("sqlite_reopen_status") != "opened"
+        ):
+            fail("production coordinator report publication does not match evidence")
+        if report.get("semantic_verification", {}).get("status") != "passed":
+            fail("production coordinator report semantic verification is not passed")
+
+    census = evidence["execution_census"]
+    warm_zero = census["warm_zero"]
+    affected_only = census["affected_only"]
+    if (
+        not warm_zero["warm_zero"]
+        or warm_zero["affected_only"]
+        or not warm_zero["exact_inputs_unchanged"]
+        or warm_zero["actual_provider_executions"] != 0
+        or warm_zero["actual_recomputed_partition_count"] != 0
+        or warm_zero["executed_partition_ids"]
+        or warm_zero["executed_provider_task_ids"]
+        or warm_zero["executed_provider_execution_ids"]
+        or warm_zero["executed_artifact_digests"]
+        or warm_zero["executed_task_partition_set_digests"]
+    ):
+        fail("production-coordinator warm-zero census is not zero and unchanged")
+    if (
+        affected_only["warm_zero"]
+        or not affected_only["affected_only"]
+        or affected_only["exact_inputs_unchanged"]
+        or affected_only["actual_provider_executions"] < 1
+        or affected_only["actual_recomputed_partition_count"] < 1
+        or not affected_only["executed_partition_ids"]
+        or not affected_only["executed_provider_task_ids"]
+        or not affected_only["executed_provider_execution_ids"]
+    ):
+        fail("production-coordinator affected-only census is incomplete")
+    if (
+        census["total_actual_provider_executions"]
+        != warm_zero["actual_provider_executions"] + affected_only["actual_provider_executions"]
+        or census["total_actual_recomputed_partition_count"]
+        != warm_zero["actual_recomputed_partition_count"]
+        + affected_only["actual_recomputed_partition_count"]
+        or census["total_planned_provider_executions"]
+        < census["total_actual_provider_executions"]
+    ):
+        fail("production-coordinator execution census totals are inconsistent")
+
+    if evidence["publication"]["outcome"] != "committed_verified":
+        fail("production-coordinator publication outcome is not committed_verified")
+    if evidence["reopen"]["outcome"] != "opened":
+        fail("production-coordinator reopen outcome is not opened")
+    if evidence["independent_recompute"]["canonical_parity"] != "passed":
+        fail("production-coordinator independent recomputation parity is not passed")
+    return evidence
 
 
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     manifest = load(root / MANIFEST)
     validate_schema(manifest, load(root / MANIFEST_SCHEMA), "G5 manifest")
-    validate_schema(
-        {
-            "schema": "cxxlens.ng-g5-qualification-report.v1",
-            "result": "passed",
-            "generated_at": "2026-07-18T00:00:00Z",
-            "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
-            "git": {"revision": "1" * 40, "tree": "2" * 40, "branch": "main", "clean": True},
-            "authority_digests": [
-                {"path": f"authority-{index}", "digest": "sha256:" + str(index) * 64}
-                for index in range(1, 5)
-            ],
-            "runtime_test": "passed",
-            "performance": {
-                "schema": "cxxlens.g5-performance.v1",
-                "fixture": {"partitions": 2048, "edges": 512},
-                "method": {"clock": "steady_clock", "repetitions": 5, "statistic": "median"},
-                "budgets": {"max_iterations": 513, "max_edges": 512},
-                "metrics_us": {"warm_zero_plan_median": 1, "bounded_closure_median": 1},
-                "environment": {
-                    "compiler": "test",
-                    "operating_system": "test-os",
-                    "architecture": "test-arch",
-                },
-            },
-        },
-        load(root / REPORT_SCHEMA),
-        "G5 report schema",
-    )
+    report_schema = load(root / REPORT_SCHEMA)
+    validate_schema_definition(report_schema, "G5 report")
+    validate_evidence_policy(manifest)
     missing = [path for path in manifest["required_artifacts"] if not (root / path).is_file()]
     if missing:
         fail(f"required G5 artifacts are missing: {missing}")
@@ -279,6 +428,7 @@ def validate_performance(manifest: dict[str, Any], value: dict[str, Any]) -> Non
     environment = value.get("environment")
     if (
         value.get("schema") != "cxxlens.g5-performance.v1"
+        or value.get("source") != "synthetic-planner"
         or not isinstance(environment, dict)
         or list(environment) != expected["environment_fields"]
         or not all(isinstance(item, str) and item for item in environment.values())
@@ -316,6 +466,7 @@ def make_report(
     root: pathlib.Path,
     manifest: dict[str, Any],
     performance: dict[str, Any],
+    production_evidence: dict[str, Any],
     run_url: str,
     expected_revision: str,
     generated_at: str,
@@ -336,6 +487,7 @@ def make_report(
         ],
         "runtime_test": "passed",
         "performance": performance,
+        "production_coordinator": production_evidence,
     }
     validate_schema(report, load(root / REPORT_SCHEMA), "G5 report")
     return report
@@ -347,6 +499,9 @@ def main() -> int:
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     parser.add_argument("--runtime", type=pathlib.Path)
     parser.add_argument("--benchmark", type=pathlib.Path)
+    parser.add_argument("--production-evidence", type=pathlib.Path)
+    parser.add_argument("--production-binary", type=pathlib.Path)
+    parser.add_argument("--production-report", type=pathlib.Path)
     parser.add_argument("--output", type=pathlib.Path)
     parser.add_argument("--run-url")
     parser.add_argument("--expected-revision")
@@ -354,6 +509,22 @@ def main() -> int:
     arguments = parser.parse_args()
     try:
         manifest = validate_documents(arguments.root)
+        production_evidence: dict[str, Any] | None = None
+        if arguments.production_evidence:
+            production_evidence = validate_production_coordinator_evidence(
+                arguments.root,
+                arguments.production_evidence.resolve(),
+                arguments.expected_revision,
+                arguments.production_binary.resolve() if arguments.production_binary else None,
+                arguments.production_report.resolve() if arguments.production_report else None,
+            )
+        elif arguments.command == "report":
+            # A local contract check intentionally has no production execution receipt.  A
+            # report is the qualification boundary and must never be synthesized from the
+            # planner/runtime fixture, so keep the missing-input failure explicit here.
+            validate_production_coordinator_evidence(
+                arguments.root, None, arguments.expected_revision
+            )
         performance: dict[str, Any] | None = None
         if arguments.runtime:
             if arguments.benchmark:
@@ -368,7 +539,15 @@ def main() -> int:
                     )
             validate_performance(manifest, performance)
         if arguments.command == "report":
-            if performance is None or not arguments.output or not arguments.run_url or not arguments.expected_revision:
+            if (
+                production_evidence is None
+                or performance is None
+                or not arguments.output
+                or not arguments.run_url
+                or not arguments.expected_revision
+                or not arguments.production_binary
+                or not arguments.production_report
+            ):
                 fail("report requires runtime, benchmark, output, run URL, and expected revision")
             generated_at = arguments.generated_at or datetime.datetime.now(
                 datetime.timezone.utc
@@ -377,6 +556,7 @@ def main() -> int:
                 arguments.root,
                 manifest,
                 performance,
+                production_evidence,
                 arguments.run_url,
                 arguments.expected_revision,
                 generated_at,

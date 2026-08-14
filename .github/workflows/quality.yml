@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   issues: read
+  actions: read
 
 concurrency:
   group: quality-${{ github.event.pull_request.number || github.ref }}
@@ -404,10 +405,22 @@ jobs:
         run: |
           cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON
           cmake --build --preset ci-quick --target cxxlens-g5-runtime
+          cmake --build --preset ci-quick --target cxxlens-clang22-materialize
+          cmake --install build/ci-quick --prefix "${RUNNER_TEMP}/cxxlens-g5-prefix"
+          python tools/quality/produce_ng_g5_production_evidence.py \
+            --root . \
+            --prefix "${RUNNER_TEMP}/cxxlens-g5-prefix" \
+            --output "${RUNNER_TEMP}/cxxlens-ng-g5-production-coordinator-evidence.json" \
+            --production-report "${RUNNER_TEMP}/cxxlens-ng-g5-production-report.json" \
+            --work-directory "${RUNNER_TEMP}/cxxlens-g5-production-state" \
+            --expected-revision "${GITHUB_SHA}"
           python tools/quality/check_ng_g5_qualification.py report \
             --root . \
             --runtime build/ci-quick/tests/cxxlens-g5-runtime \
             --benchmark "${RUNNER_TEMP}/cxxlens-g5-performance.json" \
+            --production-evidence "${RUNNER_TEMP}/cxxlens-ng-g5-production-coordinator-evidence.json" \
+            --production-binary "${RUNNER_TEMP}/cxxlens-g5-prefix/bin/cxxlens-clang22-materialize" \
+            --production-report "${RUNNER_TEMP}/cxxlens-ng-g5-production-report.json" \
             --output "${RUNNER_TEMP}/cxxlens-ng-g5-qualification-report.json" \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             --expected-revision "${GITHUB_SHA}"
@@ -416,6 +429,8 @@ jobs:
           name: cxxlens-ng-g5-qualification-${{ github.sha }}
           path: |
             ${{ runner.temp }}/cxxlens-g5-performance.json
+            ${{ runner.temp }}/cxxlens-ng-g5-production-coordinator-evidence.json
+            ${{ runner.temp }}/cxxlens-ng-g5-production-report.json
             ${{ runner.temp }}/cxxlens-ng-g5-qualification-report.json
           if-no-files-found: error
           retention-days: 90
@@ -432,6 +447,34 @@ jobs:
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+      - name: Locate the exact-main Nightly evidence run
+        id: nightly-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id="$({
+            gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/nightly.yml/runs" \
+              -f branch=main \
+              -f head_sha="${GITHUB_SHA}" \
+              -f status=completed \
+              -f per_page=100 \
+              --jq '([.workflow_runs[] | select((.event == "schedule" or .event == "workflow_dispatch") and .conclusion == "success" and .head_branch == "main")] | sort_by(.created_at, .id) | reverse | .[0].id) // empty'
+          })"
+          if [[ -z "${run_id}" ]]; then
+            echo "no successful exact-main Nightly run is available for ${GITHUB_SHA}" >&2
+            exit 1
+          fi
+          echo "run-id=${run_id}" >> "${GITHUB_OUTPUT}"
+      - name: Download exact-main Nightly evidence
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
+        with:
+          name: cxxlens-nightly-evidence-${{ github.sha }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.nightly-run.outputs.run-id }}
+          path: build/release-evaluation-nightly
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
         with:
           pattern: cxxlens-*-${{ github.sha }}
@@ -445,6 +488,7 @@ jobs:
           python tools/quality/check_ng_release_qualification.py evaluate \
             --root . \
             --evidence-dir build/release-evaluation-input \
+            --nightly-evidence-dir build/release-evaluation-nightly \
             --security-report "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json" \
             --output "${RUNNER_TEMP}/cxxlens-ng-release-qualification-evaluation-report.json" \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
@@ -456,6 +500,12 @@ jobs:
           path: |
             ${{ runner.temp }}/cxxlens-ng-security-conformance-report.json
             ${{ runner.temp }}/cxxlens-ng-release-qualification-evaluation-report.json
+          if-no-files-found: error
+          retention-days: 365
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-nightly-evidence-consumed-${{ github.sha }}
+          path: build/release-evaluation-nightly/nightly-evidence-set.json
           if-no-files-found: error
           retention-days: 365
 
@@ -481,6 +531,7 @@ jobs:
           python tools/quality/check_ng_release_qualification.py report \
             --root . \
             --evidence-dir build/release-qualification-input \
+            --nightly-evidence-dir build/release-qualification-input \
             --security-report "build/release-qualification-input/cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/cxxlens-ng-security-conformance-report.json" \
             --evaluation "build/release-qualification-input/cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/cxxlens-ng-release-qualification-evaluation-report.json" \
             --output "${RUNNER_TEMP}/cxxlens-ng-release-qualification-report.json" \

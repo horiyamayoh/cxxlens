@@ -180,6 +180,29 @@ def parse_exact_json(raw: bytes) -> Any | None:
         raise ScaleEvidenceError(f"process stdout is not one complete JSON value: {error}") from error
 
 
+def input_transfer_receipt_from_response(
+    response: Any, scenario_id: str
+) -> dict[str, Any]:
+    """Read the authenticated receipt from the producer's detailed success path."""
+
+    if not isinstance(response, dict):
+        raise ScaleEvidenceError(f"{scenario_id} installed success is not an object")
+    if response.get("response_kind") != "detailed" or response.get("result") != "passed":
+        raise ScaleEvidenceError(f"{scenario_id} installed response is not a detailed success")
+    task_results = response.get("task_results")
+    if not isinstance(task_results, list) or len(task_results) != 1:
+        raise ScaleEvidenceError(f"{scenario_id} installed success must contain one task result")
+    task_result = task_results[0]
+    if not isinstance(task_result, dict):
+        raise ScaleEvidenceError(f"{scenario_id} installed task result is not an object")
+    receipt = task_result.get("input_transfer")
+    if not isinstance(receipt, dict):
+        raise ScaleEvidenceError(
+            f"{scenario_id} installed success lacks its authenticated input transfer receipt"
+        )
+    return receipt
+
+
 def check_process(
     root: pathlib.Path,
     report_path: pathlib.Path,
@@ -241,9 +264,14 @@ def check_process(
         if installed:
             if process["observation"] != "installed-detailed-passed":
                 raise ScaleEvidenceError(f"{scenario_id} lacks a detailed installed success")
+            producer_transfer = input_transfer_receipt_from_response(parsed, scenario_id)
             transfer = process.get("input_transfer")
             if transfer is None:
                 raise ScaleEvidenceError(f"{scenario_id} lacks its authenticated input transfer receipt")
+            if transfer != producer_transfer:
+                raise ScaleEvidenceError(
+                    f"{scenario_id} input transfer receipt is not bound to installed stdout"
+                )
             expected_chunk_count = (
                 0
                 if transfer["logical_input_bytes"] == 0

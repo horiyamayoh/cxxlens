@@ -21,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:ffb83b3ac6de4080f4c0ac98fb99c35caf3635c3081e49a470aae03496b51e96
+authority_census_digest: sha256:de0528f4656b32695961cd84d2b98e8288ad8501ae53d2c80c9782b04db226fd
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
