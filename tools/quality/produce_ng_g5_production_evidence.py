@@ -361,11 +361,17 @@ def _run_materializer(
     if completed.stdout != oracle.canonical_json(report):
         fail(f"{label} report stdout is not the canonical report artifact")
     try:
+        runtime_raw_occurrences = oracle.report_runtime_raw_occurrences(
+            root,
+            request,
+            report,
+        )
         oracle.validate_report(
             root,
             request,
             report,
             request_bytes=request_bytes,
+            runtime_raw_occurrences=runtime_raw_occurrences,
         )
     except Exception as error:
         fail(f"{label} report failed the independent materialization validator: {error}")
