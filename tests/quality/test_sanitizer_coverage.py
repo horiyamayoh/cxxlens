@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_sanitizer_coverage import (  # noqa: E402
     SanitizerCoverageError,
+    extract_tsan_run_script,
     parse_expected,
     validate_tsan_ctest_selection,
     validate_contract,
@@ -90,10 +91,7 @@ class SanitizerCoverageTest(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
             encoding="utf-8"
         )
-        tsan_section = workflow.split("      - name: TSan\n", 1)[1].split(
-            "\n  static-analysis:", 1
-        )[0]
-        validate_tsan_ctest_selection(tsan_section)
+        validate_tsan_ctest_selection(extract_tsan_run_script(workflow))
 
     def test_tsan_rejects_exclude_regex_alias(self) -> None:
         continuation = "\\\n"
@@ -120,6 +118,23 @@ class SanitizerCoverageTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(SanitizerCoverageError, "exact selection"):
             validate_tsan_ctest_selection(command)
+
+    def test_tsan_rejects_prefixed_ctest_invocations(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        valid_script = extract_tsan_run_script(workflow)
+        for extra in (
+            "env ctest -E '^broad$'",
+            "true && ctest -E '^broad$'",
+            "/usr/bin/ctest -E '^broad$'",
+            "ignored=$(ctest -E '^broad$')",
+        ):
+            with self.subTest(extra=extra):
+                with self.assertRaisesRegex(
+                    SanitizerCoverageError, "CTest invocation"
+                ):
+                    validate_tsan_ctest_selection(valid_script + "\n" + extra)
 
 
 if __name__ == "__main__":

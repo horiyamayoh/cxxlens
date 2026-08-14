@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 import shlex
 import sys
 from typing import Any
@@ -38,6 +39,8 @@ TSAN_CTEST_SELECTION = [
     "--output-junit",
     "ctest.xml",
 ]
+CTEST_INVOCATION = re.compile(r"\b(?:[\w.-]+/)*ctest(?=\s|$|[;&|()<>])")
+DIRECT_CTEST_INVOCATION = re.compile(r"^ctest(?=\s|$|[;&|()<>])")
 
 
 class SanitizerCoverageError(ValueError):
@@ -55,6 +58,35 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     return document
 
 
+def extract_tsan_run_script(workflow: str) -> str:
+    try:
+        document = yaml.safe_load(workflow)
+    except yaml.YAMLError as error:
+        fail(f"sanitizer workflow YAML is invalid: {error}")
+    if not isinstance(document, dict):
+        fail("sanitizer workflow must be a mapping")
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        fail("sanitizer workflow is missing jobs")
+    thread_job = jobs.get("thread-sanitizer")
+    if not isinstance(thread_job, dict):
+        fail("sanitizer workflow is missing the thread-sanitizer job")
+    steps = thread_job.get("steps")
+    if not isinstance(steps, list):
+        fail("thread-sanitizer job is missing steps")
+    tsan_steps = [
+        step
+        for step in steps
+        if isinstance(step, dict) and step.get("name") == "TSan"
+    ]
+    if len(tsan_steps) != 1:
+        fail("thread-sanitizer job must contain exactly one TSan step")
+    run = tsan_steps[0].get("run")
+    if not isinstance(run, str):
+        fail("TSan step must contain a shell run script")
+    return run
+
+
 def _parse_ctest_command(lines: list[str]) -> list[str]:
     command = " ".join(
         line[:-1].rstrip() if line.endswith("\\") else line for line in lines
@@ -70,13 +102,18 @@ def _extract_ctest_commands(text: str) -> list[list[str]]:
     pending: list[str] | None = None
     for line in text.splitlines():
         stripped = line.strip()
+        has_ctest_invocation = CTEST_INVOCATION.search(stripped) is not None
         if pending is not None:
+            if has_ctest_invocation and not DIRECT_CTEST_INVOCATION.match(stripped):
+                fail("every CTest invocation must start a standalone ctest line")
             pending.append(stripped)
             if not stripped.endswith("\\"):
                 commands.append(_parse_ctest_command(pending))
                 pending = None
             continue
-        if stripped == "ctest" or stripped.startswith("ctest "):
+        if has_ctest_invocation and not DIRECT_CTEST_INVOCATION.match(stripped):
+            fail("every CTest invocation must start a standalone ctest line")
+        if DIRECT_CTEST_INVOCATION.match(stripped):
             pending = [stripped]
             if not stripped.endswith("\\"):
                 commands.append(_parse_ctest_command(pending))
@@ -158,13 +195,7 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
                 fail(f"sanitizer implementation marker is missing: {relative}: {marker}")
 
     workflow = (root / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
-    try:
-        tsan_section = workflow.split("      - name: TSan\n", 1)[1].split(
-            "\n  static-analysis:", 1
-        )[0]
-    except IndexError:
-        fail("sanitizer workflow is missing the TSan job boundary")
-    validate_tsan_ctest_selection(tsan_section)
+    validate_tsan_ctest_selection(extract_tsan_run_script(workflow))
     return contract
 
 
