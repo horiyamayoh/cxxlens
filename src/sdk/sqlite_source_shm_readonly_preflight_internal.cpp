@@ -2849,6 +2849,12 @@ namespace cxxlens::sdk
 				return false;
 			if (event.native_status == sqlite_ok || event.returned_status == sqlite_ok)
 				return false;
+			// A non-null flag is not sufficient qualification evidence.  The exact
+			// pointer returned by this map callback must be retained for the event;
+			// it is evidence only and never authority by itself.
+			if (event.native_mapping_nonnull != (event.native_mapping_identity != nullptr) ||
+				(event.returned_mapping_nonnull && event.native_mapping_identity == nullptr))
+				return false;
 			const auto cantinit = event.native_status == sqlite_readonly_cannot_initialize &&
 				event.returned_status == sqlite_readonly_cannot_initialize &&
 				!event.native_mapping_nonnull && !event.returned_mapping_nonnull;

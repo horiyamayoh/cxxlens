@@ -131,23 +131,26 @@ namespace
 		constexpr int cant_initialize = readonly | (5 << 8);
 		int vfs_identity{};
 		int app_data_identity{};
+		int mapping_identity{};
 		const auto event =
 			[&](const int page, const int status, const bool mapping, const bool seen_before)
 		{
-			return sqlite_backend_shm_map_observation{page,
-													  32768,
-													  1,
-													  0,
-													  status,
-													  status,
-													  mapping,
-													  mapping,
-													  seen_before,
-													  true,
-													  &vfs_identity,
-													  &app_data_identity,
-													  nullptr,
-													  std::nullopt};
+			sqlite_backend_shm_map_observation observation{};
+			observation.page = page;
+			observation.page_size = 32768;
+			observation.caller_extend = 1;
+			observation.delegated_extend = 0;
+			observation.native_status = status;
+			observation.returned_status = status;
+			observation.native_mapping_nonnull = mapping;
+			observation.returned_mapping_nonnull = mapping;
+			observation.readonly_family_seen_before = seen_before;
+			observation.readonly_family_seen_after = true;
+			observation.pinned_underlying_vfs_identity = &vfs_identity;
+			observation.pinned_underlying_vfs_app_data_identity = &app_data_identity;
+			observation.native_mapping_identity =
+				mapping ? static_cast<const volatile void*>(&mapping_identity) : nullptr;
+			return observation;
 		};
 		const std::array exact_cold{event(0, cant_initialize, false, false)};
 		require(validate_sqlite_source_shm_readonly_map_sequence(
@@ -159,6 +162,18 @@ namespace
 		require(!validate_sqlite_source_shm_readonly_map_sequence(
 					late_page_zero, &vfs_identity, &app_data_identity, true, false),
 				"cold proof rejects an earlier nonzero-page mapped event");
+
+		const std::array exact_mapped{event(0, readonly, true, false),
+									  event(1, readonly, true, true)};
+		require(validate_sqlite_source_shm_readonly_map_sequence(
+					exact_mapped, &vfs_identity, &app_data_identity, false, true),
+				"warm proof accepts mapped events with exact callback pointer evidence");
+
+		auto missing_pointer = exact_mapped;
+		missing_pointer[0].native_mapping_identity = nullptr;
+		require(!validate_sqlite_source_shm_readonly_map_sequence(
+					missing_pointer, &vfs_identity, &app_data_identity, false, true),
+				"warm proof rejects a non-null mapping without exact callback pointer evidence");
 	}
 } // namespace
 
