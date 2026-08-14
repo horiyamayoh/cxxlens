@@ -559,7 +559,10 @@ def _readonly_sqlite_reopen(database: pathlib.Path, label: str) -> None:
     if database.is_symlink() or not database.is_file():
         fail(f"{label} SQLite database is not a regular file: {database}")
     before = sorted(path.name for path in database.parent.iterdir())
-    uri = "file:" + quote(str(database), safe="/") + "?mode=ro"
+    # SQLite WAL mode may create an auxiliary -shm file even for a mode=ro
+    # connection. Immutable read-only authority must not mutate the database
+    # directory while we independently reopen the committed Store.
+    uri = "file:" + quote(str(database), safe="/") + "?mode=ro&immutable=1"
     try:
         with sqlite3.connect(uri, uri=True, timeout=5.0) as connection:
             result = connection.execute("PRAGMA integrity_check").fetchone()
