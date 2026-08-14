@@ -164,7 +164,7 @@ def validate_repository(root: pathlib.Path) -> None:
         (root / workflow).read_text(encoding="utf-8") for workflow in WORKFLOWS
     )
     expected_profiles = {
-        "--profile developer": 8,
+        "--profile developer": 9,
         "--profile compiler": 0,
         "--profile static-analysis": 1,
         "--profile documentation": 1,

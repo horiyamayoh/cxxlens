@@ -75,6 +75,13 @@ checks:
     inputs: [include, src, .clang-tidy]
     dimensions: [clang22]
     configurations: [clang22]
+  - id: materialization.scale-ingress
+    version: 1
+    owner: nightly
+    command: python tests/install/clang22_materializer_scale_test.py
+    inputs: [tests/install/clang22_materializer_scale_test.py, tools/quality/check_ng_clang22_materialization_scale.py, schemas/cxxlens_ng_clang22_materialization_scale_evidence.schema.yaml]
+    dimensions: [clang22]
+    configurations: [materialization-scale-clang22]
 modes:
   fast:
     owners: [ctest]

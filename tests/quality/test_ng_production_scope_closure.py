@@ -217,8 +217,8 @@ class ProductionScopeClosureTest(unittest.TestCase):
     def test_repository_check_closes_exact_30_domains(self) -> None:
         self.assertEqual(tuple(sorted({key.domain for key in self.model.nodes})), tuple(sorted(closure.DOMAINS)))
         self.assertEqual(self.model.summary["domain_count"], 30)
-        self.assertEqual(self.model.summary["assignable_count"], 240)
-        self.assertEqual(self.model.summary["expanded_count"], 858)
+        self.assertEqual(self.model.summary["assignable_count"], 241)
+        self.assertEqual(self.model.summary["expanded_count"], 859)
         self.assertEqual(self.model.summary["aggregate_count"], 14)
         self.assertEqual(self.model.closure_status, "classified-with-gaps")
 
@@ -242,7 +242,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
         self.assertEqual(len(assignments["scope.clang22-installed-adoption-gap"]["surfaces"]), 14)
         self.assertEqual(len(assignments["scope.ng1-provider-hardening-gap"]["surfaces"]), 6)
         self.assertEqual(len(assignments["scope.incremental-coordinator-gap"]["surfaces"]), 6)
-        self.assertEqual(len(assignments["scope.nightly-qualification-gap"]["surfaces"]), 4)
+        self.assertEqual(len(assignments["scope.nightly-qualification-gap"]["surfaces"]), 5)
         self.assertEqual(
             {
                 (row["domain"], row["id"])
@@ -260,6 +260,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
             },
             {
                 "analysis.clang-tidy",
+                "materialization.scale-ingress",
                 "quality.production-contracts",
                 "sanitizer.asan-ubsan",
                 "sanitizer.tsan",

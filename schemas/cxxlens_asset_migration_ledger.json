@@ -1,5 +1,5 @@
 {
-  "asset_count": 655,
+  "asset_count": 659,
   "assets": [
     {
       "authority": "active",
@@ -1893,6 +1893,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_materialization_scale_evidence.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -3713,6 +3720,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/install/clang22_materializer_scale_test.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/install/clang22_materializer_success_test.py",
       "removal_issue": null,
       "replacement": null,
@@ -3868,6 +3882,13 @@
     {
       "authority": "active",
       "path": "tests/quality/test_ng_clang22_materialization.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_clang22_materialization_scale.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4329,6 +4350,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_clang22_materialization_scale.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_design_feedback.py",
       "removal_issue": null,
       "replacement": null,
@@ -4588,7 +4616,7 @@
     }
   ],
   "classifications": {
-    "active": 619,
+    "active": 623,
     "archived": 35,
     "generated": 1
   },
