@@ -28,6 +28,20 @@ authority aggregates the static and shared artifacts and requires all four
 request/report/receipt tuples. No provider, platform, or four-configuration
 qualification is inferred from one Linux job.
 
+## Windows/MSVC boundary
+
+The `shared-runtime-layout` phase has a Windows-only check for the exact DLL and
+import-library destinations of each installed shared target. It is a portable
+install-layout invariant, not native Windows/MSVC qualification.
+
+Issue [#223](https://github.com/horiyamayoh/cxxlens/issues/223) remains fail-closed
+until a native MSVC runner provides one exact merged-main configure/build/test and
+installed static/shared consumer tuple, including Windows filesystem/process/
+locking behavior, provider isolation, and available sanitizer-equivalent evidence.
+The checked-in CI bootstrap is locked to Ubuntu 24.04 and the release authority
+accepts only exact measured tuples; Linux install or semantic evidence does not
+close this lane.
+
 ## Scale and resource evidence
 
 `clang22_materializer_scale_test.py` is the bounded Linux scale runner for the

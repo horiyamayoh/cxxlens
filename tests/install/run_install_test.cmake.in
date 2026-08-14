@@ -195,18 +195,24 @@ if(PHASE STREQUAL "shared-runtime-layout" AND WIN32)
       runtime_artifacts
       "${install_prefix}/bin/@CMAKE_SHARED_LIBRARY_PREFIX@${library}@CMAKE_SHARED_LIBRARY_SUFFIX@*"
     )
-    if(NOT runtime_artifacts)
+    list(LENGTH runtime_artifacts runtime_artifact_count)
+    if(NOT runtime_artifact_count EQUAL 1)
       message(
-        FATAL_ERROR "shared package lacks Windows DLL runtime: ${library}")
+        FATAL_ERROR
+          "shared package must contain exactly one Windows DLL runtime (${library}), found ${runtime_artifact_count}"
+      )
     endif()
     file(
       GLOB
       import_artifacts
       "${install_prefix}/${install_libdir}/@CMAKE_IMPORT_LIBRARY_PREFIX@${library}@CMAKE_IMPORT_LIBRARY_SUFFIX@*"
     )
-    if(NOT import_artifacts)
+    list(LENGTH import_artifacts import_artifact_count)
+    if(NOT import_artifact_count EQUAL 1)
       message(
-        FATAL_ERROR "shared package lacks Windows import library: ${library}")
+        FATAL_ERROR
+          "shared package must contain exactly one Windows import library (${library}), found ${import_artifact_count}"
+      )
     endif()
   endforeach()
 endif()
