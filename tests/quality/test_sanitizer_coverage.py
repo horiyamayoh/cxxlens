@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 from check_sanitizer_coverage import (  # noqa: E402
     SanitizerCoverageError,
     parse_expected,
+    validate_tsan_ctest_selection,
     validate_contract,
     validate_database,
 )
@@ -89,9 +90,36 @@ class SanitizerCoverageTest(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
             encoding="utf-8"
         )
-        marker = "--exclude-regex '^install\\.clang22-materializer-success$'"
-        self.assertEqual(workflow.count("--exclude-regex"), 1)
-        self.assertIn(marker, workflow)
+        tsan_section = workflow.split("      - name: TSan\n", 1)[1].split(
+            "\n  static-analysis:", 1
+        )[0]
+        validate_tsan_ctest_selection(tsan_section)
+
+    def test_tsan_rejects_exclude_regex_alias(self) -> None:
+        continuation = "\\\n"
+        command = (
+            "ctest --preset tsan --parallel 1 --label-exclude quality "
+            + continuation
+            + "-E '^install\\.clang22-materializer-success$' "
+            + continuation
+            + "--output-junit ctest.xml"
+        )
+        with self.assertRaisesRegex(SanitizerCoverageError, "exact selection"):
+            validate_tsan_ctest_selection(command)
+
+    def test_tsan_rejects_additional_label_exclusion(self) -> None:
+        continuation = "\\\n"
+        command = (
+            "ctest --preset tsan --parallel 1 "
+            + continuation
+            + "--label-exclude quality --label-exclude install "
+            + continuation
+            + "--exclude-regex '^install\\.clang22-materializer-success$' "
+            + continuation
+            + "--output-junit ctest.xml"
+        )
+        with self.assertRaisesRegex(SanitizerCoverageError, "exact selection"):
+            validate_tsan_ctest_selection(command)
 
 
 if __name__ == "__main__":

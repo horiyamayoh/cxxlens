@@ -25,6 +25,19 @@ INSTALL_DATABASES = {
     "real_project_consumer-build/compile_commands.json",
 }
 TSAN_NATIVE_MATERIALIZER_EXCLUSION = r"^install\.clang22-materializer-success$"
+TSAN_CTEST_SELECTION = [
+    "ctest",
+    "--preset",
+    "tsan",
+    "--parallel",
+    "1",
+    "--label-exclude",
+    "quality",
+    "--exclude-regex",
+    TSAN_NATIVE_MATERIALIZER_EXCLUSION,
+    "--output-junit",
+    "ctest.xml",
+]
 
 
 class SanitizerCoverageError(ValueError):
@@ -40,6 +53,48 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     if not isinstance(document, dict):
         fail(f"expected mapping: {path}")
     return document
+
+
+def _parse_ctest_command(lines: list[str]) -> list[str]:
+    command = " ".join(
+        line[:-1].rstrip() if line.endswith("\\") else line for line in lines
+    )
+    try:
+        return shlex.split(command)
+    except ValueError as error:
+        fail(f"cannot parse CTest selection: {error}")
+
+
+def _extract_ctest_commands(text: str) -> list[list[str]]:
+    commands: list[list[str]] = []
+    pending: list[str] | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if pending is not None:
+            pending.append(stripped)
+            if not stripped.endswith("\\"):
+                commands.append(_parse_ctest_command(pending))
+                pending = None
+            continue
+        if stripped == "ctest" or stripped.startswith("ctest "):
+            pending = [stripped]
+            if not stripped.endswith("\\"):
+                commands.append(_parse_ctest_command(pending))
+                pending = None
+    if pending is not None:
+        fail("CTest selection ends with an unterminated shell continuation")
+    return commands
+
+
+def validate_tsan_ctest_selection(tsan_section: str) -> None:
+    commands = _extract_ctest_commands(tsan_section)
+    if len(commands) != 1:
+        fail("TSan must contain exactly one CTest invocation")
+    if commands[0] != TSAN_CTEST_SELECTION:
+        fail(
+            "TSan CTest selection differs from the accepted exact selection: "
+            f"expected {TSAN_CTEST_SELECTION!r}, got {commands[0]!r}"
+        )
 
 
 def validate_contract(root: pathlib.Path) -> dict[str, Any]:
@@ -109,13 +164,7 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
         )[0]
     except IndexError:
         fail("sanitizer workflow is missing the TSan job boundary")
-    exclusion_marker = f"--exclude-regex '{TSAN_NATIVE_MATERIALIZER_EXCLUSION}'"
-    if tsan_section.count("--exclude-regex") != 1 or exclusion_marker not in tsan_section:
-        fail(
-            "TSan must exclude exactly the adapter-OFF native materializer success test"
-        )
-    if workflow.count("--exclude-regex") != 1:
-        fail("sanitizer workflow contains an unexpected additional test exclusion")
+    validate_tsan_ctest_selection(tsan_section)
     return contract
 
 
