@@ -14,6 +14,12 @@ namespace cxxlens::sdk::provider::detail
 		constexpr std::string_view heartbeat_schema{"cxxlens.provider-control.heartbeat.v1"};
 		constexpr std::string_view progress_schema{"cxxlens.provider-control.progress.v2"};
 		constexpr std::string_view resume_schema{"cxxlens.provider-control.resume.v2"};
+		constexpr std::string_view spill_schema{"cxxlens.provider-spill-record.v1"};
+		constexpr std::string_view spill_payload_domain{"cxxlens.provider-spill-payload.v1"};
+		constexpr std::string_view spill_record_domain{"cxxlens.provider-spill-record.v1"};
+		constexpr std::string_view spill_prefix_domain{"cxxlens.provider-spill-prefix.v1"};
+		constexpr std::string_view spill_fsync_receipt_schema{
+			"cxxlens.provider-spill-fsync-receipt.v1"};
 		constexpr std::string_view manifest_content_digest_prefix{"sha256:"};
 		constexpr std::string_view semantic_digest_prefix{"semantic-v2:sha256:"};
 		constexpr std::uint64_t heartbeat_timeout_ns = 5'000'000'000ULL;
@@ -136,14 +142,125 @@ namespace cxxlens::sdk::provider::detail
 		}
 
 		[[nodiscard]] result<std::string>
-		semantic_tuple_digest(const std::vector<canonical_value>& fields)
+		semantic_tuple_digest(const std::string_view domain,
+							  const std::vector<canonical_value>& fields)
 		{
 			auto encoded = canonical_binary(canonical_value::from_tuple(fields));
 			if (!encoded)
 				return unexpected(std::move(encoded.error()));
 			const std::string bytes{reinterpret_cast<const char*>(encoded->data()),
 									encoded->size()};
-			return semantic_digest("cxxlens.provider-resume-token.v1", bytes);
+			return semantic_digest(domain, bytes);
+		}
+
+		[[nodiscard]] result<std::uint64_t> checked_spill_size_add(const std::uint64_t left,
+																   const std::uint64_t right,
+																   const std::string_view field)
+		{
+			if (right > std::numeric_limits<std::uint64_t>::max() - left)
+				return unexpected(ng1_error("spill-corrupt", std::string{field}, "size-overflow"));
+			return left + right;
+		}
+
+		[[nodiscard]] constexpr std::uint64_t cbor_head_bytes(const std::uint64_t value) noexcept
+		{
+			if (value < 24U)
+				return 1U;
+			if (value <= std::numeric_limits<std::uint8_t>::max())
+				return 2U;
+			if (value <= std::numeric_limits<std::uint16_t>::max())
+				return 3U;
+			if (value <= std::numeric_limits<std::uint32_t>::max())
+				return 5U;
+			return 9U;
+		}
+
+		[[nodiscard]] result<std::uint64_t> cbor_text_bytes(const std::string_view value,
+															const std::string_view field)
+		{
+			const auto length = static_cast<std::uint64_t>(value.size());
+			return checked_spill_size_add(cbor_head_bytes(length), length, field);
+		}
+
+		[[nodiscard]] result<std::uint64_t> cbor_bytes_bytes(const std::span<const std::byte> value,
+															 const std::string_view field)
+		{
+			const auto length = static_cast<std::uint64_t>(value.size());
+			return checked_spill_size_add(cbor_head_bytes(length), length, field);
+		}
+
+		[[nodiscard]] result<std::uint64_t> spill_record_wire_bytes(const ng1_spill_record& record)
+		{
+			// The source-private codec uses one deterministic-CBOR map with the exact eleven
+			// authority fields and an eight-byte big-endian length prefix.
+			std::uint64_t total = cbor_head_bytes(11U) + sizeof(std::uint64_t);
+			auto add_text_pair = [&total](const std::string_view key,
+										  const std::string_view value) -> result<void>
+			{
+				auto key_bytes = cbor_text_bytes(key, "record-key");
+				if (!key_bytes)
+					return unexpected(std::move(key_bytes.error()));
+				auto value_bytes = cbor_text_bytes(value, key);
+				if (!value_bytes)
+					return unexpected(std::move(value_bytes.error()));
+				auto next = checked_spill_size_add(total, *key_bytes, key);
+				if (!next)
+					return unexpected(std::move(next.error()));
+				next = checked_spill_size_add(*next, *value_bytes, key);
+				if (!next)
+					return unexpected(std::move(next.error()));
+				total = *next;
+				return {};
+			};
+			auto add_uint_pair = [&total](const std::string_view key,
+										  const std::uint64_t value) -> result<void>
+			{
+				auto key_bytes = cbor_text_bytes(key, "record-key");
+				if (!key_bytes)
+					return unexpected(std::move(key_bytes.error()));
+				auto next = checked_spill_size_add(total, *key_bytes, key);
+				if (!next)
+					return unexpected(std::move(next.error()));
+				next = checked_spill_size_add(*next, cbor_head_bytes(value), key);
+				if (!next)
+					return unexpected(std::move(next.error()));
+				total = *next;
+				return {};
+			};
+			auto add_bytes_pair = [&total](const std::string_view key,
+										   const std::span<const std::byte> value) -> result<void>
+			{
+				auto key_bytes = cbor_text_bytes(key, "record-key");
+				if (!key_bytes)
+					return unexpected(std::move(key_bytes.error()));
+				auto value_bytes = cbor_bytes_bytes(value, key);
+				if (!value_bytes)
+					return unexpected(std::move(value_bytes.error()));
+				auto next = checked_spill_size_add(total, *key_bytes, key);
+				if (!next)
+					return unexpected(std::move(next.error()));
+				next = checked_spill_size_add(*next, *value_bytes, key);
+				if (!next)
+					return unexpected(std::move(next.error()));
+				total = *next;
+				return {};
+			};
+
+			for (const auto& valid :
+				 {add_text_pair("schema", record.schema),
+				  add_uint_pair("record_ordinal", record.record_ordinal),
+				  add_text_pair("task_id", record.task_id),
+				  add_text_pair("dependency_group_id", record.dependency_group_id),
+				  add_text_pair("atomic_output_group_id", record.atomic_output_group_id),
+				  add_text_pair("batch_id", record.batch_id),
+				  add_uint_pair("stream_id", record.stream_id),
+				  add_uint_pair("sequence", record.sequence),
+				  add_bytes_pair("payload_bytes", record.payload_bytes),
+				  add_text_pair("payload_digest", record.payload_digest),
+				  add_text_pair("record_digest", record.record_digest)})
+				if (!valid)
+					return unexpected(valid.error());
+			return total;
 		}
 
 		struct ng1_u128
@@ -569,12 +686,12 @@ namespace cxxlens::sdk::provider::detail
 		fields.push_back(canonical_u64(token.highest_contiguous_acked_sequence));
 		fields.push_back(canonical_text(token.staged_digest));
 		fields.push_back(canonical_u64(token.token_generation));
-		return semantic_tuple_digest(fields);
+		return semantic_tuple_digest("cxxlens.provider-resume-token.v1", fields);
 	}
 
 	result<void> ng1_spill_fsync_receipt::validate() const
 	{
-		if (schema != "cxxlens.provider-spill-fsync-receipt.v1")
+		if (schema != spill_fsync_receipt_schema)
 			return unexpected(ng1_error("resume-token-stale", "schema", "unexpected"));
 		for (const auto [value, field] :
 			 std::array{std::pair{std::string_view{provider_id}, std::string_view{"provider_id"}},
@@ -590,6 +707,148 @@ namespace cxxlens::sdk::provider::detail
 		if (fsync_sequence == 0U)
 			return unexpected(ng1_error("resume-token-stale", "fsync_sequence", "zero"));
 		return {};
+	}
+
+	result<void> ng1_spill_binding::validate() const
+	{
+		for (const auto [value, field] :
+			 std::array{std::pair{std::string_view{provider_id}, std::string_view{"provider_id"}},
+						std::pair{std::string_view{protocol_session_id},
+								  std::string_view{"protocol_session_id"}},
+						std::pair{std::string_view{task_id}, std::string_view{"task_id"}},
+						std::pair{std::string_view{dependency_group_id},
+								  std::string_view{"dependency_group_id"}},
+						std::pair{std::string_view{atomic_output_group_id},
+								  std::string_view{"atomic_output_group_id"}},
+						std::pair{std::string_view{batch_id}, std::string_view{"batch_id"}}})
+			if (auto valid = valid_id(value, field, "spill-corrupt"); !valid)
+				return valid;
+		return {};
+	}
+
+	result<std::string> ng1_spill_payload_digest(const std::span<const std::byte> payload)
+	{
+		std::string bytes;
+		if (!payload.empty())
+			bytes.assign(reinterpret_cast<const char*>(payload.data()), payload.size());
+		return semantic_digest(spill_payload_domain, bytes);
+	}
+
+	result<std::string> ng1_spill_record_digest(const ng1_spill_record& record)
+	{
+		if (record.schema != spill_schema)
+			return unexpected(ng1_error("spill-corrupt", "schema", "unexpected"));
+		for (const auto [value, field] :
+			 std::array{std::pair{std::string_view{record.task_id}, std::string_view{"task_id"}},
+						std::pair{std::string_view{record.dependency_group_id},
+								  std::string_view{"dependency_group_id"}},
+						std::pair{std::string_view{record.atomic_output_group_id},
+								  std::string_view{"atomic_output_group_id"}},
+						std::pair{std::string_view{record.batch_id}, std::string_view{"batch_id"}}})
+			if (auto valid = valid_id(value, field, "spill-corrupt"); !valid)
+				return unexpected(std::move(valid.error()));
+
+		auto expected_payload_digest = ng1_spill_payload_digest(record.payload_bytes);
+		if (!expected_payload_digest)
+			return unexpected(std::move(expected_payload_digest.error()));
+		if (record.payload_digest != *expected_payload_digest)
+			return unexpected(ng1_error("spill-corrupt", "payload_digest", "mismatch"));
+
+		std::vector<canonical_value> fields;
+		fields.reserve(11U);
+		fields.push_back(canonical_text(record.schema));
+		fields.push_back(canonical_u64(record.record_ordinal));
+		fields.push_back(canonical_text(record.task_id));
+		fields.push_back(canonical_text(record.dependency_group_id));
+		fields.push_back(canonical_text(record.atomic_output_group_id));
+		fields.push_back(canonical_text(record.batch_id));
+		fields.push_back(canonical_u64(record.stream_id));
+		fields.push_back(canonical_u64(record.sequence));
+		fields.push_back(canonical_value::from_bytes(
+			std::vector<std::byte>{record.payload_bytes.begin(), record.payload_bytes.end()}));
+		fields.push_back(canonical_text(record.payload_digest));
+		return semantic_tuple_digest(spill_record_domain, fields);
+	}
+
+	result<ng1_spill_prefix_state> ng1_spill_prefix_state::create(ng1_spill_binding binding)
+	{
+		if (auto valid = binding.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		ng1_spill_prefix_state output;
+		output.binding_ = std::move(binding);
+		return output;
+	}
+
+	result<void> ng1_spill_prefix_state::append(const ng1_spill_record& record)
+	{
+		if (record_digests_.size() >= ng1_spill_maximum_records)
+			return unexpected(ng1_error("spill-corrupt", "record_ordinal", "record-quota"));
+		if (record.record_ordinal != next_record_ordinal_)
+			return unexpected(ng1_error("spill-corrupt", "record_ordinal", "non-contiguous"));
+		if (record.sequence != next_sequence_)
+			return unexpected(ng1_error("spill-corrupt", "sequence", "non-contiguous"));
+		if (record.task_id != binding_.task_id ||
+			record.dependency_group_id != binding_.dependency_group_id ||
+			record.atomic_output_group_id != binding_.atomic_output_group_id ||
+			record.batch_id != binding_.batch_id || record.stream_id != binding_.stream_id)
+			return unexpected(ng1_error("spill-corrupt", "binding", "mismatch"));
+
+		auto expected_digest = ng1_spill_record_digest(record);
+		if (!expected_digest)
+			return unexpected(std::move(expected_digest.error()));
+		if (record.record_digest != *expected_digest)
+			return unexpected(ng1_error("spill-corrupt", "record_digest", "mismatch"));
+
+		auto wire_bytes = spill_record_wire_bytes(record);
+		if (!wire_bytes)
+			return unexpected(std::move(wire_bytes.error()));
+		if (*wire_bytes > ng1_spill_maximum_record_bytes)
+			return unexpected(ng1_error("spill-corrupt", "record_bytes", "record-quota"));
+		if (*wire_bytes > ng1_spill_maximum_total_bytes - total_bytes_)
+			return unexpected(ng1_error("spill-corrupt", "total_bytes", "total-quota"));
+
+		record_digests_.push_back(record.record_digest);
+		total_bytes_ += *wire_bytes;
+		++next_record_ordinal_;
+		++next_sequence_;
+		return {};
+	}
+
+	result<std::string> ng1_spill_prefix_state::spill_digest() const
+	{
+		std::vector<canonical_value> fields;
+		fields.reserve(record_digests_.size());
+		for (const auto& digest : record_digests_)
+			fields.push_back(canonical_text(digest));
+		return semantic_tuple_digest(spill_prefix_domain, fields);
+	}
+
+	result<ng1_spill_fsync_receipt> ng1_spill_prefix_state::observe_host_fsync(
+		const std::uint64_t highest_contiguous_acked_sequence,
+		std::string staged_digest,
+		const std::uint64_t fsync_sequence) const
+	{
+		if (!valid_semantic_digest(staged_digest))
+			return unexpected(ng1_error("spill-corrupt", "staged_digest", "semantic-v2"));
+		if (fsync_sequence == 0U)
+			return unexpected(ng1_error("spill-corrupt", "fsync_sequence", "zero"));
+		auto prefix_digest = spill_digest();
+		if (!prefix_digest)
+			return unexpected(std::move(prefix_digest.error()));
+		ng1_spill_fsync_receipt receipt{std::string{spill_fsync_receipt_schema},
+										binding_.provider_id,
+										binding_.protocol_session_id,
+										binding_.task_id,
+										binding_.stream_id,
+										highest_contiguous_acked_sequence,
+										std::move(staged_digest),
+										std::move(*prefix_digest),
+										total_bytes_,
+										total_records(),
+										fsync_sequence};
+		if (auto valid = receipt.validate(); !valid)
+			return unexpected(ng1_error("spill-corrupt", "receipt", "invalid"));
+		return receipt;
 	}
 
 	result<ng1_resume_state> ng1_resume_state::create(ng1_resume_binding binding)
