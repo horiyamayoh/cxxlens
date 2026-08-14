@@ -270,7 +270,11 @@ function(cxxlens_configure_clang22 target)
   # at every exact-adapter compilation boundary so provider-owned classes do not
   # introduce unresolved base-class typeinfo into the static worker.
   if(NOT LLVM_ENABLE_RTTI)
-    target_compile_options(${target} PRIVATE -fno-rtti)
+    if(MSVC)
+      target_compile_options(${target} PRIVATE /GR-)
+    else()
+      target_compile_options(${target} PRIVATE -fno-rtti)
+    endif()
   endif()
   target_include_directories(${target} SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS}
                                                       ${CLANG_INCLUDE_DIRS})
