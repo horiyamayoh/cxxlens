@@ -410,11 +410,15 @@ namespace cxxlens::detail::clang22::materialization
 					"materialization.claim-invalid", "guarantee", nested_error(valid.error())));
 			const auto& metadata = task.metadata;
 			const auto& input = task.input;
+			const bool source_window_valid = (task.source != nullptr && task.source->sealed() &&
+											  task.source->receipt() == task.source_receipt) ||
+				(task.source == nullptr && task.source_window_sealed);
+			const bool task_input_window_valid =
+				(task.task_input != nullptr && task.task_input->sealed()) ||
+				(task.task_input == nullptr && task.task_input_window_sealed);
 			if (task_index >= authority.task_count() || metadata.task_index != task_index ||
-				!task.source || !task.source->sealed() || !task.task_input ||
-				!task.task_input->sealed() || task.source->receipt() != task.source_receipt ||
-				!input.source.empty() || !input.source_content_base64.empty() ||
-				metadata.project_id != input.project ||
+				!source_window_valid || !task_input_window_valid || !input.source.empty() ||
+				!input.source_content_base64.empty() || metadata.project_id != input.project ||
 				metadata.catalog_id != catalog->catalog_id ||
 				metadata.catalog_digest != catalog->catalog_digest ||
 				metadata.selected_catalog_compile_unit_id != input.selected_catalog_compile_unit ||
@@ -448,24 +452,36 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
 												   "task-window",
 												   nested_error(valid.error())));
-			if (task.source->size_bytes() != task.source_receipt.size_bytes)
-				return sdk::unexpected(
-					claim_error("materialization.task-binding-mismatch", "source-spool", "size"));
-			auto actual_source_digest = digest_sealed_task_spool(
-				*task.source, maximum_clang22_task_source_bytes, "source-spool");
-			if (!actual_source_digest)
-				return sdk::unexpected(std::move(actual_source_digest.error()));
-			if (*actual_source_digest != task.source_receipt.content_digest ||
-				*actual_source_digest != input.source_content_digest)
-				return sdk::unexpected(
-					claim_error("materialization.task-binding-mismatch", "source-spool", "digest"));
-			auto actual_task_input_digest = digest_sealed_task_spool(
-				*task.task_input, maximum_clang22_task_input_bytes, "task-input-spool");
-			if (!actual_task_input_digest)
-				return sdk::unexpected(std::move(actual_task_input_digest.error()));
-			if (*actual_task_input_digest != metadata.task_input_digest)
+			if (task.source != nullptr)
+			{
+				if (task.source->size_bytes() != task.source_receipt.size_bytes)
+					return sdk::unexpected(claim_error(
+						"materialization.task-binding-mismatch", "source-spool", "size"));
+				auto actual_source_digest = digest_sealed_task_spool(
+					*task.source, maximum_clang22_task_source_bytes, "source-spool");
+				if (!actual_source_digest)
+					return sdk::unexpected(std::move(actual_source_digest.error()));
+				if (*actual_source_digest != task.source_receipt.content_digest ||
+					*actual_source_digest != input.source_content_digest)
+					return sdk::unexpected(claim_error(
+						"materialization.task-binding-mismatch", "source-spool", "digest"));
+			}
+			else if (!task.source_window_sealed)
 				return sdk::unexpected(claim_error(
-					"materialization.task-binding-mismatch", "task-input-spool", "digest"));
+					"materialization.task-binding-mismatch", "source-spool", "unsealed"));
+			if (task.task_input != nullptr)
+			{
+				auto actual_task_input_digest = digest_sealed_task_spool(
+					*task.task_input, maximum_clang22_task_input_bytes, "task-input-spool");
+				if (!actual_task_input_digest)
+					return sdk::unexpected(std::move(actual_task_input_digest.error()));
+				if (*actual_task_input_digest != metadata.task_input_digest)
+					return sdk::unexpected(claim_error(
+						"materialization.task-binding-mismatch", "task-input-spool", "digest"));
+			}
+			else if (!task.task_input_window_sealed)
+				return sdk::unexpected(claim_error(
+					"materialization.task-binding-mismatch", "task-input-spool", "unsealed"));
 			return {};
 		}
 

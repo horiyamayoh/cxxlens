@@ -70,6 +70,10 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
 		begin(const validated_materialization_request& request);
 
+		/** Begin a bounded source using v2.1 request authority without a legacy task vector. */
+		[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
+		begin(const materialization_v2_1_claim_authority& authority);
+
 		/** Consume exactly one bounded task window before the cursor advances. */
 		[[nodiscard]] sdk::result<void> consume_task(materialization_bounded_task_claims task);
 

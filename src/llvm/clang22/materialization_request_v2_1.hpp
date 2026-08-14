@@ -194,6 +194,9 @@ namespace cxxlens::detail::clang22::materialization
 		clang22_task_source_receipt source_receipt;
 		std::unique_ptr<clang22_task_source_spool> source;
 		std::unique_ptr<clang22_task_input_spool> task_input;
+		/** Set only after the owner has independently consumed both sealed window spools. */
+		bool source_window_sealed{};
+		bool task_input_window_sealed{};
 
 	  private:
 		/**

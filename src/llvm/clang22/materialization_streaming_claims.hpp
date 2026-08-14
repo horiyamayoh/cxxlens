@@ -17,7 +17,7 @@ namespace cxxlens::detail::clang22::materialization
 	 */
 	struct materialization_v2_1_claim_context
 	{
-		validated_materialization_request request;
+		materialization_v2_1_claim_authority claim_authority;
 		materialization_producer_authority producer_authority;
 		materialization_guarantee_authority guarantee_authority;
 	};

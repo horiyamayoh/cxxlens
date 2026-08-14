@@ -324,6 +324,15 @@ namespace cxxlens::detail::clang22::materialization
 		return materialization_bounded_claim_source{std::move(*request_id), request.engine};
 	}
 
+	sdk::result<materialization_bounded_claim_source> materialization_bounded_claim_source::begin(
+		const materialization_v2_1_claim_authority& authority)
+	{
+		if (authority.task_count() == 0U || authority.engine() == nullptr)
+			return sdk::unexpected(source_error("request", "empty-or-unbound"));
+		return materialization_bounded_claim_source{
+			std::string{authority.materialization_request_id()}, *authority.engine()};
+	}
+
 	sdk::result<void>
 	materialization_bounded_claim_source::consume_task(materialization_bounded_task_claims task)
 	{

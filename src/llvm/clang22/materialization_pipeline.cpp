@@ -116,4 +116,28 @@ namespace cxxlens::detail::clang22::materialization
 						request.publication.expected_parent_publication};
 		return result;
 	}
+
+	sdk::result<streaming_prepared_store_transaction>
+	make_materialization_streaming_store_transaction(
+		const materialization_v2_1_claim_authority& authority,
+		const materialization_bounded_claim_source& source)
+	{
+		if (authority.task_count() == 0U || authority.catalog() == nullptr ||
+			authority.request() == nullptr)
+			return sdk::unexpected(
+				sdk::error{"materialization.task-binding-mismatch", "request", "unbound"});
+		if (auto valid = authority.catalog()->validate(); !valid)
+			return sdk::unexpected(sdk::error{
+				"materialization.identity-mismatch", "project.catalog", valid.error().code});
+		if (!source.sealed() || source.partition_count() == 0U)
+			return sdk::unexpected(
+				sdk::error{"materialization.claim-invalid", "store.source", "unsealed-or-empty"});
+		const auto& publication = authority.request()->request().publication();
+		streaming_prepared_store_transaction result;
+		result.draft = {publication.selector,
+						{1U, 0U, 0U},
+						authority.catalog()->catalog_digest,
+						publication.expected_parent_publication};
+		return result;
+	}
 } // namespace cxxlens::detail::clang22::materialization

@@ -20,97 +20,6 @@ namespace cxxlens::detail::clang22::materialization
 			return {"materialization.identity-mismatch", std::string{field}, std::string{detail}};
 		}
 
-		[[nodiscard]] sdk::result<json_value> string_value(std::string value,
-														   const std::string_view field)
-		{
-			auto output = json_string(std::move(value));
-			if (!output)
-				return sdk::unexpected(bridge_error(field, "invalid-string"));
-			return output;
-		}
-
-		[[nodiscard]] sdk::result<json_value> object_value(json_value::object_type value,
-														   const std::string_view field)
-		{
-			auto output = json_object(std::move(value));
-			if (!output)
-				return sdk::unexpected(bridge_error(field, "invalid-object"));
-			return output;
-		}
-
-		[[nodiscard]] sdk::result<json_document>
-		make_claim_authority_document(const materialization_v2_1_tool_authority& tool,
-									  const materialization_v2_1_worker_authority& worker,
-									  const std::string_view materialization_request_id)
-		{
-			json_value::object_type tool_members;
-			for (const auto& [name, value] : {
-					 std::pair{std::string_view{"executable"}, std::string_view{tool.executable}},
-					 std::pair{std::string_view{"interface_version"},
-							   std::string_view{tool.interface_version}},
-					 std::pair{std::string_view{"distribution_version"},
-							   std::string_view{tool.distribution_version}},
-					 std::pair{std::string_view{"source_revision"},
-							   std::string_view{tool.source_revision}},
-					 std::pair{std::string_view{"source_tree"}, std::string_view{tool.source_tree}},
-				 })
-			{
-				auto item = string_value(std::string{value}, "tool." + std::string{name});
-				if (!item || !tool_members.emplace(std::string{name}, std::move(*item)).second)
-					return sdk::unexpected(
-						bridge_error("tool", item ? "duplicate-member" : item.error().detail));
-			}
-
-			json_value::object_type worker_members;
-			for (const auto& [name, value] : {
-					 std::pair{std::string_view{"provider_id"},
-							   std::string_view{worker.provider_id}},
-					 std::pair{std::string_view{"provider_version"},
-							   std::string_view{worker.provider_version}},
-					 std::pair{std::string_view{"semantic_contract_digest"},
-							   std::string_view{worker.semantic_contract_digest}},
-				 })
-			{
-				auto item = string_value(std::string{value}, "worker." + std::string{name});
-				if (!item || !worker_members.emplace(std::string{name}, std::move(*item)).second)
-					return sdk::unexpected(
-						bridge_error("worker", item ? "duplicate-member" : item.error().detail));
-			}
-			worker_members.emplace("protocol_major",
-								   json_value::unsigned_integer(worker.protocol_major));
-			worker_members.emplace("protocol_minor",
-								   json_value::unsigned_integer(worker.protocol_minor));
-			json_value::array_type required_features;
-			required_features.reserve(worker.required_features.size());
-			for (const auto& feature : worker.required_features)
-			{
-				auto feature_value = json_value::string(feature);
-				if (!feature_value)
-					return sdk::unexpected(bridge_error("worker.required_features", "string"));
-				required_features.push_back(std::move(*feature_value));
-			}
-			worker_members.emplace("required_features",
-								   json_value::array(std::move(required_features)));
-
-			auto tool_object = object_value(std::move(tool_members), "tool");
-			auto worker_object = object_value(std::move(worker_members), "worker");
-			if (!tool_object || !worker_object)
-				return sdk::unexpected(!tool_object ? std::move(tool_object.error())
-													: std::move(worker_object.error()));
-			auto request_id_value =
-				string_value(std::string{materialization_request_id}, "materialization_request_id");
-			if (!request_id_value)
-				return sdk::unexpected(std::move(request_id_value.error()));
-			json_value::object_type root_members;
-			root_members.emplace("materialization_request_id", std::move(*request_id_value));
-			root_members.emplace("tool", std::move(*tool_object));
-			root_members.emplace("worker", std::move(*worker_object));
-			auto root = object_value(std::move(root_members), "claims-authority");
-			if (!root)
-				return sdk::unexpected(std::move(root.error()));
-			return parse_json_object(canonical_json(*root));
-		}
-
 		[[nodiscard]] sdk::result<std::vector<materialization_authority_binding>>
 		make_authority_bindings(const materialization_occurrence_receipt& occurrence)
 		{
@@ -160,32 +69,6 @@ namespace cxxlens::detail::clang22::materialization
 				admitted.task_count() > std::numeric_limits<std::size_t>::max())
 				return sdk::unexpected(bridge_error("tasks", "cardinality"));
 
-			std::vector<validated_task_request> tasks;
-			tasks.reserve(static_cast<std::size_t>(admitted.task_count()));
-			for (std::uint64_t index{}; index < admitted.task_count(); ++index)
-			{
-				auto execution = request.task_execution(index);
-				if (!execution)
-					return sdk::unexpected(std::move(execution.error()));
-				if (!execution->source || !execution->source->sealed() || !execution->task_input ||
-					!execution->task_input->sealed())
-					return sdk::unexpected(bridge_error("task", "unsealed-spool"));
-				validated_task_request task{
-					std::move(execution->input),
-					std::move(execution->metadata.provider_task_id),
-					std::move(execution->metadata.provider_execution_id),
-					std::move(execution->metadata.task_input_digest),
-					std::move(execution->metadata.sandbox),
-					{},
-					std::move(execution->source_receipt),
-				};
-				tasks.push_back(std::move(task));
-			}
-
-			auto document = make_claim_authority_document(
-				admitted.tool(), admitted.worker(), request.identity().materialization_request_id);
-			if (!document)
-				return sdk::unexpected(std::move(document.error()));
 			auto bindings = make_authority_bindings(occurrence);
 			if (!bindings)
 				return sdk::unexpected(std::move(bindings.error()));
@@ -204,16 +87,12 @@ namespace cxxlens::detail::clang22::materialization
 				 "provider.transcript-sealed.v1",
 				 "sdk.claim-envelope-validated.v1"},
 			};
-			validated_materialization_request legacy{
-				std::move(*document),
-				admitted.catalog(),
-				admitted.engine(),
-				admitted.output_descriptors(),
-				std::move(tasks),
-				admitted.publication(),
-			};
+			auto claim_authority =
+				make_materialization_v2_1_claim_authority(request, producer, guarantee);
+			if (!claim_authority)
+				return sdk::unexpected(std::move(claim_authority.error()));
 			return materialization_v2_1_claim_context{
-				std::move(legacy), std::move(producer), std::move(guarantee)};
+				std::move(*claim_authority), std::move(producer), std::move(guarantee)};
 		}
 		catch (const std::bad_alloc&)
 		{
