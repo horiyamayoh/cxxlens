@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "../runtime/monotonic_clock_port_internal.hpp"
+
 #if defined(__linux__)
 #include <unistd.h>
 #endif
@@ -103,7 +105,7 @@ namespace cxxlens::sdk
 						}
 						continue;
 					}
-					const auto now = std::chrono::steady_clock::now();
+					const auto now = cxxlens::runtime::monotonic_now();
 					if (!deadline)
 						deadline = now + native_alias_lifecycle_wait_limit;
 					else if (now >= *deadline)

@@ -1,5 +1,5 @@
 {
-  "asset_count": 661,
+  "asset_count": 663,
   "assets": [
     {
       "authority": "active",
@@ -3006,6 +3006,20 @@
     },
     {
       "authority": "active",
+      "path": "src/runtime/monotonic_clock_port.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/runtime/monotonic_clock_port_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/runtime/provider_process_adapter.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4630,7 +4644,7 @@
     }
   ],
   "classifications": {
-    "active": 625,
+    "active": 627,
     "archived": 35,
     "generated": 1
   },
