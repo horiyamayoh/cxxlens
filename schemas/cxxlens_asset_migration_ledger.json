@@ -1,5 +1,5 @@
 {
-  "asset_count": 651,
+  "asset_count": 655,
   "assets": [
     {
       "authority": "active",
@@ -1411,6 +1411,13 @@
     {
       "authority": "active",
       "path": "docs/development/implementation-learning/records/df-0233-ng1-provider-hardening.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0243-ng1-resume-provider-digest-grammar.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3034,6 +3041,20 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/provider_ng1_transport.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/provider_ng1_transport_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/provider_ng1_validation.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4049,6 +4070,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/unit/sdk/provider_ng1_transport_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/unit/sdk/provider_runtime_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4560,7 +4588,7 @@
     }
   ],
   "classifications": {
-    "active": 615,
+    "active": 619,
     "archived": 35,
     "generated": 1
   },

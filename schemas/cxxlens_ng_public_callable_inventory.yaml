@@ -1730,7 +1730,7 @@ allocator:
   - fully_qualified_name: cxxlens::source::relations::span::span_column::ref
     callable_kind: static
     next_overload_slot: 1
-inventory_digest: sha256:0f35566a408c7c8a7023ab390118ab90d493840ea4d64341448b5a2815ecede2
+inventory_digest: sha256:a48cc97da7572988002672832e3ec20ab3bb953812ece1b0269e122608dc0f92
 callables:
 - id: cpp.callable.00100ca7a0bda4b73503b24a4e6f6d33be47b954c7553cab8f70e85f9e77f492
   identity:
@@ -1871,7 +1871,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -2444,7 +2444,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -3606,7 +3606,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -5585,7 +5585,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -7780,7 +7780,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -8913,7 +8913,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -8962,7 +8962,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -9933,7 +9933,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -10194,7 +10194,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -10545,7 +10545,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -10706,7 +10706,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -11733,7 +11733,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -11834,7 +11834,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -11943,7 +11943,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -12774,7 +12774,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -13603,7 +13603,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -13755,7 +13755,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -15515,7 +15515,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -15875,7 +15875,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -16945,7 +16945,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -19482,7 +19482,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -20309,7 +20309,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -21325,7 +21325,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -21627,7 +21627,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -22028,7 +22028,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -23440,7 +23440,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -23542,7 +23542,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -23592,7 +23592,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -24057,7 +24057,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -24106,7 +24106,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -26433,7 +26433,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -26737,7 +26737,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -27063,7 +27063,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -27980,7 +27980,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -28734,7 +28734,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -29097,7 +29097,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -29146,7 +29146,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -29660,7 +29660,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -31201,7 +31201,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -32261,7 +32261,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:40c2d86c24783990f61658aeebf901a2300bac4b88e3b35d9ec0a9a463fa6f18
+    catalog_digest: sha256:a924a5c03462e0310b4cefbfa4ba5297746b27925d9953f4666629ed3c2413b8
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
