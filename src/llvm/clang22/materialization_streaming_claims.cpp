@@ -91,8 +91,16 @@ namespace cxxlens::detail::clang22::materialization
 				make_materialization_v2_1_claim_authority(request, producer, guarantee);
 			if (!claim_authority)
 				return sdk::unexpected(std::move(claim_authority.error()));
-			return materialization_v2_1_claim_context{
-				std::move(*claim_authority), std::move(producer), std::move(guarantee)};
+			// Seal the complete selected-request entry journal before any production plan or
+			// provider dispatch can observe mutable task-window state.
+			auto selected_request_binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*claim_authority);
+			if (!selected_request_binding_set)
+				return sdk::unexpected(std::move(selected_request_binding_set.error()));
+			return materialization_v2_1_claim_context{std::move(*claim_authority),
+													  std::move(*selected_request_binding_set),
+													  std::move(producer),
+													  std::move(guarantee)};
 		}
 		catch (const std::bad_alloc&)
 		{

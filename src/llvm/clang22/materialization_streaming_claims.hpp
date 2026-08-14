@@ -3,6 +3,7 @@
 #include <string>
 
 #include "materialization_claims.hpp"
+#include "materialization_incremental_receipt.hpp"
 #include "materialization_occurrence.hpp"
 #include "materialization_request_v2_1.hpp"
 
@@ -18,6 +19,7 @@ namespace cxxlens::detail::clang22::materialization
 	struct materialization_v2_1_claim_context
 	{
 		materialization_v2_1_claim_authority claim_authority;
+		materialization_incremental_selected_request_binding_set selected_request_binding_set;
 		materialization_producer_authority producer_authority;
 		materialization_guarantee_authority guarantee_authority;
 	};

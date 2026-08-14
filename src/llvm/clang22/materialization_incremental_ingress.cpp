@@ -708,6 +708,7 @@ namespace cxxlens::detail::clang22::materialization
 		}
 		[[nodiscard]] sdk::result<void> validate_task_streams_v2(
 			const materialization_v2_1_claim_authority& authority,
+			const materialization_incremental_selected_request_binding_set& binding_set,
 			const std::size_t task_index,
 			const std::span<const std::string> expected_partition_ids,
 			const materialization_v2_1_task_execution& task,
@@ -720,12 +721,13 @@ namespace cxxlens::detail::clang22::materialization
 			if (spools.empty() ||
 				(!dynamic_partition_ids && spools.size() != expected_partition_ids.size()))
 				return sdk::unexpected(ingress_error("partitions", "exact-census"));
-			auto expected_events = materialization_incremental_result_event_projections(
+			auto expected_events = materialization_incremental_receipt_event_projections(
 				authority, task_index, task, result, expected_partition_ids);
 			if (!expected_events)
 				return sdk::unexpected(std::move(expected_events.error()));
 			auto expected_receipt = make_materialization_incremental_task_receipt(
 				authority,
+				binding_set,
 				task_index,
 				task,
 				receipt.provider_stdout_byte_count,
@@ -842,11 +844,12 @@ namespace cxxlens::detail::clang22::materialization
 		std::string request_id,
 		const std::size_t task_count,
 		const validated_materialization_request_v2_1& request,
-		const materialization_v2_1_claim_authority& claim_authority)
+		const materialization_v2_1_claim_authority& claim_authority,
+		const materialization_incremental_selected_request_binding_set& binding_set)
 		: request_{}, request_id_{std::move(request_id)}, expected_partition_ids_(task_count),
 		  task_receipts_(task_count), producer_authority_{}, guarantee_authority_{},
 		  dynamic_partition_ids_{true}, v2_request_{&request}, claim_authority_{&claim_authority},
-		  v2_task_count_{task_count}
+		  binding_set_{&binding_set}, v2_task_count_{task_count}
 	{
 	}
 
@@ -951,7 +954,8 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<materialization_incremental_ingress>
 	materialization_incremental_ingress::begin_dynamic(
 		validated_materialization_request_v2_1& request,
-		const materialization_v2_1_claim_authority& claim_authority)
+		const materialization_v2_1_claim_authority& claim_authority,
+		const materialization_incremental_selected_request_binding_set& binding_set)
 	{
 		try
 		{
@@ -959,13 +963,18 @@ namespace cxxlens::detail::clang22::materialization
 			if (task_count == 0U || task_count > std::numeric_limits<std::size_t>::max() ||
 				claim_authority.request() != &request || claim_authority.task_count() != task_count)
 				return sdk::unexpected(ingress_error("tasks", "exact-census"));
+			auto expected_binding_set =
+				seal_materialization_incremental_selected_request_binding_set(claim_authority);
+			if (!expected_binding_set || *expected_binding_set != binding_set)
+				return sdk::unexpected(ingress_error("selected-request-set", "binding"));
 			auto request_id = materialization_incremental_request_id(claim_authority);
 			if (!request_id)
 				return sdk::unexpected(std::move(request_id.error()));
 			return materialization_incremental_ingress{std::move(*request_id),
 													   static_cast<std::size_t>(task_count),
 													   request,
-													   claim_authority};
+													   claim_authority,
+													   binding_set};
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -1031,11 +1040,14 @@ namespace cxxlens::detail::clang22::materialization
 		try
 		{
 			const auto request_task_index = next_task_index_;
-			if (v2_request_ == nullptr || claim_authority_ == nullptr ||
+			if (v2_request_ == nullptr || claim_authority_ == nullptr || binding_set_ == nullptr ||
 				request_task_index >= v2_task_count_)
 				return sdk::unexpected(ingress_error("tasks", "not-next-or-missing"));
-			if (auto valid = validate_materialization_incremental_task_receipt(
-					*claim_authority_, request_task_index, task_execution, task.receipt);
+			if (auto valid = validate_materialization_incremental_task_receipt(*claim_authority_,
+																			   *binding_set_,
+																			   request_task_index,
+																			   task_execution,
+																			   task.receipt);
 				!valid)
 				return sdk::unexpected(std::move(valid.error()));
 			const auto& result = task.result;
@@ -1050,6 +1062,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<std::string> discovered_partition_ids;
 			if (auto valid = validate_task_streams_v2(
 					*claim_authority_,
+					*binding_set_,
 					request_task_index,
 					std::span<const std::string>{expected_partition_ids_[request_task_index]},
 					task_execution,

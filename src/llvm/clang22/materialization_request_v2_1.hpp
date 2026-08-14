@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cxxlens/sdk/provider.hpp>
@@ -163,6 +164,76 @@ namespace cxxlens::detail::clang22::materialization
 		materialization_v2_1_task_metadata_receipt metadata;
 	};
 
+	struct materialization_v2_1_task_execution;
+
+	/**
+	 * Private evidence produced only after both sealed task-window spools have been consumed.
+	 *
+	 * The digest values are intentionally not constructible by task callers. A moved task may
+	 * retain this receipt after its input spool has been transferred to the sealed-result path, but
+	 * downstream validation can only accept evidence issued by the bounded consumer routine.
+	 */
+	class materialization_v2_1_task_window_consumption
+	{
+	  public:
+		materialization_v2_1_task_window_consumption(
+			const materialization_v2_1_task_window_consumption&) = default;
+		materialization_v2_1_task_window_consumption&
+		operator=(const materialization_v2_1_task_window_consumption&) = default;
+		materialization_v2_1_task_window_consumption(
+			materialization_v2_1_task_window_consumption&&) noexcept = default;
+		materialization_v2_1_task_window_consumption&
+		operator=(materialization_v2_1_task_window_consumption&&) noexcept = default;
+
+		[[nodiscard]] std::uint64_t source_size_bytes() const noexcept
+		{
+			return source_size_bytes_;
+		}
+		[[nodiscard]] std::uint64_t task_input_size_bytes() const noexcept
+		{
+			return task_input_size_bytes_;
+		}
+		[[nodiscard]] const std::string& source_content_digest() const noexcept
+		{
+			return source_content_digest_;
+		}
+		[[nodiscard]] const std::string& task_input_digest() const noexcept
+		{
+			return task_input_digest_;
+		}
+
+	  private:
+		materialization_v2_1_task_window_consumption(std::uint64_t source_size_bytes,
+													 std::string source_content_digest,
+													 std::uint64_t task_input_size_bytes,
+													 std::string task_input_digest)
+			: source_size_bytes_{source_size_bytes},
+			  source_content_digest_{std::move(source_content_digest)},
+			  task_input_size_bytes_{task_input_size_bytes},
+			  task_input_digest_{std::move(task_input_digest)}
+		{
+		}
+		[[nodiscard]] static materialization_v2_1_task_window_consumption
+		make(std::uint64_t source_size_bytes,
+			 std::string source_content_digest,
+			 std::uint64_t task_input_size_bytes,
+			 std::string task_input_digest)
+		{
+			return materialization_v2_1_task_window_consumption{source_size_bytes,
+																std::move(source_content_digest),
+																task_input_size_bytes,
+																std::move(task_input_digest)};
+		}
+
+		std::uint64_t source_size_bytes_{};
+		std::string source_content_digest_;
+		std::uint64_t task_input_size_bytes_{};
+		std::string task_input_digest_;
+
+		friend sdk::result<void>
+		consume_materialization_v2_1_task_window(materialization_v2_1_task_execution& task);
+	};
+
 	/** Opaque lifetime token held by a task-at-a-time cursor result. */
 	struct materialization_v2_1_task_cursor_state;
 
@@ -194,9 +265,13 @@ namespace cxxlens::detail::clang22::materialization
 		clang22_task_source_receipt source_receipt;
 		std::unique_ptr<clang22_task_source_spool> source;
 		std::unique_ptr<clang22_task_input_spool> task_input;
-		/** Set only after the owner has independently consumed both sealed window spools. */
-		bool source_window_sealed{};
-		bool task_input_window_sealed{};
+
+		/** Evidence issued by the source-private bounded window consumer, if any. */
+		[[nodiscard]] const materialization_v2_1_task_window_consumption*
+		consumed_window() const noexcept
+		{
+			return consumed_window_ ? &*consumed_window_ : nullptr;
+		}
 
 	  private:
 		/**
@@ -205,10 +280,17 @@ namespace cxxlens::detail::clang22::materialization
 		 * cursor cannot advance while any bounded task window is still owned by a consumer.
 		 */
 		std::shared_ptr<void> cursor_lease;
+		std::optional<materialization_v2_1_task_window_consumption> consumed_window_;
 
 		void attach_cursor_lease(std::shared_ptr<void> lease) noexcept;
 		friend class materialization_v2_1_task_cursor;
+		friend sdk::result<void>
+		consume_materialization_v2_1_task_window(materialization_v2_1_task_execution& task);
 	};
+
+	/** Consume and seal both bounded task-window spools before any input spool is moved. */
+	[[nodiscard]] sdk::result<void>
+	consume_materialization_v2_1_task_window(materialization_v2_1_task_execution& task);
 
 	/**
 	 * Source-independent v2.1 pass-two result without an all-task/source/payload representation.

@@ -923,6 +923,403 @@ namespace cxxlens::detail::clang22::materialization
 	}
 
 	sdk::result<std::vector<materialization_incremental_event_projection>>
+	materialization_incremental_receipt_event_projections(
+		const materialization_v2_1_claim_authority& authority,
+		const std::size_t task_index,
+		const materialization_v2_1_task_execution& task,
+		const sealed_materialization_result& result,
+		const std::span<const std::string> partition_ids)
+	{
+		try
+		{
+			if (task_index >= authority.task_count() || task.metadata.task_index != task_index ||
+				(!partition_ids.empty() &&
+				 (!std::ranges::is_sorted(partition_ids) ||
+				  std::ranges::adjacent_find(partition_ids) != partition_ids.end())))
+				return sdk::unexpected(receipt_error("bounded-result-oracle", "identity-or-order"));
+			for (const auto& partition_id : partition_ids)
+				if (!sdk::validate_strong_id(partition_id))
+					return sdk::unexpected(receipt_error("bounded-result-oracle", "partition-id"));
+			auto bounded =
+				construct_materialization_bounded_task_claims(authority, task_index, task, result);
+			if (!bounded)
+				return sdk::unexpected(std::move(bounded.error()));
+			const auto task_id = task.metadata.provider_task_id;
+			if (result.provider_task_id() != task_id || authority.engine() == nullptr)
+				return sdk::unexpected(receipt_error("bounded-result-oracle", "task-id-or-engine"));
+
+			std::map<std::string, const materialization_claim_partition*, std::less<>> partitions;
+			std::vector<const sdk::claim*> all_claims;
+			std::map<std::string, std::pair<std::string, std::string>, std::less<>> claim_locations;
+			std::map<std::string, const sdk::claim*, std::less<>> claims_by_ref;
+			for (const auto& partition : bounded->partitions)
+			{
+				if (!partitions.emplace(partition.manifest.partition_id, &partition).second)
+					return sdk::unexpected(
+						receipt_error("bounded-result-oracle", "duplicate-partition"));
+				if (partition.stored_claim_refs.size() != partition.draft.claims.size())
+					return sdk::unexpected(
+						receipt_error("bounded-result-oracle", "claim-reference-census"));
+				for (std::size_t index{}; index < partition.draft.claims.size(); ++index)
+				{
+					const auto& claim = partition.draft.claims[index];
+					all_claims.push_back(&claim);
+					const auto& claim_ref = partition.stored_claim_refs[index];
+					const auto [found, inserted] = claim_locations.emplace(
+						claim_ref, std::pair{partition.manifest.partition_id, claim.content});
+					if (!inserted &&
+						found->second != std::pair{partition.manifest.partition_id, claim.content})
+						return sdk::unexpected(
+							receipt_error("bounded-result-oracle", "claim-reference-alias"));
+					claims_by_ref.emplace(claim_ref, &claim);
+				}
+			}
+			std::vector<std::string> actual_partition_ids;
+			actual_partition_ids.reserve(partitions.size());
+			for (const auto& [partition_id, partition] : partitions)
+			{
+				(void)partition;
+				actual_partition_ids.push_back(partition_id);
+			}
+			std::vector<std::string> selected_partition_ids;
+			if (partition_ids.empty())
+				selected_partition_ids = actual_partition_ids;
+			else
+				selected_partition_ids.assign(partition_ids.begin(), partition_ids.end());
+			if (selected_partition_ids.empty() ||
+				std::ranges::adjacent_find(selected_partition_ids) !=
+					selected_partition_ids.end() ||
+				selected_partition_ids != actual_partition_ids)
+				return sdk::unexpected(receipt_error("bounded-result-oracle", "partition-census"));
+			const std::span<const sdk::claim*> claim_span{all_claims};
+			std::map<std::string,
+					 std::vector<const materialization_origin_association*>,
+					 std::less<>>
+				associations_by_partition;
+			for (const auto& association : bounded->origin_associations)
+			{
+				const auto found = claim_locations.find(association.stored_claim_ref);
+				if (found == claim_locations.end())
+					return sdk::unexpected(
+						receipt_error("bounded-result-oracle", "association-orphan"));
+				associations_by_partition[found->second.first].push_back(&association);
+			}
+
+			std::vector<materialization_incremental_event_projection> output;
+			for (const auto& partition_id : selected_partition_ids)
+			{
+				const auto& partition = *partitions.at(partition_id);
+				std::vector<materialization_incremental_event_projection> partition_events;
+				const auto append_event =
+					[&](const materialization_partition_event_kind kind,
+						std::vector<sdk::canonical_value> key_values,
+						std::vector<sdk::canonical_value> payload_values) -> sdk::result<void>
+				{
+					auto key = event_tuple(std::move(key_values));
+					if (!key)
+						return sdk::unexpected(std::move(key.error()));
+					auto payload = event_tuple(std::move(payload_values));
+					if (!payload)
+						return sdk::unexpected(std::move(payload.error()));
+					partition_events.push_back({task_id,
+												std::string{partition_id},
+												kind,
+												std::move(*key),
+												std::move(*payload)});
+					return {};
+				};
+
+				if (auto valid = append_event(materialization_partition_event_kind::partition_begin,
+											  {text(task_id), text(partition_id)},
+											  {text(partition.draft.relation_descriptor_id),
+											   text(partition.draft.scope),
+											   text(partition.draft.condition.canonical_form()),
+											   text(partition.draft.interpretation),
+											   text(partition.draft.producer_semantics),
+											   text(partition.draft.producer_input_basis_digest),
+											   text(partition.draft.precision_profile),
+											   text(partition.draft.assumption_set_id)});
+					!valid)
+					return sdk::unexpected(std::move(valid.error()));
+
+				std::vector<std::pair<std::vector<std::byte>, const sdk::claim*>> ordered_claims;
+				ordered_claims.reserve(partition.draft.claims.size());
+				for (const auto& claim : partition.draft.claims)
+				{
+					auto occurrence = sdk::detail::claim_occurrence_projection(claim);
+					if (!occurrence)
+						return sdk::unexpected(std::move(occurrence.error()));
+					ordered_claims.emplace_back(std::move(*occurrence), &claim);
+				}
+				std::ranges::sort(ordered_claims,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				for (const auto& [occurrence, claim] : ordered_claims)
+				{
+					auto content_projection = claim_content_projection(*claim, *authority.engine());
+					if (!content_projection)
+						return sdk::unexpected(std::move(content_projection.error()));
+					auto claim_key = canonical_bytes_value(*content_projection);
+					auto claim_content = canonical_bytes_value(*content_projection);
+					auto metadata =
+						canonical_bytes_value(claim_occurrence_metadata_projection(*claim));
+					auto targets = claim_reference_targets(*claim, claim_span, *authority.engine());
+					if (!claim_key || !claim_content || !metadata || !targets)
+						return sdk::unexpected(!claim_key ? std::move(claim_key.error())
+												   : !claim_content
+												   ? std::move(claim_content.error())
+												   : !metadata ? std::move(metadata.error())
+															   : std::move(targets.error()));
+					auto hard = ordered_canonical_bytes(std::move(targets->first));
+					auto soft = ordered_canonical_bytes(std::move(targets->second));
+					auto functional =
+						ordered_canonical_bytes(std::vector<std::vector<std::byte>>{});
+					auto differential =
+						ordered_canonical_bytes(std::vector<std::vector<std::byte>>{});
+					if (!hard || !soft || !functional || !differential)
+						return sdk::unexpected(receipt_error("bounded-result-oracle", "claim-law"));
+					if (auto valid =
+							append_event(materialization_partition_event_kind::claim_occurrence,
+										 {text(task_id),
+										  text(partition_id),
+										  sdk::canonical_value::from_bytes(occurrence),
+										  std::move(*claim_key)},
+										 {std::move(*claim_content),
+										  std::move(*metadata),
+										  std::move(*hard),
+										  std::move(*soft),
+										  std::move(*functional),
+										  std::move(*differential)});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+
+				std::set<std::vector<std::byte>> row_identities;
+				for (const auto& claim : partition.draft.claims)
+				{
+					auto row = canonical_bytes_value(text(claim.row.canonical_form()));
+					if (!row)
+						return sdk::unexpected(std::move(row.error()));
+					if (!row_identities.insert(row->byte_string).second)
+						continue;
+					if (auto valid =
+							append_event(materialization_partition_event_kind::detached_row,
+										 {text(task_id),
+										  text(partition_id),
+										  text(claim.row.descriptor_id),
+										  *row},
+										 {*row});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+
+				std::vector<const materialization_origin_association*> associations =
+					associations_by_partition[std::string{partition_id}];
+				std::vector<
+					std::pair<std::vector<std::byte>, const materialization_origin_association*>>
+					ordered_associations;
+				ordered_associations.reserve(associations.size());
+				for (const auto* association : associations)
+				{
+					const auto claim = claims_by_ref.find(association->stored_claim_ref);
+					if (claim == claims_by_ref.end())
+						return sdk::unexpected(
+							receipt_error("bounded-result-oracle", "annotation-claim"));
+					auto annotation = canonical_bytes_value(annotation_projection(*claim->second));
+					if (!annotation)
+						return sdk::unexpected(std::move(annotation.error()));
+					ordered_associations.emplace_back(std::move(annotation->byte_string),
+													  association);
+				}
+				std::ranges::sort(ordered_associations,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				for (const auto& [annotation, association] : ordered_associations)
+				{
+					const auto claim = claims_by_ref.find(association->stored_claim_ref);
+					if (claim == claims_by_ref.end())
+						return sdk::unexpected(
+							receipt_error("bounded-result-oracle", "annotation-claim"));
+					auto order_key = canonical_bytes_value(
+						tuple({bytes(annotation), text(association->association_id)}));
+					if (!order_key)
+						return sdk::unexpected(std::move(order_key.error()));
+					if (auto valid =
+							append_event(materialization_partition_event_kind::claim_annotation,
+										 {text(task_id),
+										  text(partition_id),
+										  text(claim->second->content),
+										  std::move(*order_key)},
+										 {sdk::canonical_value::from_bytes(annotation)});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+
+				std::vector<std::pair<std::vector<std::byte>, sdk::snapshot_coverage_unit>>
+					coverage;
+				coverage.reserve(partition.draft.coverage.size());
+				for (const auto& item : partition.draft.coverage)
+				{
+					auto encoded = canonical_bytes_value(coverage_projection(item));
+					if (!encoded)
+						return sdk::unexpected(std::move(encoded.error()));
+					coverage.emplace_back(std::move(encoded->byte_string), item);
+				}
+				std::ranges::sort(coverage,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				for (const auto& [encoded, item] : coverage)
+					if (auto valid = append_event(materialization_partition_event_kind::coverage,
+												  {text(task_id),
+												   text(partition_id),
+												   sdk::canonical_value::from_bytes(encoded)},
+												  {sdk::canonical_value::from_bytes(encoded)});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+
+				std::vector<std::pair<std::vector<std::byte>, sdk::unresolved_reference>>
+					unresolved;
+				unresolved.reserve(partition.draft.unresolved.size());
+				for (const auto& item : partition.draft.unresolved)
+				{
+					auto encoded = canonical_bytes_value(unresolved_projection(item));
+					if (!encoded)
+						return sdk::unexpected(std::move(encoded.error()));
+					unresolved.emplace_back(std::move(encoded->byte_string), item);
+				}
+				std::ranges::sort(unresolved,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				for (const auto& [encoded, item] : unresolved)
+					if (auto valid = append_event(materialization_partition_event_kind::unresolved,
+												  {text(task_id),
+												   text(partition_id),
+												   sdk::canonical_value::from_bytes(encoded)},
+												  {sdk::canonical_value::from_bytes(encoded)});
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
+
+				std::vector<
+					std::pair<std::vector<std::byte>, materialization_incremental_event_projection>>
+					ordered_pre_end;
+				ordered_pre_end.reserve(partition_events.size());
+				std::vector<std::vector<std::byte>> claim_projections;
+				std::vector<std::vector<std::byte>> row_projections;
+				std::vector<std::vector<std::byte>> coverage_projections;
+				std::vector<std::vector<std::byte>> unresolved_projections;
+				for (auto& event : partition_events)
+				{
+					auto full = full_event_projection(event);
+					if (!full)
+						return sdk::unexpected(std::move(full.error()));
+					if (event.kind == materialization_partition_event_kind::claim_occurrence)
+						claim_projections.push_back(*full);
+					else if (event.kind == materialization_partition_event_kind::detached_row)
+						row_projections.push_back(*full);
+					else if (event.kind == materialization_partition_event_kind::coverage)
+						coverage_projections.push_back(*full);
+					else if (event.kind == materialization_partition_event_kind::unresolved)
+						unresolved_projections.push_back(*full);
+					ordered_pre_end.emplace_back(std::move(*full), std::move(event));
+				}
+				std::ranges::sort(ordered_pre_end,
+								  [](const auto& left, const auto& right)
+								  {
+									  return left.first < right.first;
+								  });
+				std::vector<std::vector<std::byte>> ordered_full;
+				ordered_full.reserve(ordered_pre_end.size());
+				for (const auto& entry : ordered_pre_end)
+					ordered_full.push_back(entry.first);
+				auto event_digest =
+					exact_partition_digest("cxxlens.df-0200.partition-event-full-projection.v1",
+										   partition_id,
+										   ordered_full);
+				auto claim_digest =
+					exact_partition_digest("cxxlens.df-0200.claim-occurrence-full-projection.v1",
+										   partition_id,
+										   claim_projections);
+				auto row_digest =
+					exact_partition_digest("cxxlens.df-0200.detached-row-full-projection.v1",
+										   partition_id,
+										   row_projections);
+				auto coverage_digest =
+					exact_partition_digest("cxxlens.df-0200.coverage-full-projection.v1",
+										   partition_id,
+										   coverage_projections);
+				auto unresolved_digest =
+					exact_partition_digest("cxxlens.df-0200.unresolved-full-projection.v1",
+										   partition_id,
+										   unresolved_projections);
+				if (!event_digest || !claim_digest || !row_digest || !coverage_digest ||
+					!unresolved_digest)
+					return sdk::unexpected(receipt_error("bounded-result-oracle", "digest"));
+				const auto event_count = ordered_pre_end.size() + 1U;
+				if (event_count > std::numeric_limits<std::uint64_t>::max())
+					return sdk::unexpected(receipt_error("bounded-result-oracle", "event-count"));
+				if (auto valid = append_event(
+						materialization_partition_event_kind::partition_end,
+						{text(task_id), text(partition_id)},
+						{u64_bytes(static_cast<std::uint64_t>(event_count)),
+						 u64_bytes(static_cast<std::uint64_t>(claim_projections.size())),
+						 u64_bytes(static_cast<std::uint64_t>(row_projections.size())),
+						 u64_bytes(static_cast<std::uint64_t>(coverage_projections.size())),
+						 u64_bytes(static_cast<std::uint64_t>(unresolved_projections.size())),
+						 text(*event_digest),
+						 text(*claim_digest),
+						 text(*row_digest),
+						 text(*coverage_digest),
+						 text(*unresolved_digest),
+						 text(partition.manifest.content_digest)});
+					!valid)
+					return sdk::unexpected(std::move(valid.error()));
+				for (auto& entry : ordered_pre_end)
+					output.push_back(std::move(entry.second));
+				output.push_back(std::move(partition_events.back()));
+			}
+
+			std::vector<
+				std::pair<std::vector<std::byte>, materialization_incremental_event_projection>>
+				ordered;
+			ordered.reserve(output.size());
+			for (auto& event : output)
+			{
+				auto full = full_event_projection(event);
+				if (!full)
+					return sdk::unexpected(std::move(full.error()));
+				ordered.emplace_back(std::move(*full), std::move(event));
+			}
+			std::ranges::sort(ordered,
+							  [](const auto& left, const auto& right)
+							  {
+								  return std::tie(left.second.partition_id, left.first) <
+									  std::tie(right.second.partition_id, right.first);
+							  });
+			for (std::size_t index{1U}; index < ordered.size(); ++index)
+				if (ordered[index - 1U].second.partition_id == ordered[index].second.partition_id &&
+					ordered[index - 1U].first == ordered[index].first)
+					return sdk::unexpected(
+						receipt_error("bounded-result-oracle", "duplicate-final-event"));
+			output.clear();
+			output.reserve(ordered.size());
+			for (auto& entry : ordered)
+				output.push_back(std::move(entry.second));
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(receipt_error("bounded-result-oracle", "allocation"));
+		}
+	}
+	sdk::result<std::vector<materialization_incremental_event_projection>>
 	materialization_incremental_result_event_projections(
 		const validated_materialization_request& request,
 		const std::size_t task_index,
@@ -1768,8 +2165,19 @@ namespace cxxlens::detail::clang22::materialization
 		const std::size_t task_index,
 		const materialization_v2_1_task_execution& task)
 	{
+		return seal_materialization_incremental_selected_request_entry_binding(
+			authority,
+			task_index,
+			materialization_v2_1_task_metadata_binding{task.input, task.metadata});
+	}
+
+	sdk::result<std::string> seal_materialization_incremental_selected_request_entry_binding(
+		const materialization_v2_1_claim_authority& authority,
+		const std::size_t task_index,
+		const materialization_v2_1_task_metadata_binding& task)
+	{
 		if (task_index >= authority.task_count() || task.metadata.task_index != task_index ||
-			task.metadata.provider_task_id.empty() ||
+			!sdk::validate_strong_id(task.metadata.provider_task_id) ||
 			task.metadata.source_content_digest != task.input.source_content_digest ||
 			task_index > std::numeric_limits<std::uint64_t>::max() ||
 			!content_digest(task.input.source_content_digest))
@@ -1781,6 +2189,57 @@ namespace cxxlens::detail::clang22::materialization
 										  text(task.input.source_content_digest),
 										  u64_bytes(task.input.budget.output_bytes),
 										  u64_bytes(task.input.budget.rows)}));
+	}
+
+	sdk::result<materialization_incremental_selected_request_binding_set>
+	seal_materialization_incremental_selected_request_binding_set(
+		const materialization_v2_1_claim_authority& authority)
+	{
+		if (authority.request() == nullptr || authority.task_count() == 0U ||
+			authority.task_count() > std::numeric_limits<std::size_t>::max())
+			return sdk::unexpected(receipt_error("selected-request-set", "authority"));
+		auto request_id = materialization_incremental_request_id(authority);
+		if (!request_id)
+			return sdk::unexpected(std::move(request_id.error()));
+
+		materialization_incremental_selected_request_binding_set output;
+		output.materialization_request_id = *request_id;
+		output.exact_task_count = authority.task_count();
+		output.canonical_task_ids.reserve(static_cast<std::size_t>(authority.task_count()));
+		output.ordered_entry_binding_digests.reserve(
+			static_cast<std::size_t>(authority.task_count()));
+		for (std::size_t index{}; index < static_cast<std::size_t>(authority.task_count()); ++index)
+		{
+			auto task = authority.request()->task_metadata_binding(index);
+			if (!task)
+				return sdk::unexpected(std::move(task.error()));
+			if (!sdk::validate_strong_id(task->metadata.provider_task_id))
+				return sdk::unexpected(receipt_error("selected-request-set", "task-id"));
+			auto entry = seal_materialization_incremental_selected_request_entry_binding(
+				authority, index, *task);
+			if (!entry)
+				return sdk::unexpected(std::move(entry.error()));
+			output.canonical_task_ids.push_back(task->metadata.provider_task_id);
+			output.ordered_entry_binding_digests.push_back(std::move(*entry));
+		}
+		std::vector<sdk::canonical_value> task_ids;
+		task_ids.reserve(output.canonical_task_ids.size());
+		for (const auto& task_id : output.canonical_task_ids)
+			task_ids.push_back(text(task_id));
+		std::vector<sdk::canonical_value> entry_digests;
+		entry_digests.reserve(output.ordered_entry_binding_digests.size());
+		for (const auto& digest : output.ordered_entry_binding_digests)
+			entry_digests.push_back(text(digest));
+		auto set_digest =
+			semantic_projection("cxxlens.df-0200.selected-request-entry-binding-set.v1",
+								tuple({text(output.materialization_request_id),
+									   u64_bytes(output.exact_task_count),
+									   tuple(std::move(task_ids)),
+									   tuple(std::move(entry_digests))}));
+		if (!set_digest)
+			return sdk::unexpected(std::move(set_digest.error()));
+		output.selected_request_entry_binding_set_digest = std::move(*set_digest);
+		return output;
 	}
 
 	sdk::result<materialization_incremental_task_receipt>
@@ -1957,6 +2416,35 @@ namespace cxxlens::detail::clang22::materialization
 		std::string provider_sealed_transcript_digest,
 		const std::span<const materialization_incremental_event_projection> events)
 	{
+		auto binding_set = seal_materialization_incremental_selected_request_binding_set(authority);
+		if (!binding_set)
+			return sdk::unexpected(std::move(binding_set.error()));
+		return make_materialization_incremental_task_receipt(
+			authority,
+			*binding_set,
+			task_index,
+			task,
+			provider_stdout_byte_count,
+			std::move(provider_stdout_sha256),
+			decoded_provider_frame_count,
+			std::move(provider_frame_transcript_digest),
+			std::move(provider_sealed_transcript_digest),
+			events);
+	}
+
+	sdk::result<materialization_incremental_task_receipt>
+	make_materialization_incremental_task_receipt(
+		const materialization_v2_1_claim_authority& authority,
+		const materialization_incremental_selected_request_binding_set& binding_set,
+		const std::size_t task_index,
+		const materialization_v2_1_task_execution& task,
+		const std::uint64_t provider_stdout_byte_count,
+		std::string provider_stdout_sha256,
+		const std::uint64_t decoded_provider_frame_count,
+		std::string provider_frame_transcript_digest,
+		std::string provider_sealed_transcript_digest,
+		const std::span<const materialization_incremental_event_projection> events)
+	{
 		if (task_index >= authority.task_count() || task.metadata.task_index != task_index ||
 			events.empty() || provider_stdout_byte_count == 0U ||
 			decoded_provider_frame_count == 0U || !content_digest(provider_stdout_sha256) ||
@@ -1966,10 +2454,22 @@ namespace cxxlens::detail::clang22::materialization
 		auto request_id = materialization_incremental_request_id(authority);
 		if (!request_id)
 			return sdk::unexpected(std::move(request_id.error()));
-		auto selected = seal_materialization_incremental_selected_request_entry_binding(
+		auto expected_binding_set =
+			seal_materialization_incremental_selected_request_binding_set(authority);
+		if (!expected_binding_set || *expected_binding_set != binding_set ||
+			binding_set.materialization_request_id != *request_id ||
+			binding_set.exact_task_count != authority.task_count() ||
+			binding_set.canonical_task_ids.size() != authority.task_count() ||
+			binding_set.ordered_entry_binding_digests.size() != authority.task_count() ||
+			task_index >= binding_set.ordered_entry_binding_digests.size() ||
+			binding_set.canonical_task_ids[task_index] != task.metadata.provider_task_id)
+			return sdk::unexpected(receipt_error("task-receipt", "selected-request-set"));
+		auto current_selected = seal_materialization_incremental_selected_request_entry_binding(
 			authority, task_index, task);
-		if (!selected)
-			return sdk::unexpected(std::move(selected.error()));
+		if (!current_selected ||
+			*current_selected != binding_set.ordered_entry_binding_digests[task_index])
+			return sdk::unexpected(receipt_error("task-receipt", "selected-entry-binding"));
+		const auto selected = binding_set.ordered_entry_binding_digests[task_index];
 		const auto task_id = task.metadata.provider_task_id;
 		std::vector<ordered_event> ordered;
 		ordered.reserve(events.size());
@@ -2085,7 +2585,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		materialization_incremental_task_receipt receipt;
 		receipt.materialization_request_id = std::move(*request_id);
-		receipt.selected_request_entry_binding_digest = std::move(*selected);
+		receipt.selected_request_entry_binding_digest = selected;
 		receipt.task_id = task_id;
 		receipt.canonical_task_ordinal = static_cast<std::uint64_t>(task_index);
 		receipt.successful_seal = true;
@@ -2148,15 +2648,42 @@ namespace cxxlens::detail::clang22::materialization
 		const materialization_v2_1_task_execution& task,
 		const materialization_incremental_task_receipt& receipt)
 	{
+		auto binding_set = seal_materialization_incremental_selected_request_binding_set(authority);
+		if (!binding_set)
+			return sdk::unexpected(std::move(binding_set.error()));
+		return validate_materialization_incremental_task_receipt(
+			authority, *binding_set, task_index, task, receipt);
+	}
+
+	sdk::result<void> validate_materialization_incremental_task_receipt(
+		const materialization_v2_1_claim_authority& authority,
+		const materialization_incremental_selected_request_binding_set& binding_set,
+		const std::size_t task_index,
+		const materialization_v2_1_task_execution& task,
+		const materialization_incremental_task_receipt& receipt)
+	{
 		if (task_index >= authority.task_count() || task.metadata.task_index != task_index ||
 			!receipt.successful_seal || receipt.canonical_task_ordinal != task_index)
 			return sdk::unexpected(receipt_error("task-receipt", "ordinal-or-success"));
 		if (receipt.materialization_request_id != authority.materialization_request_id() ||
 			receipt.task_id != task.metadata.provider_task_id)
 			return sdk::unexpected(receipt_error("task-receipt", "request-or-task-binding"));
-		auto selected = seal_materialization_incremental_selected_request_entry_binding(
+		auto expected_binding_set =
+			seal_materialization_incremental_selected_request_binding_set(authority);
+		if (!expected_binding_set || *expected_binding_set != binding_set ||
+			binding_set.materialization_request_id != authority.materialization_request_id() ||
+			binding_set.exact_task_count != authority.task_count() ||
+			binding_set.canonical_task_ids.size() != authority.task_count() ||
+			binding_set.ordered_entry_binding_digests.size() != authority.task_count() ||
+			task_index >= binding_set.ordered_entry_binding_digests.size() ||
+			binding_set.canonical_task_ids[task_index] != task.metadata.provider_task_id ||
+			receipt.selected_request_entry_binding_digest !=
+				binding_set.ordered_entry_binding_digests[task_index])
+			return sdk::unexpected(receipt_error("task-receipt", "selected-entry-binding"));
+		auto current_selected = seal_materialization_incremental_selected_request_entry_binding(
 			authority, task_index, task);
-		if (!selected || receipt.selected_request_entry_binding_digest != *selected)
+		if (!current_selected ||
+			*current_selected != binding_set.ordered_entry_binding_digests[task_index])
 			return sdk::unexpected(receipt_error("task-receipt", "selected-entry-binding"));
 		if (receipt.provider_stdout_byte_count == 0U ||
 			!content_digest(receipt.provider_stdout_sha256) ||

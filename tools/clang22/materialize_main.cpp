@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -190,51 +189,6 @@ namespace
 	  private:
 		const clang22_task_input_replay& input_;
 	};
-
-	template <class Spool>
-	[[nodiscard]] sdk::result<void>
-	independently_consume_task_window(Spool& spool,
-									  const std::uint64_t maximum_bytes,
-									  const std::string_view expected_digest,
-									  const std::string_view field)
-	{
-		try
-		{
-			if (!spool.sealed() || spool.size_bytes() > maximum_bytes)
-				return sdk::unexpected(
-					sdk::error{"materialization.spool-failure", std::string{field}, "sealed-size"});
-			auto digest = make_materialization_sha256_accumulator();
-			if (!digest)
-				return sdk::unexpected(
-					sdk::error{"materialization.spool-failure", std::string{field}, "digest"});
-			std::array<std::byte, default_stream_chunk_bytes> buffer{};
-			std::uint64_t offset{};
-			while (offset < spool.size_bytes())
-			{
-				const auto remaining = spool.size_bytes() - offset;
-				const auto count = static_cast<std::size_t>(
-					std::min<std::uint64_t>(remaining, static_cast<std::uint64_t>(buffer.size())));
-				auto read = spool.read_at(offset, std::span{buffer}.first(count));
-				if (!read || *read == 0U || *read > count)
-					return sdk::unexpected(
-						sdk::error{"materialization.spool-failure", std::string{field}, "read"});
-				if (auto updated = digest->update(std::span{buffer}.first(*read)); !updated)
-					return sdk::unexpected(sdk::error{
-						"materialization.spool-failure", std::string{field}, "digest-update"});
-				offset += static_cast<std::uint64_t>(*read);
-			}
-			auto actual = digest->finish();
-			if (!actual || *actual != expected_digest)
-				return sdk::unexpected(sdk::error{
-					"materialization.task-binding-mismatch", std::string{field}, "digest"});
-			return {};
-		}
-		catch (const std::bad_alloc&)
-		{
-			return sdk::unexpected(
-				sdk::error{"materialization.spool-failure", std::string{field}, "allocation"});
-		}
-	}
 
 	[[nodiscard]] std::string utc_now()
 	{
@@ -1318,6 +1272,7 @@ namespace
 		production_v2_1_executor(
 			validated_materialization_request_v2_1& source_request,
 			const materialization_v2_1_claim_authority& claim_authority,
+			const materialization_incremental_selected_request_binding_set& binding_set,
 			const sdk::provider::provider_selection& selection,
 			const std::unique_ptr<sdk::provider::detail::replayable_provider_process_port>&
 				processes,
@@ -1328,10 +1283,10 @@ namespace
 			const materialization_prior_artifact_replay_bundle* prior_artifact,
 			std::string request_id)
 			: source_request_{source_request}, claim_authority_{claim_authority},
-			  selection_{selection}, processes_{processes}, journal_{journal},
-			  task_reports_{task_reports}, output_descriptors_{output_descriptors},
-			  report_limits_{report_limits}, prior_artifact_{prior_artifact},
-			  request_id_{std::move(request_id)},
+			  binding_set_{binding_set}, selection_{selection}, processes_{processes},
+			  journal_{journal}, task_reports_{task_reports},
+			  output_descriptors_{output_descriptors}, report_limits_{report_limits},
+			  prior_artifact_{prior_artifact}, request_id_{std::move(request_id)},
 			  cancellation_watcher_{
 				  [this](const std::stop_token stop)
 				  {
@@ -1383,25 +1338,11 @@ namespace
 				return sdk::unexpected(sdk::error{"materialization.worker-failure",
 												  execution.metadata.provider_task_id,
 												  "execution"});
-			if (auto consumed =
-					independently_consume_task_window(*execution.source,
-													  maximum_clang22_task_source_bytes,
-													  execution.source_receipt.content_digest,
-													  "source-spool");
-				!consumed)
-				return sdk::unexpected(std::move(consumed.error()));
-			if (auto consumed =
-					independently_consume_task_window(*execution.task_input,
-													  maximum_clang22_task_input_bytes,
-													  execution.metadata.task_input_digest,
-													  "task-input-spool");
-				!consumed)
+			if (auto consumed = consume_materialization_v2_1_task_window(execution); !consumed)
 				return sdk::unexpected(std::move(consumed.error()));
 			const auto task_metadata = execution.metadata;
 			const auto task_input = execution.input;
 			const auto source_receipt = execution.source_receipt;
-			execution.source_window_sealed = true;
-			execution.task_input_window_sealed = true;
 			streamed_validated_materialization_task_request seal_request{
 				task_input,
 				&source_request_.request().catalog(),
@@ -1565,7 +1506,7 @@ namespace
 				*binding.partitions.front().current_state,
 				*artifact_digest,
 				task.metadata.provider_execution_id});
-			auto events = materialization_incremental_result_event_projections(
+			auto events = materialization_incremental_receipt_event_projections(
 				claim_authority_, task_index, task, result, std::span<const std::string>{});
 			if (!events)
 				return sdk::unexpected(std::move(events.error()));
@@ -1578,6 +1519,7 @@ namespace
 				return sdk::unexpected(std::move(partition_set_digest.error()));
 			auto task_receipt = make_materialization_incremental_task_receipt(
 				claim_authority_,
+				binding_set_,
 				task_index,
 				task,
 				stdout_bytes,
@@ -1638,7 +1580,7 @@ namespace
 				*binding.partitions.front().current_state,
 				*artifact_digest,
 				task.metadata.provider_execution_id});
-			auto events = materialization_incremental_result_event_projections(
+			auto events = materialization_incremental_receipt_event_projections(
 				claim_authority_, task_index, task, result, std::span<const std::string>{});
 			if (!events)
 				return sdk::unexpected(std::move(events.error()));
@@ -1651,6 +1593,7 @@ namespace
 				return sdk::unexpected(std::move(partition_set_digest.error()));
 			auto task_receipt = make_materialization_incremental_task_receipt(
 				claim_authority_,
+				binding_set_,
 				task_index,
 				task,
 				stdout_bytes,
@@ -1709,6 +1652,7 @@ namespace
 
 		validated_materialization_request_v2_1& source_request_;
 		const materialization_v2_1_claim_authority& claim_authority_;
+		const materialization_incremental_selected_request_binding_set& binding_set_;
 		const sdk::provider::provider_selection& selection_;
 		const std::unique_ptr<sdk::provider::detail::replayable_provider_process_port>& processes_;
 		materialization_execution_journal& journal_;
@@ -1890,7 +1834,7 @@ int main(const int argc, char**)
 								  request_subject,
 								  bounded_source.error());
 	auto ingress_begin = materialization_incremental_ingress::begin_dynamic(
-		*request, claim_context->claim_authority);
+		*request, claim_context->claim_authority, claim_context->selected_request_binding_set);
 	if (!ingress_begin)
 		return emit_typed_failure(std::move(*journal),
 								  "materialization.incremental-invalid",
@@ -1899,6 +1843,7 @@ int main(const int argc, char**)
 	std::optional<materialization_incremental_ingress> ingress{std::move(*ingress_begin)};
 	production_v2_1_executor executor{*request,
 									  claim_context->claim_authority,
+									  claim_context->selected_request_binding_set,
 									  *selection,
 									  processes,
 									  *journal,
@@ -1937,7 +1882,11 @@ int main(const int argc, char**)
 			return sdk::unexpected(sdk::error{
 				"materialization.incremental-invalid", "executor", "pre-encoder-mismatch"});
 		if (auto valid = validate_materialization_incremental_task_receipt(
-				claim_context->claim_authority, task_index, task, pre_encoder.task_receipt);
+				claim_context->claim_authority,
+				claim_context->selected_request_binding_set,
+				task_index,
+				task,
+				pre_encoder.task_receipt);
 			!valid)
 			return sdk::unexpected(std::move(valid.error()));
 		auto encoded_spools = output.encode_partition_spools(output.result, pre_encoder);

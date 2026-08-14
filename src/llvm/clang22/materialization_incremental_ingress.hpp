@@ -99,7 +99,8 @@ namespace cxxlens::detail::clang22::materialization
 		/** Begin production ingress from a v2.1 request without a legacy task vector. */
 		[[nodiscard]] static sdk::result<materialization_incremental_ingress>
 		begin_dynamic(validated_materialization_request_v2_1& request,
-					  const materialization_v2_1_claim_authority& claim_authority);
+					  const materialization_v2_1_claim_authority& claim_authority,
+					  const materialization_incremental_selected_request_binding_set& binding_set);
 
 		/** Consume only the canonical next task and destroy its input before returning. */
 		[[nodiscard]] sdk::result<void>
@@ -136,6 +137,7 @@ namespace cxxlens::detail::clang22::materialization
 		bool dynamic_partition_ids_{};
 		const validated_materialization_request_v2_1* v2_request_{};
 		const materialization_v2_1_claim_authority* claim_authority_{};
+		const materialization_incremental_selected_request_binding_set* binding_set_{};
 		std::size_t v2_task_count_{};
 
 		materialization_incremental_ingress(
@@ -153,6 +155,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::string request_id,
 			std::size_t task_count,
 			const validated_materialization_request_v2_1& request,
-			const materialization_v2_1_claim_authority& claim_authority);
+			const materialization_v2_1_claim_authority& claim_authority,
+			const materialization_incremental_selected_request_binding_set& binding_set);
 	};
 } // namespace cxxlens::detail::clang22::materialization
