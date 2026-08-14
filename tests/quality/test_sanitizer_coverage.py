@@ -105,6 +105,20 @@ class SanitizerCoverageTest(unittest.TestCase):
         with self.assertRaisesRegex(SanitizerCoverageError, "exact selection"):
             validate_tsan_ctest_selection(command)
 
+    def test_tsan_preserves_single_quoted_continuation_semantics(self) -> None:
+        continuation = "\\\n"
+        command = (
+            "ctest --preset tsan --parallel 1 --label-exclude quality "
+            + continuation
+            + "--exclude-regex '^install\\.clang22-materializer-success$"
+            + continuation
+            + "' "
+            + continuation
+            + "--output-junit ctest.xml"
+        )
+        with self.assertRaisesRegex(SanitizerCoverageError, "exact selection"):
+            validate_tsan_ctest_selection(command)
+
     def test_tsan_rejects_additional_label_exclusion(self) -> None:
         continuation = "\\\n"
         command = (
@@ -155,6 +169,42 @@ class SanitizerCoverageTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             SanitizerCoverageError, "additional CTest"
+        ):
+            extract_tsan_selection_script(mutated)
+
+    def test_tsan_rejects_dynamic_ctest_in_an_additional_step(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        mutated = workflow.replace(
+            "      - name: TSan evidence\n",
+            "      - name: TSan extra\n"
+            "        run: |\n"
+            "          cmd=c''test\n"
+            "          \"$cmd\" -E '^broad$'\n"
+            "      - name: TSan evidence\n",
+            1,
+        )
+        with self.assertRaisesRegex(
+            SanitizerCoverageError, "additional CTest"
+        ):
+            extract_tsan_selection_script(mutated)
+
+    def test_tsan_rejects_unknown_dynamic_command_in_an_additional_step(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        mutated = workflow.replace(
+            "      - name: TSan evidence\n",
+            "      - name: TSan extra\n"
+            "        run: |\n"
+            "          cmd=$CTEST\n"
+            "          \"$cmd\" -E '^broad$'\n"
+            "      - name: TSan evidence\n",
+            1,
+        )
+        with self.assertRaisesRegex(
+            SanitizerCoverageError, "dynamic shell"
         ):
             extract_tsan_selection_script(mutated)
 

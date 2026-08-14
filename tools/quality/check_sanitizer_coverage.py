@@ -39,6 +39,8 @@ TSAN_CTEST_SELECTION = [
     "ctest.xml",
 ]
 TSAN_CTEST_STEP_NAME = "Run exact TSan CTest selection"
+# The exact selection contract is scoped to the thread-sanitizer job; the
+# ASan/UBSan selection has an independent quality owner.
 
 
 class SanitizerCoverageError(ValueError):
@@ -57,12 +59,11 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
 
 
 def _shell_tokens(script: str) -> list[str]:
-    normalized = script.replace("\\\r\n", "").replace("\\\n", "")
-    lexer = shlex.shlex(normalized, posix=True, punctuation_chars=True)
+    lexer = shlex.shlex(script, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
-        return list(lexer)
+        return [token for token in lexer if token != "\n"]
     except ValueError as error:
         fail(f"cannot parse shell script: {error}")
 
@@ -103,8 +104,15 @@ def extract_tsan_selection_script(workflow: str) -> str:
         if not isinstance(other_run, str):
             continue
         tokens = _shell_tokens(other_run)
-        if any(token == "ctest" or token.endswith("/ctest") for token in tokens):
+        if any(
+            token == "ctest"
+            or token.endswith("/ctest")
+            or token.endswith("=ctest")
+            for token in tokens
+        ):
             fail("thread-sanitizer contains an additional CTest invocation")
+        if any("$" in token for token in tokens):
+            fail("thread-sanitizer contains dynamic shell command construction")
     return run
 
 
