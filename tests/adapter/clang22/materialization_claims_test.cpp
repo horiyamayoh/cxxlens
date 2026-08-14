@@ -24,6 +24,7 @@
 #include <cxxlens/relations/cc_entity.hpp>
 
 #include "llvm/clang22/materialization_claim_stream.hpp"
+#include "llvm/clang22/materialization_bounded_claim_source.hpp"
 #include "llvm/clang22/materialization_incremental_coordinator.hpp"
 #include "llvm/clang22/materialization_incremental_ingress.hpp"
 #include "llvm/clang22/materialization_incremental_receipt.hpp"
@@ -2756,12 +2757,57 @@ namespace
 																	producer,
 																	guarantee);
 		require(published && published->store().publication_attempted &&
-					published->publication_verified() &&
-					published->store().publish_call_count == 1U &&
-					published->store().publish_returned_record.has_value() &&
-					published->store().verification_store.has_value() &&
-					!published->store().first_issue.has_value(),
-				"incremental coordinator did not retain a successful Store publication receipt");
+			published->publication_verified() &&
+			published->store().publish_call_count == 1U &&
+			published->store().publish_returned_record.has_value() &&
+			published->store().verification_store.has_value() &&
+			!published->store().first_issue.has_value(),
+			"incremental coordinator did not retain a successful Store publication receipt");
+	}
+
+	void check_bounded_adoption_fail_closed(const validated_materialization_request& request,
+											const materialization_producer_authority& producer)
+	{
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		auto sealed = seal_task(request, 0U);
+		require(sealed.has_value(), "bounded adoption fail-closed fixture seal failed");
+		const auto make_task = [&]()
+		{
+			auto task = construct_materialization_bounded_task_claims(
+				request, 0U, *sealed, producer, guarantee);
+			require(task.has_value(),
+					"bounded adoption fail-closed task construction failed: " +
+						(task ? std::string{} : failure(task.error())));
+			return std::move(*task);
+		};
+
+		auto source = materialization_bounded_claim_source::begin(request);
+		require(source.has_value(), "bounded adoption fail-closed source begin failed");
+		auto metadata_drift = make_task();
+		metadata_drift.partitions.front().sdk_claim_occurrence_count += 1U;
+		auto rejected = source->consume_task(std::move(metadata_drift));
+		require(!rejected && rejected.error().field == "partition" &&
+					rejected.error().detail == "claim-census" && source->partition_count() == 0U,
+				"bounded adoption accepted metadata drift or mutated before validation");
+		auto retry = make_task();
+		auto retry_result = source->consume_task(std::move(retry));
+		require(!retry_result && retry_result.error().field == "lifecycle",
+				"bounded adoption did not remain single-use after rejection");
+		auto finalized_failed = std::move(*source).finalize();
+		require(!finalized_failed && finalized_failed.error().field == "lifecycle",
+				"failed bounded adoption source became finalizable");
+
+		auto duplicate_source = materialization_bounded_claim_source::begin(request);
+		require(duplicate_source.has_value(), "duplicate partition source begin failed");
+		auto duplicate = make_task();
+		require(!duplicate.partitions.empty(), "duplicate partition fixture is empty");
+		duplicate.partitions.push_back(duplicate.partitions.back());
+		auto duplicate_result = duplicate_source->consume_task(std::move(duplicate));
+		require(!duplicate_result && duplicate_result.error().field == "partitions" &&
+					duplicate_result.error().detail == "noncanonical-order" &&
+					duplicate_source->partition_count() == 0U,
+				"bounded adoption accepted a duplicate partition window");
 	}
 } // namespace
 
@@ -2781,5 +2827,6 @@ int main(const int argc, char** argv)
 	positive_and_zero_partitions(request, producer);
 	streaming_source_receipts_replace_resident_payloads(root);
 	check_incremental_coordinator(request, producer);
+	check_bounded_adoption_fail_closed(request, producer);
 	negative_authority_guarantee_order_and_coverage(request, std::move(producer));
 }

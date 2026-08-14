@@ -166,5 +166,6 @@ namespace cxxlens::detail::clang22::materialization
 		std::unique_ptr<materialization_replayable_spool> canonicalization_edges_;
 		std::unique_ptr<materialization_replayable_spool> origin_associations_;
 		bool sealed_{};
+		bool failed_{};
 	};
 } // namespace cxxlens::detail::clang22::materialization

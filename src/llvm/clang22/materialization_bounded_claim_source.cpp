@@ -89,6 +89,159 @@ namespace cxxlens::detail::clang22::materialization
 			return {};
 		}
 
+		[[nodiscard]] sdk::result<std::string> canonical_claim_ref(const std::string_view role,
+																   const sdk::claim& claim)
+		{
+			auto singleton = sdk::claim_batch_content_digest(
+				std::span<const sdk::claim>{&claim, 1U}, {}, {}, {});
+			if (!singleton)
+				return sdk::unexpected(source_error("claim_envelopes", "singleton-digest"));
+			const std::array fields{sdk::canonical_value::from_string(std::string{role}),
+									sdk::canonical_value::from_string(std::move(*singleton))};
+			auto reference =
+				sdk::canonical_identity_digest("materialization-claim-envelope", fields);
+			if (!reference)
+				return sdk::unexpected(source_error("claim_envelopes", "claim-ref"));
+			return std::move(*reference);
+		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_bounded_task(const sdk::relation_engine& engine,
+							  const materialization_bounded_task_claims& task)
+		{
+			if (task.partitions.empty())
+				return sdk::unexpected(source_error("partitions", "empty"));
+
+			std::map<std::string_view, const materialization_claim_envelope*, std::less<>>
+				envelopes;
+			for (const auto& envelope : task.claim_envelopes)
+			{
+				if (envelope.role.empty() || envelope.claim_ref.empty() ||
+					envelope.sdk_singleton_claim_batch_digest.empty())
+					return sdk::unexpected(source_error("claim_envelopes", "identity"));
+				auto singleton = sdk::claim_batch_content_digest(
+					std::span<const sdk::claim>{&envelope.value, 1U}, {}, {}, {});
+				if (!singleton || *singleton != envelope.sdk_singleton_claim_batch_digest)
+					return sdk::unexpected(source_error("claim_envelopes", "digest-binding"));
+				auto expected_ref = canonical_claim_ref(envelope.role, envelope.value);
+				if (!expected_ref || *expected_ref != envelope.claim_ref)
+					return sdk::unexpected(source_error("claim_envelopes", "identity-binding"));
+				if (!envelopes.emplace(envelope.claim_ref, &envelope).second)
+					return sdk::unexpected(source_error("claim_envelopes", "duplicate-ref"));
+			}
+
+			std::set<std::string_view, std::less<>> edge_precursors;
+			std::set<std::string_view, std::less<>> edge_finals;
+			for (const auto& edge : task.canonicalization_edges)
+			{
+				if (edge.precursor_claim_ref.empty() || edge.final_claim_ref.empty() ||
+					edge.transform_semantics.empty() ||
+					envelopes.find(edge.precursor_claim_ref) == envelopes.end() ||
+					envelopes.find(edge.final_claim_ref) == envelopes.end() ||
+					!edge_precursors.insert(edge.precursor_claim_ref).second ||
+					!edge_finals.insert(edge.final_claim_ref).second)
+					return sdk::unexpected(
+						source_error("canonicalization_edges", "identity-binding"));
+			}
+
+			std::map<std::string_view, std::uint64_t, std::less<>> association_counts;
+			std::set<std::string_view, std::less<>> association_ids;
+			for (const auto& association : task.origin_associations)
+			{
+				if (association.association_id.empty() || association.stored_claim_ref.empty() ||
+					association.sealed_row_digest.empty() ||
+					!association_ids.insert(association.association_id).second)
+					return sdk::unexpected(source_error("origin_associations", "identity"));
+				auto envelope = envelopes.find(association.stored_claim_ref);
+				if (envelope == envelopes.end() || envelope->second->role != "stored_final")
+					return sdk::unexpected(source_error("origin_associations", "stored-ref"));
+				auto& count = association_counts[association.stored_claim_ref];
+				if (count == std::numeric_limits<std::uint64_t>::max())
+					return sdk::unexpected(source_error("origin_associations", "count-overflow"));
+				++count;
+			}
+
+			std::set<std::string_view, std::less<>> task_final_refs;
+			std::string_view previous_partition;
+			for (const auto& partition : task.partitions)
+			{
+				const auto partition_id = std::string_view{partition.manifest.partition_id};
+				if (partition_id.empty() ||
+					(!previous_partition.empty() && !(previous_partition < partition_id)))
+					return sdk::unexpected(source_error("partitions", "noncanonical-order"));
+				previous_partition = partition_id;
+				if (auto valid = validate_partition_metadata(engine, partition); !valid)
+					return valid;
+				auto expected_manifest = sdk::make_partition_manifest(engine, partition.draft);
+				if (!expected_manifest || *expected_manifest != partition.manifest)
+					return sdk::unexpected(source_error("partition", "manifest-binding"));
+				if (partition.empty_partition != partition.draft.claims.empty() ||
+					partition.sdk_claim_occurrence_count != partition.draft.claims.size() ||
+					partition.sdk_claim_occurrence_count != partition.stored_claim_refs.size() ||
+					!std::ranges::is_sorted(partition.stored_claim_refs) ||
+					std::ranges::adjacent_find(partition.stored_claim_refs) !=
+						partition.stored_claim_refs.end())
+					return sdk::unexpected(source_error("partition", "claim-census"));
+
+				std::set<std::string_view, std::less<>> expected_contents;
+				std::uint64_t partition_association_count{};
+				for (std::size_t index{}; index < partition.draft.claims.size(); ++index)
+				{
+					const auto& claim = partition.draft.claims[index];
+					expected_contents.insert(claim.content);
+					auto expected_ref = canonical_claim_ref("stored_final", claim);
+					if (!expected_ref || partition.stored_claim_refs[index] != *expected_ref ||
+						!task_final_refs.insert(partition.stored_claim_refs[index]).second)
+						return sdk::unexpected(source_error("partition", "claim-ref-binding"));
+					auto envelope = envelopes.find(partition.stored_claim_refs[index]);
+					if (envelope == envelopes.end() || envelope->second->role != "stored_final" ||
+						!sdk::detail::same_claim_occurrence(envelope->second->value, claim))
+						return sdk::unexpected(source_error("partition", "envelope-binding"));
+					auto association = association_counts.find(partition.stored_claim_refs[index]);
+					if (association == association_counts.end() || association->second == 0U ||
+						association->second >
+							std::numeric_limits<std::uint64_t>::max() - partition_association_count)
+						return sdk::unexpected(source_error("partition", "association-census"));
+					partition_association_count += association->second;
+				}
+				if (partition.claim_content_ids.size() != expected_contents.size() ||
+					!std::ranges::is_sorted(partition.claim_content_ids) ||
+					std::ranges::adjacent_find(partition.claim_content_ids) !=
+						partition.claim_content_ids.end())
+					return sdk::unexpected(source_error("partition", "content-census"));
+				auto expected_content = expected_contents.begin();
+				for (const auto& content : partition.claim_content_ids)
+					if (expected_content == expected_contents.end() ||
+						content != *expected_content++)
+						return sdk::unexpected(source_error("partition", "content-binding"));
+				if (partition.origin_association_count != partition_association_count)
+					return sdk::unexpected(source_error("partition", "association-census"));
+			}
+
+			for (const auto& [claim_ref, count] : association_counts)
+				if (!task_final_refs.contains(claim_ref) || count == 0U)
+					return sdk::unexpected(source_error("origin_associations", "partition-union"));
+			return {};
+		}
+
+		class consume_failure_guard final
+		{
+		  public:
+			consume_failure_guard(bool& failed, bool& completed) noexcept
+				: failed_{failed}, completed_{completed}
+			{
+			}
+			~consume_failure_guard() noexcept
+			{
+				if (!completed_)
+					failed_ = true;
+			}
+
+		  private:
+			bool& failed_;
+			bool& completed_;
+		};
+
 		[[nodiscard]] bool same_identity(const sdk::partition_draft& left,
 										 const sdk::partition_draft& right) noexcept
 		{
@@ -336,10 +489,35 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<void>
 	materialization_bounded_claim_source::consume_task(materialization_bounded_task_claims task)
 	{
-		if (sealed_ || engine_ == nullptr || task.partitions.empty())
+		if (sealed_ || failed_ || engine_ == nullptr)
 			return sdk::unexpected(source_error("lifecycle", "sealed-or-empty"));
+		if (task.partitions.empty())
+		{
+			failed_ = true;
+			return sdk::unexpected(source_error("lifecycle", "sealed-or-empty"));
+		}
+		bool completed = false;
+		const consume_failure_guard failure_guard{failed_, completed};
 		try
 		{
+			if (auto valid = validate_bounded_task(*engine_, task); !valid)
+				return valid;
+			if (materializer_semantics_digest_.empty())
+			{
+				materializer_semantics_digest_ = task.materializer_semantics_digest;
+				direct_basis_digest_ = task.direct_basis_digest;
+				canonical_adoption_transform_digest_ = task.canonical_adoption_transform_digest;
+				base_ingestion_transform_digest_ = task.base_ingestion_transform_digest;
+				assumption_set_id_ = task.assumption_set_id;
+			}
+			else if (materializer_semantics_digest_ != task.materializer_semantics_digest ||
+					 direct_basis_digest_ != task.direct_basis_digest ||
+					 canonical_adoption_transform_digest_ !=
+						 task.canonical_adoption_transform_digest ||
+					 base_ingestion_transform_digest_ != task.base_ingestion_transform_digest ||
+					 assumption_set_id_ != task.assumption_set_id)
+				return sdk::unexpected(source_error("basis", "task-mismatch"));
+
 			if (!claim_envelopes_ || !canonicalization_edges_ || !origin_associations_)
 			{
 				auto envelopes = make_materialization_private_spool();
@@ -410,27 +588,8 @@ namespace cxxlens::detail::clang22::materialization
 					!appended)
 					return appended;
 			}
-			if (materializer_semantics_digest_.empty())
-			{
-				materializer_semantics_digest_ = std::move(task.materializer_semantics_digest);
-				direct_basis_digest_ = std::move(task.direct_basis_digest);
-				canonical_adoption_transform_digest_ =
-					std::move(task.canonical_adoption_transform_digest);
-				base_ingestion_transform_digest_ = std::move(task.base_ingestion_transform_digest);
-				assumption_set_id_ = std::move(task.assumption_set_id);
-			}
-			else if (materializer_semantics_digest_ != task.materializer_semantics_digest ||
-					 direct_basis_digest_ != task.direct_basis_digest ||
-					 canonical_adoption_transform_digest_ !=
-						 task.canonical_adoption_transform_digest ||
-					 base_ingestion_transform_digest_ != task.base_ingestion_transform_digest ||
-					 assumption_set_id_ != task.assumption_set_id)
-				return sdk::unexpected(source_error("basis", "task-mismatch"));
-
 			for (const auto& partition : task.partitions)
 			{
-				if (auto valid = validate_partition_metadata(*engine_, partition); !valid)
-					return valid;
 				auto [found, inserted] = partitions_.try_emplace(partition.manifest.partition_id);
 				if (inserted)
 				{
@@ -481,6 +640,7 @@ namespace cxxlens::detail::clang22::materialization
 					++found->second.appended_claim_count;
 				}
 			}
+			completed = true;
 			return {};
 		}
 		catch (const std::bad_alloc&)
@@ -492,8 +652,10 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<materialization_bounded_claim_source>
 	materialization_bounded_claim_source::finalize() &&
 	{
-		if (sealed_ || partitions_.empty())
+		if (sealed_ || failed_ || partitions_.empty())
 			return sdk::unexpected(source_error("lifecycle", "empty-or-already-sealed"));
+		bool completed = false;
+		const consume_failure_guard failure_guard{failed_, completed};
 		for (auto& [partition_id, state] : partitions_)
 		{
 			(void)partition_id;
@@ -509,13 +671,14 @@ namespace cxxlens::detail::clang22::materialization
 			if (auto sealed = spool->seal(); !sealed)
 				return sdk::unexpected(source_error("report-metadata", "spool-seal"));
 		sealed_ = true;
+		completed = true;
 		return std::move(*this);
 	}
 
 	sdk::result<void> materialization_bounded_claim_source::replay(
 		const materialization_store_partition_consumer& consumer)
 	{
-		if (!sealed_ || engine_ == nullptr || !consumer)
+		if (!sealed_ || failed_ || engine_ == nullptr || !consumer)
 			return sdk::unexpected(source_error("lifecycle", "unsealed-or-consumer"));
 		try
 		{
@@ -583,7 +746,7 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<void> materialization_bounded_claim_source::replay_claim_envelopes(
 		const materialization_claim_envelope_consumer& consumer)
 	{
-		if (!sealed_ || !claim_envelopes_ || !consumer || engine_ == nullptr)
+		if (!sealed_ || failed_ || !claim_envelopes_ || !consumer || engine_ == nullptr)
 			return sdk::unexpected(source_error("claim_envelopes", "lifecycle"));
 		std::uint64_t offset{};
 		while (offset < claim_envelopes_->size_bytes())
@@ -603,7 +766,7 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<void> materialization_bounded_claim_source::replay_canonicalization_edges(
 		const materialization_canonicalization_edge_consumer& consumer)
 	{
-		if (!sealed_ || !canonicalization_edges_ || !consumer)
+		if (!sealed_ || failed_ || !canonicalization_edges_ || !consumer)
 			return sdk::unexpected(source_error("canonicalization_edges", "lifecycle"));
 		std::uint64_t offset{};
 		while (offset < canonicalization_edges_->size_bytes())
@@ -623,7 +786,7 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<void> materialization_bounded_claim_source::replay_origin_associations(
 		const materialization_origin_association_consumer& consumer)
 	{
-		if (!sealed_ || !origin_associations_ || !consumer)
+		if (!sealed_ || failed_ || !origin_associations_ || !consumer)
 			return sdk::unexpected(source_error("origin_associations", "lifecycle"));
 		std::uint64_t offset{};
 		while (offset < origin_associations_->size_bytes())
@@ -643,7 +806,7 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<materialization_bounded_claim_batch_status>
 	materialization_bounded_claim_source::claim_batch_status()
 	{
-		if (!sealed_ || engine_ == nullptr)
+		if (!sealed_ || failed_ || engine_ == nullptr)
 			return sdk::unexpected(source_error("claim-status", "lifecycle"));
 		try
 		{
@@ -913,7 +1076,7 @@ namespace cxxlens::detail::clang22::materialization
 	materialization_bounded_claim_source::partition_metadata(
 		const std::string_view partition_id) const
 	{
-		if (!sealed_ || partition_id.empty())
+		if (!sealed_ || failed_ || partition_id.empty())
 			return sdk::unexpected(source_error("partition", "lifecycle"));
 		const auto found = partitions_.find(std::string{partition_id});
 		if (found == partitions_.end())
