@@ -487,8 +487,11 @@ def _validate_census(
         f"{label} recomputed partition count",
     )
     if (
-        planned != len(request["tasks"])
-        or planned_tasks != len(request["tasks"])
+        # The coordinator's planned counters describe recompute actions, not the
+        # request-wide task census: exact reuse plans therefore legitimately report
+        # zero planned provider calls, while affected-only reports one.
+        planned != expected_actual
+        or planned_tasks != expected_actual
         or actual != expected_actual
         or actual > planned
     ):
