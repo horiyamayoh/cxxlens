@@ -908,6 +908,24 @@ namespace
 				"task cursor did not finalize after the complete task census");
 	}
 
+	void metadata_binding_does_not_open_source_window()
+	{
+		auto accepted = validate(upgrade_fixture(), 1U);
+		require(accepted.has_value(), "metadata binding admission fixture failed");
+
+		auto first = accepted->task_metadata_binding(0U);
+		require(first.has_value(), "source-independent task metadata binding failed");
+		require(first->metadata.task_index == 0U &&
+					first->metadata.provider_task_id.starts_with("task:semantic-v2:sha256:"),
+				"metadata binding lost the canonical task identity");
+		require(first->input.source.empty() && first->input.source_content_base64.empty(),
+				"metadata binding retained source or canonical task.v3 bytes");
+
+		auto second = accepted->task_metadata_binding(1U);
+		require(second.has_value() && second->metadata.task_index == 1U,
+				"metadata binding did not replay the exact second task");
+	}
+
 	void protocol_catalog_and_source_metadata_negatives()
 	{
 		auto minor = upgrade_fixture();
@@ -1530,6 +1548,7 @@ int main()
 	shared_catalog_owner_and_single_task_replay();
 	source_dependent_production_admission();
 	task_cursor_enforces_one_live_task_window();
+	metadata_binding_does_not_open_source_window();
 	protocol_catalog_and_source_metadata_negatives();
 	schema_before_binding_and_version_dispatch();
 	full_schema_and_external_uniqueness_adversarial();
