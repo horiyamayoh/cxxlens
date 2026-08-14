@@ -125,6 +125,7 @@ class SanitizerCoverageTest(unittest.TestCase):
         )
         valid_script = extract_tsan_run_script(workflow)
         for extra in (
+            "command ctest -E '^broad$'",
             "env ctest -E '^broad$'",
             "true && ctest -E '^broad$'",
             "/usr/bin/ctest -E '^broad$'",
