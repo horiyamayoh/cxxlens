@@ -8326,6 +8326,11 @@ namespace cxxlens::sdk
 		}
 	} // namespace
 
+	bool sqlite_source_shm_native_ok_projection_production_activation_enabled() noexcept
+	{
+		return source_shm_native_ok_projection_production_activation;
+	}
+
 	result<std::shared_ptr<sqlite_default_forwarding_vfs>>
 	make_sqlite_default_forwarding_vfs(sqlite_private_snapshot_registry_binding registry)
 	{

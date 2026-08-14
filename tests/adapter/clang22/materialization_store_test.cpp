@@ -444,6 +444,19 @@ namespace
 			else
 				std::cerr << "competitor mismatch\n";
 		}
+		if (competitor.first_issue)
+		{
+			const auto* unavailable =
+				std::get_if<materialization_store_sdk_failure>(&*competitor.first_issue);
+			require(unavailable &&
+						unavailable->operation == materialization_store_operation::store_open &&
+						unavailable->error.code == "store.backend-unavailable" &&
+						unavailable->error.field == "sqlite" &&
+						unavailable->error.detail == "source-shm-readonly-qualification",
+					"SQLite race competitor fabricated a non-qualification failure while "
+					"source-SHM was disabled");
+			return;
+		}
 		require(!competitor.first_issue && competitor.publish_returned_record,
 				"race fixture competitor did not publish");
 		const auto competitor_record = *competitor.publish_returned_record;

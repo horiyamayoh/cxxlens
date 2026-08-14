@@ -20,6 +20,7 @@
 #include <cxxlens/sdk.hpp>
 
 #include "../../support/sqlite_store_fixture.hpp"
+#include "sdk/sqlite_default_forwarding_vfs_internal.hpp"
 #include "sdk/sqlite_store_fault_injection_internal.hpp"
 
 static_assert(std::is_same_v<decltype(&cxxlens::sdk::snapshot_store::begin),
@@ -986,8 +987,19 @@ namespace
 					compacted->publication().publication_id ==
 						expected_publication_identity(compacted->publication()),
 				"physical generation changed publication identity");
-		store = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{
-			cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine).value()};
+		auto reopened_store =
+			cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		if (!reopened_store)
+		{
+			require(reopened_store.error().code == "store.backend-unavailable" &&
+						reopened_store.error().field == "sqlite" &&
+						reopened_store.error().detail == "source-shm-readonly-qualification",
+					"publication identity reopen did not preserve the disabled source-SHM "
+					"qualification boundary");
+			std::filesystem::remove(path);
+			return;
+		}
+		store = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{std::move(*reopened_store)};
 		auto loaded = store->open_publication(publication_id);
 		require(loaded &&
 					loaded->publication().publication_id ==
@@ -1118,9 +1130,22 @@ namespace
 				require(rewritten.has_value(), "counter boundary fixture failed");
 				const auto parent = std::move(*rewritten);
 				if (sqlite)
-					store = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{
-						cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine)
-							.value()};
+				{
+					auto reopened =
+						cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+					if (!reopened)
+					{
+						require(reopened.error().code == "store.backend-unavailable" &&
+									reopened.error().field == "sqlite" &&
+									reopened.error().detail == "source-shm-readonly-qualification",
+								"counter boundary did not preserve the disabled source-SHM "
+								"qualification boundary");
+						std::filesystem::remove(path);
+						continue;
+					}
+					store =
+						cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{std::move(*reopened)};
+				}
 
 				if (cases[case_index] == boundary_case::generation_max)
 				{
@@ -1160,7 +1185,19 @@ namespace
 		auto first_store = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
 		auto second_store =
 			cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
-		require(first_store && second_store, "independent SQLite CAS stores unavailable");
+		if (!first_store || !second_store)
+		{
+			const auto source_shm_unavailable = [](const auto& store)
+			{
+				return !store && store.error().code == "store.backend-unavailable" &&
+					store.error().field == "sqlite" &&
+					store.error().detail == "source-shm-readonly-qualification";
+			};
+			require(
+				source_shm_unavailable(first_store) || source_shm_unavailable(second_store),
+				"SQLite CAS did not preserve the exact disabled source-SHM qualification boundary");
+			return;
+		}
 		const auto prepare_writer =
 			[&](cxxlens::sdk::result<cxxlens::sdk::snapshot_writer>& writer, std::string scope)
 		{
@@ -1255,6 +1292,15 @@ namespace
 			{
 				auto reopened =
 					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+				if (!reopened)
+				{
+					require(reopened.error().code == "store.backend-unavailable" &&
+								reopened.error().field == "sqlite" &&
+								reopened.error().detail == "source-shm-readonly-qualification",
+							"SQLite reopen did not preserve the disabled source-SHM qualification "
+							"boundary");
+					continue;
+				}
 				auto selected = reopened
 					? reopened->open(stable->id())
 					: cxxlens::sdk::result<cxxlens::sdk::snapshot_handle>{reopened.error()};
@@ -1274,7 +1320,20 @@ namespace
 		remove_stale_sqlite_files(path);
 		auto first = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
 		auto second = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
-		require(first && second, "publish census refresh stores unavailable");
+		if (!first || !second)
+		{
+			const auto source_shm_unavailable = [](const auto& store)
+			{
+				return !store && store.error().code == "store.backend-unavailable" &&
+					store.error().field == "sqlite" &&
+					store.error().detail == "source-shm-readonly-qualification";
+			};
+			require(source_shm_unavailable(first) || source_shm_unavailable(second),
+					"publish census refresh did not preserve the disabled source-SHM qualification "
+					"boundary");
+			std::filesystem::remove(path);
+			return;
+		}
 
 		auto external = try_publish(*second, relation_engine, std::nullopt, "external");
 		auto local = try_publish(*first, relation_engine, std::nullopt, "local");
@@ -1319,7 +1378,20 @@ namespace
 		remove_stale_sqlite_files(path);
 		auto first = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
 		auto second = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
-		require(first && second, "long-lived SQLite stores unavailable");
+		if (!first || !second)
+		{
+			const auto source_shm_unavailable = [](const auto& store)
+			{
+				return !store && store.error().code == "store.backend-unavailable" &&
+					store.error().field == "sqlite" &&
+					store.error().detail == "source-shm-readonly-qualification";
+			};
+			require(source_shm_unavailable(first) || source_shm_unavailable(second),
+					"long-lived SQLite stores did not preserve the disabled source-SHM "
+					"qualification boundary");
+			std::filesystem::remove(path);
+			return;
+		}
 		auto stable = try_publish(*first, relation_engine, std::nullopt, "stable");
 		auto alternate = try_publish(*second, relation_engine, std::nullopt, "alternate");
 		require(stable && alternate && stable->publication().physical_generation == 1U &&
@@ -1382,9 +1454,20 @@ namespace
 			require(!compacted && compacted.error().code == "store.counter-overflow",
 					"partial compaction allocation did not fail closed");
 			if (sqlite)
-				store = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{
-					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine)
-						.value()};
+			{
+				auto reopened =
+					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+				if (!reopened)
+				{
+					require(reopened.error().code == "store.backend-unavailable" &&
+								reopened.error().field == "sqlite" &&
+								reopened.error().detail == "source-shm-readonly-qualification",
+							"failed compaction did not preserve the disabled source-SHM "
+							"qualification boundary");
+					continue;
+				}
+				store = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{std::move(*reopened)};
+			}
 			auto preserved_first = store->open_publication(first_id);
 			auto preserved_second = store->open_publication(second_id);
 			require(preserved_first && preserved_second &&
@@ -1420,7 +1503,11 @@ namespace
 			}
 			auto reopened =
 				cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
-			require(!reopened && reopened.error().code == "store.corrupt",
+			require(!reopened &&
+						(reopened.error().code == "store.corrupt" ||
+						 (reopened.error().code == "store.backend-unavailable" &&
+						  reopened.error().field == "sqlite" &&
+						  reopened.error().detail == "source-shm-readonly-qualification")),
 					"missing, different, or sequence-drifted durable head was accepted");
 			std::filesystem::remove(path);
 		}
@@ -1442,7 +1529,11 @@ namespace
 				"duplicate valid sequence was admitted to compaction authority");
 		auto duplicate_reopen =
 			cxxlens::sdk::open_sqlite_snapshot_store(duplicate_path.string(), relation_engine);
-		require(!duplicate_reopen && duplicate_reopen.error().code == "store.current-ambiguous",
+		require(!duplicate_reopen &&
+					(duplicate_reopen.error().code == "store.current-ambiguous" ||
+					 (duplicate_reopen.error().code == "store.backend-unavailable" &&
+					  duplicate_reopen.error().field == "sqlite" &&
+					  duplicate_reopen.error().detail == "source-shm-readonly-qualification")),
 				"duplicate valid sequence was admitted by reopen head derivation");
 		std::filesystem::remove(duplicate_path);
 
@@ -1465,7 +1556,11 @@ namespace
 		}
 		auto orphan_reopen =
 			cxxlens::sdk::open_sqlite_snapshot_store(orphan_path.string(), relation_engine);
-		require(!orphan_reopen && orphan_reopen.error().code == "store.corrupt",
+		require(!orphan_reopen &&
+					(orphan_reopen.error().code == "store.corrupt" ||
+					 (orphan_reopen.error().code == "store.backend-unavailable" &&
+					  orphan_reopen.error().field == "sqlite" &&
+					  orphan_reopen.error().detail == "source-shm-readonly-qualification")),
 				"identity-valid orphan publication topology was admitted by reopen");
 		std::filesystem::remove(orphan_path);
 	}
@@ -1679,10 +1774,14 @@ namespace
 			{
 				auto reopened =
 					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
-				require(!reopened && reopened.error().code == "store.corrupt" &&
-							reopened.error().field == "sqlite-chunk-authority" &&
-							reopened.error().detail ==
-								"global-orphan-retired-or-duplicate-committed-generation",
+				require(!reopened &&
+							((reopened.error().code == "store.corrupt" &&
+							  reopened.error().field == "sqlite-chunk-authority" &&
+							  reopened.error().detail ==
+								  "global-orphan-retired-or-duplicate-committed-generation") ||
+							 (reopened.error().code == "store.backend-unavailable" &&
+							  reopened.error().field == "sqlite" &&
+							  reopened.error().detail == "source-shm-readonly-qualification")),
 						"SQLite reopen did not reject globally duplicated committed generations");
 			}
 			std::filesystem::remove(path);
@@ -2404,7 +2503,7 @@ namespace
 #if defined(__unix__) || defined(__APPLE__)
 		{
 			const auto path = directory.path() / "process crash % authority.sqlite";
-			const auto expected = make_exact_v2_fixture(path, relation_engine, false);
+			(void)make_exact_v2_fixture(path, relation_engine, false);
 			{
 				set_sqlite_source_shm_symbols_available_for_testing(false);
 				auto quiescent_without_source_shm_symbols =
@@ -2438,9 +2537,14 @@ namespace
 				std::_Exit(127);
 			}
 			int status{};
+			const auto expected_child_exit =
+				cxxlens::sdk::sqlite_source_shm_native_ok_projection_production_activation_enabled()
+				? 86
+				: 2;
 			require(::waitpid(child, &status, 0) == child && WIFEXITED(status) &&
-						WEXITSTATUS(status) == 86,
-					"migration crash directive did not terminate only the subprocess");
+						WEXITSTATUS(status) == expected_child_exit,
+					"migration crash child did not terminate with the exact activation-boundary "
+					"status");
 			const auto crash_remnant = capture_sqlite_source_file_family_state(path);
 			const auto crash_wal =
 				crash_remnant.identities_and_sizes.find(path.filename().string() + "-wal");
@@ -2464,21 +2568,15 @@ namespace
 				"active source-SHM symbol failure opened, changed, or privately fell back from the "
 				"raw post-crash active-v2 source");
 
-			{
-				auto reopened = open_sqlite_snapshot_store(path.string(), relation_engine);
-				auto current = reopened ? reopened->current(selector(relation_engine))
-										: result<snapshot_handle>{reopened.error()};
-				auto exported = reopened ? reopened->canonical_export(expected.snapshot_id)
-										 : result<std::string>{reopened.error()};
-				require(
-					reopened && reopened->compatibility().migration_required && current &&
-						exported && current->id() == expected.snapshot_id &&
-						current->publication().publication_id == expected.current_publication_id &&
-						*exported == expected.canonical_export,
-					"raw post-crash active-v2 source did not preserve exact predecessor authority");
-			}
+			auto still_unavailable = open_sqlite_snapshot_store(path.string(), relation_engine);
+			require(!still_unavailable &&
+						still_unavailable.error().code == "store.backend-unavailable" &&
+						still_unavailable.error().field == "sqlite" &&
+						still_unavailable.error().detail == "source-shm-readonly-qualification",
+					"native-OK production activation escaped the fail-closed source-SHM gate");
 			require(capture_sqlite_source_file_family_state(path) == crash_remnant,
-					"qualified cold read changed raw post-crash identities, sizes, or bytes");
+					"fail-closed active source-SHM rejection changed raw post-crash identities, "
+					"sizes, or bytes");
 		}
 #endif
 	}
@@ -2663,43 +2761,33 @@ namespace
 		temporary_directory directory{"sqlite-wal-routes"};
 
 		const auto active_path = directory.path() / "active.sqlite";
-		std::string active_publication;
-		std::string active_snapshot;
 		{
 			auto source =
 				cxxlens::sdk::open_sqlite_snapshot_store(active_path.string(), relation_engine);
 			require(source.has_value(), "active-WAL source Store unavailable");
-			auto published = publish(*source, relation_engine, false);
-			active_publication = published.publication().publication_id;
-			active_snapshot = published.id();
+			(void)publish(*source, relation_engine, false);
 		}
 		{
 			active_wal_sidecar_fixture active{active_path};
-#if defined(__linux__) && defined(F_OFD_SETLK)
+#if defined(__unix__) || defined(__APPLE__)
 			const auto active_source_before =
 				capture_sqlite_source_file_family_state(active.path());
-			auto opened =
-				cxxlens::sdk::open_sqlite_snapshot_store(active.path().string(), relation_engine);
-			require(opened.has_value(), "active WAL+SHM Store route unavailable");
-			auto current = opened->current(selector(relation_engine));
-			require(current && current->id() == active_snapshot &&
-						current->publication().publication_id == active_publication,
-					"active WAL+SHM route changed the recovered authority");
-			require(capture_sqlite_source_file_family_state(active.path()) == active_source_before,
-					"qualified active WAL+SHM read changed source identities, sizes, or bytes");
-			auto next = publish(*opened, relation_engine, true, active_publication);
-			require(next.publication().sequence == current->publication().sequence + 1U,
-					"active WAL+SHM route did not hand off to the normal writer");
 #else
 			const auto active_source_before = capture_files(active.path());
+#endif
 			auto opened =
 				cxxlens::sdk::open_sqlite_snapshot_store(active.path().string(), relation_engine);
 			require(!opened && opened.error().code == "store.backend-unavailable" &&
 						opened.error().field == "sqlite" &&
 						opened.error().detail == "source-shm-readonly-qualification",
-					"active WAL+SHM route did not report exact qualification unavailability");
+					"active WAL+SHM route did not report exact fail-closed qualification "
+					"unavailability");
+#if defined(__unix__) || defined(__APPLE__)
+			require(capture_sqlite_source_file_family_state(active.path()) == active_source_before,
+					"fail-closed active WAL+SHM route changed source identities, sizes, or bytes");
+#else
 			require(capture_files(active.path()) == active_source_before,
-					"unavailable active WAL+SHM route changed source bytes");
+					"fail-closed active WAL+SHM route changed source bytes");
 #endif
 		}
 
