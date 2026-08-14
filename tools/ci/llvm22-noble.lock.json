@@ -52,6 +52,7 @@
         "clang-22",
         "clang-format-22",
         "libclang-22-dev",
+        "libclang-rt-22-dev",
         "llvm-22",
         "llvm-22-dev"
       ],
