@@ -888,6 +888,7 @@ foreach(
         release_contract
         release_qualification
         clang22_materialization
+        clang22_materialization_scale
         production_scope_closure
         sdk_contract
         ci_supply_chain

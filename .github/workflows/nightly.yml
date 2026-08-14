@@ -144,8 +144,66 @@ jobs:
             build/ci-quick/clang-tidy.evidence.json
           if-no-files-found: error
 
+  materialization-scale:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install exact Clang 22 development toolchain and Ninja
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12.11"
+      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+      - name: Build the exact request driver and installed materializer
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset install-check -DCXXLENS_CLANG_ADAPTER=ON -DCXXLENS_BUILD_SHARED=OFF
+          cmake --build --preset install-check --target \
+            cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22 \
+            cxxlens-clang22-materialization-request-driver cxxlens-clang22-materialize
+          cmake --install build/install-check --prefix "${RUNNER_TEMP}/cxxlens-materialization-scale-prefix"
+      - name: Run and independently check scale evidence
+        env:
+          CXX: clang++-22
+        run: |
+          python tests/install/clang22_materializer_scale_test.py \
+            --root . \
+            --driver build/install-check/tests/cxxlens-clang22-materialization-request-driver \
+            --prefix "${RUNNER_TEMP}/cxxlens-materialization-scale-prefix" \
+            --work-directory "${RUNNER_TEMP}/cxxlens-materialization-scale-work" \
+            --preserve-inputs \
+            --output "${RUNNER_TEMP}/cxxlens-materialization-scale-evidence.json"
+          python tools/quality/check_ng_clang22_materialization_scale.py check \
+            --root . \
+            --report "${RUNNER_TEMP}/cxxlens-materialization-scale-evidence.json" \
+            --require-installed-scenarios one-task,sixteen-mib-source,arbitrary-short-reads
+          python tools/quality/collect_toolchain_provenance.py \
+            --compiler clang++-22 --configuration materialization-scale-clang22 \
+            --output "${RUNNER_TEMP}/cxxlens-materialization-scale-toolchain.json"
+          python tools/quality/check_quality_ownership.py evidence \
+            --check-id materialization.scale-ingress \
+            --configuration materialization-scale-clang22 \
+            --toolchain-provenance "${RUNNER_TEMP}/cxxlens-materialization-scale-toolchain.json" \
+            --checker tools/quality/check_ng_clang22_materialization_scale.py \
+            --output "${RUNNER_TEMP}/cxxlens-materialization-scale-evidence.json" \
+            --evidence-output "${RUNNER_TEMP}/cxxlens-materialization-scale-ownership.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-nightly-materialization-scale-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/cxxlens-materialization-scale-evidence.json
+            ${{ runner.temp }}/cxxlens-materialization-scale-evidence.process
+            ${{ runner.temp }}/inputs
+            ${{ runner.temp }}/cxxlens-materialization-scale-toolchain.json
+            ${{ runner.temp }}/cxxlens-materialization-scale-ownership.json
+          if-no-files-found: error
+
   evidence-ownership:
-    needs: [sanitizers, thread-sanitizer, static-analysis]
+    needs: [sanitizers, thread-sanitizer, static-analysis, materialization-scale]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

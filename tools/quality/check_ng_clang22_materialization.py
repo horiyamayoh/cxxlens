@@ -16,7 +16,7 @@ import pathlib
 import re
 import sys
 import unicodedata
-from typing import Any, Iterable, NoReturn
+from typing import Any, Callable, Iterable, NoReturn
 
 import jsonschema
 import yaml
@@ -8262,6 +8262,7 @@ def sample_request(
     configuration: str = "static",
     backend: str = "memory",
     translation_unit_count: int = 1,
+    source_factory: Callable[[int], bytes] | None = None,
 ) -> dict[str, Any]:
     if translation_unit_count < 1:
         raise ValueError("translation_unit_count must be positive")
@@ -8275,7 +8276,11 @@ def sample_request(
     digest_digits = "fedcba9876543210"
     for index in range(translation_unit_count):
         logical_path = "project://main.cpp" if index == 0 else f"project://unit_{index}.cpp"
-        if index == 0 and translation_unit_count > 1:
+        if source_factory is not None:
+            source = source_factory(index)
+            if not isinstance(source, bytes):
+                raise TypeError("source_factory must return bytes")
+        elif index == 0 and translation_unit_count > 1:
             # The multi-TU acceptance fixture is intentionally a real cross-TU
             # edge: the caller sees a declaration while the target is defined in
             # the separately compiled second unit.  The installed Clang worker

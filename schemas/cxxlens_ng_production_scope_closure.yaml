@@ -21,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:a82047c1de7b60edc8013203478b1dcdf92280e8326c98f2421e07cdd5039b0a
+authority_census_digest: sha256:ffb83b3ac6de4080f4c0ac98fb99c35caf3635c3081e49a470aae03496b51e96
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
@@ -307,6 +307,7 @@ assignments:
       remediation: Consume exact-main production-contract, Clang-Tidy, ASan/UBSan, and TSan evidence in release evaluation.
     surfaces:
       - {domain: quality.check, id: analysis.clang-tidy}
+      - {domain: quality.check, id: materialization.scale-ingress}
       - {domain: quality.check, id: quality.production-contracts}
       - {domain: quality.check, id: sanitizer.asan-ubsan}
       - {domain: quality.check, id: sanitizer.tsan}
