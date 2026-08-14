@@ -5,6 +5,8 @@ authority:
   contract: schemas/cxxlens_ng_provider_ng1_hardening.yaml
   decision_issue: '#233'
   implementation_issue: '#183'
+  digest_grammar_adr: docs/design/adr/0100-ng1-resume-provider-digest-grammar.md
+  digest_grammar_issue: '#243'
   binding:
     state: authority-only-unbound
     revision: null
@@ -79,3 +81,18 @@ vectors:
     surface: qualification
     mutation: injected-long-run-clock-worker-and-spill-faults
     expected: {decision: recovery, outcome: accepted-only-with-exact-certificate-or-stable-failure}
+  - id: manifest-content-digest-binding
+    class: positive
+    surface: resume
+    mutation: provider-identity-fields-use-exact-manifest-content-digests
+    expected: {decision: accepted}
+  - id: semantic-v2-provider-identity-rejected
+    class: negative
+    surface: resume
+    mutation: provider-identity-field-uses-semantic-v2-without-manifest-projection
+    expected: {decision: rejected, reason_code: provider.resume-token-stale}
+  - id: content-digest-semantic-field-rejected
+    class: negative
+    surface: resume
+    mutation: semantic-binding-field-uses-manifest-content-digest
+    expected: {decision: rejected, reason_code: provider.resume-token-stale}

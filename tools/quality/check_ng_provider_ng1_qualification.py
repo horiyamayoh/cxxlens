@@ -17,6 +17,8 @@ import jsonschema
 from check_ng_provider_ng1 import (
     CONTRACT,
     CONTRACT_SCHEMA,
+    DIGEST_GRAMMAR_ADR,
+    DIGEST_GRAMMAR_ISSUE,
     PROTOCOL,
     QUALIFICATION_REPORT_SCHEMA,
     VECTORS,
@@ -121,6 +123,10 @@ def validate_report(
     report_schema = load_yaml(root / QUALIFICATION_REPORT_SCHEMA)
     report = load_json(report_path)
     schema_validate(report, report_schema, "NG1 qualification report")
+    if report["authority"]["digest_grammar_adr"] != DIGEST_GRAMMAR_ADR.as_posix():
+        fail("qualification report digest grammar ADR is not traceable")
+    if report["authority"]["digest_grammar_issue"] != DIGEST_GRAMMAR_ISSUE:
+        fail("qualification report digest grammar issue is not traceable")
 
     actual_revision, actual_tree = git_binding(root)
     if expected_revision is not None and expected_revision != actual_revision:

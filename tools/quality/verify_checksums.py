@@ -38,6 +38,7 @@ PACKAGE_PATHS = (
     "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md",
     "docs/design/adr/0098-explicit-static-relation-projection.md",
     "docs/design/adr/0099-provider-ng1-hardening.md",
+    "docs/design/adr/0100-ng1-resume-provider-digest-grammar.md",
     "docs/design/catalogs/README.md",
     "schemas/cxxlens_ng_claim_envelope.schema.yaml",
     "schemas/cxxlens_ng_relation_registry.yaml",

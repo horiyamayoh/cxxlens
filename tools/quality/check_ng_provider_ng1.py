@@ -26,6 +26,7 @@ CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml"
 )
 PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml")
+MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_manifest.schema.yaml")
 EXECUTION_REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_execution_report.schema.yaml"
 )
@@ -40,6 +41,10 @@ VECTORS_SCHEMA = pathlib.Path(
 QUALIFICATION_REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml"
 )
+DIGEST_GRAMMAR_ADR = pathlib.Path(
+    "docs/design/adr/0100-ng1-resume-provider-digest-grammar.md"
+)
+DIGEST_GRAMMAR_ISSUE = "#243"
 
 
 class Ng1ContractError(ValueError):
@@ -374,6 +379,37 @@ EXPECTED_RECEIPT = {
     "authority": "host-observed-private-spill-port-result",
 }
 
+EXPECTED_RESUME_DIGEST_GRAMMAR = {
+    "manifest_content_digest": {
+        "fields": ["provider_binary_digest", "provider_semantic_contract_digest"],
+        "spelling": "sha256:<64 lowercase hex>",
+        "authority": MANIFEST_SCHEMA.as_posix(),
+        "conversion": "forbidden",
+    },
+    "semantic_digest": {
+        "fields": [
+            "task_input_digest",
+            "normalized_invocation_digest",
+            "toolchain_digest",
+            "environment_digest",
+            "sandbox_policy_digest",
+            "staged_digest",
+        ],
+        "spelling": "semantic-v2:sha256:<64 lowercase hex>",
+        "authority": "docs/design/cxxlens_next_generation_integrated_design_ja.md#5-identity-and-canonical-encoding",
+    },
+    "token_digest": {
+        "field": "token_digest",
+        "spelling": "semantic-v2:sha256:<64 lowercase hex>",
+        "projection": "all-fields-except-token_digest",
+        "algorithm": "cxxlens-semantic-digest-v2",
+        "encoding": "cxxlens-canonical-tuple-v1",
+        "identity_fields_are_exact_strings": True,
+    },
+    "namespace_conversion": "forbidden",
+    "dual_namespace_acceptance": "forbidden",
+}
+
 EXPECTED_RESUME = {
     "message_type": 19,
     "control_schema": "cxxlens.provider-control.resume.v2",
@@ -405,8 +441,8 @@ EXPECTED_RESUME = {
         "kind": "enum",
         "provider_id": "typed-id",
         "provider_version": "semantic-version",
-        "provider_binary_digest": "semantic-digest",
-        "provider_semantic_contract_digest": "semantic-digest",
+        "provider_binary_digest": "manifest-content-digest",
+        "provider_semantic_contract_digest": "manifest-content-digest",
         "protocol_session_id": "typed-id",
         "task_id": "typed-id",
         "task_input_digest": "semantic-digest",
@@ -423,13 +459,14 @@ EXPECTED_RESUME = {
         "token_generation": "uint64",
         "token_digest": "semantic-digest",
     },
+    "digest_grammar": EXPECTED_RESUME_DIGEST_GRAMMAR,
     "field_constraints": {
         "schema": "exact-control-schema",
         "kind": "request-accepted-or-rejected",
         "provider_id": "exact-provider-binding",
         "provider_version": "exact-negotiated-provider-version",
-        "provider_binary_digest": "exact-launched-binary-digest",
-        "provider_semantic_contract_digest": "exact-selected-contract-digest",
+        "provider_binary_digest": "exact-manifest-content-digest",
+        "provider_semantic_contract_digest": "exact-selected-manifest-content-digest",
         "protocol_session_id": "exact-session-binding",
         "task_id": "exact-task-binding",
         "task_input_digest": "exact-task-input-binding",
@@ -671,12 +708,15 @@ EXPECTED_QUALIFICATION = {
     "required_profiles": ["static", "shared"],
     "required_cases": [
         "positive-heartbeat-and-progress",
+        "manifest-content-digest-binding",
         "stale-heartbeat",
         "heartbeat-timeout",
         "progress-sample-timeout",
         "zero-progress-after-grace",
         "stale-resume-token",
         "foreign-resume-token",
+        "semantic-v2-provider-identity-rejected",
+        "content-digest-semantic-field-rejected",
         "spill-corruption",
         "worker-crash-recovery",
         "worker-hang-recovery",
@@ -686,12 +726,15 @@ EXPECTED_QUALIFICATION = {
     ],
     "required_case_outcomes": {
         "positive-heartbeat-and-progress": "accepted",
+        "manifest-content-digest-binding": "accepted",
         "stale-heartbeat": "provider.heartbeat-timeout",
         "heartbeat-timeout": "provider.heartbeat-timeout",
         "progress-sample-timeout": "provider.progress-rate",
         "zero-progress-after-grace": "provider.progress-rate",
         "stale-resume-token": "provider.resume-token-stale",
         "foreign-resume-token": "provider.resume-token-stale",
+        "semantic-v2-provider-identity-rejected": "provider.resume-token-stale",
+        "content-digest-semantic-field-rejected": "provider.resume-token-stale",
         "spill-corruption": "provider.spill-corrupt",
         "worker-crash-recovery": "replay-from-ack-plus-one-or-fail-closed",
         "worker-hang-recovery": "replay-from-durable-ack-or-fail-closed",
@@ -718,6 +761,12 @@ def validate_ng1_contract(
     schema_validate(hardening, schema, "NG1 hardening contract")
     vectors = load_yaml(root / VECTORS)
     schema_validate(vectors, load_yaml(root / VECTORS_SCHEMA), "NG1 conformance vectors")
+    manifest_schema = load_yaml(root / MANIFEST_SCHEMA)
+    expect(
+        manifest_schema.get("$defs", {}).get("digest", {}).get("pattern"),
+        r"^sha256:[0-9a-f]{64}$",
+        "manifest_schema.digest.pattern",
+    )
 
     expect(hardening["schema"], "cxxlens.provider-ng1-hardening.v1", "schema")
     expect(hardening["document_version"], "1.0.0", "document_version")
@@ -731,6 +780,8 @@ def validate_ng1_contract(
             "decision_adr": "docs/design/adr/0099-provider-ng1-hardening.md",
             "decision_issue": "#233",
             "implementation_issue": "#183",
+            "digest_grammar_adr": DIGEST_GRAMMAR_ADR.as_posix(),
+            "digest_grammar_issue": DIGEST_GRAMMAR_ISSUE,
             "owner": "steward.ng-provider-runtime",
             "spill_fsync_receipt_schema": SPILL_FSYNC_RECEIPT_SCHEMA.as_posix(),
         },
@@ -828,6 +879,8 @@ def validate_ng1_contract(
             "vectors": VECTORS.as_posix(),
             "decision_issue": "#233",
             "implementation_issue": "#183",
+            "digest_grammar_adr": DIGEST_GRAMMAR_ADR.as_posix(),
+            "digest_grammar_issue": DIGEST_GRAMMAR_ISSUE,
         },
         "binding": {
             "revision": "0" * 40,
@@ -865,6 +918,26 @@ def validate_ng1_contract(
         "NG1 qualification report",
     )
     expect(
+        vectors["authority"],
+        {
+            "contract": CONTRACT.as_posix(),
+            "decision_issue": "#233",
+            "implementation_issue": "#183",
+            "digest_grammar_adr": DIGEST_GRAMMAR_ADR.as_posix(),
+            "digest_grammar_issue": DIGEST_GRAMMAR_ISSUE,
+            "binding": {
+                "state": "authority-only-unbound",
+                "revision": None,
+                "tree": None,
+                "provider_binary_digest": None,
+                "provider_semantic_contract_digest": None,
+                "protocol_minor": 1,
+                "hardening_contract_digest": None,
+            },
+        },
+        "qualification.vectors.authority",
+    )
+    expect(
         vectors["authority"].get("binding"),
         {
             "state": "authority-only-unbound",
@@ -892,7 +965,13 @@ def validate_ng1_contract(
     for vector in vectors["vectors"]:
         expected_outcome = hardening["qualification"]["required_case_outcomes"][vector["id"]]
         decision = vector["expected"]["decision"]
-        expected_decision = {"positive-heartbeat-and-progress": "accepted"}.get(vector["id"], "rejected" if vector["class"] == "negative" else "recovery")
+        expected_decision = (
+            "accepted"
+            if expected_outcome == "accepted"
+            else "rejected"
+            if vector["class"] == "negative"
+            else "recovery"
+        )
         expect(decision, expected_decision, f"qualification.vectors.{vector['id']}.decision")
         if vector["class"] == "positive":
             expect(vector["expected"], {"decision": "accepted"}, f"qualification.vectors.{vector['id']}.expected")
@@ -936,6 +1015,19 @@ def validate_ng1_contract(
 
     if protocol is None:
         protocol = load_yaml(root / PROTOCOL)
+    protocol_authority = protocol.get("authority")
+    if not isinstance(protocol_authority, dict):
+        fail("protocol.authority", "authority mapping is missing")
+    expect(
+        protocol_authority.get("ng1_resume_digest_grammar_adr"),
+        DIGEST_GRAMMAR_ADR.as_posix(),
+        "protocol.authority.ng1_resume_digest_grammar_adr",
+    )
+    expect(
+        protocol_authority.get("ng1_resume_digest_grammar_issue"),
+        DIGEST_GRAMMAR_ISSUE,
+        "protocol.authority.ng1_resume_digest_grammar_issue",
+    )
     ng1 = protocol.get("profiles", {}).get("NG1")
     if not isinstance(ng1, dict):
         fail("protocol", "NG1 profile is missing")

@@ -7,6 +7,8 @@ authority:
   decision_adr: docs/design/adr/0080-provider-columnar-typed-digests.md
   owner_issue: '#149'
   owner: steward.ng-provider-protocol
+  ng1_resume_digest_grammar_adr: docs/design/adr/0100-ng1-resume-provider-digest-grammar.md
+  ng1_resume_digest_grammar_issue: '#243'
 compatibility:
   version_axis: provider-protocol
   current: 1.1.0

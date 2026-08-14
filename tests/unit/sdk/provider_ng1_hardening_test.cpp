@@ -35,6 +35,11 @@ namespace
 		return *output;
 	}
 
+	[[nodiscard]] std::string manifest_digest(const char fill)
+	{
+		return std::string{"sha256:"} + std::string(64U, fill);
+	}
+
 	[[nodiscard]] ng1_session_binding heartbeat_binding()
 	{
 		return {"provider:test", {1U, 2U, 3U}, "session:test", "task:test", 7U};
@@ -254,8 +259,8 @@ namespace
 	{
 		return {"provider:test",
 				{1U, 2U, 3U},
-				digest("binary"),
-				digest("contract"),
+				manifest_digest('a'),
+				manifest_digest('b'),
 				"session:test",
 				"task:test",
 				digest("input"),
@@ -322,6 +327,32 @@ namespace
 		auto state = ng1_resume_state::create(binding);
 		require(state.has_value(), "resume state creation failed");
 		const auto token = make_resume_token(binding);
+		require(token.binding.provider_binary_digest == manifest_digest('a'),
+				"resume provider binary digest lost manifest grammar");
+		require(token.binding.provider_semantic_contract_digest == manifest_digest('b'),
+				"resume provider contract digest lost manifest grammar");
+		require(token.token_digest.starts_with("semantic-v2:sha256:"),
+				"resume token digest left semantic-v2 namespace");
+		auto semantic_provider_identity = token;
+		semantic_provider_identity.binding.provider_binary_digest = digest("binary");
+		auto semantic_provider_identity_result =
+			ng1_resume_token_digest(semantic_provider_identity);
+		require(!semantic_provider_identity_result &&
+					semantic_provider_identity_result.error().code == "provider.resume-token-stale",
+				"semantic-v2 provider identity was accepted");
+		auto content_digest_in_semantic_field = token;
+		content_digest_in_semantic_field.binding.task_input_digest = manifest_digest('c');
+		auto content_digest_in_semantic_field_result =
+			ng1_resume_token_digest(content_digest_in_semantic_field);
+		require(!content_digest_in_semantic_field_result &&
+					content_digest_in_semantic_field_result.error().code ==
+						"provider.resume-token-stale",
+				"manifest content digest was accepted in a semantic field");
+		auto changed_provider_identity = binding;
+		changed_provider_identity.provider_binary_digest = manifest_digest('d');
+		const auto changed_provider_token = make_resume_token(changed_provider_identity);
+		require(changed_provider_token.token_digest != token.token_digest,
+				"token digest did not bind the exact provider identity string");
 		require(state->accept(token, make_fsync_receipt(binding), false, false, 4U),
 				"durable resume token was rejected");
 		auto start = state->replay_start_sequence();

@@ -8,6 +8,8 @@ authority:
   decision_adr: docs/design/adr/0099-provider-ng1-hardening.md
   decision_issue: '#233'
   implementation_issue: '#183'
+  digest_grammar_adr: docs/design/adr/0100-ng1-resume-provider-digest-grammar.md
+  digest_grammar_issue: '#243'
   owner: steward.ng-provider-runtime
   spill_fsync_receipt_schema: schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml
 
@@ -265,8 +267,8 @@ resume:
     kind: enum
     provider_id: typed-id
     provider_version: semantic-version
-    provider_binary_digest: semantic-digest
-    provider_semantic_contract_digest: semantic-digest
+    provider_binary_digest: manifest-content-digest
+    provider_semantic_contract_digest: manifest-content-digest
     protocol_session_id: typed-id
     task_id: typed-id
     task_input_digest: semantic-digest
@@ -282,13 +284,32 @@ resume:
     staged_digest: semantic-digest
     token_generation: uint64
     token_digest: semantic-digest
+  digest_grammar:
+    manifest_content_digest:
+      fields: [provider_binary_digest, provider_semantic_contract_digest]
+      spelling: sha256:<64 lowercase hex>
+      authority: schemas/cxxlens_ng_provider_manifest.schema.yaml
+      conversion: forbidden
+    semantic_digest:
+      fields: [task_input_digest, normalized_invocation_digest, toolchain_digest, environment_digest, sandbox_policy_digest, staged_digest]
+      spelling: semantic-v2:sha256:<64 lowercase hex>
+      authority: docs/design/cxxlens_next_generation_integrated_design_ja.md#5-identity-and-canonical-encoding
+    token_digest:
+      field: token_digest
+      spelling: semantic-v2:sha256:<64 lowercase hex>
+      projection: all-fields-except-token_digest
+      algorithm: cxxlens-semantic-digest-v2
+      encoding: cxxlens-canonical-tuple-v1
+      identity_fields_are_exact_strings: true
+    namespace_conversion: forbidden
+    dual_namespace_acceptance: forbidden
   field_constraints:
     schema: exact-control-schema
     kind: request-accepted-or-rejected
     provider_id: exact-provider-binding
     provider_version: exact-negotiated-provider-version
-    provider_binary_digest: exact-launched-binary-digest
-    provider_semantic_contract_digest: exact-selected-contract-digest
+    provider_binary_digest: exact-manifest-content-digest
+    provider_semantic_contract_digest: exact-selected-manifest-content-digest
     protocol_session_id: exact-session-binding
     task_id: exact-task-binding
     task_input_digest: exact-task-input-binding
@@ -489,12 +510,15 @@ qualification:
   required_profiles: [static, shared]
   required_cases:
     - positive-heartbeat-and-progress
+    - manifest-content-digest-binding
     - stale-heartbeat
     - heartbeat-timeout
     - progress-sample-timeout
     - zero-progress-after-grace
     - stale-resume-token
     - foreign-resume-token
+    - semantic-v2-provider-identity-rejected
+    - content-digest-semantic-field-rejected
     - spill-corruption
     - worker-crash-recovery
     - worker-hang-recovery
@@ -503,12 +527,15 @@ qualification:
     - long-run-fault
   required_case_outcomes:
     positive-heartbeat-and-progress: accepted
+    manifest-content-digest-binding: accepted
     stale-heartbeat: provider.heartbeat-timeout
     heartbeat-timeout: provider.heartbeat-timeout
     progress-sample-timeout: provider.progress-rate
     zero-progress-after-grace: provider.progress-rate
     stale-resume-token: provider.resume-token-stale
     foreign-resume-token: provider.resume-token-stale
+    semantic-v2-provider-identity-rejected: provider.resume-token-stale
+    content-digest-semantic-field-rejected: provider.resume-token-stale
     spill-corruption: provider.spill-corrupt
     worker-crash-recovery: replay-from-ack-plus-one-or-fail-closed
     worker-hang-recovery: replay-from-durable-ack-or-fail-closed

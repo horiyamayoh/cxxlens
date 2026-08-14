@@ -34,7 +34,7 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [design, index, decision_adr, owner_issue, owner]
+    required: [design, index, decision_adr, owner_issue, owner, ng1_resume_digest_grammar_adr, ng1_resume_digest_grammar_issue]
     properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
@@ -42,6 +42,8 @@ properties:
       decision_adr: {const: docs/design/adr/0080-provider-columnar-typed-digests.md}
       owner_issue: {const: '#149'}
       owner: {const: steward.ng-provider-protocol}
+      ng1_resume_digest_grammar_adr: {const: docs/design/adr/0100-ng1-resume-provider-digest-grammar.md}
+      ng1_resume_digest_grammar_issue: {const: '#243'}
   compatibility:
     const:
       version_axis: provider-protocol

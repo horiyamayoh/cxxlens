@@ -16,12 +16,14 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [contract, vectors, decision_issue, implementation_issue]
+    required: [contract, vectors, decision_issue, implementation_issue, digest_grammar_adr, digest_grammar_issue]
     properties:
       contract: {const: schemas/cxxlens_ng_provider_ng1_hardening.yaml}
       vectors: {const: schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml}
       decision_issue: {const: '#233'}
       implementation_issue: {const: '#183'}
+      digest_grammar_adr: {const: docs/design/adr/0100-ng1-resume-provider-digest-grammar.md}
+      digest_grammar_issue: {const: '#243'}
   binding:
     type: object
     additionalProperties: false
@@ -73,8 +75,8 @@ $defs:
       evidence_digest: {$ref: '#/$defs/digest'}
       cases:
         type: array
-        minItems: 13
-        maxItems: 13
+        minItems: 16
+        maxItems: 16
         uniqueItems: true
         items: {$ref: '#/$defs/case'}
   case:

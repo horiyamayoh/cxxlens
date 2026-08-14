@@ -73,6 +73,7 @@
 | [0096](0096-clang22-installed-materialization-boundary.md) | provider-owned Clang 22 installed materialization boundary |
 | [0098](0098-explicit-static-relation-projection.md) | explicit generated relation static projection |
 | [0099](0099-provider-ng1-hardening.md) | provider NG1 hardening lifecycle and evidence |
+| [0100](0100-ng1-resume-provider-digest-grammar.md) | NG1 resume provider identity digest grammar |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

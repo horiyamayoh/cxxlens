@@ -62,6 +62,8 @@ class Ng1QualificationTest(unittest.TestCase):
                 "vectors": VECTORS.as_posix(),
                 "decision_issue": "#233",
                 "implementation_issue": "#183",
+                "digest_grammar_adr": "docs/design/adr/0100-ng1-resume-provider-digest-grammar.md",
+                "digest_grammar_issue": "#243",
             },
             "binding": {
                 "revision": revision,

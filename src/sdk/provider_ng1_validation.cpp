@@ -14,6 +14,7 @@ namespace cxxlens::sdk::provider::detail
 		constexpr std::string_view heartbeat_schema{"cxxlens.provider-control.heartbeat.v1"};
 		constexpr std::string_view progress_schema{"cxxlens.provider-control.progress.v2"};
 		constexpr std::string_view resume_schema{"cxxlens.provider-control.resume.v2"};
+		constexpr std::string_view manifest_content_digest_prefix{"sha256:"};
 		constexpr std::string_view semantic_digest_prefix{"semantic-v2:sha256:"};
 		constexpr std::uint64_t heartbeat_timeout_ns = 5'000'000'000ULL;
 		constexpr std::uint64_t heartbeat_startup_grace_ns = 10'000'000'000ULL;
@@ -42,6 +43,17 @@ namespace cxxlens::sdk::provider::detail
 			return true;
 		}
 
+		[[nodiscard]] bool valid_manifest_content_digest(const std::string_view value)
+		{
+			if (!value.starts_with(manifest_content_digest_prefix) ||
+				value.size() != manifest_content_digest_prefix.size() + 64U)
+				return false;
+			for (const auto byte : value.substr(manifest_content_digest_prefix.size()))
+				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+					return false;
+			return true;
+		}
+
 		[[nodiscard]] result<void> valid_id(const std::string_view value,
 											const std::string_view field,
 											const std::string_view failure_code)
@@ -57,6 +69,16 @@ namespace cxxlens::sdk::provider::detail
 		{
 			if (!valid_semantic_digest(value))
 				return unexpected(ng1_error(failure_code, std::string{field}, "semantic-v2"));
+			return {};
+		}
+
+		[[nodiscard]] result<void> valid_manifest_content_digest(
+			const std::string_view value,
+			const std::string_view field,
+			const std::string_view failure_code)
+		{
+			if (!valid_manifest_content_digest(value))
+				return unexpected(ng1_error(failure_code, std::string{field}, "sha256"));
 			return {};
 		}
 
@@ -486,11 +508,15 @@ namespace cxxlens::sdk::provider::detail
 			if (auto valid = valid_id(value, field, "resume-token-stale"); !valid)
 				return valid;
 		for (const auto [value, field] :
-			 std::array{std::pair{std::string_view{provider_binary_digest},
+				 std::array{std::pair{std::string_view{provider_binary_digest},
 								  std::string_view{"provider_binary_digest"}},
 						std::pair{std::string_view{provider_semantic_contract_digest},
-								  std::string_view{"provider_semantic_contract_digest"}},
-						std::pair{std::string_view{task_input_digest},
+								  std::string_view{"provider_semantic_contract_digest"}}})
+			if (auto valid = valid_manifest_content_digest(value, field, "resume-token-stale");
+				!valid)
+				return valid;
+		for (const auto [value, field] :
+				 std::array{std::pair{std::string_view{task_input_digest},
 								  std::string_view{"task_input_digest"}},
 						std::pair{std::string_view{normalized_invocation_digest},
 								  std::string_view{"normalized_invocation_digest"}},
