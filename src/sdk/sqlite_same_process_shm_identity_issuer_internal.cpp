@@ -1531,6 +1531,8 @@ namespace cxxlens::sdk
 				sqlite_shm_reader_zero_effect_identity_validation_capability;
 			friend class ::cxxlens::sdk::
 				sqlite_shm_reader_mapped_effect_identity_validation_capability;
+			friend void quarantine_stale_identity_issuer_state(
+				sqlite_shm_process_identity_issuer_state*) noexcept;
 
 			std::weak_ptr<void> registry_state_;
 			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch_;
@@ -1544,7 +1546,30 @@ namespace cxxlens::sdk
 				sqlite_shm_identity_issuer_pause_point_for_testing::none)};
 			std::atomic_bool test_pause_entered_{false};
 			std::atomic_bool test_pause_release_{true};
+			// Non-owning link for the process-lifetime stale-epoch root. The custom deleter
+			// never destroys an issuer state after fork/epoch loss.
+			sqlite_shm_process_identity_issuer_state* quarantine_next_{};
 		};
+
+		struct sqlite_shm_identity_issuer_quarantine_sink
+		{
+			static_assert(
+				std::atomic<sqlite_shm_process_identity_issuer_state*>::is_always_lock_free);
+			std::atomic<sqlite_shm_process_identity_issuer_state*> head{nullptr};
+		};
+		sqlite_shm_identity_issuer_quarantine_sink identity_issuer_quarantine_sink_storage_instance;
+
+		void quarantine_stale_identity_issuer_state(
+			sqlite_shm_process_identity_issuer_state* state) noexcept
+		{
+			auto& sink = identity_issuer_quarantine_sink_storage_instance;
+			auto* previous = sink.head.load(std::memory_order_acquire);
+			do
+			{
+				state->quarantine_next_ = previous;
+			} while (!sink.head.compare_exchange_weak(
+				previous, state, std::memory_order_release, std::memory_order_acquire));
+		}
 
 		std::shared_ptr<sqlite_shm_process_identity_issuer_state>
 		make_identity_issuer_state_for_registry(
@@ -1579,6 +1604,8 @@ namespace cxxlens::sdk
 						stale_child_epoch->load(std::memory_order_acquire) ==
 							expected_process_epoch)
 						delete state;
+					else
+						quarantine_stale_identity_issuer_state(state);
 				}};
 		}
 
