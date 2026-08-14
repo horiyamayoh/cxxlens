@@ -1081,6 +1081,15 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             "backend-protocol-violation-fail-closed-never-translate-to-readonly",
         )
 
+    def test_source_native_ok_projection_remains_fail_closed(self) -> None:
+        source = (ROOT / "src" / "sdk" / "sqlite_default_forwarding_vfs.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "constexpr bool source_shm_native_ok_projection_production_activation = false;",
+            source,
+        )
+
     def test_option_a_structural_projection_and_vectors_pass_independently(self) -> None:
         validate_option_a_contract(self.contract)
         validate_option_a_vectors()
