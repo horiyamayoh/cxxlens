@@ -572,6 +572,7 @@ namespace
 			 {1U, 0U, 0U},
 			 "sha256:6666666666666666666666666666666666666666666666666666666666666666",
 			 publication.expected_parent_publication},
+			{},
 			{}};
 		auto streamed = execute_materialization_store_streaming(
 			value, publication, std::move(prepared), source);
