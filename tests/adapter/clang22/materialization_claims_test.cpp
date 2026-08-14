@@ -1531,6 +1531,23 @@ namespace
 		require(source.has_value() && source->task_count() == request.tasks.size() &&
 					source->partition_count() == request.tasks.size(),
 				"claim stream source did not retain the exact task/partition census");
+		const materialization_store_external_authority external_authority{
+			&*source,
+			&*journal,
+		};
+		auto external_valid = validate_materialization_store_external_authority(external_authority);
+		require(external_valid.has_value(),
+				"Store external authority rejected the sealed journal: " +
+					(external_valid ? std::string{} : failure(external_valid.error())));
+		auto tampered_journal = *journal;
+		tampered_journal.execution_journal_receipt_set_digest =
+			"semantic-v2:sha256:" + std::string(64U, 'f');
+		const materialization_store_external_authority tampered_authority{
+			&*source,
+			&tampered_journal,
+		};
+		require(!validate_materialization_store_external_authority(tampered_authority),
+				"Store external authority accepted a tampered execution journal");
 		std::size_t event_count{};
 		auto replayed = source->replay(
 			[&](const materialization_claim_stream_event& event) -> sdk::result<void>

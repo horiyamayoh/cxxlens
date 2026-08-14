@@ -13,6 +13,23 @@
 
 namespace cxxlens::detail::clang22::materialization
 {
+	class materialization_claim_stream_source;
+	struct materialization_incremental_execution_journal_receipt;
+
+	/**
+	 * Source-private external completeness authority for the production streaming Store ingress.
+	 *
+	 * The typed partition replay source remains the Store input. This separate authority binds the
+	 * Store boundary to the sealed execution journal and the independently validated event-stream
+	 * census before a candidate can be opened or published. Neither pointer is retained after the
+	 * prepublication preparation call.
+	 */
+	struct materialization_store_external_authority
+	{
+		const materialization_claim_stream_source* claim_stream{};
+		const materialization_incremental_execution_journal_receipt* execution_journal{};
+	};
+
 	/** Fully prepared SDK transaction input. This boundary only consumes Store-ready values. */
 	struct prepared_store_transaction
 	{
@@ -54,7 +71,12 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		sdk::snapshot_draft draft;
 		std::vector<sdk::closure_candidate> closures;
+		materialization_store_external_authority external_authority;
 	};
+
+	/** Validate the external journal/task census before Store candidate preparation. */
+	[[nodiscard]] sdk::result<void> validate_materialization_store_external_authority(
+		const materialization_store_external_authority& authority);
 
 	/** Exact operation ordering retained without mapping SDK failures to report outcomes. */
 	enum class materialization_store_operation : std::uint8_t

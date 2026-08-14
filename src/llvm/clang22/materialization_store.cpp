@@ -4,8 +4,10 @@
 #include <limits>
 #include <map>
 #include <ranges>
+#include <span>
 #include <utility>
 
+#include "materialization_claim_stream.hpp"
 #include "sdk/store_identity_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
@@ -496,6 +498,57 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	} // namespace
 
+	sdk::result<void> validate_materialization_store_external_authority(
+		const materialization_store_external_authority& authority)
+	{
+		const auto invalid = [](const std::string_view field, const std::string_view detail)
+		{
+			return sdk::unexpected(
+				sdk::error{"store.external-authority", std::string{field}, std::string{detail}});
+		};
+		if (authority.claim_stream == nullptr || authority.execution_journal == nullptr)
+			return invalid("source", "authority-unbound");
+
+		const auto& source = *authority.claim_stream;
+		const auto& journal = *authority.execution_journal;
+		if (!sdk::validate_strong_id(source.materialization_request_id()) ||
+			source.task_count() == 0U ||
+			journal.materialization_request_id != source.materialization_request_id() ||
+			journal.exact_task_count != source.task_count() ||
+			journal.canonical_task_ids.size() != source.task_count() ||
+			journal.ordered_task_receipt_seal_digests.size() != source.task_count())
+			return invalid("source", "task-census-mismatch");
+
+		try
+		{
+			std::vector<materialization_incremental_task_receipt> receipts;
+			receipts.reserve(source.task_count());
+			for (std::size_t index{}; index < source.task_count(); ++index)
+			{
+				const auto* receipt = source.task_receipt(index);
+				if (receipt == nullptr ||
+					receipt->materialization_request_id != source.materialization_request_id() ||
+					receipt->canonical_task_ordinal != index || !receipt->successful_seal ||
+					!sdk::validate_strong_id(receipt->task_id) ||
+					journal.canonical_task_ids[index] != receipt->task_id ||
+					journal.ordered_task_receipt_seal_digests[index] !=
+						receipt->pre_encoder_task_receipt_seal_digest)
+					return invalid("source", "task-binding-mismatch");
+				receipts.push_back(*receipt);
+			}
+			auto recomputed = seal_materialization_incremental_execution_journal(
+				std::string{source.materialization_request_id()},
+				std::span<const materialization_incremental_task_receipt>{receipts});
+			if (!recomputed || *recomputed != journal)
+				return invalid("source", "execution-journal-seal-mismatch");
+			return {};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return invalid("source", "allocation-unavailable");
+		}
+	}
+
 	struct materialization_store_preparation::state
 	{
 		state(sdk::relation_engine engine_value,
@@ -727,6 +780,51 @@ namespace cxxlens::detail::clang22::materialization
 							   std::nullopt,
 							   indexed.error());
 			return materialization_store_preparation{std::move(state_value)};
+		}
+		if (prepared.external_authority.claim_stream != nullptr ||
+			prepared.external_authority.execution_journal != nullptr)
+		{
+			if (auto valid =
+					validate_materialization_store_external_authority(prepared.external_authority);
+				!valid)
+			{
+				retain_sdk_failure(output,
+								   materialization_store_operation::store_open,
+								   std::nullopt,
+								   valid.error());
+				return materialization_store_preparation{std::move(state_value)};
+			}
+
+			std::vector<std::string> external_partition_ids;
+			external_partition_ids.reserve(
+				prepared.external_authority.claim_stream->partition_count());
+			for (std::size_t task_index{};
+				 task_index < prepared.external_authority.claim_stream->task_count();
+				 ++task_index)
+			{
+				const auto ids =
+					prepared.external_authority.claim_stream->partition_ids(task_index);
+				external_partition_ids.insert(external_partition_ids.end(), ids.begin(), ids.end());
+			}
+			std::ranges::sort(external_partition_ids);
+			external_partition_ids.erase(std::ranges::unique(external_partition_ids).begin(),
+										 external_partition_ids.end());
+			std::vector<std::string> typed_partition_ids;
+			typed_partition_ids.reserve(indexed->manifest.partitions.size());
+			for (const auto& partition : indexed->manifest.partitions)
+				typed_partition_ids.push_back(partition.partition_id);
+			std::ranges::sort(typed_partition_ids);
+			typed_partition_ids.erase(std::ranges::unique(typed_partition_ids).begin(),
+									  typed_partition_ids.end());
+			if (external_partition_ids != typed_partition_ids)
+			{
+				retain_sdk_failure(
+					output,
+					materialization_store_operation::store_open,
+					std::nullopt,
+					sdk::error{"store.external-authority", "source", "typed-replay-mismatch"});
+				return materialization_store_preparation{std::move(state_value)};
+			}
 		}
 
 		auto opened = publication.backend == "memory"

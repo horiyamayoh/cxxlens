@@ -1984,6 +1984,10 @@ int main(const int argc, char**)
 								  request_subject,
 								  source);
 	}
+	streaming_transaction->external_authority = {
+		&*claim_stream,
+		&ingress_result->journal,
+	};
 	if (auto completed = journal->complete_materialization_validation(); !completed)
 		return no_response();
 	std::unique_ptr<materialization_rooted_store_opener> rooted_opener;
