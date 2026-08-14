@@ -14,6 +14,7 @@
 #include <tuple>
 #include <utility>
 
+#include "llvm/clang22/materialization_claims.hpp"
 #include "llvm/clang22/materialization_identity.hpp"
 #include "llvm/clang22/materialization_request_identity.hpp"
 #include "llvm/clang22/materialization_task_spool.hpp"
@@ -926,6 +927,44 @@ namespace
 				"metadata binding did not replay the exact second task");
 	}
 
+	void claim_authority_does_not_retain_task_occurrences()
+	{
+		auto accepted = validate(upgrade_fixture(), 1U);
+		require(accepted.has_value(), "claim authority admission fixture failed");
+
+		const auto digest = "sha256:" + std::string(64U, '1');
+		const materialization_producer_authority producer{
+			"cxxlens-clang22-materialize",
+			"2.1.0",
+			"1.0.0",
+			std::string(40U, '1'),
+			std::string(40U, '2'),
+			{{"schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_contract.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_report.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_request.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_relation_registry.yaml", digest}}};
+		const materialization_guarantee_authority guarantee{{},
+															{"clang22.materialization-sealed.v1",
+															 "provider.transcript-sealed.v1",
+															 "sdk.claim-envelope-validated.v1"}};
+
+		auto authority = make_materialization_v2_1_claim_authority(*accepted, producer, guarantee);
+		require(authority.has_value(),
+				authority ? "" : "claim authority failed: " + authority.error().detail);
+		require(authority->catalog == &accepted->request().catalog() &&
+					authority->engine == &accepted->request().engine() &&
+					authority->materialization_request_id ==
+						accepted->identity().materialization_request_id &&
+					authority->task_count == accepted->request().task_count() &&
+					authority->worker_provider_id == accepted->request().worker().provider_id &&
+					authority->worker_semantic_contract_digest ==
+						accepted->request().worker().semantic_contract_digest &&
+					authority->direct_basis_digest.starts_with("semantic-v2:sha256:") &&
+					authority->assumption_set_id.starts_with("assumption-set:semantic-v2:sha256:"),
+				"claim authority lost typed worker/request-wide basis authority");
+	}
+
 	void protocol_catalog_and_source_metadata_negatives()
 	{
 		auto minor = upgrade_fixture();
@@ -1549,6 +1588,7 @@ int main()
 	source_dependent_production_admission();
 	task_cursor_enforces_one_live_task_window();
 	metadata_binding_does_not_open_source_window();
+	claim_authority_does_not_retain_task_occurrences();
 	protocol_catalog_and_source_metadata_negatives();
 	schema_before_binding_and_version_dispatch();
 	full_schema_and_external_uniqueness_adversarial();

@@ -13,6 +13,7 @@
 #include <cxxlens/sdk/store.hpp>
 
 #include "materialization_request.hpp"
+#include "materialization_request_v2_1.hpp"
 #include "materialization_seal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
@@ -46,6 +47,30 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		std::vector<std::string> assumptions;
 		std::vector<std::string> verification_modalities;
+	};
+
+	/**
+	 * Source-private request authority for bounded v2.1 claim adoption.
+	 *
+	 * This value owns only request-wide semantic digests and typed authority.  It deliberately
+	 * contains no task vector, source receipt, task.v3 payload, result map, or claim occurrence.
+	 * The pointed-to catalog and engine are owned by the admitted v2.1 request and must outlive
+	 * this value and every one-task adoption call made with it.
+	 */
+	struct materialization_v2_1_claim_authority
+	{
+		const sdk::project_catalog* catalog{};
+		const sdk::relation_engine* engine{};
+		std::string materialization_request_id;
+		std::uint64_t task_count{};
+		std::string worker_provider_id;
+		std::string worker_semantic_contract_digest;
+		std::string materializer_semantics_digest;
+		std::string direct_basis_digest;
+		std::string canonical_adoption_transform_digest;
+		std::string base_ingestion_transform_digest;
+		sdk::claim_guarantee guarantee;
+		std::string assumption_set_id;
 	};
 
 	/** Exact seven-field task context with physical provider execution deliberately absent. */
@@ -253,4 +278,19 @@ namespace cxxlens::detail::clang22::materialization
 		const sealed_materialization_result& result,
 		const materialization_producer_authority& producer_authority,
 		const materialization_guarantee_authority& guarantee_authority);
+
+	/** Build one request-wide v2.1 claim authority without retaining task/source occurrences. */
+	[[nodiscard]] sdk::result<materialization_v2_1_claim_authority>
+	make_materialization_v2_1_claim_authority(
+		validated_materialization_request_v2_1& request,
+		const materialization_producer_authority& producer_authority,
+		const materialization_guarantee_authority& guarantee_authority);
+
+	/** Adopt exactly one cursor-owned v2.1 task window into the bounded claim stream. */
+	[[nodiscard]] sdk::result<materialization_bounded_task_claims>
+	construct_materialization_bounded_task_claims(
+		const materialization_v2_1_claim_authority& authority,
+		std::size_t task_index,
+		const materialization_v2_1_task_execution& task,
+		const sealed_materialization_result& result);
 } // namespace cxxlens::detail::clang22::materialization
