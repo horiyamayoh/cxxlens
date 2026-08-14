@@ -101,14 +101,14 @@ namespace cxxlens::detail::clang22::materialization
 	 * Source-independent task binding used by planning and claim-adoption metadata paths.
 	 *
 	 * The decoded input contains authority metadata only: source and canonical task.v3 bytes must
-	 * remain empty and the source receipt is retained separately.  This value never owns a source
-	 * or task-input spool and is therefore safe to use for a bounded metadata replay.
+	 * remain empty.  This value deliberately contains no sealed source receipt; that authority is
+	 * created only by source-dependent replay.  It never owns a source or task-input spool and is
+	 * therefore safe to use for a bounded metadata replay.
 	 */
 	struct materialization_v2_1_task_metadata_binding
 	{
 		clang22_task_input input;
 		materialization_v2_1_task_metadata_receipt metadata;
-		clang22_task_source_receipt source_receipt;
 	};
 
 	/** Opaque lifetime token held by a task-at-a-time cursor result. */

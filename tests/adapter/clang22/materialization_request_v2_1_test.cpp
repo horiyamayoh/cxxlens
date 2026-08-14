@@ -920,10 +920,6 @@ namespace
 				"metadata binding lost the canonical task identity");
 		require(first->input.source.empty() && first->input.source_content_base64.empty(),
 				"metadata binding retained source or canonical task.v3 bytes");
-		require(first->source_receipt.size_bytes == first->input.source_size_bytes &&
-					first->source_receipt.content_digest == first->input.source_content_digest &&
-					first->source_receipt.line_index_id == first->input.line_index,
-				"metadata binding did not preserve the independent source receipt");
 
 		auto second = accepted->task_metadata_binding(1U);
 		require(second.has_value() && second->metadata.task_index == 1U,
