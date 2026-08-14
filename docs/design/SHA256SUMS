@@ -82,7 +82,7 @@ a0599e26cfea7572064308e6ac413fc237c4d8562a155354c10717b708613ece  ../../schemas/
 813c3a2ae6728c9109c4c8d09da040b869e918ef24ab5fc7ecabd7f51d6d66e7  ../../schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml
 6933cc041fff0979b21fc8bb6baf71a56b54201f5071c4f57e794eca1e1070e9  ../../schemas/cxxlens_ng_acceptance_manifest.yaml
 e8bc1adc409bbac29f762ea134788537fbe7b28dd952e4e669a17ea167ba113b  ../../schemas/cxxlens_ng_acceptance_manifest.schema.yaml
-bd89e0b1d1de7574e2b306934c0f72ea64ccc2eb5929611e4ff75b46c85d4784  ../../schemas/cxxlens_ng_quality_ownership.yaml
+fd0167f98979b99b7b6db82e0b92f69763e1f82694381dead07508b26088d24b  ../../schemas/cxxlens_ng_quality_ownership.yaml
 045a6f68d9941f1459b17a800645a01158b1254af5832d9eb6b43dc024f7bc84  ../../schemas/cxxlens_ng_quality_ownership.schema.yaml
 8087db0eb3f26d04879daf7eb1ad61f893fa03cdd20619cdea3f177b8d833df8  ../../schemas/cxxlens_ng_quality_evidence.schema.yaml
 ba85f2dad18ebb35563f8c9eb57555fd25d29900c0b3bce4f9c51adc96d2032b  ../../schemas/cxxlens_ng_design_feedback_record.schema.yaml

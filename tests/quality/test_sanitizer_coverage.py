@@ -85,6 +85,14 @@ class SanitizerCoverageTest(unittest.TestCase):
         with self.assertRaisesRegex(SanitizerCoverageError, "cannot be mixed"):
             parse_expected("address,thread")
 
+    def test_tsan_excludes_only_adapter_off_native_materializer(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        marker = "--exclude-regex '^install\\.clang22-materializer-success$'"
+        self.assertEqual(workflow.count("--exclude-regex"), 1)
+        self.assertIn(marker, workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

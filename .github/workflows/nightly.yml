@@ -78,7 +78,11 @@ jobs:
         run: |
           cmake --preset tsan
           cmake --build --preset tsan
+          # The TSan preset is the LLVM-independent foundation lane. Native
+          # Clang 22 materializer success is owned by #197 and is not part of
+          # this adapter-OFF configuration; keep the exclusion exact.
           ctest --preset tsan --parallel 1 --label-exclude quality \
+            --exclude-regex '^install\.clang22-materializer-success$' \
             --output-junit ctest.xml
           python3 tools/quality/check_sanitizer_coverage.py check --root . \
             --build-dir build/tsan --expected thread \
