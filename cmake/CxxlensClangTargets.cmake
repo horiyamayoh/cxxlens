@@ -41,6 +41,7 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/sdk/relation.cpp
     src/sdk/claim.cpp
     src/sdk/store.cpp
+    src/runtime/monotonic_clock_port.cpp
     src/sdk/sqlite_connection_lifecycle_internal.cpp
     src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp
     src/sdk/sqlite_same_process_shm_process_port_internal.cpp
