@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
-import re
 import shlex
 import sys
 from typing import Any
@@ -39,8 +38,7 @@ TSAN_CTEST_SELECTION = [
     "--output-junit",
     "ctest.xml",
 ]
-CTEST_INVOCATION = re.compile(r"\b(?:[\w.-]+/)*ctest(?=\s|$|[;&|()<>])")
-DIRECT_CTEST_INVOCATION = re.compile(r"^ctest(?=\s|$|[;&|()<>])")
+TSAN_CTEST_STEP_NAME = "Run exact TSan CTest selection"
 
 
 class SanitizerCoverageError(ValueError):
@@ -58,7 +56,18 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     return document
 
 
-def extract_tsan_run_script(workflow: str) -> str:
+def _shell_tokens(script: str) -> list[str]:
+    normalized = script.replace("\\\r\n", "").replace("\\\n", "")
+    lexer = shlex.shlex(normalized, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    try:
+        return list(lexer)
+    except ValueError as error:
+        fail(f"cannot parse shell script: {error}")
+
+
+def extract_tsan_selection_script(workflow: str) -> str:
     try:
         document = yaml.safe_load(workflow)
     except yaml.YAMLError as error:
@@ -74,63 +83,37 @@ def extract_tsan_run_script(workflow: str) -> str:
     steps = thread_job.get("steps")
     if not isinstance(steps, list):
         fail("thread-sanitizer job is missing steps")
-    tsan_steps = [
+    selection_steps = [
         step
         for step in steps
-        if isinstance(step, dict) and step.get("name") == "TSan"
+        if isinstance(step, dict) and step.get("name") == TSAN_CTEST_STEP_NAME
     ]
-    if len(tsan_steps) != 1:
-        fail("thread-sanitizer job must contain exactly one TSan step")
-    run = tsan_steps[0].get("run")
+    if len(selection_steps) != 1:
+        fail(
+            "thread-sanitizer job must contain exactly one exact TSan CTest step"
+        )
+    selection_step = selection_steps[0]
+    run = selection_step.get("run")
     if not isinstance(run, str):
-        fail("TSan step must contain a shell run script")
+        fail("exact TSan CTest step must contain a shell run script")
+    for step in steps:
+        if step is selection_step or not isinstance(step, dict):
+            continue
+        other_run = step.get("run")
+        if not isinstance(other_run, str):
+            continue
+        tokens = _shell_tokens(other_run)
+        if any(token == "ctest" or token.endswith("/ctest") for token in tokens):
+            fail("thread-sanitizer contains an additional CTest invocation")
     return run
 
 
-def _parse_ctest_command(lines: list[str]) -> list[str]:
-    command = " ".join(
-        line[:-1].rstrip() if line.endswith("\\") else line for line in lines
-    )
-    try:
-        return shlex.split(command)
-    except ValueError as error:
-        fail(f"cannot parse CTest selection: {error}")
-
-
-def _extract_ctest_commands(text: str) -> list[list[str]]:
-    commands: list[list[str]] = []
-    pending: list[str] | None = None
-    for line in text.splitlines():
-        stripped = line.strip()
-        has_ctest_invocation = CTEST_INVOCATION.search(stripped) is not None
-        if pending is not None:
-            if has_ctest_invocation and not DIRECT_CTEST_INVOCATION.match(stripped):
-                fail("every CTest invocation must start a standalone ctest line")
-            pending.append(stripped)
-            if not stripped.endswith("\\"):
-                commands.append(_parse_ctest_command(pending))
-                pending = None
-            continue
-        if has_ctest_invocation and not DIRECT_CTEST_INVOCATION.match(stripped):
-            fail("every CTest invocation must start a standalone ctest line")
-        if DIRECT_CTEST_INVOCATION.match(stripped):
-            pending = [stripped]
-            if not stripped.endswith("\\"):
-                commands.append(_parse_ctest_command(pending))
-                pending = None
-    if pending is not None:
-        fail("CTest selection ends with an unterminated shell continuation")
-    return commands
-
-
-def validate_tsan_ctest_selection(tsan_section: str) -> None:
-    commands = _extract_ctest_commands(tsan_section)
-    if len(commands) != 1:
-        fail("TSan must contain exactly one CTest invocation")
-    if commands[0] != TSAN_CTEST_SELECTION:
+def validate_tsan_ctest_selection(tsan_script: str) -> None:
+    tokens = _shell_tokens(tsan_script)
+    if tokens != TSAN_CTEST_SELECTION:
         fail(
             "TSan CTest selection differs from the accepted exact selection: "
-            f"expected {TSAN_CTEST_SELECTION!r}, got {commands[0]!r}"
+            f"expected {TSAN_CTEST_SELECTION!r}, got {tokens!r}"
         )
 
 
@@ -195,7 +178,7 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
                 fail(f"sanitizer implementation marker is missing: {relative}: {marker}")
 
     workflow = (root / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
-    validate_tsan_ctest_selection(extract_tsan_run_script(workflow))
+    validate_tsan_ctest_selection(extract_tsan_selection_script(workflow))
     return contract
 
 
