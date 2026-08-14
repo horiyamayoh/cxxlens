@@ -97,6 +97,20 @@ namespace cxxlens::detail::clang22::materialization
 		sdk::provider::sandbox_requirement sandbox;
 	};
 
+	/**
+	 * Source-independent task binding used by planning and claim-adoption metadata paths.
+	 *
+	 * The decoded input contains authority metadata only: source and canonical task.v3 bytes must
+	 * remain empty and the source receipt is retained separately.  This value never owns a source
+	 * or task-input spool and is therefore safe to use for a bounded metadata replay.
+	 */
+	struct materialization_v2_1_task_metadata_binding
+	{
+		clang22_task_input input;
+		materialization_v2_1_task_metadata_receipt metadata;
+		clang22_task_source_receipt source_receipt;
+	};
+
 	/** Opaque lifetime token held by a task-at-a-time cursor result. */
 	struct materialization_v2_1_task_cursor_state;
 
@@ -180,6 +194,9 @@ namespace cxxlens::detail::clang22::materialization
 		 */
 		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_receipt>
 		task_metadata(std::uint64_t task_index);
+		/** Replay one source-independent task binding without opening source-dependent spools. */
+		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_binding>
+		task_metadata_binding(std::uint64_t task_index);
 
 	  private:
 		prevalidated_materialization_request_v2_1(
@@ -275,6 +292,9 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::result<json_document> replay_global_authority();
 		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_receipt>
 		task_metadata(std::uint64_t task_index);
+		/** Replay one source-independent task binding without opening source-dependent spools. */
+		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_binding>
+		task_metadata_binding(std::uint64_t task_index);
 		/** Replay one fully bound task without materializing its source or task.v3 bytes. */
 		[[nodiscard]] sdk::result<materialization_v2_1_task_execution>
 		task_execution(std::uint64_t task_index);

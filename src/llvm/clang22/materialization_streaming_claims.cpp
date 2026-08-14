@@ -164,20 +164,20 @@ namespace cxxlens::detail::clang22::materialization
 			tasks.reserve(static_cast<std::size_t>(admitted.task_count()));
 			for (std::uint64_t index{}; index < admitted.task_count(); ++index)
 			{
-				auto execution = request.task_execution(index);
-				if (!execution)
-					return sdk::unexpected(std::move(execution.error()));
-				if (!execution->source || !execution->source->sealed() || !execution->task_input ||
-					!execution->task_input->sealed())
-					return sdk::unexpected(bridge_error("task", "unsealed-spool"));
+				// The bridge needs only source-independent task authority.  Do not open every
+				// source/task.v3 spool while constructing the legacy compatibility view; the
+				// production cursor owns exactly one source-dependent window during execution.
+				auto metadata = request.task_metadata_binding(index);
+				if (!metadata)
+					return sdk::unexpected(std::move(metadata.error()));
 				validated_task_request task{
-					std::move(execution->input),
-					std::move(execution->metadata.provider_task_id),
-					std::move(execution->metadata.provider_execution_id),
-					std::move(execution->metadata.task_input_digest),
-					std::move(execution->metadata.sandbox),
+					std::move(metadata->input),
+					std::move(metadata->metadata.provider_task_id),
+					std::move(metadata->metadata.provider_execution_id),
+					std::move(metadata->metadata.task_input_digest),
+					std::move(metadata->metadata.sandbox),
 					{},
-					std::move(execution->source_receipt),
+					std::move(metadata->source_receipt),
 				};
 				tasks.push_back(std::move(task));
 			}

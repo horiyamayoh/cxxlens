@@ -3212,6 +3212,15 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<materialization_v2_1_task_metadata_receipt>
 	prevalidated_materialization_request_v2_1::task_metadata(const std::uint64_t index)
 	{
+		auto binding = task_metadata_binding(index);
+		if (!binding)
+			return sdk::unexpected(std::move(binding.error()));
+		return std::move(binding->metadata);
+	}
+
+	sdk::result<materialization_v2_1_task_metadata_binding>
+	prevalidated_materialization_request_v2_1::task_metadata_binding(const std::uint64_t index)
+	{
 		if (index >= task_count_ || !raw_request_ || !task_index_)
 			return sdk::unexpected(invalid("tasks", "metadata-index"));
 		auto binding = replay_task_metadata(*raw_request_,
@@ -3225,7 +3234,14 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(std::move(binding.error()));
 		if (binding->catalog_owner != &catalog_)
 			return sdk::unexpected(invalid("task", "metadata-catalog-owner"));
-		return metadata_receipt(*binding, index);
+		if (!binding->input.source.empty() || !binding->input.source_content_base64.empty())
+			return sdk::unexpected(invalid("task", "metadata-source-residency"));
+		auto metadata = metadata_receipt(*binding, index);
+		clang22_task_source_receipt source_receipt{binding->input.source_size_bytes,
+												   binding->input.source_content_digest,
+												   binding->input.line_index};
+		return materialization_v2_1_task_metadata_binding{
+			std::move(binding->input), std::move(metadata), std::move(source_receipt)};
 	}
 
 	sdk::result<prevalidated_materialization_request_v2_1> prevalidate_materialization_request_v2_1(
@@ -3463,6 +3479,12 @@ namespace cxxlens::detail::clang22::materialization
 	validated_materialization_request_v2_1::task_metadata(const std::uint64_t index)
 	{
 		return request_.task_metadata(index);
+	}
+
+	sdk::result<materialization_v2_1_task_metadata_binding>
+	validated_materialization_request_v2_1::task_metadata_binding(const std::uint64_t index)
+	{
+		return request_.task_metadata_binding(index);
 	}
 
 	sdk::result<materialization_v2_1_task_execution>
