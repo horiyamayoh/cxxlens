@@ -84,11 +84,11 @@ namespace cxxlens::sdk
 		constexpr std::string_view source_shm_profile{"sqlite-source-shm-readonly-unix-uri-v1"};
 		constexpr std::string_view source_shm_qualification_profile{
 			"sqlite-source-shm-readonly-qualification-candidate-v1"};
-		// The native SQLITE_OK/nonnull exception is confined to the qualified source-SHM route.
-		// Its pre-delegation permit, post-native attachment receipt, atomic registry commit, and
-		// per-map projection receipt remain mandatory; generic and qualification-scratch routes
-		// retain their terminal native-OK rejection.
-		constexpr bool source_shm_native_ok_projection_production_activation = true;
+		// The internal lease/attachment machinery is intentionally retained as a proposed,
+		// fail-closed implementation boundary. The accepted authority still requires a
+		// distinct exact implementation review and complete counterexample matrix before the
+		// qualified source-SHM native-OK exception may be activated.
+		constexpr bool source_shm_native_ok_projection_production_activation = false;
 
 		constexpr int source_shm_open_flags = sqlite_open_read_only | sqlite_open_uri |
 			sqlite_open_private_cache | sqlite_open_full_mutex;
@@ -8325,6 +8325,11 @@ namespace cxxlens::sdk
 			}
 		}
 	} // namespace
+
+	bool sqlite_source_shm_native_ok_projection_production_activation_enabled() noexcept
+	{
+		return source_shm_native_ok_projection_production_activation;
+	}
 
 	result<std::shared_ptr<sqlite_default_forwarding_vfs>>
 	make_sqlite_default_forwarding_vfs(sqlite_private_snapshot_registry_binding registry)
