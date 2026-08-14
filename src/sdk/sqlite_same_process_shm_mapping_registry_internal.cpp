@@ -416,6 +416,13 @@ namespace cxxlens::sdk
 
 	namespace detail
 	{
+		struct sqlite_shm_registry_state_quarantine_sink
+		{
+			static_assert(std::atomic<sqlite_shm_mapping_registry_state*>::is_always_lock_free);
+			std::atomic<sqlite_shm_mapping_registry_state*> head{nullptr};
+		};
+		sqlite_shm_registry_state_quarantine_sink registry_state_quarantine_sink_storage_instance;
+
 		[[nodiscard]] std::shared_ptr<sqlite_shm_process_identity_issuer_state>
 		make_identity_issuer_state_for_registry(
 			std::weak_ptr<void> registry_state,
@@ -766,6 +773,8 @@ namespace cxxlens::sdk
 			friend class ::cxxlens::sdk::sqlite_shm_writer_member_authority;
 
 		  private:
+			static void quarantine_stale_state(sqlite_shm_mapping_registry_state* state) noexcept;
+
 			struct alias_record
 			{
 				alias_record(const std::uint64_t alias_token,
@@ -887,6 +896,10 @@ namespace cxxlens::sdk
 							delete state;
 							registry_state_destruction_count.fetch_add(1U,
 																	   std::memory_order_relaxed);
+						}
+						else
+						{
+							quarantine_stale_state(state);
 						}
 					},
 				};
@@ -7495,7 +7508,22 @@ namespace cxxlens::sdk
 			std::size_t ambiguous_lookup_count_{};
 			bool registry_quarantined_{};
 			std::atomic_bool emergency_quarantined_{false};
+			// Non-owning link for the process-lifetime quarantine root. The sink retains the
+			// state when its epoch is stale, so the custom deleter never deletes it after fork.
+			sqlite_shm_mapping_registry_state* quarantine_next_{};
 		};
+
+		void sqlite_shm_mapping_registry_state::quarantine_stale_state(
+			sqlite_shm_mapping_registry_state* state) noexcept
+		{
+			auto& sink = registry_state_quarantine_sink_storage_instance;
+			auto* previous = sink.head.load(std::memory_order_acquire);
+			do
+			{
+				state->quarantine_next_ = previous;
+			} while (!sink.head.compare_exchange_weak(
+				previous, state, std::memory_order_release, std::memory_order_acquire));
+		}
 	} // namespace detail
 
 	sqlite_shm_reader_open_authority::sqlite_shm_reader_open_authority(
