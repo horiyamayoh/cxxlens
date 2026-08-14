@@ -62,6 +62,11 @@ class NgCiSupplyChainTest(unittest.TestCase):
             "libclang-rt-22-dev", self.lock["llvm"]["profiles"]["compiler"]
         )
 
+    def test_developer_profile_contains_sanitizer_runtime(self) -> None:
+        self.assertIn(
+            "libclang-rt-22-dev", self.lock["llvm"]["profiles"]["developer"]
+        )
+
     def test_configure_profiles_contain_required_clang_format(self) -> None:
         self.assertIn(
             "clang-format-22", self.lock["llvm"]["profiles"]["compiler"]
