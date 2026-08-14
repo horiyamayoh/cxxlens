@@ -1439,6 +1439,8 @@ namespace
 									 cancellation_source_.get_token());
 			if (!process_request)
 				return sdk::unexpected(std::move(process_request.error()));
+			if (auto consumed = consume_materialization_v2_1_task_window(execution); !consumed)
+				return sdk::unexpected(std::move(consumed.error()));
 			auto sealed = rehydrate_materialization_prior_artifact(
 				archived_task,
 				request_task_index,

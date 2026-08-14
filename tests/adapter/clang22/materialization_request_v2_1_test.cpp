@@ -1118,6 +1118,34 @@ namespace
 				"task cursor did not finalize after the complete task census");
 	}
 
+	void task_window_consumption_is_single_use_and_digest_bound()
+	{
+		auto accepted = validate(upgrade_fixture(), 1U);
+		require(accepted.has_value(), "task-window consumption admission fixture failed");
+		auto cursor = make_materialization_v2_1_task_cursor(*accepted);
+		require(cursor.has_value(), "task-window consumption cursor construction failed");
+
+		auto first = cursor->next();
+		require(first && *first, "task-window consumption first task was unavailable");
+		auto consumed = consume_materialization_v2_1_task_window(**first);
+		require(consumed.has_value() && (*first)->consumed_window() != nullptr,
+				"sealed task-window consumption did not issue digest-bound evidence");
+		auto repeated = consume_materialization_v2_1_task_window(**first);
+		require(!repeated && repeated.error().code == "materialization.task-binding-mismatch" &&
+					repeated.error().field == "task-window",
+				"task-window consumption was not fail-closed and single-use");
+		first->reset();
+
+		auto second = cursor->next();
+		require(second && *second && (*second)->metadata.task_index == 1U,
+				"consumed task window did not release the cursor lease");
+		second->reset();
+		auto eof = cursor->next();
+		require(eof && !*eof, "task-window consumption changed the exact task census");
+		require(std::move(*cursor).finalize().has_value(),
+				"task-window consumption cursor did not finalize");
+	}
+
 	void metadata_binding_does_not_open_source_window()
 	{
 		auto accepted = validate(upgrade_fixture(), 1U);
@@ -1933,6 +1961,7 @@ int main()
 	shared_catalog_owner_and_single_task_replay();
 	source_dependent_production_admission();
 	task_cursor_enforces_one_live_task_window();
+	task_window_consumption_is_single_use_and_digest_bound();
 	metadata_binding_does_not_open_source_window();
 	claim_authority_does_not_retain_task_occurrences();
 	one_task_claim_adoption_replays_and_rejects_binding_drift();
