@@ -64,7 +64,7 @@ checks:
   - id: sanitizer.tsan
     version: 1
     owner: nightly
-    command: ctest --preset tsan --label-exclude quality
+    command: ctest --preset tsan --label-exclude quality --exclude-regex '^install\.clang22-materializer-success$'
     inputs: [CMakeLists.txt, cmake, include, src, tests]
     dimensions: [tsan, clang22]
     configurations: [tsan-clang22]

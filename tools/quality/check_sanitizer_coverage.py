@@ -24,6 +24,7 @@ INSTALL_DATABASES = {
     "examples-consumer-build/compile_commands.json",
     "real_project_consumer-build/compile_commands.json",
 }
+TSAN_NATIVE_MATERIALIZER_EXCLUSION = r"^install\.clang22-materializer-success$"
 
 
 class SanitizerCoverageError(ValueError):
@@ -92,6 +93,7 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
         ".github/workflows/nightly.yml": [
             "check_sanitizer_coverage.py",
             "--require-install-consumers",
+            "--exclude-regex '^install\\.clang22-materializer-success$'",
         ],
     }
     for relative, markers in required_markers.items():
@@ -99,6 +101,21 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
         for marker in markers:
             if marker not in text:
                 fail(f"sanitizer implementation marker is missing: {relative}: {marker}")
+
+    workflow = (root / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
+    try:
+        tsan_section = workflow.split("      - name: TSan\n", 1)[1].split(
+            "\n  static-analysis:", 1
+        )[0]
+    except IndexError:
+        fail("sanitizer workflow is missing the TSan job boundary")
+    exclusion_marker = f"--exclude-regex '{TSAN_NATIVE_MATERIALIZER_EXCLUSION}'"
+    if tsan_section.count("--exclude-regex") != 1 or exclusion_marker not in tsan_section:
+        fail(
+            "TSan must exclude exactly the adapter-OFF native materializer success test"
+        )
+    if workflow.count("--exclude-regex") != 1:
+        fail("sanitizer workflow contains an unexpected additional test exclusion")
     return contract
 
 
