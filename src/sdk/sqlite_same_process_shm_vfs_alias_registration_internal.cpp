@@ -1,6 +1,7 @@
 #include "sqlite_same_process_shm_vfs_alias_registration_internal.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -27,7 +28,7 @@ namespace cxxlens::sdk
 			"cxxlens.sqlite.shm.vfs-alias-unregistration-epoch.v1";
 		constexpr std::size_t maximum_sealed_source_id_bytes = 4096U;
 
-		constexpr std::uint32_t native_alias_lifecycle_wait_iteration_limit = 100000U;
+		constexpr auto native_alias_lifecycle_wait_limit = std::chrono::milliseconds{100};
 #if defined(__linux__)
 		static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
 					  "fork-safe alias lifecycle gate requires lock-free 64-bit atomics");
@@ -81,7 +82,7 @@ namespace cxxlens::sdk
 					return;
 				}
 				native_alias_lifecycle_active_process_key = process_key_;
-				std::uint32_t wait_iterations{};
+				std::optional<std::chrono::steady_clock::time_point> deadline;
 				auto observed = native_alias_lifecycle_gate_state.load(std::memory_order_acquire);
 				for (;;)
 				{
@@ -102,7 +103,10 @@ namespace cxxlens::sdk
 						}
 						continue;
 					}
-					if (wait_iterations++ >= native_alias_lifecycle_wait_iteration_limit)
+					const auto now = std::chrono::steady_clock::now();
+					if (!deadline)
+						deadline = now + native_alias_lifecycle_wait_limit;
+					else if (now >= *deadline)
 					{
 						timed_out_ = true;
 						return;
