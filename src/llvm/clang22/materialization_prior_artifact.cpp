@@ -2305,8 +2305,8 @@ namespace cxxlens::detail::clang22::materialization
 			return {};
 		}();
 		if (!context_mismatch.empty())
-			return sdk::unexpected(artifact_error(
-				"task.capture", "current-context/" + std::string{context_mismatch}));
+			return sdk::unexpected(
+				artifact_error("task.capture", "current-context/" + std::string{context_mismatch}));
 		if (current_task.source_receipt &&
 			(artifact.capture.source_size_bytes != current_task.source_receipt->size_bytes ||
 			 artifact.capture.source_content_digest !=
