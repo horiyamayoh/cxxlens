@@ -16,7 +16,9 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_sanitizer_coverage import (  # noqa: E402
     SanitizerCoverageError,
+    extract_tsan_selection_script,
     parse_expected,
+    validate_tsan_ctest_selection,
     validate_contract,
     validate_database,
 )
@@ -89,9 +91,145 @@ class SanitizerCoverageTest(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
             encoding="utf-8"
         )
-        marker = "--exclude-regex '^install\\.clang22-materializer-success$'"
-        self.assertEqual(workflow.count("--exclude-regex"), 1)
-        self.assertIn(marker, workflow)
+        validate_tsan_ctest_selection(extract_tsan_selection_script(workflow))
+
+    def test_tsan_rejects_exclude_regex_alias(self) -> None:
+        continuation = "\\\n"
+        command = (
+            "ctest --preset tsan --parallel 1 --label-exclude quality "
+            + continuation
+            + "-E '^install\\.clang22-materializer-success$' "
+            + continuation
+            + "--output-junit ctest.xml"
+        )
+        with self.assertRaisesRegex(SanitizerCoverageError, "exact selection"):
+            validate_tsan_ctest_selection(command)
+
+    def test_tsan_preserves_single_quoted_continuation_semantics(self) -> None:
+        continuation = "\\\n"
+        command = (
+            "ctest --preset tsan --parallel 1 --label-exclude quality "
+            + continuation
+            + "--exclude-regex '^install\\.clang22-materializer-success$"
+            + continuation
+            + "' "
+            + continuation
+            + "--output-junit ctest.xml"
+        )
+        with self.assertRaisesRegex(SanitizerCoverageError, "exact selection"):
+            validate_tsan_ctest_selection(command)
+
+    def test_tsan_rejects_additional_label_exclusion(self) -> None:
+        continuation = "\\\n"
+        command = (
+            "ctest --preset tsan --parallel 1 "
+            + continuation
+            + "--label-exclude quality --label-exclude install "
+            + continuation
+            + "--exclude-regex '^install\\.clang22-materializer-success$' "
+            + continuation
+            + "--output-junit ctest.xml"
+        )
+        with self.assertRaisesRegex(SanitizerCoverageError, "exact selection"):
+            validate_tsan_ctest_selection(command)
+
+    def test_tsan_rejects_prefixed_ctest_invocations(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        valid_script = extract_tsan_selection_script(workflow)
+        continuation = "\\\n"
+        extras = [
+            "command ctest -E '^broad$'",
+            "env ctest -E '^broad$'",
+            "true && ctest -E '^broad$'",
+            "/usr/bin/ctest -E '^broad$'",
+            "ignored=$(ctest -E '^broad$')",
+            "c''test -E '^broad$'",
+            "c\\test -E '^broad$'",
+            "c" + continuation + "test -E '^broad$'",
+        ]
+        for extra in extras:
+            with self.subTest(extra=extra):
+                with self.assertRaisesRegex(
+                    SanitizerCoverageError, "exact selection"
+                ):
+                    validate_tsan_ctest_selection(valid_script + "\n" + extra)
+
+    def test_tsan_rejects_an_additional_workflow_step(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        mutated = workflow.replace(
+            "      - name: TSan evidence\n",
+            "      - name: TSan extra\n"
+            "        run: ctest -E '^broad$'\n"
+            "      - name: TSan evidence\n",
+            1,
+        )
+        with self.assertRaisesRegex(
+            SanitizerCoverageError, "additional CTest"
+        ):
+            extract_tsan_selection_script(mutated)
+
+    def test_tsan_rejects_dynamic_ctest_in_an_additional_step(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        mutated = workflow.replace(
+            "      - name: TSan evidence\n",
+            "      - name: TSan extra\n"
+            "        run: |\n"
+            "          cmd=c''test\n"
+            "          \"$cmd\" -E '^broad$'\n"
+            "      - name: TSan evidence\n",
+            1,
+        )
+        with self.assertRaisesRegex(
+            SanitizerCoverageError, "additional CTest"
+        ):
+            extract_tsan_selection_script(mutated)
+
+    def test_tsan_rejects_nested_ctest_in_an_additional_step(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        for command in (
+            "sh -c 'ctest -E broad'",
+            "sh -c '/usr/bin/ctest -E broad'",
+            "eval 'ctest -E broad'",
+            "printf 'ctest -E broad' | sh",
+        ):
+            with self.subTest(command=command):
+                mutated = workflow.replace(
+                    "      - name: TSan evidence\n",
+                    "      - name: TSan extra\n"
+                    f"        run: {command}\n"
+                    "      - name: TSan evidence\n",
+                    1,
+                )
+                with self.assertRaisesRegex(
+                    SanitizerCoverageError, "additional CTest"
+                ):
+                    extract_tsan_selection_script(mutated)
+
+    def test_tsan_rejects_unknown_dynamic_command_in_an_additional_step(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        mutated = workflow.replace(
+            "      - name: TSan evidence\n",
+            "      - name: TSan extra\n"
+            "        run: |\n"
+            "          cmd=$CTEST\n"
+            "          \"$cmd\" -E '^broad$'\n"
+            "      - name: TSan evidence\n",
+            1,
+        )
+        with self.assertRaisesRegex(
+            SanitizerCoverageError, "dynamic shell"
+        ):
+            extract_tsan_selection_script(mutated)
 
 
 if __name__ == "__main__":
