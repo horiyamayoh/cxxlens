@@ -80,6 +80,40 @@ namespace
 						 6U)};
 	}
 
+	[[nodiscard]] sqlite_shm_writer_gate_stage_bundle
+	terminal_stage(const sqlite_shm_writer_gate_stage stage,
+				   const sqlite_shm_writer_gate_terminal_phase phase,
+				   const std::uint8_t marker)
+	{
+		auto result = passed_stage(stage, marker);
+		result.result = sqlite_shm_writer_gate_stage_result::terminal_indeterminate;
+		result.failure.reset();
+		switch (phase)
+		{
+			case sqlite_shm_writer_gate_terminal_phase::before_value_read:
+				result.expected_policy_canonical_bytes.clear();
+				result.allowed_effect_canonical_bytes.clear();
+				result.observed_value_canonical_bytes.clear();
+				result.authority_receipt_canonical_bytes.clear();
+				result.observed_effect_canonical_bytes.clear();
+				result.observed_effect_slot =
+					sqlite_shm_writer_gate_observed_effect_slot::not_executed;
+				break;
+			case sqlite_shm_writer_gate_terminal_phase::after_value_before_effect:
+				result.observed_effect_canonical_bytes.clear();
+				result.observed_effect_slot =
+					sqlite_shm_writer_gate_observed_effect_slot::not_executed;
+				break;
+			case sqlite_shm_writer_gate_terminal_phase::after_effect_start_before_effect_result:
+				result.observed_effect_slot =
+					sqlite_shm_writer_gate_observed_effect_slot::started_outcome_unresolved;
+				break;
+			case sqlite_shm_writer_gate_terminal_phase::after_effect_before_stage_result:
+				break;
+		}
+		return result;
+	}
+
 	void verify_move_only_surface()
 	{
 		static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_gate_attempt_owner>);
@@ -183,6 +217,116 @@ namespace
 				"terminal outcome accepted a malformed passed prefix");
 	}
 
+	void verify_complete_gate_failure_and_terminal_matrix()
+	{
+		constexpr std::array stages{
+			sqlite_shm_writer_gate_stage::writer_readwrite_mode,
+			sqlite_shm_writer_gate_stage::runtime_version_and_locator,
+			sqlite_shm_writer_gate_stage::runtime_vfs_file_family_and_open_epoch,
+			sqlite_shm_writer_gate_stage::synchronous_full_and_wal_mode,
+			sqlite_shm_writer_gate_stage::current_v3_format_schema_head_counter_authority,
+			sqlite_shm_writer_gate_stage::store_writer_open_before_publication_effect,
+		};
+		constexpr std::array failures{
+			sqlite_shm_writer_gate_failure::writer_mode_rejected,
+			sqlite_shm_writer_gate_failure::runtime_or_locator_rejected,
+			sqlite_shm_writer_gate_failure::runtime_vfs_or_file_family_rejected,
+			sqlite_shm_writer_gate_failure::synchronous_or_wal_mode_rejected,
+			sqlite_shm_writer_gate_failure::current_v3_authority_rejected,
+			sqlite_shm_writer_gate_failure::store_writer_open_rejected,
+		};
+		constexpr std::array terminal_phases{
+			sqlite_shm_writer_gate_terminal_phase::before_value_read,
+			sqlite_shm_writer_gate_terminal_phase::after_value_before_effect,
+			sqlite_shm_writer_gate_terminal_phase::after_effect_start_before_effect_result,
+			sqlite_shm_writer_gate_terminal_phase::after_effect_before_stage_result,
+		};
+		constexpr std::array terminal_reasons{
+			sqlite_shm_writer_gate_terminal_reason::timeout,
+			sqlite_shm_writer_gate_terminal_reason::unknown,
+			sqlite_shm_writer_gate_terminal_reason::open_epoch_drift,
+			sqlite_shm_writer_gate_terminal_reason::validator_sealed_attempt_abandonment,
+			sqlite_shm_writer_gate_terminal_reason::authority_loss,
+			sqlite_shm_writer_gate_terminal_reason::incomplete_or_unclassified_effect,
+		};
+
+		for (std::size_t index{}; index < stages.size(); ++index)
+		{
+			auto passed_prefix = all_passed();
+			passed_prefix.resize(index + 1U);
+			passed_prefix.back().result =
+				sqlite_shm_writer_gate_stage_result::typed_determinate_failure;
+			passed_prefix.back().failure = failures[index];
+			auto begun = sqlite_same_process_shm_writer_gate_receipt_validator::begin(binding());
+			auto sealed = sqlite_same_process_shm_writer_gate_receipt_validator::seal(
+				std::move(*begun),
+				std::move(passed_prefix),
+				sqlite_shm_writer_gate_outcome_kind::typed_determinate_failure);
+			require(sealed && sealed->outcome().stages().size() == index + 1U &&
+						sealed->outcome().failure() &&
+						*sealed->outcome().failure() == failures[index],
+					"one of the six stage/failure pairs was not accepted");
+
+			for (const auto phase : terminal_phases)
+			{
+				for (const auto reason : terminal_reasons)
+				{
+					auto terminal_prefix = all_passed();
+					terminal_prefix.resize(index);
+					terminal_prefix.push_back(terminal_stage(
+						stages[index], phase, static_cast<std::uint8_t>(index + 1U)));
+					auto terminal_begin =
+						sqlite_same_process_shm_writer_gate_receipt_validator::begin(binding());
+					auto terminal = sqlite_same_process_shm_writer_gate_receipt_validator::seal(
+						std::move(*terminal_begin),
+						std::move(terminal_prefix),
+						sqlite_shm_writer_gate_outcome_kind::terminal_indeterminate,
+						reason,
+						sqlite_shm_writer_gate_terminal_locus{stages[index], phase});
+					require(terminal && terminal->outcome().terminal_reason() &&
+								*terminal->outcome().terminal_reason() == reason,
+							"an accepted at-stage terminal phase/reason was rejected");
+				}
+			}
+		}
+
+		for (const auto reason : terminal_reasons)
+		{
+			auto terminal_begin =
+				sqlite_same_process_shm_writer_gate_receipt_validator::begin(binding());
+			auto terminal = sqlite_same_process_shm_writer_gate_receipt_validator::seal(
+				std::move(*terminal_begin),
+				all_passed(),
+				sqlite_shm_writer_gate_outcome_kind::terminal_indeterminate,
+				reason,
+				sqlite_shm_writer_gate_terminal_locus{
+					std::nullopt,
+					sqlite_shm_writer_gate_terminal_phase::after_effect_before_stage_result});
+			require(terminal && terminal->outcome().stages().size() == stages.size(),
+					"post-sixth-stage terminal was not accepted");
+		}
+
+		for (std::size_t prefix_size{1U}; prefix_size < stages.size(); ++prefix_size)
+		{
+			auto incomplete_prefix = all_passed();
+			incomplete_prefix.resize(prefix_size);
+			auto terminal_begin =
+				sqlite_same_process_shm_writer_gate_receipt_validator::begin(binding());
+			auto rejected = sqlite_same_process_shm_writer_gate_receipt_validator::seal(
+				std::move(*terminal_begin),
+				std::move(incomplete_prefix),
+				sqlite_shm_writer_gate_outcome_kind::terminal_indeterminate,
+				sqlite_shm_writer_gate_terminal_reason::timeout,
+				sqlite_shm_writer_gate_terminal_locus{
+					std::nullopt,
+					sqlite_shm_writer_gate_terminal_phase::after_effect_before_stage_result});
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::invalid_request,
+					"a stage-less terminal bypassed the six-stage completion boundary");
+		}
+	}
+
 	void verify_negative_validation()
 	{
 		auto invalid = binding();
@@ -250,6 +394,7 @@ int main()
 		verify_move_only_surface();
 		verify_positive_transfer_is_single_use();
 		verify_failure_bijection_and_terminal_slots();
+		verify_complete_gate_failure_and_terminal_matrix();
 		verify_negative_validation();
 	}
 	catch (const std::exception& error)
