@@ -1606,6 +1606,31 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             self.validate_report(request, drift)
 
+    def test_report_occurrence_receipt_rebinding_is_fail_closed(self) -> None:
+        request = self.request("static", "memory")
+
+        manifest_digest_drift = self.report(request)
+        manifest_digest_drift["installation"]["measured"]["manifest_file_digest"] = (
+            "sha256:" + "0" * 64
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "occurrence|materialization",
+        ):
+            self.validate_report(request, manifest_digest_drift)
+
+        file_authority_drift = self.report(request)
+        measured_files = file_authority_drift["installation"]["measured"]["files"]
+        measured_files[0], measured_files[1] = measured_files[1], measured_files[0]
+        file_authority_drift["installation"]["measured"]["inventory_digest"] = (
+            materialization.content_digest(materialization.canonical_json(measured_files))
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "occurrence|materialization",
+        ):
+            self.validate_report(request, file_authority_drift)
+
     def test_sqlite_path_is_canonical_relative_utf8_even_after_digest_rebind(self) -> None:
         invalid_paths = [
             ".",
