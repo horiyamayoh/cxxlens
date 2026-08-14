@@ -1796,18 +1796,16 @@ int main(const int argc, char**)
 								  "materialization.identity-mismatch",
 								  identity.materialization_request_id,
 								  claim_context.error());
+	// Prior-artifact recovery may perform rooted SQLite/sidecar reads. Complete the
+	// installation-binding phase before that Store effect; recovery corruption or
+	// unavailability has no phase-authentic compact response at this boundary.
+	if (auto completed = journal->complete_installation_binding(); !completed)
+		return no_response();
 	auto loaded_prior_artifact = load_materialization_prior_artifact(
 		*effect_root, request->request().engine(), request->request().publication());
 	if (!loaded_prior_artifact)
-		return emit_typed_failure(std::move(*journal),
-								  "materialization.identity-mismatch",
-								  identity.materialization_request_id,
-								  sdk::error{"materialization.identity-mismatch",
-											 "prior-artifact",
-											 "invalid-or-unavailable"});
-	auto prior_artifact = std::move(*loaded_prior_artifact);
-	if (auto completed = journal->complete_installation_binding(); !completed)
 		return no_response();
+	auto prior_artifact = std::move(*loaded_prior_artifact);
 	const auto request_subject = request->identity().materialization_request_id;
 	auto request_globals = request->replay_global_authority();
 	if (!request_globals)

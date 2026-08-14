@@ -59,6 +59,38 @@ class NgClang22MaterializationTests(unittest.TestCase):
             f"extra={sorted(worker_sources - kernel_sources)}",
         )
 
+    def test_prior_artifact_recovery_is_after_binding_and_fail_closed(self) -> None:
+        source = (ROOT / "tools/clang22/materialize_main.cpp").read_text(
+            encoding="utf-8"
+        )
+        claim_context = source.index(
+            "auto claim_context = make_materialization_v2_1_claim_context"
+        )
+        binding = source.index(
+            "journal->complete_installation_binding()", claim_context
+        )
+        prior_artifact = source.index(
+            "auto loaded_prior_artifact = load_materialization_prior_artifact(",
+            claim_context,
+        )
+        failure_end = source.index(
+            "auto prior_artifact = std::move(*loaded_prior_artifact);",
+            prior_artifact,
+        )
+        self.assertLess(
+            binding,
+            prior_artifact,
+            "prior-artifact recovery must not run in the installation-binding phase",
+        )
+        failure_block = source[prior_artifact:failure_end]
+        self.assertIn("if (!loaded_prior_artifact)", failure_block)
+        self.assertIn("return no_response();", failure_block)
+        self.assertNotIn(
+            "emit_typed_failure",
+            failure_block,
+            "prior-artifact infrastructure failure must not be relabeled as identity mismatch",
+        )
+
     def test_baseline_recovery_installed_surface_bindings_are_fail_closed(self) -> None:
         documents = {
             "root_cmake": (ROOT / materialization.ROOT_CMAKE).read_text(
