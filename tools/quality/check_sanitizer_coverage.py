@@ -105,9 +105,9 @@ def extract_tsan_selection_script(workflow: str) -> str:
             continue
         tokens = _shell_tokens(other_run)
         if any(
-            token == "ctest"
-            or token.endswith("/ctest")
-            or token.endswith("=ctest")
+            "ctest" in token
+            and token not in {"ctest.xml"}
+            and not token.endswith("/ctest.xml")
             for token in tokens
         ):
             fail("thread-sanitizer contains an additional CTest invocation")

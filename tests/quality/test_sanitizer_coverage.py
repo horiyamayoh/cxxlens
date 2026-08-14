@@ -190,6 +190,29 @@ class SanitizerCoverageTest(unittest.TestCase):
         ):
             extract_tsan_selection_script(mutated)
 
+    def test_tsan_rejects_nested_ctest_in_an_additional_step(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        for command in (
+            "sh -c 'ctest -E broad'",
+            "sh -c '/usr/bin/ctest -E broad'",
+            "eval 'ctest -E broad'",
+            "printf 'ctest -E broad' | sh",
+        ):
+            with self.subTest(command=command):
+                mutated = workflow.replace(
+                    "      - name: TSan evidence\n",
+                    "      - name: TSan extra\n"
+                    f"        run: {command}\n"
+                    "      - name: TSan evidence\n",
+                    1,
+                )
+                with self.assertRaisesRegex(
+                    SanitizerCoverageError, "additional CTest"
+                ):
+                    extract_tsan_selection_script(mutated)
+
     def test_tsan_rejects_unknown_dynamic_command_in_an_additional_step(self) -> None:
         workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
             encoding="utf-8"
