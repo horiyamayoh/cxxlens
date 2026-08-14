@@ -569,78 +569,152 @@ namespace
 
 	void exercise_receiptless_family_partition_and_routes()
 	{
+		const auto require_plan = [](const sqlite_disposable_empty_family_observation& observation,
+									 const sqlite_disposable_empty_family expected_family,
+									 const sqlite_disposable_family_phase expected_phase,
+									 const sqlite_disposable_normalization_route expected_route,
+									 const bool expected_zero_wal,
+									 const std::string_view label)
+		{
+			auto classified = classify_sqlite_disposable_empty_family(observation);
+			require(classified && classified->family == expected_family &&
+						classified->phase == expected_phase,
+					std::string{label} + " family classification");
+			auto planned = plan_sqlite_disposable_empty_normalization(observation);
+			require(planned && planned->family == *classified && planned->route == expected_route &&
+						planned->uses_existing_zero_byte_wal == expected_zero_wal &&
+						!planned->may_handoff_to_ordinary_fresh_initialization,
+					std::string{label} + " qualification-only route");
+		};
+		const auto require_rejected =
+			[](const sqlite_disposable_empty_family_observation& observation,
+			   const std::string_view label)
+		{
+			require(!classify_sqlite_disposable_empty_family(observation),
+					std::string{label} + " classifier accepted an unrecognized family");
+			require(!plan_sqlite_disposable_empty_normalization(observation),
+					std::string{label} + " planner selected a route after rejection");
+		};
+
 		const auto f0 = family_observation(sqlite_disposable_main_header_state::wal_empty,
 										   sqlite_disposable_wal_state::absent,
 										   sqlite_disposable_journal_state::absent);
-		auto classified = classify_sqlite_disposable_empty_family(f0);
-		require(classified &&
-					classified->family == sqlite_disposable_empty_family::exact_pre_no_sidecar &&
-					classified->phase == sqlite_disposable_family_phase::pre,
-				"F0 classification");
-		auto planned = plan_sqlite_disposable_empty_normalization(f0);
-		require(
-			planned &&
-				planned->route ==
-					sqlite_disposable_normalization_route::start_new_live_receipted_normalizer &&
-				!planned->may_handoff_to_ordinary_fresh_initialization,
-			"F0 starts a new normalizer without synthetic success");
+		require_plan(f0,
+					 sqlite_disposable_empty_family::exact_pre_no_sidecar,
+					 sqlite_disposable_family_phase::pre,
+					 sqlite_disposable_normalization_route::start_new_live_receipted_normalizer,
+					 false,
+					 "F0");
 
 		const auto fz_pre = family_observation(sqlite_disposable_main_header_state::wal_empty,
 											   sqlite_disposable_wal_state::readable_zero_byte,
 											   sqlite_disposable_journal_state::absent);
-		planned = plan_sqlite_disposable_empty_normalization(fz_pre);
-		require(planned &&
-					planned->family.family ==
-						sqlite_disposable_empty_family::exact_pre_or_post_zero_wal &&
-					planned->family.phase == sqlite_disposable_family_phase::pre &&
-					planned->uses_existing_zero_byte_wal,
-				"FZ pre retains the bound zero-WAL coordination object");
+		require_plan(fz_pre,
+					 sqlite_disposable_empty_family::exact_pre_or_post_zero_wal,
+					 sqlite_disposable_family_phase::pre,
+					 sqlite_disposable_normalization_route::start_new_live_receipted_normalizer,
+					 true,
+					 "FZ-pre");
 
 		const auto fz_post = family_observation(sqlite_disposable_main_header_state::rollback_empty,
 												sqlite_disposable_wal_state::readable_zero_byte,
 												sqlite_disposable_journal_state::absent);
-		planned = plan_sqlite_disposable_empty_normalization(fz_post);
-		require(planned &&
-					planned->route ==
-						sqlite_disposable_normalization_route::establish_rollback_empty_anchor &&
-					!planned->may_handoff_to_ordinary_fresh_initialization,
-				"FZ post cannot infer a completed operation");
+		require_plan(fz_post,
+					 sqlite_disposable_empty_family::exact_pre_or_post_zero_wal,
+					 sqlite_disposable_family_phase::post,
+					 sqlite_disposable_normalization_route::establish_rollback_empty_anchor,
+					 false,
+					 "FZ-post");
 
-		for (const auto journal : {sqlite_disposable_journal_state::nonhot_prefix,
-								   sqlite_disposable_journal_state::hot_with_exact_preimages})
+		const auto fp = family_observation(sqlite_disposable_main_header_state::wal_empty,
+										   sqlite_disposable_wal_state::absent,
+										   sqlite_disposable_journal_state::nonhot_prefix);
+		require_plan(fp,
+					 sqlite_disposable_empty_family::exact_pre_nonhot_journal_prefix,
+					 sqlite_disposable_family_phase::pre,
+					 sqlite_disposable_normalization_route::start_new_live_receipted_normalizer,
+					 false,
+					 "FP");
+
+		for (const auto header : {sqlite_disposable_main_header_state::wal_empty,
+								  sqlite_disposable_main_header_state::rollback_empty})
 		{
-			auto input = family_observation(sqlite_disposable_main_header_state::wal_empty,
-											sqlite_disposable_wal_state::absent,
-											journal);
-			auto result = plan_sqlite_disposable_empty_normalization(input);
-			require(
-				result &&
-					result->route ==
-						sqlite_disposable_normalization_route::start_new_live_receipted_normalizer,
-				"pre journal families start a new live receipt chain");
+			auto input =
+				family_observation(header,
+								   sqlite_disposable_wal_state::absent,
+								   sqlite_disposable_journal_state::hot_with_exact_preimages);
+			require_plan(input,
+						 sqlite_disposable_empty_family::valid_hot_journal_with_exact_preimages,
+						 sqlite_disposable_family_phase::pre_or_post,
+						 sqlite_disposable_normalization_route::start_new_live_receipted_normalizer,
+						 false,
+						 header == sqlite_disposable_main_header_state::wal_empty ? "FH-pre"
+																				  : "FH-post");
 		}
 
 		const auto fi =
 			family_observation(sqlite_disposable_main_header_state::rollback_empty,
 							   sqlite_disposable_wal_state::absent,
 							   sqlite_disposable_journal_state::invalidated_with_exact_post);
-		planned = plan_sqlite_disposable_empty_normalization(fi);
-		require(planned &&
-					planned->route ==
-						sqlite_disposable_normalization_route::establish_rollback_empty_anchor,
-				"FI establishes only a new rollback-empty anchor");
+		require_plan(fi,
+					 sqlite_disposable_empty_family::invalidated_journal_with_exact_post,
+					 sqlite_disposable_family_phase::post,
+					 sqlite_disposable_normalization_route::establish_rollback_empty_anchor,
+					 false,
+					 "FI");
+
+		const auto fo = family_observation(sqlite_disposable_main_header_state::rollback_empty,
+										   sqlite_disposable_wal_state::absent,
+										   sqlite_disposable_journal_state::absent);
+		require_plan(fo,
+					 sqlite_disposable_empty_family::complete_rollback_empty_no_sidecar,
+					 sqlite_disposable_family_phase::post,
+					 sqlite_disposable_normalization_route::establish_rollback_empty_anchor,
+					 false,
+					 "FO");
 
 		auto rejected = f0;
-		rejected.shared_memory_present = true;
-		require(!classify_sqlite_disposable_empty_family(rejected),
-				"mixed SHM topology is rejected");
+		rejected.source_anchor_stable = false;
+		require_rejected(rejected, "unstable source anchor");
 		rejected = f0;
 		rejected.main_identity_stable = false;
-		require(!classify_sqlite_disposable_empty_family(rejected), "identity drift is rejected");
+		require_rejected(rejected, "main identity drift");
+		rejected = f0;
+		rejected.main_entry_stable = false;
+		require_rejected(rejected, "main entry drift");
+		rejected = f0;
+		rejected.exact_logical_empty = false;
+		require_rejected(rejected, "non-empty logical projection");
+		rejected = f0;
+		rejected.shared_memory_present = true;
+		require_rejected(rejected, "mixed SHM topology");
+		rejected = f0;
+		rejected.other_sidecar_present = true;
+		require_rejected(rejected, "mixed sidecar topology");
 		rejected = f0;
 		rejected.wal = sqlite_disposable_wal_state::invalid_or_unknown;
-		require(!classify_sqlite_disposable_empty_family(rejected),
-				"unknown WAL state is rejected");
+		require_rejected(rejected, "unknown WAL state");
+		rejected = f0;
+		rejected.wal = sqlite_disposable_wal_state::readable_nonzero;
+		require_rejected(rejected, "non-empty WAL state");
+		rejected = f0;
+		rejected.journal = sqlite_disposable_journal_state::invalid_or_unknown;
+		require_rejected(rejected, "unknown journal state");
+		rejected = family_observation(sqlite_disposable_main_header_state::rollback_empty,
+									  sqlite_disposable_wal_state::absent,
+									  sqlite_disposable_journal_state::nonhot_prefix);
+		require_rejected(rejected, "nonhot journal with rollback header");
+		rejected = f0;
+		rejected.wal = sqlite_disposable_wal_state::readable_zero_byte;
+		rejected.journal = sqlite_disposable_journal_state::nonhot_prefix;
+		require_rejected(rejected, "mixed zero WAL and journal");
+		rejected = f0;
+		rejected.wal = sqlite_disposable_wal_state::absent;
+		rejected.journal = sqlite_disposable_journal_state::invalidated_with_exact_post;
+		require_rejected(rejected, "invalidated journal with WAL header");
+		rejected = f0;
+		rejected.main_header = static_cast<sqlite_disposable_main_header_state>(255U);
+		require_rejected(rejected, "unknown main header state");
 	}
 #endif
 } // namespace
