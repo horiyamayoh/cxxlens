@@ -1525,6 +1525,28 @@ namespace
 		require(external.has_value(),
 				"claim stream external validator rejected unchanged sealed task streams: " +
 					(external ? std::string{} : failure(external.error())));
+		auto raw_external = materialization_claim_stream_source::validate_external_task_receipts(
+			*request_id,
+			static_cast<std::uint64_t>(request.tasks.size()),
+			*journal,
+			std::span<materialization_claim_stream_task>{tasks});
+		require(raw_external.has_value(),
+				"raw claim stream external validator rejected unchanged sealed task streams: " +
+					(raw_external ? std::string{} : failure(raw_external.error())));
+		std::vector<materialization_claim_stream_task> missing_streams;
+		missing_streams.reserve(receipts.size());
+		for (const auto& receipt : receipts)
+			missing_streams.emplace_back(receipt,
+									 std::vector<std::unique_ptr<materialization_replayable_spool>>{});
+		auto raw_missing_stream = materialization_claim_stream_source::validate_external_task_receipts(
+			*request_id,
+			static_cast<std::uint64_t>(request.tasks.size()),
+			*journal,
+			std::span<materialization_claim_stream_task>{missing_streams});
+		require(!raw_missing_stream &&
+					failure(raw_missing_stream.error()) ==
+						"materialization.claim-stream-invalid/partitions/empty",
+				"raw claim stream external validator accepted receipts without sealed event spools");
 
 		auto source =
 			materialization_claim_stream_source::begin(request, *journal, std::move(tasks));

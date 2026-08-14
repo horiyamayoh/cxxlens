@@ -736,10 +736,30 @@ namespace cxxlens::detail::clang22::materialization
 		const materialization_incremental_execution_journal_receipt& journal,
 		const std::span<materialization_claim_stream_task> tasks)
 	{
-		return validate_v2_journal(materialization_request_id,
-								   task_count,
-								   journal,
-								   std::span<const materialization_claim_stream_task>{tasks});
+		try
+		{
+			auto valid = validate_v2_journal(
+				materialization_request_id,
+				task_count,
+				journal,
+				std::span<const materialization_claim_stream_task>{tasks});
+			if (!valid)
+				return valid;
+			for (const auto& task : tasks)
+			{
+				materialization_claim_stream_source::task_state ignored;
+				if (auto stream_valid = validate_task_streams(materialization_request_id,
+																  task,
+																  ignored);
+					!stream_valid)
+					return stream_valid;
+			}
+			return {};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(stream_error("allocation", "unavailable"));
+		}
 	}
 
 	sdk::result<materialization_claim_stream_source> materialization_claim_stream_source::begin(
