@@ -15,6 +15,32 @@
 
 namespace cxxlens::detail::clang22::materialization
 {
+	class validated_materialization_request_v2_1;
+
+	/** Opaque state which makes source-private request authorities fail closed on move/destruction.
+	 */
+	class materialization_v2_1_request_lifetime
+	{
+	  public:
+		[[nodiscard]] validated_materialization_request_v2_1* owner() const noexcept
+		{
+			return owner_;
+		}
+
+	  private:
+		void bind(validated_materialization_request_v2_1* owner) noexcept
+		{
+			owner_ = owner;
+		}
+		void invalidate() noexcept
+		{
+			owner_ = nullptr;
+		}
+
+		validated_materialization_request_v2_1* owner_{};
+		friend class validated_materialization_request_v2_1;
+	};
+
 	/** Exact bounded auxiliary index whose private spool is being constructed. */
 	enum class materialization_v2_1_auxiliary_spool_purpose : std::uint8_t
 	{
@@ -95,6 +121,32 @@ namespace cxxlens::detail::clang22::materialization
 		std::string provider_execution_id;
 		std::string task_input_digest;
 		sdk::provider::sandbox_requirement sandbox;
+
+		[[nodiscard]] bool
+		operator==(const materialization_v2_1_task_metadata_receipt& other) const noexcept
+		{
+			return task_index == other.task_index && project_id == other.project_id &&
+				catalog_id == other.catalog_id && catalog_digest == other.catalog_digest &&
+				selected_catalog_compile_unit_id == other.selected_catalog_compile_unit_id &&
+				final_relation_compile_unit_id == other.final_relation_compile_unit_id &&
+				variant_id == other.variant_id &&
+				toolchain_context_id == other.toolchain_context_id &&
+				toolchain_digest == other.toolchain_digest &&
+				source_snapshot_id == other.source_snapshot_id && file_id == other.file_id &&
+				logical_path == other.logical_path &&
+				source_content_digest == other.source_content_digest &&
+				source_size_bytes == other.source_size_bytes &&
+				source_encoding == other.source_encoding && line_index_id == other.line_index_id &&
+				source_read_only == other.source_read_only &&
+				condition_universe_id == other.condition_universe_id &&
+				condition_id == other.condition_id &&
+				interpretation_domain == other.interpretation_domain &&
+				provider_task_id == other.provider_task_id &&
+				provider_execution_id == other.provider_execution_id &&
+				task_input_digest == other.task_input_digest &&
+				sandbox.minimum == other.sandbox.minimum &&
+				sandbox.policy_digest == other.sandbox.policy_digest;
+		}
 	};
 
 	/**
@@ -154,8 +206,6 @@ namespace cxxlens::detail::clang22::materialization
 		void attach_cursor_lease(std::shared_ptr<void> lease) noexcept;
 		friend class materialization_v2_1_task_cursor;
 	};
-
-	class validated_materialization_request_v2_1;
 
 	/**
 	 * Source-independent v2.1 pass-two result without an all-task/source/payload representation.
@@ -288,6 +338,10 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] const prevalidated_materialization_request_v2_1& request() const noexcept;
 		[[nodiscard]] const streamed_materialization_request_identity& identity() const noexcept;
+		/** Source-private lifetime state used by bounded authorities; never exposes request
+		 * payload. */
+		[[nodiscard]] const std::shared_ptr<materialization_v2_1_request_lifetime>&
+		lifetime_token() const noexcept;
 		/** Replay only the authenticated, source-independent global request authority. */
 		[[nodiscard]] sdk::result<json_document> replay_global_authority();
 		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_receipt>
@@ -305,6 +359,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		prevalidated_materialization_request_v2_1 request_;
 		streamed_materialization_request_identity identity_;
+		std::shared_ptr<materialization_v2_1_request_lifetime> lifetime_;
 
 		friend sdk::result<validated_materialization_request_v2_1>
 			admit_materialization_request_v2_1(prevalidated_materialization_request_v2_1);

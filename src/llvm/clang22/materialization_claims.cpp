@@ -17,6 +17,7 @@
 #include <utility>
 #include <variant>
 
+#include "materialization_admission_error.hpp"
 #include "materialization_identity.hpp"
 #include "sdk/claim_internal.hpp"
 
@@ -52,6 +53,10 @@ namespace cxxlens::detail::clang22::materialization
 
 		using context_key = std::array<std::string, 7U>;
 		using partition_key = std::array<std::string, 8U>;
+		constexpr std::array<std::string_view, 3U> v2_1_guarantee_modalities{
+			"clang22.materialization-sealed.v1",
+			"provider.transcript-sealed.v1",
+			"sdk.claim-envelope-validated.v1"};
 
 		struct direct_basis_values
 		{
@@ -261,6 +266,207 @@ namespace cxxlens::detail::clang22::materialization
 					value.condition_universe_id,
 					value.condition_id,
 					value.interpretation_domain};
+		}
+
+		[[nodiscard]] bool same_catalog(const sdk::project_catalog& left,
+										const sdk::project_catalog& right) noexcept
+		{
+			return left.catalog_id == right.catalog_id &&
+				left.catalog_digest == right.catalog_digest &&
+				left.logical_root == right.logical_root &&
+				left.environment_digest == right.environment_digest &&
+				left.compile_units == right.compile_units;
+		}
+
+		[[nodiscard]] bool same_task_input_binding(const clang22_task_input& left,
+												   const clang22_task_input& right) noexcept
+		{
+			return same_catalog(left.project_catalog, right.project_catalog) &&
+				left.selected_catalog_compile_unit == right.selected_catalog_compile_unit &&
+				left.compile_unit == right.compile_unit && left.project == right.project &&
+				left.variant == right.variant &&
+				left.toolchain_context == right.toolchain_context &&
+				left.toolchain_digest == right.toolchain_digest &&
+				left.toolchain.family == right.toolchain.family &&
+				left.toolchain.exact_version == right.toolchain.exact_version &&
+				left.toolchain.target_triple == right.toolchain.target_triple &&
+				left.toolchain.builtin_headers_digest == right.toolchain.builtin_headers_digest &&
+				left.toolchain.sysroot == right.toolchain.sysroot &&
+				left.toolchain.abi_digest == right.toolchain.abi_digest &&
+				left.toolchain.plugin_spec_digest == right.toolchain.plugin_spec_digest &&
+				left.variant_authority.language == right.variant_authority.language &&
+				left.variant_authority.language_standard ==
+				right.variant_authority.language_standard &&
+				left.variant_authority.target_triple == right.variant_authority.target_triple &&
+				left.variant_authority.predefined_macros_digest ==
+				right.variant_authority.predefined_macros_digest &&
+				left.variant_authority.include_search_digest ==
+				right.variant_authority.include_search_digest &&
+				left.variant_authority.semantic_flags_digest ==
+				right.variant_authority.semantic_flags_digest &&
+				left.normalized_invocation_digest == right.normalized_invocation_digest &&
+				left.environment_digest == right.environment_digest &&
+				left.language == right.language &&
+				left.working_directory == right.working_directory &&
+				left.condition_universe == right.condition_universe &&
+				left.condition == right.condition && left.interpretation == right.interpretation &&
+				left.source_snapshot == right.source_snapshot && left.file == right.file &&
+				left.logical_path == right.logical_path &&
+				left.source_content_digest == right.source_content_digest &&
+				left.source_content_base64 == right.source_content_base64 &&
+				left.source_size_bytes == right.source_size_bytes &&
+				left.source_encoding == right.source_encoding &&
+				left.line_index == right.line_index &&
+				left.source_read_only == right.source_read_only && left.source == right.source &&
+				left.arguments == right.arguments &&
+				left.requested_descriptors == right.requested_descriptors &&
+				left.dependency_groups == right.dependency_groups &&
+				left.budget.wall_ms == right.budget.wall_ms &&
+				left.budget.cpu_ms == right.budget.cpu_ms &&
+				left.budget.address_space_bytes == right.budget.address_space_bytes &&
+				left.budget.transport_bytes == right.budget.transport_bytes &&
+				left.budget.output_bytes == right.budget.output_bytes &&
+				left.budget.rows == right.budget.rows &&
+				left.budget.diagnostics == right.budget.diagnostics &&
+				left.budget.open_files == right.budget.open_files &&
+				left.budget.subprocesses == right.budget.subprocesses &&
+				left.sandbox.minimum == right.sandbox.minimum &&
+				left.sandbox.policy_digest == right.sandbox.policy_digest;
+		}
+
+		[[nodiscard]] bool sandbox_minimum_matches(const sdk::provider::sandbox_assurance value,
+												   const std::string_view expected) noexcept
+		{
+			return (value == sdk::provider::sandbox_assurance::enforced &&
+					expected == "enforced") ||
+				(value == sdk::provider::sandbox_assurance::certified && expected == "certified");
+		}
+
+		template <class Spool>
+		[[nodiscard]] sdk::result<std::string> digest_sealed_task_spool(
+			Spool& spool, const std::uint64_t maximum_size, const std::string_view field)
+		{
+			if (!spool.sealed() || spool.size_bytes() > maximum_size)
+				return sdk::unexpected(claim_error(
+					"materialization.task-binding-mismatch", std::string{field}, "spool"));
+			auto digest = make_materialization_sha256_accumulator();
+			if (!digest)
+				return sdk::unexpected(materialization_admission_no_response());
+			std::array<std::byte, default_stream_chunk_bytes> buffer{};
+			std::uint64_t offset{};
+			while (offset < spool.size_bytes())
+			{
+				const auto remaining = spool.size_bytes() - offset;
+				const auto count = static_cast<std::size_t>(
+					std::min<std::uint64_t>(remaining, static_cast<std::uint64_t>(buffer.size())));
+				auto read = spool.read_at(offset, std::span{buffer}.first(count));
+				if (!read)
+					return sdk::unexpected(normalize_materialization_admission_spool_failure(
+						std::move(read.error()), std::string{field}, "read"));
+				if (*read == 0U || *read > count)
+					return sdk::unexpected(claim_error(
+						"materialization.task-binding-mismatch", std::string{field}, "read"));
+				auto updated = digest->update(std::span{buffer}.first(*read));
+				if (!updated)
+					return sdk::unexpected(materialization_admission_io_failure(
+						updated.error(), std::string{field}, "digest-update"));
+				offset += static_cast<std::uint64_t>(*read);
+			}
+			auto finished = digest->finish();
+			if (!finished)
+				return sdk::unexpected(materialization_admission_io_failure(
+					finished.error(), std::string{field}, "digest-finalize"));
+			return std::move(*finished);
+		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_v2_1_task_window(const materialization_v2_1_claim_authority& authority,
+								  const std::size_t task_index,
+								  const materialization_v2_1_task_execution& task)
+		{
+			auto* request = authority.request();
+			const auto* catalog = authority.catalog();
+			const auto* engine = authority.engine();
+			if (request == nullptr || catalog == nullptr || engine == nullptr)
+				return sdk::unexpected(claim_error(
+					"materialization.identity-mismatch", "claim-authority", "missing-owner"));
+			const auto& admitted = request->request();
+			if (authority.materialization_request_id() !=
+					request->identity().materialization_request_id ||
+				authority.task_count() != admitted.task_count() ||
+				authority.worker_provider_id() != admitted.worker().provider_id ||
+				authority.worker_semantic_contract_digest() !=
+					admitted.worker().semantic_contract_digest ||
+				authority.guarantee().approximation != "exact" ||
+				authority.guarantee().scope != admitted.project_id() ||
+				authority.guarantee().assumptions != authority.assumption_set_id() ||
+				!std::ranges::equal(authority.guarantee().verification_modalities,
+									v2_1_guarantee_modalities))
+				return sdk::unexpected(claim_error("materialization.identity-mismatch",
+												   "claim-authority",
+												   "request-owner-or-profile"));
+			if (auto valid = authority.guarantee().validate(); !valid)
+				return sdk::unexpected(claim_error(
+					"materialization.claim-invalid", "guarantee", nested_error(valid.error())));
+			const auto& metadata = task.metadata;
+			const auto& input = task.input;
+			if (task_index >= authority.task_count() || metadata.task_index != task_index ||
+				!task.source || !task.source->sealed() || !task.task_input ||
+				!task.task_input->sealed() || task.source->receipt() != task.source_receipt ||
+				!input.source.empty() || !input.source_content_base64.empty() ||
+				metadata.project_id != input.project ||
+				metadata.catalog_id != catalog->catalog_id ||
+				metadata.catalog_digest != catalog->catalog_digest ||
+				metadata.selected_catalog_compile_unit_id != input.selected_catalog_compile_unit ||
+				metadata.final_relation_compile_unit_id != input.compile_unit ||
+				metadata.variant_id != input.variant ||
+				metadata.toolchain_context_id != input.toolchain_context ||
+				metadata.toolchain_digest != input.toolchain_digest ||
+				metadata.source_snapshot_id != input.source_snapshot ||
+				metadata.file_id != input.file || metadata.logical_path != input.logical_path ||
+				metadata.source_content_digest != input.source_content_digest ||
+				metadata.source_size_bytes != input.source_size_bytes ||
+				metadata.source_encoding != input.source_encoding ||
+				metadata.line_index_id != input.line_index ||
+				metadata.source_read_only != input.source_read_only ||
+				metadata.condition_universe_id != input.condition_universe ||
+				metadata.condition_id != input.condition ||
+				metadata.interpretation_domain != input.interpretation ||
+				!sandbox_minimum_matches(metadata.sandbox.minimum, input.sandbox.minimum) ||
+				metadata.sandbox.policy_digest != input.sandbox.policy_digest)
+				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+												   "task-window",
+												   "sealed-source-authority"));
+
+			auto expected = request->task_metadata_binding(task_index);
+			if (!expected || expected->metadata != metadata ||
+				!same_task_input_binding(expected->input, input))
+				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+												   "task-window",
+												   "request-replay-mismatch"));
+			if (auto valid = input.validate_with_catalog(*catalog, task.source_receipt); !valid)
+				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+												   "task-window",
+												   nested_error(valid.error())));
+			if (task.source->size_bytes() != task.source_receipt.size_bytes)
+				return sdk::unexpected(
+					claim_error("materialization.task-binding-mismatch", "source-spool", "size"));
+			auto actual_source_digest = digest_sealed_task_spool(
+				*task.source, maximum_clang22_task_source_bytes, "source-spool");
+			if (!actual_source_digest)
+				return sdk::unexpected(std::move(actual_source_digest.error()));
+			if (*actual_source_digest != task.source_receipt.content_digest ||
+				*actual_source_digest != input.source_content_digest)
+				return sdk::unexpected(
+					claim_error("materialization.task-binding-mismatch", "source-spool", "digest"));
+			auto actual_task_input_digest = digest_sealed_task_spool(
+				*task.task_input, maximum_clang22_task_input_bytes, "task-input-spool");
+			if (!actual_task_input_digest)
+				return sdk::unexpected(std::move(actual_task_input_digest.error()));
+			if (*actual_task_input_digest != metadata.task_input_digest)
+				return sdk::unexpected(claim_error(
+					"materialization.task-binding-mismatch", "task-input-spool", "digest"));
+			return {};
 		}
 
 		[[nodiscard]] sdk::claim_condition
@@ -1892,15 +2098,16 @@ namespace cxxlens::detail::clang22::materialization
 			std::optional<std::pair<sdk::claim_guarantee, std::string>> guarantee_values;
 			if (v2_authority)
 			{
-				if (v2_authority->catalog != &request.catalog ||
-					v2_authority->engine != &request.engine)
+				if (v2_authority->catalog() != &request.catalog ||
+					v2_authority->engine() != &request.engine)
 					return sdk::unexpected(claim_error(
 						"materialization.identity-mismatch", "claim-authority", "request-owner"));
-				basis.emplace(v2_authority->materializer_semantics_digest,
-							  v2_authority->direct_basis_digest,
-							  v2_authority->canonical_adoption_transform_digest,
-							  v2_authority->base_ingestion_transform_digest);
-				guarantee_values.emplace(v2_authority->guarantee, v2_authority->assumption_set_id);
+				basis.emplace(v2_authority->materializer_semantics_digest(),
+							  v2_authority->direct_basis_digest(),
+							  v2_authority->canonical_adoption_transform_digest(),
+							  v2_authority->base_ingestion_transform_digest());
+				guarantee_values.emplace(v2_authority->guarantee(),
+										 v2_authority->assumption_set_id());
 			}
 			else
 			{
@@ -1931,8 +2138,8 @@ namespace cxxlens::detail::clang22::materialization
 			std::string worker_semantics;
 			if (v2_authority)
 			{
-				worker_id = v2_authority->worker_provider_id;
-				worker_semantics = v2_authority->worker_semantic_contract_digest;
+				worker_id = v2_authority->worker_provider_id();
+				worker_semantics = v2_authority->worker_semantic_contract_digest();
 			}
 			else
 			{
@@ -2591,8 +2798,10 @@ namespace cxxlens::detail::clang22::materialization
 		}
 		catch (const std::bad_alloc&)
 		{
-			return sdk::unexpected(
-				claim_error("materialization.spool-failure", "bounded-claim-window", "allocation"));
+			return sdk::unexpected(v2_authority ? materialization_admission_no_response()
+												: claim_error("materialization.spool-failure",
+															  "bounded-claim-window",
+															  "allocation"));
 		}
 	}
 
@@ -2609,6 +2818,103 @@ namespace cxxlens::detail::clang22::materialization
 			request_view, task_index, result, &producer_authority, &guarantee_authority, nullptr);
 	}
 
+	materialization_v2_1_claim_authority::materialization_v2_1_claim_authority(
+		std::shared_ptr<materialization_v2_1_request_lifetime> lifetime,
+		std::string materialization_request_id,
+		const std::uint64_t task_count,
+		std::string worker_provider_id,
+		std::string worker_semantic_contract_digest,
+		std::string materializer_semantics_digest,
+		std::string direct_basis_digest,
+		std::string canonical_adoption_transform_digest,
+		std::string base_ingestion_transform_digest,
+		sdk::claim_guarantee guarantee,
+		std::string assumption_set_id)
+		: lifetime_{std::move(lifetime)},
+		  materialization_request_id_{std::move(materialization_request_id)},
+		  task_count_{task_count}, worker_provider_id_{std::move(worker_provider_id)},
+		  worker_semantic_contract_digest_{std::move(worker_semantic_contract_digest)},
+		  materializer_semantics_digest_{std::move(materializer_semantics_digest)},
+		  direct_basis_digest_{std::move(direct_basis_digest)},
+		  canonical_adoption_transform_digest_{std::move(canonical_adoption_transform_digest)},
+		  base_ingestion_transform_digest_{std::move(base_ingestion_transform_digest)},
+		  guarantee_{std::move(guarantee)}, assumption_set_id_{std::move(assumption_set_id)}
+	{
+	}
+
+	validated_materialization_request_v2_1*
+	materialization_v2_1_claim_authority::request() const noexcept
+	{
+		return lifetime_ ? lifetime_->owner() : nullptr;
+	}
+
+	const sdk::project_catalog* materialization_v2_1_claim_authority::catalog() const noexcept
+	{
+		const auto* owner = request();
+		return owner ? &owner->request().catalog() : nullptr;
+	}
+
+	const sdk::relation_engine* materialization_v2_1_claim_authority::engine() const noexcept
+	{
+		const auto* owner = request();
+		return owner ? &owner->request().engine() : nullptr;
+	}
+
+	const std::string&
+	materialization_v2_1_claim_authority::materialization_request_id() const noexcept
+	{
+		return materialization_request_id_;
+	}
+
+	std::uint64_t materialization_v2_1_claim_authority::task_count() const noexcept
+	{
+		return task_count_;
+	}
+
+	const std::string& materialization_v2_1_claim_authority::worker_provider_id() const noexcept
+	{
+		return worker_provider_id_;
+	}
+
+	const std::string&
+	materialization_v2_1_claim_authority::worker_semantic_contract_digest() const noexcept
+	{
+		return worker_semantic_contract_digest_;
+	}
+
+	const std::string&
+	materialization_v2_1_claim_authority::materializer_semantics_digest() const noexcept
+	{
+		return materializer_semantics_digest_;
+	}
+
+	const std::string& materialization_v2_1_claim_authority::direct_basis_digest() const noexcept
+	{
+		return direct_basis_digest_;
+	}
+
+	const std::string&
+	materialization_v2_1_claim_authority::canonical_adoption_transform_digest() const noexcept
+	{
+		return canonical_adoption_transform_digest_;
+	}
+
+	const std::string&
+	materialization_v2_1_claim_authority::base_ingestion_transform_digest() const noexcept
+	{
+		return base_ingestion_transform_digest_;
+	}
+
+	const sdk::claim_guarantee& materialization_v2_1_claim_authority::guarantee() const noexcept
+	{
+		return guarantee_;
+	}
+
+	const std::string& materialization_v2_1_claim_authority::assumption_set_id() const noexcept
+	{
+		return assumption_set_id_;
+	}
+
 	sdk::result<materialization_v2_1_claim_authority> make_materialization_v2_1_claim_authority(
 		validated_materialization_request_v2_1& request,
 		const materialization_producer_authority& producer_authority,
@@ -2616,7 +2922,18 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
+			const auto& lifetime = request.lifetime_token();
+			if (!lifetime || lifetime->owner() != &request)
+				return sdk::unexpected(claim_error(
+					"materialization.identity-mismatch", "claim-authority", "lifetime"));
 			const auto& admitted = request.request();
+			if (!guarantee_authority.assumptions.empty() ||
+				guarantee_authority.verification_modalities.size() !=
+					v2_1_guarantee_modalities.size() ||
+				!std::ranges::equal(guarantee_authority.verification_modalities,
+									v2_1_guarantee_modalities))
+				return sdk::unexpected(claim_error(
+					"materialization.claim-invalid", "guarantee.profile", "v2.1-fixed-profile"));
 			if (admitted.task_count() == 0U ||
 				admitted.task_count() > std::numeric_limits<std::size_t>::max())
 				return sdk::unexpected(
@@ -2661,8 +2978,7 @@ namespace cxxlens::detail::clang22::materialization
 			if (!guarantee)
 				return sdk::unexpected(std::move(guarantee.error()));
 			return materialization_v2_1_claim_authority{
-				&admitted.catalog(),
-				&admitted.engine(),
+				lifetime,
 				request.identity().materialization_request_id,
 				admitted.task_count(),
 				admitted.worker().provider_id,
@@ -2676,8 +2992,7 @@ namespace cxxlens::detail::clang22::materialization
 		}
 		catch (const std::bad_alloc&)
 		{
-			return sdk::unexpected(
-				claim_error("materialization.spool-failure", "claim-authority", "allocation"));
+			return sdk::unexpected(materialization_admission_no_response());
 		}
 	}
 
@@ -2687,59 +3002,33 @@ namespace cxxlens::detail::clang22::materialization
 		const materialization_v2_1_task_execution& task,
 		const sealed_materialization_result& result)
 	{
-		const auto& metadata = task.metadata;
-		const auto& input = task.input;
-		const auto sandbox_minimum_matches =
-			[](const sdk::provider::sandbox_assurance value, const std::string_view expected)
+		try
 		{
-			return (value == sdk::provider::sandbox_assurance::enforced &&
-					expected == "enforced") ||
-				(value == sdk::provider::sandbox_assurance::certified && expected == "certified");
-		};
-		if (authority.catalog == nullptr || authority.engine == nullptr ||
-			task_index >= authority.task_count || task.metadata.task_index != task_index ||
-			!task.source || !task.source->sealed() || !task.task_input ||
-			!task.task_input->sealed() || !task.input.source.empty() ||
-			!task.input.source_content_base64.empty() || metadata.project_id != input.project ||
-			metadata.catalog_id != authority.catalog->catalog_id ||
-			metadata.catalog_digest != authority.catalog->catalog_digest ||
-			metadata.selected_catalog_compile_unit_id != input.selected_catalog_compile_unit ||
-			metadata.final_relation_compile_unit_id != input.compile_unit ||
-			metadata.variant_id != input.variant ||
-			metadata.toolchain_context_id != input.toolchain_context ||
-			metadata.toolchain_digest != input.toolchain_digest ||
-			metadata.source_snapshot_id != input.source_snapshot ||
-			metadata.file_id != input.file || metadata.logical_path != input.logical_path ||
-			metadata.source_content_digest != input.source_content_digest ||
-			metadata.source_size_bytes != input.source_size_bytes ||
-			metadata.source_encoding != input.source_encoding ||
-			metadata.line_index_id != input.line_index ||
-			metadata.source_read_only != input.source_read_only ||
-			metadata.condition_universe_id != input.condition_universe ||
-			metadata.condition_id != input.condition ||
-			metadata.interpretation_domain != input.interpretation ||
-			!sandbox_minimum_matches(metadata.sandbox.minimum, input.sandbox.minimum) ||
-			metadata.sandbox.policy_digest != input.sandbox.policy_digest)
-			return sdk::unexpected(claim_error(
-				"materialization.task-binding-mismatch", "task-window", "sealed-source-authority"));
-		if (auto valid = task.input.validate_with_catalog(*authority.catalog, task.source_receipt);
-			!valid)
-			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
-											   "task-window",
-											   nested_error(valid.error())));
+			if (auto valid = validate_v2_1_task_window(authority, task_index, task); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 
-		validated_task_request current{task.input,
-									   task.metadata.provider_task_id,
-									   task.metadata.provider_execution_id,
-									   task.metadata.task_input_digest,
-									   task.metadata.sandbox,
-									   {},
-									   task.source_receipt};
-		const std::span<const validated_task_request> current_task{&current, 1U};
-		const materialization_claim_request_view request_view{
-			*authority.catalog, *authority.engine, current_task, nullptr};
-		return construct_materialization_bounded_task_claims_impl(
-			request_view, task_index, result, nullptr, nullptr, &authority);
+			validated_task_request current{task.input,
+										   task.metadata.provider_task_id,
+										   task.metadata.provider_execution_id,
+										   task.metadata.task_input_digest,
+										   task.metadata.sandbox,
+										   {},
+										   task.source_receipt};
+			const std::span<const validated_task_request> current_task{&current, 1U};
+			const auto* catalog = authority.catalog();
+			const auto* engine = authority.engine();
+			if (catalog == nullptr || engine == nullptr)
+				return sdk::unexpected(
+					claim_error("materialization.identity-mismatch", "claim-authority", "owner"));
+			const materialization_claim_request_view request_view{
+				*catalog, *engine, current_task, nullptr};
+			return construct_materialization_bounded_task_claims_impl(
+				request_view, task_index, result, nullptr, nullptr, &authority);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(materialization_admission_no_response());
+		}
 	}
 
 	sdk::result<sealed_materialization_claims> construct_materialization_claims(
