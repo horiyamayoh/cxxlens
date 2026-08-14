@@ -738,19 +738,18 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
-			auto valid = validate_v2_journal(
-				materialization_request_id,
-				task_count,
-				journal,
-				std::span<const materialization_claim_stream_task>{tasks});
+			auto valid =
+				validate_v2_journal(materialization_request_id,
+									task_count,
+									journal,
+									std::span<const materialization_claim_stream_task>{tasks});
 			if (!valid)
 				return valid;
 			for (const auto& task : tasks)
 			{
 				materialization_claim_stream_source::task_state ignored;
-				if (auto stream_valid = validate_task_streams(materialization_request_id,
-																  task,
-																  ignored);
+				if (auto stream_valid =
+						validate_task_streams(materialization_request_id, task, ignored);
 					!stream_valid)
 					return stream_valid;
 			}

@@ -187,18 +187,26 @@ if(PHASE STREQUAL "shared-runtime-layout" AND WIN32)
   # in the archive directory, while the DLL runtime must be beside installed
   # executables. This check is intentionally limited to layout; it is not a
   # Windows/MSVC qualification claim.
-  foreach(library IN ITEMS cxxlens_base cxxlens_kernel cxxlens_query
-                           cxxlens_recipes cxxlens_provider_sdk
-                           cxxlens_clang22_provider_sdk)
-    file(GLOB runtime_artifacts
-         "${install_prefix}/bin/@CMAKE_SHARED_LIBRARY_PREFIX@${library}@CMAKE_SHARED_LIBRARY_SUFFIX@*")
+  foreach(library IN
+          ITEMS cxxlens_base cxxlens_kernel cxxlens_query cxxlens_recipes
+                cxxlens_provider_sdk cxxlens_clang22_provider_sdk)
+    file(
+      GLOB
+      runtime_artifacts
+      "${install_prefix}/bin/@CMAKE_SHARED_LIBRARY_PREFIX@${library}@CMAKE_SHARED_LIBRARY_SUFFIX@*"
+    )
     if(NOT runtime_artifacts)
-      message(FATAL_ERROR "shared package lacks Windows DLL runtime: ${library}")
+      message(
+        FATAL_ERROR "shared package lacks Windows DLL runtime: ${library}")
     endif()
-    file(GLOB import_artifacts
-         "${install_prefix}/${install_libdir}/@CMAKE_IMPORT_LIBRARY_PREFIX@${library}@CMAKE_IMPORT_LIBRARY_SUFFIX@*")
+    file(
+      GLOB
+      import_artifacts
+      "${install_prefix}/${install_libdir}/@CMAKE_IMPORT_LIBRARY_PREFIX@${library}@CMAKE_IMPORT_LIBRARY_SUFFIX@*"
+    )
     if(NOT import_artifacts)
-      message(FATAL_ERROR "shared package lacks Windows import library: ${library}")
+      message(
+        FATAL_ERROR "shared package lacks Windows import library: ${library}")
     endif()
   endforeach()
 endif()

@@ -339,16 +339,14 @@ namespace
 			"sha256:4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f";
 		const auto engine_registry_digest = std::string{value.registry_digest()};
 		require(engine_registry_digest.starts_with("semantic-v2:sha256:") &&
-				engine_registry_digest != authority_registry_digest,
+					engine_registry_digest != authority_registry_digest,
 				"test relation engine did not expose a distinct admitted registry digest");
 
 		auto authority_bound_selector = selector(value);
-		authority_bound_selector.relation_registry_digest =
-			std::string{authority_registry_digest};
+		authority_bound_selector.relation_registry_digest = std::string{authority_registry_digest};
 		const auto publication =
 			publication_request(authority_bound_selector, "memory", std::nullopt);
-		auto observed =
-			execute_materialization_store(value, publication, plan(value, publication));
+		auto observed = execute_materialization_store(value, publication, plan(value, publication));
 		const auto* failure = observed.first_issue
 			? std::get_if<materialization_store_sdk_failure>(&*observed.first_issue)
 			: nullptr;

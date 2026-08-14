@@ -72,10 +72,10 @@ namespace cxxlens::sdk::provider::detail
 			return {};
 		}
 
-		[[nodiscard]] result<void> valid_manifest_content_digest(
-			const std::string_view value,
-			const std::string_view field,
-			const std::string_view failure_code)
+		[[nodiscard]] result<void>
+		valid_manifest_content_digest(const std::string_view value,
+									  const std::string_view field,
+									  const std::string_view failure_code)
 		{
 			if (!valid_manifest_content_digest(value))
 				return unexpected(ng1_error(failure_code, std::string{field}, "sha256"));
@@ -508,7 +508,7 @@ namespace cxxlens::sdk::provider::detail
 			if (auto valid = valid_id(value, field, "resume-token-stale"); !valid)
 				return valid;
 		for (const auto [value, field] :
-				 std::array{std::pair{std::string_view{provider_binary_digest},
+			 std::array{std::pair{std::string_view{provider_binary_digest},
 								  std::string_view{"provider_binary_digest"}},
 						std::pair{std::string_view{provider_semantic_contract_digest},
 								  std::string_view{"provider_semantic_contract_digest"}}})
@@ -516,7 +516,7 @@ namespace cxxlens::sdk::provider::detail
 				!valid)
 				return valid;
 		for (const auto [value, field] :
-				 std::array{std::pair{std::string_view{task_input_digest},
+			 std::array{std::pair{std::string_view{task_input_digest},
 								  std::string_view{"task_input_digest"}},
 						std::pair{std::string_view{normalized_invocation_digest},
 								  std::string_view{"normalized_invocation_digest"}},
