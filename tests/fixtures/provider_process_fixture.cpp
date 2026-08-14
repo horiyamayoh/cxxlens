@@ -4,9 +4,12 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -16,6 +19,9 @@
 #include <cxxlens/sdk/provider.hpp>
 #include <fcntl.h>
 #include <sys/socket.h>
+#if defined(__linux__) && defined(__GLIBC__)
+#include <unistd.h>
+#endif
 
 namespace
 {
@@ -92,6 +98,32 @@ namespace
 				: cxxlens::sdk::unexpected(error{"provider.fixture-write", "stdout", {}});
 		}
 	};
+
+#if defined(__linux__) && defined(__GLIBC__)
+	[[nodiscard]] std::optional<std::uint64_t> process_start_time()
+	{
+		std::ifstream stat{"/proc/self/stat"};
+		std::string line;
+		if (!std::getline(stat, line))
+			return std::nullopt;
+		const auto closing_name = line.rfind(')');
+		if (closing_name == std::string::npos || closing_name + 2U >= line.size())
+			return std::nullopt;
+		std::istringstream fields{line.substr(closing_name + 2U)};
+		char state{};
+		if (!(fields >> state))
+			return std::nullopt;
+		for (std::uint32_t field = 4U; field <= 22U; ++field)
+		{
+			std::uint64_t value{};
+			if (!(fields >> value))
+				return std::nullopt;
+			if (field == 22U)
+				return value;
+		}
+		return std::nullopt;
+	}
+#endif
 } // namespace
 
 int main(const int argument_count, const char* const* arguments)
@@ -149,6 +181,80 @@ int main(const int argument_count, const char* const* arguments)
 		(void)::raise(SIGSEGV);
 	if (mode == "timeout")
 		std::this_thread::sleep_for(std::chrono::seconds{5});
+
+#if defined(__linux__) && defined(__GLIBC__)
+	constexpr std::string_view timeout_grandchild_prefix = "timeout-grandchild:";
+	if (mode.starts_with(timeout_grandchild_prefix))
+	{
+		const auto marker_path = mode.substr(timeout_grandchild_prefix.size());
+		if (marker_path.empty())
+			return EXIT_FAILURE;
+		std::array<int, 2U> ready_pipe{-1, -1};
+		if (::pipe(ready_pipe.data()) != 0)
+			return EXIT_FAILURE;
+		const auto holder = ::fork();
+		if (holder < 0)
+			return EXIT_FAILURE;
+		if (holder == 0)
+		{
+			(void)::close(ready_pipe[0U]);
+			const auto sentinel = ::fork();
+			if (sentinel < 0)
+				::_exit(EXIT_FAILURE);
+			if (sentinel == 0)
+			{
+				(void)::close(STDOUT_FILENO);
+				(void)::close(STDERR_FILENO);
+				const auto start_time = process_start_time();
+				if (!start_time)
+					::_exit(EXIT_FAILURE);
+				std::ofstream marker{std::string{marker_path} + ".sentinel", std::ios::trunc};
+				marker << ::getpid() << ' ' << *start_time << '\n';
+				marker.close();
+				if (!marker)
+					::_exit(EXIT_FAILURE);
+				const std::byte ready{0x01};
+				if (::write(ready_pipe[1U], &ready, sizeof(ready)) != sizeof(ready))
+					::_exit(EXIT_FAILURE);
+				(void)::close(ready_pipe[1U]);
+				std::this_thread::sleep_for(std::chrono::seconds{5});
+				::_exit(EXIT_SUCCESS);
+			}
+			const auto start_time = process_start_time();
+			if (!start_time)
+				::_exit(EXIT_FAILURE);
+			std::ofstream marker{std::string{marker_path} + ".holder", std::ios::trunc};
+			marker << ::getpid() << ' ' << *start_time << '\n';
+			marker.close();
+			if (!marker)
+				::_exit(EXIT_FAILURE);
+			const std::byte ready{0x01};
+			if (::write(ready_pipe[1U], &ready, sizeof(ready)) != sizeof(ready))
+				::_exit(EXIT_FAILURE);
+			(void)::close(ready_pipe[1U]);
+			std::this_thread::sleep_for(std::chrono::seconds{5});
+			::_exit(EXIT_SUCCESS);
+		}
+		(void)::close(ready_pipe[1U]);
+		std::array<std::byte, 2U> ready{};
+		std::size_t received{};
+		while (received < ready.size())
+		{
+			const auto count =
+				::read(ready_pipe[0U], ready.data() + received, ready.size() - received);
+			if (count > 0)
+				received += static_cast<std::size_t>(count);
+			else if (count < 0 && errno == EINTR)
+				continue;
+			else
+				break;
+		}
+		(void)::close(ready_pipe[0U]);
+		if (received != ready.size())
+			return EXIT_FAILURE;
+		return EXIT_SUCCESS;
+	}
+#endif
 	if (mode == "output-limit")
 	{
 		std::cout << std::string(1024U * 1024U, 'x');

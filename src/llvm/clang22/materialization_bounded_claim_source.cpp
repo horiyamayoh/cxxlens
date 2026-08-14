@@ -7,6 +7,7 @@
 #include <limits>
 #include <new>
 #include <ranges>
+#include <set>
 #include <span>
 #include <string>
 #include <utility>
@@ -237,6 +238,79 @@ namespace cxxlens::detail::clang22::materialization
 													  std::move(*row),
 													  std::move(evidence)};
 		}
+
+		struct bounded_claim_record
+		{
+			std::string content;
+			std::vector<std::byte> occurrence;
+		};
+
+		[[nodiscard]] sdk::result<bounded_claim_record>
+		decode_bounded_claim_record(const sdk::canonical_value& value)
+		{
+			if (value.type != sdk::canonical_value::kind::ordered_tuple ||
+				value.tuple.size() != 3U ||
+				value.tuple[0].type != sdk::canonical_value::kind::utf8_string ||
+				value.tuple[0].text != "claim" ||
+				value.tuple[1].type != sdk::canonical_value::kind::utf8_string ||
+				value.tuple[1].text.empty() ||
+				value.tuple[2].type != sdk::canonical_value::kind::bytes)
+				return sdk::unexpected(source_error("claim-status", "record-shape"));
+			return bounded_claim_record{value.tuple[1].text, value.tuple[2].byte_string};
+		}
+
+		[[nodiscard]] bool checked_add(const std::uint64_t left,
+									   const std::uint64_t right,
+									   std::uint64_t& output) noexcept
+		{
+			if (right > std::numeric_limits<std::uint64_t>::max() - left)
+				return false;
+			output = left + right;
+			return true;
+		}
+
+		[[nodiscard]] bool checked_canonical_string_size(const std::string_view value,
+														 std::uint64_t& output) noexcept
+		{
+			if (value.size() > std::numeric_limits<std::uint64_t>::max() - 9U)
+				return false;
+			output = 9U + static_cast<std::uint64_t>(value.size());
+			return true;
+		}
+
+		[[nodiscard]] sdk::result<void> update_digest(materialization_digest_accumulator& digest,
+													  const std::span<const std::byte> bytes,
+													  const std::string_view field)
+		{
+			if (auto updated = digest.update(bytes); !updated)
+				return sdk::unexpected(source_error(std::string{field}, "digest-update"));
+			return {};
+		}
+
+		[[nodiscard]] sdk::result<void>
+		update_canonical_string(materialization_digest_accumulator& digest,
+								const std::string_view value,
+								const std::string_view field)
+		{
+			const std::array<std::byte, 1U> tag{std::byte{0x04U}};
+			if (auto updated = update_digest(digest, tag, field); !updated)
+				return updated;
+			const auto length = encode_u64(static_cast<std::uint64_t>(value.size()));
+			if (auto updated = update_digest(digest, length, field); !updated)
+				return updated;
+			const auto* data = reinterpret_cast<const std::byte*>(value.data());
+			return update_digest(digest, std::span<const std::byte>{data, value.size()}, field);
+		}
+
+		[[nodiscard]] sdk::result<void>
+		update_empty_tuple(materialization_digest_accumulator& digest, const std::string_view field)
+		{
+			const std::array<std::byte, 1U> tag{std::byte{0x05U}};
+			if (auto updated = update_digest(digest, tag, field); !updated)
+				return updated;
+			const auto length = encode_u64(0U);
+			return update_digest(digest, length, field);
+		}
 	} // namespace
 
 	sdk::result<materialization_bounded_claim_source>
@@ -248,6 +322,15 @@ namespace cxxlens::detail::clang22::materialization
 		if (!request_id)
 			return sdk::unexpected(std::move(request_id.error()));
 		return materialization_bounded_claim_source{std::move(*request_id), request.engine};
+	}
+
+	sdk::result<materialization_bounded_claim_source> materialization_bounded_claim_source::begin(
+		const materialization_v2_1_claim_authority& authority)
+	{
+		if (authority.task_count() == 0U || authority.engine() == nullptr)
+			return sdk::unexpected(source_error("request", "empty-or-unbound"));
+		return materialization_bounded_claim_source{
+			std::string{authority.materialization_request_id()}, *authority.engine()};
 	}
 
 	sdk::result<void>
@@ -555,6 +638,275 @@ namespace cxxlens::detail::clang22::materialization
 				return consumed;
 		}
 		return {};
+	}
+
+	sdk::result<materialization_bounded_claim_batch_status>
+	materialization_bounded_claim_source::claim_batch_status()
+	{
+		if (!sealed_ || engine_ == nullptr)
+			return sdk::unexpected(source_error("claim-status", "lifecycle"));
+		try
+		{
+			struct claim_run
+			{
+				std::uint64_t begin{};
+				std::uint64_t end{};
+			};
+			struct claim_cursor
+			{
+				std::uint64_t offset{};
+				std::uint64_t end{};
+				std::string content;
+				std::vector<std::byte> occurrence;
+				bool has_current{};
+			};
+
+			auto records_result = make_materialization_private_spool();
+			if (!records_result)
+				return sdk::unexpected(source_error("claim-status", "spool-create"));
+			auto records = std::move(*records_result);
+			std::vector<claim_run> runs;
+			runs.reserve(partitions_.size());
+			std::uint64_t claim_count{};
+			std::uint64_t unresolved_count{};
+
+			if (auto replayed = replay(
+					[&](sdk::partition_draft draft) -> sdk::result<void>
+					{
+						runs.push_back({records->size_bytes(), records->size_bytes()});
+						if (draft.unresolved.size() >
+							std::numeric_limits<std::uint64_t>::max() - unresolved_count)
+							return sdk::unexpected(source_error("claims.unresolved", "overflow"));
+						unresolved_count += static_cast<std::uint64_t>(draft.unresolved.size());
+						if (draft.claims.size() >
+							std::numeric_limits<std::uint64_t>::max() - claim_count)
+							return sdk::unexpected(source_error("claims", "count-overflow"));
+						claim_count += static_cast<std::uint64_t>(draft.claims.size());
+						for (const auto& claim : draft.claims)
+						{
+							auto occurrence = sdk::detail::claim_occurrence_projection(claim);
+							if (!occurrence)
+								return sdk::unexpected(std::move(occurrence.error()));
+							auto record = sdk::canonical_value::from_tuple({
+								sdk::canonical_value::from_string("claim"),
+								sdk::canonical_value::from_string(claim.content),
+								sdk::canonical_value::from_bytes(std::move(*occurrence)),
+							});
+							if (auto appended = append_record(*records, record, "claim-status");
+								!appended)
+								return appended;
+						}
+						runs.back().end = records->size_bytes();
+						return {};
+					});
+				!replayed)
+				return sdk::unexpected(std::move(replayed.error()));
+
+			std::vector<claim_cursor> cursors;
+			cursors.reserve(runs.size());
+			const auto load = [&](claim_cursor& cursor) -> sdk::result<void>
+			{
+				if (cursor.offset == cursor.end)
+				{
+					cursor.has_current = false;
+					return {};
+				}
+				if (cursor.offset > cursor.end)
+					return sdk::unexpected(source_error("claim-status", "run-boundary"));
+				const auto before = cursor.offset;
+				auto record = read_record(*records, cursor.offset, "claim-status");
+				if (!record)
+					return sdk::unexpected(std::move(record.error()));
+				if (cursor.offset > cursor.end || cursor.offset == before)
+					return sdk::unexpected(source_error("claim-status", "run-boundary"));
+				auto decoded = decode_bounded_claim_record(*record);
+				if (!decoded)
+					return sdk::unexpected(std::move(decoded.error()));
+				cursor.content = std::move(decoded->content);
+				cursor.occurrence = std::move(decoded->occurrence);
+				cursor.has_current = true;
+				return {};
+			};
+
+			for (const auto& run : runs)
+			{
+				claim_cursor cursor{run.begin, run.end, {}, {}, false};
+				if (auto loaded = load(cursor); !loaded)
+					return sdk::unexpected(std::move(loaded.error()));
+				cursors.push_back(std::move(cursor));
+			}
+
+			const auto occurrence_less = [&cursors](const std::size_t left, const std::size_t right)
+			{
+				if (cursors[left].occurrence != cursors[right].occurrence)
+					return cursors[left].occurrence < cursors[right].occurrence;
+				return left < right;
+			};
+			std::set<std::size_t, decltype(occurrence_less)> ready{occurrence_less};
+			for (std::size_t index{}; index < cursors.size(); ++index)
+				if (cursors[index].has_current)
+					ready.insert(index);
+
+			const auto ordered_begin = records->size_bytes();
+			std::uint64_t ordered_count{};
+			while (!ready.empty())
+			{
+				const auto index = *ready.begin();
+				ready.erase(ready.begin());
+				auto& cursor = cursors[index];
+				auto record = sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string("claim"),
+					sdk::canonical_value::from_string(cursor.content),
+					sdk::canonical_value::from_bytes(cursor.occurrence),
+				});
+				if (auto appended = append_record(*records, record, "claim-status-merge");
+					!appended)
+					return sdk::unexpected(std::move(appended.error()));
+				if (ordered_count == std::numeric_limits<std::uint64_t>::max())
+					return sdk::unexpected(source_error("claims", "count-overflow"));
+				++ordered_count;
+				if (auto loaded = load(cursor); !loaded)
+					return sdk::unexpected(std::move(loaded.error()));
+				if (cursor.has_current)
+					ready.insert(index);
+			}
+			if (ordered_count != claim_count)
+				return sdk::unexpected(source_error("claims", "census-mismatch"));
+
+			if (unresolved_count != 0U)
+				// Task admission rejects functional conflicts and differential disagreements before
+				// they become bounded partitions; zero here is the source contract, not an inferred
+				// absence from the streaming census.
+				return materialization_bounded_claim_batch_status{
+					{}, claim_count, unresolved_count, 0U, 0U, partitions_.size()};
+
+			if (auto sealed = records->seal(); !sealed)
+				return sdk::unexpected(source_error("claim-status", "spool-seal"));
+			const auto ordered_end = records->size_bytes();
+			if (ordered_end < ordered_begin)
+				return sdk::unexpected(source_error("claim-status", "size-overflow"));
+			const auto ordered_size = ordered_end - ordered_begin;
+			std::uint64_t claims_tuple_size{};
+			if (!checked_add(9U, ordered_size, claims_tuple_size))
+				return sdk::unexpected(source_error("claims", "size-overflow"));
+
+			std::uint64_t claim_batch_marker_size{};
+			if (!checked_canonical_string_size("cxxlens.claim-batch.v2", claim_batch_marker_size))
+				return sdk::unexpected(source_error("claims", "size-overflow"));
+			std::uint64_t child_sum{};
+			const auto add_child = [&](const std::uint64_t encoded_size) -> bool
+			{
+				std::uint64_t framed{};
+				return checked_add(8U, encoded_size, framed) &&
+					checked_add(child_sum, framed, child_sum);
+			};
+			if (!add_child(claim_batch_marker_size) || !add_child(claims_tuple_size) ||
+				!add_child(9U) || !add_child(9U) || !add_child(9U))
+				return sdk::unexpected(source_error("claims", "size-overflow"));
+			std::uint64_t inner_payload_size{};
+			if (!checked_add(9U, child_sum, inner_payload_size))
+				return sdk::unexpected(source_error("claims", "size-overflow"));
+			std::uint64_t bytes_element_size{};
+			if (!checked_add(9U, inner_payload_size, bytes_element_size))
+				return sdk::unexpected(source_error("claims", "size-overflow"));
+
+			auto digest = make_materialization_sha256_accumulator();
+			if (!digest)
+				return sdk::unexpected(source_error("claims", "digest-create"));
+			const std::array<std::byte, 1U> tuple_tag{std::byte{0x05U}};
+			if (auto updated = update_digest(*digest, tuple_tag, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const auto outer_count = encode_u64(3U);
+			if (auto updated = update_digest(*digest, outer_count, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const auto semantic_marker = std::string_view{"cxxlens-semantic-digest-v2"};
+			const auto semantic_domain = std::string_view{"cxxlens.claim-batch.v2"};
+			std::uint64_t semantic_marker_size{};
+			std::uint64_t semantic_domain_size{};
+			if (!checked_canonical_string_size(semantic_marker, semantic_marker_size) ||
+				!checked_canonical_string_size(semantic_domain, semantic_domain_size))
+				return sdk::unexpected(source_error("claims", "size-overflow"));
+			const auto marker_length = encode_u64(semantic_marker_size);
+			if (auto updated = update_digest(*digest, marker_length, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			if (auto updated = update_canonical_string(*digest, semantic_marker, "claims.digest");
+				!updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const auto domain_length = encode_u64(semantic_domain_size);
+			if (auto updated = update_digest(*digest, domain_length, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			if (auto updated = update_canonical_string(*digest, semantic_domain, "claims.digest");
+				!updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const auto bytes_length = encode_u64(bytes_element_size);
+			if (auto updated = update_digest(*digest, bytes_length, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const std::array<std::byte, 1U> bytes_tag{std::byte{0x03U}};
+			if (auto updated = update_digest(*digest, bytes_tag, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const auto payload_length = encode_u64(inner_payload_size);
+			if (auto updated = update_digest(*digest, payload_length, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+
+			if (auto updated = update_digest(*digest, tuple_tag, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const auto inner_count = encode_u64(5U);
+			if (auto updated = update_digest(*digest, inner_count, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const auto claim_marker_length = encode_u64(claim_batch_marker_size);
+			if (auto updated = update_digest(*digest, claim_marker_length, "claims.digest");
+				!updated)
+				return sdk::unexpected(std::move(updated.error()));
+			if (auto updated =
+					update_canonical_string(*digest, "cxxlens.claim-batch.v2", "claims.digest");
+				!updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const auto claims_length = encode_u64(claims_tuple_size);
+			if (auto updated = update_digest(*digest, claims_length, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			if (auto updated = update_digest(*digest, tuple_tag, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			const auto claim_count_bytes = encode_u64(claim_count);
+			if (auto updated = update_digest(*digest, claim_count_bytes, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+
+			std::array<std::byte, default_stream_chunk_bytes> buffer{};
+			std::uint64_t offset = ordered_begin;
+			while (offset < ordered_end)
+			{
+				const auto remaining = ordered_end - offset;
+				const auto requested =
+					static_cast<std::size_t>(std::min<std::uint64_t>(remaining, buffer.size()));
+				auto received = records->read_at(offset, std::span{buffer}.first(requested));
+				if (!received || *received == 0U || *received > requested)
+					return sdk::unexpected(source_error("claims", "spool-read"));
+				if (auto updated =
+						update_digest(*digest, std::span{buffer}.first(*received), "claims.digest");
+					!updated)
+					return sdk::unexpected(std::move(updated.error()));
+				offset += static_cast<std::uint64_t>(*received);
+			}
+			for (std::size_t index{}; index < 3U; ++index)
+			{
+				const auto empty_length = encode_u64(9U);
+				if (auto updated = update_digest(*digest, empty_length, "claims.digest"); !updated)
+					return sdk::unexpected(std::move(updated.error()));
+				if (auto updated = update_empty_tuple(*digest, "claims.digest"); !updated)
+					return sdk::unexpected(std::move(updated.error()));
+			}
+			auto finished = digest->finish();
+			if (!finished || !finished->starts_with("sha256:") || finished->size() != 71U)
+				return sdk::unexpected(source_error("claims", "digest-finalize"));
+			const auto stream_digest = "semantic-v2:" + *finished;
+			// The task contract above is the sole authority for these two zero-valued fields. This
+			// bounded status path deliberately does not materialize or recompute their detail rows.
+			return materialization_bounded_claim_batch_status{
+				stream_digest, claim_count, 0U, 0U, 0U, partitions_.size()};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(source_error("claim-status", "allocation"));
+		}
 	}
 
 	sdk::result<materialization_bounded_partition_metadata>

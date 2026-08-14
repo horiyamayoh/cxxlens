@@ -605,27 +605,25 @@ namespace
 															fake_shm_unmap,
 															fake_fetch,
 															nullptr};
-	const auto foreign_shm_lock = std::bit_cast<int (*)(sqlite3_file*, int, int, int)>(&::close);
-	const sqlite3_io_methods foreign_trailing_methods{3,
-													  fake_close,
-													  fake_read,
-													  fake_write,
-													  fake_truncate,
-													  fake_sync,
-													  fake_size,
-													  fake_lock,
-													  fake_unlock,
-													  fake_reserved,
-													  fake_control,
-													  fake_sector,
-													  fake_characteristics,
-													  nullptr,
-													  foreign_shm_lock,
-													  fake_shm_barrier,
-													  fake_shm_unmap,
-													  nullptr,
-													  nullptr};
-
+	sqlite3_io_methods foreign_trailing_methods{3,
+												fake_close,
+												fake_read,
+												fake_write,
+												fake_truncate,
+												fake_sync,
+												fake_size,
+												fake_lock,
+												fake_unlock,
+												fake_reserved,
+												fake_control,
+												fake_sector,
+												fake_characteristics,
+												nullptr,
+												nullptr,
+												fake_shm_barrier,
+												fake_shm_unmap,
+												nullptr,
+												nullptr};
 	int fake_open(
 		sqlite3_vfs* vfs, const char* name, sqlite3_file* output, const int flags, int* out_flags)
 	{
@@ -2485,9 +2483,32 @@ int main()
 					close_calls == closes_before_quarantine,
 				"successful native xOpen without pMethods is quarantined");
 
-		for (const auto* malformed_methods : {&missing_shm_trailing_methods,
-											  &missing_fetch_trailing_methods,
-											  &foreign_trailing_methods})
+		auto libc = std::shared_ptr<void>{::dlopen("libc.so.6", RTLD_NOW | RTLD_LOCAL),
+										  [](void* value)
+										  {
+											  if (value != nullptr)
+												  (void)::dlclose(value);
+										  }};
+		require(libc != nullptr, "load libc for foreign callback fixture");
+		using foreign_shm_lock_function = int (*)(sqlite3_file*, int, int, int);
+		void* const foreign_shm_lock_raw = ::dlsym(libc.get(), "close");
+		require(foreign_shm_lock_raw != nullptr, "resolve libc close for foreign callback fixture");
+		static_assert(sizeof(foreign_shm_lock_function) == sizeof(foreign_shm_lock_raw));
+		const auto foreign_shm_lock =
+			std::bit_cast<foreign_shm_lock_function>(foreign_shm_lock_raw);
+		Dl_info foreign_image{};
+		Dl_info test_image{};
+		require(::dladdr(foreign_shm_lock_raw, &foreign_image) != 0 &&
+					foreign_image.dli_fbase != nullptr &&
+					::dladdr(std::bit_cast<const void*>(&fake_open), &test_image) != 0 &&
+					test_image.dli_fbase != nullptr &&
+					foreign_image.dli_fbase != test_image.dli_fbase,
+				"foreign callback fixture resolves outside the test image");
+		foreign_trailing_methods.shm_lock = foreign_shm_lock;
+		for (const auto* malformed_methods :
+			 {&missing_shm_trailing_methods,
+			  &missing_fetch_trailing_methods,
+			  static_cast<const sqlite3_io_methods*>(&foreign_trailing_methods)})
 		{
 			malformed_out = 0x7f7f;
 			const auto closes_before_malformed = close_calls;

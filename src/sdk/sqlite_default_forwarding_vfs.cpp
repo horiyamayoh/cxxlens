@@ -84,11 +84,11 @@ namespace cxxlens::sdk
 		constexpr std::string_view source_shm_profile{"sqlite-source-shm-readonly-unix-uri-v1"};
 		constexpr std::string_view source_shm_qualification_profile{
 			"sqlite-source-shm-readonly-qualification-candidate-v1"};
-		// The native SQLITE_OK/nonnull exception is confined to the qualified source-SHM route.
-		// Its pre-delegation permit, post-native attachment receipt, atomic registry commit, and
-		// per-map projection receipt remain mandatory; generic and qualification-scratch routes
-		// retain their terminal native-OK rejection.
-		constexpr bool source_shm_native_ok_projection_production_activation = true;
+		// The internal lease/attachment machinery is intentionally retained as a proposed,
+		// fail-closed implementation boundary. The accepted authority still requires a
+		// distinct exact implementation review and complete counterexample matrix before the
+		// qualified source-SHM native-OK exception may be activated.
+		constexpr bool source_shm_native_ok_projection_production_activation = false;
 
 		constexpr int source_shm_open_flags = sqlite_open_read_only | sqlite_open_uri |
 			sqlite_open_private_cache | sqlite_open_full_mutex;
@@ -573,20 +573,46 @@ namespace cxxlens::sdk
 			bool reader_existing_route_active{};
 			bool reader_lifecycle_failed{};
 			std::shared_ptr<native_file_node> quarantine_self;
+			std::atomic_bool quarantine_enqueued{false};
+			// Non-owning link; quarantine_self remains the owner for process lifetime.
+			native_file_node* quarantine_next{};
 			bool close_attempted{};
 		};
 
+		struct native_file_quarantine_sink
+		{
+			static_assert(std::atomic<native_file_node*>::is_always_lock_free);
+			std::atomic<native_file_node*> head{nullptr};
+		};
+		native_file_quarantine_sink native_file_quarantine_sink_storage;
+
 		void quarantine_native_file(std::shared_ptr<native_file_node>& node) noexcept
 		{
-			// `quarantine_self` was armed before native xOpen. Dropping the external owner is
-			// allocation-free and leaves the whole opaque file and every pin alive for process
-			// life.
+			// `quarantine_self` was armed before native xOpen. Keep the quarantined node reachable
+			// through a process-lifetime, lock-free sink instead of leaving an unreachable
+			// self-cycle behind. The link is non-owning because quarantine_self remains the owner.
+			if (!node)
+				return;
+			bool expected = false;
+			if (!node->quarantine_enqueued.compare_exchange_strong(
+					expected, true, std::memory_order_acq_rel, std::memory_order_acquire))
+			{
+				node.reset();
+				return;
+			}
+			auto* previous =
+				native_file_quarantine_sink_storage.head.load(std::memory_order_acquire);
+			do
+			{
+				node->quarantine_next = previous;
+			} while (!native_file_quarantine_sink_storage.head.compare_exchange_weak(
+				previous, node.get(), std::memory_order_release, std::memory_order_acquire));
 			node.reset();
 		}
 
 		void release_known_safe_native_file(std::shared_ptr<native_file_node>& node) noexcept
 		{
-			if (node)
+			if (node && !node->quarantine_enqueued.load(std::memory_order_acquire))
 				node->quarantine_self.reset();
 			node.reset();
 		}
@@ -8299,6 +8325,11 @@ namespace cxxlens::sdk
 			}
 		}
 	} // namespace
+
+	bool sqlite_source_shm_native_ok_projection_production_activation_enabled() noexcept
+	{
+		return source_shm_native_ok_projection_production_activation;
+	}
 
 	result<std::shared_ptr<sqlite_default_forwarding_vfs>>
 	make_sqlite_default_forwarding_vfs(sqlite_private_snapshot_registry_binding registry)

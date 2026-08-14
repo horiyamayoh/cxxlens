@@ -1,11 +1,11 @@
 ---
 id: DF-0233
 title: Define NG1 provider hardening lifecycle and evidence authority
-status: proposed
+status: accepted
 kind: contract-contradiction
 impact: contract
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - provider.ng1-heartbeat
   - provider.ng1-durable-resume
@@ -24,14 +24,28 @@ authority_refs:
 tracking_issue: '#233'
 implementation_issues:
   - '#183'
-resolution_refs: []
+resolution_refs:
+  - docs/design/adr/0099-provider-ng1-hardening.md
+  - schemas/cxxlens_ng_provider_ng1_hardening.yaml
+  - schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml
+  - schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml
+  - schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml
+  - tools/quality/check_ng_provider_ng1.py
+  - tools/quality/check_ng_provider_ng1_qualification.py
+  - tests/quality/test_ng_provider_protocol.py
+  - tests/quality/test_ng_provider_ng1_qualification.py
+  - cmake/CxxlensDeveloperTools.cmake
+  - tests/CMakeLists.txt
 review:
-  mode: self
+  mode: independent
   status: complete
-  author: codex-agent-ng1-authority
-  reviewer: codex-self-review-ng1-2026-08-13
+  author: codex-agent-ng1-authority-closure
+  reviewer: Aristotle-agent-019ff975-0bbf-7d50-9d20-950dd17d7ab5
   refs:
-    - https://github.com/horiyamayoh/cxxlens/issues/233#issuecomment-5274938939
+    - https://github.com/horiyamayoh/cxxlens/pull/236#pullrequestreview-4923550162
+    - https://github.com/horiyamayoh/cxxlens/issues/233#issuecomment-5276673201
 created: '2026-08-13'
 ---
 
@@ -73,8 +87,9 @@ published snapshot unchanged.
 Implementing the named features directly would invent public protocol semantics
 and could turn a self-reported progress or spill receipt into authorization.
 The gap is material to correctness, security, compatibility, and release
-qualification, so #183 must remain blocked until the lifecycle contract is
-accepted and independently reviewed.
+qualification, so #183 was blocked until the lifecycle contract was accepted
+and independently reviewed. The accepted authority does not itself qualify or
+activate NG1.
 
 ## Evidence
 
@@ -116,10 +131,13 @@ before adding any certification claim.
 
 ## Disposition
 
-2026-08-13: Proposed and blocked. The bounded independent review subagent did
-not complete, so the user-authorized self-review fallback was recorded on
-Issue #233 for the exact PR head. The review found no remaining P1 blocker for
-the proposed authority patch, but it is not independent acceptance. #183
-remains open and blocked; the contract must remain proposed until the live
-implementation and exact static/shared/fault/long-run qualification evidence
-are complete.
+2026-08-13: The authority closure was independently reviewed by the Aristotle
+subagent for exact PR #236 commit
+`e7ae3c4e0355ed32b22d155ac477652b68ab13c6` and tree
+`d7b638d7727bb926b35dd0562dd1520b24cd3557`, with P0=0 and P1=0. The PR
+merged to exact main commit
+`df89c776d65184d393980a78543ca8a081c60a91` and the same tree. The accepted
+authority permits #183 implementation to proceed, but the hardening contract
+remains `maturity: proposed`, #183 remains ineligible for completion until
+live process/spill/recovery/static/shared/fault/long-run evidence is exact, and
+no NG1 production activation is authorized.

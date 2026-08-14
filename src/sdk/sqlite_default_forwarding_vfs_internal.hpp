@@ -8,6 +8,11 @@
 
 namespace cxxlens::sdk
 {
+	/** Production activation remains disabled until the accepted source-SHM authority gate closes.
+	 */
+	[[nodiscard]] bool
+	sqlite_source_shm_native_ok_projection_production_activation_enabled() noexcept;
+
 	/**
 	 * One owned, non-default SQLite VFS alias which delegates to an already-pinned default VFS.
 	 * The implementation is intentionally opaque: callers receive identities and the exact

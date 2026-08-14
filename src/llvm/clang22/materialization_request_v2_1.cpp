@@ -3212,6 +3212,15 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<materialization_v2_1_task_metadata_receipt>
 	prevalidated_materialization_request_v2_1::task_metadata(const std::uint64_t index)
 	{
+		auto binding = task_metadata_binding(index);
+		if (!binding)
+			return sdk::unexpected(std::move(binding.error()));
+		return std::move(binding->metadata);
+	}
+
+	sdk::result<materialization_v2_1_task_metadata_binding>
+	prevalidated_materialization_request_v2_1::task_metadata_binding(const std::uint64_t index)
+	{
 		if (index >= task_count_ || !raw_request_ || !task_index_)
 			return sdk::unexpected(invalid("tasks", "metadata-index"));
 		auto binding = replay_task_metadata(*raw_request_,
@@ -3225,7 +3234,11 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(std::move(binding.error()));
 		if (binding->catalog_owner != &catalog_)
 			return sdk::unexpected(invalid("task", "metadata-catalog-owner"));
-		return metadata_receipt(*binding, index);
+		if (!binding->input.source.empty() || !binding->input.source_content_base64.empty())
+			return sdk::unexpected(invalid("task", "metadata-source-residency"));
+		auto metadata = metadata_receipt(*binding, index);
+		return materialization_v2_1_task_metadata_binding{std::move(binding->input),
+														  std::move(metadata)};
 	}
 
 	sdk::result<prevalidated_materialization_request_v2_1> prevalidate_materialization_request_v2_1(
@@ -3429,15 +3442,39 @@ namespace cxxlens::detail::clang22::materialization
 	validated_materialization_request_v2_1::validated_materialization_request_v2_1(
 		prevalidated_materialization_request_v2_1 request,
 		streamed_materialization_request_identity identity)
-		: request_{std::move(request)}, identity_{std::move(identity)}
+		: request_{std::move(request)}, identity_{std::move(identity)},
+		  lifetime_{std::make_shared<materialization_v2_1_request_lifetime>()}
 	{
+		lifetime_->bind(this);
 	}
 
 	validated_materialization_request_v2_1::validated_materialization_request_v2_1(
-		validated_materialization_request_v2_1&&) noexcept = default;
+		validated_materialization_request_v2_1&& other) noexcept
+		: request_{std::move(other.request_)}, identity_{std::move(other.identity_)},
+		  lifetime_{std::move(other.lifetime_)}
+	{
+		if (lifetime_)
+			lifetime_->bind(this);
+	}
 	validated_materialization_request_v2_1& validated_materialization_request_v2_1::operator=(
-		validated_materialization_request_v2_1&&) noexcept = default;
-	validated_materialization_request_v2_1::~validated_materialization_request_v2_1() = default;
+		validated_materialization_request_v2_1&& other) noexcept
+	{
+		if (this == &other)
+			return *this;
+		if (lifetime_)
+			lifetime_->invalidate();
+		request_ = std::move(other.request_);
+		identity_ = std::move(other.identity_);
+		lifetime_ = std::move(other.lifetime_);
+		if (lifetime_)
+			lifetime_->bind(this);
+		return *this;
+	}
+	validated_materialization_request_v2_1::~validated_materialization_request_v2_1()
+	{
+		if (lifetime_)
+			lifetime_->invalidate();
+	}
 
 	const prevalidated_materialization_request_v2_1&
 	validated_materialization_request_v2_1::request() const noexcept
@@ -3449,6 +3486,12 @@ namespace cxxlens::detail::clang22::materialization
 	validated_materialization_request_v2_1::identity() const noexcept
 	{
 		return identity_;
+	}
+
+	const std::shared_ptr<materialization_v2_1_request_lifetime>&
+	validated_materialization_request_v2_1::lifetime_token() const noexcept
+	{
+		return lifetime_;
 	}
 
 	sdk::result<json_document> validated_materialization_request_v2_1::replay_global_authority()
@@ -3463,6 +3506,12 @@ namespace cxxlens::detail::clang22::materialization
 	validated_materialization_request_v2_1::task_metadata(const std::uint64_t index)
 	{
 		return request_.task_metadata(index);
+	}
+
+	sdk::result<materialization_v2_1_task_metadata_binding>
+	validated_materialization_request_v2_1::task_metadata_binding(const std::uint64_t index)
+	{
+		return request_.task_metadata_binding(index);
 	}
 
 	sdk::result<materialization_v2_1_task_execution>
@@ -3623,79 +3672,88 @@ namespace cxxlens::detail::clang22::materialization
 		prevalidated_materialization_request_v2_1 request,
 		materialization_v2_1_auxiliary_spool_factory& auxiliary_spools)
 	{
-		if (!request.raw_request_ || !request.task_index_ || !request.raw_request_->sealed() ||
-			!request.task_index_->sealed() ||
-			request.task_count_ != request.task_index_->task_count())
-			return sdk::unexpected(invalid("request", "admission-binding"));
-
-		auto execution_keys = auxiliary_spools.create(
-			materialization_v2_1_auxiliary_spool_purpose::execution_unique_index);
-		if (!execution_keys)
-			return sdk::unexpected(auxiliary_create_failure(
-				materialization_v2_1_auxiliary_spool_purpose::execution_unique_index,
-				execution_keys.error()));
-		if (!*execution_keys)
-			return sdk::unexpected(materialization_admission_no_response());
-		std::uint64_t admitted_source_bytes{};
-		for (std::uint64_t index{}; index < request.task_count_; ++index)
+		try
 		{
-			auto task = validate_source_dependent_task(*request.raw_request_,
-													   *request.task_index_,
-													   index,
-													   request.catalog_,
-													   request.project_id_,
-													   request.output_descriptors_,
-													   request.worker_,
-													   auxiliary_spools);
-			if (!task)
-				return sdk::unexpected(std::move(task.error()));
-			if (task->source_size_bytes > request.declared_source_bytes_ ||
-				admitted_source_bytes > request.declared_source_bytes_ - task->source_size_bytes)
-				return sdk::unexpected(mismatch("tasks.source", "admission-census-overflow"));
-			admitted_source_bytes += task->source_size_bytes;
-			const std::array fields{std::string_view{task->provider_task_id},
-									std::string_view{task->task_input_digest},
-									std::string_view{task->provider_execution_id}};
-			if (auto appended =
-					append_string_record(**execution_keys, fields, index, auxiliary_spools);
-				!appended)
-				return sdk::unexpected(std::move(appended.error()));
-		}
-		if (admitted_source_bytes != request.declared_source_bytes_)
-			return sdk::unexpected(mismatch("tasks.source", "admission-census"));
-		if (auto unique = seal_and_validate_compact_unique_records(
-				**execution_keys,
-				request.task_count_,
-				mismatch("tasks", "duplicate-execution-tuple"),
-				materialization_v2_1_auxiliary_spool_purpose::execution_unique_index,
-				[](const compact_unique_record& record) -> sdk::result<void>
-				{
-					if (record.raw_task_offset != 0U || record.raw_task_size != 0U)
-						return sdk::unexpected(materialization_admission_no_response());
-					return {};
-				},
-				[&](const compact_unique_record& left,
-					const compact_unique_record& right) -> sdk::result<bool>
-				{
-					auto left_metadata = request.task_metadata(left.task_index);
-					if (!left_metadata)
-						return sdk::unexpected(std::move(left_metadata.error()));
-					auto right_metadata = request.task_metadata(right.task_index);
-					if (!right_metadata)
-						return sdk::unexpected(std::move(right_metadata.error()));
-					return left_metadata->provider_task_id == right_metadata->provider_task_id &&
-						left_metadata->task_input_digest == right_metadata->task_input_digest &&
-						left_metadata->provider_execution_id ==
-						right_metadata->provider_execution_id;
-				});
-			!unique)
-			return sdk::unexpected(std::move(unique.error()));
+			if (!request.raw_request_ || !request.task_index_ || !request.raw_request_->sealed() ||
+				!request.task_index_->sealed() ||
+				request.task_count_ != request.task_index_->task_count())
+				return sdk::unexpected(invalid("request", "admission-binding"));
 
-		auto identity = validate_streamed_materialization_request_identity(
-			*request.raw_request_, request.envelope_, *request.task_index_);
-		if (!identity)
-			return sdk::unexpected(std::move(identity.error()));
-		return validated_materialization_request_v2_1{std::move(request), std::move(*identity)};
+			auto execution_keys = auxiliary_spools.create(
+				materialization_v2_1_auxiliary_spool_purpose::execution_unique_index);
+			if (!execution_keys)
+				return sdk::unexpected(auxiliary_create_failure(
+					materialization_v2_1_auxiliary_spool_purpose::execution_unique_index,
+					execution_keys.error()));
+			if (!*execution_keys)
+				return sdk::unexpected(materialization_admission_no_response());
+			std::uint64_t admitted_source_bytes{};
+			for (std::uint64_t index{}; index < request.task_count_; ++index)
+			{
+				auto task = validate_source_dependent_task(*request.raw_request_,
+														   *request.task_index_,
+														   index,
+														   request.catalog_,
+														   request.project_id_,
+														   request.output_descriptors_,
+														   request.worker_,
+														   auxiliary_spools);
+				if (!task)
+					return sdk::unexpected(std::move(task.error()));
+				if (task->source_size_bytes > request.declared_source_bytes_ ||
+					admitted_source_bytes >
+						request.declared_source_bytes_ - task->source_size_bytes)
+					return sdk::unexpected(mismatch("tasks.source", "admission-census-overflow"));
+				admitted_source_bytes += task->source_size_bytes;
+				const std::array fields{std::string_view{task->provider_task_id},
+										std::string_view{task->task_input_digest},
+										std::string_view{task->provider_execution_id}};
+				if (auto appended =
+						append_string_record(**execution_keys, fields, index, auxiliary_spools);
+					!appended)
+					return sdk::unexpected(std::move(appended.error()));
+			}
+			if (admitted_source_bytes != request.declared_source_bytes_)
+				return sdk::unexpected(mismatch("tasks.source", "admission-census"));
+			if (auto unique = seal_and_validate_compact_unique_records(
+					**execution_keys,
+					request.task_count_,
+					mismatch("tasks", "duplicate-execution-tuple"),
+					materialization_v2_1_auxiliary_spool_purpose::execution_unique_index,
+					[](const compact_unique_record& record) -> sdk::result<void>
+					{
+						if (record.raw_task_offset != 0U || record.raw_task_size != 0U)
+							return sdk::unexpected(materialization_admission_no_response());
+						return {};
+					},
+					[&](const compact_unique_record& left,
+						const compact_unique_record& right) -> sdk::result<bool>
+					{
+						auto left_metadata = request.task_metadata(left.task_index);
+						if (!left_metadata)
+							return sdk::unexpected(std::move(left_metadata.error()));
+						auto right_metadata = request.task_metadata(right.task_index);
+						if (!right_metadata)
+							return sdk::unexpected(std::move(right_metadata.error()));
+						return left_metadata->provider_task_id ==
+							right_metadata->provider_task_id &&
+							left_metadata->task_input_digest == right_metadata->task_input_digest &&
+							left_metadata->provider_execution_id ==
+							right_metadata->provider_execution_id;
+					});
+				!unique)
+				return sdk::unexpected(std::move(unique.error()));
+
+			auto identity = validate_streamed_materialization_request_identity(
+				*request.raw_request_, request.envelope_, *request.task_index_);
+			if (!identity)
+				return sdk::unexpected(std::move(identity.error()));
+			return validated_materialization_request_v2_1{std::move(request), std::move(*identity)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(materialization_admission_no_response());
+		}
 	}
 
 	sdk::result<validated_materialization_request_v2_1>

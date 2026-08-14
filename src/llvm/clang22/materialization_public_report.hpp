@@ -80,6 +80,15 @@ namespace cxxlens::detail::clang22::materialization
 		operator==(const public_materialization_prepublication_projection&) const = default;
 	};
 
+	/** Observable result of the source-private prior-artifact write after Store commit. */
+	struct public_materialization_prior_artifact_persistence
+	{
+		bool committed{};
+		std::string error_code;
+		std::string error_field;
+		std::string error_detail;
+	};
+
 	/** Build the bounded publication-independent projection before publication is attempted. */
 	[[nodiscard]] sdk::result<public_materialization_prepublication_projection>
 	prepare_public_materialization_prepublication_projection(
@@ -107,6 +116,7 @@ namespace cxxlens::detail::clang22::materialization
 		const sealed_materialization_claims* claims{};
 		const materialization_store_observation* store{};
 		const public_materialization_prepublication_projection* prepublication{};
+		const public_materialization_prior_artifact_persistence* prior_artifact_persistence{};
 		/** Exact rooted-VFS receipt retained by the SQLite opener, when the backend is SQLite. */
 		const materialization_rooted_vfs_receipt* rooted_vfs_receipt{};
 		std::string generated_at;

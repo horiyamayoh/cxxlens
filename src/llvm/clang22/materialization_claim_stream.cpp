@@ -465,6 +465,49 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(stream_error("allocation", "unavailable"));
 			}
 		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_v2_journal(const std::string_view request_id,
+							const std::uint64_t task_count,
+							const materialization_incremental_execution_journal_receipt& journal,
+							const std::span<const materialization_claim_stream_task> tasks)
+		{
+			if (!sdk::validate_strong_id(request_id) || task_count == 0U ||
+				task_count > std::numeric_limits<std::size_t>::max() ||
+				tasks.size() != static_cast<std::size_t>(task_count) ||
+				journal.materialization_request_id != request_id ||
+				journal.exact_task_count != task_count ||
+				journal.canonical_task_ids.size() != tasks.size() ||
+				journal.ordered_task_receipt_seal_digests.size() != tasks.size())
+				return sdk::unexpected(stream_error("execution-journal", "task-census"));
+			try
+			{
+				std::vector<materialization_incremental_task_receipt> receipts;
+				receipts.reserve(tasks.size());
+				for (std::size_t index{}; index < tasks.size(); ++index)
+				{
+					const auto& receipt = tasks[index].receipt;
+					if (receipt.materialization_request_id != request_id ||
+						receipt.canonical_task_ordinal != index || !receipt.successful_seal ||
+						!sdk::validate_strong_id(receipt.task_id) ||
+						journal.canonical_task_ids[index] != receipt.task_id ||
+						journal.ordered_task_receipt_seal_digests[index] !=
+							receipt.pre_encoder_task_receipt_seal_digest)
+						return sdk::unexpected(stream_error("execution-journal", "task-binding"));
+					receipts.push_back(receipt);
+				}
+				const auto recomputed = seal_materialization_incremental_execution_journal(
+					std::string{request_id},
+					std::span<const materialization_incremental_task_receipt>{receipts});
+				if (!recomputed || *recomputed != journal)
+					return sdk::unexpected(stream_error("execution-journal", "seal-mismatch"));
+				return {};
+			}
+			catch (const std::bad_alloc&)
+			{
+				return sdk::unexpected(stream_error("allocation", "unavailable"));
+			}
+		}
 	} // namespace
 
 	sdk::result<std::uint64_t>
@@ -687,6 +730,18 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	}
 
+	sdk::result<void> materialization_claim_stream_source::validate_external_task_receipts(
+		const std::string_view materialization_request_id,
+		const std::uint64_t task_count,
+		const materialization_incremental_execution_journal_receipt& journal,
+		const std::span<materialization_claim_stream_task> tasks)
+	{
+		return validate_v2_journal(materialization_request_id,
+								   task_count,
+								   journal,
+								   std::span<const materialization_claim_stream_task>{tasks});
+	}
+
 	sdk::result<materialization_claim_stream_source> materialization_claim_stream_source::begin(
 		const validated_materialization_request& request,
 		const materialization_incremental_execution_journal_receipt& journal,
@@ -708,6 +763,33 @@ namespace cxxlens::detail::clang22::materialization
 			if (!states)
 				return sdk::unexpected(std::move(states.error()));
 			return materialization_claim_stream_source{std::move(*request_id), std::move(*states)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(stream_error("allocation", "unavailable"));
+		}
+	}
+
+	sdk::result<materialization_claim_stream_source> materialization_claim_stream_source::begin(
+		std::string materialization_request_id,
+		const std::uint64_t task_count,
+		const materialization_incremental_execution_journal_receipt& journal,
+		std::vector<materialization_claim_stream_task> tasks)
+	{
+		try
+		{
+			if (auto valid =
+					validate_v2_journal(materialization_request_id,
+										task_count,
+										journal,
+										std::span<const materialization_claim_stream_task>{tasks});
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
+			auto states = build_states(materialization_request_id, tasks);
+			if (!states)
+				return sdk::unexpected(std::move(states.error()));
+			return materialization_claim_stream_source{std::move(materialization_request_id),
+													   std::move(*states)};
 		}
 		catch (const std::bad_alloc&)
 		{

@@ -411,9 +411,32 @@ endif()
 add_test(NAME unit.sdk-provider-runtime
          COMMAND cxxlens-unit-sdk-provider-runtime
                  "$<TARGET_FILE:cxxlens-provider-process-fixture>")
-add_test(NAME unit.sdk-provider-runtime-timeout
-         COMMAND cxxlens-unit-sdk-provider-runtime --timeout-regression
-                 "$<TARGET_FILE:cxxlens-provider-process-fixture>")
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles(
+  [=[
+#include <features.h>
+#ifndef __GLIBC__
+#error "The provider process adapter requires glibc"
+#endif
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#ifndef SYS_pidfd_open
+#error "The timeout regression requires pidfd_open"
+#endif
+#ifndef SYS_pidfd_send_signal
+#error "The timeout regression requires pidfd_send_signal"
+#endif
+#ifndef P_PIDFD
+#error "The timeout regression requires P_PIDFD"
+#endif
+int main() { return 0; }
+]=]
+  CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
+  add_test(NAME unit.sdk-provider-runtime-timeout
+           COMMAND cxxlens-unit-sdk-provider-runtime --timeout-regression
+                   "$<TARGET_FILE:cxxlens-provider-process-fixture>")
+endif()
 add_test(NAME unit.sdk-provider-runtime-sealed
          COMMAND cxxlens-unit-sdk-provider-runtime --sealed-only)
 add_test(NAME unit.sdk-provider-runtime-host-streaming
@@ -428,15 +451,50 @@ set_tests_properties(
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     PROCESSORS 2)
-set_tests_properties(
-  unit.sdk-provider-runtime-timeout
-  PROPERTIES LABELS "unit;sdk;provider;process;budget;cancellation;regression"
-             TIMEOUT 30)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
+  set_tests_properties(
+    unit.sdk-provider-runtime-timeout
+    PROPERTIES LABELS
+               "unit;sdk;provider;process;budget;cancellation;regression"
+               TIMEOUT 30 SKIP_RETURN_CODE 77)
+endif()
 set_tests_properties(unit.sdk-provider-runtime-sealed
                      PROPERTIES LABELS "unit;sdk;provider;sealed;adoption")
 set_tests_properties(
   unit.sdk-provider-runtime-host-streaming unit.sdk-provider-runtime-receipt
   PROPERTIES LABELS "unit;sdk;provider;protocol;streaming;sealed;security")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-validation
+                            unit/sdk/provider_ng1_hardening_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-validation
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-validation
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-validation
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-ng1-validation
+         COMMAND cxxlens-unit-sdk-provider-ng1-validation)
+set_tests_properties(
+  unit.sdk-provider-ng1-validation
+  PROPERTIES LABELS "unit;sdk;provider;ng1;validation;fail-closed")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-transport
+                            unit/sdk/provider_ng1_transport_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-transport
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-transport
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-transport
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-ng1-transport
+         COMMAND cxxlens-unit-sdk-provider-ng1-transport)
+set_tests_properties(
+  unit.sdk-provider-ng1-transport
+  PROPERTIES LABELS
+             "unit;sdk;provider;ng1;transport;deterministic-cbor;fail-closed")
 
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)
@@ -830,6 +888,7 @@ foreach(
         release_contract
         release_qualification
         clang22_materialization
+        clang22_materialization_scale
         production_scope_closure
         sdk_contract
         ci_supply_chain
@@ -924,6 +983,8 @@ add_dependencies(
   cxxlens-public-header-sdk
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
+  cxxlens-unit-sdk-provider-ng1-validation
+  cxxlens-unit-sdk-provider-ng1-transport
   cxxlens-unit-sdk-query-runtime
   cxxlens-unit-sdk-sqlite-connection-lifecycle
   cxxlens-unit-sdk-sqlite-default-forwarding-vfs

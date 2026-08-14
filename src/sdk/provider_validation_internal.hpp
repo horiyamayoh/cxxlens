@@ -151,6 +151,8 @@ namespace cxxlens::sdk::provider::detail
 									host_input_chunk_sink& input);
 
 	struct transcript_validation_result;
+	class sealed_provider_transcript;
+	struct sealed_provider_batch_replay;
 
 	/**
 	 * One descriptor batch reconstructed from a single validated columnar transcript pass.
@@ -170,6 +172,7 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] std::string_view atomic_output_group_id() const noexcept;
 		[[nodiscard]] std::string_view batch_id() const noexcept;
 		[[nodiscard]] std::string_view batch_digest() const noexcept;
+		[[nodiscard]] std::span<const batch_column_summary> columns() const noexcept;
 		[[nodiscard]] std::span<const std::string> ordered_chunk_digests() const noexcept;
 		[[nodiscard]] std::span<const detached_row> rows() const noexcept;
 
@@ -181,6 +184,7 @@ namespace cxxlens::sdk::provider::detail
 							  std::string atomic_output_group_id,
 							  std::string batch_id,
 							  std::string batch_digest,
+							  std::vector<batch_column_summary> columns,
 							  std::vector<std::string> ordered_chunk_digests,
 							  std::vector<detached_row> rows);
 
@@ -191,6 +195,7 @@ namespace cxxlens::sdk::provider::detail
 		std::string atomic_output_group_id_;
 		std::string batch_id_;
 		std::string batch_digest_;
+		std::vector<batch_column_summary> columns_;
 		std::vector<std::string> ordered_chunk_digests_;
 		std::vector<detached_row> rows_;
 
@@ -198,6 +203,13 @@ namespace cxxlens::sdk::provider::detail
 		validate_provider_transcript(const transcript_validation_request& request,
 									 std::span<const frame> frames,
 									 protocol_limits session_limits);
+		friend result<sealed_provider_transcript>
+		rehydrate_provider_transcript(std::string task_id,
+									  std::span<const relation_descriptor> output_descriptors,
+									  std::vector<sealed_provider_batch_replay> batches,
+									  std::vector<coverage_unit> coverage,
+									  std::vector<unresolved_item> unresolved,
+									  std::vector<evidence_item> evidence);
 	};
 
 	/** Complete immutable adoption value produced only for a successfully sealed transcript. */
@@ -224,7 +236,42 @@ namespace cxxlens::sdk::provider::detail
 		validate_provider_transcript(const transcript_validation_request& request,
 									 std::span<const frame> frames,
 									 protocol_limits session_limits);
+		friend result<sealed_provider_transcript>
+		rehydrate_provider_transcript(std::string task_id,
+									  std::span<const relation_descriptor> output_descriptors,
+									  std::vector<sealed_provider_batch_replay> batches,
+									  std::vector<coverage_unit> coverage,
+									  std::vector<unresolved_item> unresolved,
+									  std::vector<evidence_item> evidence);
 	};
+
+	/**
+	 * Source-private replay input for a previously authenticated provider batch. This value is
+	 * deliberately separate from `sealed_provider_batch`: callers must pass through the strict
+	 * rehydration validator below before a sealed transcript can be adopted.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN sealed_provider_batch_replay
+	{
+		std::string task_id;
+		std::string descriptor_id;
+		std::string descriptor_digest;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::string batch_digest;
+		std::vector<batch_column_summary> columns;
+		std::vector<std::string> ordered_chunk_digests;
+		std::vector<detached_row> rows;
+	};
+
+	/** Revalidate a durable transcript projection before constructing private adoption values. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<sealed_provider_transcript>
+	rehydrate_provider_transcript(std::string task_id,
+								  std::span<const relation_descriptor> output_descriptors,
+								  std::vector<sealed_provider_batch_replay> batches,
+								  std::vector<coverage_unit> coverage,
+								  std::vector<unresolved_item> unresolved,
+								  std::vector<evidence_item> evidence);
 
 	/** Typed terminal plus optional adoption seal from the same validation pass. */
 	struct CXXLENS_PROVIDER_DETAIL_HIDDEN transcript_validation_result

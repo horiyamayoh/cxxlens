@@ -7,21 +7,33 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <vector>
 
+#include <cxxlens/sdk/provider.hpp>
+
+#include "llvm/clang22/materialization_claims.hpp"
 #include "llvm/clang22/materialization_identity.hpp"
 #include "llvm/clang22/materialization_request_identity.hpp"
+#include "llvm/clang22/materialization_seal.hpp"
 #include "llvm/clang22/materialization_task_spool.hpp"
+#include "llvm/clang22/provider_task_v3.hpp"
+#include "sdk/provider_runtime_internal.hpp"
 
 namespace
 {
 	using namespace cxxlens;
+	using namespace cxxlens::detail::clang22;
 	using namespace cxxlens::detail::clang22::materialization;
+
+	constexpr std::string_view v2_1_worker_semantic_contract_digest =
+		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 	void require(const bool condition, const std::string_view message)
 	{
@@ -72,6 +84,145 @@ namespace
 		}
 		value.replace(offset, from.size(), to);
 	}
+
+	class empty_v2_1_provider final : public sdk::provider::portable_provider
+	{
+	  public:
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return "cxxlens.clang22.reference";
+		}
+
+		[[nodiscard]] sdk::semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+
+		[[nodiscard]] std::string_view semantic_contract_digest() const noexcept override
+		{
+			return v2_1_worker_semantic_contract_digest;
+		}
+
+		sdk::result<void> run(const sdk::provider::task& task,
+							  sdk::provider::context& context) override
+		{
+			for (std::size_t index{}; index < task.outputs.size(); ++index)
+			{
+				auto output = context.relation(task.outputs[index]);
+				if (auto begun = output.begin(index < 3U ? "canonical" : "observation",
+											  "clang22-atomic",
+											  task.outputs[index].id + "-batch");
+					!begun)
+					return begun;
+				if (auto ended = output.end(); !ended)
+					return ended;
+			}
+			constexpr std::array<std::string_view, 4U> coverage_kinds{
+				"cc.call-extraction", "cc.entity", "frontend.clang22.observation", "task"};
+			for (const auto kind : coverage_kinds)
+			{
+				context.coverage().request(std::string{kind}, task.task_id);
+				if (auto classified = context.coverage().classify(
+						{std::string{kind}, task.task_id, "covered", ""});
+					!classified)
+					return classified;
+			}
+			context.evidence().add(
+				{"provider.clang22.execution", task.task_id, std::string{id()}, "exact"});
+			return {};
+		}
+	};
+
+	class v2_1_transcript_sink final : public sdk::provider::frame_sink
+	{
+	  public:
+		sdk::result<void> write(const std::span<const std::byte> frame_bytes) override
+		{
+			transcript.insert(transcript.end(), frame_bytes.begin(), frame_bytes.end());
+			return {};
+		}
+
+		std::vector<std::byte> transcript;
+	};
+
+	class throwing_source_spool final : public clang22_task_source_spool
+	{
+	  public:
+		explicit throwing_source_spool(std::unique_ptr<clang22_task_source_spool> delegate)
+			: delegate_{std::move(delegate)}
+		{
+		}
+
+		sdk::result<void> append(const std::span<const std::byte> bytes) override
+		{
+			return delegate_->append(bytes);
+		}
+
+		sdk::result<clang22_task_source_receipt> seal() override
+		{
+			return delegate_->seal();
+		}
+
+		sdk::result<std::size_t> read_at(const std::uint64_t, const std::span<std::byte>) override
+		{
+			throw std::bad_alloc{};
+		}
+
+		[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+		{
+			return delegate_->size_bytes();
+		}
+
+		[[nodiscard]] bool sealed() const noexcept override
+		{
+			return delegate_->sealed();
+		}
+
+		[[nodiscard]] const clang22_task_source_receipt& receipt() const noexcept override
+		{
+			return delegate_->receipt();
+		}
+
+	  private:
+		std::unique_ptr<clang22_task_source_spool> delegate_;
+	};
+
+	class throwing_task_input_spool final : public clang22_task_input_spool
+	{
+	  public:
+		explicit throwing_task_input_spool(std::unique_ptr<clang22_task_input_spool> delegate)
+			: delegate_{std::move(delegate)}
+		{
+		}
+
+		sdk::result<void> append(const std::span<const std::byte> bytes) override
+		{
+			return delegate_->append(bytes);
+		}
+
+		sdk::result<std::size_t> read_at(const std::uint64_t, const std::span<std::byte>) override
+		{
+			throw std::bad_alloc{};
+		}
+
+		sdk::result<void> seal() override
+		{
+			return delegate_->seal();
+		}
+
+		[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+		{
+			return delegate_->size_bytes();
+		}
+
+		[[nodiscard]] bool sealed() const noexcept override
+		{
+			return delegate_->sealed();
+		}
+
+	  private:
+		std::unique_ptr<clang22_task_input_spool> delegate_;
+	};
 
 	class fragmented_spool final : public materialization_replayable_spool
 	{
@@ -624,6 +775,65 @@ namespace
 		return raw;
 	}
 
+	[[nodiscard]] sdk::result<sealed_materialization_result>
+	make_empty_v2_1_sealed_result(const materialization_v2_1_task_execution& execution,
+								  const prevalidated_materialization_request_v2_1& request)
+	{
+		// v2.1 task inputs intentionally keep the request-wide catalog external.  Rebind a local
+		// copy only for the provider protocol fixture and higher seal; the execution object remains
+		// the source-private one-task value under test.
+		auto provider_input = execution.input;
+		provider_input.project_catalog = request.catalog();
+		std::vector<sdk::relation_descriptor> outputs{request.output_descriptors().begin(),
+													  request.output_descriptors().end()};
+		auto portable_task =
+			reconstruct_provider_task(provider_input,
+									  execution.source_receipt,
+									  outputs,
+									  std::string{v2_1_worker_semantic_contract_digest});
+		if (!portable_task)
+			return sdk::unexpected(std::move(portable_task.error()));
+
+		empty_v2_1_provider provider;
+		v2_1_transcript_sink sink;
+		sdk::provider::protocol_writer writer{sink};
+		const sdk::provider::protocol_credit credit{64U * 1024U * 1024U, 65536U};
+		writer.grant_credit(credit);
+		sdk::provider::execution_context provider_execution;
+		provider_execution.budget = provider_input.budget;
+		if (auto run =
+				sdk::provider::run_worker(provider, *portable_task, writer, provider_execution);
+			!run)
+			return sdk::unexpected(std::move(run.error()));
+		auto frames = sdk::provider::decode_frame_stream(sink.transcript);
+		if (!frames)
+			return sdk::unexpected(std::move(frames.error()));
+		const sdk::provider::detail::transcript_validation_request validation_request{
+			portable_task->task_id,
+			std::string{provider.id()},
+			provider.version(),
+			nullptr,
+			portable_task->outputs,
+			credit,
+			&provider_execution.budget,
+			false,
+		};
+		auto validated = sdk::provider::detail::validate_provider_transcript(
+			validation_request, *frames, sdk::provider::protocol_limits{});
+		if (!validated ||
+			validated->kind != sdk::provider::detail::transcript_terminal_kind::complete ||
+			!validated->sealed() || validated->sealing_error())
+			return sdk::unexpected(sdk::error{"test.provider-seal-invalid", {}, {}});
+		auto generic_seal = std::move(*validated).take_sealed();
+		if (!generic_seal)
+			return sdk::unexpected(sdk::error{"test.provider-seal-missing", {}, {}});
+		return seal_validated_provider_result(provider_input,
+											  execution.metadata.provider_task_id,
+											  execution.metadata.task_input_digest,
+											  execution.metadata.provider_execution_id,
+											  std::move(*generic_seal));
+	}
+
 	[[nodiscard]] std::string duplicate_second_task(std::string raw)
 	{
 		auto indexed = scan(raw, 13U);
@@ -906,6 +1116,199 @@ namespace
 		require(eof && !*eof, "task cursor did not expose the exact end of task census");
 		require(std::move(*positive_cursor).finalize().has_value(),
 				"task cursor did not finalize after the complete task census");
+	}
+
+	void metadata_binding_does_not_open_source_window()
+	{
+		auto accepted = validate(upgrade_fixture(), 1U);
+		require(accepted.has_value(), "metadata binding admission fixture failed");
+
+		auto first = accepted->task_metadata_binding(0U);
+		require(first.has_value(), "source-independent task metadata binding failed");
+		require(first->metadata.task_index == 0U &&
+					first->metadata.provider_task_id.starts_with("task:semantic-v2:sha256:"),
+				"metadata binding lost the canonical task identity");
+		require(first->input.source.empty() && first->input.source_content_base64.empty(),
+				"metadata binding retained source or canonical task.v3 bytes");
+
+		auto second = accepted->task_metadata_binding(1U);
+		require(second.has_value() && second->metadata.task_index == 1U,
+				"metadata binding did not replay the exact second task");
+	}
+
+	void claim_authority_does_not_retain_task_occurrences()
+	{
+		auto accepted = validate(upgrade_fixture(), 1U);
+		require(accepted.has_value(), "claim authority admission fixture failed");
+
+		const auto digest = "sha256:" + std::string(64U, '1');
+		const materialization_producer_authority producer{
+			"cxxlens-clang22-materialize",
+			"2.1.0",
+			"1.0.0",
+			std::string(40U, '1'),
+			std::string(40U, '2'),
+			{{"schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_contract.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_report.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_request.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_relation_registry.yaml", digest}}};
+		const materialization_guarantee_authority guarantee{{},
+															{"clang22.materialization-sealed.v1",
+															 "provider.transcript-sealed.v1",
+															 "sdk.claim-envelope-validated.v1"}};
+
+		auto authority = make_materialization_v2_1_claim_authority(*accepted, producer, guarantee);
+		require(authority.has_value(),
+				authority ? "" : "claim authority failed: " + authority.error().detail);
+		require(
+			authority->request() == &*accepted &&
+				authority->catalog() == &accepted->request().catalog() &&
+				authority->engine() == &accepted->request().engine() &&
+				authority->materialization_request_id() ==
+					accepted->identity().materialization_request_id &&
+				authority->task_count() == accepted->request().task_count() &&
+				authority->worker_provider_id() == accepted->request().worker().provider_id &&
+				authority->worker_semantic_contract_digest() ==
+					accepted->request().worker().semantic_contract_digest &&
+				authority->direct_basis_digest().starts_with("semantic-v2:sha256:") &&
+				authority->assumption_set_id().starts_with("assumption-set:semantic-v2:sha256:"),
+			"claim authority lost typed worker/request-wide basis authority");
+
+		auto altered_guarantee = guarantee;
+		altered_guarantee.verification_modalities.push_back("unregistered-modality.v1");
+		auto rejected =
+			make_materialization_v2_1_claim_authority(*accepted, producer, altered_guarantee);
+		require(!rejected && rejected.error().field == "guarantee.profile" &&
+					rejected.error().detail == "v2.1-fixed-profile",
+				"v2.1 claim authority accepted a mutable guarantee profile");
+
+		{
+			auto moved = std::move(*accepted);
+			require(authority->request() == &moved &&
+						authority->catalog() == &moved.request().catalog() &&
+						authority->engine() == &moved.request().engine(),
+					"claim authority did not follow the admitted request move");
+		}
+		require(authority->request() == nullptr && authority->catalog() == nullptr &&
+					authority->engine() == nullptr,
+				"claim authority retained an invalidated request owner");
+	}
+
+	void one_task_claim_adoption_replays_and_rejects_binding_drift()
+	{
+		auto accepted = validate(upgrade_fixture(), 1U);
+		require(accepted.has_value(), "one-task claim adoption request failed");
+		const auto digest = "sha256:" + std::string(64U, '1');
+		const materialization_producer_authority producer{
+			"cxxlens-clang22-materialize",
+			"2.1.0",
+			"1.0.0",
+			std::string(40U, '1'),
+			std::string(40U, '2'),
+			{{"schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_contract.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_report.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_request.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_relation_registry.yaml", digest}}};
+		const materialization_guarantee_authority guarantee{{},
+															{"clang22.materialization-sealed.v1",
+															 "provider.transcript-sealed.v1",
+															 "sdk.claim-envelope-validated.v1"}};
+		auto authority = make_materialization_v2_1_claim_authority(*accepted, producer, guarantee);
+		require(authority.has_value(), "one-task claim authority construction failed");
+
+		auto task = accepted->task_execution(0U);
+		require(task.has_value(), "one-task source replay failed");
+		auto result = make_empty_v2_1_sealed_result(*task, accepted->request());
+		require(result.has_value(), "one-task provider seal fixture failed");
+
+		auto adopted =
+			construct_materialization_bounded_task_claims(*authority, 0U, *task, *result);
+		if (!adopted)
+		{
+			std::cerr << "one-task adoption error: " << adopted.error().code << '/'
+					  << adopted.error().field << '/' << adopted.error().detail << '\n';
+			std::exit(1);
+		}
+		const auto source_digest = task->source_receipt.content_digest;
+		const auto task_input_digest = task->metadata.task_input_digest;
+
+		auto wrong_index =
+			construct_materialization_bounded_task_claims(*authority, 2U, *task, *result);
+		require(!wrong_index && wrong_index.error().field == "task-window" &&
+					wrong_index.error().detail == "sealed-source-authority",
+				"v2.1 one-task adoption accepted a replayed task at the wrong index");
+
+		task->source_receipt.content_digest = "sha256:" + std::string(64U, '0');
+		auto source_drift =
+			construct_materialization_bounded_task_claims(*authority, 0U, *task, *result);
+		require(!source_drift && source_drift.error().field == "task-window" &&
+					source_drift.error().detail == "sealed-source-authority",
+				"v2.1 one-task adoption accepted a mutated source receipt");
+
+		task->source_receipt.content_digest = source_digest;
+		task->metadata.task_input_digest = "sha256:" + std::string(64U, '0');
+		auto task_input_drift =
+			construct_materialization_bounded_task_claims(*authority, 0U, *task, *result);
+		require(!task_input_drift &&
+					((task_input_drift.error().field == "task-window" &&
+					  task_input_drift.error().detail == "request-replay-mismatch") ||
+					 (task_input_drift.error().field == "task-input-spool" &&
+					  task_input_drift.error().detail == "digest")),
+				"v2.1 one-task adoption accepted a mutated task-input receipt");
+		task->metadata.task_input_digest = task_input_digest;
+	}
+
+	void one_task_claim_adoption_maps_spool_bad_alloc_to_no_response()
+	{
+		auto accepted = validate(upgrade_fixture(), 1U);
+		require(accepted.has_value(), "one-task allocation request failed");
+		const auto digest = "sha256:" + std::string(64U, '1');
+		const materialization_producer_authority producer{
+			"cxxlens-clang22-materialize",
+			"2.1.0",
+			"1.0.0",
+			std::string(40U, '1'),
+			std::string(40U, '2'),
+			{{"schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_contract.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_report.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_clang22_materialization_request.schema.yaml", digest},
+			 {"schemas/cxxlens_ng_relation_registry.yaml", digest}}};
+		const materialization_guarantee_authority guarantee{{},
+															{"clang22.materialization-sealed.v1",
+															 "provider.transcript-sealed.v1",
+															 "sdk.claim-envelope-validated.v1"}};
+		auto authority = make_materialization_v2_1_claim_authority(*accepted, producer, guarantee);
+		require(authority.has_value(), "one-task allocation authority construction failed");
+
+		auto task = accepted->task_execution(0U);
+		require(task.has_value(), "one-task allocation source replay failed");
+		auto result = make_empty_v2_1_sealed_result(*task, accepted->request());
+		require(result.has_value(), "one-task allocation provider seal fixture failed");
+
+		{
+			auto source_task = accepted->task_execution(0U);
+			require(source_task.has_value(), "source allocation replay fixture failed");
+			source_task->source =
+				std::make_unique<throwing_source_spool>(std::move(source_task->source));
+			auto rejected = construct_materialization_bounded_task_claims(
+				*authority, 0U, *source_task, *result);
+			require(!rejected && is_materialization_admission_no_response(rejected.error()),
+					"source-spool bad_alloc escaped the v2.1 no-response boundary");
+		}
+
+		{
+			auto input_task = accepted->task_execution(0U);
+			require(input_task.has_value(), "task-input allocation replay fixture failed");
+			input_task->task_input =
+				std::make_unique<throwing_task_input_spool>(std::move(input_task->task_input));
+			auto rejected =
+				construct_materialization_bounded_task_claims(*authority, 0U, *input_task, *result);
+			require(!rejected && is_materialization_admission_no_response(rejected.error()),
+					"task-input bad_alloc escaped the v2.1 no-response boundary");
+		}
 	}
 
 	void protocol_catalog_and_source_metadata_negatives()
@@ -1530,6 +1933,10 @@ int main()
 	shared_catalog_owner_and_single_task_replay();
 	source_dependent_production_admission();
 	task_cursor_enforces_one_live_task_window();
+	metadata_binding_does_not_open_source_window();
+	claim_authority_does_not_retain_task_occurrences();
+	one_task_claim_adoption_replays_and_rejects_binding_drift();
+	one_task_claim_adoption_maps_spool_bad_alloc_to_no_response();
 	protocol_catalog_and_source_metadata_negatives();
 	schema_before_binding_and_version_dispatch();
 	full_schema_and_external_uniqueness_adversarial();

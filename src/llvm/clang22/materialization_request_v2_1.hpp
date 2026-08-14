@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cxxlens/sdk/provider.hpp>
@@ -15,6 +16,32 @@
 
 namespace cxxlens::detail::clang22::materialization
 {
+	class validated_materialization_request_v2_1;
+
+	/** Opaque state which makes source-private request authorities fail closed on move/destruction.
+	 */
+	class materialization_v2_1_request_lifetime
+	{
+	  public:
+		[[nodiscard]] validated_materialization_request_v2_1* owner() const noexcept
+		{
+			return owner_;
+		}
+
+	  private:
+		void bind(validated_materialization_request_v2_1* owner) noexcept
+		{
+			owner_ = owner;
+		}
+		void invalidate() noexcept
+		{
+			owner_ = nullptr;
+		}
+
+		validated_materialization_request_v2_1* owner_{};
+		friend class validated_materialization_request_v2_1;
+	};
+
 	/** Exact bounded auxiliary index whose private spool is being constructed. */
 	enum class materialization_v2_1_auxiliary_spool_purpose : std::uint8_t
 	{
@@ -95,6 +122,116 @@ namespace cxxlens::detail::clang22::materialization
 		std::string provider_execution_id;
 		std::string task_input_digest;
 		sdk::provider::sandbox_requirement sandbox;
+
+		[[nodiscard]] bool
+		operator==(const materialization_v2_1_task_metadata_receipt& other) const noexcept
+		{
+			return task_index == other.task_index && project_id == other.project_id &&
+				catalog_id == other.catalog_id && catalog_digest == other.catalog_digest &&
+				selected_catalog_compile_unit_id == other.selected_catalog_compile_unit_id &&
+				final_relation_compile_unit_id == other.final_relation_compile_unit_id &&
+				variant_id == other.variant_id &&
+				toolchain_context_id == other.toolchain_context_id &&
+				toolchain_digest == other.toolchain_digest &&
+				source_snapshot_id == other.source_snapshot_id && file_id == other.file_id &&
+				logical_path == other.logical_path &&
+				source_content_digest == other.source_content_digest &&
+				source_size_bytes == other.source_size_bytes &&
+				source_encoding == other.source_encoding && line_index_id == other.line_index_id &&
+				source_read_only == other.source_read_only &&
+				condition_universe_id == other.condition_universe_id &&
+				condition_id == other.condition_id &&
+				interpretation_domain == other.interpretation_domain &&
+				provider_task_id == other.provider_task_id &&
+				provider_execution_id == other.provider_execution_id &&
+				task_input_digest == other.task_input_digest &&
+				sandbox.minimum == other.sandbox.minimum &&
+				sandbox.policy_digest == other.sandbox.policy_digest;
+		}
+	};
+
+	/**
+	 * Source-independent task binding used by planning and claim-adoption metadata paths.
+	 *
+	 * The decoded input contains authority metadata only: source and canonical task.v3 bytes must
+	 * remain empty.  This value deliberately contains no sealed source receipt; that authority is
+	 * created only by source-dependent replay.  It never owns a source or task-input spool and is
+	 * therefore safe to use for a bounded metadata replay.
+	 */
+	struct materialization_v2_1_task_metadata_binding
+	{
+		clang22_task_input input;
+		materialization_v2_1_task_metadata_receipt metadata;
+	};
+
+	struct materialization_v2_1_task_execution;
+
+	/**
+	 * Private evidence produced only after both sealed task-window spools have been consumed.
+	 *
+	 * The digest values are intentionally not constructible by task callers. A moved task may
+	 * retain this receipt after its input spool has been transferred to the sealed-result path, but
+	 * downstream validation can only accept evidence issued by the bounded consumer routine.
+	 */
+	class materialization_v2_1_task_window_consumption
+	{
+	  public:
+		materialization_v2_1_task_window_consumption(
+			const materialization_v2_1_task_window_consumption&) = default;
+		materialization_v2_1_task_window_consumption&
+		operator=(const materialization_v2_1_task_window_consumption&) = default;
+		materialization_v2_1_task_window_consumption(
+			materialization_v2_1_task_window_consumption&&) noexcept = default;
+		materialization_v2_1_task_window_consumption&
+		operator=(materialization_v2_1_task_window_consumption&&) noexcept = default;
+
+		[[nodiscard]] std::uint64_t source_size_bytes() const noexcept
+		{
+			return source_size_bytes_;
+		}
+		[[nodiscard]] std::uint64_t task_input_size_bytes() const noexcept
+		{
+			return task_input_size_bytes_;
+		}
+		[[nodiscard]] const std::string& source_content_digest() const noexcept
+		{
+			return source_content_digest_;
+		}
+		[[nodiscard]] const std::string& task_input_digest() const noexcept
+		{
+			return task_input_digest_;
+		}
+
+	  private:
+		materialization_v2_1_task_window_consumption(std::uint64_t source_size_bytes,
+													 std::string source_content_digest,
+													 std::uint64_t task_input_size_bytes,
+													 std::string task_input_digest)
+			: source_size_bytes_{source_size_bytes},
+			  source_content_digest_{std::move(source_content_digest)},
+			  task_input_size_bytes_{task_input_size_bytes},
+			  task_input_digest_{std::move(task_input_digest)}
+		{
+		}
+		[[nodiscard]] static materialization_v2_1_task_window_consumption
+		make(std::uint64_t source_size_bytes,
+			 std::string source_content_digest,
+			 std::uint64_t task_input_size_bytes,
+			 std::string task_input_digest)
+		{
+			return materialization_v2_1_task_window_consumption{source_size_bytes,
+																std::move(source_content_digest),
+																task_input_size_bytes,
+																std::move(task_input_digest)};
+		}
+
+		std::uint64_t source_size_bytes_{};
+		std::string source_content_digest_;
+		std::uint64_t task_input_size_bytes_{};
+		std::string task_input_digest_;
+
+		friend sdk::result<void>
+		consume_materialization_v2_1_task_window(materialization_v2_1_task_execution& task);
 	};
 
 	/** Opaque lifetime token held by a task-at-a-time cursor result. */
@@ -129,6 +266,13 @@ namespace cxxlens::detail::clang22::materialization
 		std::unique_ptr<clang22_task_source_spool> source;
 		std::unique_ptr<clang22_task_input_spool> task_input;
 
+		/** Evidence issued by the source-private bounded window consumer, if any. */
+		[[nodiscard]] const materialization_v2_1_task_window_consumption*
+		consumed_window() const noexcept
+		{
+			return consumed_window_ ? &*consumed_window_ : nullptr;
+		}
+
 	  private:
 		/**
 		 * Source-private lease installed only by materialization_v2_1_task_cursor.  It is
@@ -136,12 +280,17 @@ namespace cxxlens::detail::clang22::materialization
 		 * cursor cannot advance while any bounded task window is still owned by a consumer.
 		 */
 		std::shared_ptr<void> cursor_lease;
+		std::optional<materialization_v2_1_task_window_consumption> consumed_window_;
 
 		void attach_cursor_lease(std::shared_ptr<void> lease) noexcept;
 		friend class materialization_v2_1_task_cursor;
+		friend sdk::result<void>
+		consume_materialization_v2_1_task_window(materialization_v2_1_task_execution& task);
 	};
 
-	class validated_materialization_request_v2_1;
+	/** Consume and seal both bounded task-window spools before any input spool is moved. */
+	[[nodiscard]] sdk::result<void>
+	consume_materialization_v2_1_task_window(materialization_v2_1_task_execution& task);
 
 	/**
 	 * Source-independent v2.1 pass-two result without an all-task/source/payload representation.
@@ -180,6 +329,9 @@ namespace cxxlens::detail::clang22::materialization
 		 */
 		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_receipt>
 		task_metadata(std::uint64_t task_index);
+		/** Replay one source-independent task binding without opening source-dependent spools. */
+		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_binding>
+		task_metadata_binding(std::uint64_t task_index);
 
 	  private:
 		prevalidated_materialization_request_v2_1(
@@ -271,10 +423,17 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] const prevalidated_materialization_request_v2_1& request() const noexcept;
 		[[nodiscard]] const streamed_materialization_request_identity& identity() const noexcept;
+		/** Source-private lifetime state used by bounded authorities; never exposes request
+		 * payload. */
+		[[nodiscard]] const std::shared_ptr<materialization_v2_1_request_lifetime>&
+		lifetime_token() const noexcept;
 		/** Replay only the authenticated, source-independent global request authority. */
 		[[nodiscard]] sdk::result<json_document> replay_global_authority();
 		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_receipt>
 		task_metadata(std::uint64_t task_index);
+		/** Replay one source-independent task binding without opening source-dependent spools. */
+		[[nodiscard]] sdk::result<materialization_v2_1_task_metadata_binding>
+		task_metadata_binding(std::uint64_t task_index);
 		/** Replay one fully bound task without materializing its source or task.v3 bytes. */
 		[[nodiscard]] sdk::result<materialization_v2_1_task_execution>
 		task_execution(std::uint64_t task_index);
@@ -285,6 +444,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		prevalidated_materialization_request_v2_1 request_;
 		streamed_materialization_request_identity identity_;
+		std::shared_ptr<materialization_v2_1_request_lifetime> lifetime_;
 
 		friend sdk::result<validated_materialization_request_v2_1>
 			admit_materialization_request_v2_1(prevalidated_materialization_request_v2_1);

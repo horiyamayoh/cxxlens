@@ -8,6 +8,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string_view>
 #include <thread>
@@ -446,6 +447,48 @@ namespace cxxlens::sdk::provider
 			}
 		}
 
+		[[nodiscard]] bool write_process_group_ack(const int destination,
+												   const std::byte value) noexcept
+		{
+			for (;;)
+			{
+				const auto written = ::write(destination, &value, sizeof(value));
+				if (written == sizeof(value))
+					return true;
+				if (written < 0 && errno == EINTR)
+					continue;
+				return false;
+			}
+		}
+
+		[[nodiscard]] std::optional<bool> read_process_group_ack(const int source)
+		{
+			const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{100};
+			for (;;)
+			{
+				const auto now = std::chrono::steady_clock::now();
+				if (now >= deadline)
+					return std::nullopt;
+				const auto remaining =
+					std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+				const auto timeout = static_cast<int>(std::clamp<std::int64_t>(
+					remaining.count(), 1, std::numeric_limits<int>::max()));
+				pollfd descriptor{source, POLLIN | POLLHUP | POLLERR, 0};
+				const auto polled = ::poll(&descriptor, 1U, timeout);
+				if (polled < 0 && errno == EINTR)
+					continue;
+				if (polled <= 0)
+					return std::nullopt;
+				std::byte value{};
+				const auto received = ::read(source, &value, sizeof(value));
+				if (received == sizeof(value))
+					return value == std::byte{0x01};
+				if (received == 0 ||
+					(received < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK))
+					return false;
+			}
+		}
+
 		class linux_process_port final : public provider_process_port,
 										 public detail::replayable_provider_process_port
 		{
@@ -536,12 +579,15 @@ namespace cxxlens::sdk::provider
 				auto input = std::forward<InputFactory>(input_factory)();
 				auto output_pipe = make_pipe();
 				auto error_pipe = make_pipe();
+				auto process_group_pipe = make_pipe();
 				if (!input)
 					return cxxlens::sdk::unexpected(std::move(input.error()));
 				if (!output_pipe)
 					return cxxlens::sdk::unexpected(std::move(output_pipe.error()));
 				if (!error_pipe)
 					return cxxlens::sdk::unexpected(std::move(error_pipe.error()));
+				if (!process_group_pipe)
+					return cxxlens::sdk::unexpected(std::move(process_group_pipe.error()));
 
 				std::vector<std::string> environment_storage;
 				environment_storage.reserve(invocation.environment.size() + 2U);
@@ -578,7 +624,15 @@ namespace cxxlens::sdk::provider
 										  verified->digest};
 				if (child == 0)
 				{
-					(void)::setpgid(0, 0);
+					process_group_pipe->read.reset();
+					const bool process_group_established = ::setpgid(0, 0) == 0;
+					if (!write_process_group_ack(process_group_pipe->write.get(),
+												 process_group_established ? std::byte{0x01}
+																		   : std::byte{0x00}))
+						::_exit(126);
+					process_group_pipe->write.reset();
+					if (!process_group_established)
+						::_exit(126);
 					if (::dup2(input->get(), STDIN_FILENO) < 0 ||
 						::dup2(output_pipe->write.get(), STDOUT_FILENO) < 0 ||
 						::dup2(error_pipe->write.get(), STDERR_FILENO) < 0)
@@ -600,7 +654,37 @@ namespace cxxlens::sdk::provider
 					::_exit(127);
 				}
 
-				(void)::setpgid(child, child);
+				process_group_pipe->write.reset();
+				const auto parent_setpgid = ::setpgid(child, child);
+				const auto parent_setpgid_errno = errno;
+				const auto process_group_ack =
+					read_process_group_ack(process_group_pipe->read.get());
+				const auto actual_process_group = ::getpgid(child);
+				const bool parent_group_confirmed =
+					parent_setpgid == 0 || (parent_setpgid < 0 && parent_setpgid_errno == EACCES);
+				const bool process_group_established = process_group_ack && *process_group_ack &&
+					parent_group_confirmed && actual_process_group == child;
+				process_group_pipe->read.reset();
+				if (!process_group_established)
+				{
+					(void)::kill(child, SIGKILL);
+					int failed_status{};
+					while (::waitpid(child, &failed_status, 0) < 0 && errno == EINTR)
+					{
+					}
+					return process_output{process_status::launch_failed,
+										  0,
+										  0,
+										  {},
+										  "provider process-group setup failed",
+										  sandbox_evidence(*policy,
+														   invocation.budget,
+														   sandbox_assurance::none,
+														   false,
+														   verified->digest),
+										  "provider.runtime-unavailable",
+										  verified->digest};
+				}
 				input->reset();
 				output_pipe->write.reset();
 				error_pipe->write.reset();
@@ -622,6 +706,18 @@ namespace cxxlens::sdk::provider
 				auto terminate = [&](const process_status status)
 				{
 					(void)::kill(-child, SIGKILL);
+					if (!reaped)
+					{
+						// A descendant can be concurrent with the first group traversal; keep the
+						// leader unreaped and retry for a bounded handoff window.
+						const auto signal_deadline =
+							std::chrono::steady_clock::now() + std::chrono::milliseconds{100};
+						while (std::chrono::steady_clock::now() < signal_deadline)
+						{
+							std::this_thread::sleep_for(std::chrono::milliseconds{1});
+							(void)::kill(-child, SIGKILL);
+						}
+					}
 					while (::waitpid(child, &wait_status, 0) < 0 && errno == EINTR)
 					{
 					}
@@ -670,11 +766,15 @@ namespace cxxlens::sdk::provider
 						terminate(process_status::output_limit);
 						break;
 					}
-					if (!reaped)
+					// Keep the group leader waitable while a descendant may still hold an
+					// output pipe; timeout cleanup needs its stable process-group identity.
+					if (!reaped && stdout_ended && stderr_ended)
 					{
 						const auto waited = ::waitpid(child, &wait_status, WNOHANG);
 						if (waited == child)
+						{
 							reaped = true;
+						}
 						else if (waited < 0 && errno != EINTR)
 						{
 							terminate(process_status::launch_failed);

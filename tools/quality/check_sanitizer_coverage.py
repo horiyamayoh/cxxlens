@@ -24,6 +24,23 @@ INSTALL_DATABASES = {
     "examples-consumer-build/compile_commands.json",
     "real_project_consumer-build/compile_commands.json",
 }
+TSAN_NATIVE_MATERIALIZER_EXCLUSION = r"^install\.clang22-materializer-success$"
+TSAN_CTEST_SELECTION = [
+    "ctest",
+    "--preset",
+    "tsan",
+    "--parallel",
+    "1",
+    "--label-exclude",
+    "quality",
+    "--exclude-regex",
+    TSAN_NATIVE_MATERIALIZER_EXCLUSION,
+    "--output-junit",
+    "ctest.xml",
+]
+TSAN_CTEST_STEP_NAME = "Run exact TSan CTest selection"
+# The exact selection contract is scoped to the thread-sanitizer job; the
+# ASan/UBSan selection has an independent quality owner.
 
 
 class SanitizerCoverageError(ValueError):
@@ -39,6 +56,73 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     if not isinstance(document, dict):
         fail(f"expected mapping: {path}")
     return document
+
+
+def _shell_tokens(script: str) -> list[str]:
+    lexer = shlex.shlex(script, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    try:
+        return [token for token in lexer if token != "\n"]
+    except ValueError as error:
+        fail(f"cannot parse shell script: {error}")
+
+
+def extract_tsan_selection_script(workflow: str) -> str:
+    try:
+        document = yaml.safe_load(workflow)
+    except yaml.YAMLError as error:
+        fail(f"sanitizer workflow YAML is invalid: {error}")
+    if not isinstance(document, dict):
+        fail("sanitizer workflow must be a mapping")
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        fail("sanitizer workflow is missing jobs")
+    thread_job = jobs.get("thread-sanitizer")
+    if not isinstance(thread_job, dict):
+        fail("sanitizer workflow is missing the thread-sanitizer job")
+    steps = thread_job.get("steps")
+    if not isinstance(steps, list):
+        fail("thread-sanitizer job is missing steps")
+    selection_steps = [
+        step
+        for step in steps
+        if isinstance(step, dict) and step.get("name") == TSAN_CTEST_STEP_NAME
+    ]
+    if len(selection_steps) != 1:
+        fail(
+            "thread-sanitizer job must contain exactly one exact TSan CTest step"
+        )
+    selection_step = selection_steps[0]
+    run = selection_step.get("run")
+    if not isinstance(run, str):
+        fail("exact TSan CTest step must contain a shell run script")
+    for step in steps:
+        if step is selection_step or not isinstance(step, dict):
+            continue
+        other_run = step.get("run")
+        if not isinstance(other_run, str):
+            continue
+        tokens = _shell_tokens(other_run)
+        if any(
+            "ctest" in token
+            and token not in {"ctest.xml"}
+            and not token.endswith("/ctest.xml")
+            for token in tokens
+        ):
+            fail("thread-sanitizer contains an additional CTest invocation")
+        if any("$" in token for token in tokens):
+            fail("thread-sanitizer contains dynamic shell command construction")
+    return run
+
+
+def validate_tsan_ctest_selection(tsan_script: str) -> None:
+    tokens = _shell_tokens(tsan_script)
+    if tokens != TSAN_CTEST_SELECTION:
+        fail(
+            "TSan CTest selection differs from the accepted exact selection: "
+            f"expected {TSAN_CTEST_SELECTION!r}, got {tokens!r}"
+        )
 
 
 def validate_contract(root: pathlib.Path) -> dict[str, Any]:
@@ -92,6 +176,7 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
         ".github/workflows/nightly.yml": [
             "check_sanitizer_coverage.py",
             "--require-install-consumers",
+            "--exclude-regex '^install\\.clang22-materializer-success$'",
         ],
     }
     for relative, markers in required_markers.items():
@@ -99,6 +184,9 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
         for marker in markers:
             if marker not in text:
                 fail(f"sanitizer implementation marker is missing: {relative}: {marker}")
+
+    workflow = (root / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
+    validate_tsan_ctest_selection(extract_tsan_selection_script(workflow))
     return contract
 
 

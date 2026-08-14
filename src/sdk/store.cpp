@@ -6802,6 +6802,13 @@ namespace cxxlens::sdk
 					prequalification->bytes[19U] != std::byte{2U})
 					return unexpected(
 						store_error("store.sqlite-failure", "sqlite-journal-mode", "expected-wal"));
+				// A successful target-independent qualification is not a production authorization.
+				// Keep active source WAL+SHM unavailable until the native-OK projection has its
+				// accepted exact implementation, complete counterexample matrix, and independent
+				// review. Returning before SQLite xOpen/xShmMap prevents retry loops from turning a
+				// deliberately disabled route into an opaque disk-I/O failure.
+				if (!sqlite_source_shm_native_ok_projection_production_activation_enabled())
+					return unexpected(sqlite_source_shm_qualification_failure());
 				auto qualified = qualify_active_wal_source_shm(
 					api, path, vfs_name, backend_lifetime, observation, *captured);
 				if (!qualified)

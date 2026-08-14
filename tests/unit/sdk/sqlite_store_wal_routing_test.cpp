@@ -348,18 +348,12 @@ namespace
 		active_wal_sidecar_fixture active{path};
 		const auto before = capture_files(active.path());
 		auto opened = sdk::open_sqlite_snapshot_store(active.path().string(), value);
-#if defined(__linux__) && defined(F_OFD_SETLK)
-		require(opened.has_value(), "active current WAL+SHM route was unavailable");
-		require_current(*opened, value, expected, "active current WAL+SHM authority drifted");
+		require_error(
+			opened,
+			{"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"},
+			"active current WAL+SHM route did not report fail-closed qualification unavailability");
 		require(capture_files(active.path()) == before,
-				"active current WAL+SHM route changed source bytes");
-#else
-		require_error(opened,
-					  {"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"},
-					  "active current WAL+SHM route did not report qualification unavailability");
-		require(capture_files(active.path()) == before,
-				"unavailable active current WAL+SHM route changed source bytes");
-#endif
+				"fail-closed active current WAL+SHM route changed source bytes");
 
 		// A mid-factory identity replacement must be injected after the source census and before
 		// finish_private_read().  The public API has no deterministic barrier at that boundary;

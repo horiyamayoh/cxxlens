@@ -35,6 +35,17 @@ namespace cxxlens::detail::clang22::materialization
 	using materialization_origin_association_consumer =
 		std::function<sdk::result<void>(const materialization_origin_association&)>;
 
+	/** Source-private canonical claim-batch census produced without a request-wide claim vector. */
+	struct materialization_bounded_claim_batch_status
+	{
+		std::string content_digest;
+		std::uint64_t claim_count{};
+		std::uint64_t unresolved_count{};
+		std::uint64_t conflict_count{};
+		std::uint64_t differential_disagreement_count{};
+		std::size_t partition_count{};
+	};
+
 	/**
 	 * Replayable source-private typed partition ingress for DF-0200.
 	 *
@@ -59,6 +70,10 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
 		begin(const validated_materialization_request& request);
 
+		/** Begin a bounded source using v2.1 request authority without a legacy task vector. */
+		[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
+		begin(const materialization_v2_1_claim_authority& authority);
+
 		/** Consume exactly one bounded task window before the cursor advances. */
 		[[nodiscard]] sdk::result<void> consume_task(materialization_bounded_task_claims task);
 
@@ -75,6 +90,13 @@ namespace cxxlens::detail::clang22::materialization
 			const materialization_canonicalization_edge_consumer& consumer);
 		[[nodiscard]] sdk::result<void>
 		replay_origin_associations(const materialization_origin_association_consumer& consumer);
+
+		/**
+		 * Recompute the public claim-batch v2 digest from bounded partition runs. The
+		 * implementation retains at most one decoded occurrence per partition while merging; it
+		 * never constructs a request-wide sdk::claim vector.
+		 */
+		[[nodiscard]] sdk::result<materialization_bounded_claim_batch_status> claim_batch_status();
 
 		/** Return one partition's bounded report census and identity metadata. */
 		[[nodiscard]] sdk::result<materialization_bounded_partition_metadata>

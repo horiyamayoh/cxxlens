@@ -64,7 +64,7 @@ checks:
   - id: sanitizer.tsan
     version: 1
     owner: nightly
-    command: ctest --preset tsan --label-exclude quality
+    command: ctest --preset tsan --label-exclude quality --exclude-regex '^install\.clang22-materializer-success$'
     inputs: [CMakeLists.txt, cmake, include, src, tests]
     dimensions: [tsan, clang22]
     configurations: [tsan-clang22]
@@ -75,6 +75,13 @@ checks:
     inputs: [include, src, .clang-tidy]
     dimensions: [clang22]
     configurations: [clang22]
+  - id: materialization.scale-ingress
+    version: 1
+    owner: nightly
+    command: python tests/install/clang22_materializer_scale_test.py
+    inputs: [tests/install/clang22_materializer_scale_test.py, tools/quality/check_ng_clang22_materialization_scale.py, schemas/cxxlens_ng_clang22_materialization_scale_evidence.schema.yaml]
+    dimensions: [clang22]
+    configurations: [materialization-scale-clang22]
 modes:
   fast:
     owners: [ctest]

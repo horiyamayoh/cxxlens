@@ -628,16 +628,16 @@ namespace
 				"claim construction failed: " + (claims ? std::string{} : failure(claims.error())));
 		require(claims->materializer_semantics_digest() ==
 						"semantic-v2:sha256:"
-						"90d9b5743e0c8a9f83c907505ab8e8acc93bfc44d27bc9ca5bf6b5a4830ec73c" &&
+						"a0480435d30b9921d78529a2f74d68c06a2d812db4923dd7b19ccf0fc2ce8ed6" &&
 					claims->direct_basis_digest() ==
 						"semantic-v2:sha256:"
-						"c2712d691fbc1129da702b202f25b6abf5e49db6101afc0e89ee754cc2f19fc1" &&
+						"ecfb7e110bcafa464dc24145a00ceed6415a2db920a53926693229791a31f739" &&
 					claims->canonical_adoption_transform_digest() ==
 						"semantic-v2:sha256:"
-						"49b0aff4d28b61c713a724137ab65048bcc5d217a364731ba558a19b2f03d347" &&
+						"c5296f17339f70a717e11df92a6893946e31f19e556aa3ac6f9e0d0a630f15f2" &&
 					claims->base_ingestion_transform_digest() ==
 						"semantic-v2:sha256:"
-						"d50e586b5a4ce7019eca8f63a80f3ffa7eb718d69aa584e6d596e98ed5e79b21" &&
+						"37b3a73227ee710a02287d14d6a19ab4706e23279e7e805b46d3cb023b83e197" &&
 					claims->assumption_set_id() ==
 						"assumption-set:semantic-v2:sha256:"
 						"054f2400cc7d6084286f98ff7c22f4fbcf531178fa605b2211346f528862a098",
@@ -1531,6 +1531,23 @@ namespace
 		require(source.has_value() && source->task_count() == request.tasks.size() &&
 					source->partition_count() == request.tasks.size(),
 				"claim stream source did not retain the exact task/partition census");
+		const materialization_store_external_authority external_authority{
+			&*source,
+			&*journal,
+		};
+		auto external_valid = validate_materialization_store_external_authority(external_authority);
+		require(external_valid.has_value(),
+				"Store external authority rejected the sealed journal: " +
+					(external_valid ? std::string{} : failure(external_valid.error())));
+		auto tampered_journal = *journal;
+		tampered_journal.execution_journal_receipt_set_digest =
+			"semantic-v2:sha256:" + std::string(64U, 'f');
+		const materialization_store_external_authority tampered_authority{
+			&*source,
+			&tampered_journal,
+		};
+		require(!validate_materialization_store_external_authority(tampered_authority),
+				"Store external authority accepted a tampered execution journal");
 		std::size_t event_count{};
 		auto replayed = source->replay(
 			[&](const materialization_claim_stream_event& event) -> sdk::result<void>
@@ -1924,6 +1941,31 @@ namespace
 		auto full_reference =
 			construct_materialization_claims(request, full_reference_seals, producer, guarantee);
 		require(full_reference.has_value(), "full recomputation reference failed");
+		auto bounded_status = warm->bounded_claim_source().claim_batch_status();
+		require(
+			bounded_status &&
+				bounded_status->content_digest ==
+					full_reference->final_claim_batch().content_digest &&
+				bounded_status->claim_count ==
+					static_cast<std::uint64_t>(full_reference->final_claim_batch().claims.size()) &&
+				bounded_status->unresolved_count ==
+					static_cast<std::uint64_t>(
+						full_reference->final_claim_batch().unresolved.size()) &&
+				bounded_status->conflict_count ==
+					static_cast<std::uint64_t>(
+						full_reference->final_claim_batch().conflicts.size()) &&
+				bounded_status->differential_disagreement_count ==
+					static_cast<std::uint64_t>(
+						full_reference->final_claim_batch().differential_disagreements.size()) &&
+				bounded_status->partition_count == full_reference->partitions().size(),
+			"bounded claim status differs from the independent full recomputation");
+		auto repeated_bounded_status = warm->bounded_claim_source().claim_batch_status();
+		require(repeated_bounded_status &&
+					repeated_bounded_status->content_digest == bounded_status->content_digest &&
+					repeated_bounded_status->claim_count == bounded_status->claim_count &&
+					repeated_bounded_status->unresolved_count == bounded_status->unresolved_count &&
+					repeated_bounded_status->partition_count == bounded_status->partition_count,
+				"bounded claim status was not replayable");
 
 		std::vector<sdk::partition_draft> warm_partitions;
 		std::vector<sdk::unresolved_reference> warm_unresolved;

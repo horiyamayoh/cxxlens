@@ -141,6 +141,18 @@ def validate_repository(root: pathlib.Path) -> None:
     validated = load_lock(root)
     if validated != lock:
         raise CiSupplyChainError("bootstrap and quality checker loaded different locks")
+    required_developer_packages = {
+        "libclang-22-dev",
+        "libclang-rt-22-dev",
+        "llvm-22-dev",
+    }
+    developer_packages = set(lock["llvm"]["profiles"].get("developer", ()))
+    missing_developer_packages = required_developer_packages - developer_packages
+    if missing_developer_packages:
+        raise CiSupplyChainError(
+            "developer profile lacks required exact Clang development packages: "
+            + ", ".join(sorted(missing_developer_packages))
+        )
     direct = parse_direct_requirements(root / REQUIREMENTS)
     locked = parse_hash_lock(root / REQUIREMENTS_LOCK)
     for name, version in direct.items():
@@ -152,8 +164,8 @@ def validate_repository(root: pathlib.Path) -> None:
         (root / workflow).read_text(encoding="utf-8") for workflow in WORKFLOWS
     )
     expected_profiles = {
-        "--profile developer": 6,
-        "--profile compiler": 2,
+        "--profile developer": 9,
+        "--profile compiler": 0,
         "--profile static-analysis": 1,
         "--profile documentation": 1,
     }

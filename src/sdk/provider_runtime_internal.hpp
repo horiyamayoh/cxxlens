@@ -59,6 +59,9 @@ namespace cxxlens::sdk::provider::detail
 	provider_sealed_transcript_receipt_digest(std::string_view task_id,
 											  std::string_view terminal,
 											  const sealed_provider_transcript& sealed);
+	/** Recompute the exact frame transcript receipt from a bounded decoded frame stream. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
+	provider_frame_transcript_receipt_digest(std::span<const frame> frames);
 
 	/**
 	 * Source-private process extension that lets the runtime write a replayed transcript directly
@@ -95,6 +98,8 @@ namespace cxxlens::sdk::provider::detail
 		std::string environment_digest;
 		std::string measured_executable_digest;
 		sandbox_report sandbox;
+		/** Exact successful stdout bytes retained for a source-private durable replay receipt. */
+		std::vector<std::byte> raw_frame_stream;
 		std::vector<frame> frames;
 		std::vector<unresolved_item> diagnostics;
 		int exit_code{};

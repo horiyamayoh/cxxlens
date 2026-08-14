@@ -21,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:cb2b0a1334e6b870f3c1377e718fe89a2b82ef3c3b5556e32d10901bc83da67b
+authority_census_digest: sha256:ffb83b3ac6de4080f4c0ac98fb99c35caf3635c3081e49a470aae03496b51e96
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
@@ -275,8 +275,8 @@ assignments:
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.ng1-provider-hardening
-      remediation: Accept and independently review the NG1 hardening authority, then implement and independently qualify the protocol lifecycle and resource features.
-    feedback: [DF-0233]
+      remediation: The NG1 hardening authority is accepted and independently reviewed; implement and independently qualify the protocol lifecycle and resource features in #183 before promoting this tracked gap.
+    feedback: [DF-0233, DF-0243]
     surfaces:
       - {domain: provider.message, id: '23:heartbeat'}
       - {domain: provider.profile-feature, id: NG1/durable-resume-token}
@@ -307,6 +307,7 @@ assignments:
       remediation: Consume exact-main production-contract, Clang-Tidy, ASan/UBSan, and TSan evidence in release evaluation.
     surfaces:
       - {domain: quality.check, id: analysis.clang-tidy}
+      - {domain: quality.check, id: materialization.scale-ingress}
       - {domain: quality.check, id: quality.production-contracts}
       - {domain: quality.check, id: sanitizer.asan-ubsan}
       - {domain: quality.check, id: sanitizer.tsan}

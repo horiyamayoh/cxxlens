@@ -5,6 +5,7 @@
 #include <atomic>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <new>
 #include <optional>
@@ -415,6 +416,13 @@ namespace cxxlens::sdk
 
 	namespace detail
 	{
+		struct sqlite_shm_registry_state_quarantine_sink
+		{
+			static_assert(std::atomic<sqlite_shm_mapping_registry_state*>::is_always_lock_free);
+			std::atomic<sqlite_shm_mapping_registry_state*> head{nullptr};
+		};
+		sqlite_shm_registry_state_quarantine_sink registry_state_quarantine_sink_storage_instance;
+
 		[[nodiscard]] std::shared_ptr<sqlite_shm_process_identity_issuer_state>
 		make_identity_issuer_state_for_registry(
 			std::weak_ptr<void> registry_state,
@@ -505,7 +513,53 @@ namespace cxxlens::sdk
 
 			std::shared_ptr<void> owner;
 			std::atomic_bool release_armed{true};
+			std::shared_ptr<sqlite_shm_registry_runtime_owner_box> quarantine_self;
+			std::atomic_bool quarantine_enqueued{false};
+			// Non-owning link; quarantine_self remains the owner for process lifetime.
+			sqlite_shm_registry_runtime_owner_box* quarantine_next{};
 		};
+
+		struct sqlite_shm_registry_runtime_owner_quarantine_sink
+		{
+			static_assert(std::atomic<sqlite_shm_registry_runtime_owner_box*>::is_always_lock_free);
+			std::atomic<sqlite_shm_registry_runtime_owner_box*> head{nullptr};
+		};
+		sqlite_shm_registry_runtime_owner_quarantine_sink
+			runtime_owner_quarantine_sink_storage_instance;
+
+		[[nodiscard]] sqlite_shm_registry_runtime_owner_quarantine_sink&
+		runtime_owner_quarantine_sink() noexcept
+		{
+			// The sink is intentionally never destroyed: its atomic head remains an LSan root for
+			// self-owned quarantined boxes until process termination. No inherited mutex is
+			// touched.
+			return runtime_owner_quarantine_sink_storage_instance;
+		}
+
+		void
+		quarantine_runtime_owner_box(std::shared_ptr<sqlite_shm_registry_runtime_owner_box>& owner,
+									 const bool force) noexcept
+		{
+			if (!owner || (!force && owner->release_armed.load(std::memory_order_acquire)))
+				return;
+			owner->release_armed.store(false, std::memory_order_release);
+			owner->quarantine_self = owner;
+			bool expected = false;
+			if (!owner->quarantine_enqueued.compare_exchange_strong(
+					expected, true, std::memory_order_acq_rel, std::memory_order_acquire))
+			{
+				owner.reset();
+				return;
+			}
+			auto& sink = runtime_owner_quarantine_sink();
+			auto* previous = sink.head.load(std::memory_order_acquire);
+			do
+			{
+				owner->quarantine_next = previous;
+			} while (!sink.head.compare_exchange_weak(
+				previous, owner.get(), std::memory_order_release, std::memory_order_acquire));
+			owner.reset();
+		}
 
 		enum class sqlite_shm_registry_activity_phase : std::uint8_t
 		{
@@ -719,6 +773,8 @@ namespace cxxlens::sdk
 			friend class ::cxxlens::sdk::sqlite_shm_writer_member_authority;
 
 		  private:
+			static void quarantine_stale_state(sqlite_shm_mapping_registry_state* state) noexcept;
+
 			struct alias_record
 			{
 				alias_record(const std::uint64_t alias_token,
@@ -841,12 +897,18 @@ namespace cxxlens::sdk
 							registry_state_destruction_count.fetch_add(1U,
 																	   std::memory_order_relaxed);
 						}
+						else
+						{
+							quarantine_stale_state(state);
+						}
 					},
 				};
 			}
 
 			~sqlite_shm_mapping_registry_state()
 			{
+				for (auto& alias : aliases_)
+					quarantine_runtime_owner_box(alias.runtime_lifetime.owner_box_, false);
 				activity_emergency_latch_->store(true, std::memory_order_release);
 			}
 
@@ -919,7 +981,10 @@ namespace cxxlens::sdk
 				std::scoped_lock lock{mutex_};
 				synchronize_activity_controls_locked();
 				if (!current(process_epoch_))
+				{
+					quarantine_runtime_owner_box(candidate.owner_box_, true);
 					return rejection(sqlite_shm_lease_rejection_reason::stale_token);
+				}
 				if (admission_quarantined_locked())
 					return rejection(sqlite_shm_lease_rejection_reason::quarantined,
 									 sqlite_shm_lease_recovery_action::quarantine_no_retry);
@@ -6741,7 +6806,11 @@ namespace cxxlens::sdk
 			{
 				auto owner = std::move(alias.runtime_lifetime.owner_box_);
 				if (owner)
+				{
+					if (!owner->quarantine_enqueued.load(std::memory_order_acquire))
+						owner->quarantine_self.reset();
 					owner->release_armed.store(true, std::memory_order_release);
+				}
 				alias.runtime_lifetime.process_seal_.reset();
 				alias.runtime_lifetime.process_epoch_ = 0U;
 				alias.phase = sqlite_shm_registry_alias_phase::detached;
@@ -7439,7 +7508,22 @@ namespace cxxlens::sdk
 			std::size_t ambiguous_lookup_count_{};
 			bool registry_quarantined_{};
 			std::atomic_bool emergency_quarantined_{false};
+			// Non-owning link for the process-lifetime quarantine root. The sink retains the
+			// state when its epoch is stale, so the custom deleter never deletes it after fork.
+			sqlite_shm_mapping_registry_state* quarantine_next_{};
 		};
+
+		void sqlite_shm_mapping_registry_state::quarantine_stale_state(
+			sqlite_shm_mapping_registry_state* state) noexcept
+		{
+			auto& sink = registry_state_quarantine_sink_storage_instance;
+			auto* previous = sink.head.load(std::memory_order_acquire);
+			do
+			{
+				state->quarantine_next_ = previous;
+			} while (!sink.head.compare_exchange_weak(
+				previous, state, std::memory_order_release, std::memory_order_acquire));
+		}
 	} // namespace detail
 
 	sqlite_shm_reader_open_authority::sqlite_shm_reader_open_authority(
@@ -8232,8 +8316,16 @@ namespace cxxlens::sdk
 	{
 	}
 
-	sqlite_shm_registry_runtime_lifetime_pin::~sqlite_shm_registry_runtime_lifetime_pin() noexcept =
-		default;
+	sqlite_shm_registry_runtime_lifetime_pin::~sqlite_shm_registry_runtime_lifetime_pin() noexcept
+	{
+		// A moved-out or stale child pin must not leave the epoch-aware custom deleter with an
+		// unreachable raw box.  Keep it in the same process-lifetime root used for quarantined
+		// aliases; the stale epoch still prevents any native owner destructor from running.
+		if (owner_box_ &&
+			(!process_seal_ || process_epoch_ == 0U ||
+			 process_seal_->process_epoch->load(std::memory_order_acquire) != process_epoch_))
+			detail::quarantine_runtime_owner_box(owner_box_, true);
+	}
 
 	sqlite_shm_registry_runtime_lifetime_pin::sqlite_shm_registry_runtime_lifetime_pin(
 		sqlite_shm_registry_runtime_lifetime_pin&& other) noexcept
