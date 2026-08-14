@@ -37,6 +37,14 @@ aggregate source, 1 GiB raw input, limit-plus-one, and pipe-fragmented input) an
 records `wait4` peak RSS plus exact stdout/stderr digests. An explicitly selected
 subset may also run through the installed materializer.
 
+`clang22_materializer_negative_test.py` runs the installed executable through two
+authority-bound negative paths: a raw-input-only request-schema rejection, and a
+fresh SQLite non-genesis request whose `head_current` observation is the exact
+`store.current-not-found`/`absent` case. It verifies the compact response, exact
+operation/path, discarded logical draft, zero publication, and empty stderr. A
+non-`store.current-not-found` `head_current` SDK error still requires an injected
+Store failure seam and is not claimed by this install test.
+
 `check_ng_clang22_materialization_scale.py` is an independent checker. The report
 is intentionally marked `release_qualification: false` and `semantic_status:
 partial`, with `resource_qualification: false`: ingress scale evidence and

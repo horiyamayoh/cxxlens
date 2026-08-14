@@ -938,6 +938,7 @@ foreach(
         sdk-consumer
         clang22-sdk-consumer
         clang22-materializer-success
+        clang22-materializer-negative
         real-project-consumer
         real-project-incompatible-version
         examples-consumer
