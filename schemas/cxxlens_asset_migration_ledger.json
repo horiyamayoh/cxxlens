@@ -1,5 +1,5 @@
 {
-  "asset_count": 659,
+  "asset_count": 661,
   "assets": [
     {
       "authority": "active",
@@ -1159,6 +1159,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0099-provider-ng1-hardening.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0100-ng1-resume-provider-digest-grammar.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3720,6 +3727,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/install/clang22_materializer_negative_test.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/install/clang22_materializer_scale_test.py",
       "removal_issue": null,
       "replacement": null,
@@ -4616,7 +4630,7 @@
     }
   ],
   "classifications": {
-    "active": 623,
+    "active": 625,
     "archived": 35,
     "generated": 1
   },
