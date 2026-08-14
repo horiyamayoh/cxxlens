@@ -46,4 +46,10 @@ namespace cxxlens::detail::clang22::materialization
 	make_materialization_streaming_store_transaction(
 		const validated_materialization_request& request,
 		const materialization_bounded_claim_source& source);
+
+	/** Build Store metadata from a v2.1 bounded typed source. */
+	[[nodiscard]] sdk::result<streaming_prepared_store_transaction>
+	make_materialization_streaming_store_transaction(
+		const materialization_v2_1_claim_authority& authority,
+		const materialization_bounded_claim_source& source);
 } // namespace cxxlens::detail::clang22::materialization

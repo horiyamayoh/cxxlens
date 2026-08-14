@@ -7,7 +7,9 @@
 #include <vector>
 
 #include "materialization_claim_stream.hpp"
+#include "materialization_claims.hpp"
 #include "materialization_incremental_receipt.hpp"
+#include "materialization_request_v2_1.hpp"
 #include "materialization_seal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
@@ -94,9 +96,20 @@ namespace cxxlens::detail::clang22::materialization
 					  const materialization_producer_authority& producer_authority,
 					  const materialization_guarantee_authority& guarantee_authority);
 
+		/** Begin production ingress from a v2.1 request without a legacy task vector. */
+		[[nodiscard]] static sdk::result<materialization_incremental_ingress>
+		begin_dynamic(validated_materialization_request_v2_1& request,
+					  const materialization_v2_1_claim_authority& claim_authority,
+					  const materialization_incremental_selected_request_binding_set& binding_set);
+
 		/** Consume only the canonical next task and destroy its input before returning. */
 		[[nodiscard]] sdk::result<void>
 		consume_task(materialization_incremental_task_ingress task) &&;
+
+		/** Consume one cursor-owned v2.1 task window before it is released. */
+		[[nodiscard]] sdk::result<void>
+		consume_task(materialization_v2_1_task_execution& task_execution,
+					 materialization_incremental_task_ingress task) &&;
 
 		/** Seal the exact task receipt set and return the immutable journal receipt. */
 		[[nodiscard]] sdk::result<materialization_incremental_execution_journal_receipt>
@@ -122,6 +135,10 @@ namespace cxxlens::detail::clang22::materialization
 		const materialization_producer_authority* producer_authority_{};
 		const materialization_guarantee_authority* guarantee_authority_{};
 		bool dynamic_partition_ids_{};
+		const validated_materialization_request_v2_1* v2_request_{};
+		const materialization_v2_1_claim_authority* claim_authority_{};
+		const materialization_incremental_selected_request_binding_set* binding_set_{};
+		std::size_t v2_task_count_{};
 
 		materialization_incremental_ingress(
 			const validated_materialization_request& request,
@@ -129,6 +146,16 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<std::vector<std::string>> expected_partition_ids,
 			const materialization_producer_authority* producer_authority = nullptr,
 			const materialization_guarantee_authority* guarantee_authority = nullptr,
-			bool dynamic_partition_ids = false);
+			bool dynamic_partition_ids = false,
+			const validated_materialization_request_v2_1* v2_request = nullptr,
+			const materialization_v2_1_claim_authority* claim_authority = nullptr,
+			std::size_t v2_task_count = 0U);
+
+		materialization_incremental_ingress(
+			std::string request_id,
+			std::size_t task_count,
+			const validated_materialization_request_v2_1& request,
+			const materialization_v2_1_claim_authority& claim_authority,
+			const materialization_incremental_selected_request_binding_set& binding_set);
 	};
 } // namespace cxxlens::detail::clang22::materialization

@@ -706,6 +706,120 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(ingress_error("receipt.partition", "digest-mismatch"));
 			return {};
 		}
+		[[nodiscard]] sdk::result<void> validate_task_streams_v2(
+			const materialization_v2_1_claim_authority& authority,
+			const materialization_incremental_selected_request_binding_set& binding_set,
+			const std::size_t task_index,
+			const std::span<const std::string> expected_partition_ids,
+			const materialization_v2_1_task_execution& task,
+			const sealed_materialization_result& result,
+			const materialization_incremental_task_receipt& receipt,
+			std::vector<std::unique_ptr<materialization_replayable_spool>>& spools,
+			const bool dynamic_partition_ids,
+			std::vector<std::string>* discovered_partition_ids)
+		{
+			if (spools.empty() ||
+				(!dynamic_partition_ids && spools.size() != expected_partition_ids.size()))
+				return sdk::unexpected(ingress_error("partitions", "exact-census"));
+			auto expected_events = materialization_incremental_receipt_event_projections(
+				authority, task_index, task, result, expected_partition_ids);
+			if (!expected_events)
+				return sdk::unexpected(std::move(expected_events.error()));
+			auto expected_receipt = make_materialization_incremental_task_receipt(
+				authority,
+				binding_set,
+				task_index,
+				task,
+				receipt.provider_stdout_byte_count,
+				receipt.provider_stdout_sha256,
+				receipt.decoded_provider_frame_count,
+				receipt.provider_frame_transcript_digest,
+				receipt.provider_sealed_transcript_digest,
+				std::span<const materialization_incremental_event_projection>{*expected_events});
+			if (!expected_receipt || expected_receipt->partition != receipt.partition ||
+				expected_receipt->event != receipt.event ||
+				expected_receipt->claim != receipt.claim || expected_receipt->row != receipt.row ||
+				expected_receipt->coverage != receipt.coverage ||
+				expected_receipt->unresolved != receipt.unresolved ||
+				expected_receipt->pre_encoder_task_receipt_seal_digest !=
+					receipt.pre_encoder_task_receipt_seal_digest)
+				return sdk::unexpected(ingress_error("result-oracle", "receipt-binding"));
+			auto expected_provider_seal =
+				sdk::provider::detail::provider_sealed_transcript_receipt_digest(
+					result.provider_task_id(), "provider.success", result.provider_seal());
+			if (!expected_provider_seal ||
+				receipt.provider_sealed_transcript_digest != *expected_provider_seal)
+				return sdk::unexpected(ingress_error("result-oracle", "provider-seal-binding"));
+			std::vector<std::string> oracle_partition_ids;
+			for (const auto& event : *expected_events)
+				if (oracle_partition_ids.empty() ||
+					oracle_partition_ids.back() != event.partition_id)
+					oracle_partition_ids.push_back(event.partition_id);
+			if (oracle_partition_ids.empty() || !std::ranges::is_sorted(oracle_partition_ids) ||
+				std::ranges::adjacent_find(oracle_partition_ids) != oracle_partition_ids.end())
+				return sdk::unexpected(ingress_error("partitions", "oracle-order"));
+			if (dynamic_partition_ids)
+			{
+				if (spools.size() != oracle_partition_ids.size())
+					return sdk::unexpected(ingress_error("partitions", "exact-census"));
+				if (discovered_partition_ids != nullptr)
+					*discovered_partition_ids = oracle_partition_ids;
+			}
+			const auto request_id = authority.materialization_request_id();
+			const auto task_id = task.metadata.provider_task_id;
+			for (std::size_t index{}; index < spools.size(); ++index)
+			{
+				if (!spools[index])
+					return sdk::unexpected(ingress_error("partitions", "null-spool"));
+				const auto& partition_ids =
+					dynamic_partition_ids ? oracle_partition_ids : expected_partition_ids;
+				if (index >= partition_ids.size())
+					return sdk::unexpected(ingress_error("partitions", "exact-census"));
+				std::size_t expected_index{};
+				auto expected_begin = std::ranges::find_if(
+					*expected_events,
+					[&](const materialization_incremental_event_projection& event)
+					{
+						return event.partition_id == partition_ids[index];
+					});
+				if (expected_begin == expected_events->end())
+					return sdk::unexpected(ingress_error("result-oracle", "partition-missing"));
+				auto expected_end = expected_begin;
+				while (expected_end != expected_events->end() &&
+					   expected_end->partition_id == partition_ids[index])
+					++expected_end;
+				const std::span<const materialization_incremental_event_projection>
+					expected_partition{&*expected_begin,
+									   static_cast<std::size_t>(expected_end - expected_begin)};
+				auto replay = replay_materialization_partition_event_stream(
+					*spools[index],
+					request_id,
+					[&](const std::uint64_t,
+						const materialization_partition_event_kind kind,
+						const std::span<const std::byte> key,
+						const std::span<const std::byte> payload) -> sdk::result<void>
+					{
+						if (expected_index >= expected_partition.size())
+							return sdk::unexpected(
+								ingress_error("result-oracle", "stream-extra-event"));
+						const auto& expected = expected_partition[expected_index];
+						if (expected.task_id != task_id || expected.kind != kind ||
+							expected.key.size() != key.size() ||
+							expected.payload.size() != payload.size() ||
+							!std::ranges::equal(expected.key, key) ||
+							!std::ranges::equal(expected.payload, payload))
+							return sdk::unexpected(
+								ingress_error("result-oracle", "stream-event-mismatch"));
+						++expected_index;
+						return {};
+					});
+				if (!replay || expected_index != expected_partition.size())
+					return sdk::unexpected(
+						replay ? ingress_error("result-oracle", "stream-event-missing")
+							   : std::move(replay.error()));
+			}
+			return {};
+		}
 	} // namespace
 
 	materialization_incremental_ingress::materialization_incremental_ingress(
@@ -714,11 +828,28 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<std::vector<std::string>> expected_partition_ids,
 		const materialization_producer_authority* producer_authority,
 		const materialization_guarantee_authority* guarantee_authority,
-		const bool dynamic_partition_ids)
+		const bool dynamic_partition_ids,
+		const validated_materialization_request_v2_1* v2_request,
+		const materialization_v2_1_claim_authority* claim_authority,
+		const std::size_t v2_task_count)
 		: request_{&request}, request_id_{std::move(request_id)},
 		  expected_partition_ids_{std::move(expected_partition_ids)},
 		  task_receipts_(request.tasks.size()), producer_authority_{producer_authority},
-		  guarantee_authority_{guarantee_authority}, dynamic_partition_ids_{dynamic_partition_ids}
+		  guarantee_authority_{guarantee_authority}, dynamic_partition_ids_{dynamic_partition_ids},
+		  v2_request_{v2_request}, claim_authority_{claim_authority}, v2_task_count_{v2_task_count}
+	{
+	}
+
+	materialization_incremental_ingress::materialization_incremental_ingress(
+		std::string request_id,
+		const std::size_t task_count,
+		const validated_materialization_request_v2_1& request,
+		const materialization_v2_1_claim_authority& claim_authority,
+		const materialization_incremental_selected_request_binding_set& binding_set)
+		: request_{}, request_id_{std::move(request_id)}, expected_partition_ids_(task_count),
+		  task_receipts_(task_count), producer_authority_{}, guarantee_authority_{},
+		  dynamic_partition_ids_{true}, v2_request_{&request}, claim_authority_{&claim_authority},
+		  binding_set_{&binding_set}, v2_task_count_{task_count}
 	{
 	}
 
@@ -820,6 +951,37 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	}
 
+	sdk::result<materialization_incremental_ingress>
+	materialization_incremental_ingress::begin_dynamic(
+		validated_materialization_request_v2_1& request,
+		const materialization_v2_1_claim_authority& claim_authority,
+		const materialization_incremental_selected_request_binding_set& binding_set)
+	{
+		try
+		{
+			const auto task_count = request.request().task_count();
+			if (task_count == 0U || task_count > std::numeric_limits<std::size_t>::max() ||
+				claim_authority.request() != &request || claim_authority.task_count() != task_count)
+				return sdk::unexpected(ingress_error("tasks", "exact-census"));
+			auto expected_binding_set =
+				seal_materialization_incremental_selected_request_binding_set(claim_authority);
+			if (!expected_binding_set || *expected_binding_set != binding_set)
+				return sdk::unexpected(ingress_error("selected-request-set", "binding"));
+			auto request_id = materialization_incremental_request_id(claim_authority);
+			if (!request_id)
+				return sdk::unexpected(std::move(request_id.error()));
+			return materialization_incremental_ingress{std::move(*request_id),
+													   static_cast<std::size_t>(task_count),
+													   request,
+													   claim_authority,
+													   binding_set};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(ingress_error("allocation", "unavailable"));
+		}
+	}
+
 	sdk::result<void> materialization_incremental_ingress::consume_task(
 		materialization_incremental_task_ingress task) &&
 	{
@@ -871,6 +1033,63 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	}
 
+	sdk::result<void> materialization_incremental_ingress::consume_task(
+		materialization_v2_1_task_execution& task_execution,
+		materialization_incremental_task_ingress task) &&
+	{
+		try
+		{
+			const auto request_task_index = next_task_index_;
+			if (v2_request_ == nullptr || claim_authority_ == nullptr || binding_set_ == nullptr ||
+				request_task_index >= v2_task_count_)
+				return sdk::unexpected(ingress_error("tasks", "not-next-or-missing"));
+			if (auto valid = validate_materialization_incremental_task_receipt(*claim_authority_,
+																			   *binding_set_,
+																			   request_task_index,
+																			   task_execution,
+																			   task.receipt);
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
+			const auto& result = task.result;
+			const auto& metadata = task_execution.metadata;
+			if (result.provider_task_id() != metadata.provider_task_id ||
+				result.task_input_digest() != metadata.task_input_digest ||
+				result.provider_execution_id() != metadata.provider_execution_id ||
+				result.selected_catalog_compile_unit_id() !=
+					metadata.selected_catalog_compile_unit_id ||
+				result.final_relation_compile_unit_id() != metadata.final_relation_compile_unit_id)
+				return sdk::unexpected(ingress_error("task-result", "identity-mismatch"));
+			std::vector<std::string> discovered_partition_ids;
+			if (auto valid = validate_task_streams_v2(
+					*claim_authority_,
+					*binding_set_,
+					request_task_index,
+					std::span<const std::string>{expected_partition_ids_[request_task_index]},
+					task_execution,
+					result,
+					task.receipt,
+					task.partition_spools,
+					true,
+					&discovered_partition_ids);
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
+			expected_partition_ids_[request_task_index] = std::move(discovered_partition_ids);
+			task_receipts_[request_task_index] = task.receipt;
+			claim_stream_tasks_.emplace_back(std::move(task.receipt),
+											 std::move(task.partition_spools));
+			++next_task_index_;
+			return {};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(ingress_error("allocation", "unavailable"));
+		}
+		catch (...)
+		{
+			return sdk::unexpected(ingress_error("ingress", "unexpected"));
+		}
+	}
+
 	sdk::result<materialization_incremental_execution_journal_receipt>
 	materialization_incremental_ingress::finalize() &&
 	{
@@ -885,7 +1104,11 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
-			if (request_ == nullptr || next_task_index_ != task_receipts_.size())
+			const auto expected_task_count =
+				request_ != nullptr ? request_->tasks.size() : v2_task_count_;
+			if ((request_ == nullptr && v2_request_ == nullptr) ||
+				next_task_index_ != expected_task_count ||
+				task_receipts_.size() != expected_task_count)
 				return sdk::unexpected(ingress_error("tasks", "incomplete"));
 			std::vector<materialization_incremental_task_receipt> receipts;
 			receipts.reserve(task_receipts_.size());

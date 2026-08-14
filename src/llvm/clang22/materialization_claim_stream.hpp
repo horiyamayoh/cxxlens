@@ -108,12 +108,25 @@ namespace cxxlens::detail::clang22::materialization
 			  const materialization_incremental_execution_journal_receipt& journal,
 			  std::vector<materialization_claim_stream_task> tasks);
 
+		/** Validate a v2.1 journal by request identity/count without a legacy task vector. */
+		[[nodiscard]] static sdk::result<materialization_claim_stream_source>
+		begin(std::string materialization_request_id,
+			  std::uint64_t task_count,
+			  const materialization_incremental_execution_journal_receipt& journal,
+			  std::vector<materialization_claim_stream_task> tasks);
+
 		/**
 		 * Unit-testable validation entry point. It does not consume or mutate task spools. A caller
 		 * may use it before transferring ownership to begin().
 		 */
 		[[nodiscard]] static sdk::result<void> validate_external_task_receipts(
 			const validated_materialization_request& request,
+			const materialization_incremental_execution_journal_receipt& journal,
+			std::span<materialization_claim_stream_task> tasks);
+
+		[[nodiscard]] static sdk::result<void> validate_external_task_receipts(
+			std::string_view materialization_request_id,
+			std::uint64_t task_count,
 			const materialization_incremental_execution_journal_receipt& journal,
 			std::span<materialization_claim_stream_task> tasks);
 

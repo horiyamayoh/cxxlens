@@ -410,11 +410,21 @@ namespace cxxlens::detail::clang22::materialization
 					"materialization.claim-invalid", "guarantee", nested_error(valid.error())));
 			const auto& metadata = task.metadata;
 			const auto& input = task.input;
+			const auto* consumed_window = task.consumed_window();
+			const bool source_window_valid = (task.source != nullptr && task.source->sealed() &&
+											  task.source->receipt() == task.source_receipt) ||
+				(task.source == nullptr && consumed_window != nullptr &&
+				 consumed_window->source_size_bytes() == task.source_receipt.size_bytes &&
+				 consumed_window->source_content_digest() == task.source_receipt.content_digest &&
+				 consumed_window->source_content_digest() == input.source_content_digest);
+			const bool task_input_window_valid =
+				(task.task_input != nullptr && task.task_input->sealed()) ||
+				(task.task_input == nullptr && consumed_window != nullptr &&
+				 consumed_window->task_input_size_bytes() <= maximum_clang22_task_input_bytes &&
+				 consumed_window->task_input_digest() == metadata.task_input_digest);
 			if (task_index >= authority.task_count() || metadata.task_index != task_index ||
-				!task.source || !task.source->sealed() || !task.task_input ||
-				!task.task_input->sealed() || task.source->receipt() != task.source_receipt ||
-				!input.source.empty() || !input.source_content_base64.empty() ||
-				metadata.project_id != input.project ||
+				!source_window_valid || !task_input_window_valid || !input.source.empty() ||
+				!input.source_content_base64.empty() || metadata.project_id != input.project ||
 				metadata.catalog_id != catalog->catalog_id ||
 				metadata.catalog_digest != catalog->catalog_digest ||
 				metadata.selected_catalog_compile_unit_id != input.selected_catalog_compile_unit ||
@@ -448,24 +458,42 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
 												   "task-window",
 												   nested_error(valid.error())));
-			if (task.source->size_bytes() != task.source_receipt.size_bytes)
-				return sdk::unexpected(
-					claim_error("materialization.task-binding-mismatch", "source-spool", "size"));
-			auto actual_source_digest = digest_sealed_task_spool(
-				*task.source, maximum_clang22_task_source_bytes, "source-spool");
-			if (!actual_source_digest)
-				return sdk::unexpected(std::move(actual_source_digest.error()));
-			if (*actual_source_digest != task.source_receipt.content_digest ||
-				*actual_source_digest != input.source_content_digest)
-				return sdk::unexpected(
-					claim_error("materialization.task-binding-mismatch", "source-spool", "digest"));
-			auto actual_task_input_digest = digest_sealed_task_spool(
-				*task.task_input, maximum_clang22_task_input_bytes, "task-input-spool");
-			if (!actual_task_input_digest)
-				return sdk::unexpected(std::move(actual_task_input_digest.error()));
-			if (*actual_task_input_digest != metadata.task_input_digest)
+			if (task.source != nullptr)
+			{
+				if (task.source->size_bytes() != task.source_receipt.size_bytes)
+					return sdk::unexpected(claim_error(
+						"materialization.task-binding-mismatch", "source-spool", "size"));
+				auto actual_source_digest = digest_sealed_task_spool(
+					*task.source, maximum_clang22_task_source_bytes, "source-spool");
+				if (!actual_source_digest)
+					return sdk::unexpected(std::move(actual_source_digest.error()));
+				if (*actual_source_digest != task.source_receipt.content_digest ||
+					*actual_source_digest != input.source_content_digest)
+					return sdk::unexpected(claim_error(
+						"materialization.task-binding-mismatch", "source-spool", "digest"));
+			}
+			else if (consumed_window == nullptr ||
+					 consumed_window->source_size_bytes() != task.source_receipt.size_bytes ||
+					 consumed_window->source_content_digest() !=
+						 task.source_receipt.content_digest ||
+					 consumed_window->source_content_digest() != input.source_content_digest)
 				return sdk::unexpected(claim_error(
-					"materialization.task-binding-mismatch", "task-input-spool", "digest"));
+					"materialization.task-binding-mismatch", "source-spool", "unsealed"));
+			if (task.task_input != nullptr)
+			{
+				auto actual_task_input_digest = digest_sealed_task_spool(
+					*task.task_input, maximum_clang22_task_input_bytes, "task-input-spool");
+				if (!actual_task_input_digest)
+					return sdk::unexpected(std::move(actual_task_input_digest.error()));
+				if (*actual_task_input_digest != metadata.task_input_digest)
+					return sdk::unexpected(claim_error(
+						"materialization.task-binding-mismatch", "task-input-spool", "digest"));
+			}
+			else if (consumed_window == nullptr ||
+					 consumed_window->task_input_size_bytes() > maximum_clang22_task_input_bytes ||
+					 consumed_window->task_input_digest() != metadata.task_input_digest)
+				return sdk::unexpected(claim_error(
+					"materialization.task-binding-mismatch", "task-input-spool", "unsealed"));
 			return {};
 		}
 
@@ -1303,6 +1331,41 @@ namespace cxxlens::detail::clang22::materialization
 			return *value;
 		}
 	} // namespace
+
+	sdk::result<void>
+	consume_materialization_v2_1_task_window(materialization_v2_1_task_execution& task)
+	{
+		if (task.consumed_window_ || task.source == nullptr || task.task_input == nullptr ||
+			!task.source->sealed() || !task.task_input->sealed() ||
+			task.source->receipt() != task.source_receipt)
+			return sdk::unexpected(claim_error(
+				"materialization.task-binding-mismatch", "task-window", "sealed-or-reused"));
+
+		auto source_digest = digest_sealed_task_spool(
+			*task.source, maximum_clang22_task_source_bytes, "source-spool");
+		if (!source_digest)
+			return sdk::unexpected(std::move(source_digest.error()));
+		if (task.source->size_bytes() != task.source_receipt.size_bytes ||
+			*source_digest != task.source_receipt.content_digest ||
+			*source_digest != task.input.source_content_digest)
+			return sdk::unexpected(
+				claim_error("materialization.task-binding-mismatch", "source-spool", "digest"));
+
+		auto task_input_digest = digest_sealed_task_spool(
+			*task.task_input, maximum_clang22_task_input_bytes, "task-input-spool");
+		if (!task_input_digest)
+			return sdk::unexpected(std::move(task_input_digest.error()));
+		if (*task_input_digest != task.metadata.task_input_digest)
+			return sdk::unexpected(
+				claim_error("materialization.task-binding-mismatch", "task-input-spool", "digest"));
+
+		task.consumed_window_ =
+			materialization_v2_1_task_window_consumption::make(task.source->size_bytes(),
+															   std::move(*source_digest),
+															   task.task_input->size_bytes(),
+															   std::move(*task_input_digest));
+		return {};
+	}
 
 	sealed_materialization_claims::sealed_materialization_claims(
 		std::string materializer_semantics_digest,
