@@ -66,6 +66,21 @@ report に記録された exact preset、parallel level、toolchain、command �
 `CXXLENS_CLANG_ADAPTER=AUTO` は exact LLVM/Clang 22 だけを受理し、隣接 major へ fallback しません。
 `ON` は exact package がなければ configure error、`OFF` は structured unavailable build です。
 
+ローカルの LLVM/Clang 22 が標準の CMake package search path にない場合は、隣接する `clang` package を
+自動的に解決できる LLVM package directory を明示します。例えば次のように exact package を指定して native
+provider lane を構成できます。
+
+```sh
+LLVM22_PREFIX=/opt/LLVM-22.1.0-Linux-X64
+CXX=clang++ cmake --preset dev-clang \
+  -DCXXLENS_CLANG_ADAPTER=ON \
+  -DLLVM_DIR="${LLVM22_PREFIX}/lib/cmake/llvm"
+```
+
+`LLVM_DIR` が解決できない構成は structured unavailable adapter として扱われ、installed materializer の
+positive success test を success に変換しません。native install qualification は exact package を発見した
+clean build directory で `ctest --preset install-check -L install` を実行してください。
+
 主要 test label は `unit`、`public-api`、`provider`、`quality`、`install` です。quality unit test は CTest だけが所有し、
 `cxxlens-quality` は production checker だけを実行します。
 
