@@ -1480,6 +1480,9 @@ namespace
 										execution.metadata.sandbox,
 										{},
 										execution.source_receipt};
+			// v2.1 keeps the request-wide catalog outside the bounded task window. Rehydration
+			// still needs that immutable authority to compare the archived capture context.
+			task.worker_input.project_catalog = source_request_.request().catalog();
 			auto archived = std::ranges::find_if(
 				prior_artifact_->tasks,
 				[&](const auto& task_value)
