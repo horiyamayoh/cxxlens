@@ -440,25 +440,25 @@ namespace
 	}
 
 	[[nodiscard]] sdk::result<std::string>
-	production_partition_id(const validated_task_request& task)
+	production_partition_id(const materialization_v2_1_task_metadata_binding& task)
 	{
 		return identity_digest("clang22-materialization-partition",
-							   {task.provider_task_id,
-								task.task_input_digest,
-								task.worker_input.selected_catalog_compile_unit,
-								task.worker_input.compile_unit});
+							   {task.metadata.provider_task_id,
+								task.metadata.task_input_digest,
+								task.input.selected_catalog_compile_unit,
+								task.input.compile_unit});
 	}
 
 	[[nodiscard]] sdk::result<sdk::incremental::partition_state>
-	production_partition_state(const validated_materialization_request& request,
-							   const validated_task_request& task,
+	production_partition_state(const prevalidated_materialization_request_v2_1& request,
+							   const materialization_v2_1_task_metadata_binding& task,
 							   const std::string_view worker_digest,
 							   const std::string_view worker_semantics_digest)
 	{
-		if (!task.source_receipt)
+		const auto& input = task.input;
+		if (!input.source.empty() || !input.source_content_base64.empty())
 			return sdk::unexpected(
-				sdk::error{"materialization.incremental-invalid", "source", "receipt-missing"});
-		const auto& input = task.worker_input;
+				sdk::error{"materialization.incremental-invalid", "task", "metadata-source-residency"});
 		std::vector<std::string_view> dependency_values;
 		dependency_values.reserve(input.dependency_groups.size() + 1U);
 		dependency_values.push_back(input.logical_path);
@@ -478,9 +478,9 @@ namespace
 											   input.variant_authority.semantic_flags_digest});
 		if (!variant_digest)
 			return sdk::unexpected(std::move(variant_digest.error()));
-		auto provider_set_digest =
-			identity_digest("clang22-incremental-provider-set",
-							{worker_semantics_digest, worker_digest, task.sandbox.policy_digest});
+		auto provider_set_digest = identity_digest(
+			"clang22-incremental-provider-set",
+			{worker_semantics_digest, worker_digest, task.metadata.sandbox.policy_digest});
 		if (!provider_set_digest)
 			return sdk::unexpected(std::move(provider_set_digest.error()));
 		auto interpretation_policy_digest =
@@ -497,8 +497,8 @@ namespace
 		if (!refresh_policy_digest)
 			return sdk::unexpected(std::move(refresh_policy_digest.error()));
 		std::vector<std::string_view> relation_values;
-		relation_values.reserve(request.output_descriptors.size() * 2U);
-		for (const auto& descriptor : request.output_descriptors)
+		relation_values.reserve(request.output_descriptors().size() * 2U);
+		for (const auto& descriptor : request.output_descriptors())
 		{
 			relation_values.push_back(descriptor.id);
 			relation_values.push_back(descriptor.contract_digest);
@@ -515,7 +515,7 @@ namespace
 		if (!partition_id)
 			return sdk::unexpected(std::move(partition_id.error()));
 		auto coverage_digest = identity_digest(
-			"clang22-incremental-coverage", {*partition_id, task.source_receipt->content_digest});
+			"clang22-incremental-coverage", {*partition_id, input.source_content_digest});
 		if (!coverage_digest)
 			return sdk::unexpected(std::move(coverage_digest.error()));
 		auto closure_digest =
@@ -523,14 +523,14 @@ namespace
 		if (!closure_digest)
 			return sdk::unexpected(std::move(closure_digest.error()));
 		sdk::incremental::input_fingerprint fingerprint{
-			task.source_receipt->content_digest,
+			input.source_content_digest,
 			*dependency_digest,
 			input.normalized_invocation_digest,
 			input.toolchain_digest,
 			*condition_universe_digest,
 			*variant_digest,
 			*provider_set_digest,
-			std::string{request.engine.registry_digest()},
+			std::string{request.engine().registry_digest()},
 			*interpretation_policy_digest,
 			*refresh_policy_digest,
 			input.environment_digest,
@@ -538,7 +538,7 @@ namespace
 			std::string{worker_semantics_digest},
 			*relation_digest,
 			"clang22-incremental-normalizer-v1",
-			request.catalog.catalog_digest,
+			request.catalog().catalog_digest,
 			*assumption_digest,
 			"exact"};
 		if (auto valid = fingerprint.validate(); !valid)
@@ -578,22 +578,40 @@ namespace
 	};
 
 	[[nodiscard]] sdk::result<production_incremental_plan_bundle> make_production_incremental_plan(
-		const validated_materialization_request& request,
+		validated_materialization_request_v2_1& request,
 		const std::string_view worker_digest,
 		const std::string_view worker_semantics_digest,
 		const std::optional<materialization_prior_artifact_replay_bundle>& prior)
 	{
+		const auto task_count = request.request().task_count();
+		if (task_count == 0U || task_count > std::numeric_limits<std::size_t>::max())
+			return sdk::unexpected(sdk::error{
+				"materialization.incremental-invalid", "tasks", "metadata-census"});
+		const auto task_count_size = static_cast<std::size_t>(task_count);
 		std::vector<sdk::incremental::partition_candidate> candidates;
 		std::vector<sdk::incremental::partition_state> states;
-		candidates.reserve(request.tasks.size());
-		states.reserve(request.tasks.size());
-		for (const auto& task : request.tasks)
+		std::vector<materialization_incremental_task_identity> identities;
+		std::vector<std::string> provider_execution_ids;
+		candidates.reserve(task_count_size);
+		states.reserve(task_count_size);
+		identities.reserve(task_count_size);
+		provider_execution_ids.reserve(task_count_size);
+		for (std::size_t index{}; index < task_count_size; ++index)
 		{
-			auto state =
-				production_partition_state(request, task, worker_digest, worker_semantics_digest);
+			auto metadata = request.task_metadata_binding(static_cast<std::uint64_t>(index));
+			if (!metadata)
+				return sdk::unexpected(std::move(metadata.error()));
+			auto state = production_partition_state(
+				request.request(), *metadata, worker_digest, worker_semantics_digest);
 			if (!state)
 				return sdk::unexpected(std::move(state.error()));
 			states.push_back(std::move(*state));
+			identities.push_back({index,
+				metadata->metadata.provider_task_id,
+				metadata->metadata.task_input_digest,
+				metadata->input.selected_catalog_compile_unit,
+				metadata->input.compile_unit});
+			provider_execution_ids.push_back(metadata->metadata.provider_execution_id);
 		}
 		for (std::size_t index{}; index < states.size(); ++index)
 		{
@@ -607,14 +625,13 @@ namespace
 											 return task.identity.canonical_task_ordinal == index;
 										 });
 				if (archived != prior->tasks.end() &&
-					archived->identity.provider_task_id == request.tasks[index].provider_task_id &&
-					archived->identity.task_input_digest ==
-						request.tasks[index].task_input_digest &&
-					archived->provider_execution_id == request.tasks[index].provider_execution_id &&
+					archived->identity.provider_task_id == identities[index].provider_task_id &&
+					archived->identity.task_input_digest == identities[index].task_input_digest &&
+					archived->provider_execution_id == provider_execution_ids[index] &&
 					archived->identity.selected_catalog_compile_unit_id ==
-						request.tasks[index].worker_input.selected_catalog_compile_unit &&
+						identities[index].selected_catalog_compile_unit_id &&
 					archived->identity.final_relation_compile_unit_id ==
-						request.tasks[index].worker_input.compile_unit &&
+						identities[index].final_relation_compile_unit_id &&
 					archived->state == states[index])
 					prior_state = archived->state;
 			}
@@ -624,15 +641,9 @@ namespace
 		if (!plan)
 			return sdk::unexpected(std::move(plan.error()));
 		std::vector<materialization_incremental_task_binding> bindings;
-		bindings.reserve(request.tasks.size());
-		for (std::size_t index{}; index < request.tasks.size(); ++index)
+		bindings.reserve(task_count_size);
+		for (std::size_t index{}; index < task_count_size; ++index)
 		{
-			materialization_incremental_task_identity identity{
-				index,
-				request.tasks[index].provider_task_id,
-				request.tasks[index].task_input_digest,
-				request.tasks[index].worker_input.selected_catalog_compile_unit,
-				request.tasks[index].worker_input.compile_unit};
 			std::vector<materialization_incremental_partition_binding> partitions;
 			std::optional<materialization_incremental_prior_artifact> prior_artifact;
 			if (prior)
@@ -644,14 +655,13 @@ namespace
 						return task_value.identity.canonical_task_ordinal == index;
 					});
 				if (archived != prior->tasks.end() &&
-					archived->identity.provider_task_id == request.tasks[index].provider_task_id &&
-					archived->identity.task_input_digest ==
-						request.tasks[index].task_input_digest &&
-					archived->provider_execution_id == request.tasks[index].provider_execution_id &&
+					archived->identity.provider_task_id == identities[index].provider_task_id &&
+					archived->identity.task_input_digest == identities[index].task_input_digest &&
+					archived->provider_execution_id == provider_execution_ids[index] &&
 					archived->identity.selected_catalog_compile_unit_id ==
-						request.tasks[index].worker_input.selected_catalog_compile_unit &&
+						identities[index].selected_catalog_compile_unit_id &&
 					archived->identity.final_relation_compile_unit_id ==
-						request.tasks[index].worker_input.compile_unit &&
+						identities[index].final_relation_compile_unit_id &&
 					archived->state == states[index])
 					prior_artifact = materialization_incremental_prior_artifact{
 						archived->state, archived->sealed_artifact_digest};
@@ -659,7 +669,7 @@ namespace
 			partitions.emplace_back(states[index].partition_id,
 									std::optional<sdk::incremental::partition_state>{states[index]},
 									std::move(prior_artifact));
-			bindings.emplace_back(std::move(identity), std::move(partitions));
+			bindings.emplace_back(std::move(identities[index]), std::move(partitions));
 		}
 		return production_incremental_plan_bundle{std::move(*plan), std::move(bindings)};
 	}
@@ -1315,7 +1325,7 @@ int main(const int argc, char**)
 	if (!incremental_request_id || *incremental_request_id != request_subject)
 		return no_response();
 	auto plan_bundle = make_production_incremental_plan(
-		claim_request, *worker_digest, worker.semantic_contract_digest, prior_artifact);
+		*request, *worker_digest, worker.semantic_contract_digest, prior_artifact);
 	if (!plan_bundle)
 		return no_response();
 	production_incremental_executor executor{*request,
