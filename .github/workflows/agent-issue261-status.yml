@@ -1,0 +1,49 @@
+name: agent-issue261-status
+
+on:
+  push:
+    branches:
+      - agent/issue-261-source-snapshot
+    paths:
+      - .github/workflows/agent-issue261-status.yml
+
+permissions:
+  actions: read
+  contents: write
+  issues: read
+  pull-requests: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      CONTROL_BRANCH: agent/issue-261-source-snapshot
+      WORK_BRANCH: agent/issue-261-source-closure-vfs
+      RESULT_TAG: issue261-agent-status
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Collect current state
+        shell: bash
+        run: |
+          set -u
+          mkdir -p /tmp/status/evidence
+          gh run list --repo "$REPO" --branch "$CONTROL_BRANCH" --limit 30 --json databaseId,workflowName,status,conclusion,url,headSha,createdAt,updatedAt > /tmp/status/runs.json 2>/tmp/status/runs.err || true
+          coder_run_id="$(jq -r '[.[] | select(.workflowName == "agent-issue261-coder-push")][0].databaseId // empty' /tmp/status/runs.json 2>/dev/null || true)"
+          if [[ -n "$coder_run_id" ]]; then
+            gh run view "$coder_run_id" --repo "$REPO" --json databaseId,status,conclusion,url,headSha,workflowName,jobs > /tmp/status/coder-run.json 2>/tmp/status/coder-run.err || true
+            gh run view "$coder_run_id" --repo "$REPO" --log > /tmp/status/coder-run.log 2>/tmp/status/coder-log.err || true
+            gh run download "$coder_run_id" --repo "$REPO" --dir /tmp/status/evidence 2>/tmp/status/artifact.err || true
+          fi
+          gh api "repos/$REPO/branches/$WORK_BRANCH" > /tmp/status/branch.json 2>/tmp/status/branch.err || true
+          gh pr list --repo "$REPO" --head "$WORK_BRANCH" --state all --limit 10 --json number,title,state,isDraft,mergeStateStatus,mergedAt,url,headRefOid,statusCheckRollup > /tmp/status/prs.json 2>/tmp/status/prs.err || true
+          gh issue view 261 --repo "$REPO" --json number,title,state,stateReason,url,closedAt,updatedAt,assignees > /tmp/status/issue.json 2>/tmp/status/issue.err || true
+          git ls-remote origin "refs/heads/$WORK_BRANCH" > /tmp/status/work-branch-ls-remote.txt 2>/tmp/status/work-branch-ls-remote.err || true
+          cd /tmp
+          zip -qr issue261-status.zip status
+          gh release delete "$RESULT_TAG" --repo "$REPO" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "$RESULT_TAG" /tmp/issue261-status.zip --repo "$REPO" --title "Issue 261 agent status" --notes "Current automation status snapshot." --prerelease
