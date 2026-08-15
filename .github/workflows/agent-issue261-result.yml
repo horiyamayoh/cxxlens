@@ -1,0 +1,124 @@
+name: agent-issue261-result
+
+on:
+  push:
+    branches:
+      - agent/issue-261-source-snapshot
+    paths:
+      - .github/workflows/agent-issue261-result.yml
+
+permissions:
+  actions: read
+  contents: write
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: agent-issue261-result
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 185
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      CONTROL_BRANCH: agent/issue-261-source-snapshot
+      WORK_BRANCH: agent/issue-261-source-closure-vfs
+      RESULT_TAG: issue261-agent-result
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait for implementation run and collect status
+        shell: bash
+        run: |
+          set -u
+          mkdir -p /tmp/issue261-result/evidence
+          coder_run_id=""
+          coder_status="not-found"
+          coder_conclusion=""
+          for attempt in $(seq 1 180); do
+            row="$(gh run list --repo "$REPO" --workflow agent-issue261-coder-push.yml --branch "$CONTROL_BRANCH" --limit 1 --json databaseId,status,conclusion,url,headSha 2>/dev/null || true)"
+            if [[ -n "$row" && "$row" != "[]" ]]; then
+              coder_run_id="$(jq -r '.[0].databaseId // empty' <<<"$row")"
+              coder_status="$(jq -r '.[0].status // "unknown"' <<<"$row")"
+              coder_conclusion="$(jq -r '.[0].conclusion // empty' <<<"$row")"
+              printf '%s\n' "$row" > /tmp/issue261-result/coder-run.json
+              if [[ "$coder_status" == "completed" ]]; then
+                break
+              fi
+            fi
+            sleep 60
+          done
+
+          if [[ -n "$coder_run_id" ]]; then
+            gh run view "$coder_run_id" --repo "$REPO" --json databaseId,status,conclusion,url,headSha,workflowName,jobs > /tmp/issue261-result/coder-run-full.json 2>/tmp/issue261-result/coder-run-view.err || true
+            gh run view "$coder_run_id" --repo "$REPO" --log > /tmp/issue261-result/coder-run.log 2>/tmp/issue261-result/coder-run-log.err || true
+            gh run download "$coder_run_id" --repo "$REPO" --dir /tmp/issue261-result/evidence 2>/tmp/issue261-result/coder-artifact-download.err || true
+          fi
+
+          branch_exists=false
+          branch_sha=""
+          if branch_json="$(gh api "repos/$REPO/branches/$WORK_BRANCH" 2>/tmp/issue261-result/branch.err)"; then
+            branch_exists=true
+            branch_sha="$(jq -r '.commit.sha' <<<"$branch_json")"
+            printf '%s\n' "$branch_json" > /tmp/issue261-result/branch.json
+            git fetch origin "$WORK_BRANCH"
+            git archive --format=tar.gz --output=/tmp/issue261-result/implementation-source.tar.gz "origin/$WORK_BRANCH"
+            git diff --stat origin/main..."origin/$WORK_BRANCH" > /tmp/issue261-result/diff-stat.txt || true
+            git diff --check origin/main..."origin/$WORK_BRANCH" > /tmp/issue261-result/diff-check.txt 2>&1 || true
+            git log --oneline --decorate origin/main.."origin/$WORK_BRANCH" > /tmp/issue261-result/commits.txt || true
+          fi
+
+          pr_json="$(gh pr list --repo "$REPO" --head "$WORK_BRANCH" --state all --limit 10 --json number,title,state,isDraft,mergeStateStatus,mergedAt,url,headRefOid,baseRefName 2>/tmp/issue261-result/pr-list.err || true)"
+          printf '%s\n' "$pr_json" > /tmp/issue261-result/prs.json
+          pr_number="$(jq -r '.[0].number // empty' <<<"${pr_json:-[]}")"
+          if [[ -n "$pr_number" ]]; then
+            gh pr view "$pr_number" --repo "$REPO" --json number,title,state,isDraft,mergeStateStatus,mergedAt,url,headRefOid,baseRefName,statusCheckRollup,reviews > /tmp/issue261-result/pr.json 2>/tmp/issue261-result/pr-view.err || true
+            gh pr checks "$pr_number" --repo "$REPO" > /tmp/issue261-result/pr-checks.txt 2>&1 || true
+          fi
+
+          issue_json="$(gh issue view 261 --repo "$REPO" --json number,title,state,stateReason,url,closedAt,updatedAt,assignees 2>/tmp/issue261-result/issue.err || true)"
+          printf '%s\n' "$issue_json" > /tmp/issue261-result/issue.json
+          issue_state="$(jq -r '.state // "UNKNOWN"' <<<"${issue_json:-{}}")"
+
+          cat > /tmp/issue261-result/status.json <<EOF
+          {
+            "schema": "cxxlens.issue261.agent-result.v1",
+            "repository": "$REPO",
+            "collected_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "coder_run_id": "${coder_run_id}",
+            "coder_status": "${coder_status}",
+            "coder_conclusion": "${coder_conclusion}",
+            "implementation_branch": "$WORK_BRANCH",
+            "branch_exists": ${branch_exists},
+            "branch_sha": "${branch_sha}",
+            "pull_request_number": "${pr_number}",
+            "issue_state": "${issue_state}"
+          }
+          EOF
+
+          if [[ "$coder_status" == "completed" && "$coder_conclusion" == "success" && "$branch_exists" == "true" ]]; then
+            touch /tmp/issue261-result/IMPLEMENTATION_RUN_SUCCEEDED
+          else
+            touch /tmp/issue261-result/IMPLEMENTATION_RUN_NOT_SUCCESSFUL
+          fi
+
+      - name: Publish deterministic diagnostic release
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp
+          zip -qr issue261-result.zip issue261-result
+          gh release delete "$RESULT_TAG" --repo "$REPO" --yes --cleanup-tag >/dev/null 2>&1 || true
+          cat > /tmp/release-notes.md <<'EOF'
+          Deterministic diagnostic package for cxxlens issue #261 automation.
+
+          The archive contains status.json, workflow metadata/logs, downloaded evidence artifacts,
+          PR/issue state, and the implementation branch source archive when publication reached that stage.
+          EOF
+          gh release create "$RESULT_TAG" /tmp/issue261-result.zip --repo "$REPO" --title "Issue 261 agent result" --notes-file /tmp/release-notes.md --prerelease
