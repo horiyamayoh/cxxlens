@@ -406,6 +406,7 @@ jobs:
           cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON
           cmake --build --preset ci-quick --target cxxlens-g5-runtime
           cmake --build --preset ci-quick --target \
+            cxxlens-provider-scaffold cxxlens-sdk-doctor \
             cxxlens_clang22_provider_sdk cxxlens-clang-worker-22 \
             cxxlens-clang22-materialize
           cmake --install build/ci-quick --prefix "${RUNNER_TEMP}/cxxlens-g5-prefix"
