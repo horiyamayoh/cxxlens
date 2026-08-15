@@ -193,8 +193,9 @@ function(cxxlens_configure_clang22 target)
   set(CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY
       FALSE
       CACHE INTERNAL
-        "Whether the exact Clang 22 ASan boundary uses the packaged shared clang-cpp target"
+        "Whether the last exact Clang 22 ASan boundary uses the packaged shared clang-cpp target"
         FORCE)
+  set_property(TARGET ${target} PROPERTY CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY FALSE)
   if(NOT CXXLENS_CLANG_ADAPTER MATCHES "^(AUTO|ON|OFF)$")
     message(
       FATAL_ERROR
@@ -317,8 +318,9 @@ function(cxxlens_configure_clang22 target)
       set(CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY
           TRUE
           CACHE INTERNAL
-            "Whether the exact Clang 22 ASan boundary uses the packaged shared clang-cpp target"
+            "Whether the last exact Clang 22 ASan boundary uses the packaged shared clang-cpp target"
             FORCE)
+      set_property(TARGET ${target} PROPERTY CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY TRUE)
     endif()
   else()
     target_link_libraries(${target} PRIVATE ${_cxxlens_clang22_components})

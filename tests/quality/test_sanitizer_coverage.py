@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -71,6 +73,10 @@ class SanitizerCoverageTest(unittest.TestCase):
             "          TRUE",
             asan_boundary,
         )
+        self.assertIn(
+            "set_property(TARGET ${target} PROPERTY CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY TRUE)",
+            asan_boundary,
+        )
 
     def test_normal_static_clang_boundary_keeps_explicit_components(self) -> None:
         source = (ROOT / "cmake/CxxlensClangTargets.cmake").read_text(
@@ -105,6 +111,8 @@ class SanitizerCoverageTest(unittest.TestCase):
         self.assertIn("ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1", negative)
 
     def test_clang22_boundary_configure_and_link_graph_regressions(self) -> None:
+        if os.name == "nt":
+            self.skipTest("the exact Clang 22 ASan shared-boundary contract is UNIX-only")
         components = (
             "LLVMOption",
             "LLVMSupport",
@@ -138,6 +146,34 @@ class SanitizerCoverageTest(unittest.TestCase):
                 (root / "worker.cpp").write_text(
                     "int main() { return 0; }\n", encoding="utf-8"
                 )
+                if clang_cpp_kind == "shared":
+                    fake_source = root / "fake_clang_cpp.cpp"
+                    fake_source.write_text(
+                        'extern "C" int cxxlens_fake_clang_cpp() { return 0; }\n',
+                        encoding="utf-8",
+                    )
+                    compiler = os.environ.get("CXX") or shutil.which("c++")
+                    if compiler is None:
+                        return 1, "no C++ compiler available for shared-boundary fixture", ""
+                    shared_result = subprocess.run(
+                        [
+                            compiler,
+                            "-shared",
+                            "-fPIC",
+                            str(fake_source),
+                            "-o",
+                            str(library_dir / "libclang-cpp.so"),
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if shared_result.returncode != 0:
+                        return (
+                            shared_result.returncode,
+                            shared_result.stdout + shared_result.stderr,
+                            "",
+                        )
                 (llvm_dir / "LLVMConfig.cmake").write_text(
                     "\n".join(
                         (
@@ -196,6 +232,13 @@ class SanitizerCoverageTest(unittest.TestCase):
                             "add_library(cxxlens_clang22_provider_sdk STATIC probe.cpp)",
                             f"include(\"{(ROOT / 'cmake/CxxlensClangTargets.cmake').as_posix()}\")",
                             "cxxlens_configure_clang22(cxxlens_clang22_provider_sdk)",
+                            "get_target_property(_cxxlens_boundary cxxlens_clang22_provider_sdk CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY)",
+                            "if(CXXLENS_ENABLE_ASAN AND NOT _cxxlens_boundary)",
+                            '  message(FATAL_ERROR "ASan target boundary property was not recorded")',
+                            "endif()",
+                            "if(NOT CXXLENS_ENABLE_ASAN AND _cxxlens_boundary)",
+                            '  message(FATAL_ERROR "normal target boundary property was not cleared")',
+                            "endif()",
                             "add_executable(cxxlens-clang-worker-22 worker.cpp)",
                             "target_link_libraries(cxxlens-clang-worker-22 PRIVATE cxxlens_clang22_provider_sdk)",
                         )
@@ -229,7 +272,24 @@ class SanitizerCoverageTest(unittest.TestCase):
                     if (build / "build.ninja").is_file()
                     else ""
                 )
-                return result.returncode, result.stdout + result.stderr, cache + graph
+                output = result.stdout + result.stderr
+                if result.returncode == 0 and clang_cpp_kind == "shared" and asan:
+                    built = subprocess.run(
+                        [
+                            "cmake",
+                            "--build",
+                            str(build),
+                            "--target",
+                            "cxxlens-clang-worker-22",
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    output += built.stdout + built.stderr
+                    if built.returncode != 0:
+                        return built.returncode, output, cache + graph
+                return result.returncode, output, cache + graph
 
         code, output, generated = run_fixture("shared", asan=True)
         self.assertEqual(code, 0, output)
