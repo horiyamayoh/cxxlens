@@ -618,6 +618,20 @@ namespace
 					observed->main.sha256 ==
 						"sha256:e3ba06536f7dbba337dee3c1c5f01b43660ce276abb54c5cee2d5defc5b970aa",
 				"F0 raw identity/bytes digest");
+			require(observed->observation.source_anchor_stable &&
+						observed->observation.main_identity_stable &&
+						observed->observation.main_entry_stable &&
+						observed->observation.exact_logical_empty &&
+						observed->observation.wal == sqlite_disposable_wal_state::absent &&
+						!observed->observation.shared_memory_present &&
+						observed->observation.journal == sqlite_disposable_journal_state::absent &&
+						!observed->observation.other_sidecar_present,
+					"F0 retained-FD observation has exact empty no-sidecar topology");
+
+			const auto reobserved = observe_sqlite_disposable_raw_empty_family(*minted, classify);
+			require(reobserved.has_value(), "reobserve F0 raw family from retained FD");
+			require(*reobserved == *observed,
+					"F0 retained-FD identity/size/bytes/namespace remain unchanged with no effect");
 
 			const auto denied = observe_sqlite_disposable_raw_empty_family(*minted, setup);
 			require(!denied && denied.error().detail == "raw-effect-not-authorized",
