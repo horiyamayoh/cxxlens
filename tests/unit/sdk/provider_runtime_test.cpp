@@ -2352,8 +2352,18 @@ namespace
 		require(processes != nullptr, "system provider process port unavailable");
 		process_provider_runtime runtime{*processes};
 		auto report = runtime.execute(request);
-		require(report && report->succeeded(),
-				"semantic provider input digests were rejected by the process runtime");
+		std::string failure_detail{
+			"semantic provider input digests were rejected by the process runtime"};
+		if (report)
+		{
+			failure_detail += " terminal=" + report->terminal;
+			failure_detail += " exit=" + std::to_string(report->exit_code);
+			for (const auto& diagnostic : report->diagnostics)
+				failure_detail += " [" + diagnostic.code + ":" + diagnostic.detail + "]";
+		}
+		else
+			failure_detail += " error=" + report.error().code;
+		require(report && report->succeeded(), failure_detail);
 	}
 
 	void check_prior_snapshot_preserved(const std::string& executable)

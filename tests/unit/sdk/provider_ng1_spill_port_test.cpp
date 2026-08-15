@@ -87,6 +87,7 @@ namespace
 		std::size_t append_calls{};
 		std::size_t fsync_calls{};
 		std::size_t cleanup_calls{};
+		std::size_t* cleanup_calls_observer{};
 
 		[[nodiscard]] result<void> append(const std::span<const std::byte> input) override
 		{
@@ -118,6 +119,8 @@ namespace
 		[[nodiscard]] result<void> cleanup() override
 		{
 			++cleanup_calls;
+			if (cleanup_calls_observer != nullptr)
+				++*cleanup_calls_observer;
 			if (fail_cleanup)
 				return error{"provider.recovery-failed", "cleanup", "injected"};
 			return {};
@@ -249,8 +252,9 @@ namespace
 		require(invalid_sequence->cleanup(), "invalid sequence spill cleanup failed");
 
 		auto cleanup_storage = std::make_unique<fake_spill_port>();
-		auto* cleanup_raw = cleanup_storage.get();
-		cleanup_raw->fail_cleanup = true;
+		std::size_t cleanup_calls_observer{};
+		cleanup_storage->cleanup_calls_observer = &cleanup_calls_observer;
+		cleanup_storage->fail_cleanup = true;
 		auto cleanup_session =
 			ng1_spill_staging_session::create(spill_binding, std::move(cleanup_storage));
 		require(cleanup_session.has_value(), "cleanup failure spill session creation failed");
@@ -259,7 +263,7 @@ namespace
 				"cleanup failure was not stable recovery-failed");
 		auto cleanup_retry = cleanup_session->cleanup();
 		require(!cleanup_retry && cleanup_retry.error().code == "provider.recovery-failed" &&
-					cleanup_raw->cleanup_calls == 1U,
+					cleanup_calls_observer == 1U,
 				"cleanup unknown effect was retried");
 	}
 } // namespace
