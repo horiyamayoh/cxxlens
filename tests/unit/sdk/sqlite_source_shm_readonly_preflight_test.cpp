@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "sdk/sqlite_default_forwarding_vfs_internal.hpp"
 #include "sdk/sqlite_source_shm_readonly_preflight_internal.hpp"
 
 namespace
@@ -119,6 +120,8 @@ namespace
 
 	void exercise_branch_local_capability_absence()
 	{
+		require(!sqlite_source_shm_native_ok_projection_production_activation_enabled(),
+				"native SQLITE_OK source-SHM projection remains disabled until qualification");
 		auto optional_port = make_sqlite_source_shm_readonly_preflight(
 			sqlite_default_observation_binding{}, sqlite_backend_opaque_identity{});
 		require(optional_port.has_value() && !*optional_port,
@@ -157,6 +160,16 @@ namespace
 					exact_cold, &vfs_identity, &app_data_identity, true, false),
 				"cold proof accepts exact first page-zero CANTINIT/null event");
 
+		auto normalized_readonly_null = event(0, readonly, false, false);
+		normalized_readonly_null.returned_status = cant_initialize;
+		require(
+			validate_sqlite_source_shm_readonly_map_sequence(std::array{normalized_readonly_null},
+															 &vfs_identity,
+															 &app_data_identity,
+															 true,
+															 false),
+			"cold proof accepts READONLY/null normalized to CANTINIT/null");
+
 		const std::array late_page_zero{event(1, readonly, true, false),
 										event(0, cant_initialize, false, true)};
 		require(!validate_sqlite_source_shm_readonly_map_sequence(
@@ -174,6 +187,23 @@ namespace
 		require(!validate_sqlite_source_shm_readonly_map_sequence(
 					missing_pointer, &vfs_identity, &app_data_identity, false, true),
 				"warm proof rejects a non-null mapping without exact callback pointer evidence");
+
+		auto invalid_page = exact_cold;
+		invalid_page[0].page = -1;
+		require(!validate_sqlite_source_shm_readonly_map_sequence(
+					invalid_page, &vfs_identity, &app_data_identity, true, false),
+				"map proof rejects a negative page");
+		auto invalid_page_size = exact_cold;
+		invalid_page_size[0].page_size = 0;
+		require(!validate_sqlite_source_shm_readonly_map_sequence(
+					invalid_page_size, &vfs_identity, &app_data_identity, true, false),
+				"map proof rejects a nonpositive page size");
+		auto inconsistent_pointer_flags = exact_cold;
+		inconsistent_pointer_flags[0].native_mapping_identity =
+			static_cast<const volatile void*>(&mapping_identity);
+		require(!validate_sqlite_source_shm_readonly_map_sequence(
+					inconsistent_pointer_flags, &vfs_identity, &app_data_identity, true, false),
+				"map proof rejects pointer/nonnull metadata disagreement");
 	}
 } // namespace
 

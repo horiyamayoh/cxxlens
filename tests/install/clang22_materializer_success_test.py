@@ -21,12 +21,32 @@ BASELINE_POLICY_DIGEST = (
     "semantic-v2:sha256:"
     "b4e95d8c88cf660fff40c4d9e7e4ae07bcb078013b5370c6b1abb80b0d75d375"
 )
+# The request schema's canonical integer domain is signed int64.  This value is
+# used only when a sanitizer process needs to reserve its shadow address range.
+ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1
+# LeakSanitizer creates runtime threads before the provider reaches main(). The
+# production request remains at its normal subprocess budget; this explicit
+# sanitizer-only profile matches the finite allowance used by sanitizer unit
+# tests and keeps the process-limit distinction visible in the request digest.
+ASAN_SUBPROCESS_BUDGET = 1024
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
+OCCURRENCE_FILENAME = "occurrence-v1.json"
 REQUEST_FILENAME = "cxxlens-clang22-materialization-request.json"
 REPORT_FILENAME = "cxxlens-clang22-materialization-report.json"
 EXECUTION_RECEIPT_FILENAME = "cxxlens-clang22-materialization-execution-receipt.json"
+RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME = (
+    "cxxlens-clang22-materialization-raw-provider-evidence-v1.json"
+)
+RAW_PROVIDER_EVIDENCE_DIRECTORY = "raw-provider-transcripts"
+RAW_PROVIDER_EVIDENCE_SCHEMA = (
+    "cxxlens.clang22-materialization-raw-provider-evidence.v1"
+)
+CANONICAL_BASE64_VECTOR_SOURCES = (
+    b"int main() { return 0; }\n",  # RFC 4648 two-padding spelling.
+    b"int unit_1() { return 1; }\n/*x*/",  # RFC 4648 one-padding spelling.
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,6 +57,11 @@ def parse_args() -> argparse.Namespace:
         "--backend", choices=("memory", "sqlite"), default="memory"
     )
     parser.add_argument("--translation-unit-count", type=int, default=2)
+    parser.add_argument(
+        "--canonical-base64-vectors",
+        action="store_true",
+        help="run actual installed provider tasks for one- and two-padding source spellings",
+    )
     parser.add_argument(
         "--evidence-dir",
         type=pathlib.Path,
@@ -63,13 +88,17 @@ def write_external_evidence(
     request_bytes: bytes,
     report_bytes: bytes,
     stderr_bytes: bytes,
+    raw_occurrences: dict[tuple[str, str, str], bytes],
+    occurrence_bytes: bytes,
 ) -> None:
     """Persist only externally observable bytes used by release qualification.
 
     The installed process remains the report authority: the report artifact is
     the exact stdout byte stream, and the receipt binds that byte stream.  This
     directory is intentionally outside the installed prefix so it cannot alter
-    the immutable install-artifact manifest.
+    the immutable install-artifact manifest. Raw provider stdout is captured by
+    an independent installed-worker invocation and is retained as diagnostic
+    evidence only; it is never copied into the public report.
     """
 
     destination = (evidence_dir / configuration / backend).resolve()
@@ -87,6 +116,31 @@ def write_external_evidence(
     receipt_path.write_bytes(receipt_bytes)
     (destination / REQUEST_FILENAME).write_bytes(request_bytes)
     (destination / REPORT_FILENAME).write_bytes(report_bytes)
+    (destination / OCCURRENCE_FILENAME).write_bytes(occurrence_bytes)
+    raw_directory = destination / RAW_PROVIDER_EVIDENCE_DIRECTORY
+    raw_directory.mkdir(parents=True, exist_ok=True)
+    task_keys = sorted(raw_occurrences)
+    manifest_entries = []
+    for ordinal, key in enumerate(task_keys):
+        raw = raw_occurrences[key]
+        relative_path = f"{RAW_PROVIDER_EVIDENCE_DIRECTORY}/task-{ordinal:04d}.bin"
+        (destination / relative_path).write_bytes(raw)
+        manifest_entries.append(
+            {
+                "task_execution_key": list(key),
+                "relative_path": relative_path,
+                "byte_count": len(raw),
+                "sha256": content_digest(raw),
+            }
+        )
+    (destination / RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME).write_bytes(
+        oracle_canonical_json(
+            {
+                "schema": RAW_PROVIDER_EVIDENCE_SCHEMA,
+                "entries": manifest_entries,
+            }
+        )
+    )
 
 
 def oracle_canonical_json(value: Any) -> bytes:
@@ -104,23 +158,41 @@ def main() -> int:
     args.prefix = args.prefix.resolve()
     sys.path.insert(0, str(args.root / "tools" / "quality"))
     import check_ng_clang22_materialization as oracle  # pylint: disable=import-error
+    import check_ng_clang22_install_matrix as install_matrix  # pylint: disable=import-error
 
     occurrence_path = args.prefix / OCCURRENCE_RELATIVE_PATH
     if not occurrence_path.is_file():
         fail(f"installed occurrence manifest is missing: {occurrence_path}")
     occurrence_bytes = occurrence_path.read_bytes()
-    occurrence = json.loads(occurrence_bytes)
+    try:
+        occurrence = oracle.load_strict_json_bytes(
+            occurrence_bytes, "installed occurrence manifest"
+        )
+        oracle.validate_occurrence_manifest(args.root, occurrence)
+    except (json.JSONDecodeError, oracle.MaterializationError) as error:
+        fail(f"installed occurrence manifest is invalid: {error}")
     if occurrence["package_configuration"] not in {"static", "shared"}:
         fail("installed occurrence package configuration is not closed")
     files = occurrence["files"]
     if len(files) < 2:
         fail("installed occurrence does not inventory both executables")
 
+    source_factory = None
+    if args.canonical_base64_vectors:
+        if args.translation_unit_count != len(CANONICAL_BASE64_VECTOR_SOURCES):
+            fail(
+                "canonical Base64 vector acceptance requires exactly two translation units"
+            )
+
+        def source_factory(index: int) -> bytes:
+            return CANONICAL_BASE64_VECTOR_SOURCES[index]
+
     request = oracle.sample_request(
         args.root,
         configuration=occurrence["package_configuration"],
         backend=args.backend,
         translation_unit_count=args.translation_unit_count,
+        source_factory=source_factory,
     )
     request["tool"].update(
         source_revision=occurrence["source_revision"],
@@ -134,6 +206,15 @@ def main() -> int:
         installed_binary_digest=files[1]["digest"],
         sandbox_policy_digest=BASELINE_POLICY_DIGEST,
     )
+    if os.environ.get("CXXLENS_ASAN_INSTALLED_QUALIFICATION") == "1":
+        # AddressSanitizer reserves a platform shadow range far beyond the
+        # normal finite RLIMIT_AS budget before the worker reaches main().
+        # This explicit CTest profile keeps the request binding visible while
+        # reserving the sanitizer shadow range. Normal and release requests
+        # continue to exercise their finite address-space budget.
+        for task in request["tasks"]:
+            task["budget"]["address_space_bytes"] = ASAN_ADDRESS_SPACE_BYTES
+            task["budget"]["subprocesses"] = ASAN_SUBPROCESS_BUDGET
     for task in request["tasks"]:
         task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST
     oracle.bind_provider_task_identities(request)
@@ -141,6 +222,19 @@ def main() -> int:
     oracle.bind_engine_policy_and_selector_identities(request)
     oracle.bind_request_identity(request)
     oracle.validate_request(args.root, request)
+    if args.canonical_base64_vectors:
+        expected_padding = ("==", "=")
+        for task, padding in zip(request["tasks"], expected_padding, strict=True):
+            spelling = task["source"]["content_base64"]
+            if padding == "==":
+                valid = spelling.endswith("==")
+            else:
+                valid = spelling.endswith("=") and not spelling.endswith("==")
+            if not valid:
+                fail(
+                    "installed request did not preserve the expected canonical "
+                    f"Base64 padding spelling: {spelling!r}"
+                )
     request_bytes = oracle.canonical_json(request)
 
     environment = dict(os.environ)
@@ -184,6 +278,12 @@ def main() -> int:
         oracle.load(args.root / oracle.REPORT_SCHEMA),
         "installed materializer positive report",
         error_code="materialization.report-invalid",
+    )
+    raw_occurrences = install_matrix.capture_installed_raw_provider_transcripts(
+        args.root, args.prefix, request, occurrence
+    )
+    install_matrix.validate_independent_raw_provider_transcripts(
+        args.root, request, report, raw_occurrences
     )
     if report["response_kind"] != "detailed" or report["result"] != "passed":
         fail("installed materializer positive path did not return detailed passed")
@@ -232,6 +332,7 @@ def main() -> int:
         "sandbox_policy_digest": BASELINE_POLICY_DIGEST,
     }:
         fail("installed success report provider binding differs")
+    install_matrix.validate_installed_task_v3_source_binding(request, report)
 
     incremental_execution = report["incremental_execution"]
     if (
@@ -276,6 +377,20 @@ def main() -> int:
         or (args.backend == "sqlite" and publication["sqlite_effect_root_receipt"] is None)
     ):
         fail("installed success report publication is not committed and verified")
+    authority_registry_digest = request["registry"]["authority_registry_digest"]
+    engine_registry_digest = request["engine"]["engine_registry_digest"]
+    store_selector_fields = report["store"]["selector"]["fields"]
+    if authority_registry_digest == engine_registry_digest:
+        fail("installed success request aliased authority and engine registry digests")
+    if (
+        publication["selector"]["relation_registry_digest"] != engine_registry_digest
+        or publication["selector"]["relation_registry_digest"]
+        == authority_registry_digest
+        or store_selector_fields["relation_registry_digest"] != engine_registry_digest
+        or report["store"]["snapshot_manifest"]["relation_registry_digest"]
+        != engine_registry_digest
+    ):
+        fail("installed Store publication did not bind the exact admitted engine digest")
     if report["semantic_verification"]["status"] != "passed":
         fail("installed success report lacks reopened semantic verification")
     if not report["store"].get("snapshot_manifest") or not report["store"].get(
@@ -292,6 +407,54 @@ def main() -> int:
         "canonical_export_digest"
     ]:
         fail("installed report canonical export digest differs from exact SDK export mirror")
+    expected_selector = request["publication"]["selector"]
+    expected_store_selector = report["store"]["selector"]
+    expected_record = publication["invocation_committed_record"]
+    expected_descriptors = sorted(
+        request["engine"]["admitted_descriptors"],
+        key=lambda row: row["descriptor_id"],
+    )
+    if (
+        reopened_store["selector"] != expected_store_selector
+        or reopened_store["publication_record"] != expected_record
+        or reopened_store["descriptors"] != expected_descriptors
+        or reopened_store["snapshot_manifest"]["relation_registry_digest"]
+        != engine_registry_digest
+    ):
+        fail("installed reopened Store lost exact selector, record, or descriptor inventory")
+    cursor_projection = reopened_store["cursor_projection"]
+    cursor_relations = cursor_projection["relations"]
+    if [row["relation_descriptor_id"] for row in cursor_relations] != [
+        row["descriptor_id"] for row in expected_descriptors
+    ]:
+        fail("installed reopened query cursor lost or reordered an admitted descriptor")
+    expected_descriptor_ids = {row["descriptor_id"] for row in expected_descriptors}
+    if any(
+        row["relation_descriptor_id"] not in expected_descriptor_ids
+        or "row_canonical_forms" not in row
+        or "claim_annotations" not in row
+        or "coverage" not in row
+        for row in cursor_relations
+    ):
+        fail("installed reopened query cursor contains an incomplete relation projection")
+    expected_lookups = (
+        {"selector": expected_store_selector},
+        {"publication_id": expected_record["publication_id"]},
+        {"snapshot_id": expected_record["snapshot_id"]},
+    )
+    for receipt, expected_lookup in zip(reopened_store["handle_receipts"], expected_lookups):
+        projection = receipt["projection"]
+        if (
+            receipt["lookup"] != expected_lookup
+            or projection["publication_record"] != expected_record
+            or projection["descriptors"] != expected_descriptors
+            or projection["snapshot_manifest"]["relation_registry_digest"]
+            != engine_registry_digest
+            or projection["cursor_projection_digest"] != cursor_projection["digest"]
+            or projection["canonical_export_digest"]
+            != reopened_store["canonical_export_digest"]
+        ):
+            fail("installed reopen receipt did not preserve exact lookup/query projection")
     if any(
         receipt["projection"]["canonical_export_digest"]
         != expected_projection["canonical_export_digest"]
@@ -329,7 +492,7 @@ def main() -> int:
         if result["runtime_receipt"]["frame_count"] <= 0:
             fail("installed success report has no validated provider frames")
 
-    if args.translation_unit_count > 1:
+    if args.translation_unit_count > 1 and not args.canonical_base64_vectors:
         direct_target_rows = [
             row
             for result in task_results
@@ -389,6 +552,8 @@ def main() -> int:
             request_bytes,
             completed.stdout,
             completed.stderr,
+            raw_occurrences,
+            occurrence_bytes,
         )
 
     return 0

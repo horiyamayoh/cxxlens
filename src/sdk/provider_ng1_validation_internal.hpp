@@ -73,8 +73,7 @@ namespace cxxlens::sdk::provider::detail
 		std::uint64_t started_at_ns_{};
 		std::optional<std::uint64_t> last_probe_sequence_;
 		std::optional<std::uint64_t> last_ack_sequence_;
-		std::optional<std::uint64_t> last_probe_provider_time_ns_;
-		std::optional<std::uint64_t> last_ack_provider_time_ns_;
+		std::optional<std::uint64_t> last_provider_time_ns_;
 		std::optional<std::uint64_t> last_probe_host_receipt_ns_;
 		std::optional<std::uint64_t> last_host_receipt_time_ns_;
 		std::optional<std::uint64_t> last_valid_ack_received_ns_;
@@ -246,6 +245,9 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] static result<ng1_spill_prefix_state> create(ng1_spill_binding binding);
 
 		[[nodiscard]] result<void> append(const ng1_spill_record& record);
+		/** Reject an ACK unless its sequence is represented by this exact spill prefix. */
+		[[nodiscard]] result<void>
+		validate_ack_frontier(std::uint64_t highest_contiguous_acked_sequence) const;
 		[[nodiscard]] result<std::string> spill_digest() const;
 		[[nodiscard]] result<ng1_spill_fsync_receipt>
 		observe_host_fsync(std::uint64_t highest_contiguous_acked_sequence,

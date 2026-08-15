@@ -32,6 +32,7 @@ import check_ng_production_scope_closure as production_scope  # noqa: E402
 
 
 REQUIRED_FILES = (
+    ".github/workflows/nightly.yml",
     ".github/workflows/quality.yml",
     ".github/ISSUE_TEMPLATE/design-feedback.yml",
     "AGENTS.md",
@@ -280,23 +281,188 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             ):
                 validate_documents(root)
 
-    def test_multiple_active_write_units_are_rejected(self) -> None:
+    def test_four_disjoint_active_write_units_are_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
             manifest = load_document(manifest_path)
-            unit = {
-                "issue": "#200",
-                "contract_ids": ["synthetic.contract"],
-                "write_paths": ["include/cxxlens/synthetic.hpp"],
-                "completed_stages": [],
-            }
             manifest["api_unit_workflow"]["active_write_units"] = [
-                unit,
-                {**copy.deepcopy(unit), "issue": "#201"},
+                {
+                    "issue": f"#{200 + index}",
+                    "contract_ids": [f"synthetic.contract.{index}"],
+                    "write_paths": [f"synthetic/lane-{index}"],
+                    "completed_stages": [],
+                }
+                for index in range(4)
+            ]
+            self.write_yaml(manifest_path, manifest)
+            validate_documents(root)
+
+    def test_nested_write_paths_within_one_active_unit_are_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
+            manifest = load_document(manifest_path)
+            manifest["api_unit_workflow"]["active_write_units"] = [
+                {
+                    "issue": "#200",
+                    "contract_ids": ["synthetic.contract"],
+                    "write_paths": ["src/sdk", "src/sdk/store.cpp"],
+                    "completed_stages": [],
+                }
+            ]
+            self.write_yaml(manifest_path, manifest)
+            validate_documents(root)
+
+    def test_five_active_write_units_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
+            manifest = load_document(manifest_path)
+            manifest["api_unit_workflow"]["active_write_units"] = [
+                {
+                    "issue": f"#{200 + index}",
+                    "contract_ids": [f"synthetic.contract.{index}"],
+                    "write_paths": [f"synthetic/lane-{index}"],
+                    "completed_stages": [],
+                }
+                for index in range(5)
             ]
             self.write_yaml(manifest_path, manifest)
             with self.assertRaisesRegex(ReadinessError, "schema validation failed"):
+                validate_documents(root)
+
+    def test_active_write_unit_contract_conflict_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
+            manifest = load_document(manifest_path)
+            manifest["api_unit_workflow"]["active_write_units"] = [
+                {
+                    "issue": "#200",
+                    "contract_ids": ["synthetic.contract"],
+                    "write_paths": ["synthetic/lane-a"],
+                    "completed_stages": [],
+                },
+                {
+                    "issue": "#201",
+                    "contract_ids": ["synthetic.contract"],
+                    "write_paths": ["synthetic/lane-b"],
+                    "completed_stages": [],
+                },
+            ]
+            self.write_yaml(manifest_path, manifest)
+            with self.assertRaisesRegex(ReadinessError, "contract conflict"):
+                validate_documents(root)
+
+    def test_active_write_unit_equal_path_conflict_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
+            manifest = load_document(manifest_path)
+            manifest["api_unit_workflow"]["active_write_units"] = [
+                {
+                    "issue": "#200",
+                    "contract_ids": ["synthetic.contract.a"],
+                    "write_paths": ["synthetic/shared"],
+                    "completed_stages": [],
+                },
+                {
+                    "issue": "#201",
+                    "contract_ids": ["synthetic.contract.b"],
+                    "write_paths": ["synthetic/shared"],
+                    "completed_stages": [],
+                },
+            ]
+            self.write_yaml(manifest_path, manifest)
+            with self.assertRaisesRegex(ReadinessError, "path conflict"):
+                validate_documents(root)
+
+    def test_active_write_unit_ancestor_path_conflict_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
+            manifest = load_document(manifest_path)
+            manifest["api_unit_workflow"]["active_write_units"] = [
+                {
+                    "issue": "#200",
+                    "contract_ids": ["synthetic.contract.a"],
+                    "write_paths": ["src/sdk"],
+                    "completed_stages": [],
+                },
+                {
+                    "issue": "#201",
+                    "contract_ids": ["synthetic.contract.b"],
+                    "write_paths": ["src/sdk/store.cpp"],
+                    "completed_stages": [],
+                },
+            ]
+            self.write_yaml(manifest_path, manifest)
+            with self.assertRaisesRegex(ReadinessError, "path conflict"):
+                validate_documents(root)
+
+    def test_active_write_unit_noncanonical_path_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
+            manifest = load_document(manifest_path)
+            manifest["api_unit_workflow"]["active_write_units"] = [
+                {
+                    "issue": "#200",
+                    "contract_ids": ["synthetic.contract"],
+                    "write_paths": ["src/../sdk"],
+                    "completed_stages": [],
+                }
+            ]
+            self.write_yaml(manifest_path, manifest)
+            with self.assertRaisesRegex(ReadinessError, "not canonical"):
+                validate_documents(root)
+
+    def test_quality_repository_consistency_preflight_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            marker = "          python tools/quality/check_documentation_consistency.py check --root .\n"
+            self.assertIn(marker, text)
+            workflow.write_text(text.replace(marker, "", 1), encoding="utf-8")
+            with self.assertRaisesRegex(ReadinessError, "repository consistency preflight"):
+                validate_documents(root)
+
+    def test_nightly_main_push_trigger_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/nightly.yml"
+            text = workflow.read_text(encoding="utf-8")
+            push = "  push:\n    branches:\n      - main\n"
+            self.assertIn(push, text)
+            workflow.write_text(text.replace(push, "", 1), encoding="utf-8")
+            with self.assertRaisesRegex(ReadinessError, "main push, schedule, and manual"):
+                validate_documents(root)
+
+    def test_nightly_rolling_concurrency_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/nightly.yml"
+            text = workflow.read_text(encoding="utf-8")
+            marker = "  cancel-in-progress: ${{ github.event_name != 'schedule' }}\n"
+            self.assertIn(marker, text)
+            workflow.write_text(
+                text.replace(marker, "  cancel-in-progress: false\n", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "preserve scheduled evidence"):
+                validate_documents(root)
+
+    def test_release_evaluation_waits_for_push_nightly(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            marker = '.event == "push" or '
+            self.assertIn(marker, text)
+            workflow.write_text(text.replace(marker, "", 1), encoding="utf-8")
+            with self.assertRaisesRegex(ReadinessError, "wait for push qualification"):
                 validate_documents(root)
 
     def test_missing_implementation_learning_handbook_is_rejected(self) -> None:

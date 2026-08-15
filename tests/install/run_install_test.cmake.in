@@ -42,6 +42,14 @@ if(PHASE STREQUAL "prepare")
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
             cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)
+  # `cmake --install` does not build targets, and the public Clang 22 SDK DSO
+  # plus the installed worker are not dependencies of the materializer binary.
+  # Build the complete installed executable/DSO closure before staging it.
+  execute_process(
+    COMMAND
+      "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+      cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
+      cxxlens_clang22_provider_sdk COMMAND_ERROR_IS_FATAL ANY)
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
@@ -126,7 +134,7 @@ if(PHASE STREQUAL "shared-runtime-layout"
    AND NOT APPLE)
   find_program(CXXLENS_READELF NAMES readelf llvm-readelf REQUIRED)
   foreach(tool IN ITEMS cxxlens-provider-scaffold cxxlens-sdk-doctor
-                        cxxlens-clang-worker-22)
+                        cxxlens-clang-worker-22 cxxlens-clang22-materialize)
     execute_process(
       COMMAND "${CXXLENS_READELF}" -d "${install_prefix}/bin/${tool}"
       OUTPUT_VARIABLE dynamic_section COMMAND_ERROR_IS_FATAL ANY)
@@ -240,19 +248,40 @@ if(PHASE STREQUAL "clang22-materializer-success")
       "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/check_ng_clang22_install_matrix.py"
       --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --evidence-dir
       "${materialization_evidence_dir}" --output
-      "${materialization_evidence_dir}/configuration-evidence.json"
-      COMMAND_ERROR_IS_FATAL ANY)
+      "${materialization_evidence_dir}/configuration-evidence.json" --prefix
+      "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
   message(STATUS "installed Clang 22 evidence: ${materialization_evidence_dir}")
   return()
 endif()
 
+if(PHASE STREQUAL "clang22-materializer-base64")
+  foreach(materialization_backend IN ITEMS memory sqlite)
+    execute_process(
+      COMMAND
+        "@Python3_EXECUTABLE@"
+        "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_success_test.py"
+        --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
+        --backend "${materialization_backend}" --translation-unit-count 2
+        --canonical-base64-vectors COMMAND_ERROR_IS_FATAL ANY)
+  endforeach()
+  return()
+endif()
+
 if(PHASE STREQUAL "clang22-materializer-negative")
+  set(materialization_negative_evidence_dir
+      "${test_root}/materialization-negative-evidence")
+  file(REMOVE_RECURSE "${materialization_negative_evidence_dir}")
   execute_process(
     COMMAND
       "@Python3_EXECUTABLE@"
       "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_negative_test.py"
       --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
+      --evidence-dir "${materialization_negative_evidence_dir}"
       COMMAND_ERROR_IS_FATAL ANY)
+  message(
+    STATUS
+      "installed Clang 22 negative evidence: ${materialization_negative_evidence_dir}"
+  )
   return()
 endif()
 

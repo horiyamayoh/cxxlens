@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -172,4 +173,17 @@ namespace cxxlens::detail::clang22::materialization
 	/** Encode the model as bounded canonical JSON without a trailing LF. */
 	[[nodiscard]] sdk::result<std::string> encode_public_materialization_success_report(
 		const public_materialization_success_report_model& model);
+
+	/**
+	 * Stage the exact detailed response bytes in one sealed private spool before stdout
+	 * publication.
+	 *
+	 * This is a source-private transport boundary: it does not alter the v2.1 response shape or
+	 * promote any Store observation.  The returned spool has been size-checked, sealed, and
+	 * re-digested from its immutable bytes; callers must stream it only after the remaining
+	 * post-publication validation has succeeded.
+	 */
+	[[nodiscard]] sdk::result<std::unique_ptr<materialization_replayable_spool>>
+	stage_public_materialization_final_response(std::string response,
+												std::size_t maximum_report_bytes);
 } // namespace cxxlens::detail::clang22::materialization

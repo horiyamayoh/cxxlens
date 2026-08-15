@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
+#include <string>
 
 #include <cxxlens/sdk/common.hpp>
 
@@ -101,6 +103,34 @@ namespace cxxlens::detail::sqlite_qualification
 		[[nodiscard]] bool operator==(const sqlite_disposable_normalization_plan&) const = default;
 	};
 
+	/** One held direct regular file observed by the receiptless raw classifier. */
+	struct sqlite_disposable_raw_file_observation
+	{
+		sqlite_disposable_object_identity object;
+		sqlite_disposable_object_identity entry;
+		std::uint64_t byte_count{};
+		std::string sha256;
+
+		[[nodiscard]] bool
+		operator==(const sqlite_disposable_raw_file_observation&) const = default;
+	};
+
+	/**
+	 * Raw, receiptless observation produced only from the retained fixture root. The family value
+	 * is derived from current bytes and topology; it does not claim an earlier operation, a
+	 * completed normalization edge, or public Store success.
+	 */
+	struct sqlite_disposable_raw_family_observation
+	{
+		sqlite_disposable_empty_family_observation observation;
+		sqlite_disposable_empty_family_receipt family;
+		sqlite_disposable_raw_file_observation main;
+		std::optional<sqlite_disposable_raw_file_observation> wal;
+
+		[[nodiscard]] bool
+		operator==(const sqlite_disposable_raw_family_observation&) const = default;
+	};
+
 	/**
 	 * Classify exactly one receiptless family.  Ambiguous, mixed, nonempty, unstable, and
 	 * unsupported observations return a typed failure and never select a family by precedence
@@ -118,4 +148,14 @@ namespace cxxlens::detail::sqlite_qualification
 	[[nodiscard]] cxxlens::sdk::result<sqlite_disposable_normalization_plan>
 	plan_sqlite_disposable_empty_normalization(
 		const sqlite_disposable_empty_family_observation& observation);
+
+	/**
+	 * Read-only qualification seam for the currently admitted no-journal families (F0/FZ/FO).
+	 * It uses only the capability's retained root FD and direct known leaves; SQLite open,
+	 * recovery, checkpoint, delete, cleanup, and production activation are deliberately absent.
+	 */
+	[[nodiscard]] cxxlens::sdk::result<sqlite_disposable_raw_family_observation>
+	observe_sqlite_disposable_raw_empty_family(
+		sqlite_disposable_qualification_capability& capability,
+		const sqlite_disposable_qualification_request& request);
 } // namespace cxxlens::detail::sqlite_qualification

@@ -3994,7 +3994,31 @@ namespace cxxlens::detail::clang22::materialization
 			if (admitted == nullptr || !admitted->as_array() || snapshot_manifest == nullptr)
 				return sdk::unexpected(
 					{"materialization.report-invalid", "semantic_verification", "authority-shape"});
-			json_value::array_type descriptors = *admitted->as_array();
+			json_value::array_type descriptors;
+			descriptors.reserve(admitted->as_array()->size());
+			for (const auto& admitted_descriptor : *admitted->as_array())
+			{
+				const auto* descriptor_id = admitted_descriptor.member("descriptor_id");
+				const auto* expected_digest =
+					admitted_descriptor.member("runtime_descriptor_digest");
+				if (descriptor_id == nullptr || expected_digest == nullptr ||
+					descriptor_id->as_string() == nullptr ||
+					expected_digest->as_string() == nullptr)
+					return sdk::unexpected({"materialization.report-invalid",
+											"semantic_verification",
+											"descriptor-inventory"});
+				auto actual_descriptor = handle.descriptor(*descriptor_id->as_string());
+				if (!actual_descriptor || actual_descriptor->id != *descriptor_id->as_string() ||
+					actual_descriptor->descriptor_digest != *expected_digest->as_string())
+					return sdk::unexpected({"materialization.report-invalid",
+											"semantic_verification",
+											"descriptor-inventory"});
+				descriptors.push_back(
+					make_object({{"descriptor_id", text_value(actual_descriptor->id)},
+								 {"runtime_descriptor_digest",
+								  text_value(actual_descriptor->descriptor_digest)}})
+						.value());
+			}
 			std::ranges::sort(descriptors,
 							  [](const json_value& left, const json_value& right)
 							  {
@@ -5162,5 +5186,44 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report", "projection-bytes"});
 		return encoded;
+	}
+
+	sdk::result<std::unique_ptr<materialization_replayable_spool>>
+	stage_public_materialization_final_response(std::string response,
+												const std::size_t maximum_report_bytes)
+	{
+		if (maximum_report_bytes == 0U || response.empty() ||
+			response.size() > maximum_report_bytes || response.front() != '{' ||
+			response.back() != '}' || response.find('\n') != std::string::npos ||
+			response.find('\r') != std::string::npos)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report", "final-response-boundary"});
+		try
+		{
+			auto storage = make_materialization_private_spool();
+			if (!storage)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-create"});
+			const auto bytes = std::as_bytes(std::span{response.data(), response.size()});
+			if (auto appended = (*storage)->append(bytes); !appended)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-append"});
+			if (auto sealed = (*storage)->seal(); !sealed)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-seal"});
+			if (!(*storage)->sealed() || (*storage)->size_bytes() != response.size())
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-census"});
+			auto observed_digest = digest_materialization_spool(**storage);
+			if (!observed_digest || *observed_digest != sdk::content_digest(bytes))
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-digest"});
+			return std::move(*storage);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report", "final-spool-allocation"});
+		}
 	}
 } // namespace cxxlens::detail::clang22::materialization
