@@ -392,18 +392,11 @@ target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_worker_core)
 cxxlens_enable_sanitizers(cxxlens_clang22_worker_core)
 cxxlens_configure_clang22(cxxlens_clang22_worker_core)
-# The exact Clang boundary is compiled with RTTI disabled to match the packaged
-# LLVM archives. The canonical provider derives from portable_provider in that
-# boundary, while run_worker is implemented in the SDK runtime. Keep both sides
-# of that polymorphic ABI on no-RTTI rather than requiring LLVM typeinfo from
-# the worker. The private provider and spool objects do not cross the LLVM ABI
-# and retain RTTI so UBSan can check their cxxlens-owned vtables.
-if(CXXLENS_ENABLE_UBSAN
-   AND CXXLENS_CLANG22_AVAILABLE
-   AND NOT MSVC)
-  set_source_files_properties(src/sdk/provider.cpp PROPERTIES COMPILE_OPTIONS
-                                                              "-fno-rtti")
-endif()
+# Keep the provider SDK runtime on the project-wide RTTI configuration. Its
+# context owns standard-library polymorphic state (including shared_ptr control
+# blocks), so compiling only this translation unit with an RTTI-disabled
+# override makes UBSan observe invalid vtables when the exact provider is
+# enabled.
 if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
   set_source_files_properties(
     src/llvm/clang22/materialization_io.cpp

@@ -96,10 +96,8 @@ class SanitizerCoverageTest(unittest.TestCase):
     def test_ubsan_provider_and_spool_vtables_match_exact_boundary(self) -> None:
         source = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
         normalized = " ".join(source.split())
-        self.assertIn(
-            "if(CXXLENS_ENABLE_UBSAN AND CXXLENS_CLANG22_AVAILABLE AND NOT MSVC) "
-            "set_source_files_properties(src/sdk/provider.cpp PROPERTIES "
-            "COMPILE_OPTIONS \"-fno-rtti\") endif()",
+        self.assertNotIn(
+            "src/sdk/provider.cpp PROPERTIES COMPILE_OPTIONS \"-fno-rtti\"",
             normalized,
         )
         self.assertIn(
