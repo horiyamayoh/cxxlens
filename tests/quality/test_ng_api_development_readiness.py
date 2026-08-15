@@ -298,6 +298,22 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             self.write_yaml(manifest_path, manifest)
             validate_documents(root)
 
+    def test_nested_write_paths_within_one_active_unit_are_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
+            manifest = load_document(manifest_path)
+            manifest["api_unit_workflow"]["active_write_units"] = [
+                {
+                    "issue": "#200",
+                    "contract_ids": ["synthetic.contract"],
+                    "write_paths": ["src/sdk", "src/sdk/store.cpp"],
+                    "completed_stages": [],
+                }
+            ]
+            self.write_yaml(manifest_path, manifest)
+            validate_documents(root)
+
     def test_five_active_write_units_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

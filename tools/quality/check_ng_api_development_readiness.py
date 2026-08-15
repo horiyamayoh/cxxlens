@@ -1160,6 +1160,8 @@ def validate_active_write_units(manifest: dict[str, Any]) -> None:
         for raw_path in unit["write_paths"]:
             normalized = normalize_active_write_path(issue, raw_path)
             for previous_issue, previous_raw, previous_path in path_owners:
+                if previous_issue == issue:
+                    continue
                 if active_write_paths_overlap(previous_path, normalized):
                     fail(
                         "active write unit path conflict: "
