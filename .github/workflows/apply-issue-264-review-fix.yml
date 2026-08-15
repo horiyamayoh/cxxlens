@@ -31,16 +31,24 @@ jobs:
 
           checker = Path("tools/quality/check_ng_api_development_readiness.py")
           text = checker.read_text(encoding="utf-8")
-          old = """            for previous_issue, previous_raw, previous_path in path_owners:
-                if active_write_paths_overlap(previous_path, normalized):
-                    fail(
-"""
-          new = """            for previous_issue, previous_raw, previous_path in path_owners:
-                if previous_issue == issue:
-                    continue
-                if active_write_paths_overlap(previous_path, normalized):
-                    fail(
-"""
+          old = "\n".join(
+              (
+                  "            for previous_issue, previous_raw, previous_path in path_owners:",
+                  "                if active_write_paths_overlap(previous_path, normalized):",
+                  "                    fail(",
+                  "",
+              )
+          )
+          new = "\n".join(
+              (
+                  "            for previous_issue, previous_raw, previous_path in path_owners:",
+                  "                if previous_issue == issue:",
+                  "                    continue",
+                  "                if active_write_paths_overlap(previous_path, normalized):",
+                  "                    fail(",
+                  "",
+              )
+          )
           if text.count(old) != 1:
               raise SystemExit("active write path comparison anchor differs")
           checker.write_text(text.replace(old, new, 1), encoding="utf-8")
@@ -48,23 +56,27 @@ jobs:
           tests = Path("tests/quality/test_ng_api_development_readiness.py")
           text = tests.read_text(encoding="utf-8")
           anchor = "    def test_five_active_write_units_are_rejected(self) -> None:\n"
-          method = """    def test_nested_write_paths_within_one_active_unit_are_accepted(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = self.copied_root(temporary)
-            manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
-            manifest = load_document(manifest_path)
-            manifest["api_unit_workflow"]["active_write_units"] = [
-                {
-                    "issue": "#200",
-                    "contract_ids": ["synthetic.contract"],
-                    "write_paths": ["src/sdk", "src/sdk/store.cpp"],
-                    "completed_stages": [],
-                }
-            ]
-            self.write_yaml(manifest_path, manifest)
-            validate_documents(root)
-
-"""
+          method = "\n".join(
+              (
+                  "    def test_nested_write_paths_within_one_active_unit_are_accepted(self) -> None:",
+                  "        with tempfile.TemporaryDirectory() as temporary:",
+                  "            root = self.copied_root(temporary)",
+                  "            manifest_path = root / \"schemas/cxxlens_ng_api_development_readiness.yaml\"",
+                  "            manifest = load_document(manifest_path)",
+                  "            manifest[\"api_unit_workflow\"][\"active_write_units\"] = [",
+                  "                {",
+                  "                    \"issue\": \"#200\",",
+                  "                    \"contract_ids\": [\"synthetic.contract\"],",
+                  "                    \"write_paths\": [\"src/sdk\", \"src/sdk/store.cpp\"],",
+                  "                    \"completed_stages\": [],",
+                  "                }",
+                  "            ]",
+                  "            self.write_yaml(manifest_path, manifest)",
+                  "            validate_documents(root)",
+                  "",
+                  "",
+              )
+          )
           if text.count(anchor) != 1:
               raise SystemExit("active write test anchor differs")
           tests.write_text(text.replace(anchor, method + anchor, 1), encoding="utf-8")
