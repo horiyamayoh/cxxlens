@@ -9,72 +9,51 @@ permissions:
   contents: write
 
 jobs:
-  patch-install-fixture:
+  patch-nightly-trigger:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: agent/issue-185-clang-asan-boundary
           fetch-depth: 0
-      - name: Bind the sanitizer-only finite address-space fixture
+      - name: Bind exact-main Nightly qualification to its own contract change
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("tests/install/clang22_materializer_success_test.py")
+          path = Path(".github/workflows/nightly.yml")
           text = path.read_text(encoding="utf-8")
-
-          constant_anchor = "OCCURRENCE_RELATIVE_PATH = (\n"
-          if text.count(constant_anchor) != 1:
-              raise SystemExit("ASan fixture constant anchor is not unique")
-          text = text.replace(
-              constant_anchor,
-              (
-                  "# ASan reserves a multi-terabyte virtual shadow before main(). "
-                  "The normal\n"
-                  "# install fixture retains its 1 GiB production budget; only the "
-                  "explicit\n"
-                  "# sanitizer test environment selects this finite, shadow-compatible "
-                  "limit.\n"
-                  "ASAN_TEST_ADDRESS_SPACE_BYTES = 64 * 1024 * 1024 * 1024 * 1024\n\n"
-                  + constant_anchor
-              ),
-              1,
+          anchor = '''on:
+            schedule:
+              - cron: "17 18 * * *"
+            workflow_dispatch:
+          '''
+          replacement = '''on:
+            schedule:
+              - cron: "17 18 * * *"
+            workflow_dispatch:
+            # A Nightly contract change must qualify the exact merged-main tree.
+            # The path filter prevents ordinary main pushes from duplicating the
+            # scheduled suite.
+            push:
+              branches:
+                - main
+              paths:
+                - ".github/workflows/nightly.yml"
+          '''
+          anchor = "\n".join(line[10:] for line in anchor.splitlines()) + "\n"
+          replacement = (
+              "\n".join(line[10:] for line in replacement.splitlines()) + "\n"
           )
-
-          task_anchor = (
-              '    for task in request["tasks"]:\n'
-              '        task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST\n'
-          )
-          task_replacement = (
-              "    asan_address_space = os.environ.get(\n"
-              '        "CXXLENS_TEST_ASAN_ADDRESS_SPACE_BYTES"\n'
-              "    )\n"
-              "    if asan_address_space is not None and asan_address_space != str(\n"
-              "        ASAN_TEST_ADDRESS_SPACE_BYTES\n"
-              "    ):\n"
-              "        fail(\n"
-              '            "CXXLENS_TEST_ASAN_ADDRESS_SPACE_BYTES differs from the closed "\n'
-              '            "ASan sandbox fixture budget"\n'
-              "        )\n"
-              '    for task in request["tasks"]:\n'
-              '        task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST\n'
-              "        if asan_address_space is not None:\n"
-              '            task["budget"]["address_space_bytes"] = (\n'
-              "                ASAN_TEST_ADDRESS_SPACE_BYTES\n"
-              "            )\n"
-          )
-          if text.count(task_anchor) != 1:
-              raise SystemExit("ASan fixture task anchor is not unique")
-          text = text.replace(task_anchor, task_replacement, 1)
-          path.write_text(text, encoding="utf-8")
+          if text.count(anchor) != 1:
+              raise SystemExit("Nightly trigger anchor is not unique")
+          path.write_text(text.replace(anchor, replacement, 1), encoding="utf-8")
           PY
-      - name: Validate and publish the focused patch
+      - name: Validate and publish the exact-main trigger
         run: |
-          python3 -m py_compile tests/install/clang22_materializer_success_test.py
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/install/clang22_materializer_success_test.py
-          git commit -m "Use a finite ASan-compatible worker sandbox budget"
+          git add .github/workflows/nightly.yml
+          git commit -m "Qualify Nightly contract changes on exact main"
           git push origin HEAD:agent/issue-185-clang-asan-boundary
