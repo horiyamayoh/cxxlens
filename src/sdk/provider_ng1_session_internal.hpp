@@ -82,16 +82,22 @@ namespace cxxlens::sdk::provider::detail
 		{
 			return frame_transcript_digest_;
 		}
+		[[nodiscard]] const provider_runtime_provenance& provenance() const noexcept
+		{
+			return provenance_;
+		}
 
 	  private:
 		ng1_replay_validation_receipt(std::string task_id,
 									  std::string sealed_transcript_digest,
 									  std::uint64_t first_sequence,
-									  std::string frame_transcript_digest) noexcept
+									  std::string frame_transcript_digest,
+									  provider_runtime_provenance provenance) noexcept
 			: task_id_{std::move(task_id)},
 			  sealed_transcript_digest_{std::move(sealed_transcript_digest)},
 			  first_sequence_{first_sequence},
-			  frame_transcript_digest_{std::move(frame_transcript_digest)}
+			  frame_transcript_digest_{std::move(frame_transcript_digest)},
+			  provenance_{std::move(provenance)}
 		{
 		}
 
@@ -99,6 +105,7 @@ namespace cxxlens::sdk::provider::detail
 		std::string sealed_transcript_digest_;
 		std::uint64_t first_sequence_{};
 		std::string frame_transcript_digest_;
+		provider_runtime_provenance provenance_;
 
 		friend result<ng1_replay_validation_receipt>
 		make_ng1_replay_validation_receipt(const ng1_output_validation_receipt& output,
@@ -146,8 +153,8 @@ namespace cxxlens::sdk::provider::detail
 
 		ng1_session_coordinator(const ng1_session_coordinator&) = delete;
 		ng1_session_coordinator& operator=(const ng1_session_coordinator&) = delete;
-		ng1_session_coordinator(ng1_session_coordinator&&) noexcept = default;
-		ng1_session_coordinator& operator=(ng1_session_coordinator&&) noexcept = default;
+		ng1_session_coordinator(ng1_session_coordinator&& other) noexcept;
+		ng1_session_coordinator& operator=(ng1_session_coordinator&&) = delete;
 		~ng1_session_coordinator() noexcept = default;
 
 		[[nodiscard]] ng1_recovery_state state() const noexcept
@@ -221,13 +228,14 @@ namespace cxxlens::sdk::provider::detail
 
 	  private:
 		explicit ng1_session_coordinator(std::string task_id,
+										 ng1_resume_binding resume_binding,
 										 ng1_heartbeat_state heartbeat,
 										 ng1_progress_state progress,
 										 ng1_recovery_adapter recovery,
 										 ng1_spill_staging_session spill) noexcept
-			: task_id_{std::move(task_id)}, heartbeat_{std::move(heartbeat)},
-			  progress_{std::move(progress)}, recovery_{std::move(recovery)},
-			  spill_{std::move(spill)}
+			: task_id_{std::move(task_id)}, resume_binding_{std::move(resume_binding)},
+			  heartbeat_{std::move(heartbeat)}, progress_{std::move(progress)},
+			  recovery_{std::move(recovery)}, spill_{std::move(spill)}
 		{
 		}
 
@@ -246,6 +254,7 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void> poison(error original_error);
 
 		std::string task_id_;
+		ng1_resume_binding resume_binding_;
 		ng1_heartbeat_state heartbeat_;
 		ng1_progress_state progress_;
 		ng1_recovery_adapter recovery_;
@@ -253,6 +262,7 @@ namespace cxxlens::sdk::provider::detail
 		std::optional<ng1_spill_fsync_receipt> latest_fsync_receipt_;
 		std::optional<std::uint64_t> last_host_receipt_time_ns_;
 		std::optional<std::string> replay_output_digest_;
+		std::optional<std::string> replay_frame_transcript_digest_;
 		bool progress_terminal_{};
 		bool poisoned_{};
 		bool cleaned_{};

@@ -12,6 +12,30 @@
 
 namespace cxxlens::sdk::provider::detail
 {
+	/**
+	 * Source-private identity carried by a shared runtime validation pass.  Empty optional
+	 * projections are permitted for the generic NG0 runtime, but the NG1 replay bridge requires
+	 * every field to be present and compares it with the host resume binding.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN provider_runtime_provenance
+	{
+		std::string provider_id;
+		semantic_version provider_version;
+		std::string provider_binary_digest;
+		std::string provider_semantic_contract_digest;
+		std::string protocol_session_id;
+		std::string task_id;
+		std::string task_input_digest;
+		std::string normalized_invocation_digest;
+		std::string toolchain_digest;
+		std::string environment_digest;
+		std::string sandbox_policy_digest;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::uint64_t stream_id{};
+	};
+
 	/** Closed runtime-owned evidence derived from raw bytes, decoded frames, and one immutable
 	 * seal. */
 	class CXXLENS_PROVIDER_DETAIL_HIDDEN provider_runtime_receipt
@@ -22,19 +46,22 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] std::uint64_t decoded_frame_count() const noexcept;
 		[[nodiscard]] std::string_view frame_transcript_digest() const noexcept;
 		[[nodiscard]] std::string_view sealed_transcript_digest() const noexcept;
+		[[nodiscard]] const provider_runtime_provenance& provenance() const noexcept;
 
 	  private:
 		provider_runtime_receipt(std::uint64_t raw_stdout_byte_count,
 								 std::string raw_stdout_sha256,
 								 std::uint64_t decoded_frame_count,
 								 std::string frame_transcript_digest,
-								 std::string sealed_transcript_digest);
+								 std::string sealed_transcript_digest,
+								 provider_runtime_provenance provenance);
 
 		std::uint64_t raw_stdout_byte_count_{};
 		std::string raw_stdout_sha256_;
 		std::uint64_t decoded_frame_count_{};
 		std::string frame_transcript_digest_;
 		std::string sealed_transcript_digest_;
+		provider_runtime_provenance provenance_;
 
 		friend result<provider_runtime_receipt>
 		make_provider_runtime_receipt(std::uint64_t,
@@ -43,14 +70,30 @@ namespace cxxlens::sdk::provider::detail
 									  std::string_view,
 									  std::string_view,
 									  const sealed_provider_transcript&);
+		friend result<provider_runtime_receipt>
+		make_provider_runtime_receipt(std::uint64_t,
+									  std::string,
+									  std::span<const frame>,
+									  provider_runtime_provenance,
+									  std::string_view,
+									  const sealed_provider_transcript&);
 	};
 
-	/** Construct the five-field receipt in the same pass that owns the immutable output seal. */
+	/** Construct the runtime receipt in the same pass that owns the immutable output seal. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<provider_runtime_receipt>
 	make_provider_runtime_receipt(std::uint64_t raw_stdout_byte_count,
 								  std::string raw_stdout_sha256,
 								  std::span<const frame> frames,
 								  std::string_view task_id,
+								  std::string_view terminal,
+								  const sealed_provider_transcript& sealed);
+
+	/** Construct a runtime receipt with the complete source-private NG1 identity projection. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<provider_runtime_receipt>
+	make_provider_runtime_receipt(std::uint64_t raw_stdout_byte_count,
+								  std::string raw_stdout_sha256,
+								  std::span<const frame> frames,
+								  provider_runtime_provenance provenance,
 								  std::string_view terminal,
 								  const sealed_provider_transcript& sealed);
 

@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include <cxxlens/sdk/common.hpp>
@@ -17,6 +18,7 @@ namespace
 {
 	using namespace cxxlens::sdk;
 	using namespace cxxlens::sdk::provider::detail;
+	static_assert(!std::is_move_assignable_v<ng1_session_coordinator>);
 
 	void require(const bool condition, const std::string_view message)
 	{
@@ -308,7 +310,8 @@ namespace
 			return *receipt;
 		}
 
-		[[nodiscard]] provider_runtime_receipt replay_runtime_receipt() const
+		[[nodiscard]] provider_runtime_receipt
+		replay_runtime_receipt(const std::string_view mutation = {}) const
 		{
 			auto transcript = sealed_transcript();
 			provider::frame replay_frame;
@@ -317,10 +320,30 @@ namespace
 			replay_frame.sequence = 0U;
 			replay_frame.flags = static_cast<std::uint16_t>(provider::frame_flag::end_of_stream);
 			std::vector<provider::frame> frames{std::move(replay_frame)};
+			provider_runtime_provenance provenance;
+			provenance.provider_id = resume.provider_id;
+			provenance.provider_version = resume.provider_version;
+			provenance.provider_binary_digest = resume.provider_binary_digest;
+			provenance.provider_semantic_contract_digest = resume.provider_semantic_contract_digest;
+			provenance.protocol_session_id = resume.protocol_session_id;
+			provenance.task_id = resume.task_id;
+			provenance.task_input_digest = resume.task_input_digest;
+			provenance.normalized_invocation_digest = resume.normalized_invocation_digest;
+			provenance.toolchain_digest = resume.toolchain_digest;
+			provenance.environment_digest = resume.environment_digest;
+			provenance.sandbox_policy_digest = resume.sandbox_policy_digest;
+			provenance.dependency_group_id = resume.dependency_group_id;
+			provenance.atomic_output_group_id = resume.atomic_output_group_id;
+			provenance.batch_id = resume.batch_id;
+			provenance.stream_id = resume.stream_id;
+			if (mutation == "task-input")
+				provenance.task_input_digest = digest("different-input");
+			else if (mutation == "stream")
+				provenance.stream_id = resume.stream_id + 1U;
 			auto runtime = make_provider_runtime_receipt(1U,
 														 "sha256:" + std::string(64U, 'b'),
 														 frames,
-														 "task:test",
+														 std::move(provenance),
 														 "provider.success",
 														 transcript);
 			require(runtime, "shared replay runtime receipt construction failed");
@@ -532,6 +555,29 @@ namespace
 		require(!after_cleanup, "session accepted an append after cleanup");
 	}
 
+	void test_replay_requires_complete_resume_binding()
+	{
+		const fixture values;
+		auto session = ng1_session_coordinator::create(values.configuration());
+		require(session, "provenance session creation failed");
+		require(session->append_spill(values.spill_record()), "provenance spill append failed");
+		auto receipt = session->fsync_spill(0U, 0U, digest("staged"));
+		require(receipt, "provenance fsync failed");
+		require(session->observe_worker_exit(), "provenance worker exit failed");
+		require(session->accept_durable_resume(values.resume_control(), *receipt, false, false, 0U),
+				"provenance durable resume failed");
+		auto replay_start = session->replay_start_sequence();
+		require(replay_start, "provenance replay start unavailable");
+		auto replay = make_ng1_replay_validation_receipt(
+			values.output_receipt(), values.replay_runtime_receipt("task-input"), *replay_start);
+		require(replay, "provenance replay receipt construction failed");
+		auto rejected = session->accept_replay(*replay);
+		require(!rejected && rejected.error().field == "task_input_digest" &&
+					session->state() == ng1_recovery_state::failed,
+				"replay accepted a task-input provenance mutation");
+		require(session->cleanup(), "provenance rejection cleanup failed");
+	}
+
 	void test_spill_port_throw_effects_are_terminal()
 	{
 		const fixture values;
@@ -579,6 +625,7 @@ int main()
 	test_session_rejects_unbound_or_nonmonotonic_observations();
 	test_session_requires_local_receipt_and_poisoned_spill_is_terminal();
 	test_session_rejects_bad_replay_and_post_cleanup_calls();
+	test_replay_requires_complete_resume_binding();
 	test_spill_port_throw_effects_are_terminal();
 	return 0;
 }

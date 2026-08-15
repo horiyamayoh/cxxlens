@@ -20,6 +20,78 @@ namespace cxxlens::sdk::provider::detail
 			return true;
 		}
 
+		[[nodiscard]] bool valid_sha256_digest(const std::string_view value) noexcept
+		{
+			if (!value.starts_with("sha256:") || value.size() != 71U)
+				return false;
+			for (const auto byte : value.substr(7U))
+				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+					return false;
+			return true;
+		}
+
+		[[nodiscard]] bool valid_runtime_id(const std::string_view value) noexcept
+		{
+			return !value.empty() && !value.contains('\0');
+		}
+
+		[[nodiscard]] bool
+		complete_runtime_provenance(const provider_runtime_provenance& provenance,
+									const std::string_view task_id) noexcept
+		{
+			return valid_runtime_id(provenance.provider_id) &&
+				provenance.provider_version.major != 0U &&
+				valid_sha256_digest(provenance.provider_binary_digest) &&
+				valid_sha256_digest(provenance.provider_semantic_contract_digest) &&
+				valid_runtime_id(provenance.protocol_session_id) && provenance.task_id == task_id &&
+				valid_runtime_id(provenance.task_input_digest) &&
+				valid_runtime_id(provenance.normalized_invocation_digest) &&
+				valid_runtime_id(provenance.toolchain_digest) &&
+				valid_runtime_id(provenance.environment_digest) &&
+				valid_runtime_id(provenance.sandbox_policy_digest) &&
+				valid_runtime_id(provenance.dependency_group_id) &&
+				valid_runtime_id(provenance.atomic_output_group_id) &&
+				valid_runtime_id(provenance.batch_id) && provenance.stream_id != 0U;
+		}
+
+		[[nodiscard]] std::string_view
+		provenance_mismatch_field(const provider_runtime_provenance& observed,
+								  const ng1_resume_binding& expected) noexcept
+		{
+			if (observed.provider_id != expected.provider_id)
+				return "provider_id";
+			if (observed.provider_version != expected.provider_version)
+				return "provider_version";
+			if (observed.provider_binary_digest != expected.provider_binary_digest)
+				return "provider_binary_digest";
+			if (observed.provider_semantic_contract_digest !=
+				expected.provider_semantic_contract_digest)
+				return "provider_semantic_contract_digest";
+			if (observed.protocol_session_id != expected.protocol_session_id)
+				return "protocol_session_id";
+			if (observed.task_id != expected.task_id)
+				return "task_id";
+			if (observed.task_input_digest != expected.task_input_digest)
+				return "task_input_digest";
+			if (observed.normalized_invocation_digest != expected.normalized_invocation_digest)
+				return "normalized_invocation_digest";
+			if (observed.toolchain_digest != expected.toolchain_digest)
+				return "toolchain_digest";
+			if (observed.environment_digest != expected.environment_digest)
+				return "environment_digest";
+			if (observed.sandbox_policy_digest != expected.sandbox_policy_digest)
+				return "sandbox_policy_digest";
+			if (observed.dependency_group_id != expected.dependency_group_id)
+				return "dependency_group_id";
+			if (observed.atomic_output_group_id != expected.atomic_output_group_id)
+				return "atomic_output_group_id";
+			if (observed.batch_id != expected.batch_id)
+				return "batch_id";
+			if (observed.stream_id != expected.stream_id)
+				return "stream_id";
+			return {};
+		}
+
 		[[nodiscard]] error session_error(const std::string_view field,
 										  const std::string_view detail)
 		{
@@ -82,10 +154,13 @@ namespace cxxlens::sdk::provider::detail
 			return unexpected(session_error("replay.sealed_transcript_digest", "mismatch"));
 		if (!valid_semantic_digest(replay_runtime.frame_transcript_digest()))
 			return unexpected(session_error("replay.frame_transcript_digest", "semantic-v2"));
+		if (!complete_runtime_provenance(replay_runtime.provenance(), output.task_id()))
+			return unexpected(session_error("replay.provenance", "incomplete"));
 		return ng1_replay_validation_receipt{std::string{output.task_id()},
 											 std::string{output.sealed_transcript_digest()},
 											 first_sequence,
-											 std::string{replay_runtime.frame_transcript_digest()}};
+											 std::string{replay_runtime.frame_transcript_digest()},
+											 replay_runtime.provenance()};
 	}
 
 	result<ng1_session_coordinator>
@@ -114,10 +189,27 @@ namespace cxxlens::sdk::provider::detail
 		if (!spill)
 			return unexpected(std::move(spill.error()));
 		return ng1_session_coordinator{std::move(task_id),
+									   configuration.resume_binding,
 									   std::move(*heartbeat),
 									   std::move(*progress),
 									   std::move(*recovery),
 									   std::move(*spill)};
+	}
+
+	ng1_session_coordinator::ng1_session_coordinator(ng1_session_coordinator&& other) noexcept
+		: task_id_{std::move(other.task_id_)}, resume_binding_{std::move(other.resume_binding_)},
+		  heartbeat_{std::move(other.heartbeat_)}, progress_{std::move(other.progress_)},
+		  recovery_{std::move(other.recovery_)}, spill_{std::move(other.spill_)},
+		  latest_fsync_receipt_{std::move(other.latest_fsync_receipt_)},
+		  last_host_receipt_time_ns_{std::move(other.last_host_receipt_time_ns_)},
+		  replay_output_digest_{std::move(other.replay_output_digest_)},
+		  replay_frame_transcript_digest_{std::move(other.replay_frame_transcript_digest_)},
+		  progress_terminal_{other.progress_terminal_}, poisoned_{other.poisoned_},
+		  cleaned_{other.cleaned_}
+	{
+		other.poisoned_ = true;
+		other.cleaned_ = true;
+		other.progress_terminal_ = true;
 	}
 
 	result<void> ng1_session_coordinator::ensure_open(const std::string_view operation) const
@@ -402,10 +494,19 @@ namespace cxxlens::sdk::provider::detail
 		if (replay_receipt.task_id() != task_id_)
 			return reject_replay(
 				error{"provider.resume-replay-invalid", "task_id", "binding-mismatch"});
+		if (const auto field =
+				provenance_mismatch_field(replay_receipt.provenance(), resume_binding_);
+			!field.empty())
+			return reject_replay(
+				error{"provider.resume-replay-invalid", std::string{field}, "binding-mismatch"});
+		if (!valid_semantic_digest(replay_receipt.frame_transcript_digest()))
+			return reject_replay(error{
+				"provider.resume-replay-invalid", "frame_transcript_digest", "missing-or-invalid"});
 		auto accepted = recovery_.accept_replay_validated(replay_receipt.first_sequence());
 		if (!accepted)
 			return accepted;
 		replay_output_digest_ = std::string{replay_receipt.sealed_transcript_digest()};
+		replay_frame_transcript_digest_ = std::string{replay_receipt.frame_transcript_digest()};
 		return {};
 	}
 
@@ -427,9 +528,11 @@ namespace cxxlens::sdk::provider::detail
 		}
 		if (current_state == ng1_recovery_state::resumed &&
 			(!replay_output_digest_ ||
-			 *replay_output_digest_ != output_receipt.sealed_transcript_digest()))
+			 *replay_output_digest_ != output_receipt.sealed_transcript_digest() ||
+			 !replay_frame_transcript_digest_ ||
+			 !valid_semantic_digest(*replay_frame_transcript_digest_)))
 			return reject_output(
-				error{"provider.replay-invalid", "sealed_transcript_digest", "not-replayed-seal"});
+				error{"provider.replay-invalid", "replay_receipt", "not-replayed-seal"});
 		if (!progress_terminal_)
 			return poison(error{"provider.progress-rate", "terminal", "missing"});
 		if (auto complete = progress_.finish(); !complete)
