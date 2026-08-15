@@ -297,6 +297,41 @@ namespace
 				"snapshot receipt lost the exact candidate lookup");
 	}
 
+	void require_three_paths_query_the_same_admitted_snapshot(
+		const materialization_store_observation& observation,
+		const sdk::relation_engine& value)
+	{
+		auto relation = value.require_id(descriptor().id);
+		require(relation.has_value(), "query regression relation was not admitted");
+		const auto expected_descriptor = descriptor();
+		const auto expected_row = row("item:one", "payload").canonical_form();
+		for (const auto& receipt : observation.verification_receipts)
+		{
+			require(receipt.handle.has_value(), "query regression lost a reopened handle");
+			auto persisted_descriptor = receipt.handle->descriptor(expected_descriptor.id);
+			require(persisted_descriptor && *persisted_descriptor == expected_descriptor,
+					"reopened Store descriptor admission differs from the engine descriptor");
+
+			auto claims = receipt.handle->open_claims(expected_descriptor.id);
+			require(claims.has_value(), "reopened Store claim query was unavailable");
+			auto claim = claims->next();
+			require(claim && claim->has_value() && (*claim)->copy(),
+					"reopened Store claim query lost its occurrence");
+			auto claim_end = claims->next();
+			require(claim_end && !*claim_end, "reopened Store claim query was not finite");
+
+			auto rows = receipt.handle->open(*relation);
+			require(rows.has_value(), "reopened Store row query was unavailable");
+			auto first = rows->next();
+			require(first && first->has_value(), "reopened Store row query lost its row");
+			auto copied = (*first)->copy();
+			require(copied && copied->canonical_form() == expected_row,
+					"reopened Store row query returned a different canonical row");
+			auto row_end = rows->next();
+			require(row_end && !*row_end, "reopened Store row query was not finite");
+		}
+	}
+
 	void memory_fresh_genesis()
 	{
 		const auto value = engine();
@@ -330,6 +365,7 @@ namespace
 			require(receipt.projection->publication.publication_id ==
 						observed.publish_returned_record->publication_id,
 					"memory same-Store paths did not resolve the invocation publication");
+		require_three_paths_query_the_same_admitted_snapshot(observed, value);
 	}
 
 	void authority_registry_digest_alias_is_rejected_at_store_admission()

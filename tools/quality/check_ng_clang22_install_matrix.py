@@ -11,6 +11,7 @@ the release qualification checker remains the sole aggregate authority.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import pathlib
@@ -41,6 +42,76 @@ BACKENDS = ("memory", "sqlite")
 
 class InstallMatrixError(ValueError):
     """The installed evidence is incomplete or does not bind exactly."""
+
+
+def validate_installed_task_v3_source_binding(
+    request: dict[str, Any], report: dict[str, Any]
+) -> None:
+    """Validate the installed task.v3 source spelling and execution chain.
+
+    The generic report validator checks the complete report contract.  This
+    named check keeps the #199 closure boundary visible at the installed
+    evidence layer: the exact canonical Base64 spelling must decode to the
+    source bytes used by task.v3, whose digest and provider execution identity
+    must be the same values adopted in the installed report.
+    """
+
+    tasks = {oracle.task_execution_key(task): task for task in request["tasks"]}
+    results = {
+        oracle.task_execution_key(result): result
+        for result in report.get("task_results", [])
+    }
+    if set(tasks) != set(results):
+        raise InstallMatrixError(
+            "installed task.v3 source binding has a different task execution census"
+        )
+
+    for key, task in tasks.items():
+        result = results[key]
+        spelling = task["source"]["content_base64"]
+        try:
+            source = oracle.decode_canonical_base64(spelling)
+        except oracle.MaterializationError as error:
+            raise InstallMatrixError(
+                f"installed task.v3 source Base64 is not canonical for {key}: {error}"
+            ) from error
+        if base64.b64encode(source).decode("ascii") != spelling:
+            raise InstallMatrixError(
+                f"installed task.v3 source Base64 spelling is not unique for {key}"
+            )
+
+        expected_task_input = oracle.expected_task_input_digest(request, task)
+        if task["task_input_digest"] != expected_task_input:
+            raise InstallMatrixError(
+                f"installed task.v3 digest is not bound to canonical source bytes for {key}"
+            )
+        if result["task_input_digest"] != expected_task_input:
+            raise InstallMatrixError(
+                f"installed report task.v3 digest differs for {key}"
+            )
+
+        expected_execution = oracle.expected_provider_execution_id(request, task)
+        if task["provider_execution_id"] != expected_execution:
+            raise InstallMatrixError(
+                f"installed provider execution identity is not source-bound for {key}"
+            )
+        if result["provider_execution_id"] != expected_execution:
+            raise InstallMatrixError(
+                f"installed report provider execution identity differs for {key}"
+            )
+        if result["input_transfer"] != oracle.expected_input_transfer_receipt(
+            request, task
+        ):
+            raise InstallMatrixError(
+                f"installed task.v3 input transfer receipt differs for {key}"
+            )
+        sealed_digest = result.get("runtime_receipt", {}).get(
+            "sealed_transcript_digest"
+        )
+        if not isinstance(sealed_digest, str) or not sealed_digest:
+            raise InstallMatrixError(
+                f"installed task.v3 result lacks a sealed provider transcript for {key}"
+            )
 
 
 def digest_bytes(value: bytes) -> str:
@@ -152,11 +223,8 @@ def validate_triplet(
         paths[REPORT_FILENAME], f"materialization report {paths[REPORT_FILENAME]}"
     )
     try:
-        runtime_raw_occurrences = oracle.report_runtime_raw_occurrences(
-            root,
-            request,
-            report,
-        )
+        validate_installed_task_v3_source_binding(request, report)
+        runtime_raw_occurrences = oracle.report_runtime_raw_occurrences(root, request, report)
         oracle.validate_report(
             root,
             request,
@@ -164,7 +232,7 @@ def validate_triplet(
             request_bytes=request_bytes,
             runtime_raw_occurrences=runtime_raw_occurrences,
         )
-    except oracle.MaterializationError as error:
+    except (InstallMatrixError, oracle.MaterializationError) as error:
         raise InstallMatrixError(
             f"materialization report binding is invalid: {paths[REPORT_FILENAME]}: {error}"
         ) from error

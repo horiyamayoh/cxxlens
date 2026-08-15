@@ -35,6 +35,10 @@ OCCURRENCE_RELATIVE_PATH = (
 REQUEST_FILENAME = "cxxlens-clang22-materialization-request.json"
 REPORT_FILENAME = "cxxlens-clang22-materialization-report.json"
 EXECUTION_RECEIPT_FILENAME = "cxxlens-clang22-materialization-execution-receipt.json"
+CANONICAL_BASE64_VECTOR_SOURCES = (
+    b"int main() { return 0; }\n",  # RFC 4648 two-padding spelling.
+    b"int unit_1() { return 1; }\n/*x*/",  # RFC 4648 one-padding spelling.
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,6 +49,11 @@ def parse_args() -> argparse.Namespace:
         "--backend", choices=("memory", "sqlite"), default="memory"
     )
     parser.add_argument("--translation-unit-count", type=int, default=2)
+    parser.add_argument(
+        "--canonical-base64-vectors",
+        action="store_true",
+        help="run actual installed provider tasks for one- and two-padding source spellings",
+    )
     parser.add_argument(
         "--evidence-dir",
         type=pathlib.Path,
@@ -112,6 +121,7 @@ def main() -> int:
     args.prefix = args.prefix.resolve()
     sys.path.insert(0, str(args.root / "tools" / "quality"))
     import check_ng_clang22_materialization as oracle  # pylint: disable=import-error
+    import check_ng_clang22_install_matrix as install_matrix  # pylint: disable=import-error
 
     occurrence_path = args.prefix / OCCURRENCE_RELATIVE_PATH
     if not occurrence_path.is_file():
@@ -124,11 +134,22 @@ def main() -> int:
     if len(files) < 2:
         fail("installed occurrence does not inventory both executables")
 
+    source_factory = None
+    if args.canonical_base64_vectors:
+        if args.translation_unit_count != len(CANONICAL_BASE64_VECTOR_SOURCES):
+            fail(
+                "canonical Base64 vector acceptance requires exactly two translation units"
+            )
+
+        def source_factory(index: int) -> bytes:
+            return CANONICAL_BASE64_VECTOR_SOURCES[index]
+
     request = oracle.sample_request(
         args.root,
         configuration=occurrence["package_configuration"],
         backend=args.backend,
         translation_unit_count=args.translation_unit_count,
+        source_factory=source_factory,
     )
     request["tool"].update(
         source_revision=occurrence["source_revision"],
@@ -158,6 +179,19 @@ def main() -> int:
     oracle.bind_engine_policy_and_selector_identities(request)
     oracle.bind_request_identity(request)
     oracle.validate_request(args.root, request)
+    if args.canonical_base64_vectors:
+        expected_padding = ("==", "=")
+        for task, padding in zip(request["tasks"], expected_padding, strict=True):
+            spelling = task["source"]["content_base64"]
+            if padding == "==":
+                valid = spelling.endswith("==")
+            else:
+                valid = spelling.endswith("=") and not spelling.endswith("==")
+            if not valid:
+                fail(
+                    "installed request did not preserve the expected canonical "
+                    f"Base64 padding spelling: {spelling!r}"
+                )
     request_bytes = oracle.canonical_json(request)
 
     environment = dict(os.environ)
@@ -249,6 +283,7 @@ def main() -> int:
         "sandbox_policy_digest": BASELINE_POLICY_DIGEST,
     }:
         fail("installed success report provider binding differs")
+    install_matrix.validate_installed_task_v3_source_binding(request, report)
 
     incremental_execution = report["incremental_execution"]
     if (
@@ -293,6 +328,20 @@ def main() -> int:
         or (args.backend == "sqlite" and publication["sqlite_effect_root_receipt"] is None)
     ):
         fail("installed success report publication is not committed and verified")
+    authority_registry_digest = request["registry"]["authority_registry_digest"]
+    engine_registry_digest = request["engine"]["engine_registry_digest"]
+    store_selector_fields = report["store"]["selector"]["fields"]
+    if authority_registry_digest == engine_registry_digest:
+        fail("installed success request aliased authority and engine registry digests")
+    if (
+        publication["selector"]["relation_registry_digest"] != engine_registry_digest
+        or publication["selector"]["relation_registry_digest"]
+        == authority_registry_digest
+        or store_selector_fields["relation_registry_digest"] != engine_registry_digest
+        or report["store"]["snapshot_manifest"]["relation_registry_digest"]
+        != engine_registry_digest
+    ):
+        fail("installed Store publication did not bind the exact admitted engine digest")
     if report["semantic_verification"]["status"] != "passed":
         fail("installed success report lacks reopened semantic verification")
     if not report["store"].get("snapshot_manifest") or not report["store"].get(
@@ -309,6 +358,54 @@ def main() -> int:
         "canonical_export_digest"
     ]:
         fail("installed report canonical export digest differs from exact SDK export mirror")
+    expected_selector = request["publication"]["selector"]
+    expected_store_selector = report["store"]["selector"]
+    expected_record = publication["invocation_committed_record"]
+    expected_descriptors = sorted(
+        request["engine"]["admitted_descriptors"],
+        key=lambda row: row["descriptor_id"],
+    )
+    if (
+        reopened_store["selector"] != expected_store_selector
+        or reopened_store["publication_record"] != expected_record
+        or reopened_store["descriptors"] != expected_descriptors
+        or reopened_store["snapshot_manifest"]["relation_registry_digest"]
+        != engine_registry_digest
+    ):
+        fail("installed reopened Store lost exact selector, record, or descriptor inventory")
+    cursor_projection = reopened_store["cursor_projection"]
+    cursor_relations = cursor_projection["relations"]
+    if [row["relation_descriptor_id"] for row in cursor_relations] != [
+        row["descriptor_id"] for row in expected_descriptors
+    ]:
+        fail("installed reopened query cursor lost or reordered an admitted descriptor")
+    expected_descriptor_ids = {row["descriptor_id"] for row in expected_descriptors}
+    if any(
+        row["relation_descriptor_id"] not in expected_descriptor_ids
+        or "row_canonical_forms" not in row
+        or "claim_annotations" not in row
+        or "coverage" not in row
+        for row in cursor_relations
+    ):
+        fail("installed reopened query cursor contains an incomplete relation projection")
+    expected_lookups = (
+        {"selector": expected_store_selector},
+        {"publication_id": expected_record["publication_id"]},
+        {"snapshot_id": expected_record["snapshot_id"]},
+    )
+    for receipt, expected_lookup in zip(reopened_store["handle_receipts"], expected_lookups):
+        projection = receipt["projection"]
+        if (
+            receipt["lookup"] != expected_lookup
+            or projection["publication_record"] != expected_record
+            or projection["descriptors"] != expected_descriptors
+            or projection["snapshot_manifest"]["relation_registry_digest"]
+            != engine_registry_digest
+            or projection["cursor_projection_digest"] != cursor_projection["digest"]
+            or projection["canonical_export_digest"]
+            != reopened_store["canonical_export_digest"]
+        ):
+            fail("installed reopen receipt did not preserve exact lookup/query projection")
     if any(
         receipt["projection"]["canonical_export_digest"]
         != expected_projection["canonical_export_digest"]
@@ -346,7 +443,7 @@ def main() -> int:
         if result["runtime_receipt"]["frame_count"] <= 0:
             fail("installed success report has no validated provider frames")
 
-    if args.translation_unit_count > 1:
+    if args.translation_unit_count > 1 and not args.canonical_base64_vectors:
         direct_target_rows = [
             row
             for result in task_results

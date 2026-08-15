@@ -51,11 +51,15 @@ aggregate source, 1 GiB raw input, limit-plus-one, and pipe-fragmented input) an
 records `wait4` peak RSS plus exact stdout/stderr digests. An explicitly selected
 subset may also run through the installed materializer.
 
-`clang22_materializer_negative_test.py` runs the installed executable through two
-authority-bound negative paths: a raw-input-only request-schema rejection, and a
-fresh SQLite non-genesis request whose `head_current` observation is the exact
-`store.current-not-found`/`absent` case. It verifies the compact response, exact
-operation/path, discarded logical draft, zero publication, and empty stderr. A
+`clang22_materializer_negative_test.py` runs the installed executable through
+authority-bound raw-input and Store negative paths: request-schema rejection,
+invalid UTF-8, BOM, duplicate member, non-object, trailing value, and a fresh
+SQLite non-genesis request whose `head_current` observation is the exact
+`store.current-not-found`/`absent` case. Every case verifies the compact
+response, phase, zero-effect ledger, and empty stderr. The optional
+`--evidence-dir` writes the exact stdin bytes, stdout report, stderr bytes, and
+contract execution receipt for each case; the receipt binds exit status, exact
+stdout byte count/digest, parsed response count, and stderr digest. A
 non-`store.current-not-found` `head_current` SDK error still requires an injected
 Store failure seam and is not claimed by this install test.
 

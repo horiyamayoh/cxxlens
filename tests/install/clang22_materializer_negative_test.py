@@ -11,6 +11,7 @@ Store, so the SDK's current-not-found observation is authoritative.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -33,6 +34,13 @@ ASAN_SUBPROCESS_BUDGET = 1024
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
+EXECUTION_RECEIPT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml"
+)
+NEGATIVE_REPORT_FILENAME = "report.json"
+NEGATIVE_RECEIPT_FILENAME = "execution-receipt.json"
+NEGATIVE_INPUT_FILENAME = "stdin.bin"
+NEGATIVE_STDERR_FILENAME = "stderr.bin"
 
 
 def fail(message: str) -> None:
@@ -43,6 +51,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, type=pathlib.Path)
     parser.add_argument("--prefix", required=True, type=pathlib.Path)
+    parser.add_argument(
+        "--evidence-dir",
+        type=pathlib.Path,
+        help="optional directory for exact raw-input, stdout, stderr, and receipt evidence",
+    )
     return parser.parse_args()
 
 
@@ -151,6 +164,84 @@ def assert_compact_response(
     return report
 
 
+def make_execution_receipt(
+    root: pathlib.Path,
+    oracle: Any,
+    completed: subprocess.CompletedProcess[bytes],
+    label: str,
+) -> bytes:
+    """Bind the externally observed process result without using report prose."""
+
+    parsed_response_count = 0
+    if completed.stdout:
+        try:
+            oracle.load_strict_json_bytes(completed.stdout, f"{label} stdout")
+        except oracle.MaterializationError:
+            parsed_response_count = 0
+        else:
+            parsed_response_count = 1
+    receipt = {
+        "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
+        "actual_exit_status": completed.returncode,
+        "exact_stdout_byte_count": len(completed.stdout),
+        "stdout_sha256": "sha256:" + hashlib.sha256(completed.stdout).hexdigest(),
+        "parsed_response_count": parsed_response_count,
+        "stderr_sha256": "sha256:" + hashlib.sha256(completed.stderr).hexdigest(),
+    }
+    oracle.validate_schema(
+        receipt,
+        oracle.load(root / EXECUTION_RECEIPT_SCHEMA),
+        f"{label} external execution receipt",
+        error_code="materialization.report-invalid",
+    )
+    return oracle.canonical_json(receipt)
+
+
+def write_negative_evidence(
+    evidence_dir: pathlib.Path,
+    case_name: str,
+    payload: bytes,
+    completed: subprocess.CompletedProcess[bytes],
+    receipt_bytes: bytes,
+) -> None:
+    destination = (evidence_dir / case_name).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / NEGATIVE_INPUT_FILENAME).write_bytes(payload)
+    (destination / NEGATIVE_REPORT_FILENAME).write_bytes(completed.stdout)
+    (destination / NEGATIVE_STDERR_FILENAME).write_bytes(completed.stderr)
+    (destination / NEGATIVE_RECEIPT_FILENAME).write_bytes(receipt_bytes)
+
+
+def assert_raw_failure(
+    root: pathlib.Path,
+    oracle: Any,
+    completed: subprocess.CompletedProcess[bytes],
+    payload: bytes,
+    case_name: str,
+    expected_phase: str,
+    evidence_dir: pathlib.Path | None,
+) -> dict[str, Any]:
+    report = assert_compact_response(root, oracle, completed, payload, None)
+    if (
+        report["binding"]["state"] != "raw-input-only"
+        or report["error"]["phase"] != expected_phase
+        or report["error"]["code"] != "materialization.request-invalid"
+        or report["effects"]["store_draft_state"] != "not-created"
+        or report["effects"]["head_observation"] != "not-observed"
+        or report["effects"]["publication_attempted"]
+        or report["effects"]["committed_transaction_count"] != 0
+        or report["effects"]["task_attempt_count"] != 0
+        or report["effects"]["task_success_count"] != 0
+        or report["effects"]["worker_launch_attempt_count"] != 0
+        or report["effects"]["worker_launch_success_count"] != 0
+    ):
+        fail(f"{case_name} crossed the raw binding or publication boundary")
+    receipt_bytes = make_execution_receipt(root, oracle, completed, case_name)
+    if evidence_dir is not None:
+        write_negative_evidence(evidence_dir, case_name, payload, completed, receipt_bytes)
+    return report
+
+
 def main() -> int:
     args = parse_args()
     root = args.root.resolve()
@@ -161,21 +252,38 @@ def main() -> int:
     sys.path.insert(0, str(root / "tools" / "quality"))
     import check_ng_clang22_materialization as oracle  # pylint: disable=import-error
 
+    negative_evidence_dir = (
+        args.evidence_dir.resolve() if args.evidence_dir is not None else None
+    )
+    raw_cases = (
+        (
+            "raw-request-schema",
+            b'{"schema":"cxxlens.clang22-materialization-request.v2","request_version":"2.1.0"}',
+            "request-schema",
+        ),
+        ("raw-invalid-utf8", b'{"schema":\xff}', "json-decode"),
+        ("raw-bom", b"\xef\xbb\xbf{}", "json-decode"),
+        (
+            "raw-duplicate-member",
+            b'{"schema":"x","schema":"y"}',
+            "json-decode",
+        ),
+        ("raw-non-object", b"[]", "json-decode"),
+        ("raw-trailing-value", b"{} {}", "json-decode"),
+    )
     with tempfile.TemporaryDirectory(prefix="clang22-materializer-negative-") as directory:
         work = pathlib.Path(directory)
-        raw_payload = b'{"schema":"cxxlens.clang22-materialization-request.v2","request_version":"2.1.0"}'
-        raw_completed = run_materializer(materializer, raw_payload, work)
-        raw_report = assert_compact_response(
-            root, oracle, raw_completed, raw_payload, None
-        )
-        if (
-            raw_report["binding"]["state"] != "raw-input-only"
-            or raw_report["error"]["phase"] != "request-schema"
-            or raw_report["error"]["code"] != "materialization.request-invalid"
-            or raw_report["effects"]["publication_attempted"]
-            or raw_report["effects"]["committed_transaction_count"] != 0
-        ):
-            fail("raw request-schema failure crossed the binding or publication boundary")
+        for case_name, raw_payload, expected_phase in raw_cases:
+            raw_completed = run_materializer(materializer, raw_payload, work)
+            assert_raw_failure(
+                root,
+                oracle,
+                raw_completed,
+                raw_payload,
+                case_name,
+                expected_phase,
+                negative_evidence_dir,
+            )
 
     request = installed_request(root, prefix, oracle)
     request["publication"]["genesis"] = False
@@ -207,6 +315,15 @@ def main() -> int:
         request,
         expected_head_failure,
     )
+    receipt_bytes = make_execution_receipt(root, oracle, completed, "store-head-absent")
+    if negative_evidence_dir is not None:
+        write_negative_evidence(
+            negative_evidence_dir,
+            "store-head-absent",
+            request_payload,
+            completed,
+            receipt_bytes,
+        )
     cause = report["effects"]["store_failure_cause"]
     if (
         report["error"]["phase"] != "store-stage"

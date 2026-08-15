@@ -938,6 +938,7 @@ foreach(
         sdk-consumer
         clang22-sdk-consumer
         clang22-materializer-success
+        clang22-materializer-base64
         clang22-materializer-negative
         real-project-consumer
         real-project-incompatible-version
@@ -957,6 +958,7 @@ cxxlens_configure_sanitizer_tests()
 if(CXXLENS_ENABLE_ASAN)
   set_property(
     TEST install.clang22-materializer-success
+         install.clang22-materializer-base64
          install.clang22-materializer-negative
     APPEND
     PROPERTY ENVIRONMENT "CXXLENS_ASAN_INSTALLED_QUALIFICATION=1")
