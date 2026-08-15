@@ -67,6 +67,15 @@ def fail(message: str) -> None:
     raise SdkContractError(message)
 
 
+def implemented_sdk_sources(root: pathlib.Path) -> list[pathlib.Path]:
+    """Return sources whose literals are admitted by the implemented public SDK catalog."""
+    return [
+        source
+        for source in sorted((root / "src/sdk").glob("*.cpp"))
+        if not source.name.startswith("provider_ng1_")
+    ]
+
+
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     value = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -445,8 +454,12 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
         fail(f"SDK catalog evidence is missing: {missing}")
 
     emitted_codes: set[str] = set()
+    # NG1 hardening is deliberately source-private while its provider profile remains
+    # proposed.  Its reserved failure codes are owned by the NG1 authority and must not
+    # be promoted into the implemented NG0/public SDK catalog merely because a private
+    # validator or qualification adapter spells them as literals.
     for source in [
-        *sorted((root / "src/sdk").glob("*.cpp")),
+        *implemented_sdk_sources(root),
         root / "src/llvm/clang22/provider_sdk.cpp",
     ]:
         emitted_codes.update(

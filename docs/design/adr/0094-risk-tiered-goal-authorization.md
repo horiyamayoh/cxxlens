@@ -5,7 +5,7 @@
 - Issue: #176
 - Design feedback: DF-0177 / #177
 - Depends on: ADR 0088, ADR 0089, ADR 0093
-- Amended by: ADR 0095
+- Amended by: ADR 0095; workflow amendment #263
 
 ## Context
 
@@ -45,13 +45,24 @@ goal 開始時の承認で満たされたものとする。skill が要求する
 
 protected `main` への変更は、unit branch、PR、exact-head required checks、未解決 review の解消、merge、exact merged-main
 Foundation/Wave 0/G5/release qualification の順で行う。直接 main push を durable workflow として認可しない。merge は branch
-protection、exact-head required checks、review、single-active-unit invariant を満たした場合に限る。issue close はさらに exact
+protection、exact-head required checks、review、bounded conflict-scoped active-unit invariant を満たした場合に限る。issue close はさらに exact
 merged-main qualification、completion evidence、learning checkpoint を満たした後に限る。
 
 `AGENTS.md` と goal document は policy ID をそれぞれ exactly once 参照し、API-development readiness checker は activation と
 通常会話での non-activation、standing authorization の active-unit scope、notification、target/effect-specific fresh approval、
 external blocker、platform carve-out、protected-main workflow、revoke/narrow、および skill compatibility の binding を fail closed に
 検証する。旧 direct-main workflow の再導入も拒否する。
+
+### Workflow amendment #263 — bounded conflict-scoped parallel units
+
+repository 全体を一つの write lock とする運用は、contract と path が独立した Nightly 修復、provider hardening、runtime 実装まで
+不必要に直列化した。active write unit は最大四つまで許可する。ただし各 unit は issue、contract ID、repository-relative write path を
+宣言し、異なる unit 間で contract ID が一致する場合、または write path が同一・祖先・子孫関係にある場合は conflict として
+fail closed にする。shared authority を変更する work は共通 contract ID/path を宣言するため引き続き直列になる。
+
+standing authorization は各 unit の境界を越えない。並列 unit を理由に別 issue/branch の mutable state を変更する権限は生じず、
+各 PR は独立に exact-head checks、review resolution、merged-main qualification を満たす。最大数は throughput の上限であり、
+依存関係または evidence cost が直列化を要求する場合に四レーンを使い切る義務はない。
 
 ### ADR 0095 amendment — intermediate evaluation と final GR
 

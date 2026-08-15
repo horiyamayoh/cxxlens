@@ -86,14 +86,18 @@ clean build directory で `ctest --preset install-check -L install` を実行し
 
 `cxxlens-ng-foundation-completion-check` は authority/schema/version、G0–G4、support/catalog、asset ledger、
 legacy-zero を静的に検証します。main への push では build/test、install consumer、GCC public header の成功後に
+`quality-contracts` は Clang 22 / Doxygen の取得前に asset ledger と API-development readiness を実行し、repository state の
+決定論的な不整合を fail fast します。toolchain を必要とする production checks はこの preflight の後だけ開始します。
+
 `foundation-completion` job が同一 `GITHUB_SHA`、tree、clean checkout と、completion manifest に宣言した
 `required_closed_issues`、gate issue、tracking issue の状態を結合した JSON report を artifact として生成します。
 宣言 issue の取得失敗や未 close は fail closed です。G5、GR、roadmap など宣言集合外の issue は各 gate が所有し、
 Foundation 完了を遡及的に失敗させません。tracked manifest 自身に tree hash を埋め込む自己参照は行いません。
 
 `cxxlens-ng-api-development-readiness-check` は release bundle、実 CMake の public target edge、Public API Catalog による
-header admission、Relation Registry による generated header binding、gate owner、workflow job 名、同時 active write unit 数を
-検証します。required status check は `build-test (OFF)`、`build-test (ON)`、`gcc-public-headers`、
+header admission、Relation Registry による generated header binding、gate owner、workflow job 名、最大四つの active write unit と
+unit 間の contract/path 非重複を検証します。write path は同一だけでなく祖先・子孫 ownership も conflict です。required status check は
+`build-test (OFF)`、`build-test (ON)`、`gcc-public-headers`、
 `install-consumer (OFF)`、`install-consumer (ON)`、`quality-contracts`、`quality-evidence` の exact set です。main 保護は strict
 mode でこの集合を要求し、実装 commit は同一 SHA を non-main branch で先に成功させます。main へ同一 SHA が入った後だけ
 `foundation-completion` と `wave0-readiness` が実行され、後者は全 artifact、JUnit、install manifest、toolchain provenance、

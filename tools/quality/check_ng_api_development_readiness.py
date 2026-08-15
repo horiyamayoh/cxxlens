@@ -335,6 +335,40 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
         quality_job.group("body"),
     ):
         fail("quality evidence pipeline must preserve cxxlens-quality failure status")
+    quality_body = quality_job.group("body")
+    ordered_markers = (
+        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+        "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock",
+        "- name: Fail fast on repository consistency",
+        "python tools/quality/check_documentation_consistency.py check --root .",
+        "python tools/quality/check_ng_api_development_readiness.py check --root .",
+        "- name: Install exact Clang 22 toolchain",
+        "- name: Install exact Doxygen toolchain",
+    )
+    positions = [quality_body.find(marker) for marker in ordered_markers]
+    if any(position < 0 for position in positions) or positions != sorted(positions):
+        fail("repository consistency preflight must precede quality toolchain installation")
+
+    nightly_path = root / ".github/workflows/nightly.yml"
+    try:
+        nightly_document = yaml.safe_load(nightly_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        fail(f"nightly workflow YAML is invalid: {error}")
+    expected_nightly_triggers = {
+        "push": {"branches": ["main"]},
+        "schedule": [{"cron": "17 18 * * *"}],
+        "workflow_dispatch": None,
+    }
+    if not isinstance(nightly_document, dict) or nightly_document.get(True) != expected_nightly_triggers:
+        fail("nightly workflow must run on main push, schedule, and manual dispatch")
+    if nightly_document.get("concurrency") != {
+        "group": (
+            "nightly-quality-${{ github.event_name == 'schedule' && "
+            "'scheduled' || 'rolling-main' }}"
+        ),
+        "cancel-in-progress": "${{ github.event_name != 'schedule' }}",
+    }:
+        fail("nightly workflow concurrency must preserve scheduled evidence and roll main")
     production_contract = manifest["production_scope_closure"]
     for marker in (
         production_contract["checker"],
@@ -424,7 +458,7 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
             evaluation_config,
             ["g5-qualification", "sqlite-store-v3-qualification"],
             "github.event_name == 'push' && github.ref == 'refs/heads/main'",
-            {"if", "needs", "runs-on", "outputs", "steps"},
+            {"if", "needs", "runs-on", "timeout-minutes", "outputs", "steps"},
         ),
         (
             "release-qualification",
@@ -450,6 +484,8 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
             fail(f"production-scope job keys differ: {name}")
         if job.get("runs-on") != "ubuntu-24.04":
             fail(f"production-scope job runner differs: {name}")
+        if name == "release-evaluation" and job.get("timeout-minutes") != 100:
+            fail("release-evaluation Nightly wait timeout differs")
         if job.get("needs") != expected_needs:
             fail(f"production-scope job needs differ: {name}")
         if normalized_condition(job.get("if")) != expected_condition:
@@ -624,6 +660,19 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     nightly_run_step = configured_step(
         evaluation_config, "Locate the exact-main Nightly evidence run"
     )
+    nightly_lookup = nightly_run_step.get("run")
+    if not isinstance(nightly_lookup, str) or any(
+        marker not in nightly_lookup
+        for marker in (
+            '.event == "push"',
+            "for attempt in $(seq 1 180)",
+            "sleep 30",
+            '"${status}" != "completed"',
+            '"${conclusion}" != "success"',
+            'echo "run-id=${run_id}" >> "${GITHUB_OUTPUT}"',
+        )
+    ):
+        fail("exact-main Nightly evidence lookup must wait for push qualification")
     strict_step = configured_step(
         strict_config, "Generate exact-SHA distribution 1.0 GR report"
     )
@@ -1067,6 +1116,61 @@ def validate_agent_authorization_contract(root: pathlib.Path) -> None:
         fail("short goal example does not bind the authorization policy ID")
 
 
+def normalize_active_write_path(issue: str, value: str) -> tuple[str, ...]:
+    if value.startswith("/") or "\\" in value or value.endswith("/"):
+        fail(f"active write unit path is not canonical: {issue}:{value}")
+    parts = value.split("/")
+    if not parts or any(part in ("", ".", "..") for part in parts):
+        fail(f"active write unit path is not canonical: {issue}:{value}")
+    return tuple(parts)
+
+
+def active_write_paths_overlap(
+    left: tuple[str, ...], right: tuple[str, ...]
+) -> bool:
+    common = min(len(left), len(right))
+    return left[:common] == right[:common]
+
+
+def validate_active_write_units(manifest: dict[str, Any]) -> None:
+    workflow = manifest["api_unit_workflow"]
+    units = workflow["active_write_units"]
+    maximum = workflow["maximum_active_write_units"]
+    if len(units) > maximum:
+        fail(f"more than {maximum} API write units are active")
+
+    issue_owners: set[str] = set()
+    contract_owners: dict[str, str] = {}
+    path_owners: list[tuple[str, str, tuple[str, ...]]] = []
+    for unit in units:
+        issue = unit["issue"]
+        if issue in issue_owners:
+            fail(f"active write unit issue is duplicated: {issue}")
+        issue_owners.add(issue)
+
+        for contract_id in unit["contract_ids"]:
+            previous = contract_owners.get(contract_id)
+            if previous is not None:
+                fail(
+                    "active write unit contract conflict: "
+                    f"{contract_id} is owned by {previous} and {issue}"
+                )
+            contract_owners[contract_id] = issue
+
+        for raw_path in unit["write_paths"]:
+            normalized = normalize_active_write_path(issue, raw_path)
+            for previous_issue, previous_raw, previous_path in path_owners:
+                if previous_issue == issue:
+                    continue
+                if active_write_paths_overlap(previous_path, normalized):
+                    fail(
+                        "active write unit path conflict: "
+                        f"{previous_raw} ({previous_issue}) overlaps "
+                        f"{raw_path} ({issue})"
+                    )
+            path_owners.append((issue, raw_path, normalized))
+
+
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     manifest = load_document(root / MANIFEST)
     validate_schema(
@@ -1093,8 +1197,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     except jsonschema.SchemaError as error:
         fail(f"API development readiness report schema is invalid: {error.message}")
     validate_workflow(root, manifest)
-    if len(manifest["api_unit_workflow"]["active_write_units"]) > 1:
-        fail("more than one API write unit is active")
+    validate_active_write_units(manifest)
     if not (root / AGENT_GOAL_CONTRACT).is_file():
         fail("agent API development execution contract is missing")
     return manifest

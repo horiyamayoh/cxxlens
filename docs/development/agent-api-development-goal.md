@@ -163,7 +163,7 @@ roadmap を作成しただけで goal を完了してはならない。roadmap �
 並列作業による競合や不整合を防ぐ。
 
 - 同じ checkout または同じファイルを複数エージェントに同時編集させない。
-- 並列書き込みは所有範囲が完全に分離している場合に限る。
+- 並列書き込みは最大四 unit とし、contract ID と repository-relative write path の所有範囲が完全に分離している場合に限る。
 - 必要なら agent ごとに独立 worktree / branch を使用する。
 - read-heavy な調査・監査・レビューは積極的に並列化する。
 - 依存する実装や shared contract の変更は直列化する。
@@ -321,9 +321,7 @@ independent consumer、real-project evidence を組み合わせる。
 
 ## Commit, Push, Issue Closure
 
-1つの GitHub issue を active write unit とし、qualified `main` から専用 unit branch を作る。対象差分だけを commit して branch へ
-push し、PR を作成する。PR の exact-head required checks、未解決 review の解消、branch protection、single-active-unit invariant を
-確認した後に merge する。protected `main` への direct push を durable workflow として使わない。
+1つの GitHub issue を1つの active write unit とし、各 unit は issue、contract ID、repository-relative write path を宣言する。同時 active unit は最大四つまで許可するが、異なる unit の contract ID は disjoint、write path は同一・祖先・子孫関係を含めて非重複でなければならない。shared authority/contract、依存実装、同じ path prefix を所有する作業は直列化する。対象差分だけを commit して branch へ push し、PR を作成する。各 PR の exact-head required checks、未解決 review の解消、branch protection、bounded conflict-scoped active-unit invariant を確認した後に merge する。protected `main` への direct push を durable workflow として使わない。
 
 production scope に tracked gap がある intermediate unit の merge 後は、exact merged-main SHA の required checks、Foundation、Wave 0、
 G5、`release-evaluation`、normal production-scope report を確認する。`release-evaluation: not-qualified` は評価器の fail-closed success だけを

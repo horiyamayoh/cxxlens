@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 sys.path.insert(0, str(ROOT / "tools" / "sdk"))
 
 import check_ng_clang22_materialization as materialization  # noqa: E402
+import check_ng_clang22_install_matrix as install_matrix  # noqa: E402
 from relation_idl_compiler import (  # noqa: E402
     canonical_relation as idl_canonical_relation,
 )
@@ -3989,6 +3990,33 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 request, request["tasks"][0]
             ),
         )
+
+    def test_installed_task_v3_source_binding_validator_is_fail_closed(self) -> None:
+        request = self.request(translation_unit_count=2)
+        report = self.report(request)
+        install_matrix.validate_installed_task_v3_source_binding(request, report)
+
+        source_drift = copy.deepcopy(request)
+        source_drift["tasks"][0]["source"]["content_base64"] = "YR=="
+        with self.assertRaisesRegex(
+            install_matrix.InstallMatrixError,
+            "source Base64 is not canonical",
+        ):
+            install_matrix.validate_installed_task_v3_source_binding(
+                source_drift, report
+            )
+
+        transfer_drift = copy.deepcopy(report)
+        transfer_drift["task_results"][0]["input_transfer"][
+            "logical_input_digest"
+        ] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(
+            install_matrix.InstallMatrixError,
+            "input transfer receipt differs",
+        ):
+            install_matrix.validate_installed_task_v3_source_binding(
+                request, transfer_drift
+            )
 
     def test_source_file_and_line_index_identities_are_bottom_up(self) -> None:
         request = self.request()

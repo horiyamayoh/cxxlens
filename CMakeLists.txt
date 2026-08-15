@@ -211,7 +211,8 @@ if(BUILD_TESTING)
   add_library(
     cxxlens-sqlite-disposable-qualification-internal STATIC EXCLUDE_FROM_ALL
     src/sdk/sqlite_disposable_qualification_internal.cpp
-    src/sdk/sqlite_disposable_normalization_internal.cpp)
+    src/sdk/sqlite_disposable_normalization_internal.cpp
+    src/sdk/sqlite_payload_streaming_internal.cpp)
   target_compile_features(cxxlens-sqlite-disposable-qualification-internal
                           PRIVATE cxx_std_23)
   target_include_directories(
@@ -392,6 +393,17 @@ target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_worker_core)
 cxxlens_enable_sanitizers(cxxlens_clang22_worker_core)
 cxxlens_configure_clang22(cxxlens_clang22_worker_core)
+# Keep the provider SDK runtime on the project-wide RTTI configuration. Its
+# context owns standard-library polymorphic state (including shared_ptr control
+# blocks), so compiling only this translation unit with an RTTI-disabled
+# override makes UBSan observe invalid vtables when the exact provider is
+# enabled.
+if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
+  set_source_files_properties(
+    src/llvm/clang22/materialization_io.cpp
+    src/llvm/clang22/materialization_task_spool.cpp PROPERTIES COMPILE_OPTIONS
+                                                               "-frtti")
+endif()
 
 # Provider-owned implementation for the installed Clang 22 machine surface. This
 # target is deliberately private: no headers, symbols, or CMake target are

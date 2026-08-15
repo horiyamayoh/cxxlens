@@ -3388,27 +3388,37 @@ namespace
 	{
 		const materialization_guarantee_authority guarantee{
 			{}, {"clang22-parse", "query-parity", "store-reopen"}};
-		auto sealed = seal_task(request, 0U);
-		require(sealed.has_value(), "bounded adoption fail-closed fixture seal failed");
-		const auto make_task = [&]()
+		const auto make_task = [&](const std::size_t task_index)
 		{
+			auto sealed = seal_task(request, task_index);
+			require(sealed.has_value(), "bounded adoption fail-closed fixture seal failed");
 			auto task = construct_materialization_bounded_task_claims(
-				request, 0U, *sealed, producer, guarantee);
+				request, task_index, *sealed, producer, guarantee);
 			require(task.has_value(),
 					"bounded adoption fail-closed task construction failed: " +
 						(task ? std::string{} : failure(task.error())));
 			return std::move(*task);
 		};
 
+		auto incomplete_source = materialization_bounded_claim_source::begin(request);
+		require(incomplete_source.has_value(), "incomplete bounded source begin failed");
+		auto incomplete_task = make_task(0U);
+		require(incomplete_source->consume_task(std::move(incomplete_task)).has_value(),
+				"incomplete bounded source task adoption failed");
+		auto incomplete_finalized = std::move(*incomplete_source).finalize();
+		require(!incomplete_finalized && incomplete_finalized.error().field == "lifecycle" &&
+					incomplete_finalized.error().detail == "incomplete-task-set",
+				"bounded adoption finalized before consuming the declared task set");
+
 		auto source = materialization_bounded_claim_source::begin(request);
 		require(source.has_value(), "bounded adoption fail-closed source begin failed");
-		auto metadata_drift = make_task();
+		auto metadata_drift = make_task(0U);
 		metadata_drift.partitions.front().sdk_claim_occurrence_count += 1U;
 		auto rejected = source->consume_task(std::move(metadata_drift));
 		require(!rejected && rejected.error().field == "partition" &&
 					rejected.error().detail == "claim-census" && source->partition_count() == 0U,
 				"bounded adoption accepted metadata drift or mutated before validation");
-		auto retry = make_task();
+		auto retry = make_task(0U);
 		auto retry_result = source->consume_task(std::move(retry));
 		require(!retry_result && retry_result.error().field == "lifecycle",
 				"bounded adoption did not remain single-use after rejection");
@@ -3416,9 +3426,35 @@ namespace
 		require(!finalized_failed && finalized_failed.error().field == "lifecycle",
 				"failed bounded adoption source became finalizable");
 
+		auto exact_source = materialization_bounded_claim_source::begin(request);
+		require(exact_source.has_value(), "exact bounded source begin failed");
+		require(exact_source->consume_task(make_task(0U)).has_value(),
+				"exact bounded source first task adoption failed");
+		require(exact_source->consume_task(make_task(1U)).has_value(),
+				"exact bounded source second task adoption failed");
+		auto exact_finalized = std::move(*exact_source).finalize();
+		require(exact_finalized && exact_finalized->sealed(),
+				"bounded source rejected the exact declared task census");
+
+		auto over_adoption_source = materialization_bounded_claim_source::begin(request);
+		require(over_adoption_source.has_value(), "over-adoption bounded source begin failed");
+		require(over_adoption_source->consume_task(make_task(0U)).has_value(),
+				"over-adoption bounded source first task adoption failed");
+		require(over_adoption_source->consume_task(make_task(1U)).has_value(),
+				"over-adoption bounded source second task adoption failed");
+		const auto partition_count_before_extra = over_adoption_source->partition_count();
+		auto extra_task = over_adoption_source->consume_task(make_task(0U));
+		require(!extra_task && extra_task.error().field == "lifecycle" &&
+					extra_task.error().detail == "task-count" &&
+					over_adoption_source->partition_count() == partition_count_before_extra,
+				"bounded adoption accepted a task beyond the exact request census");
+		auto over_adoption_finalized = std::move(*over_adoption_source).finalize();
+		require(!over_adoption_finalized && over_adoption_finalized.error().field == "lifecycle",
+				"over-adopting bounded source became finalizable");
+
 		auto duplicate_source = materialization_bounded_claim_source::begin(request);
 		require(duplicate_source.has_value(), "duplicate partition source begin failed");
-		auto duplicate = make_task();
+		auto duplicate = make_task(0U);
 		require(!duplicate.partitions.empty(), "duplicate partition fixture is empty");
 		duplicate.partitions.push_back(duplicate.partitions.back());
 		auto duplicate_result = duplicate_source->consume_task(std::move(duplicate));

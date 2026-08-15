@@ -838,15 +838,30 @@ namespace cxxlens::sdk::provider
 			return semantic_digest(domain, bytes);
 		}
 
+		[[nodiscard]] bool valid_semantic_digest(const std::string_view value) noexcept
+		{
+			constexpr std::string_view prefix{"semantic-v2:sha256:"};
+			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
+				return false;
+			for (const auto byte : value.substr(prefix.size()))
+				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+					return false;
+			return true;
+		}
+
 		[[nodiscard]] result<std::string>
 		frame_transcript_receipt_digest(const std::span<const frame> frames)
 		{
+			if (frames.empty())
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-state-invalid", "runtime-receipt", "empty-frame-stream"));
+			const auto stream_id = frames.front().stream_id;
 			std::vector<canonical_value> projected;
 			projected.reserve(frames.size());
 			for (std::size_t index{}; index < frames.size(); ++index)
 			{
 				const auto& value = frames[index];
-				if (value.sequence != index ||
+				if (value.sequence != index || value.stream_id != stream_id ||
 					value.stream_id >
 						static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
 					value.sequence >
@@ -945,12 +960,14 @@ namespace cxxlens::sdk::provider
 			std::string raw_stdout_sha256,
 			const std::uint64_t decoded_frame_count,
 			std::string frame_transcript_digest,
-			std::string sealed_transcript_digest)
+			std::string sealed_transcript_digest,
+			provider_runtime_provenance provenance)
 			: raw_stdout_byte_count_{raw_stdout_byte_count},
 			  raw_stdout_sha256_{std::move(raw_stdout_sha256)},
 			  decoded_frame_count_{decoded_frame_count},
 			  frame_transcript_digest_{std::move(frame_transcript_digest)},
-			  sealed_transcript_digest_{std::move(sealed_transcript_digest)}
+			  sealed_transcript_digest_{std::move(sealed_transcript_digest)},
+			  provenance_{std::move(provenance)}
 		{
 		}
 
@@ -988,6 +1005,20 @@ namespace cxxlens::sdk::provider
 		{
 			return sealed_transcript_digest_;
 		}
+		const provider_runtime_provenance& provider_runtime_receipt::provenance() const noexcept
+		{
+			return provenance_;
+		}
+		result<void> provider_runtime_receipt::validate() const
+		{
+			if (raw_stdout_byte_count_ == 0U || !canonical_digest(raw_stdout_sha256_) ||
+				decoded_frame_count_ == 0U || !valid_semantic_digest(frame_transcript_digest_) ||
+				!valid_semantic_digest(sealed_transcript_digest_) || provenance_.task_id.empty() ||
+				provenance_.task_id.contains('\0'))
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-state-invalid", "runtime-receipt", "identity-incomplete"));
+			return {};
+		}
 
 		result<provider_runtime_receipt>
 		make_provider_runtime_receipt(const std::uint64_t raw_stdout_byte_count,
@@ -997,21 +1028,67 @@ namespace cxxlens::sdk::provider
 									  const std::string_view terminal,
 									  const sealed_provider_transcript& sealed)
 		{
+			provider_runtime_provenance provenance;
+			provenance.task_id = task_id;
+			return make_provider_runtime_receipt(raw_stdout_byte_count,
+												 std::move(raw_stdout_sha256),
+												 frames,
+												 std::move(provenance),
+												 terminal,
+												 sealed);
+		}
+
+		result<provider_runtime_receipt>
+		make_provider_runtime_receipt(const std::uint64_t raw_stdout_byte_count,
+									  std::string raw_stdout_sha256,
+									  const std::span<const frame> frames,
+									  provider_runtime_provenance provenance,
+									  const std::string_view terminal,
+									  const sealed_provider_transcript& sealed)
+		{
 			if (!canonical_digest(raw_stdout_sha256) || raw_stdout_byte_count == 0U ||
-				frames.empty())
+				frames.empty() || provenance.task_id.empty() || provenance.task_id.contains('\0'))
 				return cxxlens::sdk::unexpected(runtime_error(
 					"provider.protocol-state-invalid", "runtime-receipt", "raw-observation"));
+			if (provenance.stream_id != 0U && provenance.stream_id != frames.front().stream_id)
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-state-invalid", "runtime-receipt", "stream-binding"));
+			if (provenance.stream_id == 0U)
+				provenance.stream_id = frames.front().stream_id;
 			auto frame_digest = frame_transcript_receipt_digest(frames);
 			if (!frame_digest)
 				return cxxlens::sdk::unexpected(std::move(frame_digest.error()));
-			auto sealed_digest = sealed_transcript_receipt_digest(task_id, terminal, sealed);
+			auto sealed_digest =
+				sealed_transcript_receipt_digest(provenance.task_id, terminal, sealed);
 			if (!sealed_digest)
 				return cxxlens::sdk::unexpected(std::move(sealed_digest.error()));
-			return provider_runtime_receipt{raw_stdout_byte_count,
+			if (sealed.batches().size() == 1U)
+			{
+				const auto& batch = sealed.batches().front();
+				if (batch.task_id() != provenance.task_id)
+					return cxxlens::sdk::unexpected(runtime_error(
+						"provider.protocol-state-invalid", "runtime-receipt", "batch-task"));
+				if (provenance.dependency_group_id.empty())
+					provenance.dependency_group_id = batch.dependency_group_id();
+				if (provenance.atomic_output_group_id.empty())
+					provenance.atomic_output_group_id = batch.atomic_output_group_id();
+				if (provenance.batch_id.empty())
+					provenance.batch_id = batch.batch_id();
+				if (provenance.dependency_group_id != batch.dependency_group_id() ||
+					provenance.atomic_output_group_id != batch.atomic_output_group_id() ||
+					provenance.batch_id != batch.batch_id())
+					return cxxlens::sdk::unexpected(runtime_error(
+						"provider.protocol-state-invalid", "runtime-receipt", "batch-binding"));
+			}
+			provider_runtime_receipt output{raw_stdout_byte_count,
 											std::move(raw_stdout_sha256),
 											frames.size(),
 											std::move(*frame_digest),
-											std::move(*sealed_digest)};
+											std::move(*sealed_digest),
+											std::move(provenance)};
+			if (auto valid = output.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			return output;
 		}
 
 		result<void> expected_provider_identity::validate() const
@@ -2533,10 +2610,23 @@ namespace cxxlens::sdk::provider
 			report.sealing_error = std::move(*terminal).take_sealing_error();
 			if (report.validated_transcript_success && report.sealed)
 			{
+				detail::provider_runtime_provenance provenance;
+				provenance.provider_id = selected_manifest.provider_id;
+				provenance.provider_version = selected_manifest.provider_version;
+				provenance.provider_binary_digest = selected_manifest.provider_binary_digest;
+				provenance.provider_semantic_contract_digest =
+					selected_manifest.provider_semantic_contract_digest;
+				provenance.task_id = request.task_id;
+				provenance.task_input_digest = request.task_input_digest;
+				provenance.normalized_invocation_digest = request.normalized_invocation_digest;
+				provenance.toolchain_digest = request.toolchain_digest;
+				provenance.environment_digest = request.environment_digest;
+				provenance.sandbox_policy_digest = prepared.sandbox.policy_digest;
+				provenance.stream_id = frames->front().stream_id;
 				auto receipt = detail::make_provider_runtime_receipt(raw_stdout_byte_count,
 																	 std::move(raw_stdout_sha256),
 																	 *frames,
-																	 request.task_id,
+																	 std::move(provenance),
 																	 report.terminal,
 																	 *report.sealed);
 				if (!receipt)
