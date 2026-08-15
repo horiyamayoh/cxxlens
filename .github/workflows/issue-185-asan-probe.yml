@@ -33,6 +33,83 @@ jobs:
           export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
           cmake --preset asan-ubsan
           cmake --build --preset asan-ubsan
+      - name: Prepare installed occurrence for worker diagnostics
+        run: |
+          ctest --preset asan-ubsan --parallel 1 \
+            --tests-regex '^(install\.prepare|install\.relocation)$' \
+            --output-on-failure
+      - name: Diagnose installed worker loader and sandbox startup
+        run: |
+          set -u
+          prefix="$PWD/build/asan-ubsan/tests/install-consumer/prefix"
+          worker="$prefix/bin/cxxlens-clang-worker-22"
+          diagnostics="$PWD/build/asan-ubsan/issue-185-worker-diagnostics.txt"
+          budget_json="$PWD/build/asan-ubsan/issue-185-worker-budgets.json"
+
+          python3 - <<'PY' > "$budget_json"
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path.cwd()
+          sys.path.insert(0, str(root / "tools" / "quality"))
+          import check_ng_clang22_materialization as materialization
+
+          request = materialization.sample_request(
+              root,
+              configuration="static",
+              backend="memory",
+              translation_unit_count=2,
+          )
+          found = []
+
+          def visit(value, path=()):
+              if isinstance(value, dict):
+                  if "address_space_bytes" in value:
+                      found.append({"path": list(path), "budget": value})
+                  for key, child in value.items():
+                      visit(child, path + (str(key),))
+              elif isinstance(value, list):
+                  for index, child in enumerate(value):
+                      visit(child, path + (str(index),))
+
+          visit(request)
+          print(json.dumps(found, sort_keys=True, indent=2))
+          PY
+
+          budget_as="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[0]["budget"]["address_space_bytes"])' "$budget_json")"
+
+          {
+            echo "worker=$worker"
+            echo "budget_address_space_bytes=$budget_as"
+            echo "== file =="
+            file "$worker"
+            echo "== program headers =="
+            readelf -lW "$worker"
+            echo "== dynamic section =="
+            readelf -dW "$worker"
+            echo "== dependencies =="
+            ldd "$worker"
+            echo "== direct empty-environment startup =="
+            set +e
+            timeout 10s env -i LANG=C LC_ALL=C "$worker" </dev/null \
+              >build/asan-ubsan/issue-185-worker-direct.stdout \
+              2>build/asan-ubsan/issue-185-worker-direct.stderr
+            direct_status=$?
+            set -e
+            echo "status=$direct_status"
+            sed -n '1,160p' build/asan-ubsan/issue-185-worker-direct.stderr
+            echo "== RLIMIT_AS empty-environment startup =="
+            set +e
+            timeout 10s prlimit --as="$budget_as" -- \
+              env -i LANG=C LC_ALL=C "$worker" </dev/null \
+              >build/asan-ubsan/issue-185-worker-rlimit.stdout \
+              2>build/asan-ubsan/issue-185-worker-rlimit.stderr
+            limited_status=$?
+            set -e
+            echo "status=$limited_status"
+            sed -n '1,200p' build/asan-ubsan/issue-185-worker-rlimit.stderr
+          } 2>&1 | tee "$diagnostics"
       - name: Reproduce the three former Clang allocator failures first
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1
@@ -61,4 +138,5 @@ jobs:
             build/asan-ubsan/ctest.xml
             build/asan-ubsan/sanitizer-coverage.log
             build/asan-ubsan/Testing/Temporary/LastTest.log
+            build/asan-ubsan/issue-185-worker-*
           if-no-files-found: warn
