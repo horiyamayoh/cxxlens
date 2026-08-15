@@ -1,5 +1,5 @@
 {
-  "asset_count": 670,
+  "asset_count": 673,
   "assets": [
     {
       "authority": "active",
@@ -3083,6 +3083,20 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/provider_ng1_session.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/provider_ng1_session_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/provider_ng1_spill_port_internal.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4154,6 +4168,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/unit/sdk/provider_ng1_session_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/unit/sdk/provider_ng1_spill_port_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4693,7 +4714,7 @@
     }
   ],
   "classifications": {
-    "active": 634,
+    "active": 637,
     "archived": 35,
     "generated": 1
   },

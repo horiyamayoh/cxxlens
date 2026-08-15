@@ -528,6 +528,25 @@ set_tests_properties(
   unit.sdk-provider-ng1-recovery-adapter
   PROPERTIES LABELS "unit;sdk;provider;ng1;recovery;resume;fail-closed")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-session
+                            unit/sdk/provider_ng1_session_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-session
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-session
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-ng1-session
+         COMMAND cxxlens-unit-sdk-provider-ng1-session)
+set_tests_properties(
+  unit.sdk-provider-ng1-session
+  PROPERTIES LABELS "unit;sdk;provider;ng1;session;recovery;spill;fail-closed")
+
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)
 target_link_libraries(cxxlens-clang22-provider-normalizer
@@ -1026,7 +1045,10 @@ add_dependencies(
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
   cxxlens-unit-sdk-provider-ng1-validation
+  cxxlens-unit-sdk-provider-ng1-spill-port
   cxxlens-unit-sdk-provider-ng1-transport
+  cxxlens-unit-sdk-provider-ng1-recovery-adapter
+  cxxlens-unit-sdk-provider-ng1-session
   cxxlens-unit-sdk-query-runtime
   cxxlens-unit-sdk-sqlite-connection-lifecycle
   cxxlens-unit-sdk-sqlite-default-forwarding-vfs

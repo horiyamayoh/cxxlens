@@ -48,6 +48,8 @@ namespace cxxlens::sdk::provider::detail
 														 bool open_dependency_group,
 														 bool terminal,
 														 std::uint64_t highest_observed_sequence);
+		/** Transition a malformed or mismatched durable resume to the terminal failure state. */
+		[[nodiscard]] result<void> reject_durable_resume(error original_error);
 
 		/** Return the exact replay start derived from the accepted durable ack. */
 		[[nodiscard]] result<std::uint64_t> replay_start_sequence() const;
@@ -57,6 +59,8 @@ namespace cxxlens::sdk::provider::detail
 		 * claim to validate the replay stream or adopt output.
 		 */
 		[[nodiscard]] result<void> accept_replay_validated(std::uint64_t first_sequence);
+		/** Transition a malformed or mismatched replay observation to terminal failure. */
+		[[nodiscard]] result<void> reject_replay(error original_error);
 		/** Seal a validated output after running or a valid restart replay. */
 		[[nodiscard]] result<void> seal_output();
 		/** Fail a resumed output whose shared validation did not seal. */

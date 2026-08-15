@@ -83,6 +83,13 @@ namespace cxxlens::sdk::provider::detail
 		return transition(ng1_recovery_event::durable_token_valid);
 	}
 
+	result<void> ng1_recovery_adapter::reject_durable_resume(error original_error)
+	{
+		if (state_ != ng1_recovery_state::worker_killed)
+			return unexpected(error{"provider.recovery-failed", "state", "resume-not-pending"});
+		return fail_from(ng1_recovery_event::durable_token_invalid, std::move(original_error));
+	}
+
 	result<std::uint64_t> ng1_recovery_adapter::replay_start_sequence() const
 	{
 		if (!resume_state_ || state_ != ng1_recovery_state::resume_replay)
@@ -104,6 +111,13 @@ namespace cxxlens::sdk::provider::detail
 				error{"provider.resume-replay-invalid", "first_sequence", "not-ack-plus-one"});
 
 		return transition(ng1_recovery_event::replay_valid);
+	}
+
+	result<void> ng1_recovery_adapter::reject_replay(error original_error)
+	{
+		if (state_ != ng1_recovery_state::resume_replay)
+			return unexpected(error{"provider.recovery-failed", "state", "replay-not-pending"});
+		return fail_from(ng1_recovery_event::replay_invalid, std::move(original_error));
 	}
 
 	result<void> ng1_recovery_adapter::seal_output()
