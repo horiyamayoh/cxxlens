@@ -42,6 +42,14 @@ if(PHASE STREQUAL "prepare")
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
             cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)
+  # `cmake --install` does not build targets, and the public Clang 22 SDK DSO
+  # plus the installed worker are not dependencies of the materializer binary.
+  # Build the complete installed executable/DSO closure before staging it.
+  execute_process(
+    COMMAND
+      "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+      cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
+      cxxlens_clang22_provider_sdk COMMAND_ERROR_IS_FATAL ANY)
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
@@ -126,7 +134,7 @@ if(PHASE STREQUAL "shared-runtime-layout"
    AND NOT APPLE)
   find_program(CXXLENS_READELF NAMES readelf llvm-readelf REQUIRED)
   foreach(tool IN ITEMS cxxlens-provider-scaffold cxxlens-sdk-doctor
-                        cxxlens-clang-worker-22)
+                        cxxlens-clang-worker-22 cxxlens-clang22-materialize)
     execute_process(
       COMMAND "${CXXLENS_READELF}" -d "${install_prefix}/bin/${tool}"
       OUTPUT_VARIABLE dynamic_section COMMAND_ERROR_IS_FATAL ANY)
@@ -241,8 +249,7 @@ if(PHASE STREQUAL "clang22-materializer-success")
       --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --evidence-dir
       "${materialization_evidence_dir}" --output
       "${materialization_evidence_dir}/configuration-evidence.json" --prefix
-      "${install_prefix}"
-      COMMAND_ERROR_IS_FATAL ANY)
+      "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
   message(STATUS "installed Clang 22 evidence: ${materialization_evidence_dir}")
   return()
 endif()
