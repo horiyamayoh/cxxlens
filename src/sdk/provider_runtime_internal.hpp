@@ -44,6 +44,8 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] std::uint64_t raw_stdout_byte_count() const noexcept;
 		[[nodiscard]] std::string_view raw_stdout_sha256() const noexcept;
 		[[nodiscard]] std::uint64_t decoded_frame_count() const noexcept;
+		/** Exact sequence of the first decoded frame retained by this receipt. */
+		[[nodiscard]] std::uint64_t first_frame_sequence() const noexcept;
 		[[nodiscard]] std::string_view frame_transcript_digest() const noexcept;
 		[[nodiscard]] std::string_view sealed_transcript_digest() const noexcept;
 		[[nodiscard]] const provider_runtime_provenance& provenance() const noexcept;
@@ -54,6 +56,7 @@ namespace cxxlens::sdk::provider::detail
 		provider_runtime_receipt(std::uint64_t raw_stdout_byte_count,
 								 std::string raw_stdout_sha256,
 								 std::uint64_t decoded_frame_count,
+								 std::uint64_t first_frame_sequence,
 								 std::string frame_transcript_digest,
 								 std::string sealed_transcript_digest,
 								 provider_runtime_provenance provenance);
@@ -61,6 +64,7 @@ namespace cxxlens::sdk::provider::detail
 		std::uint64_t raw_stdout_byte_count_{};
 		std::string raw_stdout_sha256_;
 		std::uint64_t decoded_frame_count_{};
+		std::uint64_t first_frame_sequence_{};
 		std::string frame_transcript_digest_;
 		std::string sealed_transcript_digest_;
 		provider_runtime_provenance provenance_;

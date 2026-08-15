@@ -856,12 +856,14 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(runtime_error(
 					"provider.protocol-state-invalid", "runtime-receipt", "empty-frame-stream"));
 			const auto stream_id = frames.front().stream_id;
+			const auto first_sequence = frames.front().sequence;
 			std::vector<canonical_value> projected;
 			projected.reserve(frames.size());
 			for (std::size_t index{}; index < frames.size(); ++index)
 			{
 				const auto& value = frames[index];
-				if (value.sequence != index || value.stream_id != stream_id ||
+				if (index > std::numeric_limits<std::uint64_t>::max() - first_sequence ||
+					value.sequence != first_sequence + index || value.stream_id != stream_id ||
 					value.stream_id >
 						static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
 					value.sequence >
@@ -959,12 +961,14 @@ namespace cxxlens::sdk::provider
 			const std::uint64_t raw_stdout_byte_count,
 			std::string raw_stdout_sha256,
 			const std::uint64_t decoded_frame_count,
+			const std::uint64_t first_frame_sequence,
 			std::string frame_transcript_digest,
 			std::string sealed_transcript_digest,
 			provider_runtime_provenance provenance)
 			: raw_stdout_byte_count_{raw_stdout_byte_count},
 			  raw_stdout_sha256_{std::move(raw_stdout_sha256)},
 			  decoded_frame_count_{decoded_frame_count},
+			  first_frame_sequence_{first_frame_sequence},
 			  frame_transcript_digest_{std::move(frame_transcript_digest)},
 			  sealed_transcript_digest_{std::move(sealed_transcript_digest)},
 			  provenance_{std::move(provenance)}
@@ -996,6 +1000,10 @@ namespace cxxlens::sdk::provider
 		std::uint64_t provider_runtime_receipt::decoded_frame_count() const noexcept
 		{
 			return decoded_frame_count_;
+		}
+		std::uint64_t provider_runtime_receipt::first_frame_sequence() const noexcept
+		{
+			return first_frame_sequence_;
 		}
 		std::string_view provider_runtime_receipt::frame_transcript_digest() const noexcept
 		{
@@ -1080,9 +1088,18 @@ namespace cxxlens::sdk::provider
 					return cxxlens::sdk::unexpected(runtime_error(
 						"provider.protocol-state-invalid", "runtime-receipt", "batch-binding"));
 			}
+			else if (!provenance.dependency_group_id.empty() ||
+					 provenance.atomic_output_group_id.size() != 0U ||
+					 provenance.batch_id.size() != 0U)
+			{
+				return cxxlens::sdk::unexpected(runtime_error("provider.protocol-state-invalid",
+															  "runtime-receipt",
+															  "multi-batch-provenance"));
+			}
 			provider_runtime_receipt output{raw_stdout_byte_count,
 											std::move(raw_stdout_sha256),
 											frames.size(),
+											frames.front().sequence,
 											std::move(*frame_digest),
 											std::move(*sealed_digest),
 											std::move(provenance)};

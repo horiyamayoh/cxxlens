@@ -810,6 +810,15 @@ namespace cxxlens::sdk::provider::detail
 		return {};
 	}
 
+	result<void> ng1_spill_prefix_state::validate_ack_frontier(
+		const std::uint64_t highest_contiguous_acked_sequence) const
+	{
+		if (record_digests_.empty() || highest_contiguous_acked_sequence >= next_sequence_)
+			return unexpected(
+				ng1_error("spill-corrupt", "highest_contiguous_acked_sequence", "not-in-prefix"));
+		return {};
+	}
+
 	result<std::string> ng1_spill_prefix_state::spill_digest() const
 	{
 		std::vector<canonical_value> fields;
@@ -826,6 +835,8 @@ namespace cxxlens::sdk::provider::detail
 	{
 		if (!valid_semantic_digest(staged_digest))
 			return unexpected(ng1_error("spill-corrupt", "staged_digest", "semantic-v2"));
+		if (auto valid = validate_ack_frontier(highest_contiguous_acked_sequence); !valid)
+			return unexpected(std::move(valid.error()));
 		if (fsync_sequence == 0U)
 			return unexpected(ng1_error("spill-corrupt", "fsync_sequence", "zero"));
 		auto prefix_digest = spill_digest();

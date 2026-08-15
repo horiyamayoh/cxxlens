@@ -76,7 +76,7 @@ namespace cxxlens::sdk::provider::detail
 		}
 		[[nodiscard]] std::uint64_t first_sequence() const noexcept
 		{
-			return first_sequence_;
+			return runtime_receipt_.first_frame_sequence();
 		}
 		[[nodiscard]] std::string_view frame_transcript_digest() const noexcept
 		{
@@ -94,30 +94,26 @@ namespace cxxlens::sdk::provider::detail
 	  private:
 		ng1_replay_validation_receipt(std::string task_id,
 									  std::string sealed_transcript_digest,
-									  std::uint64_t first_sequence,
 									  provider_runtime_receipt runtime_receipt) noexcept
 			: task_id_{std::move(task_id)},
 			  sealed_transcript_digest_{std::move(sealed_transcript_digest)},
-			  first_sequence_{first_sequence}, runtime_receipt_{std::move(runtime_receipt)}
+			  runtime_receipt_{std::move(runtime_receipt)}
 		{
 		}
 
 		std::string task_id_;
 		std::string sealed_transcript_digest_;
-		std::uint64_t first_sequence_{};
 		provider_runtime_receipt runtime_receipt_;
 
 		friend result<ng1_replay_validation_receipt>
 		make_ng1_replay_validation_receipt(const ng1_output_validation_receipt& output,
-										   const provider_runtime_receipt& replay_runtime,
-										   std::uint64_t first_sequence);
+										   const provider_runtime_receipt& replay_runtime);
 	};
 
 	/** Construct replay authority only from a shared runtime validation receipt and output seal. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<ng1_replay_validation_receipt>
 	make_ng1_replay_validation_receipt(const ng1_output_validation_receipt& output,
-									   const provider_runtime_receipt& replay_runtime,
-									   std::uint64_t first_sequence);
+									   const provider_runtime_receipt& replay_runtime);
 
 	/**
 	 * Source-private construction inputs for one NG1 task session.

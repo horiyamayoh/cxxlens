@@ -714,6 +714,8 @@ namespace cxxlens::sdk::provider::detail
 		if (highest_contiguous_acked_sequence > highest_observed_sequence)
 			return unexpected(
 				corrupt_error("highest_contiguous_acked_sequence", "ahead-of-observed"));
+		if (auto valid = prefix_.validate_ack_frontier(highest_contiguous_acked_sequence); !valid)
+			return unexpected(std::move(valid.error()));
 		if (auto valid = valid_semantic_digest(staged_digest, "staged_digest"); !valid)
 			return unexpected(std::move(valid.error()));
 		result<std::uint64_t> sequence{port_error("fsync", "not-called")};

@@ -143,10 +143,9 @@ namespace cxxlens::sdk::provider::detail
 
 	result<ng1_replay_validation_receipt>
 	make_ng1_replay_validation_receipt(const ng1_output_validation_receipt& output,
-									   const provider_runtime_receipt& replay_runtime,
-									   const std::uint64_t first_sequence)
+									   const provider_runtime_receipt& replay_runtime)
 	{
-		if (first_sequence == 0U)
+		if (replay_runtime.first_frame_sequence() == 0U)
 			return unexpected(session_error("replay.first_sequence", "zero"));
 		if (auto valid = replay_runtime.validate(); !valid)
 			return unexpected(session_error("replay.runtime_receipt", "invalid"));
@@ -158,7 +157,6 @@ namespace cxxlens::sdk::provider::detail
 			return unexpected(session_error("replay.provenance", "incomplete"));
 		return ng1_replay_validation_receipt{std::string{output.task_id()},
 											 std::string{output.sealed_transcript_digest()},
-											 first_sequence,
 											 replay_runtime};
 	}
 
