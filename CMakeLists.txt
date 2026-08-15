@@ -211,7 +211,8 @@ if(BUILD_TESTING)
   add_library(
     cxxlens-sqlite-disposable-qualification-internal STATIC EXCLUDE_FROM_ALL
     src/sdk/sqlite_disposable_qualification_internal.cpp
-    src/sdk/sqlite_disposable_normalization_internal.cpp)
+    src/sdk/sqlite_disposable_normalization_internal.cpp
+    src/sdk/sqlite_payload_streaming_internal.cpp)
   target_compile_features(cxxlens-sqlite-disposable-qualification-internal
                           PRIVATE cxx_std_23)
   target_include_directories(

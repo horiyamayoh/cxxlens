@@ -1,6 +1,7 @@
 #include <array>
 #include <concepts>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -115,6 +116,10 @@ namespace
 					{
 						(void)::unlinkat(child, "payload", 0);
 						(void)::unlinkat(child, "unexpected", 0);
+						(void)::unlinkat(child, "main", 0);
+						(void)::unlinkat(child, "main-wal", 0);
+						(void)::unlinkat(child, "main-shm", 0);
+						(void)::unlinkat(child, "main-journal", 0);
 						(void)::close(child);
 						(void)::unlinkat(descriptor_, leaf, AT_REMOVEDIR);
 					}
@@ -559,6 +564,160 @@ namespace
 				"capability destructor closes and removes unchanged empty root");
 	}
 
+	[[nodiscard]] std::vector<std::byte> canonical_empty_main(const std::uint8_t header_version)
+	{
+		std::vector<std::byte> bytes(4096U);
+		constexpr std::string_view magic{"SQLite format 3\0", 16U};
+		std::memcpy(bytes.data(), magic.data(), magic.size());
+		const auto put_u16 = [&bytes](const std::size_t offset, const std::uint16_t value)
+		{
+			bytes[offset] = static_cast<std::byte>((value >> 8U) & 0xffU);
+			bytes[offset + 1U] = static_cast<std::byte>(value & 0xffU);
+		};
+		const auto put_u32 = [&bytes](const std::size_t offset, const std::uint32_t value)
+		{
+			bytes[offset] = static_cast<std::byte>((value >> 24U) & 0xffU);
+			bytes[offset + 1U] = static_cast<std::byte>((value >> 16U) & 0xffU);
+			bytes[offset + 2U] = static_cast<std::byte>((value >> 8U) & 0xffU);
+			bytes[offset + 3U] = static_cast<std::byte>(value & 0xffU);
+		};
+		put_u16(16U, 4096U);
+		bytes[18U] = static_cast<std::byte>(header_version);
+		bytes[19U] = static_cast<std::byte>(header_version);
+		bytes[21U] = std::byte{64U};
+		bytes[22U] = std::byte{32U};
+		bytes[23U] = std::byte{32U};
+		put_u32(24U, 1U);
+		put_u32(28U, 1U);
+		put_u32(92U, 1U);
+		put_u32(96U, 3'045'001U);
+		bytes[100U] = std::byte{0x0dU};
+		put_u16(105U, 4096U);
+		return bytes;
+	}
+
+	void exercise_raw_empty_family_observation()
+	{
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint F0 raw capability");
+			auto setup = minted->no_effect_request();
+			const auto main = canonical_empty_main(2U);
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main", main)),
+					"write F0 main fixture");
+			auto classify = setup;
+			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
+			auto observed = observe_sqlite_disposable_raw_empty_family(*minted, classify);
+			require(observed.has_value(), "observe F0 raw family");
+			require(
+				observed->family.family == sqlite_disposable_empty_family::exact_pre_no_sidecar &&
+					observed->family.phase == sqlite_disposable_family_phase::pre &&
+					!observed->wal && observed->main.byte_count == main.size() &&
+					observed->main.sha256 ==
+						"sha256:e3ba06536f7dbba337dee3c1c5f01b43660ce276abb54c5cee2d5defc5b970aa",
+				"F0 raw identity/bytes digest");
+
+			const auto denied = observe_sqlite_disposable_raw_empty_family(*minted, setup);
+			require(!denied && denied.error().detail == "raw-effect-not-authorized",
+					"raw classifier requires explicit classify effect");
+			const auto invalid = [&]()
+			{
+				auto mutated = main;
+				mutated[18U] = std::byte{3U};
+				require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+							*minted, setup, "main", mutated)),
+						"write invalid F0 header");
+				return observe_sqlite_disposable_raw_empty_family(*minted, classify);
+			}();
+			require(!invalid && invalid.error().detail == "raw-main-not-exact-empty",
+					"invalid F0 header fails closed");
+		}
+
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint FZ raw capability");
+			auto setup = minted->no_effect_request();
+			const auto main = canonical_empty_main(2U);
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main", main)),
+					"write FZ main fixture");
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main-wal", {})),
+					"write zero-byte FZ WAL fixture");
+			auto classify = setup;
+			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
+			auto observed = observe_sqlite_disposable_raw_empty_family(*minted, classify);
+			require(observed.has_value() &&
+						observed->family.family ==
+							sqlite_disposable_empty_family::exact_pre_or_post_zero_wal &&
+						observed->family.phase == sqlite_disposable_family_phase::pre &&
+						observed->wal && observed->wal->byte_count == 0U,
+					"FZ-pre raw family");
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main-wal", std::array{std::byte{0x01U}})),
+					"write nonzero WAL mutation");
+			const auto rejected = observe_sqlite_disposable_raw_empty_family(*minted, classify);
+			require(!rejected && rejected.error().detail == "raw-nonzero-wal-unresolved",
+					"nonzero WAL is not silently classified");
+		}
+
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint FO raw capability");
+			auto setup = minted->no_effect_request();
+			const auto main = canonical_empty_main(1U);
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main", main)),
+					"write FO main fixture");
+			auto classify = setup;
+			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
+			auto observed = observe_sqlite_disposable_raw_empty_family(*minted, classify);
+			require(observed.has_value() &&
+						observed->family.family ==
+							sqlite_disposable_empty_family::complete_rollback_empty_no_sidecar &&
+						observed->family.phase == sqlite_disposable_family_phase::post,
+					"FO raw family");
+		}
+
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint mixed raw capability");
+			auto setup = minted->no_effect_request();
+			const auto main = canonical_empty_main(2U);
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main", main)),
+					"write mixed main fixture");
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "unexpected", std::array{std::byte{0x01U}})),
+					"write unexpected sidecar fixture");
+			auto classify = setup;
+			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
+			const auto mixed = observe_sqlite_disposable_raw_empty_family(*minted, classify);
+			require(!mixed && mixed.error().detail == "raw-family-unresolved-topology",
+					"extra topology fails closed");
+		}
+
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint orphan raw capability");
+			auto setup = minted->no_effect_request();
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main-wal", {})),
+					"write orphan WAL fixture");
+			auto classify = setup;
+			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
+			const auto orphan = observe_sqlite_disposable_raw_empty_family(*minted, classify);
+			require(!orphan && orphan.error().detail == "raw-orphan-sidecar",
+					"orphan sidecar fails closed");
+		}
+	}
+
 	[[nodiscard]] sqlite_disposable_empty_family_observation
 	family_observation(const sqlite_disposable_main_header_state header,
 					   const sqlite_disposable_wal_state wal,
@@ -738,6 +897,7 @@ int main()
 	exercise_root_rebind();
 	exercise_unlink_boundary_rebind();
 	exercise_retained_parent_lifetime_and_destructor();
+	exercise_raw_empty_family_observation();
 	exercise_receiptless_family_partition_and_routes();
 #else
 	auto unavailable = duplicate_sqlite_disposable_parent_directory(-1);
