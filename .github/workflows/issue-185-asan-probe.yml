@@ -1,0 +1,64 @@
+name: Issue 185 ASan boundary probe
+
+on:
+  push:
+    branches:
+      - agent/issue-185-clang-asan-probe
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: 2
+  CTEST_PARALLEL_LEVEL: 2
+
+jobs:
+  asan-ubsan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Install exact Clang 22 development toolchain and Ninja
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12.11"
+      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+      - name: Build ASan and UBSan configuration
+        env:
+          CXX: clang++-22
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1
+          UBSAN_OPTIONS: halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1
+        run: |
+          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
+          cmake --preset asan-ubsan
+          cmake --build --preset asan-ubsan
+      - name: Reproduce the three former Clang allocator failures first
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1
+          UBSAN_OPTIONS: halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1
+        run: |
+          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
+          ctest --preset asan-ubsan --parallel 1 \
+            --tests-regex '^(sdk\.example-clang22-native|install\.clang22-materializer-success|install\.examples-consumer)$' \
+            --output-on-failure
+      - name: Run the complete ASan and UBSan contract
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1
+          UBSAN_OPTIONS: halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1
+        run: |
+          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
+          ctest --preset asan-ubsan --parallel "${CTEST_PARALLEL_LEVEL}" \
+            --label-exclude quality --output-junit ctest.xml
+          python3 tools/quality/check_sanitizer_coverage.py check --root . \
+            --build-dir build/asan-ubsan --expected address,undefined \
+            --require-install-consumers 2>&1 | tee build/asan-ubsan/sanitizer-coverage.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: always()
+        with:
+          name: issue-185-asan-probe-${{ github.sha }}
+          path: |
+            build/asan-ubsan/ctest.xml
+            build/asan-ubsan/sanitizer-coverage.log
+            build/asan-ubsan/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
