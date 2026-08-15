@@ -128,10 +128,10 @@ properties:
     additionalProperties: false
     required: [maximum_active_write_units, active_write_units, required_stages, completion_evidence]
     properties:
-      maximum_active_write_units: {const: 1}
+      maximum_active_write_units: {const: 4}
       active_write_units:
         type: array
-        maxItems: 1
+        maxItems: 4
         items:
           type: object
           additionalProperties: false

@@ -103,7 +103,7 @@ baseline:
     - branch-protection-status-names
     - production-scope-inventory-binding
 api_unit_workflow:
-  maximum_active_write_units: 1
+  maximum_active_write_units: 4
   active_write_units: []
   required_stages:
     - semantics-identity-partiality

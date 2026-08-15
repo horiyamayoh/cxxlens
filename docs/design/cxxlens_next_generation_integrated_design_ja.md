@@ -5442,8 +5442,11 @@ toolchain digest を独立に差し替えられない。
 Wave 0 readiness は `schemas/cxxlens_ng_api_development_readiness.yaml` を authority とする。Public API target の direct edge は
 release bundle と実 CMake の `PUBLIC` / `INTERFACE` edge に一致し、public header の admission は Public API Catalog、generated
 relation header の導出可能性は Relation Registry が所有する。migration checker は superseded asset denylist に限定し、新 header
-allowlist を二重管理しない。同時 active write unit は一つ以下とする。main の required status check は exact name set を strict mode で
-要求し、同一 SHA の non-main 成功を先行させる。main へ入った SHA は全 required artifact、JUnit、install manifest、toolchain provenance、
+allowlist を二重管理しない。同時 active write unit は最大四つとし、各 unit の issue、contract ID、repository-relative write path を
+machine-readable に宣言する。異なる unit の contract ID は disjoint でなければならず、write path は同一 path だけでなく祖先・子孫の
+ownership も conflict として fail closed にする。shared authority または shared contract を変更する unit は同一 contract ID または
+共通 path prefix を宣言して直列化する。main の required status check は exact name set を strict mode で要求し、同一 SHA の non-main
+成功を先行させる。main へ入った SHA は全 required artifact、JUnit、install manifest、toolchain provenance、
 Foundation completion report、authority/header digest、public callable inventory digest、同じ inventory から生成した human review artifact を
 clean revision/tree に bind した readiness report が passed の場合だけ基準線になる。GR は同じ revision の readiness report、AST census、
 独立 Doxygen correspondence を再検証し、stale または別 SHA の callable evidence を production qualification に用いない。
