@@ -128,14 +128,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 2
-      - name: Install exact Clang 22 toolchain
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - name: Install exact Doxygen toolchain
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile documentation
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12.11"
       - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+      - name: Fail fast on repository consistency
+        run: |
+          python tools/quality/check_documentation_consistency.py check --root .
+          python tools/quality/check_ng_api_development_readiness.py check --root .
+      - name: Install exact Clang 22 toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+      - name: Install exact Doxygen toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile documentation
       - name: Generate linkage-independent quality evidence once
         env:
           CXX: clang++-22
@@ -442,6 +446,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [g5-qualification, sqlite-store-v3-qualification]
     runs-on: ubuntu-24.04
+    timeout-minutes: 100
     outputs:
       qualification: ${{ steps.evaluate.outputs.qualification }}
     steps:
@@ -456,17 +461,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          run_id="$({
-            gh api --method GET \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/nightly.yml/runs" \
-              -f branch=main \
-              -f head_sha="${GITHUB_SHA}" \
-              -f status=completed \
-              -f per_page=100 \
-              --jq '([.workflow_runs[] | select((.event == "schedule" or .event == "workflow_dispatch") and .conclusion == "success" and .head_branch == "main")] | sort_by(.created_at, .id) | reverse | .[0].id) // empty'
-          })"
+          run_id=""
+          for attempt in $(seq 1 180); do
+            latest="$({
+              gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/nightly.yml/runs" \
+                -f branch=main \
+                -f head_sha="${GITHUB_SHA}" \
+                -f per_page=100 \
+                --jq '([.workflow_runs[] | select((.event == "push" or .event == "schedule" or .event == "workflow_dispatch") and .head_branch == "main")] | sort_by(.created_at, .id) | reverse | .[0] | select(.) | [.id, .status, (.conclusion // "")] | @tsv) // empty'
+            })"
+            if [[ -z "${latest}" ]]; then
+              sleep 30
+              continue
+            fi
+            IFS=$'\t' read -r candidate status conclusion <<< "${latest}"
+            if [[ "${status}" != "completed" ]]; then
+              sleep 30
+              continue
+            fi
+            if [[ "${conclusion}" != "success" ]]; then
+              echo "exact-main Nightly run ${candidate} completed with ${conclusion}" >&2
+              exit 1
+            fi
+            run_id="${candidate}"
+            break
+          done
           if [[ -z "${run_id}" ]]; then
-            echo "no successful exact-main Nightly run is available for ${GITHUB_SHA}" >&2
+            echo "no successful exact-main Nightly run became available for ${GITHUB_SHA}" >&2
             exit 1
           fi
           echo "run-id=${run_id}" >> "${GITHUB_OUTPUT}"
