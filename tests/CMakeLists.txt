@@ -541,6 +541,10 @@ target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
                       PRIVATE cxxlens::provider_sdk)
 target_include_directories(cxxlens-unit-sdk-provider-ng1-session
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-unit-sdk-provider-ng1-session
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 add_test(NAME unit.sdk-provider-ng1-session
          COMMAND cxxlens-unit-sdk-provider-ng1-session)
 set_tests_properties(
