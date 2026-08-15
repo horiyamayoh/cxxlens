@@ -29,11 +29,23 @@ jobs:
 
           path = Path("tools/quality/check_ng_release_qualification.py")
           text = path.read_text(encoding="utf-8")
-          old = '''    for marker in (\n        "id: nightly-run",\n        'gh api --method GET',\n        'actions/workflows/nightly.yml/runs',\n        "-f head_sha=\\\"${GITHUB_SHA}\\\"",\n        "-f status=completed",\n        'name: cxxlens-nightly-evidence-${{ github.sha }}',\n        'github-token: ${{ github.token }}',\n        'repository: ${{ github.repository }}',\n        'run-id: ${{ steps.nightly-run.outputs.run-id }}',\n    ):\n'''
-          new = '''    for marker in (\n        "timeout-minutes: 100",\n        "id: nightly-run",\n        'gh api --method GET',\n        'actions/workflows/nightly.yml/runs',\n        "-f head_sha=\\\"${GITHUB_SHA}\\\"",\n        "for attempt in $(seq 1 180)",\n        "sleep 30",\n        '.event == "push"',\n        '.event == "schedule"',\n        '.event == "workflow_dispatch"',\n        '\"${status}\" != \"completed\"',\n        '\"${conclusion}\" != \"success\"',\n        'name: cxxlens-nightly-evidence-${{ github.sha }}',\n        'github-token: ${{ github.token }}',\n        'repository: ${{ github.repository }}',\n        'run-id: ${{ steps.nightly-run.outputs.run-id }}',\n    ):\n'''
-          if old not in text:
-              raise SystemExit("release workflow marker block differs")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          old = '        "-f status=completed",\n'
+          new = '''        "for attempt in $(seq 1 180)",
+        "sleep 30",
+        '.event == "push"',
+        '.event == "schedule"',
+        '.event == "workflow_dispatch"',
+        '\"${status}\" != \"completed\"',
+        '\"${conclusion}\" != \"success\"',
+'''
+          if text.count(old) != 1:
+              raise SystemExit("release workflow completed-only marker count differs")
+          text = text.replace(old, new, 1)
+          anchor = '    for marker in (\n        "id: nightly-run",\n'
+          replacement = '    for marker in (\n        "timeout-minutes: 100",\n        "id: nightly-run",\n'
+          if text.count(anchor) != 1:
+              raise SystemExit("release workflow marker anchor count differs")
+          path.write_text(text.replace(anchor, replacement, 1), encoding="utf-8")
           PY
           python3 tools/quality/verify_checksums.py generate --root .
           python3 tools/quality/verify_checksums.py check --root .
