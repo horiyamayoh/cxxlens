@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      - name: Reconstruct and apply the reviewed exact-main patch
+      - name: Reconstruct and publish the reviewed exact-main commit object
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -80,7 +80,99 @@ jobs:
           git apply --index --whitespace=error-all "${RUNNER_TEMP}/issue263.patch"
           git rm .github/workflows/apply-issue-263.yml
           git diff --cached --check
-          git config user.name "cxxlens workflow maintainer"
-          git config user.email "44720751+horiyamayoh@users.noreply.github.com"
-          git commit -m "Accelerate conflict-scoped completion lanes (#263)"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          parent_sha = os.environ["GITHUB_SHA"]
+          expected_paths = {
+              ".github/workflows/apply-issue-263.yml",
+              ".github/workflows/nightly.yml",
+              ".github/workflows/quality.yml",
+              "docs/design/adr/0094-risk-tiered-goal-authorization.md",
+              "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+              "docs/development/agent-api-development-goal.md",
+              "docs/development/build-and-test.md",
+              "schemas/cxxlens_ng_api_development_readiness.schema.yaml",
+              "schemas/cxxlens_ng_api_development_readiness.yaml",
+              "tests/quality/test_ng_api_development_readiness.py",
+              "tools/quality/check_ng_api_development_readiness.py",
+          }
+
+          def git_output(*arguments: str) -> bytes:
+              return subprocess.check_output(["git", *arguments])
+
+          def gh_post(endpoint: str, payload: dict) -> dict:
+              completed = subprocess.run(
+                  ["gh", "api", "--method", "POST", endpoint, "--input", "-"],
+                  input=json.dumps(payload),
+                  text=True,
+                  capture_output=True,
+              )
+              if completed.returncode != 0:
+                  raise SystemExit(
+                      f"GitHub API request failed for {endpoint}: {completed.stderr}"
+                  )
+              return json.loads(completed.stdout)
+
+          changed_paths = {
+              item.decode("utf-8")
+              for item in git_output("diff", "--cached", "--name-only", "-z").split(b"\0")
+              if item
+          }
+          if changed_paths != expected_paths:
+              raise SystemExit(
+                  f"staged paths differ: expected {sorted(expected_paths)}, "
+                  f"got {sorted(changed_paths)}"
+              )
+          deleted_paths = {
+              item.decode("utf-8")
+              for item in git_output(
+                  "diff", "--cached", "--diff-filter=D", "--name-only", "-z"
+              ).split(b"\0")
+              if item
+          }
+          if deleted_paths != {".github/workflows/apply-issue-263.yml"}:
+              raise SystemExit(f"deleted paths differ: {sorted(deleted_paths)}")
+
+          tree_elements = []
+          for path in sorted(changed_paths):
+              if path in deleted_paths:
+                  tree_elements.append(
+                      {"path": path, "mode": "100644", "type": "blob", "sha": None}
+                  )
+                  continue
+              index_entry = git_output("ls-files", "-s", "--", path).decode("utf-8")
+              mode = index_entry.split(maxsplit=1)[0]
+              content = pathlib.Path(path).read_bytes()
+              blob = gh_post(
+                  f"repos/{repository}/git/blobs",
+                  {
+                      "content": base64.b64encode(content).decode("ascii"),
+                      "encoding": "base64",
+                  },
+              )
+              tree_elements.append(
+                  {"path": path, "mode": mode, "type": "blob", "sha": blob["sha"]}
+              )
+              print(f"published blob {path}: {blob['sha']}")
+
+          base_tree_sha = git_output("rev-parse", "HEAD^{tree}").decode("ascii").strip()
+          tree = gh_post(
+              f"repos/{repository}/git/trees",
+              {"base_tree": base_tree_sha, "tree": tree_elements},
+          )
+          commit = gh_post(
+              f"repos/{repository}/git/commits",
+              {
+                  "message": "Accelerate conflict-scoped completion lanes (#263)",
+                  "tree": tree["sha"],
+                  "parents": [parent_sha],
+              },
+          )
+          print(f"CXXLENS_CREATED_COMMIT_SHA={commit['sha']}")
+          PY
