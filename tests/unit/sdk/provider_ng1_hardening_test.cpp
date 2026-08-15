@@ -306,12 +306,13 @@ namespace
 	}
 
 	[[nodiscard]] ng1_resume_token make_resume_token(const ng1_resume_binding& binding,
-													 const std::uint64_t generation = 1U)
+													 const std::uint64_t generation = 1U,
+													 const std::uint64_t acknowledged_sequence = 4U)
 	{
 		ng1_resume_token token;
 		token.kind = ng1_resume_kind::accepted;
 		token.binding = binding;
-		token.highest_contiguous_acked_sequence = 4U;
+		token.highest_contiguous_acked_sequence = acknowledged_sequence;
 		token.staged_digest = digest("staged");
 		token.token_generation = generation;
 		const auto token_digest = ng1_resume_token_digest(token);
@@ -561,7 +562,7 @@ namespace
 					first_prefix_digest->starts_with("semantic-v2:sha256:"),
 				"spill prefix digest was not semantic-v2 typed");
 
-		auto receipt = state->observe_host_fsync(4U, digest("staged"), 1U);
+		auto receipt = state->observe_host_fsync(0U, digest("staged"), 1U);
 		require(receipt.has_value(), "host-observed spill fsync receipt construction failed");
 		require(receipt->validate(), "host-observed spill fsync receipt was invalid");
 		require(receipt->total_records == 1U && receipt->total_bytes == state->total_bytes() &&
@@ -570,8 +571,12 @@ namespace
 
 		auto resume = ng1_resume_state::create(resume_binding());
 		require(resume.has_value(), "resume state creation for spill bridge failed");
-		require(resume->accept(make_resume_token(resume_binding()), *receipt, false, false, 4U),
-				"durable resume did not consume the host-observed spill receipt");
+		require(
+			resume->accept(make_resume_token(resume_binding(), 1U, 0U), *receipt, false, false, 4U),
+			"durable resume did not consume the host-observed spill receipt");
+		auto forged_frontier = state->observe_host_fsync(1U, digest("staged"), 2U);
+		require(!forged_frontier && forged_frontier.error().code == "provider.spill-corrupt",
+				"spill ACK beyond the validated prefix was accepted");
 
 		auto bad_payload = first;
 		bad_payload.payload_bytes.push_back(std::byte{'!'});

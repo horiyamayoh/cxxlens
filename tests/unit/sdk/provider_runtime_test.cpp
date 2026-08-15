@@ -1397,6 +1397,21 @@ namespace
 					positive->reason == "provider.success" && positive->sealed() &&
 					!positive->sealing_error(),
 				"valid transcript did not produce an adoption seal");
+		detail::provider_runtime_provenance forged_multi_batch_provenance;
+		forged_multi_batch_provenance.task_id = task.task_id;
+		forged_multi_batch_provenance.dependency_group_id = "dependency:forged";
+		forged_multi_batch_provenance.atomic_output_group_id = "atomic:forged";
+		forged_multi_batch_provenance.batch_id = "batch:forged";
+		auto forged_multi_batch_receipt =
+			detail::make_provider_runtime_receipt(1U,
+												  "sha256:" + std::string(64U, 'a'),
+												  *frames,
+												  std::move(forged_multi_batch_provenance),
+												  "provider.success",
+												  *positive->sealed());
+		require(!forged_multi_batch_receipt &&
+					forged_multi_batch_receipt.error().detail == "multi-batch-provenance",
+				"runtime receipt admitted caller provenance for multiple sealed batches");
 		const auto batches = positive->sealed()->batches();
 		require(batches.size() == 3U && batches[0U].task_id() == task.task_id &&
 					batches[0U].descriptor_id() == descriptor.id &&

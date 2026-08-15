@@ -117,10 +117,16 @@ namespace cxxlens::detail::sqlite_qualification
 			sqlite_disposable_object_identity identity;
 			std::uint64_t link_count{};
 			std::uint64_t size{};
+			std::int64_t modification_seconds{};
+			std::uint32_t modification_nanoseconds{};
+			std::int64_t change_seconds{};
+			std::uint32_t change_nanoseconds{};
+
+			[[nodiscard]] bool operator==(const object_observation&) const = default;
 		};
 
-		constexpr unsigned int required_statx_mask =
-			STATX_TYPE | STATX_MODE | STATX_NLINK | STATX_INO | STATX_MNT_ID | STATX_SIZE;
+		constexpr unsigned int required_statx_mask = STATX_TYPE | STATX_MODE | STATX_NLINK |
+			STATX_INO | STATX_MNT_ID | STATX_SIZE | STATX_MTIME | STATX_CTIME;
 
 		[[nodiscard]] sqlite_disposable_object_identity
 		make_identity(const struct statx& observed) noexcept
@@ -152,7 +158,13 @@ namespace cxxlens::detail::sqlite_qualification
 			}
 			if ((observed.stx_mask & required_statx_mask) != required_statx_mask)
 				return false;
-			output = {make_identity(observed), observed.stx_nlink, observed.stx_size};
+			output = {make_identity(observed),
+					  observed.stx_nlink,
+					  observed.stx_size,
+					  observed.stx_mtime.tv_sec,
+					  observed.stx_mtime.tv_nsec,
+					  observed.stx_ctime.tv_sec,
+					  observed.stx_ctime.tv_nsec};
 			return true;
 		}
 
@@ -169,7 +181,13 @@ namespace cxxlens::detail::sqlite_qualification
 			}
 			if ((observed.stx_mask & required_statx_mask) != required_statx_mask)
 				return false;
-			output = {make_identity(observed), observed.stx_nlink, observed.stx_size};
+			output = {make_identity(observed),
+					  observed.stx_nlink,
+					  observed.stx_size,
+					  observed.stx_mtime.tv_sec,
+					  observed.stx_mtime.tv_nsec,
+					  observed.stx_ctime.tv_sec,
+					  observed.stx_ctime.tv_nsec};
 			return true;
 		}
 
@@ -791,13 +809,48 @@ namespace cxxlens::detail::sqlite_qualification
 				offset += static_cast<std::uint64_t>(count_size);
 			}
 
+			// A same-size replacement can preserve identity and size. Re-read the complete bounded
+			// byte sequence before accepting the first digest, then also compare statx change times
+			// below. Either byte drift or metadata drift remains unresolved.
+			std::vector<std::byte> verification;
+			try
+			{
+				verification.resize(bytes.size());
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-allocation"));
+			}
+			offset = 0U;
+			while (offset < before_file.size)
+			{
+				const auto remaining = before_file.size - offset;
+				const auto requested =
+					static_cast<std::size_t>(std::min<std::uint64_t>(remaining, 4096U));
+				ssize_t count{};
+				for (;;)
+				{
+					if (offset > static_cast<std::uint64_t>(std::numeric_limits<off_t>::max()))
+						return cxxlens::sdk::unexpected(raw_family_error("raw-file-offset"));
+					count = ::pread(file.get(),
+									verification.data() + static_cast<std::size_t>(offset),
+									requested,
+									static_cast<off_t>(offset));
+					if (count >= 0 || errno != EINTR)
+						break;
+				}
+				if (count <= 0 || static_cast<std::size_t>(count) > requested)
+					return cxxlens::sdk::unexpected(raw_family_error("raw-file-short-read"));
+				offset += static_cast<std::uint64_t>(count);
+			}
+			if (!std::ranges::equal(bytes, verification))
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-byte-drift"));
+
 			object_observation after_file;
 			object_observation after_entry;
 			if (!observe_fd(file.get(), after_file) ||
-				!observe_entry(root, leaf_copy.c_str(), after_entry) ||
-				after_file.identity != before_file.identity ||
-				after_entry.identity != before_entry.identity ||
-				after_file.size != before_file.size || after_entry.size != before_entry.size)
+				!observe_entry(root, leaf_copy.c_str(), after_entry) || after_file != before_file ||
+				after_entry != before_entry)
 				return cxxlens::sdk::unexpected(raw_family_error("raw-file-drift"));
 			auto sha256 = digest.finish();
 			if (!sha256)

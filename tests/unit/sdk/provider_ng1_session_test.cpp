@@ -317,7 +317,7 @@ namespace
 			provider::frame replay_frame;
 			replay_frame.type = provider::message_type::task_complete;
 			replay_frame.stream_id = 7U;
-			replay_frame.sequence = 0U;
+			replay_frame.sequence = 1U;
 			replay_frame.flags = static_cast<std::uint16_t>(provider::frame_flag::end_of_stream);
 			std::vector<provider::frame> frames{std::move(replay_frame)};
 			provider_runtime_provenance provenance;
@@ -340,6 +340,10 @@ namespace
 				provenance.task_input_digest = digest("different-input");
 			else if (mutation == "stream")
 				provenance.stream_id = resume.stream_id + 1U;
+			else if (mutation == "sequence")
+				frames.front().sequence = 2U;
+			else if (mutation == "zero-sequence")
+				frames.front().sequence = 0U;
 			auto runtime = make_provider_runtime_receipt(1U,
 														 "sha256:" + std::string(64U, 'b'),
 														 frames,
@@ -421,8 +425,7 @@ namespace
 		auto replay_start = session->replay_start_sequence();
 		require(replay_start && *replay_start == 1U, "replay start was not durable ACK plus one");
 		auto output = values.output_receipt();
-		auto replay = make_ng1_replay_validation_receipt(
-			output, values.replay_runtime_receipt(), *replay_start);
+		auto replay = make_ng1_replay_validation_receipt(output, values.replay_runtime_receipt());
 		require(replay, "shared replay validation receipt construction failed");
 		require(session->accept_replay(*replay), "validated replay was rejected");
 		require(session->state() == ng1_recovery_state::resumed,
@@ -544,8 +547,8 @@ namespace
 		auto replay_start = session->replay_start_sequence();
 		require(replay_start, "replay-negative start unavailable");
 		auto output = values.output_receipt();
-		auto bad_replay = make_ng1_replay_validation_receipt(
-			output, values.replay_runtime_receipt(), *replay_start + 1U);
+		auto bad_replay =
+			make_ng1_replay_validation_receipt(output, values.replay_runtime_receipt("sequence"));
 		require(bad_replay, "bad replay receipt construction failed");
 		auto rejected = session->accept_replay(*bad_replay);
 		require(!rejected && session->state() == ng1_recovery_state::failed,
@@ -595,7 +598,7 @@ namespace
 		auto replay_start = session->replay_start_sequence();
 		require(replay_start, "provenance replay start unavailable");
 		auto replay = make_ng1_replay_validation_receipt(
-			values.output_receipt(), values.replay_runtime_receipt("task-input"), *replay_start);
+			values.output_receipt(), values.replay_runtime_receipt("task-input"));
 		require(replay, "provenance replay receipt construction failed");
 		auto rejected = session->accept_replay(*replay);
 		require(!rejected && rejected.error().field == "task_input_digest" &&
@@ -606,7 +609,7 @@ namespace
 		provider::frame generic_frame;
 		generic_frame.type = provider::message_type::task_complete;
 		generic_frame.stream_id = 7U;
-		generic_frame.sequence = 0U;
+		generic_frame.sequence = 1U;
 		generic_frame.flags = static_cast<std::uint16_t>(provider::frame_flag::end_of_stream);
 		std::vector<provider::frame> generic_frames{generic_frame};
 		auto generic_runtime = make_provider_runtime_receipt(1U,
@@ -617,9 +620,14 @@ namespace
 															 values.sealed_transcript());
 		require(generic_runtime, "generic runtime receipt construction failed");
 		auto incomplete_replay =
-			make_ng1_replay_validation_receipt(values.output_receipt(), *generic_runtime, 1U);
+			make_ng1_replay_validation_receipt(values.output_receipt(), *generic_runtime);
 		require(!incomplete_replay && incomplete_replay.error().field == "replay.provenance",
 				"replay admitted an opaque runtime receipt without complete provenance");
+
+		auto zero_sequence = make_ng1_replay_validation_receipt(
+			values.output_receipt(), values.replay_runtime_receipt("zero-sequence"));
+		require(!zero_sequence && zero_sequence.error().field == "replay.first_sequence",
+				"replay admitted a sequence-zero runtime receipt");
 	}
 
 	void test_spill_port_throw_effects_are_terminal()

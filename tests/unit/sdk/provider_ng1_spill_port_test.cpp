@@ -244,6 +244,8 @@ namespace
 		auto invalid_sequence =
 			ng1_spill_staging_session::create(spill_binding, std::move(invalid_sequence_storage));
 		require(invalid_sequence.has_value(), "invalid sequence spill session creation failed");
+		require(invalid_sequence->append(record(spill_binding, 0U, 0U, "sequence")),
+				"invalid sequence setup append failed");
 		auto invalid_sequence_result = invalid_sequence->fsync(0U, 0U, digest("staged"));
 		require(!invalid_sequence_result &&
 					invalid_sequence_result.error().code == "provider.recovery-failed" &&
