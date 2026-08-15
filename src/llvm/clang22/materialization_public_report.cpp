@@ -3999,9 +3999,11 @@ namespace cxxlens::detail::clang22::materialization
 			for (const auto& admitted_descriptor : *admitted->as_array())
 			{
 				const auto* descriptor_id = admitted_descriptor.member("descriptor_id");
-				const auto* expected_digest = admitted_descriptor.member("runtime_descriptor_digest");
+				const auto* expected_digest =
+					admitted_descriptor.member("runtime_descriptor_digest");
 				if (descriptor_id == nullptr || expected_digest == nullptr ||
-					descriptor_id->as_string() == nullptr || expected_digest->as_string() == nullptr)
+					descriptor_id->as_string() == nullptr ||
+					expected_digest->as_string() == nullptr)
 					return sdk::unexpected({"materialization.report-invalid",
 											"semantic_verification",
 											"descriptor-inventory"});
@@ -4013,8 +4015,8 @@ namespace cxxlens::detail::clang22::materialization
 											"descriptor-inventory"});
 				descriptors.push_back(
 					make_object({{"descriptor_id", text_value(actual_descriptor->id)},
-									 {"runtime_descriptor_digest",
-									  text_value(actual_descriptor->descriptor_digest)}})
+								 {"runtime_descriptor_digest",
+								  text_value(actual_descriptor->descriptor_digest)}})
 						.value());
 			}
 			std::ranges::sort(descriptors,

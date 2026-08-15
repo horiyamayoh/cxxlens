@@ -2877,9 +2877,8 @@ namespace cxxlens::sdk
 		if (!first_page_zero || (cold_route && *first_page_zero != 0U))
 			return false;
 		const auto& first = events[*first_page_zero];
-		const auto first_cantinit =
-			(first.native_status == sqlite_readonly_cannot_initialize ||
-				first.native_status == sqlite_readonly) &&
+		const auto first_cantinit = (first.native_status == sqlite_readonly_cannot_initialize ||
+									 first.native_status == sqlite_readonly) &&
 			first.returned_status == sqlite_readonly_cannot_initialize &&
 			!first.native_mapping_nonnull && !first.returned_mapping_nonnull;
 		const auto first_mapped = first.native_status == sqlite_readonly &&

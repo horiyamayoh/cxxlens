@@ -298,8 +298,7 @@ namespace
 	}
 
 	void require_three_paths_query_the_same_admitted_snapshot(
-		const materialization_store_observation& observation,
-		const sdk::relation_engine& value)
+		const materialization_store_observation& observation, const sdk::relation_engine& value)
 	{
 		auto relation = value.require_id(descriptor().id);
 		require(relation.has_value(), "query regression relation was not admitted");

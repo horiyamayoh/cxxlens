@@ -159,13 +159,13 @@ namespace
 
 		auto normalized_readonly_null = event(0, readonly, false, false);
 		normalized_readonly_null.returned_status = cant_initialize;
-		require(validate_sqlite_source_shm_readonly_map_sequence(
-					std::array{normalized_readonly_null},
-					&vfs_identity,
-					&app_data_identity,
-					true,
-					false),
-				"cold proof accepts READONLY/null normalized to CANTINIT/null");
+		require(
+			validate_sqlite_source_shm_readonly_map_sequence(std::array{normalized_readonly_null},
+															 &vfs_identity,
+															 &app_data_identity,
+															 true,
+															 false),
+			"cold proof accepts READONLY/null normalized to CANTINIT/null");
 
 		const std::array late_page_zero{event(1, readonly, true, false),
 										event(0, cant_initialize, false, true)};
