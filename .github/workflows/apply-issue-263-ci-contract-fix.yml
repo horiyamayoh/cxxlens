@@ -30,14 +30,18 @@ jobs:
           path = Path("tools/quality/check_ng_release_qualification.py")
           text = path.read_text(encoding="utf-8")
           old = '        "-f status=completed",\n'
-          new = '''        "for attempt in $(seq 1 180)",
-        "sleep 30",
-        '.event == "push"',
-        '.event == "schedule"',
-        '.event == "workflow_dispatch"',
-        '\"${status}\" != \"completed\"',
-        '\"${conclusion}\" != \"success\"',
-'''
+          new = "\n".join(
+              (
+                  '        "for attempt in $(seq 1 180)",',
+                  '        "sleep 30",',
+                  "        '.event == \"push\"',",
+                  "        '.event == \"schedule\"',",
+                  "        '.event == \"workflow_dispatch\"',",
+                  "        '\"${status}\" != \"completed\"',",
+                  "        '\"${conclusion}\" != \"success\"',",
+                  "",
+              )
+          )
           if text.count(old) != 1:
               raise SystemExit("release workflow completed-only marker count differs")
           text = text.replace(old, new, 1)
