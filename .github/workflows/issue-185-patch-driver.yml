@@ -23,27 +23,18 @@ jobs:
 
           path = Path(".github/workflows/nightly.yml")
           text = path.read_text(encoding="utf-8")
-          anchor = '''on:
-            schedule:
-              - cron: "17 18 * * *"
-            workflow_dispatch:
-          '''
-          replacement = '''on:
-            schedule:
-              - cron: "17 18 * * *"
-            workflow_dispatch:
-            # A Nightly contract change must qualify the exact merged-main tree.
-            # The path filter prevents ordinary main pushes from duplicating the
-            # scheduled suite.
-            push:
-              branches:
-                - main
-              paths:
-                - ".github/workflows/nightly.yml"
-          '''
-          anchor = "\n".join(line[10:] for line in anchor.splitlines()) + "\n"
+          anchor = "  workflow_dispatch:\n\npermissions:\n"
           replacement = (
-              "\n".join(line[10:] for line in replacement.splitlines()) + "\n"
+              "  workflow_dispatch:\n"
+              "  # A Nightly contract change must qualify the exact merged-main tree.\n"
+              "  # The path filter prevents ordinary main pushes from duplicating the\n"
+              "  # scheduled suite.\n"
+              "  push:\n"
+              "    branches:\n"
+              "      - main\n"
+              "    paths:\n"
+              '      - ".github/workflows/nightly.yml"\n\n'
+              "permissions:\n"
           )
           if text.count(anchor) != 1:
               raise SystemExit("Nightly trigger anchor is not unique")
