@@ -188,6 +188,12 @@ entries:
       - tests/unit/sdk/provider_runtime_test.cpp
       - tests/adapter/clang22/provider_worker_protocol_test.cpp
       - src/sdk/provider_runtime.cpp
+      - src/llvm/clang22/materialization_incremental_coordinator.hpp
+      - src/llvm/clang22/materialization_incremental_coordinator.cpp
+      - tools/clang22/materialize_main.cpp
+      - tools/quality/produce_ng_g5_production_evidence.py
+      - tests/install/clang22_materializer_success_test.py
+      - tests/adapter/clang22/materialization_claims_test.cpp
       - tools/quality/check_ng_g5_qualification.py
       - docs/design/adr/0090-g5-closure-incrementality-qualification.md
       - examples/sdk/incremental_materialization.cpp

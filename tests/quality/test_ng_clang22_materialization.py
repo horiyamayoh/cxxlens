@@ -7,6 +7,7 @@ import codecs
 import copy
 import hashlib
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -24,6 +25,72 @@ from relation_idl_compiler import (  # noqa: E402
 
 
 class NgClang22MaterializationTests(unittest.TestCase):
+    def test_clang22_worker_kernel_source_closure_matches_kernel(self) -> None:
+        root_cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        worker_cmake = (
+            ROOT / "cmake/CxxlensClangTargets.cmake"
+        ).read_text(encoding="utf-8")
+
+        def sources_for_target(document: str, target: str) -> set[str]:
+            match = re.search(
+                rf"add_library\s*\(\s*{re.escape(target)}(?=\s|\))"
+                rf"(?P<body>.*?)\)",
+                document,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"missing CMake target declaration: {target}")
+            return set(
+                re.findall(
+                    r"\bsrc/[A-Za-z0-9_./-]+\.cpp\b", match.group("body")
+                )
+            )
+
+        kernel_sources = sources_for_target(root_cmake, "cxxlens_kernel")
+        worker_sources = sources_for_target(
+            worker_cmake, "cxxlens_clang22_worker_kernel_internal"
+        )
+        monotonic_clock_source = "src/runtime/monotonic_clock_port.cpp"
+        self.assertIn(monotonic_clock_source, kernel_sources)
+        self.assertEqual(
+            worker_sources,
+            kernel_sources,
+            "Clang 22 private worker kernel source closure drifted: "
+            f"missing={sorted(kernel_sources - worker_sources)}, "
+            f"extra={sorted(worker_sources - kernel_sources)}",
+        )
+
+    def test_prior_artifact_recovery_is_after_binding_and_fail_closed(self) -> None:
+        source = (ROOT / "tools/clang22/materialize_main.cpp").read_text(
+            encoding="utf-8"
+        )
+        claim_context = source.index(
+            "auto claim_context = make_materialization_v2_1_claim_context"
+        )
+        binding = source.index(
+            "journal->complete_installation_binding()", claim_context
+        )
+        prior_artifact = source.index(
+            "auto loaded_prior_artifact = load_materialization_prior_artifact(",
+            claim_context,
+        )
+        failure_end = source.index(
+            "auto prior_artifact = std::move(*loaded_prior_artifact);",
+            prior_artifact,
+        )
+        self.assertLess(
+            binding,
+            prior_artifact,
+            "prior-artifact recovery must not run in the installation-binding phase",
+        )
+        failure_block = source[prior_artifact:failure_end]
+        self.assertIn("if (!loaded_prior_artifact)", failure_block)
+        self.assertIn("return no_response();", failure_block)
+        self.assertNotIn(
+            "emit_typed_failure",
+            failure_block,
+            "prior-artifact infrastructure failure must not be relabeled as identity mismatch",
+        )
+
     def test_baseline_recovery_installed_surface_bindings_are_fail_closed(self) -> None:
         documents = {
             "root_cmake": (ROOT / materialization.ROOT_CMAKE).read_text(
@@ -1605,6 +1672,31 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "installed occurrence binding|occurrence payload digest",
         ):
             self.validate_report(request, drift)
+
+    def test_report_occurrence_receipt_rebinding_is_fail_closed(self) -> None:
+        request = self.request("static", "memory")
+
+        manifest_digest_drift = self.report(request)
+        manifest_digest_drift["installation"]["measured"]["manifest_file_digest"] = (
+            "sha256:" + "0" * 64
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "occurrence|materialization",
+        ):
+            self.validate_report(request, manifest_digest_drift)
+
+        file_authority_drift = self.report(request)
+        measured_files = file_authority_drift["installation"]["measured"]["files"]
+        measured_files[0], measured_files[1] = measured_files[1], measured_files[0]
+        file_authority_drift["installation"]["measured"]["inventory_digest"] = (
+            materialization.content_digest(materialization.canonical_json(measured_files))
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "occurrence|materialization",
+        ):
+            self.validate_report(request, file_authority_drift)
 
     def test_sqlite_path_is_canonical_relative_utf8_even_after_digest_rebind(self) -> None:
         invalid_paths = [
@@ -6349,7 +6441,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             (
                 "design-legacy-report-schema-digest",
                 design_text.replace(
-                    "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520",
+                    "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96",
                     "sha256:96c11ba8518075abed8e57c08bd38c10907b9d195ec1daafdb4fd0d57a583941",
                     1,
                 ),

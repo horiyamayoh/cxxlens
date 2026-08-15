@@ -3222,7 +3222,7 @@ dependency は禁止する。
    failure または successful receipt/checked arithmetic contradiction に限定する。
 6. **D6 — accepted SQLite Option A authority; report-schema activation applied, qualification pending:** request 2.1.0、public signatures、claim/Store identity、logical canonical v5 は変更しない。
    report 2.1.0 は private spool-failure phase/code closure、13/19-file occurrence inventory、sandbox array bound を activation し、
-   full parsed report-schema canonical JSON digest は sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520 に固定する。
+   full parsed report-schema canonical JSON digest は sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96 に固定する。
    SQLite v2 single payload BLOB と runtime MAX_LENGTH 1,000,000,000 は required limit-adjacent passed memory/SQLite parity を満たさないため、
    selected alternative A と ADR 0097 に従い physical v3.0.0 の 8 MiB chunk table、16 MiB runtime floor、exact v2.6.0 read-only direct-open、
    `compact()` の deterministic COW migration を実装する。v2 `begin()` は exact

@@ -1,11 +1,11 @@
 ---
 id: DF-0243
 title: Reconcile NG1 resume provider digest grammar
-status: proposed
+status: accepted
 kind: contract-contradiction
 impact: contract
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - provider.manifest-identity
   - provider.ng1-durable-resume
@@ -15,12 +15,31 @@ authority_refs:
   - docs/design/cxxlens_next_generation_integrated_design_ja.md
   - schemas/cxxlens_ng_provider_manifest.schema.yaml
   - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_protocol.schema.yaml
   - schemas/cxxlens_ng_provider_ng1_hardening.yaml
   - schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml
+  - schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml
+  - docs/design/adr/0100-ng1-resume-provider-digest-grammar.md
 tracking_issue: '#243'
 implementation_issues:
   - '#183'
-resolution_refs: []
+resolution_refs:
+  - docs/design/adr/0100-ng1-resume-provider-digest-grammar.md
+  - schemas/cxxlens_ng_provider_ng1_hardening.yaml
+  - schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_protocol.schema.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
+  - schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml
+  - schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml
+  - src/sdk/provider_ng1_validation.cpp
+  - tests/unit/sdk/provider_ng1_hardening_test.cpp
+  - tests/unit/sdk/provider_ng1_transport_test.cpp
+  - tools/quality/check_ng_provider_ng1.py
+  - tools/quality/check_ng_provider_ng1_qualification.py
+  - tests/quality/test_ng_provider_ng1_qualification.py
 review:
   mode: independent
   status: complete
@@ -41,29 +60,31 @@ The provider manifest and current runtime identity path represent both
 digest through without conversion, and the runtime carries the selected
 identity into its expected-provider validation.
 
-The NG1 hardening contract classifies the corresponding resume binding fields
-as `semantic-digest`, and the NG1 resume validator accepts only
-`semantic-v2:sha256:<64 lowercase hex>`. The typed transport codec reaches that
-validator for encode/decode. Therefore a resume control populated directly
-from the current manifest identity is rejected. The current codec vectors use
-semantic-v2 values and do not exercise the manifest-derived path.
+Before this resolution, the NG1 hardening contract classified the
+corresponding resume binding fields as `semantic-digest`, and the NG1 resume
+validator accepted only `semantic-v2:sha256:<64 lowercase hex>`. The typed
+transport codec reached that validator for encode/decode, so a resume control
+populated directly from the current manifest identity was rejected before its
+token projection could be validated. The candidate adds the missing
+field-specific grammar and exercises both the manifest-derived path and
+namespace substitution rejection.
 
 ## Working mental model
 
-The measured provider identity and the NG1 resume semantic projection are
-distinct authorities that need one explicit, versioned bridge. That bridge
-must preserve exact binary identity and derive any semantic digest from
-canonical source bytes or a precisely defined projection. A string prefix
-alias is not a semantic digest calculation.
+The measured provider identity and the NG1 resume token projection are
+distinct authorities. The provider identity fields carry the exact manifest
+content digest, while the token digest is a separate semantic-v2 digest over
+the canonical tuple. The projection preserves each provider identity string
+exactly; it is not a string-prefix alias or a rehashing bridge.
 
 ## Mismatch or opportunity
 
-The manifest schema, runtime identity grammar, and NG1 resume field grammar
-are incompatible at the live integration boundary. The integrated design
-forbids silently reinterpreting legacy/content `sha256:` values as semantic-v2
-values. Prefix conversion, silent rehashing, or unconditional dual-namespace
-acceptance would fix a local test while weakening identity and replay
-authority.
+The manifest schema and runtime identity grammar use `sha256:`, while the
+other NG1 binding digests and token projection use semantic-v2. The resolved
+boundary is explicit and field-specific. The integrated design still forbids
+silently reinterpreting content `sha256:` values as semantic-v2 values;
+prefix conversion, silent rehashing, and unconditional dual-namespace
+acceptance remain invalid.
 
 ## Evidence
 
@@ -74,13 +95,18 @@ authority.
   measures it as `sha256:`.
 - `src/sdk/provider_runtime.cpp` carries manifest identity into provider
   selection and expected-provider validation without conversion.
-- `schemas/cxxlens_ng_provider_ng1_hardening.yaml` defines both resume
-  provider identity fields as `semantic-digest`.
-- `src/sdk/provider_ng1_validation.cpp` validates both fields with the
-  semantic-v2-only validator before `ng1_resume_token_digest()` computes the
-  replay projection.
+- `schemas/cxxlens_ng_provider_ng1_hardening.yaml` now defines both resume
+  provider identity fields as `manifest-content-digest` and records the
+  field-specific grammar and accepted ADR.
+- `src/sdk/provider_ng1_validation.cpp` validates provider identity fields
+  with the exact `sha256:` validator, validates semantic binding fields with
+  the semantic-v2 validator, and preserves all values as exact strings in
+  `ng1_resume_token_digest()`.
 - `src/sdk/provider_ng1_transport.cpp` invokes that validator through the
   resume codec bridge.
+- `schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml` and the focused
+  unit/quality tests cover accepted manifest digests and rejected namespace
+  substitution.
 - The independent review recorded on
   `https://github.com/horiyamayoh/cxxlens/issues/243#issuecomment-5287649392`
   confirms P0=0, P1=0 for the codec-only scope, and a real P2 for future NG1
@@ -88,13 +114,14 @@ authority.
 
 ## Alternatives and trade-offs
 
-1. Define an explicit provider-identity semantic projection and calculate it
-   from measured bytes and selected contract authority at the live integration
-   boundary. This preserves both identity domains and is recommended, subject
-   to accepted authority.
-2. Change NG1 resume fields to accept legacy/content digests. This changes the
-   hardening field grammar and requires coordinated schema, validator, replay
-   digest, and qualification changes.
+1. Define a new provider-identity semantic projection and calculate it from
+   measured bytes and selected contract authority. Rejected for this bounded
+   candidate because it invents a second identity value not present in the
+   manifest contract.
+2. Use the exact manifest content digest for the two provider identity fields,
+   while retaining semantic-v2 for the other binding fields and token digest.
+   Selected with coordinated schema, validator, replay projection, vector,
+   report-traceability, and focused-test changes.
 3. Prefix or silently rehash existing `sha256:` strings. Rejected because it
    loses domain provenance and violates semantic digest v2 rules.
 4. Accept both namespaces in the validator. Rejected unless exact field
@@ -104,16 +131,25 @@ authority.
 ## Recommendation
 
 Keep the source-private codec fail-closed and keep NG1 capability
-advertisement, live transport, resume recovery, and qualification disabled.
-Amend the authority first, then update the manifest-derived positive and
-negative vectors and all replay/qualification evidence in one bounded change.
+unadvertised. The accepted amendment may proceed through bounded validator,
+vector, checker, and evidence work, but does not authorize live transport,
+resume recovery, or production qualification.
 
 ## Disposition
 
 2026-08-14: The contradiction was reproduced at exact implementation head
 `f6ede7f421dfcc8aa0e153df1c0d1c6e3390a7b7`. Independent read-only review by
 Aristotle found no P0/P1 for the codec-only PR, but confirmed a real P2 for
-NG1 live integration. This record is `proposed` with
-`implementation_disposition: blocked`; #183 may continue only on work that
-does not cross the unresolved digest boundary. No authority change or
-production activation is authorized by this record.
+NG1 live integration. At that point this record was `proposed` with
+`implementation_disposition: blocked`; #183 could continue only on work that
+did not cross the unresolved digest boundary. No authority change or
+production activation was authorized by that prior disposition.
+
+2026-08-15: Accepted by ADR 0100. The bounded candidate changes the NG1
+hardening YAML/schema, protocol and report traceability, source-private
+validator, conformance vectors, focused unit/quality tests, and checkers so
+that provider identity fields require exact manifest content digests and the
+overall token digest remains semantic-v2 over the canonical tuple. No prefix,
+silent rehash, or dual-namespace acceptance is introduced. NG1 remains
+proposed and unadvertised; the live transport/production qualification gate
+for #183 remains unresolved and is intentionally outside this candidate.

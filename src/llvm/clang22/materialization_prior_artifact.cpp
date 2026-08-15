@@ -2261,27 +2261,52 @@ namespace cxxlens::detail::clang22::materialization
 			artifact.capture.provider_execution_id != current_task.provider_execution_id)
 			return sdk::unexpected(artifact_error("task", "current-identity"));
 		const auto& input = current_task.worker_input;
-		if (artifact.capture.project_id != input.project ||
-			artifact.capture.catalog_id != input.project_catalog.catalog_id ||
-			artifact.capture.catalog_digest != input.project_catalog.catalog_digest ||
-			artifact.capture.selected_catalog_compile_unit_id !=
-				input.selected_catalog_compile_unit ||
-			artifact.capture.compile_unit_id != input.compile_unit ||
-			artifact.capture.variant_id != input.variant ||
-			artifact.capture.toolchain_context_id != input.toolchain_context ||
-			artifact.capture.toolchain_digest != input.toolchain_digest ||
-			artifact.capture.source_snapshot_id != input.source_snapshot ||
-			artifact.capture.source_file_id != input.file ||
-			artifact.capture.source_logical_path != input.logical_path ||
-			artifact.capture.source_content_digest != input.source_content_digest ||
-			artifact.capture.source_size_bytes != input.source_size_bytes ||
-			artifact.capture.source_encoding != input.source_encoding ||
-			artifact.capture.source_line_index_id != input.line_index ||
-			artifact.capture.source_read_only != input.source_read_only ||
-			artifact.capture.condition_universe_id != input.condition_universe ||
-			artifact.capture.condition_id != input.condition ||
-			artifact.capture.interpretation_domain != input.interpretation)
-			return sdk::unexpected(artifact_error("task.capture", "current-context"));
+		const auto context_mismatch = [&]() -> std::string_view
+		{
+			if (artifact.capture.project_id != input.project)
+				return "project";
+			if (artifact.capture.catalog_id != input.project_catalog.catalog_id)
+				return "catalog-id";
+			if (artifact.capture.catalog_digest != input.project_catalog.catalog_digest)
+				return "catalog-digest";
+			if (artifact.capture.selected_catalog_compile_unit_id !=
+				input.selected_catalog_compile_unit)
+				return "selected-catalog-compile-unit";
+			if (artifact.capture.compile_unit_id != input.compile_unit)
+				return "compile-unit";
+			if (artifact.capture.variant_id != input.variant)
+				return "variant";
+			if (artifact.capture.toolchain_context_id != input.toolchain_context)
+				return "toolchain-context";
+			if (artifact.capture.toolchain_digest != input.toolchain_digest)
+				return "toolchain-digest";
+			if (artifact.capture.source_snapshot_id != input.source_snapshot)
+				return "source-snapshot";
+			if (artifact.capture.source_file_id != input.file)
+				return "source-file";
+			if (artifact.capture.source_logical_path != input.logical_path)
+				return "source-logical-path";
+			if (artifact.capture.source_content_digest != input.source_content_digest)
+				return "source-content-digest";
+			if (artifact.capture.source_size_bytes != input.source_size_bytes)
+				return "source-size";
+			if (artifact.capture.source_encoding != input.source_encoding)
+				return "source-encoding";
+			if (artifact.capture.source_line_index_id != input.line_index)
+				return "source-line-index";
+			if (artifact.capture.source_read_only != input.source_read_only)
+				return "source-read-only";
+			if (artifact.capture.condition_universe_id != input.condition_universe)
+				return "condition-universe";
+			if (artifact.capture.condition_id != input.condition)
+				return "condition";
+			if (artifact.capture.interpretation_domain != input.interpretation)
+				return "interpretation";
+			return {};
+		}();
+		if (!context_mismatch.empty())
+			return sdk::unexpected(
+				artifact_error("task.capture", "current-context/" + std::string{context_mismatch}));
 		if (current_task.source_receipt &&
 			(artifact.capture.source_size_bytes != current_task.source_receipt->size_bytes ||
 			 artifact.capture.source_content_digest !=

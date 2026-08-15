@@ -4,6 +4,7 @@
 | --- | --- |
 | Language | C++23 |
 | Host | Linux primary |
+| Native Windows/MSVC distribution | Unqualified; issue [#223](https://github.com/horiyamayoh/cxxlens/issues/223) requires an exact native tuple |
 | Core target DAG | implemented and installed |
 | Relation/claim kernel | implemented |
 | In-memory and SQLite immutable snapshots | implemented with semantic parity |
@@ -28,3 +29,13 @@ configuration、relation、`cc.clang22-canonical-1` interpretation、capability�
 保持します。各 configuration の evidence digest は、relocated installed materializer と worker、exact task/six descriptors、全 mandatory
 group を束縛する memory report と再 open 済み SQLite report の canonical two-report set digest を含みます。
 report にない provider、relation、platform、binary rebuild、または materialization report は unsupported です。
+
+Windows/MSVC is intentionally not promoted by the Linux lane. The current CI
+workflow and locked bootstrap only measure Ubuntu 24.04, while the release report
+schema accepts production platform tuples matching `linux-...-(static|shared)`.
+The provider-process and SQLite SHM/VFS implementations also still contain
+POSIX-specific paths that require a native Windows port and native negative/positive
+evidence. The Windows install test checks the portable DLL/import-library layout,
+but that layout check is not Windows/MSVC qualification. Until issue #223 has an
+exact merged-main MSVC report, Windows remains unqualified and no wildcard or
+pending tuple may be added to this matrix.

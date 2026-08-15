@@ -1,9 +1,12 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <cxxlens/sdk/provider.hpp>
 
@@ -182,6 +185,88 @@ namespace cxxlens::sdk::provider::detail
 
 		[[nodiscard]] result<void> validate() const;
 		[[nodiscard]] bool operator==(const ng1_spill_fsync_receipt&) const = default;
+	};
+
+	/** Exact identity binding for one source-private staged spill prefix. */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_spill_binding
+	{
+		std::string provider_id;
+		std::string protocol_session_id;
+		std::string task_id;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::uint64_t stream_id{};
+
+		[[nodiscard]] result<void> validate() const;
+		[[nodiscard]] bool operator==(const ng1_spill_binding&) const = default;
+	};
+
+	/** One decoded, source-private NG1 spill record before prefix admission. */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_spill_record
+	{
+		std::string schema{"cxxlens.provider-spill-record.v1"};
+		std::uint64_t record_ordinal{};
+		std::string task_id;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::uint64_t stream_id{};
+		std::uint64_t sequence{};
+		std::vector<std::byte> payload_bytes;
+		std::string payload_digest;
+		std::string record_digest;
+
+		[[nodiscard]] bool operator==(const ng1_spill_record&) const = default;
+	};
+
+	inline constexpr std::uint64_t ng1_spill_maximum_record_bytes = 16U * 1024U * 1024U;
+	inline constexpr std::uint64_t ng1_spill_maximum_total_bytes = 64U * 1024U * 1024U;
+	inline constexpr std::uint64_t ng1_spill_maximum_records = 65'536U;
+
+	/** Digest the exact payload bytes in the source-private spill payload domain. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
+	ng1_spill_payload_digest(std::span<const std::byte> payload);
+	/** Digest the exact record projection excluding record_digest. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
+	ng1_spill_record_digest(const ng1_spill_record& record);
+
+	/**
+	 * Source-private bounded spill-prefix integrity core.
+	 *
+	 * This value-only component does not allocate payloads from an unvalidated wire header and
+	 * does not perform fsync. A caller may convert an independently host-observed private-port
+	 * fsync sequence into a receipt with observe_host_fsync(); that method is not a durability
+	 * proof by itself and is intentionally not connected to production runtime or capability
+	 * advertisement.
+	 */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_spill_prefix_state
+	{
+	  public:
+		[[nodiscard]] static result<ng1_spill_prefix_state> create(ng1_spill_binding binding);
+
+		[[nodiscard]] result<void> append(const ng1_spill_record& record);
+		[[nodiscard]] result<std::string> spill_digest() const;
+		[[nodiscard]] result<ng1_spill_fsync_receipt>
+		observe_host_fsync(std::uint64_t highest_contiguous_acked_sequence,
+						   std::string staged_digest,
+						   std::uint64_t fsync_sequence) const;
+
+		[[nodiscard]] std::uint64_t total_bytes() const noexcept
+		{
+			return total_bytes_;
+		}
+		[[nodiscard]] std::uint64_t total_records() const noexcept
+		{
+			return static_cast<std::uint64_t>(record_digests_.size());
+		}
+
+	  private:
+		ng1_spill_binding binding_;
+		std::vector<std::string> record_digests_;
+		std::uint64_t total_bytes_{};
+		std::uint64_t next_record_ordinal_{};
+		std::uint64_t next_sequence_{};
 	};
 
 	/**

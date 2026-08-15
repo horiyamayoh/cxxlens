@@ -41,6 +41,11 @@ namespace
 		return *output;
 	}
 
+	[[nodiscard]] std::string manifest_digest(const char fill)
+	{
+		return std::string{"sha256:"} + std::string(64U, fill);
+	}
+
 	[[nodiscard]] ng1_heartbeat_control heartbeat_control()
 	{
 		return {"cxxlens.provider-control.heartbeat.v1",
@@ -71,8 +76,8 @@ namespace
 	{
 		return {"provider:test",
 				{1U, 2U, 3U},
-				digest("binary"),
-				digest("contract"),
+				manifest_digest('a'),
+				manifest_digest('b'),
 				"session:test",
 				"task:test",
 				digest("input"),
@@ -256,6 +261,21 @@ namespace
 		require(token, "resume validator bridge failed");
 		require(token->token_digest == input.token_digest,
 				"resume bridge did not preserve projection digest");
+		require(input.token_digest.starts_with("semantic-v2:sha256:"),
+				"resume token digest left semantic-v2 namespace");
+
+		auto semantic_provider_identity = input;
+		semantic_provider_identity.binding.provider_binary_digest = digest("binary");
+		auto semantic_provider_identity_result =
+			encode_ng1_resume_control(semantic_provider_identity);
+		require(!semantic_provider_identity_result,
+				"semantic-v2 provider identity was accepted by transport");
+		auto content_digest_in_semantic_field = input;
+		content_digest_in_semantic_field.binding.task_input_digest = manifest_digest('c');
+		auto content_digest_in_semantic_field_result =
+			encode_ng1_resume_control(content_digest_in_semantic_field);
+		require(!content_digest_in_semantic_field_result,
+				"manifest content digest was accepted in a semantic field by transport");
 
 		auto mutated = input;
 		mutated.staged_digest = digest("different-staged-prefix");

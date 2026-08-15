@@ -182,6 +182,41 @@ if(PHASE STREQUAL "shared-runtime-layout"
   endif()
 endif()
 
+if(PHASE STREQUAL "shared-runtime-layout" AND WIN32)
+  # Windows shared targets have two install artifacts: the import library stays
+  # in the archive directory, while the DLL runtime must be beside installed
+  # executables. This check is intentionally limited to layout; it is not a
+  # Windows/MSVC qualification claim.
+  foreach(library IN
+          ITEMS cxxlens_base cxxlens_kernel cxxlens_query cxxlens_recipes
+                cxxlens_provider_sdk cxxlens_clang22_provider_sdk)
+    file(
+      GLOB
+      runtime_artifacts
+      "${install_prefix}/bin/@CMAKE_SHARED_LIBRARY_PREFIX@${library}@CMAKE_SHARED_LIBRARY_SUFFIX@*"
+    )
+    list(LENGTH runtime_artifacts runtime_artifact_count)
+    if(NOT runtime_artifact_count EQUAL 1)
+      message(
+        FATAL_ERROR
+          "shared package must contain exactly one Windows DLL runtime (${library}), found ${runtime_artifact_count}"
+      )
+    endif()
+    file(
+      GLOB
+      import_artifacts
+      "${install_prefix}/${install_libdir}/@CMAKE_IMPORT_LIBRARY_PREFIX@${library}@CMAKE_IMPORT_LIBRARY_SUFFIX@*"
+    )
+    list(LENGTH import_artifacts import_artifact_count)
+    if(NOT import_artifact_count EQUAL 1)
+      message(
+        FATAL_ERROR
+          "shared package must contain exactly one Windows import library (${library}), found ${import_artifact_count}"
+      )
+    endif()
+  endforeach()
+endif()
+
 if(PHASE STREQUAL "shared-runtime-layout")
   return()
 endif()
@@ -208,6 +243,16 @@ if(PHASE STREQUAL "clang22-materializer-success")
       "${materialization_evidence_dir}/configuration-evidence.json"
       COMMAND_ERROR_IS_FATAL ANY)
   message(STATUS "installed Clang 22 evidence: ${materialization_evidence_dir}")
+  return()
+endif()
+
+if(PHASE STREQUAL "clang22-materializer-negative")
+  execute_process(
+    COMMAND
+      "@Python3_EXECUTABLE@"
+      "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_negative_test.py"
+      --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
+      COMMAND_ERROR_IS_FATAL ANY)
   return()
 endif()
 

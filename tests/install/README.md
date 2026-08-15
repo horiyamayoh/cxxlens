@@ -28,6 +28,20 @@ authority aggregates the static and shared artifacts and requires all four
 request/report/receipt tuples. No provider, platform, or four-configuration
 qualification is inferred from one Linux job.
 
+## Windows/MSVC boundary
+
+The `shared-runtime-layout` phase has a Windows-only check for the exact DLL and
+import-library destinations of each installed shared target. It is a portable
+install-layout invariant, not native Windows/MSVC qualification.
+
+Issue [#223](https://github.com/horiyamayoh/cxxlens/issues/223) remains fail-closed
+until a native MSVC runner provides one exact merged-main configure/build/test and
+installed static/shared consumer tuple, including Windows filesystem/process/
+locking behavior, provider isolation, and available sanitizer-equivalent evidence.
+The checked-in CI bootstrap is locked to Ubuntu 24.04 and the release authority
+accepts only exact measured tuples; Linux install or semantic evidence does not
+close this lane.
+
 ## Scale and resource evidence
 
 `clang22_materializer_scale_test.py` is the bounded Linux scale runner for the
@@ -36,6 +50,14 @@ limit-adjacent census (one task, 4,096 tasks, exact 16 MiB source, exact 512 MiB
 aggregate source, 1 GiB raw input, limit-plus-one, and pipe-fragmented input) and
 records `wait4` peak RSS plus exact stdout/stderr digests. An explicitly selected
 subset may also run through the installed materializer.
+
+`clang22_materializer_negative_test.py` runs the installed executable through two
+authority-bound negative paths: a raw-input-only request-schema rejection, and a
+fresh SQLite non-genesis request whose `head_current` observation is the exact
+`store.current-not-found`/`absent` case. It verifies the compact response, exact
+operation/path, discarded logical draft, zero publication, and empty stderr. A
+non-`store.current-not-found` `head_current` SDK error still requires an injected
+Store failure seam and is not claimed by this install test.
 
 `check_ng_clang22_materialization_scale.py` is an independent checker. The report
 is intentionally marked `release_qualification: false` and `semantic_status:

@@ -219,6 +219,12 @@ namespace cxxlens::sdk
 				stages_value.back().result !=
 					sqlite_shm_writer_gate_stage_result::terminal_indeterminate)
 			{
+				// A stage-less terminal locus is the post-gate boundary.  It is
+				// meaningful only after the complete six-stage passed prefix; a
+				// shorter prefix must identify the immediate terminal stage so the
+				// first non-pass remains unambiguous.
+				if (stages_value.size() != stages.size())
+					return reject(sqlite_shm_lease_rejection_reason::invalid_request);
 				if (!stages_value.empty() &&
 					std::ranges::any_of(stages_value,
 										[](const auto& value)
@@ -244,9 +250,16 @@ namespace cxxlens::sdk
 				if (!terminal_locus->stage || *terminal_locus->stage != stages_value.back().stage)
 					return reject(sqlite_shm_lease_rejection_reason::invalid_request);
 				for (const auto& stage : stages_value)
+				{
+					const bool is_terminal_stage = &stage == &stages_value.back();
 					if (!valid_stage_bundle(
-							stage, &stage == &stages_value.back(), terminal_locus->phase))
+							stage,
+							is_terminal_stage,
+							is_terminal_stage
+								? terminal_locus->phase
+								: std::optional<sqlite_shm_writer_gate_terminal_phase>{}))
 						return reject(sqlite_shm_lease_rejection_reason::invalid_request);
+				}
 			}
 		}
 

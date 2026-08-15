@@ -66,6 +66,7 @@ class NgG5QualificationTests(unittest.TestCase):
     def test_performance_envelope_is_fail_closed(self) -> None:
         value = {
             "schema": "cxxlens.g5-performance.v1",
+            "source": "synthetic-planner",
             "fixture": copy.deepcopy(self.manifest["performance"]["fixture"]),
             "method": copy.deepcopy(self.manifest["performance"]["method"]),
             "budgets": copy.deepcopy(self.manifest["performance"]["budgets"]),
@@ -105,6 +106,164 @@ class NgG5QualificationTests(unittest.TestCase):
         with mock.patch.object(g5, "load", side_effect=replacement):
             with self.assertRaisesRegex(g5.G5QualificationError, "closure kinds differ"):
                 g5.validate_documents(ROOT)
+
+    def test_production_coordinator_evidence_is_required(self) -> None:
+        with self.assertRaisesRegex(
+            g5.G5QualificationError, "production-coordinator evidence input is required"
+        ):
+            g5.validate_production_coordinator_evidence(ROOT, None)
+
+    def test_missing_production_coordinator_evidence_file_is_rejected(self) -> None:
+        missing = ROOT / "build" / "does-not-exist-g5-production-evidence.json"
+        with self.assertRaisesRegex(
+            g5.G5QualificationError, "production-coordinator evidence input is missing"
+        ):
+            g5.validate_production_coordinator_evidence(ROOT, missing)
+
+    def test_production_evidence_requires_artifact_pair(self) -> None:
+        evidence = self._forged_production_evidence()
+        with mock.patch.object(g5, "git_state", return_value=evidence["git"]):
+            with self._temporary_evidence(evidence) as path:
+                with self.assertRaisesRegex(
+                    g5.G5QualificationError,
+                    "production binary and production report inputs are required",
+                ):
+                    g5.validate_production_coordinator_evidence(ROOT, path)
+
+    def test_production_report_artifacts_are_cross_bound(self) -> None:
+        evidence = self._forged_production_evidence()
+        digest = evidence["producer"]["binary_digest"]
+        report = {
+            "source": {
+                "revision": evidence["git"]["revision"],
+                "tree": evidence["git"]["tree"],
+            },
+            "installation": {
+                "measured": {
+                    "source_revision": evidence["git"]["revision"],
+                    "source_tree": evidence["git"]["tree"],
+                    "tool": {
+                        "path": "bin/cxxlens-clang22-materialize",
+                        "digest": digest,
+                    },
+                }
+            },
+        }
+        g5.validate_production_report_bindings(report, evidence["git"], digest)
+
+        report["installation"]["measured"]["tool"]["digest"] = "sha256:" + "1" * 64
+        with self.assertRaisesRegex(
+            g5.G5QualificationError,
+            "tool digest does not match the supplied production binary",
+        ):
+            g5.validate_production_report_bindings(report, evidence["git"], digest)
+
+        report["installation"]["measured"]["tool"]["digest"] = digest
+        report["source"]["revision"] = "f" * 40
+        with self.assertRaisesRegex(
+            g5.G5QualificationError,
+            "source revision does not match evidence Git",
+        ):
+            g5.validate_production_report_bindings(report, evidence["git"], digest)
+
+    def test_forged_production_evidence_with_revision_drift_is_rejected(self) -> None:
+        evidence = self._forged_production_evidence()
+        evidence["git"]["revision"] = "0" * 40
+        with self._temporary_evidence(evidence) as path:
+            with self.assertRaisesRegex(
+                g5.G5QualificationError,
+                "not bound to the exact local SHA/tree/state",
+            ):
+                g5.validate_production_coordinator_evidence(ROOT, path)
+
+    def test_synthetic_planner_cannot_be_used_as_production_evidence(self) -> None:
+        evidence = self._forged_production_evidence()
+        evidence["producer"]["synthetic_planner_evidence"] = True
+        with self._temporary_evidence(evidence) as path:
+            with self.assertRaisesRegex(g5.G5QualificationError, "schema validation failed"):
+                g5.validate_production_coordinator_evidence(ROOT, path)
+
+    def _forged_production_evidence(self) -> dict:
+        state = g5.git_state(ROOT)
+        state["clean"] = True
+        digest = "sha256:" + "0" * 64
+        artifact_digest = "materialization.incremental-sealed-artifact:sha256:" + "1" * 64
+        partition_set_digest = (
+            "materialization.incremental-task-partition-set:sha256:" + "2" * 64
+        )
+        empty = {
+            "planned_provider_executions": 0,
+            "actual_provider_executions": 0,
+            "actual_recomputed_partition_count": 0,
+            "warm_zero": True,
+            "affected_only": False,
+            "exact_inputs_unchanged": True,
+            "executed_partition_ids": [],
+            "executed_provider_task_ids": [],
+            "executed_provider_execution_ids": [],
+            "executed_artifact_digests": [],
+            "executed_task_partition_set_digests": [],
+        }
+        affected = {
+            "planned_provider_executions": 1,
+            "actual_provider_executions": 1,
+            "actual_recomputed_partition_count": 1,
+            "warm_zero": False,
+            "affected_only": True,
+            "exact_inputs_unchanged": False,
+            "executed_partition_ids": ["partition:forged"],
+            "executed_provider_task_ids": ["task:forged"],
+            "executed_provider_execution_ids": ["execution:forged"],
+            "executed_artifact_digests": [artifact_digest],
+            "executed_task_partition_set_digests": [partition_set_digest],
+        }
+        return {
+            "schema": "cxxlens.ng-g5-production-coordinator-evidence.v1",
+            "evidence_status": "observed",
+            "producer": {
+                "kind": "production-coordinator",
+                "synthetic_planner_evidence": False,
+                "interface": "run_materialization_incremental_coordinator_and_publish",
+                "binary_digest": digest,
+                "report_digest": digest,
+            },
+            "git": state,
+            "execution_census": {
+                "schema": "cxxlens.ng-g5-production-execution-census.v1",
+                "total_planned_provider_executions": 1,
+                "total_actual_provider_executions": 1,
+                "total_actual_recomputed_partition_count": 1,
+                "warm_zero": empty,
+                "affected_only": affected,
+            },
+            "publication": {
+                "backend": "sqlite",
+                "attempted": True,
+                "outcome": "committed_verified",
+                "verified": True,
+                "publish_call_count": 1,
+                "committed_transaction_count": 1,
+            },
+            "reopen": {"attempted": True, "outcome": "opened", "verified": True},
+            "independent_recompute": {"status": "passed", "canonical_parity": "passed"},
+        }
+
+    @staticmethod
+    def _temporary_evidence(evidence: dict):
+        import json
+        import tempfile
+
+        class EvidenceFile:
+            def __enter__(self):
+                self.directory = tempfile.TemporaryDirectory()
+                self.path = pathlib.Path(self.directory.name) / "production-evidence.json"
+                self.path.write_text(json.dumps(evidence), encoding="utf-8")
+                return self.path
+
+            def __exit__(self, *exc):
+                return self.directory.__exit__(*exc)
+
+        return EvidenceFile()
 
 
 if __name__ == "__main__":

@@ -669,6 +669,50 @@ properties:
         oneOf:
           - {type: 'null'}
           - {$ref: '#/$defs/semantic_verification_failure'}
+  incremental_execution:
+    type: object
+    additionalProperties: false
+    required:
+      - schema
+      - planned_provider_executions
+      - planned_provider_task_executions
+      - actual_provider_executions
+      - actual_recomputed_partition_count
+      - warm_zero
+      - executed_partition_ids
+      - executed_provider_task_ids
+      - executed_provider_execution_ids
+      - executed_artifact_digests
+      - executed_task_partition_set_digests
+    properties:
+      schema: {const: cxxlens.ng-g5-production-execution-census.v1}
+      planned_provider_executions: {type: integer, minimum: 0}
+      planned_provider_task_executions: {type: integer, minimum: 0}
+      actual_provider_executions: {type: integer, minimum: 0}
+      actual_recomputed_partition_count: {type: integer, minimum: 0}
+      warm_zero: {type: boolean}
+      executed_partition_ids:
+        type: array
+        items: {$ref: '#/$defs/strong_id'}
+      executed_provider_task_ids:
+        type: array
+        items: {$ref: '#/$defs/strong_id'}
+      executed_provider_execution_ids:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/strong_id'}
+      executed_artifact_digests:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          pattern: '^materialization\.incremental-sealed-artifact:sha256:[0-9a-f]{64}$'
+      executed_task_partition_set_digests:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          pattern: '^materialization\.incremental-task-partition-set:sha256:[0-9a-f]{64}$'
   authority_digests:
     type: array
     minItems: 5
@@ -689,7 +733,7 @@ properties:
 oneOf:
   - properties:
       response_kind: {const: detailed}
-    required: [source, request, installation, provider, project, registry, engine, interpretation_policy, trust_policy, adoption, task_results, span_validation, base_claims, side_channels, claim_stages, provenance, store, publication, semantic_verification, authority_digests, error]
+    required: [source, request, installation, provider, project, registry, engine, interpretation_policy, trust_policy, adoption, task_results, span_validation, base_claims, side_channels, claim_stages, provenance, store, publication, semantic_verification, incremental_execution, authority_digests, error]
     not:
       anyOf:
         - {required: [binding]}
@@ -721,6 +765,7 @@ oneOf:
         - {required: [store]}
         - {required: [publication]}
         - {required: [semantic_verification]}
+        - {required: [incremental_execution]}
         - {required: [authority_digests]}
 allOf:
   - if:

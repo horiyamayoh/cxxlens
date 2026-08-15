@@ -72,6 +72,19 @@ provider_hardening:
   runtime: schemas/cxxlens_ng_provider_runtime_contract.yaml
   security: schemas/cxxlens_ng_security_profile.yaml
   required_properties: [snapshot-binding, variant-binding, refresh-binding, structured-errors, budget-enforcement, process-isolation]
+  evidence_ownership:
+    production_coordinator:
+      schema: cxxlens.ng-g5-production-coordinator-evidence.v1
+      input: required
+      source: production-coordinator-only
+      synthetic_planner_evidence: non-qualifying
+      exact_binding: [revision, tree, branch, clean]
+      required_observations:
+        - actual-provider-execution-census
+        - warm-zero
+        - affected-only
+        - publication-outcome
+        - reopen-outcome
 performance:
   executable: cxxlens-g5-runtime
   fixture: {partitions: 2048, edges: 512}
@@ -103,7 +116,13 @@ required_artifacts:
   - tests/unit/sdk/provider_runtime_test.cpp
   - tests/adapter/clang22/provider_worker_protocol_test.cpp
   - src/sdk/provider_runtime.cpp
+  - src/llvm/clang22/materialization_incremental_coordinator.hpp
+  - src/llvm/clang22/materialization_incremental_coordinator.cpp
+  - tools/clang22/materialize_main.cpp
   - tools/quality/check_ng_g5_qualification.py
+  - tools/quality/produce_ng_g5_production_evidence.py
+  - tests/install/clang22_materializer_success_test.py
+  - tests/adapter/clang22/materialization_claims_test.cpp
   - docs/design/adr/0090-g5-closure-incrementality-qualification.md
   - examples/sdk/incremental_materialization.cpp
   - .github/workflows/quality.yml

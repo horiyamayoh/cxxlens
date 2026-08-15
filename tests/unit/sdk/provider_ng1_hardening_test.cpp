@@ -4,6 +4,7 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <cxxlens/sdk/common.hpp>
 
@@ -33,6 +34,11 @@ namespace
 		const auto output = semantic_digest("test.ng1", value);
 		require(output.has_value(), "test semantic digest construction failed");
 		return *output;
+	}
+
+	[[nodiscard]] std::string manifest_digest(const char fill)
+	{
+		return std::string{"sha256:"} + std::string(64U, fill);
 	}
 
 	[[nodiscard]] ng1_session_binding heartbeat_binding()
@@ -91,6 +97,20 @@ namespace
 			heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U, digest("staged"));
 		require(!duplicate_result && duplicate_result.error().code == "provider.heartbeat-sequence",
 				"duplicate heartbeat sequence was accepted");
+
+		auto unknown_kind = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
+		require(unknown_kind.has_value(), "unknown heartbeat kind state creation failed");
+		auto unknown_kind_result = unknown_kind->accept(
+			heartbeat_sample(static_cast<ng1_heartbeat_kind>(255U), 0U, 0U, 0U),
+			0U,
+			digest("staged"));
+		require(!unknown_kind_result &&
+					unknown_kind_result.error().code == "provider.heartbeat-clock-invalid" &&
+					unknown_kind_result.error().field == "kind",
+				"unknown heartbeat kind was treated as an acknowledgement");
+		require(unknown_kind->accept(
+					heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 0U, 0U), 0U, digest("staged")),
+				"unknown heartbeat kind mutated validator state");
 
 		auto backwards = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
 		require(backwards.has_value(), "backwards heartbeat state creation failed");
@@ -254,8 +274,8 @@ namespace
 	{
 		return {"provider:test",
 				{1U, 2U, 3U},
-				digest("binary"),
-				digest("contract"),
+				manifest_digest('a'),
+				manifest_digest('b'),
 				"session:test",
 				"task:test",
 				digest("input"),
@@ -322,6 +342,32 @@ namespace
 		auto state = ng1_resume_state::create(binding);
 		require(state.has_value(), "resume state creation failed");
 		const auto token = make_resume_token(binding);
+		require(token.binding.provider_binary_digest == manifest_digest('a'),
+				"resume provider binary digest lost manifest grammar");
+		require(token.binding.provider_semantic_contract_digest == manifest_digest('b'),
+				"resume provider contract digest lost manifest grammar");
+		require(token.token_digest.starts_with("semantic-v2:sha256:"),
+				"resume token digest left semantic-v2 namespace");
+		auto semantic_provider_identity = token;
+		semantic_provider_identity.binding.provider_binary_digest = digest("binary");
+		auto semantic_provider_identity_result =
+			ng1_resume_token_digest(semantic_provider_identity);
+		require(!semantic_provider_identity_result &&
+					semantic_provider_identity_result.error().code == "provider.resume-token-stale",
+				"semantic-v2 provider identity was accepted");
+		auto content_digest_in_semantic_field = token;
+		content_digest_in_semantic_field.binding.task_input_digest = manifest_digest('c');
+		auto content_digest_in_semantic_field_result =
+			ng1_resume_token_digest(content_digest_in_semantic_field);
+		require(!content_digest_in_semantic_field_result &&
+					content_digest_in_semantic_field_result.error().code ==
+						"provider.resume-token-stale",
+				"manifest content digest was accepted in a semantic field");
+		auto changed_provider_identity = binding;
+		changed_provider_identity.provider_binary_digest = manifest_digest('d');
+		const auto changed_provider_token = make_resume_token(changed_provider_identity);
+		require(changed_provider_token.token_digest != token.token_digest,
+				"token digest did not bind the exact provider identity string");
 		require(state->accept(token, make_fsync_receipt(binding), false, false, 4U),
 				"durable resume token was rejected");
 		auto start = state->replay_start_sequence();
@@ -399,6 +445,112 @@ namespace
 				"resume ack ahead of observed sequence was accepted");
 	}
 
+	[[nodiscard]] ng1_spill_binding spill_binding()
+	{
+		const auto binding = resume_binding();
+		return {binding.provider_id,
+				binding.protocol_session_id,
+				binding.task_id,
+				binding.dependency_group_id,
+				binding.atomic_output_group_id,
+				binding.batch_id,
+				binding.stream_id};
+	}
+
+	[[nodiscard]] ng1_spill_record make_spill_record(const ng1_spill_binding& binding,
+													 const std::uint64_t ordinal,
+													 const std::uint64_t sequence,
+													 const std::string_view payload_text)
+	{
+		ng1_spill_record record;
+		record.record_ordinal = ordinal;
+		record.task_id = binding.task_id;
+		record.dependency_group_id = binding.dependency_group_id;
+		record.atomic_output_group_id = binding.atomic_output_group_id;
+		record.batch_id = binding.batch_id;
+		record.stream_id = binding.stream_id;
+		record.sequence = sequence;
+		for (const auto byte : payload_text)
+			record.payload_bytes.push_back(
+				static_cast<std::byte>(static_cast<unsigned char>(byte)));
+		auto payload_digest = ng1_spill_payload_digest(record.payload_bytes);
+		require(payload_digest.has_value(), "spill payload digest construction failed");
+		record.payload_digest = *payload_digest;
+		auto record_digest = ng1_spill_record_digest(record);
+		require(record_digest.has_value(), "spill record digest construction failed");
+		record.record_digest = *record_digest;
+		return record;
+	}
+
+	void test_spill_prefix_integrity_and_resume_bridge()
+	{
+		const auto binding = spill_binding();
+		auto state = ng1_spill_prefix_state::create(binding);
+		require(state.has_value(), "spill prefix state creation failed");
+
+		const auto first = make_spill_record(binding, 0U, 0U, "first");
+		require(state->append(first), "valid spill record was rejected");
+		require(state->total_records() == 1U && state->total_bytes() > 0U,
+				"spill prefix counters were not advanced");
+		auto first_prefix_digest = state->spill_digest();
+		require(first_prefix_digest.has_value() &&
+					first_prefix_digest->starts_with("semantic-v2:sha256:"),
+				"spill prefix digest was not semantic-v2 typed");
+
+		auto receipt = state->observe_host_fsync(4U, digest("staged"), 1U);
+		require(receipt.has_value(), "host-observed spill fsync receipt construction failed");
+		require(receipt->validate(), "host-observed spill fsync receipt was invalid");
+		require(receipt->total_records == 1U && receipt->total_bytes == state->total_bytes() &&
+					receipt->spill_digest == *first_prefix_digest,
+				"spill fsync receipt lost exact prefix counters or digest");
+
+		auto resume = ng1_resume_state::create(resume_binding());
+		require(resume.has_value(), "resume state creation for spill bridge failed");
+		require(resume->accept(make_resume_token(resume_binding()), *receipt, false, false, 4U),
+				"durable resume did not consume the host-observed spill receipt");
+
+		auto bad_payload = first;
+		bad_payload.payload_bytes.push_back(std::byte{'!'});
+		auto bad_payload_result = state->append(bad_payload);
+		require(!bad_payload_result && bad_payload_result.error().code == "provider.spill-corrupt",
+				"payload mutation without digest refresh was accepted");
+		require(state->total_records() == 1U, "failed spill append mutated the prefix");
+
+		auto bad_digest = first;
+		bad_digest.record_ordinal = 1U;
+		bad_digest.sequence = 1U;
+		bad_digest.record_digest = digest("not-the-record-digest");
+		auto bad_digest_result = state->append(bad_digest);
+		require(!bad_digest_result && bad_digest_result.error().code == "provider.spill-corrupt",
+				"record digest mutation was accepted");
+
+		auto foreign = make_spill_record(binding, 1U, 1U, "foreign-binding-check");
+		foreign.task_id = "task:foreign";
+		auto foreign_result = state->append(foreign);
+		require(!foreign_result && foreign_result.error().code == "provider.spill-corrupt",
+				"foreign spill binding was accepted");
+
+		auto gap = make_spill_record(binding, 2U, 2U, "gap");
+		auto gap_result = state->append(gap);
+		require(!gap_result && gap_result.error().code == "provider.spill-corrupt",
+				"spill ordinal or sequence gap was accepted");
+
+		const auto second = make_spill_record(binding, 1U, 1U, "second");
+		require(state->append(second), "valid contiguous spill record was rejected");
+		auto second_prefix_digest = state->spill_digest();
+		require(second_prefix_digest && *second_prefix_digest != *first_prefix_digest,
+				"spill prefix digest ignored append order or content");
+
+		auto invalid_fsync_digest =
+			state->observe_host_fsync(4U, "sha256:" + std::string(64U, 'a'), 2U);
+		require(!invalid_fsync_digest &&
+					invalid_fsync_digest.error().code == "provider.spill-corrupt",
+				"legacy spill fsync digest namespace was accepted");
+		auto zero_fsync = state->observe_host_fsync(4U, digest("staged"), 0U);
+		require(!zero_fsync && zero_fsync.error().code == "provider.spill-corrupt",
+				"zero spill fsync sequence was accepted");
+	}
+
 	void test_recovery_matrix()
 	{
 		auto heartbeat = ng1_recovery_transition(ng1_recovery_state::running,
@@ -439,6 +591,7 @@ int main()
 	test_heartbeat_liveness_and_sequence();
 	test_progress_rate_and_terminal_boundaries();
 	test_resume_binding_and_projection();
+	test_spill_prefix_integrity_and_resume_bridge();
 	test_recovery_matrix();
 	return 0;
 }

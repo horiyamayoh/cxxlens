@@ -177,6 +177,7 @@ add_library(
   src/sdk/claim.cpp
   src/sdk/store.cpp
   src/sdk/sqlite_connection_lifecycle_internal.cpp
+  src/runtime/monotonic_clock_port.cpp
   src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp
   src/sdk/sqlite_same_process_shm_process_port_internal.cpp
   src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.cpp
@@ -514,6 +515,7 @@ install(
   EXPORT cxxlensTargets
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(
@@ -521,6 +523,7 @@ install(
   EXPORT cxxlensProviderSDKTargets
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(
@@ -528,6 +531,7 @@ install(
   EXPORT cxxlensClang22ProviderSDKTargets
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(TARGETS cxxlens-provider-scaffold cxxlens-sdk-doctor

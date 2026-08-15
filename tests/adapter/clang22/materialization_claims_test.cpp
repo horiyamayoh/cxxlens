@@ -1,5 +1,6 @@
 #include "llvm/clang22/materialization_claims.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdlib>
@@ -23,12 +24,15 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 
+#include "llvm/clang22/materialization_bounded_claim_source.hpp"
 #include "llvm/clang22/materialization_claim_stream.hpp"
 #include "llvm/clang22/materialization_incremental_coordinator.hpp"
 #include "llvm/clang22/materialization_incremental_ingress.hpp"
 #include "llvm/clang22/materialization_incremental_receipt.hpp"
 #include "llvm/clang22/materialization_partition_event_stream.hpp"
 #include "llvm/clang22/materialization_pipeline.hpp"
+#include "llvm/clang22/materialization_request_identity.hpp"
+#include "llvm/clang22/materialization_request_v2_1.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 
 namespace
@@ -463,11 +467,16 @@ namespace
 		return output;
 	}
 
-	[[nodiscard]] validated_materialization_request request_fixture()
+	[[nodiscard]] std::string request_fixture_json()
 	{
 		constexpr std::string_view request_json =
 			R"cxxlens_json({"engine":{"admitted_descriptors":[{"descriptor_id":"build.compile_unit.v1","runtime_descriptor_digest":"semantic-v2:sha256:1dde734221f3db42a0bdadd531740c35e6f30c15fe196e0b20e1b60c2cf54679"},{"descriptor_id":"build.project.v1","runtime_descriptor_digest":"semantic-v2:sha256:97e5d3d4546803be5de464e5d5de7617b9f4ed29bcb81e503dc6c5a613277cd9"},{"descriptor_id":"build.toolchain_context.v1","runtime_descriptor_digest":"semantic-v2:sha256:3e8895ed57aca936310888a256c4ed31911b46fe5bbac5e045a80f80801cc4e0"},{"descriptor_id":"build.variant.v1","runtime_descriptor_digest":"semantic-v2:sha256:56c59d76bd7921d01c54118470d2643eee5ff8e4ed0ce275f69e9d6ef45500e6"},{"descriptor_id":"cc.call_direct_target.v1","runtime_descriptor_digest":"semantic-v2:sha256:888196009a7344c3cfb198c0c01a359f49e4f042b998d34efc4057c3ba4e56d4"},{"descriptor_id":"cc.call_site.v1","runtime_descriptor_digest":"semantic-v2:sha256:8377b659e3703eef0acb446ab6b07e94aa4655aba33aa5b430e5cf65491163f2"},{"descriptor_id":"cc.entity.v1","runtime_descriptor_digest":"semantic-v2:sha256:4537eb3f074379aa8c2222c9d2ed5dc530340bf1b2b5c862b4cf52b0c37b1b3e"},{"descriptor_id":"frontend.clang22.call_observation.v2","runtime_descriptor_digest":"semantic-v2:sha256:8b79a9fb3d59e750c51310d6f32935701a36c68fd5830228516482b0e7d2cd65"},{"descriptor_id":"frontend.clang22.entity_observation.v2","runtime_descriptor_digest":"semantic-v2:sha256:eb909eec97cec22586f4ac67dc7c56cc29390857df9355186feae5e9ce7700fb"},{"descriptor_id":"frontend.clang22.type_observation.v2","runtime_descriptor_digest":"semantic-v2:sha256:94b6f6efcd46dad74c0cec1c761a2d363c6acdfe135862c37d0b7e28b01b6026"},{"descriptor_id":"source.file.v1","runtime_descriptor_digest":"semantic-v2:sha256:3aebbb05303ba924f1c25547242a656c59d95c265fe99cc3fd77db8633af8609"},{"descriptor_id":"source.span.v1","runtime_descriptor_digest":"semantic-v2:sha256:055e5a6997fef2d1c2dcebfe10baa41813c0ccec091409ad84a1081fd8894a86"}],"engine_generation_id":"engine-generation:sha256:984ec980908d8a3e3d14fb81b06e06009249e909bc7a6d323b447de825da08eb","engine_registry_digest":"semantic-v2:sha256:051823ea2f538bf38656afefb81d22950e5a6ca671fa4d57d89fffd8cfba171a","generation_contract":"cxxlens.clang22-materialization-engine.v2"},"group_topology":{"atomic_output_group":"clang22-atomic","dependency_groups":["canonical","observation"],"partial_policy":"forbid"},"interpretation_policy":{"interpretation_policy_digest":"semantic-v2:sha256:3e97b2cb497e80e0f59953844b4050930e3919f36ac3aab7403d391ab4cc087f","policy_id":"cxxlens.clang22-interpretation-policy.v1","selected_domain":"cc.clang22-canonical-1"},"materialization_request_id":"materialization:semantic-v2:sha256:09a36429bc4dc0f74ef0bf23a6751837d8b0277c06392c9ac5e64c9dab66f95a","project":{"catalog_compile_unit_census_digest":"semantic-v2:sha256:806e8f7964f77dcec9a30078129430a733c89e39488e7fae80b68c7a50d186ba","catalog_compile_units":[{"catalog_compile_unit_id":"catalog-unit:0000","effective_invocation_digest":"semantic-v2:sha256:dd5bdb2f9fd85376546c2f486a1ac3ebeed4bdb922351f3c2f4a7bf89be94acb","environment_digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","source_digest":"sha256:deac66ccb79f6d31c0fa7d358de48e083c15c02ff50ec1ebd4b64314b9e6e196"},{"catalog_compile_unit_id":"catalog-unit:0001","effective_invocation_digest":"semantic-v2:sha256:68f779154ad8159b42f2ccc79b7e74999742e0c05a05563421e50d0cae028c09","environment_digest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","source_digest":"sha256:76af64be58a1f67608cb4c34771305ad773b173cc4cde76261d749928ad4ea49"}],"catalog_digest":"semantic-v2:sha256:88dc78c51c338486857a2e282701263bda48781f08669378abaf41b80c9bc464","catalog_environment_digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","catalog_id":"catalog:semantic-v2:sha256:88dc78c51c338486857a2e282701263bda48781f08669378abaf41b80c9bc464","logical_root":"project://fixture","project_id":"project:sha256:9b8cdb2a5afab245af006c61b1bbf0a758687ed969b42d349caf98bcdb6f01c3"},"publication":{"backend":"memory","expected_parent_publication":null,"genesis":true,"partial_policy":"forbid","reopen_before_success":true,"selector":{"catalog_id":"catalog:semantic-v2:sha256:88dc78c51c338486857a2e282701263bda48781f08669378abaf41b80c9bc464","channel_id":"channel:clang22-production","condition_universe_id":"condition-universe:one","engine_generation_id":"engine-generation:sha256:984ec980908d8a3e3d14fb81b06e06009249e909bc7a6d323b447de825da08eb","interpretation_policy_digest":"semantic-v2:sha256:3e97b2cb497e80e0f59953844b4050930e3919f36ac3aab7403d391ab4cc087f","relation_registry_digest":"semantic-v2:sha256:051823ea2f538bf38656afefb81d22950e5a6ca671fa4d57d89fffd8cfba171a","trust_policy_digest":"semantic-v2:sha256:a0b190b934d43470d18cbbf326601174fe8a23e52e825c904b8d265dc990d053"},"series_id":"snapshot-series:sha256:c405319c06ab507d9ec7bff97664b5ddac4d211549f4cd72f4fc56621666cdd3","sqlite_path":null,"transaction_count":1},"registry":{"authority_registry_digest":"sha256:4caf626ec6f198118802f22d9cac62b02b2c3bb392fdc8d68b1a58f8101c342e","base_descriptors":[{"contract_digest":"sha256:a0b4b380ab0f5b631fa8ff59c39dcfbd859e26f849d169ae5d6a428e2f9eff5f","descriptor_id":"build.project.v1","descriptor_version":"1.0.0","output_stage":"canonical_claim","owner":"installed-tool","runtime_descriptor_digest":"semantic-v2:sha256:97e5d3d4546803be5de464e5d5de7617b9f4ed29bcb81e503dc6c5a613277cd9","stage_order":0},{"contract_digest":"sha256:06383e29854c5ce463c996a7a36b6954a4d6388b8384ddc39ad62688bdac0663","descriptor_id":"build.toolchain_context.v1","descriptor_version":"1.0.0","output_stage":"canonical_claim","owner":"installed-tool","runtime_descriptor_digest":"semantic-v2:sha256:3e8895ed57aca936310888a256c4ed31911b46fe5bbac5e045a80f80801cc4e0","stage_order":1},{"contract_digest":"sha256:1594c6f7ee0f80fdb59f11a9ab45a9521a8aab889052ba3fa40cf1d790aa66a1","descriptor_id":"build.variant.v1","descriptor_version":"1.0.0","output_stage":"canonical_claim","owner":"installed-tool","runtime_descriptor_digest":"semantic-v2:sha256:56c59d76bd7921d01c54118470d2643eee5ff8e4ed0ce275f69e9d6ef45500e6","stage_order":2},{"contract_digest":"sha256:3c325526160c00ceccd0c43f384689fff95187ef97f926871917ce6b4f7f429a","descriptor_id":"source.file.v1","descriptor_version":"1.0.0","output_stage":"canonical_claim","owner":"installed-tool","runtime_descriptor_digest":"semantic-v2:sha256:3aebbb05303ba924f1c25547242a656c59d95c265fe99cc3fd77db8633af8609","stage_order":3},{"contract_digest":"sha256:8b019f86c953ce3d08475a726b16dcb355e1474238b6a4300d7dd3dc9fc299b3","descriptor_id":"build.compile_unit.v1","descriptor_version":"1.0.0","output_stage":"canonical_claim","owner":"installed-tool","runtime_descriptor_digest":"semantic-v2:sha256:1dde734221f3db42a0bdadd531740c35e6f30c15fe196e0b20e1b60c2cf54679","stage_order":4},{"contract_digest":"sha256:645a46ad50ee0c84276ff4e09b2818486bfafe8c631f66368d45aa47cbe659ff","descriptor_id":"source.span.v1","descriptor_version":"1.0.0","output_stage":"canonical_claim","owner":"installed-tool","runtime_descriptor_digest":"semantic-v2:sha256:055e5a6997fef2d1c2dcebfe10baa41813c0ccec091409ad84a1081fd8894a86","stage_order":5}],"descriptors":[{"atomic_output_group_id":"clang22-atomic","batch_id":"cc.call_direct_target.v1-batch","contract_digest":"sha256:e2960ef9dff7a1190aa6b687281e0b1aeaddfcc684f35a9870323d5716697b2b","dependency_group_id":"canonical","descriptor_id":"cc.call_direct_target.v1","descriptor_version":"1.0.0","output_stage":"canonical_claim","runtime_descriptor_digest":"semantic-v2:sha256:888196009a7344c3cfb198c0c01a359f49e4f042b998d34efc4057c3ba4e56d4"},{"atomic_output_group_id":"clang22-atomic","batch_id":"cc.call_site.v1-batch","contract_digest":"sha256:4b8f7b76ef8087485462762bfef006e3fad50354da2738a61402441e9e53510e","dependency_group_id":"canonical","descriptor_id":"cc.call_site.v1","descriptor_version":"1.0.0","output_stage":"canonical_claim","runtime_descriptor_digest":"semantic-v2:sha256:8377b659e3703eef0acb446ab6b07e94aa4655aba33aa5b430e5cf65491163f2"},{"atomic_output_group_id":"clang22-atomic","batch_id":"cc.entity.v1-batch","contract_digest":"sha256:89813f031dbe91daed64d5c9d3fa1aef22a1ddcf74cf00a29f292971541f9020","dependency_group_id":"canonical","descriptor_id":"cc.entity.v1","descriptor_version":"1.0.0","output_stage":"canonical_claim","runtime_descriptor_digest":"semantic-v2:sha256:4537eb3f074379aa8c2222c9d2ed5dc530340bf1b2b5c862b4cf52b0c37b1b3e"},{"atomic_output_group_id":"clang22-atomic","batch_id":"frontend.clang22.call_observation.v2-batch","contract_digest":"sha256:07ea48a7f00e80972ba59c14ee96f916772ad9ed57fc84e313e3958f08fa548a","dependency_group_id":"observation","descriptor_id":"frontend.clang22.call_observation.v2","descriptor_version":"2.0.0","output_stage":"assertion","runtime_descriptor_digest":"semantic-v2:sha256:8b79a9fb3d59e750c51310d6f32935701a36c68fd5830228516482b0e7d2cd65"},{"atomic_output_group_id":"clang22-atomic","batch_id":"frontend.clang22.entity_observation.v2-batch","contract_digest":"sha256:4a5012801fcde26110a9f6350177d74d7d6975edde96337d4d3918ca7a004d51","dependency_group_id":"observation","descriptor_id":"frontend.clang22.entity_observation.v2","descriptor_version":"2.0.0","output_stage":"assertion","runtime_descriptor_digest":"semantic-v2:sha256:eb909eec97cec22586f4ac67dc7c56cc29390857df9355186feae5e9ce7700fb"},{"atomic_output_group_id":"clang22-atomic","batch_id":"frontend.clang22.type_observation.v2-batch","contract_digest":"sha256:53c54f967eb041e75ea98463c212d259fed0d3a310038ac9c93209749e72387f","dependency_group_id":"observation","descriptor_id":"frontend.clang22.type_observation.v2","descriptor_version":"2.0.0","output_stage":"assertion","runtime_descriptor_digest":"semantic-v2:sha256:94b6f6efcd46dad74c0cec1c761a2d363c6acdfe135862c37d0b7e28b01b6026"}],"path":"schemas/cxxlens_ng_relation_registry.yaml"},"request_digest":"semantic-v2:sha256:09a36429bc4dc0f74ef0bf23a6751837d8b0277c06392c9ac5e64c9dab66f95a","request_version":"2.0.0","schema":"cxxlens.clang22-materialization-request.v2","semantic_request_digest":"semantic-v2:sha256:7d79bd07fade21afe4701e0b55814701792b4b285ab823282e70e229c82e0bdd","tasks":[{"budget":{"address_space_bytes":1073741824,"cpu_ms":10000,"diagnostics":128,"open_files":64,"output_bytes":1048576,"rows":1024,"subprocesses":1,"transport_bytes":2097152,"wall_ms":10000},"build_variant_id":"build-variant:sha256:d0d2c433d8c558923be73e7655f2faa65ea94e330c9aa722d0e7d831d6907e01","catalog_digest":"semantic-v2:sha256:88dc78c51c338486857a2e282701263bda48781f08669378abaf41b80c9bc464","catalog_id":"catalog:semantic-v2:sha256:88dc78c51c338486857a2e282701263bda48781f08669378abaf41b80c9bc464","compile_unit_id":"compile-unit:sha256:be42bfee446b271dd490ce3477e4c2f74e8a6125a6f3ec8a03bbcbe349161e99","condition_id":"condition:all","condition_universe_id":"condition-universe:one","dependency_groups":["canonical","observation"],"effective_argv":["clang++","-std=c++23","project://main.cpp"],"environment_digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","interpretation_domain":"cc.clang22-canonical-1","language":"cxx","normalized_invocation_digest":"semantic-v2:sha256:dd5bdb2f9fd85376546c2f486a1ac3ebeed4bdb922351f3c2f4a7bf89be94acb","project_id":"project:sha256:9b8cdb2a5afab245af006c61b1bbf0a758687ed969b42d349caf98bcdb6f01c3","provider_execution_id":"provider-execution:sha256:b7a7f77301033ac30084e3fa657eac3914344e6ab26f3fdc6b52272e10d4c0b3","provider_task_id":"task:semantic-v2:sha256:5fb6b47f3aec5abedd658b2acd86f9a9e3af418712ed9fbf80e30cb3c7306118","requested_descriptor_ids":["cc.call_direct_target.v1","cc.call_site.v1","cc.entity.v1","frontend.clang22.call_observation.v2","frontend.clang22.entity_observation.v2","frontend.clang22.type_observation.v2"],"sandbox":{"minimum":"enforced","policy_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"selected_catalog_compile_unit_id":"catalog-unit:0000","source":{"content_base64":"aW50IG1haW4oKSB7IHJldHVybiAwOyB9Cg==","content_digest":"sha256:deac66ccb79f6d31c0fa7d358de48e083c15c02ff50ec1ebd4b64314b9e6e196","encoding":"utf8","file_id":"file:sha256:83e065cbf0d8f742fe73a01155b02057c0de0fbe747f88b35ea5e96efe8faf06","line_index_id":"line-index:sha256:99cec457c4ced432a4db1dbb3c30bc291044469abf025737b306ccc7980a3510","logical_path":"project://main.cpp","read_only":false,"size_bytes":25,"source_snapshot_id":"source-snapshot:sha256:cb28d4d99af02e2bf0d1efc7288f211f595ef0a0caeaed889b66cb0fe995086d"},"task_input_digest":"sha256:39bd328764ad9f47c49e0efdfee4d232c410dfa79f096bbed16ea6ca02fd8056","toolchain":{"abi_digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","builtin_headers_digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","exact_version":"22.0.0","family":"clang","plugin_spec_digest":"sha256:5555555555555555555555555555555555555555555555555555555555555555","sysroot":null,"target_triple":"x86_64-unknown-linux-gnu"},"toolchain_context_id":"toolchain-context:sha256:78f64803fb0f0f1ab7f10321ebc90aa52aafb99705407b92e005ff7d6ae82b9a","toolchain_digest":"semantic-v2:sha256:d84b82c787577126d2fbbc4e19f1608f77d1725216cf7647c6ace444d1917dbb","variant":{"include_search_digest":"sha256:7777777777777777777777777777777777777777777777777777777777777777","language":"cxx","language_standard":"cxx23","predefined_macros_digest":"sha256:6666666666666666666666666666666666666666666666666666666666666666","semantic_flags_digest":"sha256:8888888888888888888888888888888888888888888888888888888888888888","target_triple":"x86_64-unknown-linux-gnu"},"working_directory":"project://fixture"},{"budget":{"address_space_bytes":1073741824,"cpu_ms":10000,"diagnostics":128,"open_files":64,"output_bytes":1048576,"rows":1024,"subprocesses":1,"transport_bytes":2097152,"wall_ms":10000},"build_variant_id":"build-variant:sha256:d0d2c433d8c558923be73e7655f2faa65ea94e330c9aa722d0e7d831d6907e01","catalog_digest":"semantic-v2:sha256:88dc78c51c338486857a2e282701263bda48781f08669378abaf41b80c9bc464","catalog_id":"catalog:semantic-v2:sha256:88dc78c51c338486857a2e282701263bda48781f08669378abaf41b80c9bc464","compile_unit_id":"compile-unit:sha256:3c5db06dbb85f42d2c2d89246ccf445078097e49250efb894a0270ad2b0cd553","condition_id":"condition:all","condition_universe_id":"condition-universe:one","dependency_groups":["canonical","observation"],"effective_argv":["clang++","-std=c++23","project://unit_1.cpp"],"environment_digest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","interpretation_domain":"cc.clang22-canonical-1","language":"cxx","normalized_invocation_digest":"semantic-v2:sha256:68f779154ad8159b42f2ccc79b7e74999742e0c05a05563421e50d0cae028c09","project_id":"project:sha256:9b8cdb2a5afab245af006c61b1bbf0a758687ed969b42d349caf98bcdb6f01c3","provider_execution_id":"provider-execution:sha256:8bab585913137bb9106c76c4e46e5934aa07161cffc37784592af415fd7eb784","provider_task_id":"task:semantic-v2:sha256:5fb6b47f3aec5abedd658b2acd86f9a9e3af418712ed9fbf80e30cb3c7306118","requested_descriptor_ids":["cc.call_direct_target.v1","cc.call_site.v1","cc.entity.v1","frontend.clang22.call_observation.v2","frontend.clang22.entity_observation.v2","frontend.clang22.type_observation.v2"],"sandbox":{"minimum":"enforced","policy_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"selected_catalog_compile_unit_id":"catalog-unit:0001","source":{"content_base64":"aW50IHVuaXRfMSgpIHsgcmV0dXJuIDE7IH0K","content_digest":"sha256:76af64be58a1f67608cb4c34771305ad773b173cc4cde76261d749928ad4ea49","encoding":"utf8","file_id":"file:sha256:c07309e8ee43ccbf4412cd0bbbb99099df12cd1e1a89ac84b7093308ac760b71","line_index_id":"line-index:sha256:5fe3bf322112a1740a8a1e95ed148bc1d8db4ad217b3574d6540c2de296da3a3","logical_path":"project://unit_1.cpp","read_only":false,"size_bytes":27,"source_snapshot_id":"source-snapshot:sha256:3663a8dd373452f9a641715395076673985bd5f2897e7b95983d0888464f9a93"},"task_input_digest":"sha256:6f097c492800c8a785ce8b69ff61ce8c106ab80b296be12c0ae6b92d3017b650","toolchain":{"abi_digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","builtin_headers_digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","exact_version":"22.0.0","family":"clang","plugin_spec_digest":"sha256:5555555555555555555555555555555555555555555555555555555555555555","sysroot":null,"target_triple":"x86_64-unknown-linux-gnu"},"toolchain_context_id":"toolchain-context:sha256:78f64803fb0f0f1ab7f10321ebc90aa52aafb99705407b92e005ff7d6ae82b9a","toolchain_digest":"semantic-v2:sha256:d84b82c787577126d2fbbc4e19f1608f77d1725216cf7647c6ace444d1917dbb","variant":{"include_search_digest":"sha256:7777777777777777777777777777777777777777777777777777777777777777","language":"cxx","language_standard":"cxx23","predefined_macros_digest":"sha256:6666666666666666666666666666666666666666666666666666666666666666","semantic_flags_digest":"sha256:8888888888888888888888888888888888888888888888888888888888888888","target_triple":"x86_64-unknown-linux-gnu"},"working_directory":"project://fixture"}],"tool":{"distribution_version":"1.0.0","executable":"cxxlens-clang22-materialize","installed_executable_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111","interface_version":"2.0.0","package_configuration":"static","prefix_manifest_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111","relocated_prefix_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111","source_revision":"1111111111111111111111111111111111111111","source_tree":"2222222222222222222222222222222222222222"},"trust_policy":{"execution_profile":"trust.native-worker","policy_id":"cxxlens.clang22-installed-native-worker-trust.v1","protocol_major":1,"protocol_minor":0,"provider_id":"cxxlens.clang22.reference","provider_version":"1.0.0","required_qualification":"canonical-semantic-qualified","semantic_contract_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","task_sandbox_requirements":[{"minimum":"enforced","policy_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"trust_policy_digest":"semantic-v2:sha256:a0b190b934d43470d18cbbf326601174fe8a23e52e825c904b8d265dc990d053","worker_sandbox_policy_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"worker":{"executable":"cxxlens-clang-worker-22","installed_binary_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111","protocol_major":1,"protocol_minor":0,"provider_id":"cxxlens.clang22.reference","provider_version":"1.0.0","sandbox_policy_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","semantic_contract_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}})cxxlens_json";
-		auto document = parse_json_object(std::string{request_json});
+		return std::string{request_json};
+	}
+
+	[[nodiscard]] validated_materialization_request request_fixture()
+	{
+		auto document = parse_json_object(request_fixture_json());
 		require(document.has_value(),
 				"request JSON parse failed: " +
 					(document ? std::string{} : failure(document.error())));
@@ -475,6 +484,153 @@ namespace
 		require(request.has_value(),
 				"request fixture failed: " + (request ? std::string{} : failure(request.error())));
 		return std::move(*request);
+	}
+
+	void replace_once(std::string& value, const std::string_view from, const std::string_view to)
+	{
+		const auto offset = value.find(from);
+		require(offset != std::string::npos, "v2.1 fixture replacement target missing");
+		value.replace(offset, from.size(), to);
+	}
+
+	void replace_all(std::string& value, const std::string_view from, const std::string_view to)
+	{
+		std::size_t offset{};
+		std::size_t count{};
+		while ((offset = value.find(from, offset)) != std::string::npos)
+		{
+			value.replace(offset, from.size(), to);
+			offset += to.size();
+			++count;
+		}
+		require(count != 0U, "v2.1 fixture replacement set was empty");
+	}
+
+	[[nodiscard]] const std::string& member_string(const json_value& value,
+												   const std::string_view name)
+	{
+		const auto* member = value.member(name);
+		require(member != nullptr && member->as_string() != nullptr,
+				"v2.1 fixture string member missing");
+		return *member->as_string();
+	}
+
+	[[nodiscard]] std::string expected_v2_1_trust_digest()
+	{
+		using sdk::canonical_value;
+		auto projection = canonical_value::from_tuple({
+			canonical_value::from_string("cxxlens.clang22-installed-native-worker-trust.v1"),
+			canonical_value::from_string("trust.native-worker"),
+			canonical_value::from_string("cxxlens.clang22.reference"),
+			canonical_value::from_string("1.0.0"),
+			canonical_value::from_string("sha256:" + std::string(64U, 'a')),
+			canonical_value::from_integer(1),
+			canonical_value::from_integer(1),
+			canonical_value::from_tuple({canonical_value::from_string("task-input-chunks-v1")}),
+			canonical_value::from_string("canonical-semantic-qualified"),
+			canonical_value::from_string("sha256:" + std::string(64U, 'b')),
+			canonical_value::from_tuple({canonical_value::from_tuple({
+				canonical_value::from_string("enforced"),
+				canonical_value::from_string("sha256:" + std::string(64U, 'b')),
+			})}),
+		});
+		auto encoded = sdk::canonical_binary(projection);
+		require(encoded.has_value(), "v2.1 trust projection encoding failed");
+		auto digest = sdk::semantic_digest(
+			"cxxlens.clang22-installed-native-worker-trust.v1",
+			std::string_view{reinterpret_cast<const char*>(encoded->data()), encoded->size()});
+		require(digest.has_value(), "v2.1 trust projection digest failed");
+		return std::move(*digest);
+	}
+
+	[[nodiscard]] std::string v2_1_request_fixture_json()
+	{
+		auto raw = request_fixture_json();
+		replace_once(raw, "\"request_version\":\"2.0.0\"", "\"request_version\":\"2.1.0\"");
+		replace_once(raw, "\"interface_version\":\"2.0.0\"", "\"interface_version\":\"2.1.0\"");
+		replace_once(raw,
+					 "\"authority_registry_digest\":\"sha256:"
+					 "4caf626ec6f198118802f22d9cac62b02b2c3bb392fdc8d68b1a58f8101c342e\"",
+					 "\"authority_registry_digest\":\"sha256:"
+					 "e47bbaec6a56bc18f90e314a948003c47bf2c46431cf5f26fd035249a94f35b5\"");
+		const auto digest = "sha256:" + std::string(64U, '1');
+		replace_once(raw,
+					 ",\"prefix_manifest_digest\":\"" + digest +
+						 "\",\"relocated_prefix_digest\":\"" + digest + "\"",
+					 ",\"occurrence_manifest_digest\":\"" + digest + "\"");
+		replace_all(raw,
+					"\"protocol_minor\":0",
+					"\"protocol_minor\":1,\"required_features\":[\"task-input-chunks-v1\"]");
+
+		auto before = parse_json_object(raw);
+		require(before.has_value(), "v2.1 upgraded fixture did not parse");
+		const auto* trust = before->root().member("trust_policy");
+		const auto* publication = before->root().member("publication");
+		require(trust != nullptr && publication != nullptr, "v2.1 fixture globals missing");
+		const auto new_trust = expected_v2_1_trust_digest();
+		replace_all(raw, member_string(*trust, "trust_policy_digest"), new_trust);
+
+		sdk::snapshot_series_selector selector{
+			"catalog:semantic-v2:sha256:"
+			"88dc78c51c338486857a2e282701263bda48781f08669378abaf41b80c9bc464",
+			"channel:clang22-production",
+			"engine-generation:sha256:"
+			"984ec980908d8a3e3d14fb81b06e06009249e909bc7a6d323b447de825da08eb",
+			"condition-universe:one",
+			"semantic-v2:sha256:051823ea2f538bf38656afefb81d22950e5a6ca671fa4d57d89fffd8cfba171a",
+			"semantic-v2:sha256:3e97b2cb497e80e0f59953844b4050930e3919f36ac3aab7403d391ab4cc087f",
+			new_trust,
+		};
+		replace_once(raw, member_string(*publication, "series_id"), selector.id());
+
+		const auto make_identity =
+			[](const std::string& value) -> streamed_materialization_request_identity
+		{
+			auto storage = make_materialization_private_spool();
+			require(storage.has_value(), "v2.1 identity spool creation failed");
+			require(storage->get()
+						->append(std::as_bytes(std::span{value.data(), value.size()}))
+						.has_value(),
+					"v2.1 identity spool write failed");
+			require(storage->get()->seal().has_value(), "v2.1 identity spool seal failed");
+			auto index = make_materialization_request_task_index(storage->get()->size_bytes());
+			require(index.has_value(), "v2.1 identity task index failed");
+			auto envelope = scan_materialization_request_envelope(**storage, {}, index->get());
+			require(envelope.has_value(), "v2.1 identity envelope scan failed");
+			auto identity =
+				derive_streamed_materialization_request_identity(**storage, *envelope, **index);
+			require(identity.has_value(), "v2.1 identity derivation failed");
+			return std::move(*identity);
+		};
+		const auto identity = make_identity(raw);
+		auto parsed = parse_json_object(raw);
+		require(parsed.has_value(), "v2.1 identity fixture parse failed");
+		replace_once(raw,
+					 member_string(parsed->root(), "materialization_request_id"),
+					 identity.materialization_request_id);
+		replace_once(raw, member_string(parsed->root(), "request_digest"), identity.request_digest);
+		replace_once(raw,
+					 member_string(parsed->root(), "semantic_request_digest"),
+					 identity.semantic_request_digest);
+		return raw;
+	}
+
+	[[nodiscard]] sdk::result<validated_materialization_request_v2_1>
+	validate_v2_1_request_fixture()
+	{
+		auto raw = v2_1_request_fixture_json();
+		auto storage = make_materialization_private_spool();
+		require(storage.has_value(), "v2.1 request spool creation failed");
+		require(
+			storage->get()->append(std::as_bytes(std::span{raw.data(), raw.size()})).has_value(),
+			"v2.1 request spool write failed");
+		require(storage->get()->seal().has_value(), "v2.1 request spool seal failed");
+		auto index = make_materialization_request_task_index(storage->get()->size_bytes());
+		require(index.has_value(), "v2.1 request task index failed");
+		auto envelope = scan_materialization_request_envelope(**storage, {}, index->get());
+		require(envelope.has_value(), "v2.1 request envelope scan failed");
+		return validate_materialization_request_v2_1(
+			std::move(*storage), std::move(*envelope), std::move(*index));
 	}
 
 	void verify_graph_and_partitions(const validated_materialization_request& request,
@@ -628,16 +784,16 @@ namespace
 				"claim construction failed: " + (claims ? std::string{} : failure(claims.error())));
 		require(claims->materializer_semantics_digest() ==
 						"semantic-v2:sha256:"
-						"a0480435d30b9921d78529a2f74d68c06a2d812db4923dd7b19ccf0fc2ce8ed6" &&
+						"31070011864f22e80665a84fe885919a535310fca66d102f2002c2b41313b14f" &&
 					claims->direct_basis_digest() ==
 						"semantic-v2:sha256:"
-						"ecfb7e110bcafa464dc24145a00ceed6415a2db920a53926693229791a31f739" &&
+						"5b626a30b0742c97b2cdd17cc3b1b25a32cb3f5e38b54908b83b1128548965ee" &&
 					claims->canonical_adoption_transform_digest() ==
 						"semantic-v2:sha256:"
-						"c5296f17339f70a717e11df92a6893946e31f19e556aa3ac6f9e0d0a630f15f2" &&
+						"559bacb92b22062b80a3f677d070c4990697f22608171277c10d0402f8fd1e6f" &&
 					claims->base_ingestion_transform_digest() ==
 						"semantic-v2:sha256:"
-						"37b3a73227ee710a02287d14d6a19ab4706e23279e7e805b46d3cb023b83e197" &&
+						"72602c67a04379f2e20fdc8c5d764aae6c5240c5363b853cf92d11655361985b" &&
 					claims->assumption_set_id() ==
 						"assumption-set:semantic-v2:sha256:"
 						"054f2400cc7d6084286f98ff7c22f4fbcf531178fa605b2211346f528862a098",
@@ -1525,6 +1681,30 @@ namespace
 		require(external.has_value(),
 				"claim stream external validator rejected unchanged sealed task streams: " +
 					(external ? std::string{} : failure(external.error())));
+		auto raw_external = materialization_claim_stream_source::validate_external_task_receipts(
+			*request_id,
+			static_cast<std::uint64_t>(request.tasks.size()),
+			*journal,
+			std::span<materialization_claim_stream_task>{tasks});
+		require(raw_external.has_value(),
+				"raw claim stream external validator rejected unchanged sealed task streams: " +
+					(raw_external ? std::string{} : failure(raw_external.error())));
+		std::vector<materialization_claim_stream_task> missing_streams;
+		missing_streams.reserve(receipts.size());
+		for (const auto& receipt : receipts)
+			missing_streams.emplace_back(
+				receipt, std::vector<std::unique_ptr<materialization_replayable_spool>>{});
+		auto raw_missing_stream =
+			materialization_claim_stream_source::validate_external_task_receipts(
+				*request_id,
+				static_cast<std::uint64_t>(request.tasks.size()),
+				*journal,
+				std::span<materialization_claim_stream_task>{missing_streams});
+		require(
+			!raw_missing_stream &&
+				failure(raw_missing_stream.error()) ==
+					"materialization.claim-stream-invalid/partitions/empty",
+			"raw claim stream external validator accepted receipts without sealed event spools");
 
 		auto source =
 			materialization_claim_stream_source::begin(request, *journal, std::move(tasks));
@@ -1874,6 +2054,469 @@ namespace
 		bool tamper_provider_sealed_transcript_digest_{};
 		std::vector<std::optional<sealed_materialization_result>> reusable_;
 	};
+
+	[[nodiscard]] materialization_incremental_task_identity
+	v2_1_incremental_identity(validated_materialization_request_v2_1& request,
+							  const std::size_t index)
+	{
+		auto metadata = request.task_metadata(index);
+		require(metadata.has_value(), "v2.1 incremental metadata replay failed");
+		return {index,
+				metadata->provider_task_id,
+				metadata->task_input_digest,
+				metadata->selected_catalog_compile_unit_id,
+				metadata->final_relation_compile_unit_id};
+	}
+
+	[[nodiscard]] std::vector<std::string>
+	v2_1_partition_ids(const materialization_v2_1_claim_authority& authority,
+					   const std::size_t task_index,
+					   const materialization_v2_1_task_execution& task,
+					   const sealed_materialization_result& result)
+	{
+		auto events = materialization_incremental_receipt_event_projections(
+			authority, task_index, task, result, {});
+		require(events.has_value(), "v2.1 receipt partition oracle failed");
+		std::set<std::string, std::less<>> seen;
+		std::vector<std::string> ids;
+		for (const auto& event : *events)
+			if (seen.insert(event.partition_id).second)
+				ids.push_back(event.partition_id);
+		std::ranges::sort(ids);
+		require(!ids.empty(), "v2.1 receipt partition census was empty");
+		return ids;
+	}
+
+	[[nodiscard]] std::vector<std::unique_ptr<materialization_replayable_spool>>
+	v2_1_partition_spools(const materialization_v2_1_claim_authority& authority,
+						  const std::size_t task_index,
+						  const materialization_v2_1_task_execution& task,
+						  const sealed_materialization_result& result,
+						  const std::span<const std::string> partition_ids)
+	{
+		auto request_id = materialization_incremental_request_id(authority);
+		require(request_id.has_value(), "v2.1 spool request identity failed");
+		auto events = materialization_incremental_receipt_event_projections(
+			authority, task_index, task, result, {});
+		require(events.has_value(), "v2.1 spool event oracle failed");
+		std::vector<std::unique_ptr<materialization_replayable_spool>> output;
+		output.reserve(partition_ids.size());
+		for (std::size_t partition_index{}; partition_index < partition_ids.size();
+			 ++partition_index)
+		{
+			std::vector<materialization_incremental_event_projection> partition_events;
+			for (const auto& event : *events)
+				if (event.partition_id == partition_ids[partition_index])
+					partition_events.push_back(event);
+			output.push_back(make_fixture_partition_spool(
+				*request_id,
+				static_cast<std::uint64_t>(task_index * 10U + partition_index),
+				partition_events));
+		}
+		return output;
+	}
+
+	enum class v2_1_receipt_mode
+	{
+		valid,
+		missing_pre_encoder_seal,
+		wrong_artifact_digest,
+		duplicate_partition_census,
+	};
+
+	struct v2_1_output_parts
+	{
+		sealed_materialization_result result;
+		materialization_incremental_provider_execution_receipt receipt;
+		materialization_incremental_partition_spool_encoder encode_partition_spools;
+
+		v2_1_output_parts(
+			sealed_materialization_result result,
+			materialization_incremental_provider_execution_receipt receipt,
+			materialization_incremental_partition_spool_encoder encode_partition_spools)
+			: result{std::move(result)}, receipt{std::move(receipt)},
+			  encode_partition_spools{std::move(encode_partition_spools)}
+		{
+		}
+	};
+
+	class fixture_v2_1_executor final : public materialization_incremental_v2_1_task_executor
+	{
+	  public:
+		fixture_v2_1_executor(
+			const materialization_v2_1_claim_authority& authority,
+			const materialization_incremental_selected_request_binding_set& binding_set,
+			std::vector<sealed_materialization_result> results,
+			const v2_1_receipt_mode receipt_mode = v2_1_receipt_mode::valid,
+			const bool cancelled = false,
+			const bool fail_finalization = false)
+			: authority_{authority}, binding_set_{binding_set}, receipt_mode_{receipt_mode},
+			  cancelled_{cancelled}, fail_finalization_{fail_finalization}
+		{
+			results_.reserve(results.size());
+			for (auto& result : results)
+				results_.emplace_back(std::move(result));
+		}
+
+		[[nodiscard]] sdk::result<materialization_incremental_task_execution>
+		execute(const std::size_t request_task_index,
+				materialization_v2_1_task_execution& task,
+				const materialization_incremental_task_binding& binding) override
+		{
+			++execute_calls;
+			called_indices.push_back(request_task_index);
+			auto parts = make_output(request_task_index, task, binding, true);
+			if (!parts)
+				return sdk::unexpected(std::move(parts.error()));
+			return materialization_incremental_task_execution{
+				std::move(parts->result),
+				std::move(parts->receipt),
+				std::move(parts->encode_partition_spools)};
+		}
+
+		[[nodiscard]] sdk::result<materialization_incremental_task_reuse>
+		load_reusable(const std::size_t request_task_index,
+					  materialization_v2_1_task_execution& task,
+					  const materialization_incremental_task_binding& binding) override
+		{
+			++reuse_calls;
+			auto parts = make_output(request_task_index, task, binding, false);
+			if (!parts)
+				return sdk::unexpected(std::move(parts.error()));
+			return materialization_incremental_task_reuse{
+				std::move(parts->result),
+				std::move(parts->receipt),
+				std::move(parts->encode_partition_spools)};
+		}
+
+		[[nodiscard]] bool cancellation_requested() const noexcept override
+		{
+			return cancelled_;
+		}
+
+		[[nodiscard]] bool dynamic_typed_partition_ids() const noexcept override
+		{
+			return true;
+		}
+
+		[[nodiscard]] sdk::result<void> finalize_pending() override
+		{
+			++finalize_calls;
+			finalized = true;
+			if (fail_finalization_)
+				return sdk::unexpected(
+					sdk::error{"fixture.v2-1-finalization-failure", "executor", "deliberate"});
+			return {};
+		}
+
+		std::size_t execute_calls{};
+		std::size_t reuse_calls{};
+		std::size_t finalize_calls{};
+		std::vector<std::size_t> called_indices;
+		bool finalized{};
+
+		[[nodiscard]] sdk::result<v2_1_output_parts>
+		make_output(const std::size_t task_index,
+					materialization_v2_1_task_execution& task,
+					const materialization_incremental_task_binding&,
+					const bool recompute)
+		{
+			if (task_index >= results_.size() || !results_[task_index])
+				return sdk::unexpected(
+					sdk::error{"fixture.v2-1-result-missing", "executor", "task"});
+			auto result = std::move(*results_[task_index]);
+			results_[task_index].reset();
+			auto artifact_digest = seal_materialization_incremental_artifact_digest(result);
+			if (!artifact_digest)
+				return sdk::unexpected(std::move(artifact_digest.error()));
+			auto events = materialization_incremental_receipt_event_projections(
+				authority_, task_index, task, result, {});
+			if (!events)
+				return sdk::unexpected(std::move(events.error()));
+			auto partition_ids = v2_1_partition_ids(authority_, task_index, task, result);
+			auto partition_set_digest =
+				seal_materialization_incremental_task_partition_set_digest(partition_ids);
+			if (!partition_set_digest)
+				return sdk::unexpected(std::move(partition_set_digest.error()));
+			auto sealed_transcript_digest =
+				sdk::provider::detail::provider_sealed_transcript_receipt_digest(
+					result.provider_task_id(), "provider.success", result.provider_seal());
+			if (!sealed_transcript_digest)
+				return sdk::unexpected(std::move(sealed_transcript_digest.error()));
+			auto task_receipt = make_materialization_incremental_task_receipt(
+				authority_,
+				binding_set_,
+				task_index,
+				task,
+				16U,
+				incremental_digest('1'),
+				static_cast<std::uint64_t>(events->size()),
+				"semantic-v2:sha256:" + std::string(64U, '2'),
+				std::move(*sealed_transcript_digest),
+				std::span<const materialization_incremental_event_projection>{*events});
+			if (!task_receipt)
+				return sdk::unexpected(std::move(task_receipt.error()));
+
+			std::vector<std::string> covered_partition_ids = partition_ids;
+			std::string covered_partition_set_digest = *partition_set_digest;
+			if (receipt_mode_ == v2_1_receipt_mode::duplicate_partition_census)
+			{
+				covered_partition_ids.push_back(covered_partition_ids.back());
+				covered_partition_set_digest = incremental_digest('d');
+			}
+			std::string artifact_receipt_digest = *artifact_digest;
+			if (receipt_mode_ == v2_1_receipt_mode::wrong_artifact_digest)
+				artifact_receipt_digest = incremental_digest('e');
+			std::optional<materialization_incremental_pre_encoder_seal> pre_encoder_seal;
+			if (receipt_mode_ != v2_1_receipt_mode::missing_pre_encoder_seal)
+				pre_encoder_seal.emplace(std::move(*task_receipt),
+										 *artifact_digest,
+										 covered_partition_set_digest,
+										 covered_partition_ids);
+			auto encode_partition_spools =
+				[this, task_index, task_ptr = &task](
+					const sealed_materialization_result& delayed_result,
+					const materialization_incremental_pre_encoder_seal& seal)
+				-> sdk::result<std::vector<std::unique_ptr<materialization_replayable_spool>>>
+			{
+				return v2_1_partition_spools(
+					authority_, task_index, *task_ptr, delayed_result, seal.partition_ids);
+			};
+			materialization_incremental_provider_execution_receipt receipt{
+				recompute ? 1U : 0U,
+				std::string{result.provider_task_id()},
+				std::string{result.provider_execution_id()},
+				std::move(artifact_receipt_digest),
+				std::move(covered_partition_ids),
+				std::move(covered_partition_set_digest),
+				std::move(pre_encoder_seal)};
+			return v2_1_output_parts{
+				std::move(result), std::move(receipt), std::move(encode_partition_spools)};
+		}
+
+	  private:
+		const materialization_v2_1_claim_authority& authority_;
+		const materialization_incremental_selected_request_binding_set& binding_set_;
+		v2_1_receipt_mode receipt_mode_{};
+		bool cancelled_{};
+		bool fail_finalization_{};
+		std::vector<std::optional<sealed_materialization_result>> results_;
+	};
+
+	struct v2_1_plan_fixture
+	{
+		incremental::materialization_plan plan;
+		std::vector<materialization_incremental_task_binding> bindings;
+	};
+
+	[[nodiscard]] v2_1_plan_fixture
+	make_v2_1_plan_fixture(validated_materialization_request_v2_1& request,
+						   const std::array<std::string, 2U>& artifact_digests,
+						   const bool warm_zero)
+	{
+		auto first = incremental_state("partition:a");
+		auto second = incremental_state("partition:b");
+		auto current_first = first;
+		if (!warm_zero)
+			current_first.input.source_digest = incremental_digest('e');
+		const std::array candidates{
+			incremental::partition_candidate{current_first, first},
+			incremental::partition_candidate{second, second},
+		};
+		auto plan = incremental::make_materialization_plan(candidates);
+		require(plan.has_value(), "v2.1 plan fixture construction failed");
+		std::vector<materialization_incremental_task_binding> bindings;
+		bindings.emplace_back(materialization_incremental_task_binding{
+			v2_1_incremental_identity(request, 0U),
+			{materialization_incremental_partition_binding{
+				"partition:a",
+				std::optional<incremental::partition_state>{current_first},
+				std::optional<materialization_incremental_prior_artifact>{
+					materialization_incremental_prior_artifact{first, artifact_digests[0U]}}}}});
+		bindings.emplace_back(materialization_incremental_task_binding{
+			v2_1_incremental_identity(request, 1U),
+			{materialization_incremental_partition_binding{
+				"partition:b",
+				std::optional<incremental::partition_state>{second},
+				std::optional<materialization_incremental_prior_artifact>{
+					materialization_incremental_prior_artifact{second, artifact_digests[1U]}}}}});
+		return {std::move(*plan), std::move(bindings)};
+	}
+
+	[[nodiscard]] materialization_producer_authority
+	v2_1_producer_authority(const std::filesystem::path& root)
+	{
+		auto output = producer_authority(root);
+		output.interface_version = "2.1.0";
+		return output;
+	}
+
+	[[nodiscard]] std::vector<sealed_materialization_result> v2_1_reference_results()
+	{
+		auto legacy_request = request_fixture();
+		return seal_all(legacy_request);
+	}
+
+	void check_incremental_coordinator_v2_1(const std::filesystem::path& root)
+	{
+		const materialization_guarantee_authority guarantee{{},
+															{"clang22.materialization-sealed.v1",
+															 "provider.transcript-sealed.v1",
+															 "sdk.claim-envelope-validated.v1"}};
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 coordinator request admission failed");
+			auto authority = make_materialization_v2_1_claim_authority(
+				*accepted, v2_1_producer_authority(root), guarantee);
+			require(authority.has_value(), "v2.1 coordinator claim authority failed");
+			auto binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*authority);
+			require(binding_set.has_value(), "v2.1 selected binding set seal failed");
+			auto results = v2_1_reference_results();
+			std::array<std::string, 2U> artifact_digests;
+			for (std::size_t index{}; index < results.size(); ++index)
+			{
+				auto digest = seal_materialization_incremental_artifact_digest(results[index]);
+				require(digest.has_value(), "v2.1 reference artifact digest failed");
+				artifact_digests[index] = std::move(*digest);
+			}
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false);
+			fixture_v2_1_executor executor{
+				*authority, *binding_set, std::move(results), v2_1_receipt_mode::valid};
+			auto outcome =
+				run_materialization_incremental_coordinator_v2_1(*accepted,
+																 fixture.plan,
+																 std::move(fixture.bindings),
+																 executor,
+																 *authority,
+																 *binding_set);
+			require(outcome.has_value(),
+					"v2.1 reuse/recompute coordinator failed: " +
+						(outcome ? std::string{} : failure(outcome.error())));
+			const auto& census = outcome->execution_census();
+			require(census.planned_provider_executions == 1U &&
+						census.planned_provider_task_executions == 1U &&
+						census.actual_provider_executions == 1U &&
+						census.actual_recomputed_partition_count ==
+							census.executed_partition_ids.size() &&
+						!census.executed_partition_ids.empty() &&
+						census.executed_provider_task_ids.size() == 1U &&
+						census.executed_provider_execution_ids.size() == 1U &&
+						census.executed_artifact_digests.size() == 1U &&
+						executor.execute_calls == 1U && executor.reuse_calls == 1U &&
+						executor.finalize_calls == 1U && executor.finalized &&
+						outcome->bounded_claim_source().sealed() &&
+						outcome->claim_stream() != nullptr,
+					"v2.1 coordinator lost reuse/recompute census or finalization evidence");
+		}
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 cancellation request admission failed");
+			auto authority = make_materialization_v2_1_claim_authority(
+				*accepted, v2_1_producer_authority(root), guarantee);
+			require(authority.has_value(), "v2.1 cancellation claim authority failed");
+			auto binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*authority);
+			require(binding_set.has_value(), "v2.1 cancellation binding set seal failed");
+			auto results = v2_1_reference_results();
+			std::array<std::string, 2U> artifact_digests;
+			for (std::size_t index{}; index < results.size(); ++index)
+			{
+				auto digest = seal_materialization_incremental_artifact_digest(results[index]);
+				require(digest.has_value(), "v2.1 cancellation artifact digest failed");
+				artifact_digests[index] = std::move(*digest);
+			}
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, true);
+			fixture_v2_1_executor executor{
+				*authority, *binding_set, std::move(results), v2_1_receipt_mode::valid, true};
+			auto outcome =
+				run_materialization_incremental_coordinator_v2_1(*accepted,
+																 fixture.plan,
+																 std::move(fixture.bindings),
+																 executor,
+																 *authority,
+																 *binding_set);
+			require(!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+						outcome.error().field == "executor" &&
+						outcome.error().detail == "cancelled" && executor.execute_calls == 0U &&
+						executor.reuse_calls == 2U && executor.finalize_calls == 1U &&
+						executor.finalized,
+					"v2.1 cancellation did not preserve finalization lifecycle");
+		}
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 malformed binding admission failed");
+			auto authority = make_materialization_v2_1_claim_authority(
+				*accepted, v2_1_producer_authority(root), guarantee);
+			require(authority.has_value(), "v2.1 malformed binding authority failed");
+			auto binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*authority);
+			require(binding_set.has_value(), "v2.1 malformed binding set seal failed");
+			auto results = v2_1_reference_results();
+			std::array<std::string, 2U> artifact_digests;
+			for (std::size_t index{}; index < results.size(); ++index)
+			{
+				auto digest = seal_materialization_incremental_artifact_digest(results[index]);
+				require(digest.has_value(), "v2.1 malformed binding artifact digest failed");
+				artifact_digests[index] = std::move(*digest);
+			}
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false);
+			fixture.bindings[1U].partitions.front().partition_id = "partition:a";
+			fixture.bindings[1U].partitions.front().current_state->partition_id = "partition:a";
+			fixture_v2_1_executor executor{
+				*authority, *binding_set, std::move(results), v2_1_receipt_mode::valid};
+			auto outcome =
+				run_materialization_incremental_coordinator_v2_1(*accepted,
+																 fixture.plan,
+																 std::move(fixture.bindings),
+																 executor,
+																 *authority,
+																 *binding_set);
+			require(!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+						outcome.error().field == "bindings" && executor.execute_calls == 0U &&
+						executor.reuse_calls == 0U && executor.finalize_calls == 0U,
+					"v2.1 duplicate/global binding census crossed validation");
+		}
+
+		for (const auto mode : {v2_1_receipt_mode::missing_pre_encoder_seal,
+								v2_1_receipt_mode::duplicate_partition_census})
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 malformed receipt admission failed");
+			auto authority = make_materialization_v2_1_claim_authority(
+				*accepted, v2_1_producer_authority(root), guarantee);
+			require(authority.has_value(), "v2.1 malformed receipt authority failed");
+			auto binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*authority);
+			require(binding_set.has_value(), "v2.1 malformed receipt binding set seal failed");
+			auto results = v2_1_reference_results();
+			std::array<std::string, 2U> artifact_digests;
+			for (std::size_t index{}; index < results.size(); ++index)
+			{
+				auto digest = seal_materialization_incremental_artifact_digest(results[index]);
+				require(digest.has_value(), "v2.1 malformed receipt artifact digest failed");
+				artifact_digests[index] = std::move(*digest);
+			}
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false);
+			fixture_v2_1_executor executor{*authority, *binding_set, std::move(results), mode};
+			auto outcome =
+				run_materialization_incremental_coordinator_v2_1(*accepted,
+																 fixture.plan,
+																 std::move(fixture.bindings),
+																 executor,
+																 *authority,
+																 *binding_set);
+			require(!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+						outcome.error().field ==
+							(mode == v2_1_receipt_mode::missing_pre_encoder_seal ? "executor"
+																				 : "receipt") &&
+						executor.execute_calls == 1U && executor.finalize_calls == 0U,
+					"v2.1 malformed receipt crossed coordinator validation");
+		}
+	}
 
 	void check_incremental_coordinator(const validated_materialization_request& request,
 									   const materialization_producer_authority& producer)
@@ -2739,6 +3382,51 @@ namespace
 					!published->store().first_issue.has_value(),
 				"incremental coordinator did not retain a successful Store publication receipt");
 	}
+
+	void check_bounded_adoption_fail_closed(const validated_materialization_request& request,
+											const materialization_producer_authority& producer)
+	{
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		auto sealed = seal_task(request, 0U);
+		require(sealed.has_value(), "bounded adoption fail-closed fixture seal failed");
+		const auto make_task = [&]()
+		{
+			auto task = construct_materialization_bounded_task_claims(
+				request, 0U, *sealed, producer, guarantee);
+			require(task.has_value(),
+					"bounded adoption fail-closed task construction failed: " +
+						(task ? std::string{} : failure(task.error())));
+			return std::move(*task);
+		};
+
+		auto source = materialization_bounded_claim_source::begin(request);
+		require(source.has_value(), "bounded adoption fail-closed source begin failed");
+		auto metadata_drift = make_task();
+		metadata_drift.partitions.front().sdk_claim_occurrence_count += 1U;
+		auto rejected = source->consume_task(std::move(metadata_drift));
+		require(!rejected && rejected.error().field == "partition" &&
+					rejected.error().detail == "claim-census" && source->partition_count() == 0U,
+				"bounded adoption accepted metadata drift or mutated before validation");
+		auto retry = make_task();
+		auto retry_result = source->consume_task(std::move(retry));
+		require(!retry_result && retry_result.error().field == "lifecycle",
+				"bounded adoption did not remain single-use after rejection");
+		auto finalized_failed = std::move(*source).finalize();
+		require(!finalized_failed && finalized_failed.error().field == "lifecycle",
+				"failed bounded adoption source became finalizable");
+
+		auto duplicate_source = materialization_bounded_claim_source::begin(request);
+		require(duplicate_source.has_value(), "duplicate partition source begin failed");
+		auto duplicate = make_task();
+		require(!duplicate.partitions.empty(), "duplicate partition fixture is empty");
+		duplicate.partitions.push_back(duplicate.partitions.back());
+		auto duplicate_result = duplicate_source->consume_task(std::move(duplicate));
+		require(!duplicate_result && duplicate_result.error().field == "partitions" &&
+					duplicate_result.error().detail == "noncanonical-order" &&
+					duplicate_source->partition_count() == 0U,
+				"bounded adoption accepted a duplicate partition window");
+	}
 } // namespace
 
 int main(const int argc, char** argv)
@@ -2756,6 +3444,8 @@ int main(const int argc, char** argv)
 	check_claim_stream_source(request);
 	positive_and_zero_partitions(request, producer);
 	streaming_source_receipts_replace_resident_payloads(root);
+	check_incremental_coordinator_v2_1(root);
 	check_incremental_coordinator(request, producer);
+	check_bounded_adoption_fail_closed(request, producer);
 	negative_authority_guarantee_order_and_coverage(request, std::move(producer));
 }

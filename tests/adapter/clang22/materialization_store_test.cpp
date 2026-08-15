@@ -332,6 +332,34 @@ namespace
 					"memory same-Store paths did not resolve the invocation publication");
 	}
 
+	void authority_registry_digest_alias_is_rejected_at_store_admission()
+	{
+		const auto value = engine();
+		constexpr std::string_view authority_registry_digest =
+			"sha256:4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f";
+		const auto engine_registry_digest = std::string{value.registry_digest()};
+		require(engine_registry_digest.starts_with("semantic-v2:sha256:") &&
+					engine_registry_digest != authority_registry_digest,
+				"test relation engine did not expose a distinct admitted registry digest");
+
+		auto authority_bound_selector = selector(value);
+		authority_bound_selector.relation_registry_digest = std::string{authority_registry_digest};
+		const auto publication =
+			publication_request(authority_bound_selector, "memory", std::nullopt);
+		auto observed = execute_materialization_store(value, publication, plan(value, publication));
+		const auto* failure = observed.first_issue
+			? std::get_if<materialization_store_sdk_failure>(&*observed.first_issue)
+			: nullptr;
+		require(failure && failure->operation == materialization_store_operation::writer_begin &&
+					failure->error.code == "store.draft-authority-mismatch" &&
+					failure->error.field == "snapshot" && failure->error.detail.empty() &&
+					observed.head_observation.selector_lookup == authority_bound_selector &&
+					observed.writer_begin_call_count == 1U && !observed.publication_attempted &&
+					observed.publish_call_count == 0U && !observed.publish_returned_record &&
+					!observed.verification_store,
+				"authority registry digest was admitted as the Store engine digest");
+	}
+
 	void sqlite_genesis_append_and_stale()
 	{
 		temporary_working_directory working_directory;
@@ -686,6 +714,7 @@ int main()
 {
 	sqlite_v2_begin_is_phase_authentic_and_does_not_migrate();
 	memory_fresh_genesis();
+	authority_registry_digest_alias_is_rejected_at_store_admission();
 	sqlite_genesis_append_and_stale();
 	sqlite_publish_race_recovers_exact_receipts();
 	typed_prepublication_failures();

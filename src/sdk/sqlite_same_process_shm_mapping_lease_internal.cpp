@@ -18257,6 +18257,14 @@ namespace cxxlens::sdk
 						return std::nullopt;
 					else
 					{
+						// A grouped cleanup owner may only retire members from the
+						// currently live mapping generation.  The attachment identity
+						// preserves the native lifetime, while the holder carries the
+						// generation lifetime; accepting either axis independently
+						// would allow a stale holder to be folded into a new generation.
+						if (!generation_ || generation_->value == 0U ||
+							holder->generation != generation_->value)
+							return std::nullopt;
 						if (holder->registry_bound != attachment.registry_bound_origin ||
 							(holder->registry_bound && !holder->member_authority))
 							return std::nullopt;

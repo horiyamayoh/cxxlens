@@ -20,6 +20,83 @@ import check_ng_production_scope_closure as scope  # noqa: E402
 
 
 class NgReleaseQualificationTests(unittest.TestCase):
+    def test_nightly_evidence_requires_exact_passed_aggregate(self) -> None:
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        ownership = release.load(ROOT / release.QUALITY_OWNERSHIP_MANIFEST)
+        record_count = sum(
+            len(check["configurations"])
+            for check in ownership["checks"]
+            if check["owner"] == "nightly"
+        )
+        evidence_ids = [
+            f"quality-evidence:{index:064x}"
+            for index in range(1, record_count + 1)
+        ]
+        report = {
+            "schema": "cxxlens.quality-evidence-set.v1",
+            "mode": "owners:nightly",
+            "revision": git["revision"],
+            "tree": git["tree"],
+            "evidence_ids": evidence_ids,
+            "set_digest": release.canonical_digest(evidence_ids),
+            "result": "passed",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            report_path = evidence / release.NIGHTLY_EVIDENCE_FILENAME
+            report_path.write_text(json.dumps(report) + "\n", encoding="utf-8")
+            binding = release.verify_nightly_evidence(ROOT, evidence, git)
+            self.assertEqual(binding["path"], report_path)
+            self.assertEqual(binding["digest"], release.digest(report_path))
+
+            report["result"] = "failed"
+            report_path.write_text(json.dumps(report) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError, "not a passed owners:nightly set"
+            ):
+                release.verify_nightly_evidence(ROOT, evidence, git)
+
+    def test_nightly_evidence_rejects_revision_and_set_digest_mismatch(self) -> None:
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        report = {
+            "schema": "cxxlens.quality-evidence-set.v1",
+            "mode": "owners:nightly",
+            "revision": "3" * 40,
+            "tree": git["tree"],
+            "evidence_ids": ["quality-evidence:" + "a" * 64] * 4,
+            "set_digest": "sha256:" + "0" * 64,
+            "result": "passed",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            report_path = evidence / release.NIGHTLY_EVIDENCE_FILENAME
+            report_path.write_text(json.dumps(report) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "not from the release revision/tree",
+            ):
+                release.verify_nightly_evidence(ROOT, evidence, git)
+
+            report["revision"] = git["revision"]
+            report["evidence_ids"] = [
+                "quality-evidence:" + digit * 64 for digit in "abcd"
+            ]
+            report_path.write_text(json.dumps(report) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError, "set digest differs"
+            ):
+                release.verify_nightly_evidence(ROOT, evidence, git)
+
     def test_clang22_production_source_decomposition_is_exact(self) -> None:
         worker = "\n".join(
             (
@@ -2489,6 +2566,8 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "--root",
                 str(ROOT),
                 "--evidence-dir",
+                str(root),
+                "--nightly-evidence-dir",
                 str(root),
                 "--security-report",
                 str(root / "security.json"),

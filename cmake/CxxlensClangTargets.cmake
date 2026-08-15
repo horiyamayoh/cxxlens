@@ -41,6 +41,7 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/sdk/relation.cpp
     src/sdk/claim.cpp
     src/sdk/store.cpp
+    src/runtime/monotonic_clock_port.cpp
     src/sdk/sqlite_connection_lifecycle_internal.cpp
     src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp
     src/sdk/sqlite_same_process_shm_process_port_internal.cpp
@@ -270,7 +271,11 @@ function(cxxlens_configure_clang22 target)
   # at every exact-adapter compilation boundary so provider-owned classes do not
   # introduce unresolved base-class typeinfo into the static worker.
   if(NOT LLVM_ENABLE_RTTI)
-    target_compile_options(${target} PRIVATE -fno-rtti)
+    if(MSVC)
+      target_compile_options(${target} PRIVATE /GR-)
+    else()
+      target_compile_options(${target} PRIVATE -fno-rtti)
+    endif()
   endif()
   target_include_directories(${target} SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS}
                                                       ${CLANG_INCLUDE_DIRS})

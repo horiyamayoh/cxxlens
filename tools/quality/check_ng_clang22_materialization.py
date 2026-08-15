@@ -249,7 +249,7 @@ EXPECTED_REQUEST_SCHEMA_CANONICAL_DIGEST = (
     "sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270"
 )
 EXPECTED_REPORT_SCHEMA_CANONICAL_DIGEST = (
-    "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520"
+    "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96"
 )
 DF_0200_REPORT_SHAPE_ACTIVATION = (
     "request-2.1.0-unchanged-report-private-spool-failure-"
@@ -13013,16 +13013,57 @@ def validate_prior_artifact_persistence_status(publication: dict[str, Any]) -> N
 def bind_committed_verified_publication(
     request: dict[str, Any],
     report: dict[str, Any],
+    *,
+    parent_record: dict[str, Any] | None = None,
 ) -> None:
     snapshot_id = report["store"]["snapshot_manifest"]["snapshot_id"]
-    parent = request["publication"]["expected_parent_publication"]
-    sequence = 1
+    expected_parent = request["publication"]["expected_parent_publication"]
+    if request["publication"]["genesis"]:
+        if expected_parent is not None or parent_record is not None:
+            fail(
+                "materialization.store-failure",
+                "genesis publication unexpectedly has a parent authority",
+            )
+        parent = None
+        sequence = 1
+        physical_generation = 1
+        observed_parent_record = None
+        head_observation = "absent"
+    else:
+        if parent_record is None:
+            existing_publication = report.get("publication")
+            if isinstance(existing_publication, dict):
+                candidate_parent = existing_publication.get("observed_parent_record")
+                if isinstance(candidate_parent, dict):
+                    parent_record = candidate_parent
+        if not isinstance(parent_record, dict):
+            fail(
+                "materialization.store-failure",
+                "non-genesis publication lacks its observed parent record",
+            )
+        if (
+            expected_parent is None
+            or parent_record.get("publication_id") != expected_parent
+            or parent_record.get("series_id") != request["publication"]["series_id"]
+            or parent_record.get("state") != "committed"
+            or parent_record.get("corrupt") is not False
+            or parent_record.get("publication_id") != _publication_record_identity(parent_record)
+        ):
+            fail(
+                "materialization.store-failure",
+                "observed parent record is not the exact committed series head",
+            )
+        parent = expected_parent
+        sequence = parent_record["sequence"] + 1
+        physical_generation = parent_record["physical_generation"] + 1
+        observed_parent_record = copy.deepcopy(parent_record)
+        head_observation = "present"
     record = {
         "publication_id": "pending",
         "series_id": request["publication"]["series_id"],
         "snapshot_id": snapshot_id,
         "sequence": sequence,
-        "physical_generation": 1,
+        "physical_generation": physical_generation,
         "parent_publication": parent,
         "state": "committed",
         "corrupt": False,
@@ -13039,8 +13080,8 @@ def bind_committed_verified_publication(
         "genesis": request["publication"]["genesis"],
         "expected_parent_publication": parent,
         "observed_parent_publication": parent,
-        "observed_parent_record": None,
-        "head_observation": "absent",
+        "observed_parent_record": observed_parent_record,
+        "head_observation": head_observation,
         "publication_attempted": True,
         "outcome": "committed_verified",
         "partial_policy": "forbid",
@@ -13301,6 +13342,33 @@ def sample_report(
     }
     provenance["edge_set_digest"] = "pending"
     exact_request_bytes = canonical_json(request) if request_bytes is None else request_bytes
+    incremental_execution = {
+        "schema": "cxxlens.ng-g5-production-execution-census.v1",
+        "planned_provider_executions": task_count,
+        "planned_provider_task_executions": task_count,
+        "actual_provider_executions": task_count,
+        "actual_recomputed_partition_count": task_count,
+        "warm_zero": False,
+        "executed_partition_ids": [
+            f"partition:fixture:{index}" for index in range(task_count)
+        ],
+        "executed_provider_task_ids": [
+            result["provider_task_id"] for result in task_results
+        ],
+        "executed_provider_execution_ids": [
+            result["provider_execution_id"] for result in task_results
+        ],
+        "executed_artifact_digests": [
+            "materialization.incremental-sealed-artifact:sha256:"
+            + f"{index + 1:064x}"
+            for index in range(task_count)
+        ],
+        "executed_task_partition_set_digests": [
+            "materialization.incremental-task-partition-set:sha256:"
+            + f"{index + 1:064x}"
+            for index in range(task_count)
+        ],
+    }
     report = {
         "schema": "cxxlens.clang22-materialization-report.v2",
         "report_version": MATERIALIZATION_VERSION,
@@ -13459,6 +13527,7 @@ def sample_report(
             "reopen_attempt": None,
             "failure": None,
         },
+        "incremental_execution": incremental_execution,
         "authority_digests": copy.deepcopy(authority_bindings(root)),
         "error": None,
     }
@@ -14864,7 +14933,11 @@ def validate_report(
     outcome = publication["outcome"]
     if outcome == "committed_verified":
         expected = {"store": expected_store}
-        bind_committed_verified_publication(request, expected)
+        bind_committed_verified_publication(
+            request,
+            expected,
+            parent_record=publication["observed_parent_record"],
+        )
         validate_prior_artifact_persistence_status(publication)
         if publication["backend"] == "sqlite":
             # The rooted-VFS observation is operational evidence captured from the
@@ -16178,7 +16251,7 @@ def validate_v2_1_admission_authority_text(
                 "request 2.1.0 shape は不変",
                 "13/19-file occurrence inventory",
                 "`task_sandbox_requirements maxItems: 4096`",
-                "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520",
+                "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96",
                 "operation-authentic kind×operation matrix",
                 "全 mismatched pair は no-response",
                 "root member の missing/extra",
@@ -16225,7 +16298,7 @@ def validate_v2_1_admission_authority_text(
                 "request 2.1.0 shape は不変",
                 "13/19-file occurrence inventory",
                 "sandbox array bound",
-                "sha256:0a285fdb1a45c3e98a42813aba1b3e74271d437071730c7f89f79af36f323520",
+                "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96",
                 "operation-authentic kind×operation matrix",
                 "全 mismatched pair は no-response",
                 "root member missing/extra",

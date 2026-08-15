@@ -11,11 +11,13 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [contract, decision_issue, implementation_issue, binding]
+    required: [contract, decision_issue, implementation_issue, digest_grammar_adr, digest_grammar_issue, binding]
     properties:
       contract: {const: schemas/cxxlens_ng_provider_ng1_hardening.yaml}
       decision_issue: {const: '#233'}
       implementation_issue: {const: '#183'}
+      digest_grammar_adr: {const: docs/design/adr/0100-ng1-resume-provider-digest-grammar.md}
+      digest_grammar_issue: {const: '#243'}
       binding:
         type: object
         additionalProperties: false
@@ -30,8 +32,8 @@ properties:
           hardening_contract_digest: {type: 'null'}
   vectors:
     type: array
-    minItems: 13
-    maxItems: 13
+    minItems: 16
+    maxItems: 16
     uniqueItems: true
     items:
       type: object

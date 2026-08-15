@@ -445,6 +445,36 @@ class NgReleaseContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ReleaseContractError, "static/shared matrix"):
             validate_package_qualification(bundle, ROOT)
 
+    def test_shared_library_install_rules_cover_windows_runtime_and_import_library(
+        self,
+    ) -> None:
+        cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        for target in (
+            "cxxlens_base",
+            "cxxlens_provider_sdk",
+            "cxxlens_clang22_provider_sdk",
+        ):
+            with self.subTest(target=target):
+                start = cmake.index(f"install(\n  TARGETS {target}")
+                next_install = cmake.find("\ninstall(", start + 1)
+                block = cmake[start:] if next_install < 0 else cmake[start:next_install]
+                self.assertIn(
+                    'ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"',
+                    block,
+                )
+                self.assertIn(
+                    'RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"',
+                    block,
+                )
+
+    def test_msvc_exact_adapter_uses_msvc_no_rtti_option(self) -> None:
+        cmake = (
+            ROOT / "cmake" / "CxxlensClangTargets.cmake"
+        ).read_text(encoding="utf-8")
+        self.assertIn("if(MSVC)", cmake)
+        self.assertIn("target_compile_options(${target} PRIVATE /GR-)", cmake)
+        self.assertIn("target_compile_options(${target} PRIVATE -fno-rtti)", cmake)
+
     def test_doctor_request_without_environment_is_schema_rejected(self) -> None:
         document = request(SNAPSHOT_AXES, context="snapshot-open")
         document["operation"] = "doctor"
