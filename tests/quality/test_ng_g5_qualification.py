@@ -120,6 +120,16 @@ class NgG5QualificationTests(unittest.TestCase):
         ):
             g5.validate_production_coordinator_evidence(ROOT, missing)
 
+    def test_production_evidence_requires_artifact_pair(self) -> None:
+        evidence = self._forged_production_evidence()
+        with mock.patch.object(g5, "git_state", return_value=evidence["git"]):
+            with self._temporary_evidence(evidence) as path:
+                with self.assertRaisesRegex(
+                    g5.G5QualificationError,
+                    "production binary and production report inputs are required",
+                ):
+                    g5.validate_production_coordinator_evidence(ROOT, path)
+
     def test_forged_production_evidence_with_revision_drift_is_rejected(self) -> None:
         evidence = self._forged_production_evidence()
         evidence["git"]["revision"] = "0" * 40

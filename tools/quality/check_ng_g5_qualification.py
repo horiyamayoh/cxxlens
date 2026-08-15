@@ -135,8 +135,11 @@ def validate_production_coordinator_evidence(
             f"{evidence_git['revision']} != {expected_revision}"
         )
 
-    if (production_binary is None) != (production_report is None):
-        fail("production binary and production report inputs must be supplied together")
+    if production_binary is None or production_report is None:
+        fail(
+            "production binary and production report inputs are required when "
+            "production-coordinator evidence is supplied"
+        )
     if production_binary is not None and production_report is not None:
         if (
             production_binary.is_symlink()
@@ -454,10 +457,16 @@ def git_output(root: pathlib.Path, *arguments: str) -> str:
 
 
 def git_state(root: pathlib.Path) -> dict[str, Any]:
+    branch = git_output(root, "branch", "--show-current")
+    # GitHub Actions checks out the PR merge ref detached.  Preserve a schema-valid,
+    # explicit state for that mode so binding failures report the actual SHA/tree
+    # mismatch instead of failing earlier on an empty branch field.
+    if not branch:
+        branch = "detached"
     return {
         "revision": git_output(root, "rev-parse", "HEAD"),
         "tree": git_output(root, "rev-parse", "HEAD^{tree}"),
-        "branch": git_output(root, "branch", "--show-current"),
+        "branch": branch,
         "clean": git_output(root, "status", "--porcelain=v1") == "",
     }
 
