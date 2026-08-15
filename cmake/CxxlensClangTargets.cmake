@@ -304,6 +304,12 @@ function(cxxlens_configure_clang22 target)
           "Exact Clang 22 shared boundary requires the packaged clang-cpp target"
       )
     endif()
+    if(NOT TARGET LLVM)
+      message(
+        FATAL_ERROR
+          "Exact Clang 22 shared boundary requires the packaged LLVM shared target"
+      )
+    endif()
     get_target_property(_cxxlens_clang_cpp_type clang-cpp TYPE)
     if(NOT _cxxlens_clang_cpp_type STREQUAL "SHARED_LIBRARY")
       message(
@@ -311,7 +317,17 @@ function(cxxlens_configure_clang22 target)
           "Exact Clang 22 shared boundary requires clang-cpp to be a shared library target"
       )
     endif()
-    target_link_libraries(${target} PRIVATE clang-cpp)
+    get_target_property(_cxxlens_llvm_dylib_type LLVM TYPE)
+    if(NOT _cxxlens_llvm_dylib_type STREQUAL "SHARED_LIBRARY")
+      message(
+        FATAL_ERROR
+          "Exact Clang 22 shared boundary requires LLVM to be a shared library target"
+      )
+    endif()
+    # Adapter objects also call inline LLVM helpers whose out-of-line symbols
+    # live in libLLVM.  Link both DSOs explicitly: GNU ld does not promote a
+    # transitive DT_NEEDED entry from clang-cpp to satisfy direct references.
+    target_link_libraries(${target} PRIVATE clang-cpp LLVM)
     if(CXXLENS_ENABLE_ASAN)
       message(
         STATUS
