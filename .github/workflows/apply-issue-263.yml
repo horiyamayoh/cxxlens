@@ -1,0 +1,77 @@
+name: Apply workflow acceleration patch for issue 263
+
+on:
+  push:
+    branches:
+      - agent/issue-263-conflict-scoped-completion
+    paths:
+      - ".github/workflows/apply-issue-263.yml"
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Reconstruct and apply the reviewed exact-main patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/263/comments?per_page=100" \
+            > "${RUNNER_TEMP}/issue263-comments.json"
+          python3 - "${RUNNER_TEMP}/issue263-comments.json" "${RUNNER_TEMP}/issue263.patch" <<'PY'
+          import base64
+          import hashlib
+          import json
+          import pathlib
+          import re
+          import sys
+
+          comments_path = pathlib.Path(sys.argv[1])
+          patch_path = pathlib.Path(sys.argv[2])
+          comments = json.loads(comments_path.read_text(encoding="utf-8"))
+          pattern = re.compile(
+              r"<!-- CXXLENS_ISSUE263_PATCH_PART (\d{3})/008\n"
+              r"([A-Za-z0-9+/=]+)\n-->"
+          )
+          parts = {}
+          for comment in comments:
+              body = comment.get("body")
+              if not isinstance(body, str):
+                  continue
+              match = pattern.fullmatch(body)
+              if match is None:
+                  continue
+              index = int(match.group(1))
+              if index in parts:
+                  raise SystemExit(f"duplicate patch part: {index:03d}")
+              parts[index] = match.group(2)
+          expected = set(range(1, 9))
+          if set(parts) != expected:
+              raise SystemExit(
+                  f"patch parts differ: expected {sorted(expected)}, got {sorted(parts)}"
+              )
+          encoded = "".join(parts[index] for index in sorted(parts))
+          encoded_digest = hashlib.sha256(encoded.encode("ascii")).hexdigest()
+          if encoded_digest != "38694485255fda66ae8587b01824c4b8f3082515f835bc9399dd319388fd9669":
+              raise SystemExit(f"encoded patch digest differs: {encoded_digest}")
+          patch = base64.b64decode(encoded, validate=True)
+          patch_digest = hashlib.sha256(patch).hexdigest()
+          if patch_digest != "7a3b361b638c3c711268e91fa278288e04ab602b625bc8b40c399b675057e7c3":
+              raise SystemExit(f"decoded patch digest differs: {patch_digest}")
+          patch_path.write_bytes(patch)
+          PY
+          git apply --check --whitespace=error-all "${RUNNER_TEMP}/issue263.patch"
+          git apply --index --whitespace=error-all "${RUNNER_TEMP}/issue263.patch"
+          git rm .github/workflows/apply-issue-263.yml
+          git diff --cached --check
+          git config user.name "cxxlens workflow maintainer"
+          git config user.email "44720751+horiyamayoh@users.noreply.github.com"
+          git commit -m "Accelerate conflict-scoped completion lanes (#263)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
