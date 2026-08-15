@@ -534,9 +534,7 @@ namespace cxxlens::sdk::provider::detail
 			{
 				if (descriptor_ < 0 || cleaned_)
 					return unexpected(port_error("read", "terminal-port"));
-				struct stat metadata
-				{
-				};
+				struct stat metadata{};
 				if (::fstat(descriptor_, &metadata) != 0 || metadata.st_size < 0)
 					return unexpected(port_error("read", "stat"));
 				const auto size = static_cast<std::uint64_t>(metadata.st_size);
