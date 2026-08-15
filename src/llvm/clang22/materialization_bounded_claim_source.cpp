@@ -471,10 +471,15 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (request.tasks.empty())
 			return sdk::unexpected(source_error("request", "empty-task-set"));
+		if (request.tasks.size() > std::numeric_limits<std::uint64_t>::max())
+			return sdk::unexpected(source_error("request", "task-count-overflow"));
 		auto request_id = materialization_incremental_request_id(request);
 		if (!request_id)
 			return sdk::unexpected(std::move(request_id.error()));
-		return materialization_bounded_claim_source{std::move(*request_id), request.engine};
+		return materialization_bounded_claim_source{
+			std::move(*request_id),
+			request.engine,
+			static_cast<std::uint64_t>(request.tasks.size())};
 	}
 
 	sdk::result<materialization_bounded_claim_source> materialization_bounded_claim_source::begin(
@@ -483,7 +488,9 @@ namespace cxxlens::detail::clang22::materialization
 		if (authority.task_count() == 0U || authority.engine() == nullptr)
 			return sdk::unexpected(source_error("request", "empty-or-unbound"));
 		return materialization_bounded_claim_source{
-			std::string{authority.materialization_request_id()}, *authority.engine()};
+			std::string{authority.materialization_request_id()},
+			*authority.engine(),
+			authority.task_count()};
 	}
 
 	sdk::result<void>
@@ -491,6 +498,11 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (sealed_ || failed_ || engine_ == nullptr)
 			return sdk::unexpected(source_error("lifecycle", "sealed-or-empty"));
+		if (consumed_task_count_ >= expected_task_count_)
+		{
+			failed_ = true;
+			return sdk::unexpected(source_error("lifecycle", "task-count"));
+		}
 		if (task.partitions.empty())
 		{
 			failed_ = true;
@@ -640,6 +652,9 @@ namespace cxxlens::detail::clang22::materialization
 					++found->second.appended_claim_count;
 				}
 			}
+			if (consumed_task_count_ == std::numeric_limits<std::uint64_t>::max())
+				return sdk::unexpected(source_error("lifecycle", "task-count-overflow"));
+			++consumed_task_count_;
 			completed = true;
 			return {};
 		}
@@ -654,6 +669,11 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (sealed_ || failed_ || partitions_.empty())
 			return sdk::unexpected(source_error("lifecycle", "empty-or-already-sealed"));
+		if (consumed_task_count_ != expected_task_count_)
+		{
+			failed_ = true;
+			return sdk::unexpected(source_error("lifecycle", "incomplete-task-set"));
+		}
 		bool completed = false;
 		const consume_failure_guard failure_guard{failed_, completed};
 		for (auto& [partition_id, state] : partitions_)

@@ -3400,6 +3400,16 @@ namespace
 			return std::move(*task);
 		};
 
+		auto incomplete_source = materialization_bounded_claim_source::begin(request);
+		require(incomplete_source.has_value(), "incomplete bounded source begin failed");
+		auto incomplete_task = make_task();
+		require(incomplete_source->consume_task(std::move(incomplete_task)).has_value(),
+				"incomplete bounded source task adoption failed");
+		auto incomplete_finalized = std::move(*incomplete_source).finalize();
+		require(!incomplete_finalized && incomplete_finalized.error().field == "lifecycle" &&
+					incomplete_finalized.error().detail == "incomplete-task-set",
+				"bounded adoption finalized before consuming the declared task set");
+
 		auto source = materialization_bounded_claim_source::begin(request);
 		require(source.has_value(), "bounded adoption fail-closed source begin failed");
 		auto metadata_drift = make_task();
