@@ -42,31 +42,27 @@ jobs:
               1,
           )
 
-          task_anchor = '''    for task in request["tasks"]:
-              task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST
-          '''
-          task_replacement = '''    asan_address_space = os.environ.get(
-              "CXXLENS_TEST_ASAN_ADDRESS_SPACE_BYTES"
+          task_anchor = (
+              '    for task in request["tasks"]:\n'
+              '        task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST\n'
           )
-              if asan_address_space is not None and asan_address_space != str(
-                  ASAN_TEST_ADDRESS_SPACE_BYTES
-              ):
-                  fail(
-                      "CXXLENS_TEST_ASAN_ADDRESS_SPACE_BYTES differs from the closed "
-                      "ASan sandbox fixture budget"
-                  )
-              for task in request["tasks"]:
-                  task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST
-                  if asan_address_space is not None:
-                      task["budget"]["address_space_bytes"] = (
-                          ASAN_TEST_ADDRESS_SPACE_BYTES
-                      )
-          '''
-          # The literals above carry workflow indentation. Normalize the exact source
-          # text before replacing it.
-          task_anchor = "\n".join(line[4:] for line in task_anchor.splitlines()) + "\n"
           task_replacement = (
-              "\n".join(line[4:] for line in task_replacement.splitlines()) + "\n"
+              "    asan_address_space = os.environ.get(\n"
+              '        "CXXLENS_TEST_ASAN_ADDRESS_SPACE_BYTES"\n'
+              "    )\n"
+              "    if asan_address_space is not None and asan_address_space != str(\n"
+              "        ASAN_TEST_ADDRESS_SPACE_BYTES\n"
+              "    ):\n"
+              "        fail(\n"
+              '            "CXXLENS_TEST_ASAN_ADDRESS_SPACE_BYTES differs from the closed "\n'
+              '            "ASan sandbox fixture budget"\n'
+              "        )\n"
+              '    for task in request["tasks"]:\n'
+              '        task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST\n'
+              "        if asan_address_space is not None:\n"
+              '            task["budget"]["address_space_bytes"] = (\n'
+              "                ASAN_TEST_ADDRESS_SPACE_BYTES\n"
+              "            )\n"
           )
           if text.count(task_anchor) != 1:
               raise SystemExit("ASan fixture task anchor is not unique")
