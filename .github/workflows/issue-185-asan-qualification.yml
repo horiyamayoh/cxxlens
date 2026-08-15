@@ -10,7 +10,7 @@ permissions:
 
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: 2
-  CTEST_PARALLEL_LEVEL: 2
+  CTEST_PARALLEL_LEVEL: 1
 
 jobs:
   asan-ubsan:
@@ -18,6 +18,46 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Expose the private worker outcome in this probe build only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("tools/clang22/materialize_main.cpp")
+          text = path.read_text(encoding="utf-8")
+          old = '''\t\t\tif (!outcome || !outcome->succeeded() || !outcome->sealed || !outcome->runtime_receipt)
+\t\t\t\treturn sdk::unexpected(sdk::error{
+\t\t\t\t\t"materialization.worker-failure", task.provider_task_id, "execution"});
+'''
+          new = '''\t\t\tif (!outcome)
+\t\t\t{
+\t\t\t\tconst auto& runtime_error = outcome.error();
+\t\t\t\treturn sdk::unexpected(sdk::error{
+\t\t\t\t\t"materialization.worker-failure",
+\t\t\t\t\ttask.provider_task_id,
+\t\t\t\t\t"runtime-error:" + runtime_error.code + ":" + runtime_error.field + ":" +
+\t\t\t\t\t\truntime_error.detail});
+\t\t\t}
+\t\t\tif (!outcome->succeeded() || !outcome->sealed || !outcome->runtime_receipt)
+\t\t\t{
+\t\t\t\tstd::string detail = "outcome:exit=" + std::to_string(outcome->exit_code) +
+\t\t\t\t\t":signal=" + std::to_string(outcome->termination_signal) +
+\t\t\t\t\t":terminal=" + outcome->terminal +
+\t\t\t\t\t":frames=" + std::to_string(outcome->frames.size()) +
+\t\t\t\t\t":sealed=" + (outcome->sealed ? "1" : "0") +
+\t\t\t\t\t":receipt=" + (outcome->runtime_receipt ? "1" : "0");
+\t\t\t\tif (outcome->sealing_error)
+\t\t\t\t\tdetail += ":sealing-error:" + outcome->sealing_error->code + ":" +
+\t\t\t\t\t\toutcome->sealing_error->field + ":" + outcome->sealing_error->detail;
+\t\t\t\treturn sdk::unexpected(sdk::error{
+\t\t\t\t\t"materialization.worker-failure", task.provider_task_id, std::move(detail)});
+\t\t\t}
+'''
+          if text.count(old) != 1:
+              raise SystemExit("worker outcome compression anchor is not unique")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          git diff --check
       - name: Install exact Clang 22 development toolchain and Ninja
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
@@ -36,34 +76,33 @@ jobs:
           export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
           cmake --preset asan-ubsan
           cmake --build --preset asan-ubsan
-      - name: Qualify the three former failing paths first
+      - name: Show the registered materializer environment
+        run: |
+          ctest --test-dir build/asan-ubsan --show-only=json-v1 > build/asan-ubsan/ctest-tests.json
+          python3 - <<'PY'
+          import json
+          with open("build/asan-ubsan/ctest-tests.json", encoding="utf-8") as stream:
+              tests = json.load(stream)["tests"]
+          match = next(
+              test for test in tests
+              if test["name"] == "install.clang22-materializer-success"
+          )
+          print(json.dumps(match, indent=2, sort_keys=True))
+          PY
+      - name: Run the installed materializer with private outcome diagnostics
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1
           UBSAN_OPTIONS: halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1
         run: |
           export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
           ctest --preset asan-ubsan --parallel 1 \
-            --tests-regex '^(sdk\.example-clang22-native|install\.clang22-materializer-success|install\.examples-consumer)$' \
-            --output-on-failure
-      - name: Run the complete ASan and UBSan CTest contract
-        env:
-          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1
-          UBSAN_OPTIONS: halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1
-        run: |
-          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
-          ctest --preset asan-ubsan --parallel "${CTEST_PARALLEL_LEVEL}" \
-            --label-exclude quality --output-on-failure --output-junit ctest.xml
-      - name: Prove first-party and installed-consumer sanitizer coverage
-        run: |
-          python3 tools/quality/check_sanitizer_coverage.py check --root . \
-            --build-dir build/asan-ubsan --expected address,undefined \
-            --require-install-consumers 2>&1 | tee build/asan-ubsan/sanitizer-coverage.log
+            --tests-regex '^install\.clang22-materializer-success$' \
+            --output-on-failure --verbose
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         if: always()
         with:
-          name: issue-185-asan-qualification-${{ github.sha }}
+          name: issue-185-asan-diagnostic-${{ github.sha }}
           path: |
-            build/asan-ubsan/ctest.xml
-            build/asan-ubsan/sanitizer-coverage.log
+            build/asan-ubsan/ctest-tests.json
             build/asan-ubsan/Testing/Temporary/LastTest.log
           if-no-files-found: warn
