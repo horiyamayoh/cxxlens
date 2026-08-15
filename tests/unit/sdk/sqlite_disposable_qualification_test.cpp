@@ -712,6 +712,13 @@ namespace
 		rejected.wal = sqlite_disposable_wal_state::absent;
 		rejected.journal = sqlite_disposable_journal_state::invalidated_with_exact_post;
 		require_rejected(rejected, "invalidated journal with WAL header");
+		rejected = fz_pre;
+		rejected.main_header = static_cast<sqlite_disposable_main_header_state>(255U);
+		require_rejected(rejected, "unknown main header with zero-byte WAL");
+		rejected = family_observation(static_cast<sqlite_disposable_main_header_state>(255U),
+									  sqlite_disposable_wal_state::absent,
+									  sqlite_disposable_journal_state::hot_with_exact_preimages);
+		require_rejected(rejected, "unknown main header with hot journal");
 		rejected = f0;
 		rejected.main_header = static_cast<sqlite_disposable_main_header_state>(255U);
 		require_rejected(rejected, "unknown main header state");

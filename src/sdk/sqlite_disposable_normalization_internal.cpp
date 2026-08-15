@@ -37,6 +37,9 @@ namespace cxxlens::detail::sqlite_qualification
 		if (observation.journal == sqlite_disposable_journal_state::invalid_or_unknown ||
 			observation.wal == sqlite_disposable_wal_state::invalid_or_unknown)
 			return cxxlens::sdk::unexpected(family_error("unrecognized-preauthority-state"));
+		if (observation.main_header != sqlite_disposable_main_header_state::wal_empty &&
+			observation.main_header != sqlite_disposable_main_header_state::rollback_empty)
+			return cxxlens::sdk::unexpected(family_error("unrecognized-preauthority-state"));
 
 		if (no_journal_or_wal(observation))
 		{
