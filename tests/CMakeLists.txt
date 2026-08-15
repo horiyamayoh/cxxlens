@@ -496,6 +496,22 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;provider;ng1;transport;deterministic-cbor;fail-closed")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-recovery-adapter
+                            unit/sdk/provider_ng1_recovery_adapter_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-recovery-adapter
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-recovery-adapter
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-recovery-adapter
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-ng1-recovery-adapter
+         COMMAND cxxlens-unit-sdk-provider-ng1-recovery-adapter)
+set_tests_properties(
+  unit.sdk-provider-ng1-recovery-adapter
+  PROPERTIES LABELS "unit;sdk;provider;ng1;recovery;resume;fail-closed")
+
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)
 target_link_libraries(cxxlens-clang22-provider-normalizer
