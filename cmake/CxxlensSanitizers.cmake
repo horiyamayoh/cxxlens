@@ -77,7 +77,8 @@ function(cxxlens_configure_sanitizer_tests)
       "ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1"
       # ASan reserves a multi-terabyte virtual shadow before main(). Keep the
       # installed sandbox test finite and truthful while leaving the normal
-      # production fixture's 1 GiB address-space request unchanged.
+      # production fixture's 1 GiB address-space request unchanged. 64 TiB is
+      # finite and safely exceeds the x86-64 ASan shadow reservation.
       "CXXLENS_TEST_ASAN_ADDRESS_SPACE_BYTES=70368744177664")
   endif()
   if(CXXLENS_ENABLE_UBSAN)
