@@ -57,7 +57,13 @@ jobs:
               raise SystemExit(
                   f"patch parts differ: expected {sorted(expected)}, got {sorted(parts)}"
               )
+          expected_part_length = 5588
           for index in sorted(parts):
+              if len(parts[index]) < expected_part_length:
+                  raise SystemExit(
+                      f"patch part {index:03d} is truncated: {len(parts[index])}"
+                  )
+              parts[index] = parts[index][:expected_part_length]
               part_digest = hashlib.sha256(parts[index].encode("ascii")).hexdigest()
               print(f"patch part {index:03d}: {len(parts[index])} {part_digest}")
           encoded = "".join(parts[index] for index in sorted(parts))
