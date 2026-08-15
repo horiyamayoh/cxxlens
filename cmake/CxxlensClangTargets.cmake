@@ -282,25 +282,41 @@ function(cxxlens_configure_clang22 target)
   # The exact LLVM 22 distribution exports both non-PIC component archives and
   # a shared clang-cpp DSO.  A shared public SDK cannot embed those archives:
   # the transitive LLVMSupport closure includes a non-PIC zstd archive and the
-  # link must fail closed instead of producing a text-relocation DSO.  Keep the
-  # worker's private static closure explicit, while making the installed public
-  # shared SDK depend on the exact packaged clang-cpp DSO.
-  if(CXXLENS_BUILD_SHARED AND UNIX
-     AND target STREQUAL "cxxlens_clang22_provider_sdk")
+  # link must fail closed instead of producing a text-relocation DSO.
+  #
+  # The same shared boundary is mandatory when cxxlens-owned adapter objects
+  # are ASan-instrumented but the exact packaged LLVM/Clang archives are not.
+  # LLVM's inline BumpPtrAllocator poison/unpoison behavior is selected per
+  # translation unit.  Mixing the two variants in one ELF image can poison a
+  # slab in one definition and omit the matching unpoison in another.
+  set(_cxxlens_clang22_use_shared_boundary FALSE)
+  if(UNIX AND CXXLENS_ENABLE_ASAN)
+    set(_cxxlens_clang22_use_shared_boundary TRUE)
+  elseif(CXXLENS_BUILD_SHARED AND UNIX
+         AND target STREQUAL "cxxlens_clang22_provider_sdk")
+    set(_cxxlens_clang22_use_shared_boundary TRUE)
+  endif()
+
+  if(_cxxlens_clang22_use_shared_boundary)
     if(NOT TARGET clang-cpp)
       message(
         FATAL_ERROR
-          "Shared Clang 22 provider SDK requires the exact packaged clang-cpp shared target"
+          "Exact Clang 22 shared boundary requires the packaged clang-cpp target"
       )
     endif()
     get_target_property(_cxxlens_clang_cpp_type clang-cpp TYPE)
     if(NOT _cxxlens_clang_cpp_type STREQUAL "SHARED_LIBRARY")
       message(
         FATAL_ERROR
-          "Shared Clang 22 provider SDK requires clang-cpp to be a shared library target"
+          "Exact Clang 22 shared boundary requires clang-cpp to be a shared library target"
       )
     endif()
     target_link_libraries(${target} PRIVATE clang-cpp)
+    if(CXXLENS_ENABLE_ASAN)
+      message(
+        STATUS
+          "Using exact shared clang-cpp boundary for ASan target ${target}")
+    endif()
   else()
     target_link_libraries(${target} PRIVATE ${_cxxlens_clang22_components})
   endif()
