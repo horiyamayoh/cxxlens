@@ -57,6 +57,9 @@ jobs:
               raise SystemExit(
                   f"patch parts differ: expected {sorted(expected)}, got {sorted(parts)}"
               )
+          for index in sorted(parts):
+              part_digest = hashlib.sha256(parts[index].encode("ascii")).hexdigest()
+              print(f"patch part {index:03d}: {len(parts[index])} {part_digest}")
           encoded = "".join(parts[index] for index in sorted(parts))
           encoded_digest = hashlib.sha256(encoded.encode("ascii")).hexdigest()
           if encoded_digest != "38694485255fda66ae8587b01824c4b8f3082515f835bc9399dd319388fd9669":
