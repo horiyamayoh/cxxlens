@@ -130,6 +130,42 @@ class NgG5QualificationTests(unittest.TestCase):
                 ):
                     g5.validate_production_coordinator_evidence(ROOT, path)
 
+    def test_production_report_artifacts_are_cross_bound(self) -> None:
+        evidence = self._forged_production_evidence()
+        digest = evidence["producer"]["binary_digest"]
+        report = {
+            "source": {
+                "revision": evidence["git"]["revision"],
+                "tree": evidence["git"]["tree"],
+            },
+            "installation": {
+                "measured": {
+                    "source_revision": evidence["git"]["revision"],
+                    "source_tree": evidence["git"]["tree"],
+                    "tool": {
+                        "path": "bin/cxxlens-clang22-materialize",
+                        "digest": digest,
+                    },
+                }
+            },
+        }
+        g5.validate_production_report_bindings(report, evidence["git"], digest)
+
+        report["installation"]["measured"]["tool"]["digest"] = "sha256:" + "1" * 64
+        with self.assertRaisesRegex(
+            g5.G5QualificationError,
+            "tool digest does not match the supplied production binary",
+        ):
+            g5.validate_production_report_bindings(report, evidence["git"], digest)
+
+        report["installation"]["measured"]["tool"]["digest"] = digest
+        report["source"]["revision"] = "f" * 40
+        with self.assertRaisesRegex(
+            g5.G5QualificationError,
+            "source revision does not match evidence Git",
+        ):
+            g5.validate_production_report_bindings(report, evidence["git"], digest)
+
     def test_forged_production_evidence_with_revision_drift_is_rejected(self) -> None:
         evidence = self._forged_production_evidence()
         evidence["git"]["revision"] = "0" * 40

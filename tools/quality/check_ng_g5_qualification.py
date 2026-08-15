@@ -101,6 +101,35 @@ def validate_evidence_policy(manifest: dict[str, Any]) -> None:
         fail("G5 production-coordinator evidence ownership policy differs")
 
 
+def validate_production_report_bindings(
+    report: dict[str, Any],
+    evidence_git: dict[str, Any],
+    production_binary_digest: str,
+) -> None:
+    """Bind report-owned installation facts to the supplied evidence artifacts."""
+
+    source = report.get("source")
+    if not isinstance(source, dict) or source.get("revision") != evidence_git["revision"]:
+        fail("production coordinator report source revision does not match evidence Git")
+    if source.get("tree") != evidence_git["tree"]:
+        fail("production coordinator report source tree does not match evidence Git")
+
+    measured = report.get("installation", {}).get("measured")
+    if not isinstance(measured, dict):
+        fail("production coordinator report lacks measured installation binding")
+    if measured.get("source_revision") != evidence_git["revision"]:
+        fail("production coordinator report installation revision does not match evidence Git")
+    if measured.get("source_tree") != evidence_git["tree"]:
+        fail("production coordinator report installation tree does not match evidence Git")
+
+    tool = measured.get("tool")
+    if not isinstance(tool, dict) or tool.get("digest") != production_binary_digest:
+        fail(
+            "production coordinator report tool digest does not match the supplied "
+            "production binary"
+        )
+
+
 def validate_production_coordinator_evidence(
     root: pathlib.Path,
     evidence_path: pathlib.Path | None,
@@ -148,7 +177,8 @@ def validate_production_coordinator_evidence(
             or not production_report.is_file()
         ):
             fail("production binary/report inputs must be regular files")
-        if sha256(production_binary) != evidence["producer"]["binary_digest"]:
+        production_binary_digest = sha256(production_binary)
+        if production_binary_digest != evidence["producer"]["binary_digest"]:
             fail("production coordinator binary digest does not match the evidence")
         if sha256(production_report) != evidence["producer"]["report_digest"]:
             fail("production coordinator report digest does not match the evidence")
@@ -160,6 +190,11 @@ def validate_production_coordinator_evidence(
         )
         if report.get("response_kind") != "detailed" or report.get("result") != "passed":
             fail("production coordinator report is not a detailed passed response")
+        validate_production_report_bindings(
+            report,
+            evidence["git"],
+            production_binary_digest,
+        )
         report_census = report.get("incremental_execution")
         if not isinstance(report_census, dict):
             fail("production coordinator report lacks incremental execution census")
