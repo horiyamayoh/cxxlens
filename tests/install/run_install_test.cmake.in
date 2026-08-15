@@ -240,7 +240,8 @@ if(PHASE STREQUAL "clang22-materializer-success")
       "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/check_ng_clang22_install_matrix.py"
       --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --evidence-dir
       "${materialization_evidence_dir}" --output
-      "${materialization_evidence_dir}/configuration-evidence.json"
+      "${materialization_evidence_dir}/configuration-evidence.json" --prefix
+      "${install_prefix}"
       COMMAND_ERROR_IS_FATAL ANY)
   message(STATUS "installed Clang 22 evidence: ${materialization_evidence_dir}")
   return()

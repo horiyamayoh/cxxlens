@@ -15,6 +15,8 @@ import hashlib
 import json
 import os
 import pathlib
+import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -34,6 +36,7 @@ ASAN_SUBPROCESS_BUDGET = 1024
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
+MATERIALIZATION_DATABASE_FILENAME = "materialization.sqlite"
 EXECUTION_RECEIPT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml"
 )
@@ -242,6 +245,225 @@ def assert_raw_failure(
     return report
 
 
+def prepare_sqlite_baseline(
+    root: pathlib.Path,
+    materializer: pathlib.Path,
+    oracle: Any,
+    prefix: pathlib.Path,
+    evidence_dir: pathlib.Path | None,
+) -> tuple[pathlib.Path, dict[str, Any], dict[str, Any]]:
+    """Create one real installed Store used as the corruption source.
+
+    The negative matrix must exercise the installed materializer against an
+    authenticated Store artifact.  It therefore starts with a genuine
+    one-task genesis publication, then copies that database into disposable
+    case directories before applying one bounded SQLite corruption vector.
+    Nothing under the installed prefix is modified.
+    """
+
+    request = installed_request(root, prefix, oracle)
+    request["publication"]["genesis"] = True
+    request["publication"]["expected_parent_publication"] = None
+    request["publication"]["sqlite_path"] = MATERIALIZATION_DATABASE_FILENAME
+    oracle.bind_request_identity(request)
+    oracle.validate_request(root, request)
+    request_payload = oracle.canonical_json(request)
+
+    work = pathlib.Path(
+        tempfile.mkdtemp(prefix="clang22-materializer-negative-baseline-")
+    )
+    completed = run_materializer(materializer, request_payload, work)
+    if completed.returncode != 0 or completed.stderr:
+        fail(
+            "installed baseline Store publication failed: "
+            f"returncode={completed.returncode}, stdout={completed.stdout[:2000]!r}, "
+            f"stderr={completed.stderr[:2000]!r}"
+        )
+    try:
+        report: dict[str, Any] = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        fail(f"installed baseline Store publication did not emit JSON: {error}")
+    oracle.validate_schema(
+        report,
+        oracle.load(root / oracle.REPORT_SCHEMA),
+        "installed baseline Store publication report",
+        error_code="materialization.report-invalid",
+    )
+    if (
+        report["response_kind"] != "detailed"
+        or report["result"] != "passed"
+        or report["process_exit_status"] != 0
+        or report["raw_input_observation"]
+        != oracle.raw_input_observation(request_payload)
+        or report["request"] != oracle._request_binding(request)
+        or report["publication"]["outcome"] != "committed_verified"
+        or report["publication"]["committed_transaction_count"] != 1
+    ):
+        fail(
+            "installed baseline Store publication was not a committed verified "
+            "genesis"
+        )
+    database = work / MATERIALIZATION_DATABASE_FILENAME
+    if not database.is_file():
+        fail(f"installed baseline Store did not create {database}")
+    if evidence_dir is not None:
+        receipt_bytes = make_execution_receipt(
+            root, oracle, completed, "store-head-corruption-baseline"
+        )
+        write_negative_evidence(
+            evidence_dir,
+            "store-head-corruption-baseline",
+            request_payload,
+            completed,
+            receipt_bytes,
+        )
+    return database, request, report
+
+
+def corrupt_sqlite_payload(
+    database: pathlib.Path,
+    mode: str,
+) -> str:
+    """Apply one deterministic, bounded corruption to a disposable Store copy."""
+
+    connection = sqlite3.connect(database)
+    try:
+        row = connection.execute(
+            "SELECT publication_id, generation, chunk_ordinal, payload "
+            "FROM cxxlens_ng_payload_chunk "
+            "ORDER BY publication_id, generation, chunk_ordinal LIMIT 1"
+        ).fetchone()
+        if row is None:
+            fail(f"{mode} fixture has no persisted payload chunk")
+        publication_id, generation, chunk_ordinal, payload = row
+        if not isinstance(publication_id, str) or not isinstance(payload, bytes):
+            fail(f"{mode} fixture payload authority is not typed")
+        if mode == "payload-byte-flip":
+            if not payload:
+                fail("payload-byte-flip fixture has an empty payload")
+            corrupted = bytearray(payload)
+            corrupted[0] ^= 1
+            connection.execute(
+                "UPDATE cxxlens_ng_payload_chunk SET payload=? "
+                "WHERE publication_id=? AND generation=? AND chunk_ordinal=?",
+                (
+                    sqlite3.Binary(corrupted),
+                    publication_id,
+                    generation,
+                    chunk_ordinal,
+                ),
+            )
+        elif mode == "payload-checksum":
+            connection.execute(
+                "UPDATE cxxlens_ng_publication SET payload_checksum=? "
+                "WHERE publication_id=?",
+                ("sha256:" + "0" * 64, publication_id),
+            )
+        else:
+            fail(f"unknown SQLite corruption mode: {mode}")
+        connection.commit()
+
+        remaining = connection.execute(
+            "SELECT publication_id FROM cxxlens_ng_publication "
+            "ORDER BY publication_id LIMIT 2"
+        ).fetchall()
+        if len(remaining) != 1 or remaining[0][0] != publication_id:
+            fail(f"{mode} fixture changed the publication census")
+    finally:
+        connection.close()
+    if any(
+        database.with_name(database.name + suffix).exists()
+        for suffix in ("-wal", "-shm")
+    ):
+        fail(f"{mode} fixture left active SQLite sidecars after corruption")
+    return publication_id
+
+
+def assert_corrupt_head_failure(
+    root: pathlib.Path,
+    oracle: Any,
+    materializer: pathlib.Path,
+    baseline_database: pathlib.Path,
+    baseline_request: dict[str, Any],
+    mode: str,
+    evidence_dir: pathlib.Path | None,
+) -> None:
+    case_name = f"store-head-current-corrupt-{mode}"
+    with tempfile.TemporaryDirectory(
+        prefix=f"clang22-materializer-{case_name}-"
+    ) as directory:
+        work = pathlib.Path(directory)
+        baseline_entries = sorted(baseline_database.parent.iterdir())
+        if any(not entry.is_file() or entry.is_symlink() for entry in baseline_entries):
+            fail(f"{case_name} baseline Store directory contains an unexpected entry")
+        for entry in baseline_entries:
+            shutil.copy2(entry, work / entry.name)
+        database = work / MATERIALIZATION_DATABASE_FILENAME
+        if not database.is_file():
+            fail(f"{case_name} baseline Store copy lost the database")
+        publication_id = corrupt_sqlite_payload(database, mode)
+
+        request = json.loads(json.dumps(baseline_request))
+        request["publication"]["genesis"] = False
+        request["publication"]["expected_parent_publication"] = (
+            "publication:missing-parent"
+        )
+        request["publication"]["sqlite_path"] = MATERIALIZATION_DATABASE_FILENAME
+        oracle.bind_request_identity(request)
+        oracle.validate_request(root, request)
+        request_payload = oracle.canonical_json(request)
+        completed = run_materializer(materializer, request_payload, work)
+
+    expected_failure = {
+        "kind": "sdk_error",
+        "operation": "head_current",
+        "access_path": "current-selector",
+        "code": "store.current-corrupt",
+        "field": publication_id,
+        "detail": {
+            "kind": "opaque",
+            "byte_count": 0,
+            "diagnostic": "",
+            "digest": oracle.content_digest(b""),
+        },
+    }
+    report = assert_compact_response(
+        root,
+        oracle,
+        completed,
+        request_payload,
+        request,
+        expected_failure,
+    )
+    cause = report["effects"]["store_failure_cause"]
+    if (
+        report["binding"]["state"] != "request-bound"
+        or report["error"]["phase"] != "store-stage"
+        or report["error"]["code"] != "materialization.store-failure"
+        or report["effects"]["store_draft_state"] != "discarded"
+        or report["effects"]["head_observation"] != "sdk-error"
+        or report["effects"]["observed_head_publication"] is not None
+        or cause != expected_failure
+        or report["effects"]["publication_attempted"]
+        or report["effects"]["committed_transaction_count"] != 0
+        or report["effects"]["prior_history_retained"] is not True
+        or report["effects"]["task_attempt_count"] != 1
+        or report["effects"]["task_success_count"] != 1
+        or report["effects"]["worker_launch_attempt_count"] != 1
+        or report["effects"]["worker_launch_success_count"] != 1
+    ):
+        fail(f"{case_name} lost the authenticated non-not-found head failure")
+    receipt_bytes = make_execution_receipt(root, oracle, completed, case_name)
+    if evidence_dir is not None:
+        write_negative_evidence(
+            evidence_dir,
+            case_name,
+            request_payload,
+            completed,
+            receipt_bytes,
+        )
+
+
 def main() -> int:
     args = parse_args()
     root = args.root.resolve()
@@ -339,6 +561,30 @@ def main() -> int:
         or report["effects"]["committed_transaction_count"] != 0
     ):
         fail("fresh non-genesis Store failure lost the exact absent-head authority")
+
+    baseline_database, baseline_request, _baseline_report = prepare_sqlite_baseline(
+        root,
+        materializer,
+        oracle,
+        prefix,
+        negative_evidence_dir,
+    )
+    try:
+        # A public installed request has no fault-injection option.  These
+        # cases therefore use only disposable copies of a real committed Store
+        # and retain the exact SDK error observed by snapshot_store::current.
+        for corruption_mode in ("payload-byte-flip", "payload-checksum"):
+            assert_corrupt_head_failure(
+                root,
+                oracle,
+                materializer,
+                baseline_database,
+                baseline_request,
+                corruption_mode,
+                negative_evidence_dir,
+            )
+    finally:
+        shutil.rmtree(baseline_database.parent)
     return 0
 
 

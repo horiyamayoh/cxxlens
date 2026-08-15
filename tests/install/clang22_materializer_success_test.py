@@ -32,9 +32,17 @@ ASAN_SUBPROCESS_BUDGET = 1024
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
+OCCURRENCE_FILENAME = "occurrence-v1.json"
 REQUEST_FILENAME = "cxxlens-clang22-materialization-request.json"
 REPORT_FILENAME = "cxxlens-clang22-materialization-report.json"
 EXECUTION_RECEIPT_FILENAME = "cxxlens-clang22-materialization-execution-receipt.json"
+RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME = (
+    "cxxlens-clang22-materialization-raw-provider-evidence-v1.json"
+)
+RAW_PROVIDER_EVIDENCE_DIRECTORY = "raw-provider-transcripts"
+RAW_PROVIDER_EVIDENCE_SCHEMA = (
+    "cxxlens.clang22-materialization-raw-provider-evidence.v1"
+)
 CANONICAL_BASE64_VECTOR_SOURCES = (
     b"int main() { return 0; }\n",  # RFC 4648 two-padding spelling.
     b"int unit_1() { return 1; }\n/*x*/",  # RFC 4648 one-padding spelling.
@@ -80,13 +88,17 @@ def write_external_evidence(
     request_bytes: bytes,
     report_bytes: bytes,
     stderr_bytes: bytes,
+    raw_occurrences: dict[tuple[str, str, str], bytes],
+    occurrence_bytes: bytes,
 ) -> None:
     """Persist only externally observable bytes used by release qualification.
 
     The installed process remains the report authority: the report artifact is
     the exact stdout byte stream, and the receipt binds that byte stream.  This
     directory is intentionally outside the installed prefix so it cannot alter
-    the immutable install-artifact manifest.
+    the immutable install-artifact manifest. Raw provider stdout is captured by
+    an independent installed-worker invocation and is retained as diagnostic
+    evidence only; it is never copied into the public report.
     """
 
     destination = (evidence_dir / configuration / backend).resolve()
@@ -104,6 +116,31 @@ def write_external_evidence(
     receipt_path.write_bytes(receipt_bytes)
     (destination / REQUEST_FILENAME).write_bytes(request_bytes)
     (destination / REPORT_FILENAME).write_bytes(report_bytes)
+    (destination / OCCURRENCE_FILENAME).write_bytes(occurrence_bytes)
+    raw_directory = destination / RAW_PROVIDER_EVIDENCE_DIRECTORY
+    raw_directory.mkdir(parents=True, exist_ok=True)
+    task_keys = sorted(raw_occurrences)
+    manifest_entries = []
+    for ordinal, key in enumerate(task_keys):
+        raw = raw_occurrences[key]
+        relative_path = f"{RAW_PROVIDER_EVIDENCE_DIRECTORY}/task-{ordinal:04d}.bin"
+        (destination / relative_path).write_bytes(raw)
+        manifest_entries.append(
+            {
+                "task_execution_key": list(key),
+                "relative_path": relative_path,
+                "byte_count": len(raw),
+                "sha256": content_digest(raw),
+            }
+        )
+    (destination / RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME).write_bytes(
+        oracle_canonical_json(
+            {
+                "schema": RAW_PROVIDER_EVIDENCE_SCHEMA,
+                "entries": manifest_entries,
+            }
+        )
+    )
 
 
 def oracle_canonical_json(value: Any) -> bytes:
@@ -127,7 +164,13 @@ def main() -> int:
     if not occurrence_path.is_file():
         fail(f"installed occurrence manifest is missing: {occurrence_path}")
     occurrence_bytes = occurrence_path.read_bytes()
-    occurrence = json.loads(occurrence_bytes)
+    try:
+        occurrence = oracle.load_strict_json_bytes(
+            occurrence_bytes, "installed occurrence manifest"
+        )
+        oracle.validate_occurrence_manifest(args.root, occurrence)
+    except (json.JSONDecodeError, oracle.MaterializationError) as error:
+        fail(f"installed occurrence manifest is invalid: {error}")
     if occurrence["package_configuration"] not in {"static", "shared"}:
         fail("installed occurrence package configuration is not closed")
     files = occurrence["files"]
@@ -235,6 +278,12 @@ def main() -> int:
         oracle.load(args.root / oracle.REPORT_SCHEMA),
         "installed materializer positive report",
         error_code="materialization.report-invalid",
+    )
+    raw_occurrences = install_matrix.capture_installed_raw_provider_transcripts(
+        args.root, args.prefix, request, occurrence
+    )
+    install_matrix.validate_independent_raw_provider_transcripts(
+        args.root, request, report, raw_occurrences
     )
     if report["response_kind"] != "detailed" or report["result"] != "passed":
         fail("installed materializer positive path did not return detailed passed")
@@ -503,6 +552,8 @@ def main() -> int:
             request_bytes,
             completed.stdout,
             completed.stderr,
+            raw_occurrences,
+            occurrence_bytes,
         )
 
     return 0

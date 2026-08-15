@@ -60,8 +60,14 @@ response, phase, zero-effect ledger, and empty stderr. The optional
 `--evidence-dir` writes the exact stdin bytes, stdout report, stderr bytes, and
 contract execution receipt for each case; the receipt binds exit status, exact
 stdout byte count/digest, parsed response count, and stderr digest. A
-non-`store.current-not-found` `head_current` SDK error still requires an injected
-Store failure seam and is not claimed by this install test.
+non-`store.current-not-found` `head_current` matrix is also exercised through
+two disposable copies of a real one-task SQLite genesis Store: one flips a
+persisted payload byte and the other tampers with its payload checksum. The
+installed response must preserve `sdk-error`, `head_current`,
+`current-selector`, the exact publication ID, and the zero-publication effect
+ledger as `store.current-corrupt`. The DB and its source-private incremental
+sidecar remain outside the installed prefix, and no fault-injection seam or
+native/hosted qualification is implied.
 
 `check_ng_clang22_materialization_scale.py` is an independent checker. The report
 is intentionally marked `release_qualification: false` and `semantic_status:
