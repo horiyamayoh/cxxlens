@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "sdk/sqlite_default_forwarding_vfs_internal.hpp"
 #include "sdk/sqlite_source_shm_readonly_preflight_internal.hpp"
 
 namespace
@@ -119,6 +120,8 @@ namespace
 
 	void exercise_branch_local_capability_absence()
 	{
+		require(!sqlite_source_shm_native_ok_projection_production_activation_enabled(),
+				"native SQLITE_OK source-SHM projection remains disabled until qualification");
 		auto optional_port = make_sqlite_source_shm_readonly_preflight(
 			sqlite_default_observation_binding{}, sqlite_backend_opaque_identity{});
 		require(optional_port.has_value() && !*optional_port,

@@ -1647,6 +1647,40 @@ namespace
 					"missing=publication.prior_artifact_persistence") == std::string::npos,
 			"public success report did not admit an explicit unavailable prior-artifact status");
 	}
+
+	void final_response_spool_is_sealed_before_transport()
+	{
+		const std::string response{
+			R"({"error":null,"process_exit_status":0,"report_version":"2.1.0",)"
+			R"("response_kind":"detailed","result":"passed",)"
+			R"("schema":"cxxlens.clang22-materialization-report.v2"})"};
+		auto too_small =
+			stage_public_materialization_final_response(response, response.size() - 1U);
+		require(!too_small &&
+					too_small.error() ==
+						sdk::error{
+							"materialization.report-invalid", "report", "final-response-boundary"},
+				"final response spool accepted a limit-minus-one response");
+
+		auto staged = stage_public_materialization_final_response(response, response.size());
+		require(staged && (*staged)->sealed() && (*staged)->size_bytes() == response.size(),
+				"final response did not cross the sealed private-spool boundary");
+		const auto expected = std::vector<std::byte>{
+			std::as_bytes(std::span{response.data(), response.size()}).begin(),
+			std::as_bytes(std::span{response.data(), response.size()}).end()};
+		std::vector<std::byte> replay(expected.size());
+		auto read = (*staged)->read_at(0U, replay);
+		require(read && *read == replay.size() && replay == expected,
+				"final response spool changed the canonical response bytes");
+		auto digest = digest_materialization_spool(**staged);
+		require(digest &&
+					*digest == cxxlens::sdk::content_digest(std::span<const std::byte>{expected}),
+				"final response spool lost its sealed-byte digest binding");
+		const std::array extra{std::byte{'x'}};
+		auto appended = (*staged)->append(extra);
+		require(!appended && (*staged)->sealed(),
+				"final response spool accepted mutation after seal");
+	}
 } // namespace
 
 int main(const int argument_count, const char* const* arguments)
@@ -1716,6 +1750,7 @@ int main(const int argument_count, const char* const* arguments)
 	prior_artifact_rehydration_reproves_raw_semantics();
 	detailed_report_capacity_reservation_is_compositional_and_closed();
 	public_success_report_requires_all_authority_inputs();
+	final_response_spool_is_sealed_before_transport();
 
 	return 0;
 }

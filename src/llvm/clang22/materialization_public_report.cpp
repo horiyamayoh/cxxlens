@@ -5187,4 +5187,43 @@ namespace cxxlens::detail::clang22::materialization
 				{"materialization.report-invalid", "report", "projection-bytes"});
 		return encoded;
 	}
+
+	sdk::result<std::unique_ptr<materialization_replayable_spool>>
+	stage_public_materialization_final_response(std::string response,
+												const std::size_t maximum_report_bytes)
+	{
+		if (maximum_report_bytes == 0U || response.empty() ||
+			response.size() > maximum_report_bytes || response.front() != '{' ||
+			response.back() != '}' || response.find('\n') != std::string::npos ||
+			response.find('\r') != std::string::npos)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report", "final-response-boundary"});
+		try
+		{
+			auto storage = make_materialization_private_spool();
+			if (!storage)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-create"});
+			const auto bytes = std::as_bytes(std::span{response.data(), response.size()});
+			if (auto appended = (*storage)->append(bytes); !appended)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-append"});
+			if (auto sealed = (*storage)->seal(); !sealed)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-seal"});
+			if (!(*storage)->sealed() || (*storage)->size_bytes() != response.size())
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-census"});
+			auto observed_digest = digest_materialization_spool(**storage);
+			if (!observed_digest || *observed_digest != sdk::content_digest(bytes))
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-digest"});
+			return std::move(*storage);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report", "final-spool-allocation"});
+		}
+	}
 } // namespace cxxlens::detail::clang22::materialization

@@ -301,6 +301,38 @@ namespace
 		}
 	}
 
+	[[nodiscard]] bool
+	write_authoritative_response(materialization_replayable_spool& response) noexcept
+	{
+		if (!response.sealed() || response.size_bytes() == 0U)
+			return false;
+		try
+		{
+			std::array<std::byte, default_stream_chunk_bytes> buffer{};
+			std::uint64_t offset{};
+			while (offset < response.size_bytes())
+			{
+				const auto remaining = response.size_bytes() - offset;
+				auto destination = std::span{buffer}.first(
+					static_cast<std::size_t>(std::min<std::uint64_t>(remaining, buffer.size())));
+				auto received = response.read_at(offset, destination);
+				if (!received || *received == 0U || *received > destination.size())
+					return false;
+				std::cout.write(reinterpret_cast<const char*>(buffer.data()),
+								static_cast<std::streamsize>(*received));
+				if (!std::cout)
+					return false;
+				offset += static_cast<std::uint64_t>(*received);
+			}
+			std::cout.flush();
+			return static_cast<bool>(std::cout);
+		}
+		catch (...)
+		{
+			return false;
+		}
+	}
+
 	[[nodiscard]] int emit_failure(materialization_execution_journal journal,
 								   compact_report_error error)
 	{
@@ -2112,7 +2144,14 @@ int main(const int argc, char**)
 		auto report = encode_public_materialization_success_report(std::move(*public_model));
 		if (!report)
 			return no_response();
-		return write_authoritative_response(*report) ? 0 : no_response();
+		auto final_response = stage_public_materialization_final_response(
+			std::move(*report), report_limits.max_projection_bytes);
+		if (!final_response)
+			return no_response();
+		// The sealed memfd is now the sole authoritative response storage.  Release any
+		// moved-from string capacity before the bounded stdout replay begins.
+		std::string{}.swap(*report);
+		return write_authoritative_response(**final_response) ? 0 : no_response();
 	}
 	catch (const std::bad_alloc&)
 	{
