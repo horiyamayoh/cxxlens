@@ -954,6 +954,11 @@ foreach(
 endforeach()
 
 cxxlens_configure_sanitizer_tests()
+if(CXXLENS_ENABLE_ASAN)
+  set_property(
+    TEST install.clang22-materializer-success install.clang22-materializer-negative
+    APPEND PROPERTY ENVIRONMENT "CXXLENS_ASAN_INSTALLED_QUALIFICATION=1")
+endif()
 
 add_custom_target(cxxlens-ng-test-binaries)
 add_dependencies(

@@ -28,6 +28,232 @@ class SanitizerCoverageTest(unittest.TestCase):
     def setUp(self) -> None:
         validate_contract(ROOT)
 
+    def test_unix_asan_exact_clang_boundary_is_shared_and_fail_closed(self) -> None:
+        source = (ROOT / "cmake/CxxlensClangTargets.cmake").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "if(UNIX AND CXXLENS_ENABLE_ASAN)\n"
+            "    set(_cxxlens_use_shared_clang_cpp TRUE)",
+            source,
+        )
+        asan_selector_start = source.index(
+            "if(UNIX AND CXXLENS_ENABLE_ASAN)\n"
+            "    set(_cxxlens_use_shared_clang_cpp TRUE)"
+        )
+        asan_selector_end = source.index(
+            "  elseif(CXXLENS_BUILD_SHARED",
+            asan_selector_start,
+        )
+        asan_selector = source[asan_selector_start:asan_selector_end]
+        self.assertNotIn(
+            "CXXLENS_BUILD_SHARED",
+            asan_selector,
+            "ASan boundary selection must not depend on the package shared/static mode",
+        )
+        shared_branch_start = source.index(
+            "  if(_cxxlens_use_shared_clang_cpp)", asan_selector_end
+        )
+        shared_branch_end = source.index(
+            "  else()\n    target_link_libraries(${target} PRIVATE ${_cxxlens_clang22_components})",
+            shared_branch_start,
+        )
+        asan_boundary = source[shared_branch_start:shared_branch_end]
+        self.assertIn("if(NOT TARGET clang-cpp)", asan_boundary)
+        self.assertIn("get_target_property(_cxxlens_clang_cpp_type clang-cpp TYPE)", asan_boundary)
+        self.assertIn(
+            'if(NOT _cxxlens_clang_cpp_type STREQUAL "SHARED_LIBRARY")',
+            asan_boundary,
+        )
+        self.assertIn("target_link_libraries(${target} PRIVATE clang-cpp)", asan_boundary)
+        self.assertIn(
+            "set(CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY\n"
+            "          TRUE",
+            asan_boundary,
+        )
+
+    def test_normal_static_clang_boundary_keeps_explicit_components(self) -> None:
+        source = (ROOT / "cmake/CxxlensClangTargets.cmake").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "else()\n"
+            "    target_link_libraries(${target} PRIVATE ${_cxxlens_clang22_components})",
+            source,
+        )
+        self.assertIn(
+            "elseif(CXXLENS_BUILD_SHARED AND UNIX\n"
+            "         AND target STREQUAL \"cxxlens_clang22_provider_sdk\")",
+            source,
+        )
+
+    def test_installed_asan_profile_is_explicit_and_keeps_normal_budget(self) -> None:
+        success = (ROOT / "tests/install/clang22_materializer_success_test.py").read_text(
+            encoding="utf-8"
+        )
+        negative = (ROOT / "tests/install/clang22_materializer_negative_test.py").read_text(
+            encoding="utf-8"
+        )
+        tests_cmake = (ROOT / "tests/CMakeLists.txt").read_text(encoding="utf-8")
+        profile = 'CXXLENS_ASAN_INSTALLED_QUALIFICATION") == "1"'
+        self.assertIn(profile, success)
+        self.assertIn(profile, negative)
+        self.assertIn("CXXLENS_ASAN_INSTALLED_QUALIFICATION=1", tests_cmake)
+        self.assertNotIn('os.environ.get("ASAN_OPTIONS")', success)
+        self.assertNotIn('os.environ.get("ASAN_OPTIONS")', negative)
+        self.assertIn("ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1", success)
+        self.assertIn("ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1", negative)
+
+    def test_clang22_boundary_configure_and_link_graph_regressions(self) -> None:
+        components = (
+            "LLVMOption",
+            "LLVMSupport",
+            "clangAST",
+            "clangBasic",
+            "clangDriver",
+            "clangFrontend",
+            "clangFrontendTool",
+            "clangIndex",
+            "clangLex",
+            "clangOptions",
+            "clangSerialization",
+            "clangTooling",
+            "clangToolingCore",
+        )
+
+        def run_fixture(clang_cpp_kind: str | None, asan: bool) -> tuple[int, str, str]:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = pathlib.Path(temporary)
+                package_root = root / "package"
+                llvm_dir = package_root / "llvm"
+                clang_dir = package_root / "clang"
+                library_dir = package_root / "lib"
+                include_dir = package_root / "include"
+                for directory in (llvm_dir, clang_dir, library_dir, include_dir):
+                    directory.mkdir(parents=True)
+                (library_dir / "libclangBasic.a").touch()
+                (root / "probe.cpp").write_text(
+                    "int cxxlens_probe() { return 0; }\n", encoding="utf-8"
+                )
+                (root / "worker.cpp").write_text(
+                    "int main() { return 0; }\n", encoding="utf-8"
+                )
+                (llvm_dir / "LLVMConfig.cmake").write_text(
+                    "\n".join(
+                        (
+                            "set(LLVM_FOUND TRUE)",
+                            "set(LLVM_VERSION_MAJOR 22)",
+                            "set(LLVM_PACKAGE_VERSION 22.1.0)",
+                            "set(LLVM_CMAKE_DIR \"${CMAKE_CURRENT_LIST_DIR}\")",
+                            "set(LLVM_LIBRARY_DIRS \"${CMAKE_CURRENT_LIST_DIR}/../lib\")",
+                            "set(LLVM_INCLUDE_DIRS \"${CMAKE_CURRENT_LIST_DIR}/../include\")",
+                        )
+                        + tuple(
+                            f"add_library({component} INTERFACE IMPORTED GLOBAL)"
+                            for component in ("LLVMOption", "LLVMSupport")
+                        )
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                (llvm_dir / "LLVMConfigVersion.cmake").write_text(
+                    "set(PACKAGE_VERSION 22.1.0)\n"
+                    "set(PACKAGE_VERSION_COMPATIBLE TRUE)\n"
+                    "set(PACKAGE_VERSION_EXACT TRUE)\n",
+                    encoding="utf-8",
+                )
+                clang_config = [
+                    "set(Clang_FOUND TRUE)",
+                    "set(CLANG_INCLUDE_DIRS \"${CMAKE_CURRENT_LIST_DIR}/../include\")",
+                ]
+                clang_config.extend(
+                    f"add_library({component} INTERFACE IMPORTED GLOBAL)"
+                    for component in components
+                    if component.startswith("clang")
+                )
+                if clang_cpp_kind is not None:
+                    suffix = "so" if clang_cpp_kind == "shared" else "a"
+                    library = library_dir / f"libclang-cpp.{suffix}"
+                    library.touch()
+                    clang_config.extend(
+                        (
+                            f"add_library(clang-cpp {clang_cpp_kind.upper()} IMPORTED GLOBAL)",
+                            f"set_target_properties(clang-cpp PROPERTIES IMPORTED_LOCATION \"{library}\")",
+                        )
+                    )
+                (clang_dir / "ClangConfig.cmake").write_text(
+                    "\n".join(clang_config) + "\n", encoding="utf-8"
+                )
+                (root / "CMakeLists.txt").write_text(
+                    "\n".join(
+                        (
+                            "cmake_minimum_required(VERSION 3.25)",
+                            "project(clang22_boundary_fixture LANGUAGES CXX)",
+                            "set(CXXLENS_CLANG_ADAPTER ON CACHE STRING \"\")",
+                            f"set(CXXLENS_ENABLE_ASAN {'ON' if asan else 'OFF'} CACHE BOOL \"\")",
+                            "set(CXXLENS_ENABLE_UBSAN OFF CACHE BOOL \"\")",
+                            "set(CXXLENS_BUILD_SHARED OFF CACHE BOOL \"\")",
+                            "add_library(cxxlens_clang22_provider_sdk STATIC probe.cpp)",
+                            f"include(\"{(ROOT / 'cmake/CxxlensClangTargets.cmake').as_posix()}\")",
+                            "cxxlens_configure_clang22(cxxlens_clang22_provider_sdk)",
+                            "add_executable(cxxlens-clang-worker-22 worker.cpp)",
+                            "target_link_libraries(cxxlens-clang-worker-22 PRIVATE cxxlens_clang22_provider_sdk)",
+                        )
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                build = root / "build"
+                result = subprocess.run(
+                    [
+                        "cmake",
+                        "-S",
+                        str(root),
+                        "-B",
+                        str(build),
+                        "-G",
+                        "Ninja",
+                        "-DLLVM_DIR=" + str(llvm_dir),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                cache = (
+                    (build / "CMakeCache.txt").read_text(encoding="utf-8")
+                    if (build / "CMakeCache.txt").is_file()
+                    else ""
+                )
+                graph = (
+                    (build / "build.ninja").read_text(encoding="utf-8")
+                    if (build / "build.ninja").is_file()
+                    else ""
+                )
+                return result.returncode, result.stdout + result.stderr, cache + graph
+
+        code, output, generated = run_fixture("shared", asan=True)
+        self.assertEqual(code, 0, output)
+        self.assertIn(
+            "CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY:INTERNAL=TRUE", generated
+        )
+        self.assertIn("libclang-cpp.so", generated)
+        self.assertNotIn("libclangBasic.a", generated)
+
+        for kind, expected in (
+            (None, "requires the packaged clang-cpp shared target"),
+            ("static", "requires clang-cpp to be a shared library target"),
+        ):
+            code, output, _ = run_fixture(kind, asan=True)
+            self.assertNotEqual(code, 0, output)
+            self.assertIn(expected, " ".join(output.split()))
+
+        code, output, generated = run_fixture("static", asan=False)
+        self.assertEqual(code, 0, output)
+        self.assertIn(
+            "CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY:INTERNAL=FALSE", generated
+        )
+        self.assertIn("CXXLENS_CLANG22_EXPLICIT_COMPONENTS:INTERNAL=", generated)
+
     def make_database(self, flag: str) -> pathlib.Path:
         temporary = tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", encoding="utf-8", delete=False

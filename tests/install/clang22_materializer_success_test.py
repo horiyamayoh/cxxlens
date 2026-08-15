@@ -21,6 +21,9 @@ BASELINE_POLICY_DIGEST = (
     "semantic-v2:sha256:"
     "b4e95d8c88cf660fff40c4d9e7e4ae07bcb078013b5370c6b1abb80b0d75d375"
 )
+# The request schema's canonical integer domain is signed int64.  This value is
+# used only when a sanitizer process needs to reserve its shadow address range.
+ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
@@ -134,6 +137,14 @@ def main() -> int:
         installed_binary_digest=files[1]["digest"],
         sandbox_policy_digest=BASELINE_POLICY_DIGEST,
     )
+    if os.environ.get("CXXLENS_ASAN_INSTALLED_QUALIFICATION") == "1":
+        # AddressSanitizer reserves a platform shadow range far beyond the
+        # normal finite RLIMIT_AS budget before the worker reaches main().
+        # This explicit CTest profile keeps the request binding visible while
+        # reserving the sanitizer shadow range. Normal and release requests
+        # continue to exercise their finite address-space budget.
+        for task in request["tasks"]:
+            task["budget"]["address_space_bytes"] = ASAN_ADDRESS_SPACE_BYTES
     for task in request["tasks"]:
         task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST
     oracle.bind_provider_task_identities(request)
