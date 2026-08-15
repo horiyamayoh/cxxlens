@@ -21,6 +21,11 @@ BASELINE_POLICY_DIGEST = (
     "semantic-v2:sha256:"
     "b4e95d8c88cf660fff40c4d9e7e4ae07bcb078013b5370c6b1abb80b0d75d375"
 )
+# ASan reserves a multi-terabyte virtual shadow before main(). The normal
+# install fixture retains its 1 GiB production budget; only the explicit
+# sanitizer test environment selects this finite, shadow-compatible limit.
+ASAN_TEST_ADDRESS_SPACE_BYTES = 64 * 1024 * 1024 * 1024 * 1024
+
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
@@ -134,8 +139,22 @@ def main() -> int:
         installed_binary_digest=files[1]["digest"],
         sandbox_policy_digest=BASELINE_POLICY_DIGEST,
     )
+    asan_address_space = os.environ.get(
+        "CXXLENS_TEST_ASAN_ADDRESS_SPACE_BYTES"
+    )
+    if asan_address_space is not None and asan_address_space != str(
+        ASAN_TEST_ADDRESS_SPACE_BYTES
+    ):
+        fail(
+            "CXXLENS_TEST_ASAN_ADDRESS_SPACE_BYTES differs from the closed "
+            "ASan sandbox fixture budget"
+        )
     for task in request["tasks"]:
         task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST
+        if asan_address_space is not None:
+            task["budget"]["address_space_bytes"] = (
+                ASAN_TEST_ADDRESS_SPACE_BYTES
+            )
     oracle.bind_provider_task_identities(request)
     oracle.bind_task_execution_identities(request)
     oracle.bind_engine_policy_and_selector_identities(request)
