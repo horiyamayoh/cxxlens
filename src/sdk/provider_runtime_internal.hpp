@@ -47,6 +47,8 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] std::string_view frame_transcript_digest() const noexcept;
 		[[nodiscard]] std::string_view sealed_transcript_digest() const noexcept;
 		[[nodiscard]] const provider_runtime_provenance& provenance() const noexcept;
+		/** Revalidate the opaque raw/frame/sealed receipt before a source-private handoff. */
+		[[nodiscard]] result<void> validate() const;
 
 	  private:
 		provider_runtime_receipt(std::uint64_t raw_stdout_byte_count,

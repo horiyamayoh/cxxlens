@@ -555,6 +555,32 @@ namespace
 		require(!after_cleanup, "session accepted an append after cleanup");
 	}
 
+	void test_moved_from_session_is_terminal_and_cleanup_cannot_reuse_it()
+	{
+		const fixture values;
+		auto source = ng1_session_coordinator::create(values.configuration());
+		require(source, "moved-from source session creation failed");
+		auto destination = ng1_session_coordinator{std::move(*source)};
+		require(source->state() == ng1_recovery_state::failed && source->poisoned() &&
+					source->cleaned(),
+				"moved-from session did not become a terminal poisoned value");
+		auto stale_operation = source->observe_worker_exit();
+		require(!stale_operation && stale_operation.error().detail == "moved-from",
+				"moved-from session admitted an operation");
+		auto stale_cleanup = source->cleanup();
+		require(!stale_cleanup && stale_cleanup.error().detail == "moved-from",
+				"moved-from session cleanup was not fail-closed");
+
+		auto destination_failure = destination.observe_host_probe(
+			values.heartbeat_control(ng1_heartbeat_kind::ack, 0U, 1'000U),
+			1'000U,
+			0U,
+			digest("staged"));
+		require(!destination_failure && destination.state() == ng1_recovery_state::failed,
+				"moved-to session did not retain its independent lifecycle");
+		require(destination.cleanup(), "moved-to session cleanup failed");
+	}
+
 	void test_replay_requires_complete_resume_binding()
 	{
 		const fixture values;
@@ -576,6 +602,24 @@ namespace
 					session->state() == ng1_recovery_state::failed,
 				"replay accepted a task-input provenance mutation");
 		require(session->cleanup(), "provenance rejection cleanup failed");
+
+		provider::frame generic_frame;
+		generic_frame.type = provider::message_type::task_complete;
+		generic_frame.stream_id = 7U;
+		generic_frame.sequence = 0U;
+		generic_frame.flags = static_cast<std::uint16_t>(provider::frame_flag::end_of_stream);
+		std::vector<provider::frame> generic_frames{generic_frame};
+		auto generic_runtime = make_provider_runtime_receipt(1U,
+															 "sha256:" + std::string(64U, 'b'),
+															 generic_frames,
+															 "task:test",
+															 "provider.success",
+															 values.sealed_transcript());
+		require(generic_runtime, "generic runtime receipt construction failed");
+		auto incomplete_replay =
+			make_ng1_replay_validation_receipt(values.output_receipt(), *generic_runtime, 1U);
+		require(!incomplete_replay && incomplete_replay.error().field == "replay.provenance",
+				"replay admitted an opaque runtime receipt without complete provenance");
 	}
 
 	void test_spill_port_throw_effects_are_terminal()
@@ -625,6 +669,7 @@ int main()
 	test_session_rejects_unbound_or_nonmonotonic_observations();
 	test_session_requires_local_receipt_and_poisoned_spill_is_terminal();
 	test_session_rejects_bad_replay_and_post_cleanup_calls();
+	test_moved_from_session_is_terminal_and_cleanup_cannot_reuse_it();
 	test_replay_requires_complete_resume_binding();
 	test_spill_port_throw_effects_are_terminal();
 	return 0;

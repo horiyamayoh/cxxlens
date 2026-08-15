@@ -80,32 +80,32 @@ namespace cxxlens::sdk::provider::detail
 		}
 		[[nodiscard]] std::string_view frame_transcript_digest() const noexcept
 		{
-			return frame_transcript_digest_;
+			return runtime_receipt_.frame_transcript_digest();
 		}
 		[[nodiscard]] const provider_runtime_provenance& provenance() const noexcept
 		{
-			return provenance_;
+			return runtime_receipt_.provenance();
+		}
+		[[nodiscard]] const provider_runtime_receipt& runtime_receipt() const noexcept
+		{
+			return runtime_receipt_;
 		}
 
 	  private:
 		ng1_replay_validation_receipt(std::string task_id,
 									  std::string sealed_transcript_digest,
 									  std::uint64_t first_sequence,
-									  std::string frame_transcript_digest,
-									  provider_runtime_provenance provenance) noexcept
+									  provider_runtime_receipt runtime_receipt) noexcept
 			: task_id_{std::move(task_id)},
 			  sealed_transcript_digest_{std::move(sealed_transcript_digest)},
-			  first_sequence_{first_sequence},
-			  frame_transcript_digest_{std::move(frame_transcript_digest)},
-			  provenance_{std::move(provenance)}
+			  first_sequence_{first_sequence}, runtime_receipt_{std::move(runtime_receipt)}
 		{
 		}
 
 		std::string task_id_;
 		std::string sealed_transcript_digest_;
 		std::uint64_t first_sequence_{};
-		std::string frame_transcript_digest_;
-		provider_runtime_provenance provenance_;
+		provider_runtime_receipt runtime_receipt_;
 
 		friend result<ng1_replay_validation_receipt>
 		make_ng1_replay_validation_receipt(const ng1_output_validation_receipt& output,
@@ -159,15 +159,16 @@ namespace cxxlens::sdk::provider::detail
 
 		[[nodiscard]] ng1_recovery_state state() const noexcept
 		{
-			return poisoned_ ? ng1_recovery_state::failed : recovery_.state();
+			return (moved_from_ || poisoned_ || spill_.poisoned()) ? ng1_recovery_state::failed
+																   : recovery_.state();
 		}
 		[[nodiscard]] bool poisoned() const noexcept
 		{
-			return poisoned_ || spill_.poisoned();
+			return moved_from_ || poisoned_ || spill_.poisoned();
 		}
 		[[nodiscard]] bool cleaned() const noexcept
 		{
-			return cleaned_;
+			return moved_from_ || cleaned_ || spill_.cleaned();
 		}
 		[[nodiscard]] std::uint64_t spill_total_bytes() const noexcept
 		{
@@ -266,5 +267,6 @@ namespace cxxlens::sdk::provider::detail
 		bool progress_terminal_{};
 		bool poisoned_{};
 		bool cleaned_{};
+		bool moved_from_{};
 	};
 } // namespace cxxlens::sdk::provider::detail

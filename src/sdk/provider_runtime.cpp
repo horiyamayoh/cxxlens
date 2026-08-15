@@ -838,6 +838,17 @@ namespace cxxlens::sdk::provider
 			return semantic_digest(domain, bytes);
 		}
 
+		[[nodiscard]] bool valid_semantic_digest(const std::string_view value) noexcept
+		{
+			constexpr std::string_view prefix{"semantic-v2:sha256:"};
+			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
+				return false;
+			for (const auto byte : value.substr(prefix.size()))
+				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+					return false;
+			return true;
+		}
+
 		[[nodiscard]] result<std::string>
 		frame_transcript_receipt_digest(const std::span<const frame> frames)
 		{
@@ -998,6 +1009,16 @@ namespace cxxlens::sdk::provider
 		{
 			return provenance_;
 		}
+		result<void> provider_runtime_receipt::validate() const
+		{
+			if (raw_stdout_byte_count_ == 0U || !canonical_digest(raw_stdout_sha256_) ||
+				decoded_frame_count_ == 0U || !valid_semantic_digest(frame_transcript_digest_) ||
+				!valid_semantic_digest(sealed_transcript_digest_) || provenance_.task_id.empty() ||
+				provenance_.task_id.contains('\0'))
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-state-invalid", "runtime-receipt", "identity-incomplete"));
+			return {};
+		}
 
 		result<provider_runtime_receipt>
 		make_provider_runtime_receipt(const std::uint64_t raw_stdout_byte_count,
@@ -1059,12 +1080,15 @@ namespace cxxlens::sdk::provider
 					return cxxlens::sdk::unexpected(runtime_error(
 						"provider.protocol-state-invalid", "runtime-receipt", "batch-binding"));
 			}
-			return provider_runtime_receipt{raw_stdout_byte_count,
+			provider_runtime_receipt output{raw_stdout_byte_count,
 											std::move(raw_stdout_sha256),
 											frames.size(),
 											std::move(*frame_digest),
 											std::move(*sealed_digest),
 											std::move(provenance)};
+			if (auto valid = output.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			return output;
 		}
 
 		result<void> expected_provider_identity::validate() const

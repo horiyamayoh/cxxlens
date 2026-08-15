@@ -148,8 +148,8 @@ namespace cxxlens::sdk::provider::detail
 	{
 		if (first_sequence == 0U)
 			return unexpected(session_error("replay.first_sequence", "zero"));
-		if (replay_runtime.decoded_frame_count() == 0U)
-			return unexpected(session_error("replay.frames", "empty"));
+		if (auto valid = replay_runtime.validate(); !valid)
+			return unexpected(session_error("replay.runtime_receipt", "invalid"));
 		if (replay_runtime.sealed_transcript_digest() != output.sealed_transcript_digest())
 			return unexpected(session_error("replay.sealed_transcript_digest", "mismatch"));
 		if (!valid_semantic_digest(replay_runtime.frame_transcript_digest()))
@@ -159,8 +159,7 @@ namespace cxxlens::sdk::provider::detail
 		return ng1_replay_validation_receipt{std::string{output.task_id()},
 											 std::string{output.sealed_transcript_digest()},
 											 first_sequence,
-											 std::string{replay_runtime.frame_transcript_digest()},
-											 replay_runtime.provenance()};
+											 replay_runtime};
 	}
 
 	result<ng1_session_coordinator>
@@ -204,16 +203,17 @@ namespace cxxlens::sdk::provider::detail
 		  last_host_receipt_time_ns_{std::move(other.last_host_receipt_time_ns_)},
 		  replay_output_digest_{std::move(other.replay_output_digest_)},
 		  replay_frame_transcript_digest_{std::move(other.replay_frame_transcript_digest_)},
-		  progress_terminal_{other.progress_terminal_}, poisoned_{other.poisoned_},
-		  cleaned_{other.cleaned_}
+		  progress_terminal_{std::exchange(other.progress_terminal_, true)},
+		  poisoned_{std::exchange(other.poisoned_, true)},
+		  cleaned_{std::exchange(other.cleaned_, true)},
+		  moved_from_{std::exchange(other.moved_from_, true)}
 	{
-		other.poisoned_ = true;
-		other.cleaned_ = true;
-		other.progress_terminal_ = true;
 	}
 
 	result<void> ng1_session_coordinator::ensure_open(const std::string_view operation) const
 	{
+		if (moved_from_)
+			return unexpected(recovery_error(operation, "moved-from"));
 		if (cleaned_ || spill_.cleaned())
 			return unexpected(recovery_error(operation, "session-cleaned"));
 		if (poisoned_ || spill_.poisoned())
@@ -494,12 +494,19 @@ namespace cxxlens::sdk::provider::detail
 		if (replay_receipt.task_id() != task_id_)
 			return reject_replay(
 				error{"provider.resume-replay-invalid", "task_id", "binding-mismatch"});
+		const auto& runtime_receipt = replay_receipt.runtime_receipt();
+		if (auto valid = runtime_receipt.validate(); !valid)
+			return reject_replay(
+				error{"provider.resume-replay-invalid", "runtime_receipt", "identity-incomplete"});
+		if (runtime_receipt.sealed_transcript_digest() != replay_receipt.sealed_transcript_digest())
+			return reject_replay(error{
+				"provider.resume-replay-invalid", "sealed_transcript_digest", "identity-mismatch"});
 		if (const auto field =
-				provenance_mismatch_field(replay_receipt.provenance(), resume_binding_);
+				provenance_mismatch_field(runtime_receipt.provenance(), resume_binding_);
 			!field.empty())
 			return reject_replay(
 				error{"provider.resume-replay-invalid", std::string{field}, "binding-mismatch"});
-		if (!valid_semantic_digest(replay_receipt.frame_transcript_digest()))
+		if (!valid_semantic_digest(runtime_receipt.frame_transcript_digest()))
 			return reject_replay(error{
 				"provider.resume-replay-invalid", "frame_transcript_digest", "missing-or-invalid"});
 		auto accepted = recovery_.accept_replay_validated(replay_receipt.first_sequence());
@@ -557,6 +564,8 @@ namespace cxxlens::sdk::provider::detail
 
 	result<void> ng1_session_coordinator::cleanup()
 	{
+		if (moved_from_)
+			return unexpected(recovery_error("cleanup", "moved-from"));
 		if (cleaned_)
 			return unexpected(recovery_error("cleanup", "already-terminal"));
 		if (state() != ng1_recovery_state::completed && state() != ng1_recovery_state::failed)
