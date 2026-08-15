@@ -27,6 +27,9 @@ BASELINE_POLICY_DIGEST = (
 # The request schema's canonical integer domain is signed int64.  This value is
 # used only when a sanitizer process needs to reserve its shadow address range.
 ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1
+# Keep the sanitizer-only worker process allowance explicit. Normal and release
+# requests retain the production subprocess budget from the canonical fixture.
+ASAN_SUBPROCESS_BUDGET = 1024
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
@@ -82,6 +85,7 @@ def installed_request(
         # address-space value. Normal and release requests keep finite RLIMIT_AS.
         for task in request["tasks"]:
             task["budget"]["address_space_bytes"] = ASAN_ADDRESS_SPACE_BYTES
+            task["budget"]["subprocesses"] = ASAN_SUBPROCESS_BUDGET
     for task in request["tasks"]:
         task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST
     oracle.bind_provider_task_identities(request)

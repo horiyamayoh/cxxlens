@@ -93,6 +93,23 @@ class SanitizerCoverageTest(unittest.TestCase):
             source,
         )
 
+    def test_ubsan_provider_and_spool_vtables_match_exact_boundary(self) -> None:
+        source = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        normalized = " ".join(source.split())
+        self.assertIn(
+            "if(CXXLENS_ENABLE_UBSAN AND CXXLENS_CLANG22_AVAILABLE AND NOT MSVC) "
+            "set_source_files_properties(src/sdk/provider.cpp PROPERTIES "
+            "COMPILE_OPTIONS \"-fno-rtti\") endif()",
+            normalized,
+        )
+        self.assertIn(
+            "if(CXXLENS_ENABLE_UBSAN AND NOT MSVC) set_source_files_properties( "
+            "src/llvm/clang22/materialization_io.cpp "
+            "src/llvm/clang22/materialization_task_spool.cpp PROPERTIES "
+            "COMPILE_OPTIONS \"-frtti\") endif()",
+            normalized,
+        )
+
     def test_installed_asan_profile_is_explicit_and_keeps_normal_budget(self) -> None:
         success = (ROOT / "tests/install/clang22_materializer_success_test.py").read_text(
             encoding="utf-8"
@@ -109,6 +126,10 @@ class SanitizerCoverageTest(unittest.TestCase):
         self.assertNotIn('os.environ.get("ASAN_OPTIONS")', negative)
         self.assertIn("ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1", success)
         self.assertIn("ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1", negative)
+        self.assertIn("ASAN_SUBPROCESS_BUDGET = 1024", success)
+        self.assertIn("ASAN_SUBPROCESS_BUDGET = 1024", negative)
+        self.assertIn('task["budget"]["subprocesses"] = ASAN_SUBPROCESS_BUDGET', success)
+        self.assertIn('task["budget"]["subprocesses"] = ASAN_SUBPROCESS_BUDGET', negative)
 
     def test_clang22_boundary_configure_and_link_graph_regressions(self) -> None:
         if os.name == "nt":

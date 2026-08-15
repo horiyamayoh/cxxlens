@@ -24,6 +24,11 @@ BASELINE_POLICY_DIGEST = (
 # The request schema's canonical integer domain is signed int64.  This value is
 # used only when a sanitizer process needs to reserve its shadow address range.
 ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1
+# LeakSanitizer creates runtime threads before the provider reaches main(). The
+# production request remains at its normal subprocess budget; this explicit
+# sanitizer-only profile matches the finite allowance used by sanitizer unit
+# tests and keeps the process-limit distinction visible in the request digest.
+ASAN_SUBPROCESS_BUDGET = 1024
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
@@ -145,6 +150,7 @@ def main() -> int:
         # continue to exercise their finite address-space budget.
         for task in request["tasks"]:
             task["budget"]["address_space_bytes"] = ASAN_ADDRESS_SPACE_BYTES
+            task["budget"]["subprocesses"] = ASAN_SUBPROCESS_BUDGET
     for task in request["tasks"]:
         task["sandbox"]["policy_digest"] = BASELINE_POLICY_DIGEST
     oracle.bind_provider_task_identities(request)
