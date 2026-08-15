@@ -60,8 +60,8 @@ namespace cxxlens::sdk::provider::detail
 	 * Opaque replay-validation authority supplied by the shared replay validator.
 	 *
 	 * The coordinator still checks the first occurrence against the durable ACK.  The remaining
-	 * replay count/digest are retained so a future live bridge cannot reduce replay validation to a
-	 * bare sequence number at this seam.
+	 * replay authority is retained from the shared runtime receipt so this seam cannot turn a raw
+	 * caller-supplied digest or record count into a validation claim.
 	 */
 	class CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_replay_validation_receipt
 	{
@@ -78,47 +78,39 @@ namespace cxxlens::sdk::provider::detail
 		{
 			return first_sequence_;
 		}
-		[[nodiscard]] std::uint64_t replayed_records() const noexcept
+		[[nodiscard]] std::string_view frame_transcript_digest() const noexcept
 		{
-			return replayed_records_;
-		}
-		[[nodiscard]] std::string_view replay_digest() const noexcept
-		{
-			return replay_digest_;
+			return frame_transcript_digest_;
 		}
 
 	  private:
 		ng1_replay_validation_receipt(std::string task_id,
 									  std::string sealed_transcript_digest,
 									  std::uint64_t first_sequence,
-									  std::uint64_t replayed_records,
-									  std::string replay_digest) noexcept
+									  std::string frame_transcript_digest) noexcept
 			: task_id_{std::move(task_id)},
 			  sealed_transcript_digest_{std::move(sealed_transcript_digest)},
-			  first_sequence_{first_sequence}, replayed_records_{replayed_records},
-			  replay_digest_{std::move(replay_digest)}
+			  first_sequence_{first_sequence},
+			  frame_transcript_digest_{std::move(frame_transcript_digest)}
 		{
 		}
 
 		std::string task_id_;
 		std::string sealed_transcript_digest_;
 		std::uint64_t first_sequence_{};
-		std::uint64_t replayed_records_{};
-		std::string replay_digest_;
+		std::string frame_transcript_digest_;
 
 		friend result<ng1_replay_validation_receipt>
 		make_ng1_replay_validation_receipt(const ng1_output_validation_receipt& output,
-										   std::uint64_t first_sequence,
-										   std::uint64_t replayed_records,
-										   std::string replay_digest);
+										   const provider_runtime_receipt& replay_runtime,
+										   std::uint64_t first_sequence);
 	};
 
-	/** Construct replay authority only from a shared output seal and a typed replay digest. */
+	/** Construct replay authority only from a shared runtime validation receipt and output seal. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<ng1_replay_validation_receipt>
 	make_ng1_replay_validation_receipt(const ng1_output_validation_receipt& output,
-									   std::uint64_t first_sequence,
-									   std::uint64_t replayed_records,
-									   std::string replay_digest);
+									   const provider_runtime_receipt& replay_runtime,
+									   std::uint64_t first_sequence);
 
 	/**
 	 * Source-private construction inputs for one NG1 task session.
@@ -164,7 +156,7 @@ namespace cxxlens::sdk::provider::detail
 		}
 		[[nodiscard]] bool poisoned() const noexcept
 		{
-			return poisoned_;
+			return poisoned_ || spill_.poisoned();
 		}
 		[[nodiscard]] bool cleaned() const noexcept
 		{

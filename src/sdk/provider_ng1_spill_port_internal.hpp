@@ -64,7 +64,7 @@ namespace cxxlens::sdk::provider::detail
 			  std::uint64_t highest_observed_sequence,
 			  std::string staged_digest);
 		/** Re-read and validate the complete stored prefix from the private port. */
-		[[nodiscard]] result<ng1_spill_prefix_state> recover() const;
+		[[nodiscard]] result<ng1_spill_prefix_state> recover();
 
 		/** Cleanup after final report/token disposal or after recovery classification. */
 		[[nodiscard]] result<void> cleanup();

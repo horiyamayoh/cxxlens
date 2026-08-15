@@ -71,19 +71,21 @@ namespace cxxlens::sdk::provider::detail
 
 	result<ng1_replay_validation_receipt>
 	make_ng1_replay_validation_receipt(const ng1_output_validation_receipt& output,
-									   const std::uint64_t first_sequence,
-									   const std::uint64_t replayed_records,
-									   std::string replay_digest)
+									   const provider_runtime_receipt& replay_runtime,
+									   const std::uint64_t first_sequence)
 	{
 		if (first_sequence == 0U)
 			return unexpected(session_error("replay.first_sequence", "zero"));
-		if (!valid_semantic_digest(replay_digest))
-			return unexpected(session_error("replay.replay_digest", "semantic-v2"));
+		if (replay_runtime.decoded_frame_count() == 0U)
+			return unexpected(session_error("replay.frames", "empty"));
+		if (replay_runtime.sealed_transcript_digest() != output.sealed_transcript_digest())
+			return unexpected(session_error("replay.sealed_transcript_digest", "mismatch"));
+		if (!valid_semantic_digest(replay_runtime.frame_transcript_digest()))
+			return unexpected(session_error("replay.frame_transcript_digest", "semantic-v2"));
 		return ng1_replay_validation_receipt{std::string{output.task_id()},
 											 std::string{output.sealed_transcript_digest()},
 											 first_sequence,
-											 replayed_records,
-											 std::move(replay_digest)};
+											 std::string{replay_runtime.frame_transcript_digest()}};
 	}
 
 	result<ng1_session_coordinator>
@@ -429,7 +431,7 @@ namespace cxxlens::sdk::provider::detail
 			return reject_output(
 				error{"provider.replay-invalid", "sealed_transcript_digest", "not-replayed-seal"});
 		if (!progress_terminal_)
-			return unexpected(error{"provider.progress-rate", "terminal", "missing"});
+			return poison(error{"provider.progress-rate", "terminal", "missing"});
 		if (auto complete = progress_.finish(); !complete)
 		{
 			if (current_state == ng1_recovery_state::resumed)
@@ -454,6 +456,8 @@ namespace cxxlens::sdk::provider::detail
 	{
 		if (cleaned_)
 			return unexpected(recovery_error("cleanup", "already-terminal"));
+		if (state() != ng1_recovery_state::completed && state() != ng1_recovery_state::failed)
+			return unexpected(recovery_error("cleanup", "state-not-terminal"));
 		cleaned_ = true;
 		auto result = spill_.cleanup();
 		if (!result)

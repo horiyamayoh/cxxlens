@@ -4,6 +4,7 @@
 #include <iostream>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -113,6 +114,51 @@ namespace
 		}
 	};
 
+	enum class throwing_spill_effect
+	{
+		append,
+		fsync,
+		read,
+		cleanup,
+	};
+
+	class throwing_spill_storage final : public memory_spill_storage
+	{
+	  public:
+		explicit throwing_spill_storage(const throwing_spill_effect effect) : effect_{effect} {}
+
+		result<void> append(const std::span<const std::byte> bytes) override
+		{
+			if (effect_ == throwing_spill_effect::append)
+				throw std::runtime_error{"append"};
+			return memory_spill_storage::append(bytes);
+		}
+
+		result<std::uint64_t> fsync() override
+		{
+			if (effect_ == throwing_spill_effect::fsync)
+				throw std::runtime_error{"fsync"};
+			return memory_spill_storage::fsync();
+		}
+
+		result<std::vector<std::byte>> read_all() const override
+		{
+			if (effect_ == throwing_spill_effect::read)
+				throw std::runtime_error{"read"};
+			return memory_spill_storage::read_all();
+		}
+
+		result<void> cleanup() override
+		{
+			if (effect_ == throwing_spill_effect::cleanup)
+				throw std::runtime_error{"cleanup"};
+			return memory_spill_storage::cleanup();
+		}
+
+	  private:
+		throwing_spill_effect effect_;
+	};
+
 	struct fixture
 	{
 		ng1_session_binding heartbeat{
@@ -219,7 +265,7 @@ namespace
 			return control;
 		}
 
-		[[nodiscard]] ng1_output_validation_receipt output_receipt() const
+		[[nodiscard]] sealed_provider_transcript sealed_transcript() const
 		{
 			relation_descriptor descriptor;
 			descriptor.id = "descriptor:test";
@@ -251,9 +297,34 @@ namespace
 				{},
 				{});
 			require(transcript, "shared transcript fixture construction failed");
-			auto receipt = make_ng1_output_validation_receipt("task:test", *transcript);
+			return std::move(*transcript);
+		}
+
+		[[nodiscard]] ng1_output_validation_receipt output_receipt() const
+		{
+			auto transcript = sealed_transcript();
+			auto receipt = make_ng1_output_validation_receipt("task:test", transcript);
 			require(receipt, "shared output validation receipt construction failed");
 			return *receipt;
+		}
+
+		[[nodiscard]] provider_runtime_receipt replay_runtime_receipt() const
+		{
+			auto transcript = sealed_transcript();
+			provider::frame replay_frame;
+			replay_frame.type = provider::message_type::task_complete;
+			replay_frame.stream_id = 7U;
+			replay_frame.sequence = 0U;
+			replay_frame.flags = static_cast<std::uint16_t>(provider::frame_flag::end_of_stream);
+			std::vector<provider::frame> frames{std::move(replay_frame)};
+			auto runtime = make_provider_runtime_receipt(1U,
+														 "sha256:" + std::string(64U, 'b'),
+														 frames,
+														 "task:test",
+														 "provider.success",
+														 transcript);
+			require(runtime, "shared replay runtime receipt construction failed");
+			return *runtime;
 		}
 	};
 
@@ -327,8 +398,8 @@ namespace
 		auto replay_start = session->replay_start_sequence();
 		require(replay_start && *replay_start == 1U, "replay start was not durable ACK plus one");
 		auto output = values.output_receipt();
-		auto replay =
-			make_ng1_replay_validation_receipt(output, *replay_start, 1U, digest("replay"));
+		auto replay = make_ng1_replay_validation_receipt(
+			output, values.replay_runtime_receipt(), *replay_start);
 		require(replay, "shared replay validation receipt construction failed");
 		require(session->accept_replay(*replay), "validated replay was rejected");
 		require(session->state() == ng1_recovery_state::resumed,
@@ -417,6 +488,16 @@ namespace
 		cleanup_failure.spill_storage = std::make_unique<failing_cleanup_spill_storage>();
 		auto cleanup_session = ng1_session_coordinator::create(std::move(cleanup_failure));
 		require(cleanup_session, "cleanup-failure session creation failed");
+		auto early_cleanup = cleanup_session->cleanup();
+		require(!early_cleanup && early_cleanup.error().detail == "state-not-terminal",
+				"running session permitted cleanup before lifecycle classification");
+		auto failed = cleanup_session->observe_host_probe(
+			values.heartbeat_control(ng1_heartbeat_kind::ack, 0U, 1'000U),
+			1'000U,
+			0U,
+			digest("staged"));
+		require(!failed && cleanup_session->state() == ng1_recovery_state::failed,
+				"cleanup-failure setup did not reach failed state");
 		auto cleanup = cleanup_session->cleanup();
 		require(!cleanup && cleanup_session->poisoned() && cleanup_session->cleaned() &&
 					cleanup_session->state() == ng1_recovery_state::failed,
@@ -440,8 +521,8 @@ namespace
 		auto replay_start = session->replay_start_sequence();
 		require(replay_start, "replay-negative start unavailable");
 		auto output = values.output_receipt();
-		auto bad_replay =
-			make_ng1_replay_validation_receipt(output, *replay_start + 1U, 1U, digest("replay"));
+		auto bad_replay = make_ng1_replay_validation_receipt(
+			output, values.replay_runtime_receipt(), *replay_start + 1U);
 		require(bad_replay, "bad replay receipt construction failed");
 		auto rejected = session->accept_replay(*bad_replay);
 		require(!rejected && session->state() == ng1_recovery_state::failed,
@@ -449,6 +530,45 @@ namespace
 		require(session->cleanup(), "replay-negative cleanup failed");
 		auto after_cleanup = session->append_spill(values.spill_record());
 		require(!after_cleanup, "session accepted an append after cleanup");
+	}
+
+	void test_spill_port_throw_effects_are_terminal()
+	{
+		const fixture values;
+		for (const auto effect : {throwing_spill_effect::append, throwing_spill_effect::fsync})
+		{
+			auto configuration = values.configuration();
+			configuration.spill_storage = std::make_unique<throwing_spill_storage>(effect);
+			auto session = ng1_session_coordinator::create(std::move(configuration));
+			require(session, "throwing spill session creation failed");
+			auto append = session->append_spill(values.spill_record());
+			if (effect == throwing_spill_effect::fsync)
+			{
+				require(append, "fsync-throw setup append failed");
+				auto receipt = session->fsync_spill(0U, 0U, digest("staged"));
+				require(!receipt, "fsync throw was swallowed as success");
+			}
+			else
+				require(!append, "append throw was swallowed as success");
+			require(session->poisoned() && session->state() == ng1_recovery_state::failed,
+					"throwing spill effect did not poison the session");
+			require(session->cleanup(), "throwing spill cleanup failed");
+		}
+
+		auto configuration = values.configuration();
+		configuration.spill_storage =
+			std::make_unique<throwing_spill_storage>(throwing_spill_effect::read);
+		auto session = ng1_session_coordinator::create(std::move(configuration));
+		require(session, "read-throw spill session creation failed");
+		require(session->append_spill(values.spill_record()), "read-throw setup append failed");
+		auto receipt = session->fsync_spill(0U, 0U, digest("staged"));
+		require(receipt, "read-throw setup fsync failed");
+		require(session->observe_worker_exit(), "read-throw worker exit failed");
+		auto resumed =
+			session->accept_durable_resume(values.resume_control(), *receipt, false, false, 0U);
+		require(!resumed && session->poisoned() && session->state() == ng1_recovery_state::failed,
+				"read throw did not poison the session");
+		require(session->cleanup(), "read-throw spill cleanup failed");
 	}
 } // namespace
 
@@ -459,5 +579,6 @@ int main()
 	test_session_rejects_unbound_or_nonmonotonic_observations();
 	test_session_requires_local_receipt_and_poisoned_spill_is_terminal();
 	test_session_rejects_bad_replay_and_post_cleanup_calls();
+	test_spill_port_throw_effects_are_terminal();
 	return 0;
 }

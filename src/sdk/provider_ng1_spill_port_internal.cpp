@@ -680,7 +680,17 @@ namespace cxxlens::sdk::provider::detail
 			auto wire = encode_spill_record(record);
 			if (!wire)
 				return unexpected(std::move(wire.error()));
-			if (auto stored = storage_->append(*wire); !stored)
+			result<void> stored;
+			try
+			{
+				stored = storage_->append(*wire);
+			}
+			catch (...)
+			{
+				poisoned_ = true;
+				return unexpected(port_error("append", "effect-unknown"));
+			}
+			if (!stored)
 			{
 				poisoned_ = true;
 				return unexpected(std::move(stored.error()));
@@ -706,7 +716,16 @@ namespace cxxlens::sdk::provider::detail
 				corrupt_error("highest_contiguous_acked_sequence", "ahead-of-observed"));
 		if (auto valid = valid_semantic_digest(staged_digest, "staged_digest"); !valid)
 			return unexpected(std::move(valid.error()));
-		auto sequence = storage_->fsync();
+		result<std::uint64_t> sequence{port_error("fsync", "not-called")};
+		try
+		{
+			sequence = storage_->fsync();
+		}
+		catch (...)
+		{
+			poisoned_ = true;
+			return unexpected(port_error("fsync", "effect-unknown"));
+		}
 		if (!sequence)
 		{
 			poisoned_ = true;
@@ -717,8 +736,17 @@ namespace cxxlens::sdk::provider::detail
 			poisoned_ = true;
 			return unexpected(port_error("fsync_sequence", "not-increasing"));
 		}
-		auto receipt = prefix_.observe_host_fsync(
-			highest_contiguous_acked_sequence, std::move(staged_digest), *sequence);
+		result<ng1_spill_fsync_receipt> receipt{port_error("fsync", "not-observed")};
+		try
+		{
+			receipt = prefix_.observe_host_fsync(
+				highest_contiguous_acked_sequence, std::move(staged_digest), *sequence);
+		}
+		catch (...)
+		{
+			poisoned_ = true;
+			return unexpected(port_error("fsync", "effect-unknown"));
+		}
 		if (!receipt)
 		{
 			poisoned_ = true;
@@ -729,28 +757,60 @@ namespace cxxlens::sdk::provider::detail
 		return receipt;
 	}
 
-	result<ng1_spill_prefix_state> ng1_spill_staging_session::recover() const
+	result<ng1_spill_prefix_state> ng1_spill_staging_session::recover()
 	{
 		if (!storage_ || cleaned_)
 			return unexpected(port_error("recovery", "terminal-session"));
-		auto raw = storage_->read_all();
-		if (!raw)
-			return unexpected(std::move(raw.error()));
-		auto recovered = ng1_spill_prefix_state::create(binding_);
-		if (!recovered)
-			return unexpected(std::move(recovered.error()));
-		std::size_t offset{};
-		while (offset < raw->size())
+		result<std::vector<std::byte>> raw{port_error("recovery", "not-read")};
+		try
 		{
-			auto record = decode_framed_record(*raw, offset);
-			if (!record)
-				return unexpected(std::move(record.error()));
-			if (auto admitted = recovered->append(*record); !admitted)
-				return unexpected(std::move(admitted.error()));
+			raw = storage_->read_all();
 		}
-		if (recovered->total_bytes() != raw->size())
-			return unexpected(corrupt_error("total_bytes", "framing-mismatch"));
-		return recovered;
+		catch (...)
+		{
+			poisoned_ = true;
+			return unexpected(port_error("recovery", "effect-unknown"));
+		}
+		if (!raw)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(raw.error()));
+		}
+		try
+		{
+			auto recovered = ng1_spill_prefix_state::create(binding_);
+			if (!recovered)
+			{
+				poisoned_ = true;
+				return unexpected(std::move(recovered.error()));
+			}
+			std::size_t offset{};
+			while (offset < raw->size())
+			{
+				auto record = decode_framed_record(*raw, offset);
+				if (!record)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(record.error()));
+				}
+				if (auto admitted = recovered->append(*record); !admitted)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(admitted.error()));
+				}
+			}
+			if (recovered->total_bytes() != raw->size())
+			{
+				poisoned_ = true;
+				return unexpected(corrupt_error("total_bytes", "framing-mismatch"));
+			}
+			return recovered;
+		}
+		catch (...)
+		{
+			poisoned_ = true;
+			return unexpected(port_error("recovery", "effect-unknown"));
+		}
 	}
 
 	result<void> ng1_spill_staging_session::cleanup()
@@ -758,10 +818,23 @@ namespace cxxlens::sdk::provider::detail
 		if (!storage_ || cleaned_)
 			return unexpected(port_error("cleanup", "already-terminal"));
 		cleaned_ = true;
-		auto result = storage_->cleanup();
+		result<void> result;
+		try
+		{
+			result = storage_->cleanup();
+		}
+		catch (...)
+		{
+			poisoned_ = true;
+			storage_.reset();
+			return unexpected(port_error("cleanup", "effect-unknown"));
+		}
 		storage_.reset();
 		if (!result)
+		{
+			poisoned_ = true;
 			return unexpected(std::move(result.error()));
+		}
 		return {};
 	}
 } // namespace cxxlens::sdk::provider::detail
