@@ -1,0 +1,51 @@
+name: Apply issue 263 CI contract fix
+
+on:
+  push:
+    branches:
+      - agent/issue-263-conflict-scoped-completion
+    paths:
+      - ".github/workflows/apply-issue-263-ci-contract-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12.11"
+      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+      - name: Align release workflow validation and design checksums
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("tools/quality/check_ng_release_qualification.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''    for marker in (\n        "id: nightly-run",\n        'gh api --method GET',\n        'actions/workflows/nightly.yml/runs',\n        "-f head_sha=\\\"${GITHUB_SHA}\\\"",\n        "-f status=completed",\n        'name: cxxlens-nightly-evidence-${{ github.sha }}',\n        'github-token: ${{ github.token }}',\n        'repository: ${{ github.repository }}',\n        'run-id: ${{ steps.nightly-run.outputs.run-id }}',\n    ):\n'''
+          new = '''    for marker in (\n        "timeout-minutes: 100",\n        "id: nightly-run",\n        'gh api --method GET',\n        'actions/workflows/nightly.yml/runs',\n        "-f head_sha=\\\"${GITHUB_SHA}\\\"",\n        "for attempt in $(seq 1 180)",\n        "sleep 30",\n        '.event == "push"',\n        '.event == "schedule"',\n        '.event == "workflow_dispatch"',\n        '\"${status}\" != \"completed\"',\n        '\"${conclusion}\" != \"success\"',\n        'name: cxxlens-nightly-evidence-${{ github.sha }}',\n        'github-token: ${{ github.token }}',\n        'repository: ${{ github.repository }}',\n        'run-id: ${{ steps.nightly-run.outputs.run-id }}',\n    ):\n'''
+          if old not in text:
+              raise SystemExit("release workflow marker block differs")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          python3 tools/quality/verify_checksums.py generate --root .
+          python3 tools/quality/verify_checksums.py check --root .
+          python3 -m unittest \
+            tests.quality.test_ng_release_qualification.NgReleaseQualificationTests.test_repository_contract_is_implemented \
+            tests.quality.test_ng_api_development_readiness.NgApiDevelopmentReadinessTest.test_release_evaluation_waits_for_push_nightly \
+            tests.quality.test_ng_api_development_readiness.NgApiDevelopmentReadinessTest.test_quality_repository_consistency_preflight_is_required \
+            -v
+          git diff --check
+          git add docs/design/SHA256SUMS tools/quality/check_ng_release_qualification.py
+          git diff --cached --check
+          git config user.name "cxxlens workflow maintainer"
+          git config user.email "44720751+horiyamayoh@users.noreply.github.com"
+          git commit -m "Align CI qualification contracts (#263)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
