@@ -1114,11 +1114,18 @@ def validate_documents(
         if marker not in evaluation_job.group("body"):
             fail(f"release evaluation workflow marker is missing: {marker}")
     for marker in (
+        "timeout-minutes: 100",
         "id: nightly-run",
         'gh api --method GET',
         'actions/workflows/nightly.yml/runs',
         "-f head_sha=\"${GITHUB_SHA}\"",
-        "-f status=completed",
+        "for attempt in $(seq 1 180)",
+        "sleep 30",
+        '.event == "push"',
+        '.event == "schedule"',
+        '.event == "workflow_dispatch"',
+        '"${status}" != "completed"',
+        '"${conclusion}" != "success"',
         'name: cxxlens-nightly-evidence-${{ github.sha }}',
         'github-token: ${{ github.token }}',
         'repository: ${{ github.repository }}',
