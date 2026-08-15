@@ -22,6 +22,7 @@ from check_ng_sdk_contract import (  # noqa: E402
     SdkContractError,
     admitted_generated_relations,
     canonical_relation,
+    implemented_sdk_sources,
     load_yaml,
     render,
     validate_boundaries,
@@ -56,6 +57,13 @@ class NgSdkContractTest(unittest.TestCase):
     def test_exact_catalog_and_ordinary_boundary_are_valid(self) -> None:
         validate_catalog(ROOT, self.catalog)
         validate_boundaries(ROOT)
+
+    def test_proposed_ng1_private_sources_do_not_enter_public_error_catalog(self) -> None:
+        validate_catalog(ROOT, self.catalog)
+        source_names = {source.name for source in implemented_sdk_sources(ROOT)}
+        self.assertNotIn("provider_ng1_validation.cpp", source_names)
+        self.assertNotIn("provider_ng1_spill_port_internal.cpp", source_names)
+        self.assertNotIn("provider_ng1_recovery.cpp", source_names)
 
     def test_missing_author_path_is_rejected(self) -> None:
         catalog = copy.deepcopy(self.catalog)
