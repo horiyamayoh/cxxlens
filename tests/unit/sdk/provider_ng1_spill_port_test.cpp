@@ -1,0 +1,274 @@
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <cxxlens/sdk/common.hpp>
+
+#include "sdk/provider_ng1_spill_port_internal.hpp"
+
+namespace
+{
+	using namespace cxxlens::sdk;
+	using namespace cxxlens::sdk::provider::detail;
+
+	void require(const bool condition, const std::string_view message)
+	{
+		if (!condition)
+		{
+			std::cerr << message << '\n';
+			std::exit(1);
+		}
+	}
+
+	void require(const result<void>& outcome, const std::string_view message)
+	{
+		require(outcome.has_value(), message);
+	}
+
+	[[nodiscard]] std::string digest(const std::string_view value)
+	{
+		auto output = semantic_digest("test.ng1.spill", value);
+		require(output.has_value(), "test semantic digest construction failed");
+		return *output;
+	}
+
+	[[nodiscard]] ng1_spill_binding binding()
+	{
+		return {"provider:test",
+				"session:test",
+				"task:test",
+				"dependency:test",
+				"atomic:test",
+				"batch:test",
+				7U};
+	}
+
+	[[nodiscard]] ng1_spill_record record(const ng1_spill_binding& value,
+										  const std::uint64_t ordinal,
+										  const std::uint64_t sequence,
+										  const std::string_view payload_text)
+	{
+		ng1_spill_record output;
+		output.record_ordinal = ordinal;
+		output.task_id = value.task_id;
+		output.dependency_group_id = value.dependency_group_id;
+		output.atomic_output_group_id = value.atomic_output_group_id;
+		output.batch_id = value.batch_id;
+		output.stream_id = value.stream_id;
+		output.sequence = sequence;
+		for (const auto byte : payload_text)
+			output.payload_bytes.push_back(
+				static_cast<std::byte>(static_cast<unsigned char>(byte)));
+		auto payload_digest = ng1_spill_payload_digest(output.payload_bytes);
+		require(payload_digest.has_value(), "spill payload digest construction failed");
+		output.payload_digest = *payload_digest;
+		auto record_digest = ng1_spill_record_digest(output);
+		require(record_digest.has_value(), "spill record digest construction failed");
+		output.record_digest = *record_digest;
+		return output;
+	}
+
+	class fake_spill_port final : public ng1_spill_storage_port
+	{
+	  public:
+		bool fail_append{};
+		std::size_t partial_append_bytes{};
+		bool fail_fsync{};
+		std::uint64_t fsync_value{1U};
+		bool fail_cleanup{};
+		std::vector<std::byte> bytes;
+		std::size_t append_calls{};
+		std::size_t fsync_calls{};
+		std::size_t cleanup_calls{};
+
+		[[nodiscard]] result<void> append(const std::span<const std::byte> input) override
+		{
+			++append_calls;
+			if (fail_append)
+			{
+				const auto count = std::min(partial_append_bytes, input.size());
+				bytes.insert(
+					bytes.end(), input.begin(), input.begin() + static_cast<std::ptrdiff_t>(count));
+				return error{"provider.recovery-failed", "append", "injected"};
+			}
+			bytes.insert(bytes.end(), input.begin(), input.end());
+			return {};
+		}
+
+		[[nodiscard]] result<std::uint64_t> fsync() override
+		{
+			++fsync_calls;
+			if (fail_fsync)
+				return error{"provider.recovery-failed", "fsync", "injected"};
+			return fsync_value;
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>> read_all() const override
+		{
+			return bytes;
+		}
+
+		[[nodiscard]] result<void> cleanup() override
+		{
+			++cleanup_calls;
+			if (fail_cleanup)
+				return error{"provider.recovery-failed", "cleanup", "injected"};
+			return {};
+		}
+	};
+
+	void test_system_port_round_trip()
+	{
+		const auto spill_binding = binding();
+		auto storage = make_system_ng1_spill_storage_port();
+		if (!storage)
+		{
+			require(storage.error().code == "provider.recovery-failed",
+					"unsupported spill platform did not fail closed");
+			return;
+		}
+		auto session = ng1_spill_staging_session::create(spill_binding, std::move(*storage));
+		require(session.has_value(), "system spill staging session creation failed");
+		auto first = record(spill_binding, 0U, 0U, "first");
+		require(session->append(first), "system spill append rejected a valid record");
+		require(session->total_records() == 1U && session->total_bytes() > 0U,
+				"system spill counters were not advanced");
+		auto first_receipt = session->fsync(0U, 0U, digest("staged-0"));
+		require(first_receipt.has_value(), "system spill fsync receipt construction failed");
+		require(first_receipt->fsync_sequence == 1U && first_receipt->total_records == 1U,
+				"system spill receipt lost fsync sequence or record count");
+
+		auto recovered = session->recover();
+		require(recovered.has_value(), "system spill recovery rejected a valid prefix");
+		require(recovered->total_records() == session->total_records() &&
+					recovered->total_bytes() == session->total_bytes(),
+				"system spill recovery changed the exact prefix counters");
+
+		auto second = record(spill_binding, 1U, 1U, "second");
+		require(session->append(second), "system spill rejected a second contiguous record");
+		auto second_receipt = session->fsync(1U, 1U, digest("staged-1"));
+		require(second_receipt.has_value() && second_receipt->fsync_sequence == 2U,
+				"system spill fsync sequence was not strictly increasing");
+		require(session->cleanup(), "system spill cleanup failed");
+		require(session->cleaned() && !session->cleanup(),
+				"system spill cleanup was retryable after terminal disposal");
+	}
+
+	void test_append_failure_poison_and_atomicity()
+	{
+		const auto spill_binding = binding();
+		auto storage = std::make_unique<fake_spill_port>();
+		auto* raw_storage = storage.get();
+		raw_storage->fail_append = true;
+		auto session = ng1_spill_staging_session::create(spill_binding, std::move(storage));
+		require(session.has_value(), "fake spill staging session creation failed");
+		auto first = record(spill_binding, 0U, 0U, "first");
+		auto append_result = session->append(first);
+		require(!append_result && append_result.error().code == "provider.recovery-failed",
+				"storage append failure did not remain a recovery failure");
+		require(session->poisoned() && session->total_records() == 0U &&
+					session->total_bytes() == 0U,
+				"failed append mutated the validated prefix");
+		auto retry_result = session->append(first);
+		require(!retry_result && retry_result.error().code == "provider.recovery-failed" &&
+					raw_storage->append_calls == 1U,
+				"unknown append effect was retried");
+		require(session->cleanup(), "poisoned spill cleanup failed");
+
+		auto partial_storage = std::make_unique<fake_spill_port>();
+		partial_storage->fail_append = true;
+		partial_storage->partial_append_bytes = 3U;
+		auto partial = ng1_spill_staging_session::create(spill_binding, std::move(partial_storage));
+		require(partial.has_value(), "partial fake spill session creation failed");
+		require(!partial->append(first), "partial append failure was accepted");
+		auto recovered = partial->recover();
+		require(!recovered && recovered.error().code == "provider.spill-corrupt",
+				"torn last record did not fail closed during recovery");
+		require(partial->cleanup(), "partial spill cleanup failed");
+
+		auto accounting_storage = std::make_unique<fake_spill_port>();
+		auto* accounting_raw = accounting_storage.get();
+		auto accounting =
+			ng1_spill_staging_session::create(spill_binding, std::move(accounting_storage));
+		require(accounting.has_value(), "wire accounting spill session creation failed");
+		require(accounting->append(first), "wire accounting append failed");
+		require(accounting->total_bytes() == accounting_raw->bytes.size(),
+				"wire-byte accounting omitted the framing prefix");
+		require(accounting->cleanup(), "wire accounting cleanup failed");
+	}
+
+	void test_recovery_rejects_digest_corruption()
+	{
+		const auto spill_binding = binding();
+		auto storage = std::make_unique<fake_spill_port>();
+		auto* raw_storage = storage.get();
+		auto session = ng1_spill_staging_session::create(spill_binding, std::move(storage));
+		require(session.has_value(), "corruption fake spill session creation failed");
+		auto first = record(spill_binding, 0U, 0U, "first");
+		require(session->append(first), "corruption setup append failed");
+		require(!raw_storage->bytes.empty(), "corruption setup did not create wire bytes");
+		raw_storage->bytes.back() ^= std::byte{1U};
+		auto recovered = session->recover();
+		require(!recovered && recovered.error().code == "provider.spill-corrupt",
+				"record digest corruption was accepted by recovery");
+		require(session->cleanup(), "corruption spill cleanup failed");
+	}
+
+	void test_fsync_and_cleanup_fail_closed()
+	{
+		const auto spill_binding = binding();
+		auto invalid_ack_storage = std::make_unique<fake_spill_port>();
+		auto* invalid_ack_raw = invalid_ack_storage.get();
+		auto invalid_ack =
+			ng1_spill_staging_session::create(spill_binding, std::move(invalid_ack_storage));
+		require(invalid_ack.has_value(), "invalid ack spill session creation failed");
+		auto invalid_ack_result = invalid_ack->fsync(1U, 0U, digest("staged"));
+		require(!invalid_ack_result &&
+					invalid_ack_result.error().code == "provider.spill-corrupt" &&
+					invalid_ack_raw->fsync_calls == 0U,
+				"ahead-of-observed ACK reached the storage fsync port");
+		require(invalid_ack->cleanup(), "invalid ack spill cleanup failed");
+
+		auto invalid_sequence_storage = std::make_unique<fake_spill_port>();
+		invalid_sequence_storage->fsync_value = 0U;
+		auto invalid_sequence =
+			ng1_spill_staging_session::create(spill_binding, std::move(invalid_sequence_storage));
+		require(invalid_sequence.has_value(), "invalid sequence spill session creation failed");
+		auto invalid_sequence_result = invalid_sequence->fsync(0U, 0U, digest("staged"));
+		require(!invalid_sequence_result &&
+					invalid_sequence_result.error().code == "provider.recovery-failed" &&
+					invalid_sequence->poisoned(),
+				"invalid host fsync sequence did not poison the session");
+		require(invalid_sequence->cleanup(), "invalid sequence spill cleanup failed");
+
+		auto cleanup_storage = std::make_unique<fake_spill_port>();
+		auto* cleanup_raw = cleanup_storage.get();
+		cleanup_raw->fail_cleanup = true;
+		auto cleanup_session =
+			ng1_spill_staging_session::create(spill_binding, std::move(cleanup_storage));
+		require(cleanup_session.has_value(), "cleanup failure spill session creation failed");
+		auto cleanup_result = cleanup_session->cleanup();
+		require(!cleanup_result && cleanup_result.error().code == "provider.recovery-failed",
+				"cleanup failure was not stable recovery-failed");
+		auto cleanup_retry = cleanup_session->cleanup();
+		require(!cleanup_retry && cleanup_retry.error().code == "provider.recovery-failed" &&
+					cleanup_raw->cleanup_calls == 1U,
+				"cleanup unknown effect was retried");
+	}
+} // namespace
+
+int main()
+{
+	test_system_port_round_trip();
+	test_append_failure_poison_and_atomicity();
+	test_recovery_rejects_digest_corruption();
+	test_fsync_and_cleanup_fail_closed();
+	return 0;
+}

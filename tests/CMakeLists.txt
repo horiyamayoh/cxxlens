@@ -479,6 +479,22 @@ set_tests_properties(
   unit.sdk-provider-ng1-validation
   PROPERTIES LABELS "unit;sdk;provider;ng1;validation;fail-closed")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-spill-port
+                            unit/sdk/provider_ng1_spill_port_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-spill-port
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-spill-port
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-spill-port
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-ng1-spill-port
+         COMMAND cxxlens-unit-sdk-provider-ng1-spill-port)
+set_tests_properties(
+  unit.sdk-provider-ng1-spill-port
+  PROPERTIES LABELS "unit;sdk;provider;ng1;spill;fsync;recovery;fail-closed")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-transport
                             unit/sdk/provider_ng1_transport_test.cpp)
 target_sources(
