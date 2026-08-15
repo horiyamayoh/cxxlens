@@ -366,15 +366,14 @@ namespace cxxlens::sdk::provider::detail
 				"heartbeat-clock-invalid", "host_receipt_time_ns", "before-session-start"));
 		if (sample.provider_monotonic_time_ns > sample.host_receipt_time_ns)
 			return unexpected(ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "future"));
+		if (last_provider_time_ns_ && sample.provider_monotonic_time_ns < *last_provider_time_ns_)
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "backwards"));
 		if (last_host_receipt_time_ns_ && sample.host_receipt_time_ns < *last_host_receipt_time_ns_)
 			return unexpected(
 				ng1_error("heartbeat-clock-invalid", "host_receipt_time_ns", "backwards"));
 		if (sample.kind == ng1_heartbeat_kind::probe)
 		{
-			if (last_probe_provider_time_ns_ &&
-				sample.provider_monotonic_time_ns < *last_probe_provider_time_ns_)
-				return unexpected(
-					ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "backwards"));
 			auto next_sequence = last_probe_sequence_;
 			if (auto valid = accept_contiguous(next_sequence,
 											   sample.heartbeat_sequence,
@@ -387,7 +386,6 @@ namespace cxxlens::sdk::provider::detail
 											"highest_contiguous_acked_sequence",
 											"ahead-of-observed"));
 			last_probe_sequence_ = next_sequence;
-			last_probe_provider_time_ns_ = sample.provider_monotonic_time_ns;
 			last_probe_host_receipt_ns_ = sample.host_receipt_time_ns;
 		}
 		else
@@ -416,10 +414,6 @@ namespace cxxlens::sdk::provider::detail
 					return unexpected(ng1_error(
 						"heartbeat-timeout", "host_receipt_time_ns", "ack-deadline-reached"));
 			}
-			if (last_ack_provider_time_ns_ &&
-				sample.provider_monotonic_time_ns < *last_ack_provider_time_ns_)
-				return unexpected(
-					ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "backwards"));
 			auto next_sequence = last_ack_sequence_;
 			if (auto valid = accept_contiguous(next_sequence,
 											   sample.heartbeat_sequence,
@@ -432,9 +426,9 @@ namespace cxxlens::sdk::provider::detail
 											"highest_contiguous_acked_sequence",
 											"ahead-of-observed"));
 			last_ack_sequence_ = next_sequence;
-			last_ack_provider_time_ns_ = sample.provider_monotonic_time_ns;
 			last_valid_ack_received_ns_ = sample.host_receipt_time_ns;
 		}
+		last_provider_time_ns_ = sample.provider_monotonic_time_ns;
 		last_host_receipt_time_ns_ = sample.host_receipt_time_ns;
 		return {};
 	}

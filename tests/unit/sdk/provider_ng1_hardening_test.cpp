@@ -124,6 +124,22 @@ namespace
 					backwards_result.error().code == "provider.heartbeat-clock-invalid",
 				"backwards provider heartbeat timestamp was accepted");
 
+		auto cross_direction_backwards = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
+		require(cross_direction_backwards.has_value(),
+				"cross-direction heartbeat state creation failed");
+		require(
+			cross_direction_backwards->accept(
+				heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 10U, 10U), 0U, digest("staged")),
+			"cross-direction heartbeat setup failed");
+		auto cross_direction_result = cross_direction_backwards->accept(
+			heartbeat_sample(ng1_heartbeat_kind::ack, 0U, 9U, 11U), 0U, digest("staged"));
+		require(!cross_direction_result &&
+					cross_direction_result.error().code == "provider.heartbeat-clock-invalid",
+				"cross-direction backwards provider timestamp was accepted");
+		require(cross_direction_backwards->accept(
+					heartbeat_sample(ng1_heartbeat_kind::ack, 0U, 10U, 11U), 0U, digest("staged")),
+				"rejected cross-direction heartbeat mutated clock state");
+
 		auto future = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
 		require(future.has_value(), "future heartbeat state creation failed");
 		auto future_result = future->accept(
@@ -403,6 +419,54 @@ namespace
 						  4U);
 		require(!foreign_result && foreign_result.error().code == "provider.resume-token-stale",
 				"foreign resume token was accepted");
+
+		auto foreign_group = binding;
+		foreign_group.dependency_group_id = "dependency:foreign";
+		auto foreign_group_result =
+			state->accept(make_resume_token(foreign_group, 2U),
+						  make_fsync_receipt(foreign_group, 4U, digest("staged"), 3U),
+						  false,
+						  false,
+						  4U);
+		require(!foreign_group_result &&
+					foreign_group_result.error().code == "provider.resume-token-stale",
+				"foreign dependency group resume token was accepted");
+
+		auto foreign_atomic_group = binding;
+		foreign_atomic_group.atomic_output_group_id = "atomic:foreign";
+		auto foreign_atomic_group_result =
+			state->accept(make_resume_token(foreign_atomic_group, 2U),
+						  make_fsync_receipt(foreign_atomic_group, 4U, digest("staged"), 3U),
+						  false,
+						  false,
+						  4U);
+		require(!foreign_atomic_group_result &&
+					foreign_atomic_group_result.error().code == "provider.resume-token-stale",
+				"foreign atomic output group resume token was accepted");
+
+		auto foreign_batch = binding;
+		foreign_batch.batch_id = "batch:foreign";
+		auto foreign_batch_result =
+			state->accept(make_resume_token(foreign_batch, 2U),
+						  make_fsync_receipt(foreign_batch, 4U, digest("staged"), 3U),
+						  false,
+						  false,
+						  4U);
+		require(!foreign_batch_result &&
+					foreign_batch_result.error().code == "provider.resume-token-stale",
+				"foreign batch resume token was accepted");
+
+		auto foreign_stream = binding;
+		++foreign_stream.stream_id;
+		auto foreign_stream_result =
+			state->accept(make_resume_token(foreign_stream, 2U),
+						  make_fsync_receipt(foreign_stream, 4U, digest("staged"), 3U),
+						  false,
+						  false,
+						  4U);
+		require(!foreign_stream_result &&
+					foreign_stream_result.error().code == "provider.resume-token-stale",
+				"foreign stream resume token was accepted");
 
 		auto mutated = make_resume_token(binding, 2U);
 		mutated.staged_digest = digest("mutated");

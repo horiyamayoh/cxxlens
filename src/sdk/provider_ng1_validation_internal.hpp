@@ -73,8 +73,7 @@ namespace cxxlens::sdk::provider::detail
 		std::uint64_t started_at_ns_{};
 		std::optional<std::uint64_t> last_probe_sequence_;
 		std::optional<std::uint64_t> last_ack_sequence_;
-		std::optional<std::uint64_t> last_probe_provider_time_ns_;
-		std::optional<std::uint64_t> last_ack_provider_time_ns_;
+		std::optional<std::uint64_t> last_provider_time_ns_;
 		std::optional<std::uint64_t> last_probe_host_receipt_ns_;
 		std::optional<std::uint64_t> last_host_receipt_time_ns_;
 		std::optional<std::uint64_t> last_valid_ack_received_ns_;
