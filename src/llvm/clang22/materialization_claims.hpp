@@ -165,6 +165,23 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
+	 * Source-private request authority retained by sealed claims.
+	 *
+	 * The request ID binds the validated semantic request projection, while the catalog identity
+	 * and exact task count keep Store adoption from pairing this claim set with a coherent but
+	 * different request that happens to have compatible mutable projections.
+	 */
+	struct materialization_claim_request_binding
+	{
+		std::string materialization_request_id;
+		std::string catalog_id;
+		std::string catalog_digest;
+		std::uint64_t task_count{};
+
+		[[nodiscard]] bool operator==(const materialization_claim_request_binding&) const = default;
+	};
+
+	/**
 	 * One bounded task adoption result. The contained drafts are limited to the currently consumed
 	 * sealed task; callers must transfer them to a replayable source before advancing the task
 	 * cursor. This type deliberately has no claim_batch or request-wide result-set member.
@@ -271,6 +288,7 @@ namespace cxxlens::detail::clang22::materialization
 
 	  private:
 		sealed_materialization_claims(
+			materialization_claim_request_binding request_binding,
 			std::string materializer_semantics_digest,
 			std::string direct_basis_digest,
 			std::string canonical_adoption_transform_digest,
@@ -282,6 +300,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<materialization_origin_association> origin_associations,
 			std::vector<materialization_claim_partition> partitions);
 
+		materialization_claim_request_binding request_binding_;
 		std::string materializer_semantics_digest_;
 		std::string direct_basis_digest_;
 		std::string canonical_adoption_transform_digest_;
@@ -292,6 +311,10 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<materialization_canonicalization_edge> canonicalization_edges_;
 		std::vector<materialization_origin_association> origin_associations_;
 		std::vector<materialization_claim_partition> partitions_;
+
+		friend sdk::result<void> validate_materialization_claim_request_binding(
+			const validated_materialization_request& request,
+			const sealed_materialization_claims& claims);
 
 		friend sdk::result<sealed_materialization_claims> construct_materialization_claims(
 			const validated_materialization_request& request,
@@ -305,6 +328,16 @@ namespace cxxlens::detail::clang22::materialization
 			const materialization_producer_authority& producer_authority,
 			const materialization_guarantee_authority& guarantee_authority);
 	};
+
+	/** Derive the exact source-private request binding retained by sealed claims and bounded
+	 * sources. */
+	[[nodiscard]] sdk::result<materialization_claim_request_binding>
+	make_materialization_claim_request_binding(const validated_materialization_request& request);
+
+	/** Validate a sealed claim set against the candidate request before Store adoption. */
+	[[nodiscard]] sdk::result<void>
+	validate_materialization_claim_request_binding(const validated_materialization_request& request,
+												   const sealed_materialization_claims& claims);
 
 	/** Construct, globally validate, and partition every final occurrence exactly once. */
 	[[nodiscard]] sdk::result<sealed_materialization_claims> construct_materialization_claims(
