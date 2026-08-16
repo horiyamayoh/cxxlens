@@ -65,6 +65,9 @@ NEGATIVE_VECTORS = [
     "raw-request-limit-plus-one",
     "fragmented-short-reads",
 ]
+RUN_MARKER_SCHEMA = "cxxlens.clang22-materialization-scale-run.v1"
+
+_ACTIVE_RUN_MARKER: tuple[pathlib.Path, dict[str, Any]] | None = None
 
 
 class ScaleEvidenceError(RuntimeError):
@@ -88,6 +91,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="retain generated request files next to the evidence report",
     )
+    parser.add_argument(
+        "--failure-marker",
+        type=pathlib.Path,
+        help="write a canonical run/scenario status marker for success and failure",
+    )
     return parser.parse_args()
 
 
@@ -109,6 +117,58 @@ def canonical_json(value: Any) -> bytes:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+
+
+def write_run_marker(path: pathlib.Path, marker: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_bytes(canonical_json(marker))
+    temporary.replace(path)
+
+
+def safe_git_value(root: pathlib.Path, expression: str) -> str | None:
+    try:
+        return git_value(root, expression)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def new_run_marker(
+    root: pathlib.Path, driver: pathlib.Path, output: pathlib.Path
+) -> dict[str, Any]:
+    return {
+        "schema": RUN_MARKER_SCHEMA,
+        "status": "running",
+        "exit_status": None,
+        "source_revision": safe_git_value(root, "HEAD"),
+        "source_tree": safe_git_value(root, "HEAD^{tree}"),
+        "driver": str(driver),
+        "report": output.name,
+        "phase": "startup",
+        "current_scenario": None,
+        "scenarios": [],
+        "failure": None,
+    }
+
+
+def finish_aborted_run(error: BaseException, exit_status: int) -> None:
+    if _ACTIVE_RUN_MARKER is None:
+        return
+    marker_path, marker = _ACTIVE_RUN_MARKER
+    marker["status"] = "aborted"
+    marker["exit_status"] = exit_status
+    marker["failure"] = {
+        "phase": marker.get("phase", "unknown"),
+        "scenario_id": marker.get("current_scenario"),
+        "error_type": type(error).__name__,
+        "message": str(error),
+    }
+    for scenario in marker["scenarios"]:
+        if scenario["status"] == "running":
+            scenario["status"] = "aborted"
+    marker["phase"] = "aborted"
+    marker["current_scenario"] = None
+    write_run_marker(marker_path, marker)
 
 
 def write_canonical_json(path: pathlib.Path, value: Any) -> tuple[int, str]:
@@ -484,11 +544,24 @@ def scenario_input(
 
 
 def run() -> int:
+    global _ACTIVE_RUN_MARKER
+
     args = parse_args()
     root = args.root.resolve()
     driver = args.driver.resolve()
     output = args.output.resolve()
+    failure_marker = (
+        args.failure_marker.resolve()
+        if args.failure_marker
+        else output.parent / f"{output.stem}.failure.json"
+    )
+    marker = new_run_marker(root, driver, output)
+    _ACTIVE_RUN_MARKER = (failure_marker, marker)
+    write_run_marker(failure_marker, marker)
+
     prefix = args.prefix.resolve() if args.prefix else None
+    marker["phase"] = "validate"
+    write_run_marker(failure_marker, marker)
     if not driver.is_file():
         raise ScaleEvidenceError(f"request driver is missing: {driver}")
     installed_scenarios = tuple(
@@ -511,6 +584,8 @@ def run() -> int:
         occurrence_path = None
 
     sys.path.insert(0, str(root / "tools" / "quality"))
+    marker["phase"] = "load-oracle"
+    write_run_marker(failure_marker, marker)
     import check_ng_clang22_materialization as oracle  # pylint: disable=import-error
 
     work_directory = (
@@ -523,8 +598,23 @@ def run() -> int:
     run_directory.mkdir(parents=True, exist_ok=True)
     scenarios: list[dict[str, Any]] = []
     failed = False
+    marker["phase"] = "scenario-loop"
+    write_run_marker(failure_marker, marker)
     for scenario_id in SCENARIO_IDS:
         expected = "reject" if scenario_id == "raw-request-limit-plus-one" else "pass"
+        scenario_marker = {
+            "id": scenario_id,
+            "expected": expected,
+            "status": "running",
+            "input": "pending",
+            "admission": None,
+            "installed": None,
+        }
+        marker["scenarios"].append(scenario_marker)
+        marker["current_scenario"] = scenario_id
+        marker["phase"] = "input"
+        write_run_marker(failure_marker, marker)
+        print(f"materialization scale scenario start: id={scenario_id}", flush=True)
         request_path, input_metadata, _artifact = scenario_input(
             root,
             oracle,
@@ -533,6 +623,9 @@ def run() -> int:
             args.preserve_inputs,
             output,
         )
+        scenario_marker["input"] = "generated"
+        marker["phase"] = "admission"
+        write_run_marker(failure_marker, marker)
         admission = run_process(
             [str(driver)],
             request_path,
@@ -547,6 +640,13 @@ def run() -> int:
             oracle,
             run_directory / scenario_id / "admission" / "stdout",
         )
+        scenario_marker["admission"] = admission["status"]
+        write_run_marker(failure_marker, marker)
+        print(
+            f"materialization scale scenario progress: id={scenario_id} "
+            f"phase=admission status={admission['status']}",
+            flush=True,
+        )
         installed = None
         if materializer is not None and scenario_id in installed_scenarios:
             # Rebuild the request from the input only for selected positive cases.  The
@@ -554,6 +654,8 @@ def run() -> int:
             # identities; the installed tool needs the exact relocated occurrence binding.
             if expected != "pass":
                 raise ScaleEvidenceError("installed scenarios must be positive")
+            marker["phase"] = "installed"
+            write_run_marker(failure_marker, marker)
             with request_path.open("rb") as source:
                 request_value = json.load(source)
             installed_request = bind_installed_request(request_value, occurrence_path, oracle)
@@ -573,6 +675,13 @@ def run() -> int:
                 oracle,
                 run_directory / scenario_id / "installed" / "stdout",
             )
+            scenario_marker["installed"] = installed["status"]
+            write_run_marker(failure_marker, marker)
+            print(
+                f"materialization scale scenario progress: id={scenario_id} "
+                f"phase=installed status={installed['status']}",
+                flush=True,
+            )
             attach_installed_input_transfer_receipt(
                 installed, run_directory / scenario_id / "installed" / "stdout"
             )
@@ -586,6 +695,27 @@ def run() -> int:
             installed is not None and installed["status"] == "failed"
         ):
             failed = True
+            if marker["failure"] is None:
+                marker["failure"] = {
+                    "phase": "scenario-result",
+                    "scenario_id": scenario_id,
+                    "reason": "process-boundary-failed",
+                }
+        scenario_marker["status"] = (
+            "failed"
+            if admission["status"] == "failed"
+            or (installed is not None and installed["status"] == "failed")
+            else "passed"
+        )
+        marker["phase"] = "scenario-result"
+        write_run_marker(failure_marker, marker)
+        print(
+            f"materialization scale scenario result: id={scenario_id} "
+            f"status={scenario_marker['status']} "
+            f"admission={admission['status']} "
+            f"installed={scenario_marker['installed'] or 'not-run'}",
+            flush=True,
+        )
         scenarios.append(
             {
                 "id": scenario_id,
@@ -596,6 +726,9 @@ def run() -> int:
             }
         )
 
+    marker["phase"] = "report"
+    marker["current_scenario"] = None
+    write_run_marker(failure_marker, marker)
     report = {
         "schema": SCALE_SCHEMA,
         "scope": {
@@ -631,12 +764,28 @@ def run() -> int:
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(canonical_json(report))
-    return 1 if failed else 0
+    exit_status = 1 if failed else 0
+    marker["status"] = "failed" if failed else "passed"
+    marker["exit_status"] = exit_status
+    marker["phase"] = "complete"
+    write_run_marker(failure_marker, marker)
+    print(
+        f"materialization scale run result: status={marker['status']} "
+        f"exit_status={exit_status}",
+        flush=True,
+    )
+    _ACTIVE_RUN_MARKER = None
+    return exit_status
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(run())
-    except (OSError, ScaleEvidenceError, subprocess.SubprocessError) as error:
+    except KeyboardInterrupt as error:
+        finish_aborted_run(error, 130)
+        print(f"materialization scale evidence interrupted: {error}", file=sys.stderr)
+        raise SystemExit(130) from error
+    except Exception as error:
+        finish_aborted_run(error, 2)
         print(f"materialization scale evidence failed: {error}", file=sys.stderr)
         raise SystemExit(2) from error

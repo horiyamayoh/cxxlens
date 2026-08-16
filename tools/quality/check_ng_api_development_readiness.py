@@ -13,12 +13,9 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
-import importlib.util
 import json
 import pathlib
 import re
-import shutil
-import subprocess
 import sys
 import tempfile
 import types
@@ -28,17 +25,41 @@ import yaml
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-BASELINE_REVISION = "c4b8c9df6f7fa53656c39447b191ba723ebe2040"
-BASELINE_PATH = "tools/quality/check_ng_api_development_readiness.py"
+BASELINE_PATH = pathlib.Path(
+    "tools/quality/check_ng_api_development_readiness_wave0_baseline.py"
+)
+BASELINE_DIGEST = "sha256:4e81eff25e898794381624a82d9d3c06ef9d219ddcb32de3721cd2b56f32089f"
 MANIFEST_PATH = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
 QUALITY_PATH = pathlib.Path(".github/workflows/quality.yml")
 NIGHTLY_PATH = pathlib.Path(".github/workflows/nightly.yml")
+AGENT_GOAL_PATH = pathlib.Path("docs/development/agent-api-development-goal.md")
 PACKET_JSON_NAME = "cxxlens-ng-agent-context-issue-261.json"
 PACKET_MARKDOWN_NAME = "cxxlens-ng-agent-context-issue-261.md"
 USE_CASE_ID = "repository-semantic-query.explain-translation-unit.v1"
 ISSUE_ID = "#261"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 CANONICAL_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\.v[0-9]+(?:_[0-9]+)?$")
+BOUNDED_COMPLETION_GOAL_MARKERS = (
+    "completion-class: bounded-implementation",
+    "production-qualification: not-claimed-by-default",
+    "issue-close-owner: bounded-issue-or-explicit-qualification-gate",
+    "aggregate-qualification-owner: exact-merged-main-integration-readiness-release",
+    "reopen-condition: bounded-acceptance-or-scope-regression-only",
+)
+BOUNDED_COMPLETION_GOAL_TEXT = (
+    "通常の implementation issue の既定完了クラスは **bounded implementation completion**",
+    "issue を閉じるために distribution 全体の production qualification を再実行・再証明してはなりません。",
+    "`production qualification: not claimed`",
+    "Foundation、Wave 0、G5、`release-evaluation`、normal/final",
+    "exact merged-main SHA の required checks と fail-closed evidence",
+    "全 tracked gap の解消後は `release-evaluation: qualified`",
+    "final-mode production-scope report を同じ exact",
+    "過去 SHA の成功を最終 SHA の evidence として流用しません。",
+)
+LEGACY_GOAL_ISSUE_CLOSE_PATTERNS = (
+    re.compile(r"merged-main qualification と learning checkpoint 後の active issue close"),
+    re.compile(r"production scope に tracked gap がある intermediate unit の merge 後"),
+)
 
 
 class AccelerationError(ValueError):
@@ -46,21 +67,20 @@ class AccelerationError(ValueError):
 
 
 def _load_baseline() -> types.ModuleType:
-    completed = subprocess.run(
-        ["git", "-C", str(ROOT), "show", f"{BASELINE_REVISION}:{BASELINE_PATH}"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
+    baseline_path = ROOT / BASELINE_PATH
+    if not baseline_path.is_file():
         raise RuntimeError(
-            "the frozen readiness baseline is unavailable; use a full-history "
-            f"checkout containing {BASELINE_REVISION}: {completed.stderr.strip()}"
+            "the tracked frozen readiness baseline is unavailable: "
+            f"{BASELINE_PATH.as_posix()}"
         )
+    baseline_source = baseline_path.read_bytes()
+    actual_digest = "sha256:" + hashlib.sha256(baseline_source).hexdigest()
+    if actual_digest != BASELINE_DIGEST:
+        raise RuntimeError("the tracked frozen readiness baseline digest differs")
     module = types.ModuleType("_cxxlens_wave0_readiness_baseline")
-    module.__file__ = str(ROOT / BASELINE_PATH)
+    module.__file__ = str(baseline_path)
     module.__package__ = None
-    exec(compile(completed.stdout, module.__file__, "exec"), module.__dict__)
+    exec(compile(baseline_source.decode("utf-8"), module.__file__, "exec"), module.__dict__)
     return module
 
 
@@ -107,6 +127,21 @@ def _file_digest(path: pathlib.Path) -> str:
 
 def _normalized_condition(value: Any) -> str:
     return " ".join(value.split()) if isinstance(value, str) else ""
+
+
+def validate_bounded_completion_contract(root: pathlib.Path) -> None:
+    """Keep the activated /goal contract aligned with completion-policy #291."""
+    goal = (root / AGENT_GOAL_PATH).read_text(encoding="utf-8")
+    for marker in BOUNDED_COMPLETION_GOAL_MARKERS:
+        if goal.count(f"`{marker}`") != 1:
+            _fail(f"bounded completion marker is missing or duplicated in goal: {marker}")
+    normalized_goal = re.sub(r"\s+", " ", goal)
+    for phrase in BOUNDED_COMPLETION_GOAL_TEXT:
+        if re.sub(r"\s+", " ", phrase) not in normalized_goal:
+            _fail(f"bounded completion contract text is missing from goal: {phrase}")
+    for pattern in LEGACY_GOAL_ISSUE_CLOSE_PATTERNS:
+        if pattern.search(goal):
+            _fail("legacy issue-close requirement remains in the activated goal contract")
 
 
 def _canonical_repo_path(value: str) -> bool:
@@ -366,6 +401,11 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         "quality-evidence",
     ]:
         _fail("check tier evidence closure differs")
+    required_contexts = manifest.get("required_status_checks", {}).get("contexts")
+    if not isinstance(required_contexts, list) or "check-tier" not in required_contexts:
+        _fail("check tier must be a required pull-request status context")
+    if "sqlite-store-v3-qualification" not in check["needs"]:
+        _fail("required check tier must depend on sqlite qualification")
     full = _job(quality, "full-tier")
     main_condition = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     if _normalized_condition(full.get("if")) != main_condition:
@@ -449,7 +489,13 @@ def _legacy_projection(root: pathlib.Path, manifest: dict[str, Any]) -> None:
         (projected / QUALITY_PATH).parent.mkdir(parents=True, exist_ok=True)
         (projected / QUALITY_PATH).write_text(quality, encoding="utf-8")
         (projected / NIGHTLY_PATH).write_text(nightly, encoding="utf-8")
-        _baseline_validate_workflow(projected, manifest)
+        legacy_manifest = copy.deepcopy(manifest)
+        legacy_manifest["required_status_checks"]["contexts"] = [
+            context
+            for context in legacy_manifest["required_status_checks"]["contexts"]
+            if context != "check-tier"
+        ]
+        _baseline_validate_workflow(projected, legacy_manifest)
 
 
 def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
@@ -459,6 +505,7 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
 
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     manifest = _baseline_validate_documents(root)
+    validate_bounded_completion_contract(root)
     validate_demand_closure(root, manifest)
     return manifest
 
@@ -535,28 +582,61 @@ def render_agent_context_markdown(packet: dict[str, Any]) -> str:
     )
     reads = "\n".join(f"- `{value}`" for value in packet["authority_reading_set"])
     writes = "\n".join(f"- `{value}`" for value in packet["allowed_write_paths"])
+    contracts = "\n".join(f"- `{value}`" for value in packet["exact_contract_ids"])
+    feedback = "\n".join(f"- `{value}`" for value in packet["known_design_feedback"])
+    shortcuts = "\n".join(f"- `{value}`" for value in packet["forbidden_shortcuts"])
     commands = "\n".join(f"- `{value}`" for value in packet["completion_commands"])
+    expected_states = ", ".join(f"`{value}`" for value in packet["expected_result_states"])
+    constructibility = json.dumps(
+        packet["constructibility"], ensure_ascii=False, sort_keys=True, indent=2
+    )
+    binding = json.dumps(packet["binding"], ensure_ascii=False, sort_keys=True, indent=2)
+    complete_packet = json.dumps(packet, ensure_ascii=False, sort_keys=True, indent=2)
     return (
         "# cxxlens issue #261 agent context\n\n"
+        f"- Schema: `{packet['schema']}`\n"
         f"- Packet: `{packet['packet_id']}`\n"
+        f"- Issue: `{packet['issue']}`\n"
         f"- Use case: `{packet['use_case_id']}`\n"
+        f"- Consumer: `{packet['consumer']}`\n"
+        f"- Goal: `{packet['goal']}`\n"
+        f"- Expected result states: {expected_states}\n"
         f"- Revision: `{packet['binding']['revision']}`\n"
         f"- Tree: `{packet['binding']['tree']}`\n"
         f"- Authority digest: `{packet['binding']['authority_projection_digest']}`\n"
         f"- Packet digest: `{packet['canonical_digest']}`\n"
-        f"- Disposition: **blocked** (`{packet['blocked_reason']}`)\n\n"
+        f"- Blocked reason: `{packet['blocked_reason']}`\n\n"
         "## Capability path\n\n"
         f"`{path}`\n\n"
+        "## Exact contract IDs\n\n"
+        f"{contracts}\n\n"
         "## Minimum authority reading set\n\n"
         f"{reads}\n\n"
         "## Allowed write paths\n\n"
         f"{writes}\n\n"
         "## Required evidence\n\n"
         f"{evidence}\n\n"
+        "## Known design feedback\n\n"
+        f"{feedback}\n\n"
+        "## Constructibility\n\n"
+        "```json\n"
+        f"{constructibility}\n"
+        "```\n\n"
+        "## Forbidden shortcuts\n\n"
+        f"{shortcuts}\n\n"
         "## Completion plan\n\n"
         f"{plan}\n\n"
         "## Completion commands\n\n"
-        f"{commands}\n"
+        f"{commands}\n\n"
+        "## Exact binding\n\n"
+        "```json\n"
+        f"{binding}\n"
+        "```\n\n"
+        "## Complete packet fields\n\n"
+        "The following canonical JSON block mirrors every field in the paired packet.\n\n"
+        "```json\n"
+        f"{complete_packet}\n"
+        "```\n"
     )
 
 
@@ -582,15 +662,20 @@ def build_report(
     generated_at: str,
     expected_revision: str,
 ) -> dict[str, Any]:
-    report = _baseline_build_report(
-        root,
-        manifest,
-        evidence_dir,
-        run_url,
-        ci_jobs,
-        generated_at,
-        expected_revision,
-    )
+    baseline_current_git_state = _baseline.current_git_state
+    _baseline.current_git_state = current_git_state
+    try:
+        report = _baseline_build_report(
+            root,
+            manifest,
+            evidence_dir,
+            run_url,
+            ci_jobs,
+            generated_at,
+            expected_revision,
+        )
+    finally:
+        _baseline.current_git_state = baseline_current_git_state
     json_path, markdown_path = _packet_paths(evidence_dir)
     packet = json.loads(json_path.read_text(encoding="utf-8"))
     git = report["git"]
@@ -646,9 +731,14 @@ def _plan(arguments: list[str]) -> int:
 
 
 # Make the frozen baseline's internal global lookups use the composed contracts.
+def _current_git_state_for_baseline(root: pathlib.Path) -> dict[str, Any]:
+    return current_git_state(root)
+
+
 _baseline.validate_workflow = validate_workflow
 _baseline.validate_documents = validate_documents
 _baseline.build_report = build_report
+_baseline.current_git_state = _current_git_state_for_baseline
 
 
 def main() -> int:
