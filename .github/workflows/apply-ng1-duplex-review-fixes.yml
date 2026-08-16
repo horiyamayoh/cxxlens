@@ -1,0 +1,39 @@
+name: Apply NG1 duplex review fixes
+
+on:
+  push:
+    branches:
+      - issue-183-ng1-live-duplex
+    paths:
+      - .github/workflows/apply-ng1-duplex-review-fixes.yml
+      - tools/agent/apply_ng1_duplex_review_fixes.py
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: issue-183-ng1-live-duplex
+          fetch-depth: 0
+
+      - name: Apply asserted source and regression changes
+        run: python3 tools/agent/apply_ng1_duplex_review_fixes.py
+
+      - name: Verify the generated diff
+        run: git diff --check
+
+      - name: Commit the fix and remove the one-shot applicator
+        run: |
+          rm -f .github/workflows/apply-ng1-duplex-review-fixes.yml
+          rm -f tools/agent/apply_ng1_duplex_review_fixes.py
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Fix NG1 duplex process review findings"
+          git push origin HEAD:refs/heads/issue-183-ng1-live-duplex
