@@ -124,6 +124,12 @@ namespace cxxlens::detail::clang22::materialization
 			return materialization_request_id_;
 		}
 
+		/** Return the exact task census sealed into this source's request authority. */
+		[[nodiscard]] std::uint64_t task_count() const noexcept
+		{
+			return expected_task_count_;
+		}
+
 		[[nodiscard]] std::size_t partition_count() const noexcept
 		{
 			return partitions_.size();
