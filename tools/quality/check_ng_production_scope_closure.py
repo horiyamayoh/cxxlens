@@ -667,6 +667,47 @@ def census_rows(nodes: dict[SurfaceKey, SourceNode]) -> list[dict[str, Any]]:
     ]
 
 
+def validate_public_catalog_scope_traceability(
+    catalog: dict[str, Any],
+    assignments: dict[SurfaceKey, dict[str, Any]],
+) -> None:
+    """Cross-bind catalog implementation state to the typed scope assignment.
+
+    ``implemented`` describes the catalog contract/implementation state; it is
+    intentionally allowed to coexist with ``included/tracked-gap``.  A
+    ``contract-pending`` entry, however, cannot be promoted to a qualified
+    production surface while its catalog contract is still pending.
+    """
+
+    for entry in catalog.get("entries", []):
+        key = SurfaceKey("public.catalog-entry", entry["id"])
+        assignment = assignments.get(key)
+        if assignment is None:
+            fail(
+                "public API catalog entry has no production-scope assignment: "
+                f"{entry['id']}"
+            )
+        pair = (assignment["scope"], assignment["qualification"])
+        allowed_pairs = {
+            "implemented": {
+                ("included", "qualified"),
+                ("included", "tracked-gap"),
+            },
+            "contract-pending": {
+                ("included", "tracked-gap"),
+            },
+        }.get(entry["status"])
+        if allowed_pairs is None:
+            fail(f"unknown public API catalog status: {entry['id']}")
+        if pair not in allowed_pairs:
+            expected = sorted(allowed_pairs)
+            fail(
+                "public API catalog status is not traceable to production scope: "
+                f"{entry['id']} status={entry['status']!r} scope={pair!r} "
+                f"expected one of {expected!r}"
+            )
+
+
 def evidence_for_surface(key: SurfaceKey) -> tuple[str, ...]:
     evidence = SURFACE_EVIDENCE_TESTS.get(key, DOMAIN_EVIDENCE_TESTS.get(key.domain))
     if not evidence:
@@ -1070,6 +1111,11 @@ def validate_repository(root: Path | str) -> ValidatedModel:
             f"missing={[f'{x.domain}/{x.id}' for x in missing]}, "
             f"extra={[f'{x.domain}/{x.id}' for x in extra]}"
         )
+
+    validate_public_catalog_scope_traceability(
+        load_yaml(root / "schemas/cxxlens_ng_public_api_catalog.yaml"),
+        assignments,
+    )
 
     all_records = load_feedback_records(root)
     records = applicable_feedback(root)
