@@ -53,6 +53,15 @@ namespace cxxlens::sdk::provider::detail
 		auto session = ng1_session_coordinator::create(std::move(configuration.session));
 		if (!session)
 			return cxxlens::sdk::unexpected(std::move(session.error()));
+		bool process_start_cleanup_attempted{};
+		auto cleanup_failed_start = [&]() -> result<void>
+		{
+			if (process_start_cleanup_attempted)
+				return {};
+			process_start_cleanup_attempted = true;
+			session->fail_before_worker_start();
+			return session->cleanup();
+		};
 		result<std::unique_ptr<ng1_duplex_process>> process =
 			[&]() -> result<std::unique_ptr<ng1_duplex_process>>
 		{
@@ -63,16 +72,25 @@ namespace cxxlens::sdk::provider::detail
 			}
 			catch (const std::bad_alloc&)
 			{
+				auto cleanup = cleanup_failed_start();
+				if (!cleanup)
+					return cxxlens::sdk::unexpected(std::move(cleanup.error()));
 				return cxxlens::sdk::unexpected(
 					process_start_exception_error("process-port-allocation-failed"));
 			}
 			catch (const std::exception&)
 			{
+				auto cleanup = cleanup_failed_start();
+				if (!cleanup)
+					return cxxlens::sdk::unexpected(std::move(cleanup.error()));
 				return cxxlens::sdk::unexpected(
 					process_start_exception_error("process-port-exception"));
 			}
 			catch (...)
 			{
+				auto cleanup = cleanup_failed_start();
+				if (!cleanup)
+					return cxxlens::sdk::unexpected(std::move(cleanup.error()));
 				return cxxlens::sdk::unexpected(
 					process_start_exception_error("process-port-unknown-exception"));
 			}
@@ -80,8 +98,7 @@ namespace cxxlens::sdk::provider::detail
 		if (!process)
 		{
 			auto launch_error = std::move(process.error());
-			session->fail_before_worker_start();
-			if (auto cleanup = session->cleanup(); !cleanup)
+			if (auto cleanup = cleanup_failed_start(); !cleanup)
 				return cxxlens::sdk::unexpected(std::move(cleanup.error()));
 			return cxxlens::sdk::unexpected(std::move(launch_error));
 		}

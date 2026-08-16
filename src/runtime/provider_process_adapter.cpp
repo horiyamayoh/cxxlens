@@ -39,6 +39,48 @@
 
 namespace cxxlens::sdk::provider
 {
+#if defined(__linux__) && defined(__GLIBC__)
+	namespace detail
+	{
+		ng1_post_fork_process_guard::ng1_post_fork_process_guard(const int child) noexcept
+			: child_{child}
+		{
+		}
+
+		ng1_post_fork_process_guard::~ng1_post_fork_process_guard() noexcept
+		{
+			cleanup();
+		}
+
+		void ng1_post_fork_process_guard::release() noexcept
+		{
+			child_ = -1;
+		}
+
+		void ng1_post_fork_process_guard::cleanup() noexcept
+		{
+			const auto child = static_cast<pid_t>(std::exchange(child_, -1));
+			if (child <= 0)
+				return;
+
+			const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{100};
+			while (std::chrono::steady_clock::now() < deadline)
+			{
+				// The child PID is freshly allocated and remains waitable until this guard
+				// reaps it, so a group with that ID cannot belong to an unrelated process.
+				// Attempt the group first even when the setup ACK was not observed; this
+				// closes the scheduler/ACK-timeout race for descendants.
+				(void)::kill(-child, SIGKILL);
+				(void)::kill(child, SIGKILL);
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+			}
+			while (::waitpid(child, nullptr, 0) < 0 && errno == EINTR)
+			{
+			}
+		}
+	} // namespace detail
+#endif
+
 	namespace
 	{
 		[[nodiscard]] error
@@ -193,51 +235,6 @@ namespace cxxlens::sdk::provider
 		{
 			descriptor read;
 			descriptor write;
-		};
-
-		/** Keep a forked child owned until the live process object owns its group. */
-		class post_fork_process_guard
-		{
-		  public:
-			explicit post_fork_process_guard(const pid_t child) noexcept : child_{child} {}
-			post_fork_process_guard(const post_fork_process_guard&) = delete;
-			post_fork_process_guard& operator=(const post_fork_process_guard&) = delete;
-			~post_fork_process_guard() noexcept
-			{
-				cleanup();
-			}
-
-			void mark_process_group_established() noexcept
-			{
-				process_group_established_ = true;
-			}
-
-			void release() noexcept
-			{
-				child_ = -1;
-			}
-
-		  private:
-			void cleanup() noexcept
-			{
-				const auto child = std::exchange(child_, static_cast<pid_t>(-1));
-				if (child <= 0)
-					return;
-				const auto target = process_group_established_ ? -child : child;
-				const auto deadline =
-					std::chrono::steady_clock::now() + std::chrono::milliseconds{100};
-				while (std::chrono::steady_clock::now() < deadline)
-				{
-					(void)::kill(target, SIGKILL);
-					std::this_thread::sleep_for(std::chrono::milliseconds{1});
-				}
-				while (::waitpid(child, nullptr, 0) < 0 && errno == EINTR)
-				{
-				}
-			}
-
-			pid_t child_{};
-			bool process_group_established_{};
 		};
 
 		[[nodiscard]] result<pipe_pair> make_pipe()
@@ -1120,7 +1117,7 @@ namespace cxxlens::sdk::provider
 #endif
 					::_exit(127);
 				}
-				post_fork_process_guard child_guard{child};
+				detail::ng1_post_fork_process_guard child_guard{child};
 
 				process_group_pipe->write.reset();
 				const auto parent_setpgid = ::setpgid(child, child);
@@ -1138,7 +1135,6 @@ namespace cxxlens::sdk::provider
 					return cxxlens::sdk::unexpected(
 						process_error("provider.runtime-unavailable", "ng1-live", "process-group"));
 				}
-				child_guard.mark_process_group_established();
 				input->read.reset();
 				output_pipe->write.reset();
 				error_pipe->write.reset();
