@@ -6,7 +6,7 @@
     "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02"
   },
   "local_workflows": {
-    ".github/workflows/nightly.yml": "979e6bb1815ff734c9dfe4224a1eb4270a473fd8d316900761f9d28d4e77c72c"
+    ".github/workflows/nightly.yml": "d05873e273c63e846b6be72607536ac62f9c3b15943372cc20a178331d9d10ae"
   },
   "authority": {
     "adr": "docs/design/adr/0072-ci-supply-chain-provenance.md",

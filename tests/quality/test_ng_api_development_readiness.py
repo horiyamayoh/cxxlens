@@ -302,6 +302,58 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             ):
                 readiness.validate_documents(root)
 
+    def test_bounded_completion_contract_is_required_in_activated_goal(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / readiness.AGENT_GOAL_PATH
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`completion-class: bounded-implementation`",
+                    "completion class marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                readiness.ReadinessError, "bounded completion marker"
+            ):
+                readiness.validate_documents(root)
+
+    def test_legacy_issue_close_qualification_is_rejected_from_goal(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / readiness.AGENT_GOAL_PATH
+            goal.write_text(
+                goal.read_text(encoding="utf-8")
+                + "\nmerged-main qualification と learning checkpoint 後の active issue close\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                readiness.ReadinessError, "legacy issue-close requirement"
+            ):
+                readiness.validate_documents(root)
+
+    def test_bounded_goal_keeps_aggregate_exact_sha_qualification(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / readiness.AGENT_GOAL_PATH
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "それらの aggregate gate は exact merged-main SHA の required checks と fail-closed evidence を引き続き検証します。",
+                    "aggregate gate wording removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                readiness.ReadinessError, "bounded completion contract text"
+            ):
+                readiness.validate_documents(root)
+
 
 if __name__ == "__main__":
     unittest.main()

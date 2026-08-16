@@ -77,6 +77,23 @@ namespace cxxlens::detail::clang22::materialization
 
 	class materialization_execution_journal;
 
+	/** Phase in which a response became unsafe after the Store publish boundary. */
+	enum class materialization_postpublication_failure_phase : std::uint8_t
+	{
+		store_persistence,
+		report_construction,
+		report_validation,
+		response_spool,
+		stdout_transport,
+	};
+
+	/** Recovery authority retained when no post-publication response is authoritative. */
+	enum class materialization_postpublication_recovery_authority : std::uint8_t
+	{
+		committed_record_only,
+		read_only_recovery_required,
+	};
+
 	/**
 	 * Non-forgeable authority for exactly one compact prepublication failure.
 	 *
@@ -135,12 +152,73 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] const materialization_store_observation& store_observation() const noexcept;
 
+		/**
+		 * Consume the post-publication journal as an exit-2/no-response outcome.
+		 *
+		 * This operation has no compact-failure counterpart: once publish() was attempted, a
+		 * zero-effect response cannot be authored. The returned token retains the exact Store
+		 * observation so callers cannot accidentally claim zero commit or retry blindly. Successful
+		 * authority issuance consumes this journal; repeated rvalue issuance is rejected.
+		 */
+		[[nodiscard]] sdk::result<class materialization_postpublication_failure_authority>
+		issue_no_response_failure(materialization_postpublication_failure_phase phase,
+								  sdk::error error) &&;
+
 	  private:
 		explicit materialization_postpublication_journal(
 			materialization_store_observation observation);
 		materialization_store_observation observation_;
+		bool consumed_{};
 
 		friend class materialization_execution_journal;
+	};
+
+	/**
+	 * Non-forgeable authority for a post-publication failure.
+	 *
+	 * The token carries no response bytes and deliberately exposes exit 2, non-authoritative
+	 * stdout, and the only valid recovery route. It is source-private evidence, not a failure JSON
+	 * response and not a permission to downgrade to the compact zero-effect branch.
+	 */
+	class materialization_postpublication_failure_authority
+	{
+	  public:
+		materialization_postpublication_failure_authority(
+			const materialization_postpublication_failure_authority&) = delete;
+		materialization_postpublication_failure_authority&
+		operator=(const materialization_postpublication_failure_authority&) = delete;
+		materialization_postpublication_failure_authority(
+			materialization_postpublication_failure_authority&&) noexcept;
+		materialization_postpublication_failure_authority&
+		operator=(materialization_postpublication_failure_authority&&) noexcept;
+		~materialization_postpublication_failure_authority();
+
+		[[nodiscard]] bool valid() const noexcept;
+		[[nodiscard]] materialization_postpublication_failure_phase phase() const noexcept;
+		[[nodiscard]] const sdk::error& error() const noexcept;
+		[[nodiscard]] const materialization_store_observation& store_observation() const noexcept;
+		[[nodiscard]] materialization_postpublication_recovery_authority
+		recovery_authority() const noexcept;
+		[[nodiscard]] constexpr int process_exit_status() const noexcept
+		{
+			return 2;
+		}
+		[[nodiscard]] constexpr bool response_authoritative() const noexcept
+		{
+			return false;
+		}
+		[[nodiscard]] constexpr bool compact_downgrade_allowed() const noexcept
+		{
+			return false;
+		}
+
+	  private:
+		struct state;
+		explicit materialization_postpublication_failure_authority(
+			std::unique_ptr<state> state) noexcept;
+		std::unique_ptr<state> state_;
+
+		friend class materialization_postpublication_journal;
 	};
 
 	/**

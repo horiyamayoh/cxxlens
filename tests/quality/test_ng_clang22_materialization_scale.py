@@ -196,6 +196,86 @@ class NgClang22MaterializationScaleTests(unittest.TestCase):
                     scenario_id="raw-request-limit-plus-one",
                 )
 
+    def test_run_marker_binds_terminal_scenario_results_to_the_tree(self) -> None:
+        marker = scale.new_run_marker(
+            ROOT,
+            ROOT / "build" / "driver",
+            ROOT / "evidence.json",
+        )
+        marker["status"] = "passed"
+        marker["exit_status"] = 0
+        marker["phase"] = "complete"
+        marker["current_scenario"] = None
+        marker["scenarios"] = [
+            {
+                "id": scenario_id,
+                "expected": (
+                    "reject" if scenario_id == "raw-request-limit-plus-one" else "pass"
+                ),
+                "status": "passed",
+                "input": "generated",
+                "admission": (
+                    "expected-rejection"
+                    if scenario_id == "raw-request-limit-plus-one"
+                    else "passed"
+                ),
+                "installed": None,
+            }
+            for scenario_id in checker.REQUIRED_SCENARIOS
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            marker_path = pathlib.Path(directory) / "scale-failure.json"
+            scale.write_run_marker(marker_path, marker)
+            checked = checker.check_run_marker(ROOT, marker_path)
+            self.assertEqual(checked["status"], "passed")
+
+    def test_failed_run_marker_identifies_the_owning_scenario(self) -> None:
+        marker = scale.new_run_marker(ROOT, ROOT / "driver", ROOT / "evidence.json")
+        marker["status"] = "failed"
+        marker["exit_status"] = 1
+        marker["phase"] = "complete"
+        marker["current_scenario"] = None
+        marker["scenarios"] = [
+            {
+                "id": "one-task",
+                "expected": "pass",
+                "status": "failed",
+                "input": "generated",
+                "admission": "failed",
+                "installed": None,
+            }
+        ]
+        marker["failure"] = {
+            "phase": "scenario-result",
+            "scenario_id": "one-task",
+            "reason": "process-boundary-failed",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            marker_path = pathlib.Path(directory) / "scale-failure.json"
+            scale.write_run_marker(marker_path, marker)
+            checked = checker.check_run_marker(ROOT, marker_path)
+            self.assertEqual(checked["failure"]["scenario_id"], "one-task")
+
+    def test_nightly_scale_job_uploads_failures_and_has_a_final_gate(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        scale_job = workflow.split("  materialization-scale:\n", 1)[1].split(
+            "  evidence-ownership:\n", 1
+        )[0]
+        harness_source = (ROOT / "tests" / "install" / "clang22_materializer_scale_test.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("--failure-marker", scale_job)
+        self.assertIn("--run-marker", scale_job)
+        self.assertIn("materialization scale scenario start", harness_source)
+        self.assertIn("materialization scale scenario result", harness_source)
+        self.assertIn("if: always()", scale_job)
+        self.assertIn("name: Enforce scale evidence result", scale_job)
+        self.assertIn("cxxlens-materialization-scale-failure.json", scale_job)
+        self.assertIn("if-no-files-found: warn", scale_job)
+        self.assertNotIn("continue-on-error:", scale_job)
+
 
 if __name__ == "__main__":
     unittest.main()
