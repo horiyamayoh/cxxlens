@@ -171,6 +171,8 @@ namespace cxxlens::detail::clang22::materialization
 	 */
 	struct materialization_bounded_task_claims
 	{
+		/** Canonical request position; the source accepts only the next position once. */
+		std::uint64_t canonical_task_index{};
 		std::string materializer_semantics_digest;
 		std::string direct_basis_digest;
 		std::string canonical_adoption_transform_digest;
@@ -182,6 +184,7 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<materialization_claim_partition> partitions;
 
 		materialization_bounded_task_claims(
+			const std::uint64_t canonical_task_index,
 			std::string materializer_semantics_digest,
 			std::string direct_basis_digest,
 			std::string canonical_adoption_transform_digest,
@@ -191,7 +194,8 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<materialization_canonicalization_edge> canonicalization_edges,
 			std::vector<materialization_origin_association> origin_associations,
 			std::vector<materialization_claim_partition> partitions)
-			: materializer_semantics_digest{std::move(materializer_semantics_digest)},
+			: canonical_task_index{canonical_task_index},
+			  materializer_semantics_digest{std::move(materializer_semantics_digest)},
 			  direct_basis_digest{std::move(direct_basis_digest)},
 			  canonical_adoption_transform_digest{std::move(canonical_adoption_transform_digest)},
 			  base_ingestion_transform_digest{std::move(base_ingestion_transform_digest)},

@@ -3492,6 +3492,25 @@ namespace
 					duplicate_result.error().detail == "noncanonical-order" &&
 					duplicate_source->partition_count() == 0U,
 				"bounded adoption accepted a duplicate partition window");
+
+		auto out_of_order_source = materialization_bounded_claim_source::begin(request);
+		require(out_of_order_source.has_value(), "out-of-order source begin failed");
+		auto out_of_order = out_of_order_source->consume_task(make_task(1U));
+		require(!out_of_order && out_of_order.error().field == "task-order" &&
+					out_of_order.error().detail == "canonical-next" &&
+					out_of_order_source->partition_count() == 0U,
+				"bounded adoption staged an out-of-order task window");
+
+		auto duplicate_task_source = materialization_bounded_claim_source::begin(request);
+		require(duplicate_task_source.has_value(), "duplicate task source begin failed");
+		require(duplicate_task_source->consume_task(make_task(0U)).has_value(),
+				"duplicate task source first window adoption failed");
+		const auto partition_count_before_duplicate = duplicate_task_source->partition_count();
+		auto duplicate_task = duplicate_task_source->consume_task(make_task(0U));
+		require(!duplicate_task && duplicate_task.error().field == "task-order" &&
+					duplicate_task.error().detail == "canonical-next" &&
+					duplicate_task_source->partition_count() == partition_count_before_duplicate,
+				"bounded adoption staged a duplicate task window");
 	}
 } // namespace
 

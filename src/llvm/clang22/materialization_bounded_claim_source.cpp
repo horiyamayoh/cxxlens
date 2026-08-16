@@ -503,6 +503,15 @@ namespace cxxlens::detail::clang22::materialization
 			failed_ = true;
 			return sdk::unexpected(source_error("lifecycle", "task-count"));
 		}
+		// The task result is still caller-owned at this point. Reject an out-of-order or repeated
+		// window before creating or appending to any private spool so a duplicate cannot inflate
+		// the retained source staging state. The index is compact request metadata, not a task
+		// payload.
+		if (task.canonical_task_index != consumed_task_count_)
+		{
+			failed_ = true;
+			return sdk::unexpected(source_error("task-order", "canonical-next"));
+		}
 		if (task.partitions.empty())
 		{
 			failed_ = true;

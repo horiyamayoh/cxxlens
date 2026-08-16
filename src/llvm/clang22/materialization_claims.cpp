@@ -2105,6 +2105,9 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
+			if (task_index > std::numeric_limits<std::uint64_t>::max())
+				return sdk::unexpected(claim_error(
+					"materialization.task-binding-mismatch", "task-index", "cardinality"));
 			if (request.tasks.empty() || (!v2_authority && task_index >= request.tasks.size()) ||
 				(v2_authority && request.tasks.size() != 1U))
 				return sdk::unexpected(
@@ -2849,7 +2852,8 @@ namespace cxxlens::detail::clang22::materialization
 				association_values.push_back(std::move(association));
 			}
 
-			return materialization_bounded_task_claims{basis->materializer_semantics,
+			return materialization_bounded_task_claims{static_cast<std::uint64_t>(task_index),
+													   basis->materializer_semantics,
 													   basis->direct_basis,
 													   basis->canonical_transform,
 													   basis->base_transform,
