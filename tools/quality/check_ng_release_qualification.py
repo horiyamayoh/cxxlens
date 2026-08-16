@@ -124,6 +124,7 @@ MATERIALIZATION_ASSIGNMENT_FEEDBACK = (
     "DF-0206",
     "DF-0207",
     "DF-0208",
+    "DF-0261",
 )
 MATERIALIZATION_ASSIGNMENT_SURFACES = (
     ("distribution.consumer-configuration", "shared/real-project"),
@@ -548,7 +549,9 @@ def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
                 "gap": {
                     "finding": "scope.tracked-gap.clang22-installed-adoption",
                     "remediation": (
-                        "Implement the accepted DF-0195 through DF-0199 sealed-evidence, "
+                        "Resolve the proposed DF-0261 source-closure identity and compiler "
+                        "VFS authority before qualifying real-project consumers; implement "
+                        "the accepted DF-0195 through DF-0199 sealed-evidence, "
                         "measured-occurrence, authenticated-streaming, head-observation, "
                         "and canonical-Base64 authority; implement the accepted DF-0200 bounded "
                         "claim/Store staging, the accepted DF-0205/DF-0206 same-process "
@@ -1155,6 +1158,17 @@ def validate_documents(
         if marker not in evaluation_job.group("body"):
             fail(f"release evaluation workflow marker is missing: {marker}")
     evaluation_body = evaluation_job.group("body")
+    for marker in (
+        "timeout-minutes: 100",
+        "name: Download exact-main Nightly evidence",
+        "uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16",
+        "name: cxxlens-nightly-evidence-${{ github.sha }}",
+        "path: build/release-evaluation-nightly",
+        "name: cxxlens-nightly-evidence-consumed-${{ github.sha }}",
+        "build/release-evaluation-nightly/nightly-evidence-set.json",
+    ):
+        if marker not in evaluation_body:
+            fail(f"exact-main Nightly evidence workflow marker is missing: {marker}")
     validate_accelerated_nightly_download_step(evaluation_steps)
     for forbidden in (
         "gh api",
@@ -1163,17 +1177,13 @@ def validate_documents(
         "sleep 30",
         "run-id",
         "nightly-run",
+        "id: nightly-run",
+        "gh api --method GET",
+        "for attempt in $(seq 1 180)",
+        'run-id: ${{ steps.nightly-run.outputs.run-id }}',
     ):
         if forbidden in evaluation_body:
-            fail(f"release evaluation polling marker is forbidden: {forbidden}")
-    for marker in (
-        "name: cxxlens-nightly-evidence-${{ github.sha }}",
-        "path: build/release-evaluation-nightly",
-        "name: cxxlens-nightly-evidence-consumed-${{ github.sha }}",
-        "build/release-evaluation-nightly/nightly-evidence-set.json",
-    ):
-        if marker not in evaluation_body:
-            fail(f"same-run Nightly evidence workflow marker is missing: {marker}")
+            fail(f"release qualification polling is forbidden: {forbidden}")
     for marker in (
         "needs: [release-evaluation]",
         "needs.release-evaluation.outputs.qualification == 'qualified'",
