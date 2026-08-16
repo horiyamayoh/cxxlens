@@ -29,12 +29,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      - name: Install exact Clang 22 toolchain
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: developer
       - name: Run draft fast gate
         env:
           CXX: clang++-22
@@ -64,15 +61,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
-      - name: Install exact Clang 22 toolchain
-        if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
-        run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: developer
       - name: Configure, build, and test
         if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
         env:
@@ -114,12 +105,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - name: Install exact Clang 22 toolchain
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: developer
       - name: Build and observe exact-SHA static/shared SQLite Store v3
         env:
           CXX: clang++-22
@@ -166,18 +154,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 2
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: none
       - name: Fail fast on repository consistency
         run: |
           python tools/quality/check_documentation_consistency.py check --root .
           python tools/quality/check_ng_api_development_readiness.py check --root .
-      - name: Install exact Clang 22 toolchain
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - name: Install exact Doxygen toolchain
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile documentation
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+          documentation: "true"
+          python-dependencies: "false"
       - name: Generate linkage-independent quality evidence once
         env:
           CXX: clang++-22
@@ -247,10 +235,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: none
       - name: "Generate exact-SHA #261 agent context"
         run: |
           SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')"
@@ -279,12 +266,9 @@ jobs:
         shared: ["OFF", "ON"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - name: Install Clang 22 and Ninja
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: developer
       - name: Verify installed packages
         env:
           CXX: clang++-22
@@ -329,10 +313,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: none
       - name: Compile LLVM-independent public headers
         run: |
           mkdir -p build/gcc-public-headers
@@ -363,10 +346,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: none
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
         with:
           pattern: cxxlens-*-${{ github.sha }}
@@ -396,10 +378,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: none
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
         with:
           pattern: cxxlens-*-${{ github.sha }}
@@ -439,10 +420,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: none
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
         with:
           pattern: cxxlens-*-${{ github.sha }}
@@ -476,12 +456,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - name: Install exact Clang 22 toolchain
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: developer
       - name: Build and measure the exact-SHA G5 runtime
         env:
           CXX: clang++-22
@@ -543,10 +520,9 @@ jobs:
       qualification: ${{ steps.evaluate.outputs.qualification }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: none
       - name: Download exact-main Nightly evidence
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
         with:
@@ -595,10 +571,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: none
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
         with:
           pattern: cxxlens-*-${{ github.sha }}
@@ -644,10 +619,9 @@ jobs:
           echo "invalid qualification dependency matrix: evaluation=${EVALUATION_RESULT}, qualification=${QUALIFICATION}, strict=${STRICT_RESULT}" >&2
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          python-version: "3.12.11"
-      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+          profile: none
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
         with:
           name: cxxlens-ng-release-qualification-evaluation-${{ github.sha }}
