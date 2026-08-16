@@ -177,6 +177,32 @@ def fail(message: str) -> None:
     raise ReleaseQualificationError(message)
 
 
+def validate_accelerated_nightly_download_step(steps: Any) -> None:
+    expected_name = "cxxlens-nightly-evidence-${{ github.sha }}"
+    expected_path = "build/release-evaluation-nightly"
+    if not isinstance(steps, list):
+        fail("release evaluation steps are missing")
+    candidates = [
+        step
+        for step in steps
+        if isinstance(step, dict)
+        and step.get("name") == "Download exact-main Nightly evidence"
+    ]
+    if len(candidates) != 1:
+        fail("accelerated release evaluation must have one named Nightly download step")
+    step = candidates[0]
+    uses = step.get("uses")
+    if not isinstance(uses, str) or not re.fullmatch(
+        r"actions/download-artifact@[0-9a-f]{40}", uses
+    ):
+        fail("accelerated Nightly download step must use a pinned download-artifact action")
+    settings = step.get("with")
+    if not isinstance(settings, dict):
+        fail("accelerated Nightly download step is missing action inputs")
+    if settings.get("name") != expected_name or settings.get("path") != expected_path:
+        fail("accelerated Nightly download step artifact name/path binding differs")
+
+
 def load(path: pathlib.Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8")) if path.suffix == ".json" else yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -1107,12 +1133,27 @@ def validate_documents(
     strict_job = workflow_job("release-qualification")
     if evaluation_job is None or strict_job is None:
         fail("release evaluation/qualification workflow jobs are missing")
+    evaluation_body = evaluation_job.group("body")
+    try:
+        workflow_document = yaml.safe_load(workflow)
+    except yaml.YAMLError as error:
+        fail(f"release qualification workflow cannot be parsed: {error}")
+    jobs = workflow_document.get("jobs") if isinstance(workflow_document, dict) else None
+    evaluation_definition = (
+        jobs.get("release-evaluation") if isinstance(jobs, dict) else None
+    )
+    evaluation_steps = (
+        evaluation_definition.get("steps")
+        if isinstance(evaluation_definition, dict)
+        else None
+    )
     for marker in (
         "needs: [nightly-quality, g5-qualification, sqlite-store-v3-qualification]",
         "check_ng_release_qualification.py evaluate",
         "--nightly-evidence-dir build/release-evaluation-nightly",
         '--github-output "${GITHUB_OUTPUT}"',
         "qualification: ${{ steps.evaluate.outputs.qualification }}",
+        "timeout-minutes: 100",
     ):
         if marker not in evaluation_job.group("body"):
             fail(f"release evaluation workflow marker is missing: {marker}")
@@ -1128,6 +1169,7 @@ def validate_documents(
     ):
         if marker not in evaluation_body:
             fail(f"exact-main Nightly evidence workflow marker is missing: {marker}")
+    validate_accelerated_nightly_download_step(evaluation_steps)
     for forbidden in (
         "gh api",
         "actions/workflows/nightly.yml/runs",

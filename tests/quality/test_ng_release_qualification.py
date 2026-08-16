@@ -20,6 +20,36 @@ import check_ng_production_scope_closure as scope  # noqa: E402
 
 
 class NgReleaseQualificationTests(unittest.TestCase):
+    def test_accelerated_nightly_download_binding_is_step_scoped(self) -> None:
+        steps = [
+            {
+                "name": "Download exact-main Nightly evidence",
+                "uses": "actions/download-artifact@" + "a" * 40,
+                "with": {
+                    "name": "cxxlens-nightly-evidence-${{ github.sha }}",
+                    "path": "build/release-evaluation-nightly",
+                },
+            },
+            {
+                "uses": "actions/download-artifact@" + "b" * 40,
+                "with": {"pattern": "cxxlens-*-${{ github.sha }}"},
+            },
+        ]
+        release.validate_accelerated_nightly_download_step(steps)
+
+        steps[0]["uses"] = "actions/upload-artifact@" + "a" * 40
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "pinned download-artifact"
+        ):
+            release.validate_accelerated_nightly_download_step(steps)
+
+        steps[0]["uses"] = "actions/download-artifact@" + "a" * 40
+        steps[0]["with"]["path"] = "build/wrong"
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "name/path binding"
+        ):
+            release.validate_accelerated_nightly_download_step(steps)
+
     def test_nightly_evidence_requires_exact_passed_aggregate(self) -> None:
         git = {
             "revision": "1" * 40,
