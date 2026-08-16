@@ -26,7 +26,7 @@ namespace cxxlens::provider::clang22
 		struct native_access;
 	} // namespace detail
 
-	/** @brief One in-memory Clang translation-unit request with explicit arguments. */
+	/** @brief In-memory Clang translation-unit input with path validation. */
 	struct translation_unit_input
 	{
 		std::string source_snapshot;

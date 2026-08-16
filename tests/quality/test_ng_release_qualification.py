@@ -1238,6 +1238,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0206",
                     "DF-0207",
                     "DF-0208",
+                    "DF-0261",
                 ],
             },
         )
