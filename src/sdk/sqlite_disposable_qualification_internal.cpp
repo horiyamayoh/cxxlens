@@ -430,6 +430,7 @@ namespace cxxlens::detail::sqlite_qualification
 			sqlite_disposable_cleanup_policy::retain_private_root};
 		void (*pre_remove_signal)(void*) noexcept {};
 		void* pre_remove_signal_context{};
+		bool parent_sync_failure_for_testing{};
 		// Once a normalization boundary is entered, the capability is terminal for every
 		// subsequent normalization or handoff attempt, including an opaque syscall failure.
 		bool normalization_attempted{};
@@ -1244,6 +1245,14 @@ namespace cxxlens::detail::sqlite_qualification
 		capability.state_->pre_remove_signal_context = context;
 	}
 
+	void set_sqlite_disposable_parent_sync_failure_for_testing(
+		sqlite_disposable_qualification_capability& capability, const bool enabled) noexcept
+	{
+		if (capability.state_ == nullptr || !capability.state_->active)
+			return;
+		capability.state_->parent_sync_failure_for_testing = enabled;
+	}
+
 	void invalidate_sqlite_disposable_process_instance_for_testing(
 		sqlite_disposable_qualification_capability& capability) noexcept
 	{
@@ -1330,7 +1339,7 @@ namespace cxxlens::detail::sqlite_qualification
 			if (::unlinkat(state->root.get(), "main-wal", 0) != 0)
 				return cxxlens::sdk::unexpected(
 					raw_family_error("normalization-wal-unlink-uncertain"));
-			if (!fsync_exact(state->root.get()))
+			if (state->parent_sync_failure_for_testing || !fsync_exact(state->root.get()))
 				return cxxlens::sdk::unexpected(
 					raw_family_error("normalization-parent-sync-uncertain"));
 
