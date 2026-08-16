@@ -1999,6 +1999,18 @@ namespace
 		};
 		require(!validate_materialization_store_external_authority(tampered_authority),
 				"Store external authority accepted a tampered execution journal");
+		std::vector<materialization_incremental_task_receipt> retained_receipts;
+		std::vector<std::vector<std::string>> retained_partition_ids;
+		retained_receipts.reserve(source->task_count());
+		retained_partition_ids.reserve(source->task_count());
+		for (std::size_t index{}; index < source->task_count(); ++index)
+		{
+			const auto* receipt = source->task_receipt(index);
+			require(receipt != nullptr, "claim stream source lost a task receipt before release");
+			retained_receipts.push_back(*receipt);
+			const auto ids = source->partition_ids(index);
+			retained_partition_ids.emplace_back(ids.begin(), ids.end());
+		}
 		std::size_t event_count{};
 		auto replayed = source->replay(
 			[&](const materialization_claim_stream_event& event) -> sdk::result<void>
@@ -2011,6 +2023,40 @@ namespace
 			});
 		require(replayed.has_value() && event_count != 0U,
 				"claim stream source did not replay the sealed event boundary");
+		auto released = source->release_replay_payloads_after_store_preparation();
+		require(released.has_value(), "claim stream payload release rejected the first release");
+		require(source->materialization_request_id() == *request_id &&
+					source->task_count() == retained_receipts.size() &&
+					source->partition_count() == request.tasks.size(),
+				"claim stream payload release discarded request or census identity");
+		for (std::size_t index{}; index < retained_receipts.size(); ++index)
+		{
+			const auto* receipt = source->task_receipt(index);
+			require(
+				receipt != nullptr && *receipt == retained_receipts[index] &&
+					std::ranges::equal(source->partition_ids(index), retained_partition_ids[index]),
+				"claim stream payload release discarded retained task authority");
+		}
+		auto retained_authority_valid = validate_materialization_store_external_authority(
+			materialization_store_external_authority{&*source, &*journal});
+		require(retained_authority_valid.has_value(),
+				"Store authority could not validate retained metadata after payload release");
+		require(!validate_materialization_store_external_authority(tampered_authority),
+				"Store authority accepted a tampered journal after payload release");
+		auto replay_after_release = source->replay(
+			[](const materialization_claim_stream_event&) -> sdk::result<void>
+			{
+				return {};
+			});
+		require(!replay_after_release &&
+					failure(replay_after_release.error()) ==
+						"materialization.claim-stream-invalid/replay/payloads-released",
+				"claim stream replay did not fail closed after payload release");
+		auto released_again = source->release_replay_payloads_after_store_preparation();
+		require(!released_again &&
+					failure(released_again.error()) ==
+						"materialization.claim-stream-invalid/replay/payloads-already-released",
+				"claim stream payload release was not a one-shot transition");
 	}
 
 	[[nodiscard]] incremental::input_fingerprint incremental_fingerprint()
