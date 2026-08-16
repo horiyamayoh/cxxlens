@@ -710,6 +710,21 @@ namespace cxxlens::detail::clang22::materialization
 									{
 										return string(batch.ordered_chunk_digests[index]);
 									});
+			const auto rows = json_array_capacity(
+				batch.rows.size(),
+				[&](const std::size_t index) -> std::optional<std::size_t>
+				{
+					const auto& row = batch.rows[index];
+					json_capacity_object value;
+					auto canonical = string(row.row_canonical_form);
+					auto digest = string(row.row_digest);
+					if (!canonical || !digest ||
+						!value.add_member("row_index", maximum_json_u64_bytes) ||
+						!value.add_member("row_canonical_form", *canonical) ||
+						!value.add_member("row_digest", *digest))
+						return std::nullopt;
+					return value.finish();
+				});
 			auto task_id = string(batch.task_id);
 			auto descriptor_id = string(batch.descriptor_id);
 			auto descriptor_digest = string(batch.descriptor_digest);
@@ -718,8 +733,8 @@ namespace cxxlens::detail::clang22::materialization
 			auto batch_id = string(batch.batch_id);
 			auto batch_digest = string(batch.batch_digest);
 			auto row_digest = string(batch.row_set_digest);
-			if (!chunks || !task_id || !descriptor_id || !descriptor_digest || !dependency ||
-				!atomic || !batch_id || !batch_digest || !row_digest ||
+			if (!chunks || !rows || !task_id || !descriptor_id || !descriptor_digest ||
+				!dependency || !atomic || !batch_id || !batch_digest || !row_digest ||
 				!output.add_member("task_id", *task_id) ||
 				!output.add_member("descriptor_id", *descriptor_id) ||
 				!output.add_member("descriptor_digest", *descriptor_digest) ||
@@ -729,6 +744,7 @@ namespace cxxlens::detail::clang22::materialization
 				!output.add_member("batch_digest", *batch_digest) ||
 				!output.add_member("ordered_chunk_digests", *chunks) ||
 				!output.add_member("row_count", maximum_json_u64_bytes) ||
+				!output.add_member("rows", *rows) ||
 				!output.add_member("row_set_digest", *row_digest))
 				return std::nullopt;
 			return output.finish();
@@ -1773,6 +1789,80 @@ namespace cxxlens::detail::clang22::materialization
 			}
 			return sdk::semantic_digest("cxxlens.clang22.materialization-report.row-set.v1",
 										projection);
+		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_sealed_transcript_report_leaf(const detailed_task_report_capture& capture,
+											   const detailed_report_limits& limits)
+		{
+			if (capture.batches.empty() || capture.batches.size() > limits.max_batches_per_task)
+				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
+											"provider_sealed_transcript",
+											"batch-count"));
+			std::vector<sdk::provider::detail::provider_sealed_transcript_batch_receipt_projection>
+				batches;
+			batches.reserve(capture.batches.size());
+			for (const auto& batch : capture.batches)
+			{
+				if (batch.task_id != capture.provider_task_id ||
+					batch.row_count != batch.rows.size() ||
+					batch.rows.size() > limits.max_side_channel_records)
+					return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+												"provider_sealed_transcript",
+												"batch-binding"));
+				sdk::provider::detail::provider_sealed_transcript_batch_receipt_projection
+					projection;
+				projection.task_id = batch.task_id;
+				projection.descriptor_id = batch.descriptor_id;
+				projection.descriptor_digest = batch.descriptor_digest;
+				projection.dependency_group_id = batch.dependency_group_id;
+				projection.atomic_output_group_id = batch.atomic_output_group_id;
+				projection.batch_id = batch.batch_id;
+				projection.batch_digest = batch.batch_digest;
+				projection.ordered_chunk_digests = batch.ordered_chunk_digests;
+				projection.row_canonical_forms.reserve(batch.rows.size());
+				for (std::size_t index{}; index < batch.rows.size(); ++index)
+				{
+					const auto& row = batch.rows[index];
+					if (row.row_index != index || !bounded_text(row.row_canonical_form, limits) ||
+						!sdk::validate_utf8_text(row.row_canonical_form) ||
+						!bounded_text(row.row_digest, limits) ||
+						digest_text(row.row_canonical_form) != row.row_digest)
+						return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+													"provider_sealed_transcript.rows",
+													"canonical-binding"));
+					projection.row_canonical_forms.push_back(row.row_canonical_form);
+				}
+				batches.push_back(std::move(projection));
+			}
+			std::vector<sdk::provider::coverage_unit> coverage;
+			coverage.reserve(capture.coverage.size());
+			for (const auto& value : capture.coverage)
+				coverage.push_back({value.kind, value.id, value.state, value.reason});
+			std::vector<sdk::provider::unresolved_item> unresolved;
+			unresolved.reserve(capture.unresolved.size());
+			for (const auto& value : capture.unresolved)
+				unresolved.push_back({value.code, value.subject, value.detail});
+			std::vector<sdk::provider::evidence_item> evidence;
+			evidence.reserve(capture.evidence.size());
+			for (const auto& value : capture.evidence)
+				evidence.push_back({value.kind, value.subject, value.producer, value.summary});
+			auto expected = sdk::provider::detail::provider_sealed_transcript_receipt_digest(
+				capture.provider_task_id,
+				"provider.success",
+				batches,
+				coverage,
+				unresolved,
+				evidence);
+			if (!expected)
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+											"provider_sealed_transcript",
+											"receipt-projection"));
+			if (*expected != capture.sealed_transcript_digest)
+				return sdk::unexpected(fail(detailed_report_error_kind::transcript_mismatch,
+											"provider_sealed_transcript",
+											"leaf-binding"));
+			return {};
 		}
 
 		[[nodiscard]] sdk::result<void>
@@ -2881,6 +2971,12 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	} // namespace
 
+	sdk::result<void> validate_detailed_task_report_sealed_transcript_leaf(
+		const detailed_task_report_capture& capture, const detailed_report_limits& limits)
+	{
+		return validate_sealed_transcript_report_leaf(capture, limits);
+	}
+
 	sdk::result<std::vector<std::byte>>
 	encode_detailed_task_report_capture(const detailed_task_report_capture& capture,
 										const detailed_report_limits& limits)
@@ -3366,6 +3462,12 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(fail(detailed_report_error_kind::invalid_capture,
 											"task_results",
 											"incomplete-authority"));
+			if (auto valid = validate_report_capture_semantics(task, model.limits); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			if (auto valid =
+					validate_detailed_task_report_sealed_transcript_leaf(task, model.limits);
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
 			if (!accept_text(task.provider_task_id, true) ||
 				!accept_text(task.provider_execution_id, true) ||
 				!accept_text(task.selected_catalog_compile_unit_id, true) ||
@@ -3441,6 +3543,29 @@ namespace cxxlens::detail::clang22::materialization
 						return sdk::unexpected(fail(detailed_report_error_kind::limit_exceeded,
 													"provider_sealed_transcript.batches",
 													"chunk-digest-string"));
+				json_value::array_type rows;
+				rows.reserve(batch.rows.size());
+				for (const auto& row : batch.rows)
+				{
+					if (!accept_text(row.row_canonical_form, true) ||
+						!accept_text(row.row_digest, true))
+						return sdk::unexpected(fail(detailed_report_error_kind::limit_exceeded,
+													"provider_sealed_transcript.rows",
+													"bounded-string"));
+					auto row_canonical = json_string(row.row_canonical_form);
+					auto row_digest = json_string(row.row_digest);
+					if (!row_canonical || !row_digest)
+						return sdk::unexpected(
+							invalid("provider_sealed_transcript.rows", "string"));
+					auto row_value = json_object({
+						{"row_index", json_value::unsigned_integer(row.row_index)},
+						{"row_canonical_form", std::move(*row_canonical)},
+						{"row_digest", std::move(*row_digest)},
+					});
+					if (!row_value)
+						return sdk::unexpected(std::move(row_value.error()));
+					rows.push_back(std::move(*row_value));
+				}
 				auto batch_chunks = json_strings(batch.ordered_chunk_digests);
 				auto batch_task = json_string(batch.task_id);
 				auto descriptor = json_string(batch.descriptor_id);
@@ -3463,6 +3588,7 @@ namespace cxxlens::detail::clang22::materialization
 					{"batch_digest", std::move(*batch_digest)},
 					{"ordered_chunk_digests", std::move(*batch_chunks)},
 					{"row_count", json_value::unsigned_integer(batch.row_count)},
+					{"rows", json_value::array(std::move(rows))},
 					{"row_set_digest", std::move(*row_digest)},
 				});
 				if (!value)
