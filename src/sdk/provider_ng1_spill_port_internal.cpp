@@ -9,6 +9,7 @@
 #include <limits>
 #include <map>
 #include <new>
+#include <optional>
 #include <ranges>
 #include <string_view>
 #include <type_traits>
@@ -571,6 +572,30 @@ namespace cxxlens::sdk::provider::detail
 				}
 			}
 
+			[[nodiscard]] result<std::optional<ng1_spill_resume_frontier>>
+			read_resume_frontier() const override
+			{
+				if (descriptor_ < 0 || cleaned_ || poisoned_)
+					return unexpected(port_error("resume_frontier", "terminal-port"));
+				return frontier_;
+			}
+
+			[[nodiscard]] result<void>
+			persist_resume_frontier(const ng1_spill_resume_frontier& frontier) override
+			{
+				if (descriptor_ < 0 || cleaned_ || poisoned_)
+					return unexpected(port_error("resume_frontier", "terminal-port"));
+				if (auto valid = frontier.validate(); !valid)
+					return unexpected(std::move(valid.error()));
+				if (frontier_ &&
+					(frontier.resume_generation <= frontier_->resume_generation ||
+					 frontier.receipt.fsync_sequence <= frontier_->receipt.fsync_sequence))
+					return unexpected(
+						error{"provider.resume-token-stale", "resume_frontier", "not-increasing"});
+				frontier_ = frontier;
+				return {};
+			}
+
 			[[nodiscard]] result<void> cleanup() override
 			{
 				if (cleaned_)
@@ -588,6 +613,7 @@ namespace cxxlens::sdk::provider::detail
 			int descriptor_{-1};
 			std::uint64_t byte_count_{};
 			std::uint64_t fsync_sequence_{};
+			std::optional<ng1_spill_resume_frontier> frontier_;
 			bool poisoned_{};
 			bool cleaned_{};
 		};
@@ -633,7 +659,9 @@ namespace cxxlens::sdk::provider::detail
 	ng1_spill_staging_session::ng1_spill_staging_session(ng1_spill_staging_session&& other) noexcept
 		: prefix_{std::move(other.prefix_)}, binding_{std::move(other.binding_)},
 		  storage_{std::move(other.storage_)}, last_fsync_sequence_{other.last_fsync_sequence_},
-		  has_fsync_sequence_{other.has_fsync_sequence_}, poisoned_{other.poisoned_},
+		  last_resume_generation_{other.last_resume_generation_},
+		  has_fsync_sequence_{other.has_fsync_sequence_},
+		  has_resume_generation_{other.has_resume_generation_}, poisoned_{other.poisoned_},
 		  cleaned_{other.cleaned_}
 	{
 		other.cleaned_ = true;
@@ -651,7 +679,9 @@ namespace cxxlens::sdk::provider::detail
 		binding_ = std::move(other.binding_);
 		storage_ = std::move(other.storage_);
 		last_fsync_sequence_ = other.last_fsync_sequence_;
+		last_resume_generation_ = other.last_resume_generation_;
 		has_fsync_sequence_ = other.has_fsync_sequence_;
+		has_resume_generation_ = other.has_resume_generation_;
 		poisoned_ = other.poisoned_;
 		cleaned_ = other.cleaned_;
 		other.cleaned_ = true;
@@ -711,10 +741,14 @@ namespace cxxlens::sdk::provider::detail
 	result<ng1_spill_fsync_receipt>
 	ng1_spill_staging_session::fsync(const std::uint64_t highest_contiguous_acked_sequence,
 									 const std::uint64_t highest_observed_sequence,
-									 std::string staged_digest)
+									 std::string staged_digest,
+									 const std::uint64_t resume_generation)
 	{
 		if (!storage_ || cleaned_ || poisoned_)
 			return unexpected(port_error("fsync", "terminal-session"));
+		if (resume_generation == 0U ||
+			(has_resume_generation_ && resume_generation <= last_resume_generation_))
+			return unexpected(port_error("resume_generation", "not-increasing"));
 		if (highest_contiguous_acked_sequence > highest_observed_sequence)
 			return unexpected(
 				corrupt_error("highest_contiguous_acked_sequence", "ahead-of-observed"));
@@ -758,9 +792,76 @@ namespace cxxlens::sdk::provider::detail
 			poisoned_ = true;
 			return unexpected(std::move(receipt.error()));
 		}
+		ng1_spill_resume_frontier frontier{*receipt, resume_generation};
+		if (auto valid = frontier.validate(); !valid)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(valid.error()));
+		}
+		result<void> persisted{port_error("resume_frontier", "not-persisted")};
+		try
+		{
+			persisted = storage_->persist_resume_frontier(frontier);
+		}
+		catch (...)
+		{
+			poisoned_ = true;
+			return unexpected(port_error("resume_frontier", "effect-unknown"));
+		}
+		if (!persisted)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(persisted.error()));
+		}
 		last_fsync_sequence_ = *sequence;
 		has_fsync_sequence_ = true;
+		last_resume_generation_ = resume_generation;
+		has_resume_generation_ = true;
 		return receipt;
+	}
+
+	result<void>
+	ng1_spill_staging_session::validate_persisted_frontier(const ng1_spill_fsync_receipt& receipt,
+														   const std::uint64_t resume_generation)
+	{
+		if (!storage_ || cleaned_ || poisoned_)
+			return unexpected(port_error("resume_frontier", "terminal-session"));
+		ng1_spill_resume_frontier expected{receipt, resume_generation};
+		if (auto valid = expected.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		result<std::optional<ng1_spill_resume_frontier>> persisted{
+			port_error("resume_frontier", "not-read")};
+		try
+		{
+			persisted = storage_->read_resume_frontier();
+		}
+		catch (...)
+		{
+			poisoned_ = true;
+			return unexpected(port_error("resume_frontier", "effect-unknown"));
+		}
+		if (!persisted)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(persisted.error()));
+		}
+		if (!*persisted)
+		{
+			poisoned_ = true;
+			return unexpected(error{"provider.resume-token-stale", "resume_frontier", "missing"});
+		}
+		if (auto valid = (*persisted)->validate(); !valid)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(valid.error()));
+		}
+		if (**persisted != expected)
+		{
+			poisoned_ = true;
+			return unexpected(
+				error{"provider.resume-token-stale", "resume_frontier", "not-latest"});
+		}
+		return {};
 	}
 
 	result<ng1_spill_prefix_state> ng1_spill_staging_session::recover()
@@ -817,6 +918,57 @@ namespace cxxlens::sdk::provider::detail
 			poisoned_ = true;
 			return unexpected(port_error("recovery", "effect-unknown"));
 		}
+	}
+
+	result<void>
+	ng1_spill_staging_session::restore_from_fsync_receipt(const ng1_spill_fsync_receipt& receipt,
+														  const std::uint64_t resume_generation)
+	{
+		if (!storage_ || cleaned_ || poisoned_)
+			return unexpected(port_error("restore", "terminal-session"));
+		if (prefix_.total_bytes() != 0U || prefix_.total_records() != 0U || has_fsync_sequence_)
+		{
+			poisoned_ = true;
+			return unexpected(port_error("restore", "non-fresh-session"));
+		}
+		if (auto valid = receipt.validate(); !valid)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(valid.error()));
+		}
+		if (receipt.provider_id != binding_.provider_id ||
+			receipt.protocol_session_id != binding_.protocol_session_id ||
+			receipt.task_id != binding_.task_id || receipt.stream_id != binding_.stream_id)
+		{
+			poisoned_ = true;
+			return unexpected(corrupt_error("receipt", "binding-mismatch"));
+		}
+
+		auto recovered = recover();
+		if (!recovered)
+			return unexpected(std::move(recovered.error()));
+		auto expected = recovered->observe_host_fsync(receipt.highest_contiguous_acked_sequence,
+													  receipt.staged_digest,
+													  receipt.fsync_sequence);
+		if (!expected)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(expected.error()));
+		}
+		if (*expected != receipt)
+		{
+			poisoned_ = true;
+			return unexpected(corrupt_error("receipt", "prefix-mismatch"));
+		}
+		if (auto valid = validate_persisted_frontier(receipt, resume_generation); !valid)
+			return valid;
+
+		prefix_ = std::move(*recovered);
+		last_fsync_sequence_ = receipt.fsync_sequence;
+		has_fsync_sequence_ = true;
+		last_resume_generation_ = resume_generation;
+		has_resume_generation_ = true;
+		return {};
 	}
 
 	result<void> ng1_spill_staging_session::cleanup()
