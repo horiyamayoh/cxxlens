@@ -1,0 +1,62 @@
+name: Reconcile PR 305 onto current main
+
+on:
+  push:
+    branches:
+      - agent/issue-196-store-outcome-publication
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-pr-305
+  cancel-in-progress: true
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12.11"
+      - run: python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock
+      - name: Reapply the bounded Store-outcome slice and regenerate inventories
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='agent/issue-196-store-outcome-publication'
+          payload_base='b22c6ec46e3fb025e5f5aebe3379158d5afa3d82'
+          payload_head='fa42631bedd780cd87070fa2dbb3b67be1703057'
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main "$branch"
+          branch_head="$(git rev-parse "origin/${branch}")"
+          main_head="$(git rev-parse origin/main)"
+
+          git checkout --detach "$main_head"
+          git diff --binary "$payload_base" "$payload_head" -- \
+            CMakeLists.txt \
+            src/llvm/clang22/materialization_store_outcome.cpp \
+            src/llvm/clang22/materialization_store_outcome.hpp \
+            tests/CMakeLists.txt \
+            tests/adapter/clang22/materialization_store_outcome_test.cpp \
+            | git apply --index --3way
+
+          python tools/quality/check_documentation_consistency.py generate --root .
+          python tools/quality/verify_checksums.py generate --root .
+          git add schemas/cxxlens_asset_migration_ledger.json docs/design/SHA256SUMS
+
+          python tools/quality/check_documentation_consistency.py check --root .
+          python tools/quality/verify_checksums.py check --root .
+          git diff --cached --check
+
+          tree="$(git write-tree)"
+          commit="$(printf '%s\n\n%s\n' \
+            'Merge current main into PR #305 without generated-inventory rollback' \
+            'Reapply only the bounded Store publication-outcome slice and regenerate the asset ledger and design checksums from the exact merged tree.' \
+            | git commit-tree "$tree" -p "$branch_head" -p "$main_head")"
+          git push origin "$commit:refs/heads/${branch}"
