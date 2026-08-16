@@ -851,6 +851,36 @@ namespace
 		mutated_task.tasks.front().worker_payload.push_back(std::byte{0x01});
 		require_claims_request_binding_rejection(std::move(mutated_task), "task payload");
 
+		auto rebound_task = request;
+		rebound_task.tasks.front().worker_input.budget.wall_ms += 1U;
+		auto rebound_payload = encode_task_input(rebound_task.tasks.front().worker_input);
+		require(rebound_payload.has_value(),
+				"coherent mutable task payload fixture encoding failed");
+		rebound_task.tasks.front().worker_payload = *rebound_payload;
+		rebound_task.tasks.front().task_input_digest = sdk::content_digest(
+			std::span<const std::byte>{rebound_payload->data(), rebound_payload->size()});
+		require_claims_request_binding_rejection(std::move(rebound_task),
+												 "coherent task payload and digest");
+
+		auto mutated_task_identity = request;
+		mutated_task_identity.tasks.front().provider_task_id += ":rebound";
+		require_claims_request_binding_rejection(std::move(mutated_task_identity),
+												 "provider task identity");
+
+		auto mutated_execution = request;
+		mutated_execution.tasks.front().provider_execution_id += ":rebound";
+		require_claims_request_binding_rejection(std::move(mutated_execution),
+												 "provider execution identity");
+
+		auto mutated_sandbox = request;
+		mutated_sandbox.tasks.front().sandbox.policy_digest = "sha256:" + std::string(64U, 'f');
+		require_claims_request_binding_rejection(std::move(mutated_sandbox), "task sandbox");
+
+		auto mutated_outputs = request;
+		mutated_outputs.output_descriptors.front().descriptor_digest =
+			"semantic-v2:sha256:" + std::string(64U, 'd');
+		require_claims_request_binding_rejection(std::move(mutated_outputs), "output descriptor");
+
 		auto rebound_catalog = sdk::project_catalog::make(
 			"project://mutated", request.catalog.environment_digest, request.catalog.compile_units);
 		require(rebound_catalog.has_value(), "claims mutable catalog fixture construction failed");
@@ -861,6 +891,24 @@ namespace
 		auto mutated_publication = request;
 		mutated_publication.publication.selector.channel_id = "channel:mutated";
 		require_claims_request_binding_rejection(std::move(mutated_publication), "publication");
+
+		auto mutated_backend = request;
+		mutated_backend.publication.backend = "sqlite";
+		require_claims_request_binding_rejection(std::move(mutated_backend), "publication backend");
+
+		auto mutated_genesis = request;
+		mutated_genesis.publication.genesis = !request.publication.genesis;
+		require_claims_request_binding_rejection(std::move(mutated_genesis), "publication genesis");
+
+		auto mutated_parent = request;
+		mutated_parent.publication.expected_parent_publication = std::string{"publication:rebound"};
+		require_claims_request_binding_rejection(std::move(mutated_parent),
+												 "expected parent publication");
+
+		auto mutated_sqlite_path = request;
+		mutated_sqlite_path.publication.sqlite_path = std::string{"project://rebound.sqlite"};
+		require_claims_request_binding_rejection(std::move(mutated_sqlite_path),
+												 "publication sqlite path");
 		materialization_claim_partition_replay_source partition_source{*claims};
 		std::vector<std::string> replayed_partition_ids;
 		auto replay = partition_source.replay(
