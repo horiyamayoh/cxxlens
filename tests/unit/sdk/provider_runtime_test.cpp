@@ -2648,7 +2648,14 @@ namespace
 		descendant.budget.wall_ms = 2000U;
 		auto descendant_process = start_process(descendant);
 		std::optional<holder_observation> observed_descendant;
-		const auto marker_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+		// start() acknowledges process-group setup before exec reaches the shell command.  The
+		// live channel evaluates its wall deadline on send/receive/finish, so using the 2-second
+		// operation budget as the post-start marker-readiness deadline races with a busy runner.
+		// Keep readiness independently bounded; finish() still enforces the original operation
+		// deadline and performs the process-group cleanup assertion below.
+		const auto marker_wait_ms = std::max<std::uint64_t>(descendant.budget.wall_ms, 5'000U);
+		const auto marker_deadline =
+			std::chrono::steady_clock::now() + std::chrono::milliseconds{marker_wait_ms};
 		while (std::chrono::steady_clock::now() < marker_deadline && !observed_descendant)
 		{
 			observed_descendant = observe_descendant(descendant_marker);

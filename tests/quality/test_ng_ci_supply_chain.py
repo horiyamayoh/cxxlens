@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import json
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -37,6 +38,64 @@ class NgCiSupplyChainTest(unittest.TestCase):
 
     def test_repository_contract_and_workflows_are_valid(self) -> None:
         validate_repository(ROOT)
+
+    def test_tracked_reusable_workflow_is_repository_scoped(self) -> None:
+        validate_workflow(ROOT / ".github/workflows/quality.yml", self.lock)
+
+    def test_unavailable_reusable_workflow_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text(
+                "jobs:\n  check:\n    uses: ./.github/workflows/missing.yml\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(CiSupplyChainError, "unavailable"):
+                validate_workflow(workflow, self.lock)
+
+    def test_unlocked_reusable_workflow_is_rejected(self) -> None:
+        lock = copy.deepcopy(self.lock)
+        del lock["local_workflows"][".github/workflows/nightly.yml"]
+        with self.assertRaisesRegex(CiSupplyChainError, "absent from supply-chain lock"):
+            validate_workflow(ROOT / ".github/workflows/quality.yml", lock)
+
+    def test_reusable_workflow_digest_mismatch_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            shutil.copy2(ROOT / ".github/workflows/quality.yml", workflows / "quality.yml")
+            shutil.copy2(ROOT / ".github/workflows/nightly.yml", workflows / "nightly.yml")
+            (workflows / "nightly.yml").write_text(
+                (workflows / "nightly.yml").read_text(encoding="utf-8") + "\n# substituted\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(CiSupplyChainError, "differs from supply-chain lock"):
+                validate_workflow(workflows / "quality.yml", self.lock)
+
+    def test_bootstrap_lock_rejects_reusable_workflow_digest_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / "tools/ci").mkdir(parents=True)
+            (root / "tools/quality").mkdir(parents=True)
+            (root / ".github/workflows").mkdir(parents=True)
+            shutil.copy2(
+                ROOT / "tools/ci/llvm22-noble.lock.json",
+                root / "tools/ci/llvm22-noble.lock.json",
+            )
+            shutil.copy2(
+                ROOT / "tools/quality/requirements.lock",
+                root / "tools/quality/requirements.lock",
+            )
+            nightly = root / ".github/workflows/nightly.yml"
+            shutil.copy2(ROOT / ".github/workflows/nightly.yml", nightly)
+            nightly.write_text(
+                nightly.read_text(encoding="utf-8") + "\n# substituted\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SupplyChainError, "local workflow .*checksum mismatch"):
+                load_lock(root)
 
     def test_checksum_mismatch_is_rejected_before_effect(self) -> None:
         with self.assertRaisesRegex(SupplyChainError, "checksum mismatch"):

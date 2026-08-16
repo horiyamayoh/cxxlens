@@ -1,5 +1,5 @@
 {
-  "asset_count": 681,
+  "asset_count": 686,
   "assets": [
     {
       "authority": "active",
@@ -2915,6 +2915,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_store_outcome.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_store_outcome.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_streaming_claims.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3741,6 +3755,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/adapter/clang22/materialization_store_outcome_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/adapter/clang22/materialization_store_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3973,6 +3994,13 @@
     {
       "authority": "active",
       "path": "tests/quality/test_ng_api_development_readiness.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_api_development_readiness_wave0_baseline.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4476,6 +4504,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_api_development_readiness_wave0_baseline.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_clang22_install_matrix.py",
       "removal_issue": null,
       "replacement": null,
@@ -4770,7 +4805,7 @@
     }
   ],
   "classifications": {
-    "active": 645,
+    "active": 650,
     "archived": 35,
     "generated": 1
   },
