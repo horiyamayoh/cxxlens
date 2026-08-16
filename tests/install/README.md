@@ -67,7 +67,16 @@ installed response must preserve `sdk-error`, `head_current`,
 `current-selector`, the exact publication ID, and the zero-publication effect
 ledger as `store.current-corrupt`. The DB and its source-private incremental
 sidecar remain outside the installed prefix, and no fault-injection seam or
-native/hosted qualification is implied.
+native/hosted qualification is implied. Each negative case also emits a
+test-only `evidence-manifest.json` beside the raw input/report/receipt. Its
+validator cross-binds request-bound compact cases and the detailed baseline to
+the exact source revision/tree, package configuration, occurrence-manifest
+digest, materializer/worker digests, report projection, and external execution
+receipt/artifact digests. A raw-input-only case retains no request identity; a
+compact response without a binding is recorded as `unbound` with null source
+identity rather than inventing attribution. Every manifest is explicitly
+marked negative-only and cannot be used as positive or release qualification
+evidence.
 
 `check_ng_clang22_materialization_scale.py` is an independent checker. The report
 is intentionally marked `release_qualification: false` and `semantic_status:
