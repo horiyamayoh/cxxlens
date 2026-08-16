@@ -169,6 +169,8 @@ namespace
 	{
 		std::deque<frame> incoming;
 		std::vector<frame> sent;
+		std::optional<error> finish_failure;
+		std::optional<error> terminate_failure;
 	};
 
 	class fake_process final : public ng1_duplex_process
@@ -195,11 +197,15 @@ namespace
 
 		result<process_output> finish(const std::stop_token) override
 		{
+			if (state_->finish_failure)
+				return unexpected(*state_->finish_failure);
 			return process_output{process_status::exited, 0, 0, {}, {}, {}, {}, {}};
 		}
 
 		result<process_output> terminate(const process_status status) override
 		{
+			if (state_->terminate_failure)
+				return unexpected(*state_->terminate_failure);
 			return process_output{status, 0, 0, {}, {}, {}, {}, {}};
 		}
 
@@ -391,17 +397,16 @@ namespace
 		auto liveness = driver->check_liveness();
 		require(!liveness && liveness.error().code == "provider.heartbeat-timeout",
 				"live-driver did not fail closed on the host liveness deadline");
-		require(driver->session().confirm_worker_kill(),
-				"live-driver did not expose the explicit worker-kill confirmation");
+		auto output = driver->finish({});
+		require(output && output->status == process_status::exited,
+				"live-driver did not preserve the exact finish outcome");
+		require(driver->session().state() == ng1_recovery_state::worker_killed,
+				"live-driver finish did not synchronize timeout cleanup into worker-killed");
 		auto rejected_resume = driver->session().accept_durable_resume(
 			ng1_resume_control{}, ng1_spill_fsync_receipt{}, false, false, 0U);
 		require(!rejected_resume &&
 					rejected_resume.error().code == "provider.resume-replay-invalid",
 				"live-driver session did not fail closed on an unreceipted resume");
-
-		auto output = driver->finish({});
-		require(output && output->status == process_status::exited,
-				"live-driver did not preserve the exact finish outcome");
 		require(driver->cleanup(), "live-driver session cleanup failed");
 	}
 
@@ -424,8 +429,8 @@ namespace
 				"live-driver accepted a frame beyond the retention bound");
 		require(driver->terminate(process_status::output_limit),
 				"live-driver overflow cleanup did not terminate the process");
-		require(driver->session().observe_worker_exit(),
-				"live-driver overflow cleanup did not observe worker exit");
+		require(driver->session().state() == ng1_recovery_state::worker_killed,
+				"live-driver terminate did not synchronize a running worker exit");
 		auto rejected_resume = driver->session().accept_durable_resume(
 			ng1_resume_control{}, ng1_spill_fsync_receipt{}, false, false, 0U);
 		require(!rejected_resume, "live-driver overflow cleanup resume was not rejected");
@@ -452,8 +457,8 @@ namespace
 				"live-driver silently accepted a host resume without durable receipt");
 		require(driver->terminate(process_status::cancelled),
 				"live-driver resume cleanup did not terminate the process");
-		require(driver->session().observe_worker_exit(),
-				"live-driver resume cleanup did not observe worker exit");
+		require(driver->session().state() == ng1_recovery_state::worker_killed,
+				"live-driver terminate did not synchronize a cancelled worker exit");
 		auto rejected_resume = driver->session().accept_durable_resume(
 			ng1_resume_control{}, ng1_spill_fsync_receipt{}, false, false, 0U);
 		require(!rejected_resume, "live-driver resume cleanup was not fail-closed");
@@ -522,8 +527,8 @@ namespace
 		auto output = driver->finish({});
 		require(output && output->status == process_status::exited,
 				"task-acceptance timer fixture did not preserve process outcome");
-		require(driver->session().observe_worker_exit(),
-				"task-acceptance timer fixture did not record worker exit");
+		require(driver->session().state() == ng1_recovery_state::worker_killed,
+				"task-acceptance timer finish did not synchronize worker exit");
 		auto rejected_resume = driver->session().accept_durable_resume(
 			ng1_resume_control{}, ng1_spill_fsync_receipt{}, false, false, 0U);
 		require(!rejected_resume, "task-acceptance timer fixture accepted an unreceipted resume");
@@ -532,6 +537,39 @@ namespace
 			require(false,
 					"task-acceptance timer fixture cleanup failed: " + cleanup.error().code + ":" +
 						cleanup.error().detail);
+	}
+
+	void test_live_driver_does_not_sync_failed_process_effects()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		auto driver =
+			ng1_live_session_driver::start(values.configuration(clock, observation, process), {});
+		require(driver, "process-effect failure fixture start failed");
+
+		process->finish_failure =
+			error{"provider.process-launch-failed", "ng1-live-finish", "injected"};
+		auto finish = driver->finish({});
+		require(!finish && driver->session().state() == ng1_recovery_state::running,
+				"failed finish effect fabricated a worker lifecycle transition");
+
+		process->finish_failure.reset();
+		process->terminate_failure =
+			error{"provider.process-launch-failed", "ng1-live-terminate", "injected"};
+		auto terminate = driver->terminate(process_status::cancelled);
+		require(!terminate && driver->session().state() == ng1_recovery_state::running,
+				"failed terminate effect fabricated a worker lifecycle transition");
+
+		process->terminate_failure.reset();
+		auto completed = driver->terminate(process_status::cancelled);
+		require(completed && driver->session().state() == ng1_recovery_state::worker_killed,
+				"successful terminate did not synchronize after a failed process effect");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->session().state() == ng1_recovery_state::failed,
+				"process-effect failure fixture did not reach explicit failed cleanup");
+		require(driver->cleanup(), "process-effect failure fixture cleanup failed");
 	}
 
 	void test_shared_validator_accepts_explicit_ng1_controls()
@@ -689,6 +727,7 @@ int main()
 	test_live_driver_cleans_session_when_process_start_fails();
 	test_live_driver_cleans_session_when_process_start_throws();
 	test_live_driver_rebases_task_timers_at_acceptance();
+	test_live_driver_does_not_sync_failed_process_effects();
 	test_shared_validator_accepts_explicit_ng1_controls();
 	return 0;
 }
