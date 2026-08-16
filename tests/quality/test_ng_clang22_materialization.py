@@ -29,6 +29,41 @@ from relation_idl_compiler import (  # noqa: E402
 
 
 class NgClang22MaterializationTests(unittest.TestCase):
+    @unittest.skipUnless(
+        sys.platform.startswith("linux"),
+        "configured-suffix simulation is a Linux-only filesystem-path test",
+    )
+    def test_configured_suffix_resolves_installed_file_without_manifest_path_drift(
+        self,
+    ) -> None:
+        """Exercise suffix resolution only; this is not Windows/MSVC evidence."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = pathlib.Path(temporary) / "prefix"
+            installed = prefix / "bin/cxxlens-clang22-materialize.linux-sim"
+            installed.parent.mkdir(parents=True)
+            installed.write_bytes(b"linux suffix simulation\n")
+
+            resolved = install_matrix.resolve_installed_executable(
+                prefix,
+                "bin/cxxlens-clang22-materialize",
+                ".linux-sim",
+            )
+            self.assertEqual(resolved, installed)
+            self.assertTrue(resolved.is_file())
+            self.assertFalse(
+                (prefix / "bin/cxxlens-clang22-materialize").exists(),
+                "the canonical manifest path must not be synthesized as a second file",
+            )
+            for unsafe_suffix in ("/escape", "../escape", "\\escape", "\x00"):
+                with self.subTest(unsafe_suffix=unsafe_suffix):
+                    with self.assertRaises(install_matrix.InstallMatrixError):
+                        install_matrix.resolve_installed_executable(
+                            prefix,
+                            "bin/cxxlens-clang22-materialize",
+                            unsafe_suffix,
+                        )
+
     def test_clang22_worker_kernel_source_closure_matches_kernel(self) -> None:
         root_cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
         worker_cmake = (
@@ -114,6 +149,32 @@ class NgClang22MaterializationTests(unittest.TestCase):
             ).read_text(encoding="utf-8"),
         }
         materialization.validate_baseline_recovery_source_bindings(**documents)
+        canonical_materializer_path = (
+            '"${install_prefix}/bin/cxxlens-clang22-materialize"'
+        )
+        suffix_aware_materializer_path = (
+            '"${install_prefix}/bin/cxxlens-clang22-materialize'
+            '${install_executable_suffix}"'
+        )
+        suffix_aware_documents = copy.deepcopy(documents)
+        suffix_aware_documents["install_test"] = suffix_aware_documents[
+            "install_test"
+        ].replace(canonical_materializer_path, suffix_aware_materializer_path, 1)
+        materialization.validate_baseline_recovery_source_bindings(
+            **suffix_aware_documents
+        )
+        suffix_aware_documents["install_test"] = suffix_aware_documents[
+            "install_test"
+        ].replace(
+            suffix_aware_materializer_path,
+            '"${install_prefix}/bin/cxxlens-clang22-materialize-removed'
+            '${install_executable_suffix}"',
+            1,
+        )
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_baseline_recovery_source_bindings(
+                **suffix_aware_documents
+            )
         mutations = (
             (
                 "root_cmake",
@@ -134,7 +195,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             ),
             (
                 "install_test",
-                '"${install_prefix}/bin/cxxlens-clang22-materialize"',
+                canonical_materializer_path,
                 '"${install_prefix}/bin/cxxlens-clang22-materialize-removed"',
             ),
             (
