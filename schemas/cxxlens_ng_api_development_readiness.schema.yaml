@@ -480,6 +480,7 @@ properties:
       - install-consumer (ON)
       - quality-contracts
       - quality-evidence
+      - check-tier
   merged_main_checks:
     const:
     - foundation-completion
