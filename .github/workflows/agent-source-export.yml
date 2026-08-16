@@ -16,14 +16,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      - name: Package exact PR source
+      - name: Package exact PR and main sources
         shell: bash
         run: |
           set -euo pipefail
-          git archive --format=tar.gz --output="${RUNNER_TEMP}/cxxlens-source-${GITHUB_SHA}.tar.gz" HEAD
+          git archive --format=tar.gz --output="${RUNNER_TEMP}/cxxlens-source-head-${GITHUB_SHA}.tar.gz" HEAD
+          git archive --format=tar.gz --output="${RUNNER_TEMP}/cxxlens-source-main-${GITHUB_SHA}.tar.gz" origin/main
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: cxxlens-agent-source-${{ github.sha }}
-          path: ${{ runner.temp }}/cxxlens-source-${{ github.sha }}.tar.gz
+          path: ${{ runner.temp }}/cxxlens-source-*.tar.gz
           if-no-files-found: error
           retention-days: 1
