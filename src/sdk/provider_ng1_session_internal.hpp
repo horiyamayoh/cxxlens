@@ -176,6 +176,9 @@ namespace cxxlens::sdk::provider::detail
 		{
 			return spill_.total_records();
 		}
+		/** Admit the exact provider task-accepted identity and start task timers at its receipt. */
+		[[nodiscard]] result<void> observe_task_accepted(const task_accepted_metadata& metadata,
+														 std::uint64_t host_receipt_time_ns);
 
 		/** Validate and admit a host-to-provider heartbeat probe. */
 		[[nodiscard]] result<void> observe_host_probe(const ng1_heartbeat_control& control,
@@ -262,6 +265,7 @@ namespace cxxlens::sdk::provider::detail
 		std::optional<std::uint64_t> last_host_receipt_time_ns_;
 		std::optional<std::string> replay_output_digest_;
 		std::optional<std::string> replay_frame_transcript_digest_;
+		bool task_accepted_{};
 		bool progress_terminal_{};
 		bool poisoned_{};
 		bool cleaned_{};

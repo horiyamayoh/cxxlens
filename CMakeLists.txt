@@ -267,7 +267,8 @@ set_target_properties(cxxlens PROPERTIES EXPORT_NAME cxxlens)
 add_library(
   cxxlens_provider_runtime_internal OBJECT
   EXCLUDE_FROM_ALL src/sdk/provider_runtime.cpp
-  src/runtime/provider_process_adapter.cpp)
+  src/runtime/provider_process_adapter.cpp src/sdk/provider_ng1_transport.cpp
+  src/sdk/provider_ng1_validation.cpp)
 target_compile_definitions(cxxlens_provider_runtime_internal
                            PRIVATE CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY=1)
 target_link_libraries(cxxlens_provider_runtime_internal
@@ -295,6 +296,7 @@ add_library(
   src/sdk/provider_ng1_recovery.cpp
   src/sdk/provider_ng1_spill_port_internal.cpp
   src/sdk/provider_ng1_session.cpp
+  src/sdk/provider_ng1_live_driver.cpp
   src/sdk/testing.cpp)
 add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
 cxxlens_configure_component(cxxlens_provider_sdk provider_sdk)

@@ -1,7 +1,10 @@
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include <cxxlens/sdk/common.hpp>
 
@@ -94,6 +97,59 @@ namespace
 				fsync_sequence};
 	}
 
+	[[nodiscard]] ng1_spill_binding spill_binding(const ng1_resume_binding& value)
+	{
+		return {value.provider_id,
+				value.protocol_session_id,
+				value.task_id,
+				value.dependency_group_id,
+				value.atomic_output_group_id,
+				value.batch_id,
+				value.stream_id};
+	}
+
+	[[nodiscard]] ng1_spill_record spill_record(const ng1_spill_binding& value,
+												const std::uint64_t ordinal,
+												const std::uint64_t sequence,
+												const std::string_view payload_text)
+	{
+		ng1_spill_record output;
+		output.record_ordinal = ordinal;
+		output.task_id = value.task_id;
+		output.dependency_group_id = value.dependency_group_id;
+		output.atomic_output_group_id = value.atomic_output_group_id;
+		output.batch_id = value.batch_id;
+		output.stream_id = value.stream_id;
+		output.sequence = sequence;
+		for (const auto byte : payload_text)
+			output.payload_bytes.push_back(
+				static_cast<std::byte>(static_cast<unsigned char>(byte)));
+		auto payload_digest = ng1_spill_payload_digest(output.payload_bytes);
+		require(payload_digest, "spill payload digest construction failed");
+		output.payload_digest = *payload_digest;
+		auto record_digest = ng1_spill_record_digest(output);
+		require(record_digest, "spill record digest construction failed");
+		output.record_digest = *record_digest;
+		return output;
+	}
+
+	[[nodiscard]] ng1_resume_token make_frontier_token(const ng1_resume_binding& value,
+													   const std::uint64_t generation,
+													   const std::uint64_t acknowledged_sequence,
+													   std::string staged_digest)
+	{
+		ng1_resume_token output;
+		output.kind = ng1_resume_kind::accepted;
+		output.binding = value;
+		output.highest_contiguous_acked_sequence = acknowledged_sequence;
+		output.staged_digest = std::move(staged_digest);
+		output.token_generation = generation;
+		auto token_digest = ng1_resume_token_digest(output);
+		require(token_digest, "frontier resume token digest construction failed");
+		output.token_digest = *token_digest;
+		return output;
+	}
+
 	void test_crash_restart_replays_after_durable_ack()
 	{
 		const auto resume_binding = binding();
@@ -174,6 +230,99 @@ namespace
 		require(replay->state() == ng1_recovery_state::failed,
 				"invalid replay start did not fail closed");
 	}
+
+	void test_cancellation_transition_is_terminal_or_explicitly_recoverable()
+	{
+		auto cancelled = ng1_recovery_transition(ng1_recovery_state::running,
+												 ng1_recovery_event::cancel_requested);
+		require(cancelled && *cancelled == ng1_recovery_state::cancel_requested,
+				"cancel request did not enter the explicit cancellation state");
+
+		auto acknowledged =
+			ng1_recovery_transition(*cancelled, ng1_recovery_event::cancel_acknowledged);
+		require(acknowledged && *acknowledged == ng1_recovery_state::failed,
+				"acknowledged cancellation did not fail closed");
+		auto post_cancel = ng1_recovery_transition(*acknowledged, ng1_recovery_event::worker_exit);
+		require(!post_cancel && post_cancel.error().code == "provider.recovery-failed",
+				"terminal cancellation state remained restartable");
+
+		auto timed_out = ng1_recovery_transition(ng1_recovery_state::running,
+												 ng1_recovery_event::cancel_requested);
+		require(timed_out, "cancel-timeout setup did not enter cancellation state");
+		timed_out = ng1_recovery_transition(*timed_out, ng1_recovery_event::cancel_timeout);
+		require(timed_out && *timed_out == ng1_recovery_state::worker_killed,
+				"cancel timeout did not require the worker-kill boundary");
+
+		auto replay = ng1_recovery_transition(*timed_out, ng1_recovery_event::durable_token_valid);
+		require(replay && *replay == ng1_recovery_state::resume_replay,
+				"cancel-timeout restart did not require a durable resume token");
+		auto resumed = ng1_recovery_transition(*replay, ng1_recovery_event::replay_valid);
+		require(resumed && *resumed == ng1_recovery_state::resumed,
+				"validated cancel-timeout replay did not resume");
+		auto completed = ng1_recovery_transition(*resumed, ng1_recovery_event::output_sealed);
+		require(completed && *completed == ng1_recovery_state::completed,
+				"resumed cancel-timeout output did not complete");
+
+		auto bypass = ng1_recovery_transition(ng1_recovery_state::cancel_requested,
+											  ng1_recovery_event::durable_token_valid);
+		require(!bypass && bypass.error().code == "provider.recovery-failed",
+				"cancellation state accepted resume before worker termination");
+		auto wrong_ack = ng1_recovery_transition(ng1_recovery_state::running,
+												 ng1_recovery_event::cancel_acknowledged);
+		require(!wrong_ack && wrong_ack.error().code == "provider.recovery-failed",
+				"running state accepted an out-of-order cancel acknowledgement");
+	}
+
+	void test_durable_receipts_advance_with_the_exact_spill_prefix()
+	{
+		const auto resume_binding = binding();
+		const auto staged_zero = digest("staged-zero");
+		const auto staged_one = digest("staged-one");
+		const auto spill = spill_binding(resume_binding);
+		auto prefix = ng1_spill_prefix_state::create(spill);
+		require(prefix, "spill prefix creation failed");
+		require(prefix->append(spill_record(spill, 0U, 0U, "first")),
+				"first spill prefix record was rejected");
+
+		auto beyond_prefix = prefix->observe_host_fsync(1U, staged_zero, 1U);
+		require(!beyond_prefix && beyond_prefix.error().code == "provider.spill-corrupt",
+				"fsync receipt acknowledged a sequence absent from the spill prefix");
+		auto first_receipt = prefix->observe_host_fsync(0U, staged_zero, 1U);
+		require(first_receipt && first_receipt->total_records == 1U &&
+					first_receipt->total_bytes == prefix->total_bytes() &&
+					first_receipt->staged_digest == staged_zero,
+				"first durable receipt did not bind the complete staged prefix");
+
+		auto resume = ng1_resume_state::create(resume_binding);
+		require(resume, "durable resume state creation failed");
+		auto first_token = make_frontier_token(resume_binding, 1U, 0U, staged_zero);
+		require(resume->accept(first_token, *first_receipt, false, false, 0U),
+				"first fsync-confirmed resume token was rejected");
+		auto first_replay = resume->replay_start_sequence();
+		require(first_replay && *first_replay == 1U,
+				"first replay did not start after the durable acknowledgement");
+
+		require(prefix->append(spill_record(spill, 1U, 1U, "second")),
+				"second spill prefix record was rejected");
+		auto second_receipt = prefix->observe_host_fsync(1U, staged_one, 2U);
+		require(second_receipt && second_receipt->total_records == 2U &&
+					second_receipt->total_bytes == prefix->total_bytes() &&
+					second_receipt->spill_digest != first_receipt->spill_digest,
+				"second durable receipt did not advance with the appended prefix");
+		auto second_token = make_frontier_token(resume_binding, 2U, 1U, staged_one);
+		require(resume->accept(second_token, *second_receipt, false, false, 1U),
+				"strictly newer fsync-confirmed resume token was rejected");
+		auto second_replay = resume->replay_start_sequence();
+		require(second_replay && *second_replay == 2U,
+				"second replay did not advance after the durable acknowledgement");
+
+		auto volatile_receipt = *second_receipt;
+		volatile_receipt.schema = "volatile-ack-without-fsync";
+		auto volatile_token = make_frontier_token(resume_binding, 3U, 1U, staged_one);
+		auto volatile_result = resume->accept(volatile_token, volatile_receipt, false, false, 1U);
+		require(!volatile_result && volatile_result.error().code == "provider.resume-token-stale",
+				"receipt without the durable schema remained resume authority");
+	}
 } // namespace
 
 int main()
@@ -181,5 +330,7 @@ int main()
 	test_crash_restart_replays_after_durable_ack();
 	test_hang_path_requires_kill_before_resume();
 	test_invalid_resume_fails_closed_and_wrong_order_is_rejected();
+	test_cancellation_transition_is_terminal_or_explicitly_recoverable();
+	test_durable_receipts_advance_with_the_exact_spill_prefix();
 	return 0;
 }
