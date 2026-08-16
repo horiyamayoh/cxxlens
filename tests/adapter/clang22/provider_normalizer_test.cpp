@@ -78,6 +78,20 @@ namespace
 		return output;
 	}
 
+	[[nodiscard]] sdk::canonical_value* object_member(sdk::canonical_value& object,
+													  const std::string_view key)
+	{
+		if (object.type != sdk::canonical_value::kind::ordered_tuple)
+			return nullptr;
+		for (auto& entry : object.tuple)
+			if (entry.type == sdk::canonical_value::kind::ordered_tuple &&
+				entry.tuple.size() == 2U &&
+				entry.tuple[0U].type == sdk::canonical_value::kind::utf8_string &&
+				entry.tuple[0U].text == key)
+				return &entry.tuple[1U];
+		return nullptr;
+	}
+
 	class fragmented_task_source final : public clang22_task_source_replay
 	{
 	  public:
@@ -1347,13 +1361,109 @@ int main()
 	trailing_lf_task.source_content_base64.push_back('\n');
 	require(!encode_task_input(trailing_lf_task),
 			"task.v3 encoder accepted trailing non-alphabet Base64 data");
+	constexpr std::size_t maximum_source_bytes = 16U * 1024U * 1024U;
 	constexpr std::size_t maximum_source_base64_bytes = ((16U * 1024U * 1024U + 2U) / 3U) * 4U;
-	auto oversized_base64_task = task;
-	oversized_base64_task.source_content_base64.assign(maximum_source_base64_bytes + 4U, 'A');
-	auto oversized_base64 = encode_task_input(oversized_base64_task);
-	require(!oversized_base64 && oversized_base64.error().field == "source.content_base64" &&
-				oversized_base64.error().detail == "maximum-bytes",
-			"one-shot task.v3 encoder did not reject Base64 beyond the selected schema bound");
+	{
+		auto malformed_shape = task;
+		malformed_shape.source_content_base64 = "YQ=";
+		auto shape = encode_task_input(malformed_shape);
+		require(!shape && shape.error().field == "source.content_base64" &&
+					shape.error().detail == "shape",
+				"one-shot task.v3 encoder did not classify malformed Base64 length as shape");
+
+		auto malformed_padding = task;
+		malformed_padding.source_content_base64 = "AA=A";
+		auto padding = encode_task_input(malformed_padding);
+		require(!padding && padding.error().field == "source.content_base64" &&
+					padding.error().detail == "padding",
+				"one-shot task.v3 encoder did not classify malformed Base64 padding separately");
+	}
+	{
+		auto limit_plus_one = task;
+		limit_plus_one.source_content_base64.assign(maximum_source_base64_bytes, 'A');
+		limit_plus_one.source_content_base64.back() = '=';
+		auto result = encode_task_input(limit_plus_one);
+		require(!result && result.error().field == "source.content_base64" &&
+					result.error().detail == "maximum-bytes",
+				"one-shot task.v3 encoder did not reject decoded source limit plus one");
+
+		auto limit_plus_two = task;
+		limit_plus_two.source_content_base64.assign(maximum_source_base64_bytes, 'A');
+		auto result_two = encode_task_input(limit_plus_two);
+		require(!result_two && result_two.error().field == "source.content_base64" &&
+					result_two.error().detail == "maximum-bytes",
+				"one-shot task.v3 encoder did not reject decoded source limit plus two");
+
+		auto oversized_base64 = task;
+		oversized_base64.source_content_base64.assign(maximum_source_base64_bytes + 4U, 'A');
+		auto oversized_result = encode_task_input(oversized_base64);
+		require(!oversized_result && oversized_result.error().field == "source.content_base64" &&
+					oversized_result.error().detail == "maximum-bytes",
+				"one-shot task.v3 encoder did not reject Base64 beyond the selected schema bound");
+	}
+	{
+		auto exact_task = task_input(std::string(maximum_source_bytes, '\0'));
+		auto exact_encoded = encode_task_input(exact_task);
+		require(exact_encoded &&
+					exact_task.source_content_base64.size() == maximum_source_base64_bytes,
+				"one-shot task.v3 encoder rejected the exact decoded source limit");
+		const auto exact_digest = sdk::content_digest(*exact_encoded);
+
+		auto exact_streaming_task = exact_task;
+		exact_streaming_task.source.clear();
+		exact_streaming_task.source_content_base64.clear();
+		fragmented_task_source exact_source{exact_task.source, 65535U};
+		vector_task_sink exact_sink;
+		auto exact_receipt =
+			encode_task_input_streaming(exact_streaming_task, exact_source, exact_sink);
+		require(exact_receipt && exact_receipt->source_size_bytes == maximum_source_bytes &&
+					exact_receipt->canonical_base64_bytes == maximum_source_base64_bytes &&
+					exact_sink.value == *exact_encoded &&
+					sdk::content_digest(exact_sink.value) == exact_digest,
+				"streaming task.v3 encoder changed the exact decoded source limit identity");
+
+		fragmented_task_replay exact_replay{*exact_encoded, 65535U};
+		vector_source_spool exact_spool;
+		auto exact_streamed = decode_task_input_streaming(exact_replay, exact_spool);
+		require(exact_streamed && exact_streamed->source.size_bytes == maximum_source_bytes &&
+					exact_streamed->canonical_base64_bytes == maximum_source_base64_bytes &&
+					exact_streamed->task_input_bytes == exact_encoded->size() &&
+					exact_spool.sealed() &&
+					std::ranges::equal(exact_spool.bytes(),
+									   std::as_bytes(std::span{exact_task.source})),
+				"streaming task.v3 decoder rejected the exact decoded source limit");
+
+		auto boundary_encoding = [&](const std::string& content, const std::string& label)
+		{
+			auto projection = sdk::canonical_binary_decode(*exact_encoded);
+			require(projection.has_value(), label + " projection decode failed");
+			auto* payload = object_member(projection->tuple[4U], "source");
+			auto* content_member =
+				payload != nullptr ? object_member(*payload, "content_base64") : nullptr;
+			require(content_member != nullptr &&
+						content_member->type == sdk::canonical_value::kind::utf8_string,
+					label + " source content member was not found");
+			content_member->text = content;
+			auto mutated = sdk::canonical_binary(*projection);
+			require(mutated.has_value(), label + " projection re-encode failed");
+			fragmented_task_replay replay{*mutated, 65535U};
+			vector_source_spool source_spool;
+			auto result = decode_task_input_streaming(replay, source_spool);
+			require(!result && result.error().field == "source" &&
+						result.error().detail == "maximum-bytes",
+					label + " did not fail closed at decoded source maximum-bytes");
+		};
+
+		auto limit_plus_one_base64 = exact_task.source_content_base64;
+		require(limit_plus_one_base64.size() >= 2U && limit_plus_one_base64.ends_with("=="),
+				"exact decoded source fixture did not use required double padding");
+		limit_plus_one_base64[limit_plus_one_base64.size() - 2U] = 'A';
+		boundary_encoding(limit_plus_one_base64, "streaming limit-plus-one");
+
+		auto limit_plus_two_base64 = limit_plus_one_base64;
+		limit_plus_two_base64.back() = 'A';
+		boundary_encoding(limit_plus_two_base64, "streaming limit-plus-two");
+	}
 	auto missing_source_authority = task;
 	missing_source_authority.source_snapshot.clear();
 	require(!encode_task_input(missing_source_authority),

@@ -126,44 +126,92 @@ namespace cxxlens::detail::clang22
 			return sdk::canonical_value::from_tuple(std::move(output));
 		}
 
-		[[nodiscard]] sdk::result<std::string> base64_decode(const std::string_view input)
+		[[nodiscard]] std::optional<std::uint32_t> base64_value(const char value)
 		{
-			if (static_cast<std::uint64_t>(input.size()) > maximum_source_base64_bytes)
-				return sdk::unexpected(provider_error(
-					"provider.frontend-request-invalid", "source.content_base64", "maximum-bytes"));
+			if (value >= 'A' && value <= 'Z')
+				return static_cast<std::uint32_t>(value - 'A');
+			if (value >= 'a' && value <= 'z')
+				return static_cast<std::uint32_t>(value - 'a' + 26);
+			if (value >= '0' && value <= '9')
+				return static_cast<std::uint32_t>(value - '0' + 52);
+			if (value == '+')
+				return 62U;
+			if (value == '/')
+				return 63U;
+			return std::nullopt;
+		}
+
+		[[nodiscard]] sdk::result<std::uint64_t> base64_decoded_size(const std::string_view input)
+		{
 			if (input.size() % 4U != 0U)
-				return sdk::unexpected(
-					provider_error("provider.frontend-request-invalid", "source.content_base64"));
-			const auto decode = [](const char value) -> std::optional<std::uint32_t>
-			{
-				if (value >= 'A' && value <= 'Z')
-					return static_cast<std::uint32_t>(value - 'A');
-				if (value >= 'a' && value <= 'z')
-					return static_cast<std::uint32_t>(value - 'a' + 26);
-				if (value >= '0' && value <= '9')
-					return static_cast<std::uint32_t>(value - '0' + 52);
-				if (value == '+')
-					return 62U;
-				if (value == '/')
-					return 63U;
-				return std::nullopt;
-			};
-			std::string output;
-			output.reserve((input.size() / 4U) * 3U);
+				return sdk::unexpected(provider_error(
+					"provider.frontend-request-invalid", "source.content_base64", "shape"));
+
+			const bool encoded_length_exceeds_limit = input.size() > maximum_source_base64_bytes;
+			std::uint64_t decoded_bytes{};
 			for (std::size_t offset{}; offset < input.size(); offset += 4U)
 			{
-				const bool final = offset + 4U == input.size();
+				const bool final = input.size() - offset == 4U;
+				const auto first_byte = input[offset];
+				const auto second_byte = input[offset + 1U];
+				const auto third_byte = input[offset + 2U];
+				const auto fourth_byte = input[offset + 3U];
+				const bool padding_two = third_byte == '=';
+				const bool padding_one = fourth_byte == '=';
+				if (first_byte == '=' || second_byte == '=' ||
+					(!final && (padding_two || padding_one)) || (padding_two && !padding_one))
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "source.content_base64", "padding"));
+
+				auto first = base64_value(first_byte);
+				auto second = base64_value(second_byte);
+				auto third =
+					padding_two ? std::optional<std::uint32_t>{0U} : base64_value(third_byte);
+				auto fourth =
+					padding_one ? std::optional<std::uint32_t>{0U} : base64_value(fourth_byte);
+				if (!first || !second || !third || !fourth)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "source.content_base64", "alphabet"));
+				if ((padding_two && ((*second & 0x0fU) != 0U)) ||
+					(padding_one && !padding_two && ((*third & 0x03U) != 0U)))
+					return sdk::unexpected(provider_error("provider.frontend-request-invalid",
+														  "source.content_base64",
+														  "nonzero-padding-bits"));
+
+				const std::uint64_t group_bytes = padding_two ? 1U : padding_one ? 2U : 3U;
+				if (decoded_bytes > maximum_source_bytes - group_bytes)
+					decoded_bytes = maximum_source_bytes + 1U;
+				else if (decoded_bytes <= maximum_source_bytes)
+					decoded_bytes += group_bytes;
+			}
+			if (encoded_length_exceeds_limit || decoded_bytes > maximum_source_bytes)
+				return sdk::unexpected(provider_error(
+					"provider.frontend-request-invalid", "source.content_base64", "maximum-bytes"));
+			return decoded_bytes;
+		}
+
+		[[nodiscard]] sdk::result<std::string> base64_decode(const std::string_view input)
+		{
+			auto decoded_size = base64_decoded_size(input);
+			if (!decoded_size)
+				return sdk::unexpected(std::move(decoded_size.error()));
+			std::string output;
+			output.reserve(static_cast<std::size_t>(*decoded_size));
+			for (std::size_t offset{}; offset < input.size(); offset += 4U)
+			{
+				const bool final = input.size() - offset == 4U;
 				const bool padding_two = input[offset + 2U] == '=';
 				const bool padding_one = input[offset + 3U] == '=';
-				if ((!final && (padding_two || padding_one)) || (padding_two && !padding_one))
+				if (input[offset] == '=' || input[offset + 1U] == '=' ||
+					(!final && (padding_two || padding_one)) || (padding_two && !padding_one))
 					return sdk::unexpected(provider_error("provider.frontend-request-invalid",
 														  "source.content_base64"));
-				auto first = decode(input[offset]);
-				auto second = decode(input[offset + 1U]);
-				auto third =
-					padding_two ? std::optional<std::uint32_t>{0U} : decode(input[offset + 2U]);
-				auto fourth =
-					padding_one ? std::optional<std::uint32_t>{0U} : decode(input[offset + 3U]);
+				auto first = base64_value(input[offset]);
+				auto second = base64_value(input[offset + 1U]);
+				auto third = padding_two ? std::optional<std::uint32_t>{0U}
+										 : base64_value(input[offset + 2U]);
+				auto fourth = padding_one ? std::optional<std::uint32_t>{0U}
+										  : base64_value(input[offset + 3U]);
 				if (!first || !second || !third || !fourth)
 					return sdk::unexpected(provider_error("provider.frontend-request-invalid",
 														  "source.content_base64"));
@@ -1236,28 +1284,11 @@ namespace cxxlens::detail::clang22
 
 			[[nodiscard]] sdk::result<void> decode_base64(const std::uint64_t length)
 			{
-				if (source_seen_ || length > maximum_source_base64_bytes || length % 4U != 0U)
+				if (source_seen_ || length % 4U != 0U)
 					return sdk::unexpected(provider_error(
 						"provider.frontend-request-invalid", "source.content_base64", "shape"));
 				source_seen_ = true;
 				base64_bytes_ = length;
-				const auto decode = [](const std::uint8_t value) -> std::optional<std::uint32_t>
-				{
-					if (value >= static_cast<std::uint8_t>('A') &&
-						value <= static_cast<std::uint8_t>('Z'))
-						return value - static_cast<std::uint8_t>('A');
-					if (value >= static_cast<std::uint8_t>('a') &&
-						value <= static_cast<std::uint8_t>('z'))
-						return value - static_cast<std::uint8_t>('a') + 26U;
-					if (value >= static_cast<std::uint8_t>('0') &&
-						value <= static_cast<std::uint8_t>('9'))
-						return value - static_cast<std::uint8_t>('0') + 52U;
-					if (value == static_cast<std::uint8_t>('+'))
-						return 62U;
-					if (value == static_cast<std::uint8_t>('/'))
-						return 63U;
-					return std::nullopt;
-				};
 
 				std::array<std::byte, 64U * 1024U> encoded{};
 				std::array<std::byte, 48U * 1024U> decoded{};
@@ -1272,23 +1303,29 @@ namespace cxxlens::detail::clang22
 					std::size_t decoded_size{};
 					for (std::size_t index{}; index < count; index += 4U)
 					{
-						const bool final = consumed + index + 4U == length;
+						const bool final = length - consumed - index == 4U;
 						const auto third_byte = std::to_integer<std::uint8_t>(encoded[index + 2U]);
 						const auto fourth_byte = std::to_integer<std::uint8_t>(encoded[index + 3U]);
 						const bool padding_two = third_byte == static_cast<std::uint8_t>('=');
 						const bool padding_one = fourth_byte == static_cast<std::uint8_t>('=');
-						if ((!final && (padding_two || padding_one)) ||
+						if (std::to_integer<std::uint8_t>(encoded[index]) ==
+								static_cast<std::uint8_t>('=') ||
+							std::to_integer<std::uint8_t>(encoded[index + 1U]) ==
+								static_cast<std::uint8_t>('=') ||
+							(!final && (padding_two || padding_one)) ||
 							(padding_two && !padding_one))
 							return sdk::unexpected(
 								provider_error("provider.frontend-request-invalid",
 											   "source.content_base64",
 											   "padding"));
-						auto first = decode(std::to_integer<std::uint8_t>(encoded[index]));
-						auto second = decode(std::to_integer<std::uint8_t>(encoded[index + 1U]));
-						auto third =
-							padding_two ? std::optional<std::uint32_t>{0U} : decode(third_byte);
-						auto fourth =
-							padding_one ? std::optional<std::uint32_t>{0U} : decode(fourth_byte);
+						auto first = base64_value(
+							static_cast<char>(std::to_integer<std::uint8_t>(encoded[index])));
+						auto second = base64_value(
+							static_cast<char>(std::to_integer<std::uint8_t>(encoded[index + 1U])));
+						auto third = padding_two ? std::optional<std::uint32_t>{0U}
+												 : base64_value(static_cast<char>(third_byte));
+						auto fourth = padding_one ? std::optional<std::uint32_t>{0U}
+												  : base64_value(static_cast<char>(fourth_byte));
 						if (!first || !second || !third || !fourth)
 							return sdk::unexpected(
 								provider_error("provider.frontend-request-invalid",
