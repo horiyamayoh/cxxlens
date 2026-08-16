@@ -34,11 +34,15 @@ jobs:
       - name: Apply exact downloaded-package cache migration
         run: |
           set -euo pipefail
-          python3 -m py_compile .github/bootstrap/apply_issue_316_package_cache.py
+          python3 -m py_compile \
+            .github/bootstrap/apply_issue_316_package_cache.py \
+            .github/bootstrap/fix_issue_316_package_cache.py
           cp .github/bootstrap/apply_issue_316_package_cache.py \
             "${RUNNER_TEMP}/apply_issue_316_package_cache.py"
           python3 .github/bootstrap/apply_issue_316_package_cache.py apply
+          python3 .github/bootstrap/fix_issue_316_package_cache.py
           rm -f .github/bootstrap/apply_issue_316_package_cache.py
+          rm -f .github/bootstrap/fix_issue_316_package_cache.py
           rm -f .github/workflows/issue-316-package-cache-followup.yml
           rmdir .github/bootstrap 2>/dev/null || true
 
