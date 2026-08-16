@@ -76,9 +76,27 @@ namespace cxxlens::detail::clang22::materialization
 		std::string occurrence_inventory_digest;
 		std::uint64_t task_count{};
 		std::size_t reserved_bytes{};
+		/** Source-private lifecycle state; deliberately excluded from the authority comparison. */
+		bool capacity_consumed{};
 
+		/** Consume exactly the checked response budget before the publication attempt. */
+		[[nodiscard]] sdk::result<void> consume_reserved_capacity(std::size_t required_bytes);
+
+		[[nodiscard]] bool reservation_consumed() const noexcept
+		{
+			return capacity_consumed;
+		}
+
+		/** Compare only publication-independent authority; consumption is lifecycle state. */
 		[[nodiscard]] bool
-		operator==(const public_materialization_prepublication_projection&) const = default;
+		operator==(const public_materialization_prepublication_projection& other) const noexcept
+		{
+			return binding_digest == other.binding_digest &&
+				request_digest == other.request_digest &&
+				semantic_request_digest == other.semantic_request_digest &&
+				occurrence_inventory_digest == other.occurrence_inventory_digest &&
+				task_count == other.task_count && reserved_bytes == other.reserved_bytes;
+		}
 	};
 
 	/** Observable result of the source-private prior-artifact write after Store commit. */
