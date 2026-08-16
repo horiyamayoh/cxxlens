@@ -1,4 +1,4 @@
-name: Agent fix soft unresolved materialization 272
+name: Recover issue 272 implementation payload
 
 on:
   push:
@@ -10,51 +10,35 @@ permissions:
   contents: write
 
 concurrency:
-  group: agent-fix-soft-unresolved-272
+  group: recover-soft-unresolved-272
   cancel-in-progress: true
 
 jobs:
-  apply-test-publish:
+  decode-payload:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: fix/soft-unresolved-materialization-272
           fetch-depth: 0
-      - name: Decode and apply the focused patch
+      - name: Decode the implementation source for review
         run: |
-          base64 --decode .github/agent_fix_272.py.gz.b64 | gzip --decompress > /tmp/agent_fix_272.py
-          python3 /tmp/agent_fix_272.py
-      - name: Install exact Clang 22 toolchain
-        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - name: Format modified C++
+          python3 - <<'PY'
+          import base64
+          import gzip
+          from pathlib import Path
+
+          encoded = Path('.github/agent_fix_272.py.gz.b64').read_text(encoding='utf-8')
+          decoded = gzip.decompress(base64.b64decode(encoded))
+          Path('.github/agent_fix_272.py').write_bytes(decoded)
+          PY
+          python3 -m py_compile .github/agent_fix_272.py
+      - name: Commit the decoded source
         run: |
-          clang-format-22 -i \
-            src/llvm/clang22/materialization_claims.cpp \
-            src/llvm/clang22/materialization_bounded_claim_source.cpp \
-            src/llvm/clang22/materialization_bounded_claim_source.hpp \
-            tests/adapter/clang22/materialization_store_test.cpp
-      - name: Configure and build focused materialization targets
-        env:
-          CXX: clang++-22
-        run: |
-          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON -DCXXLENS_BUILD_SHARED=OFF
-          cmake --build --preset ci-quick --target \
-            cxxlens-clang22-materialization-store \
-            cxxlens-clang22-materialization-claims
-      - name: Run focused regressions
-        run: |
-          ctest --preset ci-quick --output-on-failure \
-            -R 'adapter\.clang22-materialization-(store|claims)$'
-          git diff --check
-      - name: Commit the verified implementation
-        run: |
-          rm -f .github/agent_fix_272.py.gz.b64 \
-            .github/workflows/agent-fix-soft-unresolved-272.yml
-          git add -A
+          git add .github/agent_fix_272.py
           git diff --cached --check
           git config user.name 'Codex'
           git config user.email 'codex@users.noreply.github.com'
-          git commit -m 'Preserve soft unresolved materialization references (#272)'
+          git commit -m 'Recover issue #272 implementation source for review'
           git push origin HEAD:fix/soft-unresolved-materialization-272
