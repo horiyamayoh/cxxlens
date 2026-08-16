@@ -231,12 +231,19 @@ jobs:
       - name: Check scale evidence ownership
         id: materialization-scale-ownership
         if: always()
+        env:
+          HARNESS_STATUS: ${{ steps.materialization-scale-harness.outputs.exit_status }}
+          CHECKER_STATUS: ${{ steps.materialization-scale-check.outputs.exit_status }}
         run: |
           set +e
           report="${RUNNER_TEMP}/cxxlens-materialization-scale-evidence.json"
           toolchain="${RUNNER_TEMP}/cxxlens-materialization-scale-toolchain.json"
           ownership_log="${RUNNER_TEMP}/cxxlens-materialization-scale-ownership.log"
-          if [[ -f "${report}" && -f "${toolchain}" ]]; then
+          if [[ "${HARNESS_STATUS}" != "0" || "${CHECKER_STATUS}" != "0" ]]; then
+            printf 'scale evidence ownership was not generated: harness=%s checker=%s\n' \
+              "${HARNESS_STATUS}" "${CHECKER_STATUS}" > "${ownership_log}"
+            ownership_status=1
+          elif [[ -f "${report}" && -f "${toolchain}" ]]; then
             python tools/quality/check_quality_ownership.py evidence \
               --check-id materialization.scale-ingress \
               --configuration materialization-scale-clang22 \
