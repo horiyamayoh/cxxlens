@@ -15,9 +15,7 @@ set(cxxlens_clang22_adapter "@CXXLENS_CLANG_ADAPTER@")
 set(cxxlens_clang22_unavailable_reason "@CXXLENS_CLANG22_UNAVAILABLE_REASON@")
 set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")
 set(install_executable_names
-    cxxlens-provider-scaffold
-    cxxlens-sdk-doctor
-    cxxlens-clang-worker-22
+    cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
     cxxlens-clang22-materialize)
 set(artifact_source_arguments --source-revision "@CXXLENS_SOURCE_REVISION@"
                               --source-tree "@CXXLENS_SOURCE_TREE@")
@@ -57,17 +55,27 @@ function(resolve_install_artifact_path canonical_path resolved_path)
       break()
     endif()
   endforeach()
-  set(${resolved_path} "${resolved}" PARENT_SCOPE)
+  set(${resolved_path}
+      "${resolved}"
+      PARENT_SCOPE)
 endfunction()
 
 function(run_installed_tools label)
-  run_clean(0 "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}" inspect)
-  run_clean(1 "${install_prefix}/bin/cxxlens-clang-worker-22${install_executable_suffix}")
+  run_clean(
+    0 "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
+    inspect)
+  run_clean(
+    1
+    "${install_prefix}/bin/cxxlens-clang-worker-22${install_executable_suffix}")
   set(scaffold_output "${test_root}/scaffold-${label}")
   file(REMOVE_RECURSE "${scaffold_output}")
-  run_clean(0 "${install_prefix}/bin/cxxlens-provider-scaffold${install_executable_suffix}"
-            "${scaffold_output}" company.install.provider portable
-            company.install.relation)
+  run_clean(
+    0
+    "${install_prefix}/bin/cxxlens-provider-scaffold${install_executable_suffix}"
+    "${scaffold_output}"
+    company.install.provider
+    portable
+    company.install.relation)
 endfunction()
 
 if(PHASE STREQUAL "prepare")
@@ -89,9 +97,9 @@ if(PHASE STREQUAL "prepare")
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
 
-  # Keep canonical artifact paths literal for the installed-surface census.
-  # Only the filesystem path used by the existence check receives the
-  # platform executable suffix.
+  # Keep canonical artifact paths literal for the installed-surface census. Only
+  # the filesystem path used by the existence check receives the platform
+  # executable suffix.
   foreach(
     required IN
     ITEMS
@@ -126,8 +134,7 @@ if(PHASE STREQUAL "prepare")
     if(NOT EXISTS "${resolved_required}")
       message(
         FATAL_ERROR
-          "installed next-generation artifact is missing: ${resolved_required}"
-      )
+          "installed next-generation artifact is missing: ${resolved_required}")
     endif()
   endforeach()
 
@@ -215,7 +222,8 @@ if(PHASE STREQUAL "shared-runtime-layout"
   execute_process(
     COMMAND
       "@CMAKE_COMMAND@" -E env --unset=LD_LIBRARY_PATH --unset=DYLD_LIBRARY_PATH
-      "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}" inspect
+      "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
+      inspect
     RESULT_VARIABLE missing_dependency_result
     OUTPUT_VARIABLE missing_dependency_output
     ERROR_VARIABLE missing_dependency_error)
@@ -387,11 +395,15 @@ if(PHASE MATCHES "^(core|sdk|clang22-sdk|real-project)-consumer$")
   execute_process(COMMAND "@CMAKE_COMMAND@" --build "${build_dir}"
                           COMMAND_ERROR_IS_FATAL ANY)
   string(REPLACE "_" "-" consumer_executable "${consumer}")
-  run_clean(0 "${build_dir}/cxxlens-${consumer_executable}${install_executable_suffix}")
+  run_clean(
+    0 "${build_dir}/cxxlens-${consumer_executable}${install_executable_suffix}")
   set(consumer_prefix "${test_root}/${consumer}-prefix")
   execute_process(COMMAND "@CMAKE_COMMAND@" --install "${build_dir}" --prefix
                           "${consumer_prefix}" COMMAND_ERROR_IS_FATAL ANY)
-  run_clean(0 "${consumer_prefix}/bin/cxxlens-${consumer_executable}${install_executable_suffix}")
+  run_clean(
+    0
+    "${consumer_prefix}/bin/cxxlens-${consumer_executable}${install_executable_suffix}"
+  )
   return()
 endif()
 
@@ -417,8 +429,14 @@ if(PHASE STREQUAL "examples-consumer")
             "${example_prefix}" COMMAND_ERROR_IS_FATAL ANY)
   foreach(example IN ITEMS recipe typed_query dynamic_query portable_provider
                            clang22-native)
-    run_clean(0 "${example_build_dir}/cxxlens-installed-${example}${install_executable_suffix}")
-    run_clean(0 "${example_prefix}/bin/cxxlens-installed-${example}${install_executable_suffix}")
+    run_clean(
+      0
+      "${example_build_dir}/cxxlens-installed-${example}${install_executable_suffix}"
+    )
+    run_clean(
+      0
+      "${example_prefix}/bin/cxxlens-installed-${example}${install_executable_suffix}"
+    )
   endforeach()
   return()
 endif()
