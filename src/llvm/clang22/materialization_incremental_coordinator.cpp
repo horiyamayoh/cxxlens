@@ -180,6 +180,29 @@ namespace cxxlens::detail::clang22::materialization
 				task.metadata.final_relation_compile_unit_id;
 		}
 
+		[[nodiscard]] sdk::result<void>
+		validate_plan_entry_binding(const sdk::incremental::plan_entry& plan_entry,
+									const materialization_incremental_partition_binding& binding)
+		{
+			if (!binding.current_state)
+				return sdk::unexpected(coordinator_error("bindings", "plan-state-mismatch"));
+			std::optional<sdk::incremental::partition_state> prior_state;
+			if (binding.prior_artifact)
+				prior_state = binding.prior_artifact->state;
+			const sdk::incremental::partition_candidate candidate{*binding.current_state,
+																  std::move(prior_state)};
+			const std::span<const sdk::incremental::partition_candidate> candidates{&candidate, 1U};
+			auto derived_plan = sdk::incremental::make_materialization_plan(candidates);
+			if (!derived_plan || derived_plan->entries.size() != 1U)
+				return sdk::unexpected(coordinator_error("bindings", "plan-state-mismatch"));
+			const auto& derived_entry = derived_plan->entries.front();
+			if (derived_entry.partition_id != plan_entry.partition_id ||
+				derived_entry.decision != plan_entry.decision ||
+				derived_entry.reason != plan_entry.reason)
+				return sdk::unexpected(coordinator_error("bindings", "plan-state-mismatch"));
+			return {};
+		}
+
 		[[nodiscard]] bool
 		result_matches_v2_1_task(const sealed_materialization_result& result,
 								 const materialization_v2_1_task_execution& task) noexcept
@@ -372,6 +395,9 @@ namespace cxxlens::detail::clang22::materialization
 						partition.current_state->partition_id != partition.partition_id)
 						return sdk::unexpected(
 							coordinator_error("bindings", "partition-task-mismatch"));
+					if (auto valid = validate_plan_entry_binding(*plan_entry->second, partition);
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
 					if (task_action && *task_action != plan_entry->second->decision)
 						return sdk::unexpected(
 							coordinator_error("bindings", "mixed-task-decisions"));
@@ -505,6 +531,9 @@ namespace cxxlens::detail::clang22::materialization
 						partition.current_state->partition_id != partition.partition_id)
 						return sdk::unexpected(
 							coordinator_error("bindings", "partition-task-mismatch"));
+					if (auto valid = validate_plan_entry_binding(*plan_entry->second, partition);
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
 					if (task_action && *task_action != plan_entry->second->decision)
 						return sdk::unexpected(
 							coordinator_error("bindings", "mixed-task-decisions"));
@@ -887,6 +916,9 @@ namespace cxxlens::detail::clang22::materialization
 						partition.current_state->partition_id != partition.partition_id)
 						return sdk::unexpected(
 							coordinator_error("bindings", "partition-task-mismatch"));
+					if (auto valid = validate_plan_entry_binding(*plan_entry->second, partition);
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
 					if (task_action && *task_action != plan_entry->second->decision)
 						return sdk::unexpected(
 							coordinator_error("bindings", "mixed-task-decisions"));
