@@ -84,7 +84,7 @@ stable admission は二つ以上の独立 consumer、または不可避な found
 production support は exact support tuple、real-project、negative/fault、relocation、resource evidence に限定し、
 implemented や schema-admitted だけから推測しません。
 
-## Constructibility before acceptance
+## High-risk contract witness requirements
 
 public semantics、identity、protocol、persistence、不可逆 effect、resource bound を変える high-risk contract は、実装開始前に次を揃えます。
 
