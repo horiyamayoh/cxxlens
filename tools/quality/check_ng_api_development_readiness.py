@@ -32,6 +32,7 @@ BASELINE_DIGEST = "sha256:4e81eff25e898794381624a82d9d3c06ef9d219ddcb32de3721cd2
 MANIFEST_PATH = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
 QUALITY_PATH = pathlib.Path(".github/workflows/quality.yml")
 NIGHTLY_PATH = pathlib.Path(".github/workflows/nightly.yml")
+BUILD_TEST_GUIDE_PATH = pathlib.Path("docs/development/build-and-test.md")
 AGENT_GOAL_PATH = pathlib.Path("docs/development/agent-api-development-goal.md")
 PACKET_JSON_NAME = "cxxlens-ng-agent-context-issue-261.json"
 PACKET_MARKDOWN_NAME = "cxxlens-ng-agent-context-issue-261.md"
@@ -530,6 +531,26 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         _fail("CI authority must forbid qualification polling")
 
 
+def _validate_required_status_documentation(
+    root: pathlib.Path, manifest: dict[str, Any]
+) -> None:
+    path = root / BUILD_TEST_GUIDE_PATH
+    if not path.is_file():
+        _fail(f"required CI status documentation is missing: {BUILD_TEST_GUIDE_PATH}")
+    document = path.read_text(encoding="utf-8")
+    contexts = manifest.get("required_status_checks", {}).get("contexts")
+    if not isinstance(contexts, list) or not all(isinstance(value, str) for value in contexts):
+        _fail("readiness required status contexts are malformed")
+    expected = (
+        re.escape("production/readiness qualification が所有する required status check は")
+        + r"\s*"
+        + r"、\s*".join(re.escape(f"`{value}`") for value in contexts)
+        + r"\s*の exact set です。"
+    )
+    if re.search(expected, document) is None:
+        _fail("build/test guide required status checks differ from readiness authority")
+
+
 def _legacy_projection(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     quality = _project_legacy_setup(
         (root / QUALITY_PATH).read_text(encoding="utf-8")
@@ -578,6 +599,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     manifest = _baseline_validate_documents(root)
     validate_bounded_completion_contract(root)
     validate_demand_closure(root, manifest)
+    _validate_required_status_documentation(root, manifest)
     return manifest
 
 
