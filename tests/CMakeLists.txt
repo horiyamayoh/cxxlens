@@ -438,7 +438,8 @@ int main() {
 }
 ]=]
   CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   add_test(NAME unit.sdk-provider-runtime-timeout
            COMMAND cxxlens-unit-sdk-provider-runtime --timeout-regression
                    "$<TARGET_FILE:cxxlens-provider-process-fixture>")
@@ -457,7 +458,8 @@ set_tests_properties(
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     PROCESSORS 2)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   set_tests_properties(
     unit.sdk-provider-runtime-timeout
     PROPERTIES LABELS
