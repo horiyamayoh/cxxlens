@@ -1,11 +1,40 @@
 # cxxlens
 
-`cxxlens` は、静的解析器・言語解析器を構築するための C++23 Semantic Relation Platform です。
-versioned relation、semantic claim、immutable snapshot、typed/dynamic query、provider protocol を共通基盤とし、
-recipe 利用者から portable/native provider 開発者まで同じ identity・validation・partiality 契約を利用できます。
+> **cxxlens は、コンパイラの観測結果を、再現可能・問い合わせ可能・証拠付きの意味知識へ変換し、分からない場合には何が足りないかまで返す基盤である。**
 
-通常の public API は LLVM/Clang に依存しません。Clang 22 native API は専用 package に分離され、AST object は
-同期 callback の外へ保存・所有・thread 移送できません。
+`cxxlens` は、静的解析器・言語解析器・意味検索・移行・リファクタリング支援を構築するための
+C++23 Semantic Relation Platform です。versioned relation、semantic claim、immutable snapshot、
+typed/dynamic query、provider protocol を共通基盤とし、recipe 利用者から portable/native provider
+開発者まで同じ identity・validation・partiality 契約を利用できます。
+
+cxxlens が返すのは単なる row や finding ではありません。結果は、適用できる範囲で
+`proved`、`disproved`、`unknown`、`partial`、`conflicting` を区別し、coverage、closure、
+unresolved、conflict、differential disagreement、guarantee、provenance、logical/physical
+explain を保持します。分からない場合は、足りない source/build input、capability、model、
+provider evidence と、結果を強化するための dependency-ordered completion plan を返せることを
+製品方向とします。
+
+通常の public API は LLVM/Clang に依存しません。Clang 22 native API は専用 package に分離され、
+AST object は同期 callback の外へ保存・所有・thread 移送できません。cxxlens は Clang AST API を
+網羅的に薄く包むことや、公開 API 数を増やすこと自体を目的にしません。compiler-native observation を
+detached semantic knowledge へ変換し、独立 consumer が再利用できる versioned capability として提供します。
+
+## Development direction
+
+完成は二方向から判定します。
+
+- **Supply-side closure:** admitted public surface が contract、implementation、validation、evidence を持つ。
+- **Demand-side closure:** admitted use case から必要 capability、provider、relation、analysis、evidence まで
+  実行可能な経路があるか、明示された tracked gap がある。
+- **Complete:** orphan public surface と orphan admitted use case の双方が存在しない。
+
+今後の優先順は、real-project source closure/capture/replay、semantic graph、CFG/control exit、
+use-def/value flow、alias/effect/invalidation、interprocedural summary/model pack、
+proof-carrying rewrite/artifact、cross-provider semantic consensus です。個別 capability は kernel を
+肥大化させず、versioned relation/provider/analysis/model/recipe として追加します。
+
+machine-readable な製品方向と agent workflow は
+[API development readiness](schemas/cxxlens_ng_api_development_readiness.yaml) にあります。
 
 ## Build
 
@@ -38,7 +67,9 @@ target_compile_features(my_analyzer PRIVATE cxx_std_23)
 - [次世代統合設計](docs/design/cxxlens_next_generation_integrated_design_ja.md)
 - [Public API catalog](schemas/cxxlens_ng_public_api_catalog.yaml)
 - [Relation registry](schemas/cxxlens_ng_relation_registry.yaml)
+- [API development readiness](schemas/cxxlens_ng_api_development_readiness.yaml)
 - [開発アーキテクチャ](docs/development/architecture.md)
+- [Extending the platform](docs/development/extending-platform.md)
 - [Tutorials](docs/tutorials/README.md)
 - [Support matrix](docs/support-matrix.md)
 
