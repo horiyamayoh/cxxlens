@@ -83,8 +83,10 @@ completion の対象選択と反復高速化には使用できます。統合 ga
 
 CI setup は `.github/actions/setup-ci/action.yml` が一元管理します。`actions/setup-python`、
 exact LLVM/Doxygen bootstrap、hash-locked Python dependencies を各 job に複製しません。
-`setup-python` の pip cache は反復高速化に使いますが、cache は `full` / `stress` の
-correctness evidence ではありません。
+`setup-python` の pip wheel cache と、lock digest・runner OS/arch・profile に完全一致する LLVM/Doxygen `.deb` cache を
+反復高速化に使います。cache hit でも package SHA-256、name、exact epoch-qualified version、architecture と LLVM
+signing-key fingerprint を再検証し、fallback restore key は使用しません。verified cache/download の別は provenance
+receipt に残します。cache は `full` / `stress` の correctness evidence ではありません。
 
 同一 repository の PR branch を最新 `main` へ更新するには、PR conversation に
 `/update-branch` と単独行でコメントします。Owner、Member、Collaborator だけが実行できます。

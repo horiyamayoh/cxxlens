@@ -55,6 +55,67 @@ def local_reference_lock(
     return local_path, expected
 
 
+def package_cache_authority_digest(lock: dict[str, Any]) -> str:
+    return "sha256:" + hashlib.sha256(
+        json.dumps(
+            lock["package_cache"], sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def package_cache_provenance(lock: dict[str, Any]) -> dict[str, Any]:
+    config = lock.get("package_cache")
+    if not isinstance(config, dict):
+        raise ValueError("package-cache authority is missing")
+    authority_digest = package_cache_authority_digest(lock)
+    raw_path = os.environ.get(config["receipt_environment"])
+    if not raw_path:
+        return {
+            "status": "not-requested",
+            "authority_digest": authority_digest,
+            "key": "unavailable",
+            "cache_hit": "not-requested",
+            "profiles": {},
+        }
+    path = pathlib.Path(raw_path)
+    if not path.is_absolute() or not path.is_file():
+        raise ValueError("package-cache provenance receipt is unavailable")
+    document = json.loads(path.read_text(encoding="utf-8"))
+    expected_key = os.environ.get(config["key_environment"], "unavailable")
+    expected_hit = (
+        "hit"
+        if os.environ.get(config["hit_environment"], "").lower() == "true"
+        else "miss"
+    )
+    if (
+        document.get("schema") != "cxxlens.ci-package-cache-receipt.v1"
+        or document.get("authority_digest") != authority_digest
+        or document.get("key") != expected_key
+        or document.get("cache_hit") != expected_hit
+        or not isinstance(document.get("profiles"), dict)
+    ):
+        raise ValueError("package-cache provenance receipt binding differs")
+    allowed_sources = {"verified-cache", "verified-download"}
+    for profile, rows in document["profiles"].items():
+        if not isinstance(profile, str) or not isinstance(rows, list) or not rows:
+            raise ValueError("package-cache provenance profile is invalid")
+        for row in rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("source") not in allowed_sources
+                or not isinstance(row.get("package_digest"), str)
+                or not row["package_digest"].startswith("sha256:")
+            ):
+                raise ValueError("package-cache provenance package record is invalid")
+    return {
+        "status": "verified",
+        "authority_digest": authority_digest,
+        "key": expected_key,
+        "cache_hit": expected_hit,
+        "profiles": document["profiles"],
+        "receipt_digest": file_digest(path),
+    }
+
 def provenance_digest(document: dict[str, Any]) -> str:
     projection = {key: value for key, value in document.items() if key != "digest"}
     return "sha256:" + hashlib.sha256(
@@ -259,6 +320,7 @@ def main() -> int:
             "kernel": run("uname", "-srmo"),
         },
         "supply_chain": supply_chain_binding,
+        "package_cache": package_cache_provenance(lock),
     }
     document["digest"] = provenance_digest(document)
     args.output.parent.mkdir(parents=True, exist_ok=True)
