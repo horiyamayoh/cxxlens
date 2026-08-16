@@ -31,6 +31,13 @@ def file_digest(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def hash_files_digest(path: pathlib.Path) -> str:
+    """Reproduce hashFiles for the single exact lock file used by CI."""
+
+    file_digest_bytes = hashlib.sha256(path.read_bytes()).digest()
+    return hashlib.sha256(file_digest_bytes).hexdigest()
+
+
 def local_reference_lock(
     root: pathlib.Path, reference: pathlib.PurePosixPath, kind: str
 ) -> tuple[pathlib.Path, str]:
@@ -304,7 +311,7 @@ def package_cache_provenance(
         "${runner.arch}": required_environment["runner_arch_environment"],
         "${profile}": requested_profile,
         "${documentation}": documentation,
-        "${lock_digest}": lock_digest_hex,
+        "${lock_hash_files_digest}": hash_files_digest(ROOT / SUPPLY_CHAIN_LOCK),
     }
     for token, value in replacements.items():
         expected_key = expected_key.replace(token, value)

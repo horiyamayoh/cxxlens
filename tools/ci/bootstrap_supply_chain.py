@@ -114,7 +114,7 @@ def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
         "key_version": "v1",
         "key_template": (
             "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-"
-            "${profile}-${documentation}-${lock_digest}"
+            "${profile}-${documentation}-${lock_hash_files_digest}"
         ),
         "profile_environment": PACKAGE_CACHE_PROFILE_ENV,
         "receipt_schema": PACKAGE_CACHE_RECEIPT_SCHEMA,

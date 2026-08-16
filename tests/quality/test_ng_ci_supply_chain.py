@@ -39,6 +39,7 @@ from check_ci_supply_chain import (  # noqa: E402
 
 from collect_toolchain_provenance import (  # noqa: E402
     file_digest,
+    hash_files_digest,
     package_cache_provenance,
 )
 
@@ -88,9 +89,7 @@ class NgCiSupplyChainTest(unittest.TestCase):
                     "authority_digest": authority_digest
                     or package_cache_authority_digest(self.lock),
                     "key": key or "cxxlens-ci-packages-v1-Linux-X64-developer-false-"
-                    + file_digest(ROOT / "tools/ci/llvm22-noble.lock.json").removeprefix(
-                        "sha256:"
-                    ),
+                    + hash_files_digest(ROOT / "tools/ci/llvm22-noble.lock.json"),
                     "cache_hit": cache_hit,
                     "profiles": profiles,
                 },
@@ -112,16 +111,14 @@ class NgCiSupplyChainTest(unittest.TestCase):
         include: set[str] | None = None,
     ) -> dict[str, str]:
         config = self.lock["package_cache"]
-        lock_digest = file_digest(
-            ROOT / "tools/ci/llvm22-noble.lock.json"
-        ).removeprefix("sha256:")
+        lock_digest = hash_files_digest(ROOT / "tools/ci/llvm22-noble.lock.json")
         expected_key = config["key_template"]
         for token, value in {
             "${runner.os}": runner_os,
             "${runner.arch}": runner_arch,
             "${profile}": profile,
             "${documentation}": documentation,
-            "${lock_digest}": lock_digest,
+            "${lock_hash_files_digest}": lock_digest,
         }.items():
             expected_key = expected_key.replace(token, value)
         values = {
@@ -356,6 +353,35 @@ class NgCiSupplyChainTest(unittest.TestCase):
             self.lock["package_cache"]["correctness_role"],
             "transport-optimization-only",
         )
+
+    def test_package_cache_key_matches_hash_files_not_raw_lock_digest(self) -> None:
+        lock_path = ROOT / "tools/ci/llvm22-noble.lock.json"
+        self.assertEqual(
+            file_digest(lock_path),
+            "sha256:4faa12d829068236cfcec742043aacc5d8a908fbcda56a8e25c23d8d7e50ea68",
+        )
+        self.assertEqual(
+            hash_files_digest(lock_path),
+            "596a855e4995898c6deb0943b385ca7f5657d52da3e6c61423a24c8ed5a4d5f2",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "raw-key.json"
+            hashfiles_key = self.cache_environment(receipt)[
+                self.lock["package_cache"]["key_environment"]
+            ]
+            raw_key = hashfiles_key.replace(
+                hash_files_digest(lock_path),
+                file_digest(lock_path).removeprefix("sha256:"),
+            )
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key=raw_key,
+            )
+            environment = self.cache_environment(receipt, key=raw_key)
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "key differs"):
+                    package_cache_provenance(self.lock)
 
     def test_relative_downloaded_package_cache_path_is_rejected(self) -> None:
         with mock.patch.dict(

@@ -29,6 +29,7 @@ from check_ng_foundation_completion import (  # noqa: E402
 )
 from collect_toolchain_provenance import (  # noqa: E402
     file_digest,
+    hash_files_digest,
     locked_package_profiles,
     package_cache_authority_digest,
     pinned_actions,
@@ -120,7 +121,9 @@ class NgFoundationCompletionTest(unittest.TestCase):
             "${runner.arch}": runner_arch,
             "${profile}": profile,
             "${documentation}": documentation,
-            "${lock_digest}": lock_digest.removeprefix("sha256:"),
+            "${lock_hash_files_digest}": hash_files_digest(
+                ROOT / "tools/ci/llvm22-noble.lock.json"
+            ),
         }.items():
             key = key.replace(token, value)
         rows = [
@@ -277,6 +280,18 @@ class NgFoundationCompletionTest(unittest.TestCase):
         provenance = copy.deepcopy(self.provenance)
         provenance["package_cache"] = self.verified_package_cache()
         provenance["package_cache"]["key"] += "-mutated"
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "package-cache key"):
+            self.report(provenance_records=[provenance])
+
+    def test_verified_package_cache_raw_lock_digest_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        verified = self.verified_package_cache()
+        lock_path = ROOT / "tools/ci/llvm22-noble.lock.json"
+        verified["key"] = verified["key"].replace(
+            hash_files_digest(lock_path), file_digest(lock_path).removeprefix("sha256:")
+        )
+        provenance["package_cache"] = verified
         provenance["digest"] = provenance_digest(provenance)
         with self.assertRaisesRegex(CompletionError, "package-cache key"):
             self.report(provenance_records=[provenance])

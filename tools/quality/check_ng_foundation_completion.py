@@ -20,6 +20,7 @@ import jsonschema
 import yaml
 
 from collect_toolchain_provenance import (
+    hash_files_digest,
     package_cache_authority_digest,
     package_cache_config,
     pinned_actions,
@@ -132,7 +133,7 @@ def load_provenance_directory(directory: pathlib.Path) -> list[dict[str, Any]]:
 
 def canonical_package_cache_key(
     lock: dict[str, Any],
-    lock_digest: str,
+    lock_path: pathlib.Path,
     profile: str,
     documentation: str,
     runner_os: str,
@@ -141,11 +142,7 @@ def canonical_package_cache_key(
     """Reconstruct the cache key from locked authority, not submitted evidence."""
 
     config = package_cache_config(lock)
-    lock_digest_hex = lock_digest.removeprefix("sha256:")
-    if len(lock_digest_hex) != 64 or any(
-        character not in "0123456789abcdef" for character in lock_digest_hex
-    ):
-        fail("verified package-cache lock digest is invalid")
+    lock_hash_files_digest = hash_files_digest(lock_path)
 
     runner = lock.get("runner")
     if not isinstance(runner, dict):
@@ -161,7 +158,7 @@ def canonical_package_cache_key(
         "${runner.arch}": runner.get("architecture"),
         "${profile}": profile,
         "${documentation}": documentation,
-        "${lock_digest}": lock_digest_hex,
+        "${lock_hash_files_digest}": lock_hash_files_digest,
     }.items():
         if not isinstance(value, str) or not value:
             fail("verified package-cache key authority is invalid")
@@ -240,7 +237,7 @@ def validate_package_cache_evidence(
             fail(f"verified package-cache {field} is unavailable")
     expected_key = canonical_package_cache_key(
         lock,
-        expected_lock_digest,
+        root / "tools/ci/llvm22-noble.lock.json",
         profile,
         documentation,
         evidence["runner_os"],

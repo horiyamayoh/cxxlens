@@ -242,7 +242,7 @@ def validate_repository(root: pathlib.Path) -> None:
         "key_version": "v1",
         "key_template": (
             "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-"
-            "${profile}-${documentation}-${lock_digest}"
+            "${profile}-${documentation}-${lock_hash_files_digest}"
         ),
         "profile_environment": "CXXLENS_PACKAGE_CACHE_PROFILE",
         "receipt_schema": "cxxlens.ci-package-cache-receipt.v2",

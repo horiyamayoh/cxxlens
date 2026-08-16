@@ -85,7 +85,7 @@
     "documentation_environment": "CXXLENS_PACKAGE_CACHE_DOCUMENTATION",
     "hit_environment": "CXXLENS_PACKAGE_CACHE_HIT",
     "key_environment": "CXXLENS_PACKAGE_CACHE_KEY",
-    "key_template": "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-${profile}-${documentation}-${lock_digest}",
+    "key_template": "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-${profile}-${documentation}-${lock_hash_files_digest}",
     "key_version": "v1",
     "profile_environment": "CXXLENS_PACKAGE_CACHE_PROFILE",
     "receipt_environment": "CXXLENS_PACKAGE_CACHE_RECEIPT",
