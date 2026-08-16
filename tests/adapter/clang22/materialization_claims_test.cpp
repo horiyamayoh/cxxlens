@@ -26,6 +26,7 @@
 
 #include "llvm/clang22/materialization_bounded_claim_source.hpp"
 #include "llvm/clang22/materialization_claim_stream.hpp"
+#include "llvm/clang22/materialization_identity.hpp"
 #include "llvm/clang22/materialization_incremental_coordinator.hpp"
 #include "llvm/clang22/materialization_incremental_ingress.hpp"
 #include "llvm/clang22/materialization_incremental_receipt.hpp"
@@ -486,6 +487,63 @@ namespace
 		return std::move(*request);
 	}
 
+	[[nodiscard]] validated_materialization_request
+	coherent_rebound_request(const validated_materialization_request& request)
+	{
+		auto root_object = *request.document.root().as_object();
+		auto publication_object = *root_object.at("publication").as_object();
+		auto selector_object = *publication_object.at("selector").as_object();
+		const auto rebound_channel = std::string{"channel:clang22-cross-request"};
+		selector_object.at("channel_id") = *json_string(rebound_channel);
+		publication_object.at("selector") = *json_object(std::move(selector_object));
+		auto rebound_selector = request.publication.selector;
+		rebound_selector.channel_id = rebound_channel;
+		publication_object.at("series_id") = *json_string(rebound_selector.id());
+		root_object.at("publication") = *json_object(std::move(publication_object));
+		auto rebound_root = json_object(std::move(root_object));
+		require(rebound_root.has_value(), "coherent rebound request root construction failed");
+
+		constexpr std::array identity_members{
+			std::string_view{"materialization_request_id"},
+			std::string_view{"request_digest"},
+			std::string_view{"semantic_request_digest"},
+		};
+		auto request_projection = object_without(*rebound_root, identity_members);
+		require(request_projection.has_value(), "coherent rebound request projection failed");
+		auto request_digest =
+			projection_digest("cxxlens.clang22-materialization-request.v2", *request_projection);
+		require(request_digest.has_value(), "coherent rebound request digest failed");
+
+		auto semantic_object = *request_projection->as_object();
+		auto semantic_publication = *semantic_object.at("publication").as_object();
+		for (const auto member : {std::string_view{"backend"},
+								  std::string_view{"series_id"},
+								  std::string_view{"expected_parent_publication"},
+								  std::string_view{"sqlite_path"}})
+			semantic_publication.erase(std::string{member});
+		semantic_object.at("publication") = *json_object(std::move(semantic_publication));
+		auto semantic_projection = json_object(std::move(semantic_object));
+		require(semantic_projection.has_value(), "coherent rebound semantic projection failed");
+		auto semantic_digest =
+			projection_digest("cxxlens.clang22-semantic-request.v2", *semantic_projection);
+		require(semantic_digest.has_value(), "coherent rebound semantic digest failed");
+
+		root_object = *rebound_root->as_object();
+		root_object.at("materialization_request_id") =
+			*json_string("materialization:" + *request_digest);
+		root_object.at("request_digest") = *json_string(*request_digest);
+		root_object.at("semantic_request_digest") = *json_string(*semantic_digest);
+		rebound_root = json_object(std::move(root_object));
+		require(rebound_root.has_value(), "coherent rebound request identity construction failed");
+		auto document = parse_json_object(canonical_json(*rebound_root));
+		require(document.has_value(), "coherent rebound request JSON parse failed");
+		auto rebound = validate_materialization_request(std::move(*document));
+		require(rebound.has_value(),
+				"coherent rebound request validation failed: " +
+					(rebound ? std::string{} : failure(rebound.error())));
+		return std::move(*rebound);
+	}
+
 	void replace_once(std::string& value, const std::string_view from, const std::string_view to)
 	{
 		const auto offset = value.find(from);
@@ -829,6 +887,31 @@ namespace
 					streaming_transaction->draft.catalog_semantic_digest ==
 						request.tasks.front().worker_input.project_catalog.catalog_digest,
 				"sealed claims did not produce the streaming Store metadata");
+		auto coherent_request_b = coherent_rebound_request(request);
+		auto request_a_id = materialization_incremental_request_id(request);
+		auto request_b_id = materialization_incremental_request_id(coherent_request_b);
+		require(request_a_id.has_value() && request_b_id.has_value() &&
+					*request_a_id != *request_b_id &&
+					coherent_request_b.catalog.catalog_id == request.catalog.catalog_id &&
+					coherent_request_b.catalog.catalog_digest == request.catalog.catalog_digest &&
+					coherent_request_b.tasks.size() == request.tasks.size(),
+				"coherent rebound request did not preserve the catalog/task census while changing "
+				"identity");
+		auto cross_request_store =
+			make_materialization_store_transaction(coherent_request_b, *claims);
+		require(!cross_request_store &&
+					cross_request_store.error().code == "materialization.task-binding-mismatch" &&
+					cross_request_store.error().field == "request" &&
+					cross_request_store.error().detail == "request-identity-or-task-census",
+				"claims from request A were accepted for coherent request B Store metadata");
+		auto cross_request_streaming =
+			make_materialization_streaming_store_transaction(coherent_request_b, *claims);
+		require(!cross_request_streaming &&
+					cross_request_streaming.error().code ==
+						"materialization.task-binding-mismatch" &&
+					cross_request_streaming.error().field == "request" &&
+					cross_request_streaming.error().detail == "request-identity-or-task-census",
+				"claims from request A were accepted for coherent request B streaming metadata");
 		const auto require_claims_request_binding_rejection =
 			[&](validated_materialization_request candidate, const std::string_view mutation)
 		{
@@ -3644,7 +3727,7 @@ namespace
 		require(!mismatched_streaming_transaction &&
 					mismatched_streaming_transaction.error().code ==
 						"materialization.task-binding-mismatch" &&
-					mismatched_streaming_transaction.error().field == "store.source" &&
+					mismatched_streaming_transaction.error().field == "request" &&
 					mismatched_streaming_transaction.error().detail ==
 						"request-identity-or-task-census",
 				"bounded Store metadata accepted a source with a mismatched request task census");
@@ -3660,6 +3743,15 @@ namespace
 						transaction.error().detail == "request-identity-or-task-census",
 					"bounded Store metadata accepted a mutable request " + std::string{mutation});
 		};
+		auto coherent_request_b = coherent_rebound_request(request);
+		auto cross_request_streaming =
+			make_materialization_streaming_store_transaction(coherent_request_b, *exact_finalized);
+		require(!cross_request_streaming &&
+					cross_request_streaming.error().code ==
+						"materialization.task-binding-mismatch" &&
+					cross_request_streaming.error().field == "store.source" &&
+					cross_request_streaming.error().detail == "request-identity-or-task-census",
+				"bounded source from request A was accepted for coherent request B");
 
 		auto mutated_task = request;
 		mutated_task.tasks.front().worker_payload.push_back(std::byte{0x01});

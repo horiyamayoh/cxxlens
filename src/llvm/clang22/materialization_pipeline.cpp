@@ -78,6 +78,17 @@ namespace cxxlens::detail::clang22::materialization
 												  "request-identity-or-task-census"});
 			return {};
 		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_bounded_source_binding(const materialization_claim_request_binding& expected,
+										const materialization_bounded_claim_source& source)
+		{
+			if (source.request_binding() != expected)
+				return sdk::unexpected(sdk::error{"materialization.task-binding-mismatch",
+												  "store.source",
+												  "request-identity-or-task-census"});
+			return {};
+		}
 	} // namespace
 
 	sdk::result<prepared_store_transaction>
@@ -88,6 +99,8 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(
 				sdk::error{"materialization.task-binding-mismatch", "tasks", "empty"});
 		if (auto valid = validate_legacy_request_binding(request); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		if (auto valid = validate_materialization_claim_request_binding(request, claims); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		const auto& catalog = request.catalog;
 		if (auto valid = catalog.validate(); !valid)
@@ -149,6 +162,8 @@ namespace cxxlens::detail::clang22::materialization
 				sdk::error{"materialization.task-binding-mismatch", "tasks", "empty"});
 		if (auto valid = validate_legacy_request_binding(request); !valid)
 			return sdk::unexpected(std::move(valid.error()));
+		if (auto valid = validate_materialization_claim_request_binding(request, claims); !valid)
+			return sdk::unexpected(std::move(valid.error()));
 		const auto& catalog = request.catalog;
 		if (auto valid = catalog.validate(); !valid)
 			return sdk::unexpected(sdk::error{
@@ -190,15 +205,12 @@ namespace cxxlens::detail::clang22::materialization
 		if (request.tasks.size() > std::numeric_limits<std::uint64_t>::max())
 			return sdk::unexpected(
 				sdk::error{"materialization.task-binding-mismatch", "tasks", "count-overflow"});
-		auto request_id = materialization_incremental_request_id(request);
-		if (!request_id)
-			return sdk::unexpected(
-				sdk::error{"materialization.task-binding-mismatch", "request", "identity"});
-		if (auto valid = validate_bounded_source_binding(
-				*request_id, static_cast<std::uint64_t>(request.tasks.size()), source);
-			!valid)
-			return sdk::unexpected(std::move(valid.error()));
 		if (auto valid = validate_legacy_request_binding(request); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		auto expected_binding = make_materialization_claim_request_binding(request);
+		if (!expected_binding)
+			return sdk::unexpected(std::move(expected_binding.error()));
+		if (auto valid = validate_bounded_source_binding(*expected_binding, source); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		streaming_prepared_store_transaction result;
 		result.draft = {request.publication.selector,
