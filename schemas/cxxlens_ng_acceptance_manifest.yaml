@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.22.0
+document_version: 1.23.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -293,6 +293,7 @@ entries:
       - tests/adapter/clang22/provider_worker_protocol_test.cpp
       - tests/quality/test_ng_production_scope_closure.py
       - tests/unit/sdk/provider_runtime_test.cpp
+      - tests/public_headers/provider_clang22_translation_unit_input_test.cpp
       - examples/sdk/clang22_native_provider.cpp
       - tools/quality/check_ng_release_qualification.py
       - tools/quality/check_ng_sqlite_store_v3_qualification.py

@@ -900,6 +900,18 @@ add_test(NAME public-api.provider-clang22-header
 set_tests_properties(public-api.provider-clang22-header
                      PROPERTIES LABELS "public-api;native-sdk;clang22")
 
+cxxlens_add_test_executable(
+  cxxlens-public-api-provider-clang22-translation-unit-input
+  public_headers/provider_clang22_translation_unit_input_test.cpp)
+target_link_libraries(cxxlens-public-api-provider-clang22-translation-unit-input
+                      PRIVATE cxxlens::clang22_provider_sdk)
+add_test(NAME acceptance.public-api.provider-clang22-translation-unit-input
+         COMMAND cxxlens-public-api-provider-clang22-translation-unit-input)
+set_tests_properties(
+  acceptance.public-api.provider-clang22-translation-unit-input
+  PROPERTIES LABELS
+             "acceptance;public-api;native-sdk;clang22;validation;security")
+
 foreach(
   example IN
   ITEMS typed_query
@@ -1002,6 +1014,7 @@ foreach(
         migration_completion
         foundation_completion
         api_development_readiness
+        use_case_capability_catalog
         design_feedback
         public_callable_inventory
         g5_qualification)
@@ -1113,6 +1126,7 @@ add_dependencies(
   cxxlens-provider-process-fixture
   cxxlens-public-header-cxxlens
   cxxlens-public-header-provider-clang22
+  cxxlens-public-api-provider-clang22-translation-unit-input
   cxxlens-public-header-sdk
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime

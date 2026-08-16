@@ -1,5 +1,5 @@
 {
-  "asset_count": 685,
+  "asset_count": 691,
   "assets": [
     {
       "authority": "active",
@@ -1445,6 +1445,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0261-source-closure-vfs.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/doxygen-main.md",
       "removal_issue": null,
       "replacement": null,
@@ -2580,6 +2587,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_store_conformance_vectors.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/logical_path_segments.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3986,6 +4007,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/public_headers/provider_clang22_translation_unit_input_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/public_headers/sdk_header_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4162,6 +4190,13 @@
     {
       "authority": "active",
       "path": "tests/quality/test_ng_sqlite_store_v3_qualification.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_use_case_capability_catalog.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4672,6 +4707,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_use_case_capability_catalog.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_public_headers.py",
       "removal_issue": null,
       "replacement": null,
@@ -4798,7 +4840,7 @@
     }
   ],
   "classifications": {
-    "active": 649,
+    "active": 655,
     "archived": 35,
     "generated": 1
   },
