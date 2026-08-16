@@ -21,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:de0528f4656b32695961cd84d2b98e8288ad8501ae53d2c80c9782b04db226fd
+authority_census_digest: sha256:f61710df75b3bfc2e50cb457ea73219978acb635a3ca47bc36c9a1c46c67697a
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
@@ -242,8 +242,8 @@ assignments:
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.clang22-installed-adoption
-      remediation: Implement the accepted DF-0195 through DF-0199 sealed-evidence, measured-occurrence, authenticated-streaming, head-observation, and canonical-Base64 authority; implement the accepted DF-0200 bounded claim/Store staging, the accepted DF-0205/DF-0206 same-process writer-mapping and writer-native-attachment authorities, the accepted DF-0207 reader-native-attachment authority, and the accepted DF-0208 typed determinate gate-failure evidence authority before qualifying the full CAS/race/attachment counterexample matrix or activating production; complete a distinct exact implementation review; then complete installed actual-source worker output adoption with exact publication and query evidence; do not claim generic relation-row reference enforcement.
-    feedback: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200, DF-0205, DF-0206, DF-0207, DF-0208]
+      remediation: Resolve the proposed DF-0261 source-closure identity and compiler VFS authority before qualifying real-project consumers; implement the accepted DF-0195 through DF-0199 sealed-evidence, measured-occurrence, authenticated-streaming, head-observation, and canonical-Base64 authority; implement the accepted DF-0200 bounded claim/Store staging, the accepted DF-0205/DF-0206 same-process writer-mapping and writer-native-attachment authorities, the accepted DF-0207 reader-native-attachment authority, and the accepted DF-0208 typed determinate gate-failure evidence authority before qualifying the full CAS/race/attachment counterexample matrix or activating production; complete a distinct exact implementation review; then complete installed actual-source worker output adoption with exact publication and query evidence; do not claim generic relation-row reference enforcement.
+    feedback: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200, DF-0205, DF-0206, DF-0207, DF-0208, DF-0261]
     surfaces:
       - {domain: distribution.consumer-configuration, id: shared/real-project}
       - {domain: distribution.consumer-configuration, id: static/real-project}
