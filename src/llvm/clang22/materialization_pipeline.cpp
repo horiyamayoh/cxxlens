@@ -87,6 +87,8 @@ namespace cxxlens::detail::clang22::materialization
 		if (request.tasks.empty())
 			return sdk::unexpected(
 				sdk::error{"materialization.task-binding-mismatch", "tasks", "empty"});
+		if (auto valid = validate_legacy_request_binding(request); !valid)
+			return sdk::unexpected(std::move(valid.error()));
 		const auto& catalog = request.catalog;
 		if (auto valid = catalog.validate(); !valid)
 			return sdk::unexpected(sdk::error{
@@ -145,6 +147,8 @@ namespace cxxlens::detail::clang22::materialization
 		if (request.tasks.empty())
 			return sdk::unexpected(
 				sdk::error{"materialization.task-binding-mismatch", "tasks", "empty"});
+		if (auto valid = validate_legacy_request_binding(request); !valid)
+			return sdk::unexpected(std::move(valid.error()));
 		const auto& catalog = request.catalog;
 		if (auto valid = catalog.validate(); !valid)
 			return sdk::unexpected(sdk::error{

@@ -829,6 +829,38 @@ namespace
 					streaming_transaction->draft.catalog_semantic_digest ==
 						request.tasks.front().worker_input.project_catalog.catalog_digest,
 				"sealed claims did not produce the streaming Store metadata");
+		const auto require_claims_request_binding_rejection =
+			[&](validated_materialization_request candidate, const std::string_view mutation)
+		{
+			auto transaction = make_materialization_store_transaction(candidate, *claims);
+			require(!transaction &&
+						transaction.error().code == "materialization.task-binding-mismatch" &&
+						transaction.error().field == "request" &&
+						transaction.error().detail == "request-identity-or-task-census",
+					"claims Store metadata accepted a mutable request " + std::string{mutation});
+			auto streaming = make_materialization_streaming_store_transaction(candidate, *claims);
+			require(!streaming &&
+						streaming.error().code == "materialization.task-binding-mismatch" &&
+						streaming.error().field == "request" &&
+						streaming.error().detail == "request-identity-or-task-census",
+					"claims streaming Store metadata accepted a mutable request " +
+						std::string{mutation});
+		};
+
+		auto mutated_task = request;
+		mutated_task.tasks.front().worker_payload.push_back(std::byte{0x01});
+		require_claims_request_binding_rejection(std::move(mutated_task), "task payload");
+
+		auto rebound_catalog = sdk::project_catalog::make(
+			"project://mutated", request.catalog.environment_digest, request.catalog.compile_units);
+		require(rebound_catalog.has_value(), "claims mutable catalog fixture construction failed");
+		auto mutated_catalog = request;
+		mutated_catalog.catalog = std::move(*rebound_catalog);
+		require_claims_request_binding_rejection(std::move(mutated_catalog), "catalog");
+
+		auto mutated_publication = request;
+		mutated_publication.publication.selector.channel_id = "channel:mutated";
+		require_claims_request_binding_rejection(std::move(mutated_publication), "publication");
 		materialization_claim_partition_replay_source partition_source{*claims};
 		std::vector<std::string> replayed_partition_ids;
 		auto replay = partition_source.replay(
