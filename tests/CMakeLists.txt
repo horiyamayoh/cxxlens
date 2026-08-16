@@ -988,6 +988,7 @@ foreach(
         migration_completion
         foundation_completion
         api_development_readiness
+        use_case_capability_catalog
         design_feedback
         public_callable_inventory
         g5_qualification)

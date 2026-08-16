@@ -1,5 +1,5 @@
 {
-  "asset_count": 677,
+  "asset_count": 680,
   "assets": [
     {
       "authority": "active",
@@ -2572,6 +2572,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_admission_error.hpp",
       "removal_issue": null,
       "replacement": null,
@@ -4119,6 +4126,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_use_case_capability_catalog.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_produce_ng_sqlite_store_v3_qualification.py",
       "removal_issue": null,
       "replacement": null,
@@ -4616,6 +4630,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_use_case_capability_catalog.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_public_headers.py",
       "removal_issue": null,
       "replacement": null,
@@ -4742,7 +4763,7 @@
     }
   ],
   "classifications": {
-    "active": 641,
+    "active": 644,
     "archived": 35,
     "generated": 1
   },
