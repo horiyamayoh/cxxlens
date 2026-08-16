@@ -46,7 +46,9 @@ jobs:
             echo "refusing to update a closed or cross-repository pull request" >&2
             exit 1
           fi
-          gh api --method PUT             "repos/${GITHUB_REPOSITORY}/pulls/${REQUESTED_PR}/update-branch"             -f "expected_head_sha=${head_sha}"
+          gh api --method PUT \
+            "repos/${GITHUB_REPOSITORY}/pulls/${REQUESTED_PR}/update-branch" \
+            -f "expected_head_sha=${head_sha}"
 
   squash-automerge:
     if: >-
@@ -83,7 +85,8 @@ jobs:
             echo "PR #${number} no longer matches the successful exact-head run" >&2
             exit 1
           fi
-          gh pr merge "${number}" --repo "${GITHUB_REPOSITORY}"             --squash --delete-branch --match-head-commit "${RUN_HEAD_SHA}"
+          gh pr merge "${number}" --repo "${GITHUB_REPOSITORY}" \
+            --squash --delete-branch --match-head-commit "${RUN_HEAD_SHA}"
 
   cleanup-merged-branch:
     if: >-
@@ -95,15 +98,21 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      MERGED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Delete merged same-repository source branch
         run: |
           set -euo pipefail
           encoded_ref="$(jq -rn --arg value "${HEAD_REF}" '$value|@uri')"
-          if ! gh api --method DELETE             "repos/${GITHUB_REPOSITORY}/git/refs/heads/${encoded_ref}"; then
-            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${encoded_ref}" >/dev/null 2>&1; then
-              echo "merged branch still exists after deletion failure" >&2
-              exit 1
-            fi
+          if ! current_ref="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/${encoded_ref}" 2>/dev/null)"; then
             echo "merged branch was already absent"
+            exit 0
           fi
+          current_sha="$(jq -r '.object.sha' <<<"${current_ref}")"
+          if [[ "${current_sha}" != "${MERGED_HEAD_SHA}" ]]; then
+            echo "refusing to delete ${HEAD_REF}: current=${current_sha}, merged=${MERGED_HEAD_SHA}" >&2
+            exit 1
+          fi
+          gh api --method DELETE \
+            "repos/${GITHUB_REPOSITORY}/git/refs/heads/${encoded_ref}"
