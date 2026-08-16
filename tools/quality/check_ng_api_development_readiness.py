@@ -447,6 +447,7 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         "sqlite-store-v3-qualification",
         "quality-contracts",
         "agent-context",
+        "agent-context-projection",
         "install-consumer",
         "gcc-public-headers",
         "quality-evidence",
@@ -473,6 +474,7 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         "sqlite-store-v3-qualification",
         "quality-contracts",
         "agent-context",
+        "agent-context-projection",
         "install-consumer",
         "gcc-public-headers",
         "quality-evidence",
@@ -542,8 +544,11 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         if not isinstance(authoritative_run, str) or marker not in authoritative_run:
             _fail(f"authoritative #261 agent-context generation marker is missing: {marker}")
 
+    projection_job = _job(quality, "agent-context-projection")
+    if "needs" in projection_job:
+        _fail("non-authoritative #277 projection must not have qualification dependencies")
     projection_step = _step(
-        agent_job, "Generate exact-SHA non-authoritative #277 projection"
+        projection_job, "Generate exact-SHA non-authoritative #277 projection"
     )
     projection_run = projection_step.get("run")
     for marker in (
@@ -559,13 +564,17 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         if not isinstance(projection_run, str) or marker not in projection_run:
             _fail(f"non-authoritative #277 projection marker is missing: {marker}")
 
-    artifact_names = json.dumps(agent_job, ensure_ascii=False, sort_keys=True)
-    for marker in (
-        "cxxlens-ng-agent-context-261-${{ github.sha }}",
-        "cxxlens-ng-agent-context-277-${{ github.sha }}",
-    ):
-        if marker not in artifact_names:
-            _fail(f"agent-context artifact boundary is missing: {marker}")
+    authoritative_artifacts = json.dumps(agent_job, ensure_ascii=False, sort_keys=True)
+    if "cxxlens-ng-agent-context-261-${{ github.sha }}" not in authoritative_artifacts:
+        _fail("agent-context artifact boundary is missing: cxxlens-ng-agent-context-261-${{ github.sha }}")
+    projection_artifacts = json.dumps(
+        projection_job, ensure_ascii=False, sort_keys=True
+    )
+    if "cxxlens-ng-agent-context-277-${{ github.sha }}" not in projection_artifacts:
+        _fail(
+            "agent-context projection artifact boundary is missing: "
+            "cxxlens-ng-agent-context-277-${{ github.sha }}"
+        )
 
     evaluation = _job(quality, "release-evaluation")
     if evaluation.get("needs") != [
