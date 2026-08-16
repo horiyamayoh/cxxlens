@@ -1108,7 +1108,7 @@ def validate_documents(
     if evaluation_job is None or strict_job is None:
         fail("release evaluation/qualification workflow jobs are missing")
     for marker in (
-        "needs: [g5-qualification, sqlite-store-v3-qualification]",
+        "needs: [nightly-quality, g5-qualification, sqlite-store-v3-qualification]",
         "check_ng_release_qualification.py evaluate",
         "--nightly-evidence-dir build/release-evaluation-nightly",
         '--github-output "${GITHUB_OUTPUT}"',
@@ -1116,26 +1116,26 @@ def validate_documents(
     ):
         if marker not in evaluation_job.group("body"):
             fail(f"release evaluation workflow marker is missing: {marker}")
+    evaluation_body = evaluation_job.group("body")
     for marker in (
         "timeout-minutes: 100",
+        "name: Download exact-main Nightly evidence",
+        "uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16",
+        "name: cxxlens-nightly-evidence-${{ github.sha }}",
+        "path: build/release-evaluation-nightly",
+    ):
+        if marker not in evaluation_body:
+            fail(f"exact-main Nightly evidence workflow marker is missing: {marker}")
+    for forbidden in (
         "id: nightly-run",
-        'gh api --method GET',
-        'actions/workflows/nightly.yml/runs',
-        "-f head_sha=\"${GITHUB_SHA}\"",
+        "gh api --method GET",
+        "actions/workflows/nightly.yml/runs",
         "for attempt in $(seq 1 180)",
         "sleep 30",
-        '.event == "push"',
-        '.event == "schedule"',
-        '.event == "workflow_dispatch"',
-        '"${status}" != "completed"',
-        '"${conclusion}" != "success"',
-        'name: cxxlens-nightly-evidence-${{ github.sha }}',
-        'github-token: ${{ github.token }}',
-        'repository: ${{ github.repository }}',
         'run-id: ${{ steps.nightly-run.outputs.run-id }}',
     ):
-        if marker not in evaluation_job.group("body"):
-            fail(f"exact-main Nightly evidence workflow marker is missing: {marker}")
+        if forbidden in evaluation_body:
+            fail(f"release qualification polling is forbidden: {forbidden}")
     for marker in (
         "needs: [release-evaluation]",
         "needs.release-evaluation.outputs.qualification == 'qualified'",
