@@ -400,6 +400,12 @@ target_link_libraries(cxxlens-provider-process-fixture
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-runtime
                             unit/sdk/provider_runtime_test.cpp)
+if(NOT CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-runtime
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+endif()
 target_link_libraries(cxxlens-unit-sdk-provider-runtime
                       PRIVATE cxxlens::provider_sdk)
 target_include_directories(cxxlens-unit-sdk-provider-runtime
@@ -534,9 +540,13 @@ target_sources(
   cxxlens-unit-sdk-provider-ng1-session
   PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
           "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
+if(NOT CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-ng1-session
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+endif()
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
                       PRIVATE cxxlens::provider_sdk)
 target_include_directories(cxxlens-unit-sdk-provider-ng1-session
@@ -550,6 +560,34 @@ add_test(NAME unit.sdk-provider-ng1-session
 set_tests_properties(
   unit.sdk-provider-ng1-session
   PROPERTIES LABELS "unit;sdk;provider;ng1;session;recovery;spill;fail-closed")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-live-driver
+                            unit/sdk/provider_ng1_live_driver_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-live-driver
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_live_driver.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
+if(NOT CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-ng1-live-driver
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+endif()
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-live-driver
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-live-driver
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-unit-sdk-provider-ng1-live-driver
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+add_test(NAME unit.sdk-provider-ng1-live-driver
+         COMMAND cxxlens-unit-sdk-provider-ng1-live-driver)
+set_tests_properties(
+  unit.sdk-provider-ng1-live-driver
+  PROPERTIES LABELS "unit;sdk;provider;ng1;live;transport;session;fail-closed")
 
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)
@@ -1053,6 +1091,7 @@ add_dependencies(
   cxxlens-unit-sdk-provider-ng1-transport
   cxxlens-unit-sdk-provider-ng1-recovery-adapter
   cxxlens-unit-sdk-provider-ng1-session
+  cxxlens-unit-sdk-provider-ng1-live-driver
   cxxlens-unit-sdk-query-runtime
   cxxlens-unit-sdk-sqlite-connection-lifecycle
   cxxlens-unit-sdk-sqlite-default-forwarding-vfs
