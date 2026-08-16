@@ -32,12 +32,14 @@ def file_digest(path: pathlib.Path) -> str:
 
 
 def hash_files_digest(*paths: pathlib.Path) -> str:
-    """Reproduce hashFiles for the exact set of files matched by CI."""
+    """Reproduce hashFiles for files yielded in the runner's match order."""
 
-    per_file_hex_digests = sorted(
-        hashlib.sha256(path.read_bytes()).hexdigest() for path in paths
-    )
-    return hashlib.sha256("".join(per_file_hex_digests).encode("utf-8")).hexdigest()
+    if not paths:
+        return ""
+    result = hashlib.sha256()
+    for path in paths:
+        result.update(hashlib.sha256(path.read_bytes()).digest())
+    return result.hexdigest()
 
 
 def local_reference_lock(

@@ -46,12 +46,14 @@ from collect_toolchain_provenance import (  # noqa: E402
 
 
 def github_hash_files_simulation(*paths: pathlib.Path) -> str:
-    """Model GitHub's hashFiles per-file hex-digest concatenation."""
+    """Model GitHub's hashFiles raw per-file digest accumulation."""
 
-    per_file_hex_digests = sorted(
-        hashlib.sha256(path.read_bytes()).hexdigest() for path in paths
-    )
-    return hashlib.sha256("".join(per_file_hex_digests).encode("utf-8")).hexdigest()
+    if not paths:
+        return ""
+    result = hashlib.sha256()
+    for path in paths:
+        result.update(hashlib.sha256(path.read_bytes()).digest())
+    return result.hexdigest()
 
 
 class NgCiSupplyChainTest(unittest.TestCase):
@@ -372,23 +374,25 @@ class NgCiSupplyChainTest(unittest.TestCase):
         )
         self.assertEqual(
             hash_files_digest(lock_path),
-            "80430a40a6191474280380d2615334078f89a58808493238dd06ee7c7595663f",
+            "596a855e4995898c6deb0943b385ca7f5657d52da3e6c61423a24c8ed5a4d5f2",
         )
         self.assertEqual(
             hash_files_digest(lock_path), github_hash_files_simulation(lock_path)
         )
         self.assertNotEqual(
             hash_files_digest(lock_path),
-            hashlib.sha256(hashlib.sha256(lock_path.read_bytes()).digest()).hexdigest(),
+            file_digest(lock_path).removeprefix("sha256:"),
         )
         with tempfile.TemporaryDirectory() as temporary:
             first = pathlib.Path(temporary) / "first"
             second = pathlib.Path(temporary) / "second"
             first.write_bytes(b"first")
             second.write_bytes(b"second")
-            expected = github_hash_files_simulation(second, first)
-            self.assertEqual(hash_files_digest(first, second), expected)
-            self.assertEqual(hash_files_digest(second, first), expected)
+            forward = github_hash_files_simulation(first, second)
+            reverse = github_hash_files_simulation(second, first)
+            self.assertEqual(hash_files_digest(first, second), forward)
+            self.assertEqual(hash_files_digest(second, first), reverse)
+            self.assertNotEqual(forward, reverse)
         with tempfile.TemporaryDirectory() as temporary:
             receipt = pathlib.Path(temporary) / "raw-key.json"
             hashfiles_key = self.cache_environment(receipt)[
@@ -407,6 +411,28 @@ class NgCiSupplyChainTest(unittest.TestCase):
             with mock.patch.dict(os.environ, environment, clear=True):
                 with self.assertRaisesRegex(ValueError, "key differs"):
                     package_cache_provenance(self.lock)
+
+    def test_hash_files_uses_raw_digest_bytes_not_hex_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            first = pathlib.Path(temporary) / "first"
+            second = pathlib.Path(temporary) / "second"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+
+            raw_digest = hashlib.sha256(
+                hashlib.sha256(first.read_bytes()).digest()
+                + hashlib.sha256(second.read_bytes()).digest()
+            ).hexdigest()
+            hex_text_digest = hashlib.sha256(
+                (
+                    hashlib.sha256(first.read_bytes()).hexdigest()
+                    + hashlib.sha256(second.read_bytes()).hexdigest()
+                ).encode("ascii")
+            ).hexdigest()
+
+            self.assertEqual(hash_files_digest(first, second), raw_digest)
+            self.assertNotEqual(raw_digest, hex_text_digest)
+            self.assertNotEqual(hash_files_digest(first, second), hex_text_digest)
 
     def test_relative_downloaded_package_cache_path_is_rejected(self) -> None:
         with mock.patch.dict(
