@@ -160,6 +160,8 @@ namespace cxxlens::detail::sqlite_qualification
 			sqlite_disposable_qualification_capability& capability,
 			void (*signal)(void*) noexcept,
 			void* context) noexcept;
+		friend void set_sqlite_disposable_parent_sync_failure_for_testing(
+			sqlite_disposable_qualification_capability& capability, bool enabled) noexcept;
 		friend void invalidate_sqlite_disposable_process_instance_for_testing(
 			sqlite_disposable_qualification_capability& capability) noexcept;
 		friend cxxlens::sdk::result<void> write_sqlite_disposable_fixture_file_for_testing(
@@ -226,6 +228,13 @@ namespace cxxlens::detail::sqlite_qualification
 		sqlite_disposable_qualification_capability& capability,
 		void (*signal)(void* context) noexcept,
 		void* context) noexcept;
+
+	/**
+	 * Inject the retained-parent sync failure that follows the fixture-only unlink boundary.
+	 * This is a one-way fault-harness control; it never exposes a descriptor or enables a retry.
+	 */
+	CXXLENS_SQLITE_QUALIFICATION_HIDDEN void set_sqlite_disposable_parent_sync_failure_for_testing(
+		sqlite_disposable_qualification_capability& capability, bool enabled) noexcept;
 
 	/** Invalidate only the retained creator-process proof for a focused fail-closed test. */
 	CXXLENS_SQLITE_QUALIFICATION_HIDDEN void
