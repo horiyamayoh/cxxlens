@@ -21,6 +21,8 @@ from typing import Any, Mapping
 import jsonschema
 import yaml
 
+import check_ng_git_authority as git_authority
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 READINESS_PATH = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
@@ -210,7 +212,10 @@ def project_use_cases(readiness: dict[str, Any]) -> tuple[list[dict[str, Any]], 
 
 
 def build_report(
-    root: pathlib.Path, *, source_bytes: Mapping[str, bytes] | None = None
+    root: pathlib.Path,
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
+    snapshot: git_authority.HeadSnapshot | None = None,
 ) -> dict[str, Any]:
     root = root.resolve()
     reject_dirty_source_files(root)
@@ -234,11 +239,15 @@ def build_report(
             "owner_issue": "#271",
             "tracking_issue": "#275",
             "source_pointer": "/product_direction/roadmap/use_case_families",
-            "revision": git_value(root, "HEAD"),
-            "tree": git_value(root, "HEAD^{tree}"),
-        "readiness_digest": sha256(
-            readiness_path, source_bytes=source_bytes, root=root
-        ),
+            "revision": snapshot.revision
+            if snapshot is not None
+            else git_value(root, "HEAD"),
+            "tree": snapshot.tree
+            if snapshot is not None
+            else git_value(root, "HEAD^{tree}"),
+            "readiness_digest": sha256(
+                readiness_path, source_bytes=source_bytes, root=root
+            ),
         },
         "projection": {
             "scope": "readiness-declared-use-case-families",

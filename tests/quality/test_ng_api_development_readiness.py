@@ -265,12 +265,26 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             readiness.validate_demand_closure(ROOT, manifest)
 
     def test_agent_packet_is_exact_bound_and_digested(self) -> None:
+        bound_sources = {
+            readiness.MANIFEST_PATH.as_posix(): (
+                ROOT / readiness.MANIFEST_PATH
+            ).read_bytes()
+        }
         with self.exact_source("1" * 40, "2" * 40):
             packet = readiness.build_agent_context_packet(
-                ROOT, self.manifest, "1" * 40, "2" * 40
+                ROOT,
+                self.manifest,
+                "1" * 40,
+                "2" * 40,
+                bound_sources=bound_sources,
             )
             readiness.validate_agent_context_packet(
-                ROOT, self.manifest, packet, "1" * 40, "2" * 40
+                ROOT,
+                self.manifest,
+                packet,
+                "1" * 40,
+                "2" * 40,
+                bound_sources=bound_sources,
             )
         self.assertEqual(packet["binding"]["revision"], "1" * 40)
         self.assertTrue(packet["canonical_digest"].startswith("sha256:"))
@@ -300,6 +314,35 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         self.assertIn(packet["constructibility"]["reason"], markdown)
         for value in packet["binding"].values():
             self.assertIn(str(value), markdown)
+
+    def test_packet_uses_bound_manifest_bytes_and_rejects_unbound_reads(self) -> None:
+        authority = readiness._require_head_bound_authorities(ROOT)
+        manifest_bytes = authority.records[readiness.MANIFEST.as_posix()][2]
+        manifest = yaml.safe_load(manifest_bytes.decode("utf-8"))
+        manifest_path = ROOT / readiness.MANIFEST
+        original = manifest_path.read_bytes()
+        try:
+            manifest_path.write_bytes(original + b"\n# replacement after binding\n")
+            packet = readiness.build_agent_context_packet(
+                ROOT,
+                manifest,
+                authority.snapshot.revision,
+                authority.snapshot.tree,
+                bound_sources=authority.sources,
+                snapshot=authority.snapshot,
+            )
+            expected_digest = "sha256:" + hashlib.sha256(manifest_bytes).hexdigest()
+            self.assertEqual(packet["binding"]["manifest_file_digest"], expected_digest)
+            with readiness._bound_authority_reads(
+                ROOT,
+                {readiness.MANIFEST.as_posix(): manifest_bytes},
+            ), self.assertRaisesRegex(
+                readiness.ReadinessError,
+                r"authority source was not bound to snapshot",
+            ):
+                (ROOT / readiness.QUALITY_PATH).read_text(encoding="utf-8")
+        finally:
+            manifest_path.write_bytes(original)
 
     def test_check_tier_is_required_and_sqlite_bound(self) -> None:
         self.assertIn("check-tier", self.manifest["required_status_checks"]["contexts"])
@@ -414,9 +457,18 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_stale_agent_packet_is_rejected(self) -> None:
+        bound_sources = {
+            readiness.MANIFEST_PATH.as_posix(): (
+                ROOT / readiness.MANIFEST_PATH
+            ).read_bytes()
+        }
         with self.exact_source("1" * 40, "2" * 40):
             packet = readiness.build_agent_context_packet(
-                ROOT, self.manifest, "1" * 40, "2" * 40
+                ROOT,
+                self.manifest,
+                "1" * 40,
+                "2" * 40,
+                bound_sources=bound_sources,
             )
         packet["binding"]["revision"] = "3" * 40
         with self.assertRaisesRegex(
@@ -424,7 +476,12 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         ):
             with self.exact_source("1" * 40, "2" * 40):
                 readiness.validate_agent_context_packet(
-                    ROOT, self.manifest, packet, "1" * 40, "2" * 40
+                    ROOT,
+                    self.manifest,
+                    packet,
+                    "1" * 40,
+                    "2" * 40,
+                    bound_sources=bound_sources,
                 )
 
     def test_release_polling_tokens_are_forbidden(self) -> None:

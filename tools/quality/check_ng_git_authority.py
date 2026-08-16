@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bind repository inputs to the regular-file blobs present at ``HEAD``."""
+"""Bind repository inputs to one immutable regular-file ``HEAD`` snapshot."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import pathlib
 import re
 import stat
 import subprocess
+from dataclasses import dataclass
 
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -22,6 +23,106 @@ class GitAuthorityError(ValueError):
 
 def _fail(code: str, relative: str) -> None:
     raise GitAuthorityError(f"git-authority.{code}:{relative}")
+
+
+@dataclass(frozen=True)
+class HeadSnapshot:
+    """One exact commit/tree pair used for every authority lookup."""
+
+    revision: str
+    tree: str
+
+    @classmethod
+    def capture(cls, root: pathlib.Path) -> "HeadSnapshot":
+        try:
+            revision_result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "rev-parse",
+                    "--verify",
+                    "HEAD^{commit}",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            revision = revision_result.stdout.strip()
+            tree_result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "rev-parse",
+                    "--verify",
+                    f"{revision}^{{tree}}",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            tree = tree_result.stdout.strip()
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise GitAuthorityError("git-authority.head-snapshot-unavailable") from error
+        if not HEX40.fullmatch(revision) or not HEX40.fullmatch(tree):
+            raise GitAuthorityError("git-authority.head-snapshot-invalid")
+        return cls(revision=revision, tree=tree)
+
+    @classmethod
+    def capture_expected(
+        cls,
+        root: pathlib.Path,
+        *,
+        revision: str,
+        tree: str,
+    ) -> "HeadSnapshot":
+        snapshot = cls.capture(root)
+        if (snapshot.revision, snapshot.tree) != (revision, tree):
+            raise GitAuthorityError(
+                "git-authority.head-snapshot-mismatch:"
+                f"{revision}:{tree}->{snapshot.revision}:{snapshot.tree}"
+            )
+        return snapshot
+
+    def assert_current(self, root: pathlib.Path) -> None:
+        current = type(self).capture(root)
+        if current != self:
+            raise GitAuthorityError(
+                "git-authority.head-snapshot-changed:"
+                f"{self.revision}:{self.tree}->{current.revision}:{current.tree}"
+            )
+
+    def tracked_paths(
+        self, root: pathlib.Path, prefix: str
+    ) -> tuple[str, ...]:
+        """List paths from this tree, never from the mutable worktree/index."""
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "ls-tree",
+                    "-r",
+                    "-z",
+                    "--name-only",
+                    self.tree,
+                    "--",
+                    prefix,
+                ],
+                check=True,
+                capture_output=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise GitAuthorityError(
+                f"git-authority.head-snapshot-paths-unavailable:{prefix}"
+            ) from error
+        return tuple(
+            path.decode("utf-8")
+            for path in result.stdout.split(b"\0")
+            if path
+        )
 
 
 def _working_tree_path(root: pathlib.Path, relative: str) -> pathlib.Path:
@@ -45,6 +146,10 @@ def _safe_open_flags(*, directory: bool) -> int:
     required = ["O_CLOEXEC", "O_NOFOLLOW"]
     if directory:
         required.append("O_DIRECTORY")
+    else:
+        # O_RDONLY alone can block forever when an authority path is replaced
+        # with a FIFO before fstat() gets a chance to reject it.
+        required.append("O_NONBLOCK")
     missing = [name for name in required if not hasattr(os, name)]
     if missing:
         raise GitAuthorityError(
@@ -204,7 +309,9 @@ def _read_bound_worktree_file(
                 pass
 
 
-def _head_blob(root: pathlib.Path, relative: str) -> tuple[str, str, bytes]:
+def _head_blob(
+    root: pathlib.Path, snapshot: HeadSnapshot, relative: str
+) -> tuple[str, str, bytes]:
     try:
         tree = subprocess.run(
             [
@@ -215,7 +322,7 @@ def _head_blob(root: pathlib.Path, relative: str) -> tuple[str, str, bytes]:
                 "ls-tree",
                 "-z",
                 "--full-tree",
-                "HEAD",
+                snapshot.tree,
                 "--",
                 relative,
             ],
@@ -295,7 +402,12 @@ def _require_normal_index_entry(root: pathlib.Path, relative: str) -> None:
     _fail("path-index-flag", relative)
 
 
-def bind_head_blob(root: pathlib.Path, relative: str) -> tuple[str, str, bytes]:
+def bind_head_blob(
+    root: pathlib.Path,
+    relative: str,
+    *,
+    snapshot: HeadSnapshot | None = None,
+) -> tuple[str, str, bytes]:
     """Return the exact regular ``HEAD`` mode/blob after checking the worktree.
 
     The current path must exist without symlink traversal and must contain the
@@ -311,15 +423,19 @@ def bind_head_blob(root: pathlib.Path, relative: str) -> tuple[str, str, bytes]:
         or any(component in {"", ".", "..", ".git"} for component in relative.split("/"))
     ):
         _fail("path-noncanonical", relative)
+    owned_snapshot = snapshot is None
+    snapshot = snapshot or HeadSnapshot.capture(root)
     # Keep this preflight for a precise diagnostic, but never rely on the
     # pathname check for authority: the descriptor-bound read below is the
     # authoritative worktree observation.
     _working_tree_path(root, relative)
-    mode, blob, content = _head_blob(root, relative)
+    mode, blob, content = _head_blob(root, snapshot, relative)
     working_tree_content = _read_bound_worktree_file(root, relative, mode)
     if working_tree_content != content:
         _fail("path-content-mismatch", relative)
     _require_normal_index_entry(root, relative)
+    if owned_snapshot:
+        snapshot.assert_current(root)
     return mode, blob, content
 
 
@@ -328,19 +444,41 @@ def sha256_digest(content: bytes) -> str:
 
 
 def require_head_bound_paths(
-    root: pathlib.Path, paths: list[str] | tuple[str, ...]
+    root: pathlib.Path,
+    paths: list[str] | tuple[str, ...],
+    *,
+    snapshot: HeadSnapshot | None = None,
+    verify_current: bool = True,
 ) -> dict[str, bytes]:
     return {
         relative: record[2]
-        for relative, record in require_head_bound_records(root, paths).items()
+        for relative, record in require_head_bound_records(
+            root,
+            paths,
+            snapshot=snapshot,
+            verify_current=verify_current,
+        ).items()
     }
 
 
 def require_head_bound_records(
-    root: pathlib.Path, paths: list[str] | tuple[str, ...]
+    root: pathlib.Path,
+    paths: list[str] | tuple[str, ...],
+    *,
+    snapshot: HeadSnapshot | None = None,
+    verify_current: bool = True,
 ) -> dict[str, tuple[str, str, bytes]]:
-    """Bind paths once and retain their exact mode, blob, and bytes."""
+    """Bind all paths to one snapshot and retain exact mode/blob/bytes.
+
+    Callers may bind a discovery prefix with ``verify_current=False`` and then
+    bind the manifest-declared remainder using the same snapshot.  The final
+    call must verify the snapshot after every authoritative byte has been
+    bound; no path is resolved against a moving ``HEAD`` independently.
+    """
+    snapshot = snapshot or HeadSnapshot.capture(root)
     bound: dict[str, tuple[str, str, bytes]] = {}
     for relative in paths:
-        bound[relative] = bind_head_blob(root, relative)
+        bound[relative] = bind_head_blob(root, relative, snapshot=snapshot)
+    if verify_current:
+        snapshot.assert_current(root)
     return bound

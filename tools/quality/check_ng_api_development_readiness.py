@@ -21,6 +21,7 @@ import tempfile
 import types
 from contextlib import contextmanager
 from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import yaml
@@ -67,10 +68,50 @@ LEGACY_GOAL_ISSUE_CLOSE_PATTERNS = (
     re.compile(r"merged-main qualification と learning checkpoint 後の active issue close"),
     re.compile(r"production scope に tracked gap がある intermediate unit の merge 後"),
 )
+PRODUCTION_SCOPE_SOURCE_PATHS = (
+    "schemas/cxxlens_ng_acceptance_manifest.yaml",
+    "schemas/cxxlens_ng_g5_qualification.yaml",
+    "schemas/cxxlens_ng_logical_query_contract.yaml",
+    "schemas/cxxlens_ng_namespace_registry.yaml",
+    "schemas/cxxlens_ng_provider_protocol.yaml",
+    "schemas/cxxlens_ng_provider_runtime_contract.yaml",
+    "schemas/cxxlens_ng_clang22_materialization_contract.yaml",
+    "schemas/cxxlens_ng_provider_support_matrix.yaml",
+    "schemas/cxxlens_ng_public_api_catalog.yaml",
+    "schemas/cxxlens_ng_public_callable_inventory.yaml",
+    "schemas/cxxlens_ng_quality_ownership.yaml",
+    "schemas/cxxlens_ng_relation_registry.yaml",
+    "schemas/cxxlens_ng_release_bundle.yaml",
+    "schemas/cxxlens_ng_release_qualification.yaml",
+    "schemas/cxxlens_ng_security_profile.yaml",
+    "schemas/cxxlens_ng_provider_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_query_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_security_conformance_vectors.yaml",
+)
 
 
 class AccelerationError(ValueError):
     """A fail-closed #291 contract violation."""
+
+
+@dataclass(frozen=True)
+class BoundAuthority:
+    """All authority bytes bound to one immutable Git commit/tree snapshot."""
+
+    snapshot: git_authority.HeadSnapshot
+    records: Mapping[str, tuple[str, str, bytes]]
+
+    @property
+    def sources(self) -> Mapping[str, bytes]:
+        return {path: record[2] for path, record in self.records.items()}
+
+
+class BoundManifest(dict[str, Any]):
+    """Manifest mapping carrying the exact binding used to validate it."""
+
+    def __init__(self, value: dict[str, Any], authority: BoundAuthority):
+        super().__init__(value)
+        self.authority = authority
 
 
 def _load_baseline() -> types.ModuleType:
@@ -128,8 +169,33 @@ def _semantic_digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
-def _file_digest(path: pathlib.Path) -> str:
-    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+def _bound_bytes(
+    path: pathlib.Path,
+    *,
+    bound_sources: Mapping[str, bytes] | None,
+    root: pathlib.Path,
+) -> bytes:
+    if bound_sources is None:
+        return path.read_bytes()
+    try:
+        relative = path.absolute().relative_to(root.absolute()).as_posix()
+    except ValueError as error:
+        raise ReadinessError(f"authority source is outside root: {path}") from error
+    if relative not in bound_sources:
+        raise ReadinessError(f"authority source was not bound to snapshot: {relative}")
+    return bound_sources[relative]
+
+
+def _file_digest(
+    path: pathlib.Path,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+    root: pathlib.Path | None = None,
+) -> str:
+    source_root = root or ROOT
+    return "sha256:" + hashlib.sha256(
+        _bound_bytes(path, bound_sources=bound_sources, root=source_root)
+    ).hexdigest()
 
 
 def _normalized_condition(value: Any) -> str:
@@ -707,6 +773,10 @@ def _bound_authority_reads(
         relative = bound_key(path)
         if relative in bound_sources:
             return bound_sources[relative]
+        if relative is not None:
+            raise ReadinessError(
+                f"authority source was not bound to snapshot: {relative}"
+            )
         return original_read_bytes(path)
 
     def read_text(
@@ -723,6 +793,10 @@ def _bound_authority_reads(
             return bound_sources[relative].decode(
                 encoding or "utf-8", errors or "strict"
             )
+        if relative is not None:
+            raise ReadinessError(
+                f"authority source was not bound to snapshot: {relative}"
+            )
         return original_read_text(path, *args, **kwargs)
 
     pathlib.Path.read_bytes = read_bytes
@@ -734,7 +808,28 @@ def _bound_authority_reads(
         pathlib.Path.read_text = original_read_text
 
 
-def _require_head_bound_authorities(root: pathlib.Path) -> dict[str, bytes]:
+def _require_head_bound_authorities(
+    root: pathlib.Path,
+    *,
+    snapshot: git_authority.HeadSnapshot | None = None,
+    expected_revision: str | None = None,
+    expected_tree: str | None = None,
+) -> BoundAuthority:
+    if snapshot is None:
+        if (expected_revision is None) != (expected_tree is None):
+            _fail("exact authority snapshot requires both revision and tree")
+        try:
+            snapshot = (
+                git_authority.HeadSnapshot.capture_expected(
+                    root,
+                    revision=expected_revision,
+                    tree=expected_tree,
+                )
+                if expected_revision is not None and expected_tree is not None
+                else git_authority.HeadSnapshot.capture(root)
+            )
+        except git_authority.GitAuthorityError as error:
+            _fail(f"agent-context.authority-source-{error}")
     fixed_paths = [
         BASELINE_PATH,
         MANIFEST,
@@ -773,9 +868,14 @@ def _require_head_bound_authorities(root: pathlib.Path) -> dict[str, bytes]:
         pathlib.Path(git_authority.__file__).resolve().relative_to(root),
     ]
     try:
-        _manifest_mode, _manifest_blob, manifest_bytes = git_authority.bind_head_blob(
-            root, MANIFEST.as_posix()
+        initial_paths = tuple(path.as_posix() for path in fixed_paths)
+        initial_records = git_authority.require_head_bound_records(
+            root,
+            initial_paths,
+            snapshot=snapshot,
+            verify_current=False,
         )
+        manifest_bytes = initial_records[MANIFEST.as_posix()][2]
         manifest = yaml.safe_load(manifest_bytes.decode("utf-8"))
         if not isinstance(manifest, dict):
             _fail("HEAD readiness manifest is not a mapping")
@@ -790,25 +890,48 @@ def _require_head_bound_authorities(root: pathlib.Path) -> dict[str, bytes]:
         ):
             _fail("HEAD #261 authority reading set is missing")
         fixed_paths.extend(pathlib.Path(path) for path in authority_paths)
-        return git_authority.require_head_bound_paths(
+        fixed_paths.extend(pathlib.Path(path) for path in PRODUCTION_SCOPE_SOURCE_PATHS)
+        fixed_paths.extend(
+            pathlib.Path(path)
+            for path in snapshot.tracked_paths(
+                root, "docs/development/implementation-learning/records"
+            )
+            if pathlib.PurePosixPath(path).name.startswith("df-")
+        )
+        records = git_authority.require_head_bound_records(
             root,
             tuple(path.as_posix() for path in fixed_paths),
+            snapshot=snapshot,
+            verify_current=False,
         )
+        snapshot.assert_current(root)
+        return BoundAuthority(snapshot=snapshot, records=records)
     except git_authority.GitAuthorityError as error:
         _fail(f"agent-context.authority-source-{error}")
     except (UnicodeDecodeError, yaml.YAMLError) as error:
         _fail(f"agent-context.authority-manifest-invalid:{error}")
 
 
+def _validate_documents_with_binding(
+    root: pathlib.Path, authority: BoundAuthority
+) -> BoundManifest:
+    with _bound_authority_reads(root, authority.sources):
+        manifest = _baseline_validate_documents(root)
+        validate_bounded_completion_contract(root)
+        validate_demand_closure(root, manifest)
+        _validate_required_status_documentation(root, manifest)
+    try:
+        authority.snapshot.assert_current(root)
+    except git_authority.GitAuthorityError as error:
+        _fail(f"agent-context.source-snapshot-{error}")
+    return BoundManifest(manifest, authority)
+
+
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     if (root / ".git").exists():
-        bound_sources = _require_head_bound_authorities(root)
-        with _bound_authority_reads(root, bound_sources):
-            manifest = _baseline_validate_documents(root)
-            validate_bounded_completion_contract(root)
-            validate_demand_closure(root, manifest)
-            _validate_required_status_documentation(root, manifest)
-        return manifest
+        return _validate_documents_with_binding(
+            root, _require_head_bound_authorities(root)
+        )
     manifest = _baseline_validate_documents(root)
     validate_bounded_completion_contract(root)
     validate_demand_closure(root, manifest)
@@ -832,9 +955,22 @@ def build_agent_context_packet(
     manifest: dict[str, Any],
     revision: str,
     tree: str,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+    snapshot: git_authority.HeadSnapshot | None = None,
 ) -> dict[str, Any]:
     if HEX40.fullmatch(revision) is None or HEX40.fullmatch(tree) is None:
         _fail("agent context requires exact 40-hex revision and tree")
+    authority = getattr(manifest, "authority", None)
+    if authority is not None and bound_sources is None:
+        bound_sources = authority.sources
+        snapshot = snapshot or authority.snapshot
+    if bound_sources is None and (root / ".git").exists():
+        authority = _require_head_bound_authorities(
+            root, expected_revision=revision, expected_tree=tree
+        )
+        bound_sources = authority.sources
+        snapshot = snapshot or authority.snapshot
     use_case, template = _product_contract(manifest)
     packet = {
         "schema": "cxxlens.agent-context.v1",
@@ -859,12 +995,21 @@ def build_agent_context_packet(
             "revision": revision,
             "tree": tree,
             "manifest_path": MANIFEST_PATH.as_posix(),
-            "manifest_file_digest": _file_digest(root / MANIFEST_PATH),
+            "manifest_file_digest": _file_digest(
+                root / MANIFEST_PATH,
+                bound_sources=bound_sources,
+                root=root,
+            ),
             "authority_projection_digest": _semantic_digest(authority_projection(manifest)),
             "stale_policy": "reject",
         },
     }
     packet["canonical_digest"] = _semantic_digest(packet)
+    if snapshot is not None:
+        try:
+            snapshot.assert_current(root)
+        except git_authority.GitAuthorityError as error:
+            _fail(f"agent-context.source-snapshot-{error}")
     return packet
 
 
@@ -874,8 +1019,18 @@ def validate_agent_context_packet(
     packet: dict[str, Any],
     revision: str,
     tree: str,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+    snapshot: git_authority.HeadSnapshot | None = None,
 ) -> None:
-    expected = build_agent_context_packet(root, manifest, revision, tree)
+    expected = build_agent_context_packet(
+        root,
+        manifest,
+        revision,
+        tree,
+        bound_sources=bound_sources,
+        snapshot=snapshot,
+    )
     if packet != expected:
         _fail("agent-context.stale-or-not-machine-derived")
 
@@ -968,6 +1123,7 @@ def build_report(
     generated_at: str,
     expected_revision: str,
 ) -> dict[str, Any]:
+    authority = getattr(manifest, "authority", None)
     baseline_current_git_state = _baseline.current_git_state
     _baseline.current_git_state = current_git_state
     try:
@@ -985,7 +1141,15 @@ def build_report(
     json_path, markdown_path = _packet_paths(evidence_dir)
     packet = json.loads(json_path.read_text(encoding="utf-8"))
     git = report["git"]
-    validate_agent_context_packet(root, manifest, packet, git["revision"], git["tree"])
+    validate_agent_context_packet(
+        root,
+        manifest,
+        packet,
+        git["revision"],
+        git["tree"],
+        bound_sources=authority.sources if authority is not None else None,
+        snapshot=authority.snapshot if authority is not None else None,
+    )
     if markdown_path.read_text(encoding="utf-8") != render_agent_context_markdown(packet):
         _fail("#261 agent-context Markdown differs from the canonical packet")
     report["evidence_artifacts"].extend(
@@ -1013,7 +1177,12 @@ def _plan(arguments: list[str]) -> int:
         print(f"unknown agent-context packet issue: {parsed.issue}", file=sys.stderr)
         return 1
     try:
-        manifest = validate_documents(root)
+        authority = _require_head_bound_authorities(
+            root,
+            expected_revision=parsed.expected_revision,
+            expected_tree=parsed.expected_tree,
+        )
+        manifest = _validate_documents_with_binding(root, authority)
         status = _baseline.git_output(
             root, "status", "--porcelain=v1", "--untracked-files=all"
         )
@@ -1022,12 +1191,17 @@ def _plan(arguments: list[str]) -> int:
                 "agent-context.worktree-dirty: exact-bound #261 readiness context "
                 "requires a clean tracked/untracked worktree"
             )
-        actual_revision = _baseline.git_output(root, "rev-parse", "HEAD")
-        actual_tree = _baseline.git_output(root, "rev-parse", "HEAD^{tree}")
-        if (parsed.expected_revision, parsed.expected_tree) != (actual_revision, actual_tree):
-            _fail("agent-context revision/tree binding is stale")
+        try:
+            authority.snapshot.assert_current(root)
+        except git_authority.GitAuthorityError as error:
+            _fail(f"agent-context.source-snapshot-{error}")
         packet = build_agent_context_packet(
-            root, manifest, parsed.expected_revision, parsed.expected_tree
+            root,
+            manifest,
+            parsed.expected_revision,
+            parsed.expected_tree,
+            bound_sources=authority.sources,
+            snapshot=authority.snapshot,
         )
         parsed.output_json.parent.mkdir(parents=True, exist_ok=True)
         parsed.output_markdown.parent.mkdir(parents=True, exist_ok=True)
@@ -1043,6 +1217,26 @@ def _plan(arguments: list[str]) -> int:
     except (ReadinessError, OSError, UnicodeError, json.JSONDecodeError) as error:
         print(f"readiness agent-context plan failed: {error}", file=sys.stderr)
         return 1
+
+
+# Make the frozen baseline's internal git lookup use one commit/tree capture.
+def current_git_state(root: pathlib.Path) -> dict[str, Any]:
+    try:
+        snapshot = git_authority.HeadSnapshot.capture(root)
+    except git_authority.GitAuthorityError as error:
+        _fail(f"agent-context.source-snapshot-{error}")
+    branch = git_output(root, "branch", "--show-current")
+    clean = git_output(root, "status", "--porcelain=v1") == ""
+    try:
+        snapshot.assert_current(root)
+    except git_authority.GitAuthorityError as error:
+        _fail(f"agent-context.source-snapshot-{error}")
+    return {
+        "revision": snapshot.revision,
+        "tree": snapshot.tree,
+        "branch": branch,
+        "clean": clean,
+    }
 
 
 # Make the frozen baseline's internal global lookups use the composed contracts.

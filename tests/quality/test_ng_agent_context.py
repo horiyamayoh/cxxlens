@@ -8,6 +8,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -23,6 +24,15 @@ USE_CASE_ID = "repository-semantic-query.explain-translation-unit.v1"
 def git_value(expression: str) -> str:
     return subprocess.run(
         ["git", "-C", str(ROOT), "rev-parse", expression],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def git_value_for_root(root: pathlib.Path, expression: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), "rev-parse", expression],
         check=True,
         capture_output=True,
         text=True,
@@ -381,6 +391,91 @@ class AgentContextTests(unittest.TestCase):
             path.write_bytes(original)
             os.chmod(path, original_mode)
             path.with_name(path.name + ".replacement").unlink(missing_ok=True)
+
+    def test_fifo_replacement_is_rejected_without_blocking_before_fstat(self) -> None:
+        relative = "AGENTS.md"
+        path = ROOT / relative
+        original = path.read_bytes()
+        try:
+            path.unlink()
+            os.mkfifo(path, mode=0o644)
+            with self.assertRaisesRegex(
+                agent.git_authority.GitAuthorityError,
+                r"git-authority.path-not-regular-file",
+            ):
+                agent.git_authority.bind_head_blob(ROOT, relative)
+        finally:
+            path.unlink(missing_ok=True)
+            path.write_bytes(original)
+            os.chmod(path, 0o644)
+
+    def test_head_snapshot_replacement_is_rejected_after_all_paths_bind(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            subprocess.run(["git", "-C", str(root), "init", "--quiet"], check=True)
+            (root / "first.txt").write_text("first\n", encoding="utf-8")
+            (root / "second.txt").write_text("second\n", encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(root), "add", "first.txt", "second.txt"],
+                check=True,
+            )
+            git_identity = [
+                "-c",
+                "user.name=authority-test",
+                "-c",
+                "user.email=authority-test@example.invalid",
+            ]
+            subprocess.run(
+                ["git", "-C", str(root), *git_identity, "commit", "--quiet", "-m", "first"],
+                check=True,
+            )
+            first = git_value_for_root(root, "HEAD")
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    *git_identity,
+                    "commit",
+                    "--quiet",
+                    "--allow-empty",
+                    "-m",
+                    "second",
+                ],
+                check=True,
+            )
+            second = git_value_for_root(root, "HEAD")
+            subprocess.run(
+                ["git", "-C", str(root), "checkout", "--quiet", "--detach", first],
+                check=True,
+            )
+            real_read = agent.git_authority._read_bound_worktree_file
+            replaced = False
+
+            def read_then_advance(
+                read_root: pathlib.Path, path_name: str, expected_mode: str
+            ) -> bytes:
+                nonlocal replaced
+                content = real_read(read_root, path_name, expected_mode)
+                if not replaced:
+                    subprocess.run(
+                        ["git", "-C", str(root), "update-ref", "HEAD", second],
+                        check=True,
+                    )
+                    replaced = True
+                return content
+
+            with mock.patch.object(
+                agent.git_authority,
+                "_read_bound_worktree_file",
+                side_effect=read_then_advance,
+            ), self.assertRaisesRegex(
+                agent.git_authority.GitAuthorityError,
+                r"git-authority.head-snapshot-changed",
+            ):
+                agent.git_authority.require_head_bound_records(
+                    root, ("first.txt", "second.txt")
+                )
 
     def test_index_authority_flags_are_rejected(self) -> None:
         relative = agent.READINESS_SCHEMA_PATH.as_posix()

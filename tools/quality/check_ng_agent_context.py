@@ -248,11 +248,14 @@ def select_source(
     use_case_id: str,
     *,
     bound_sources: Mapping[str, bytes] | None = None,
+    snapshot: git_authority.HeadSnapshot | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     if CANONICAL_ID.fullmatch(use_case_id) is None:
         fail(f"agent-context.use-case-id-invalid:{use_case_id}")
     try:
-        report = catalog.build_report(root, source_bytes=bound_sources)
+        report = catalog.build_report(
+            root, source_bytes=bound_sources, snapshot=snapshot
+        )
     except catalog.CatalogError as error:
         fail(f"agent-context.demand-source-invalid:{error}")
     families = readiness.get("product_direction", {}).get("roadmap", {}).get(
@@ -446,8 +449,11 @@ def bind_design_feedback(
     bound_sources: Mapping[str, bytes] | None = None,
 ) -> list[dict[str, Any]]:
     path = root / DF_0261_RECORD_PATH
-    if not path.is_file():
-        fail(f"agent-context.design-feedback-record-missing:{DF_0261_RECORD_PATH}")
+    if bound_sources is None:
+        if not path.is_file():
+            fail(f"agent-context.design-feedback-record-missing:{DF_0261_RECORD_PATH}")
+    elif DF_0261_RECORD_PATH.as_posix() not in bound_sources:
+        fail(f"agent-context.authority-file-not-bound:{DF_0261_RECORD_PATH}")
     try:
         schema = design_feedback.load_mapping(
             root / DESIGN_FEEDBACK_SCHEMA_PATH,
@@ -491,8 +497,12 @@ def build_context(
     require_clean_worktree(root)
     if not HEX40.fullmatch(revision) or not HEX40.fullmatch(tree):
         fail("agent-context.exact-sha-invalid")
-    if (git_value(root, "HEAD"), git_value(root, "HEAD^{tree}")) != (revision, tree):
-        fail("agent-context.source-revision-or-tree-mismatch")
+    try:
+        snapshot = git_authority.HeadSnapshot.capture_expected(
+            root, revision=revision, tree=tree
+        )
+    except git_authority.GitAuthorityError as error:
+        fail(f"agent-context.source-revision-or-tree-mismatch:{error}")
     fixed_paths = (
         READINESS_PATH.as_posix(),
         READINESS_SCHEMA_PATH.as_posix(),
@@ -505,7 +515,12 @@ def build_context(
         pathlib.Path(design_feedback.__file__).resolve().relative_to(root).as_posix(),
     )
     try:
-        initial_records = git_authority.require_head_bound_records(root, fixed_paths)
+        initial_records = git_authority.require_head_bound_records(
+            root,
+            fixed_paths,
+            snapshot=snapshot,
+            verify_current=False,
+        )
         initial_sources = {
             path: record[2] for path, record in initial_records.items()
         }
@@ -536,7 +551,12 @@ def build_context(
         )
         validate_path_set(authority_paths, "authority-reading-set", reject_overlap=False)
         all_paths = tuple(dict.fromkeys((*fixed_paths, *authority_paths)))
-        bound_records = git_authority.require_head_bound_records(root, all_paths)
+        bound_records = git_authority.require_head_bound_records(
+            root,
+            all_paths,
+            snapshot=snapshot,
+            verify_current=False,
+        )
         bound_sources = {
             path: record[2] for path, record in bound_records.items()
         }
@@ -546,7 +566,11 @@ def build_context(
         root, bound_sources=bound_sources
     )
     family, template, report = select_source(
-        root, readiness, use_case_id, bound_sources=bound_sources
+        root,
+        readiness,
+        use_case_id,
+        bound_sources=bound_sources,
+        snapshot=snapshot,
     )
     if template.get("issue") != issue:
         fail(f"agent-context.issue-binding-mismatch:{issue}:{template.get('issue')}")
@@ -706,6 +730,10 @@ def build_context(
     }
     packet["canonical_digest"] = digest(packet)
     validate_schema(packet, context_schema, "agent-context")
+    try:
+        snapshot.assert_current(root)
+    except git_authority.GitAuthorityError as error:
+        fail(f"agent-context.source-snapshot-{error}")
     return packet
 
 
