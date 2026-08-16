@@ -193,6 +193,13 @@ namespace
 					std::array{native_ok_mapped}, &vfs_identity, &app_data_identity, false, false),
 				"qualified readonly proof rejects native SQLITE_OK with a mapping");
 
+		const auto cantinit_after_mapped = event(0, cant_initialize, false, true);
+		const std::array reversed_transition{
+			exact_mapped[0], exact_mapped[1], cantinit_after_mapped};
+		require(!validate_sqlite_source_shm_readonly_map_sequence(
+					reversed_transition, &vfs_identity, &app_data_identity, false, true),
+				"warm proof rejects CANTINIT/null after a mapped route");
+
 		auto missing_pointer = exact_mapped;
 		missing_pointer[0].native_mapping_identity = nullptr;
 		require(!validate_sqlite_source_shm_readonly_map_sequence(
