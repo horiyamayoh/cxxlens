@@ -946,6 +946,12 @@ void issue_attribute_words();
             "return waitid(P_PIDFD, 0, &status, WEXITED | WNOHANG);", tests_cmake
         )
         self.assertNotIn("#ifndef P_PIDFD", tests_cmake)
+        self.assertIn(
+            "CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)", tests_cmake
+        )
+        self.assertNotIn(
+            "CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)", tests_cmake
+        )
 
 
 if __name__ == "__main__":
