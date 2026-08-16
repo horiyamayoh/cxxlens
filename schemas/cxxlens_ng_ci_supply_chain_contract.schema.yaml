@@ -75,6 +75,7 @@ properties:
       - tools
       - packages
       - package_cache
+      - package_cache_receipt
       - python_distributions
       - lock_digest
       - requirements_digest
@@ -85,6 +86,8 @@ properties:
       tools: {const: version-path-and-binary-digest}
       packages: {const: exact-dpkg-versions}
       package_cache: {const: verified-cache-or-locked-download-with-authority-and-dependency-resolution}
+      package_cache_receipt:
+        const: cxxlens.ci-package-cache-receipt.v2
       python_distributions: {const: versions-and-record-digests}
       lock_digest: {const: sha256}
       requirements_digest: {const: sha256}

@@ -25,6 +25,11 @@ PACKAGE_CACHE_ENV = "CXXLENS_PACKAGE_CACHE"
 PACKAGE_CACHE_HIT_ENV = "CXXLENS_PACKAGE_CACHE_HIT"
 PACKAGE_CACHE_KEY_ENV = "CXXLENS_PACKAGE_CACHE_KEY"
 PACKAGE_CACHE_RECEIPT_ENV = "CXXLENS_PACKAGE_CACHE_RECEIPT"
+PACKAGE_CACHE_PROFILE_ENV = "CXXLENS_PACKAGE_CACHE_PROFILE"
+PACKAGE_CACHE_DOCUMENTATION_ENV = "CXXLENS_PACKAGE_CACHE_DOCUMENTATION"
+PACKAGE_CACHE_RUNNER_OS_ENV = "CXXLENS_PACKAGE_CACHE_RUNNER_OS"
+PACKAGE_CACHE_RUNNER_ARCH_ENV = "CXXLENS_PACKAGE_CACHE_RUNNER_ARCH"
+PACKAGE_CACHE_RECEIPT_SCHEMA = "cxxlens.ci-package-cache-receipt.v2"
 
 
 class SupplyChainError(ValueError):
@@ -102,6 +107,7 @@ def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
     expected_package_cache = {
         "directory": "~/.cache/cxxlens/packages",
         "environment": PACKAGE_CACHE_ENV,
+        "documentation_environment": PACKAGE_CACHE_DOCUMENTATION_ENV,
         "hit_environment": PACKAGE_CACHE_HIT_ENV,
         "key_environment": PACKAGE_CACHE_KEY_ENV,
         "receipt_environment": PACKAGE_CACHE_RECEIPT_ENV,
@@ -110,12 +116,22 @@ def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
             "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-"
             "${profile}-${documentation}-${lock_digest}"
         ),
+        "profile_environment": PACKAGE_CACHE_PROFILE_ENV,
+        "receipt_schema": PACKAGE_CACHE_RECEIPT_SCHEMA,
         "scope": "exact-downloaded-debs-only",
         "correctness_role": "transport-optimization-only",
         "restore_keys": False,
+        "runner_arch_environment": PACKAGE_CACHE_RUNNER_ARCH_ENV,
+        "runner_os_environment": PACKAGE_CACHE_RUNNER_OS_ENV,
     }
     if package_cache != expected_package_cache:
         raise SupplyChainError("downloaded-package cache contract differs")
+    if (
+        runner.get("label") != "ubuntu-24.04"
+        or runner.get("architecture") != "X64"
+        or runner.get("os") != "Linux"
+    ):
+        raise SupplyChainError("runner lock is inconsistent")
     if any(
         not isinstance(documentation.get(field), str) or not documentation[field]
         for field in (
@@ -241,8 +257,10 @@ def assert_runner(lock: dict[str, Any]) -> None:
         "VERSION_ID", ""
     ).strip('"') != "24.04":
         raise SupplyChainError("LLVM lock requires Ubuntu 24.04")
-    if lock["runner"]["architecture"] != "X64":
+    if lock["runner"].get("architecture") != "X64":
         raise SupplyChainError("runner architecture lock is inconsistent")
+    if lock["runner"].get("os") != "Linux":
+        raise SupplyChainError("runner operating-system lock is inconsistent")
 
 
 
@@ -398,7 +416,7 @@ def write_package_cache_receipt(
         except (OSError, json.JSONDecodeError) as error:
             raise SupplyChainError(f"could not read package-cache receipt: {error}") from error
         if (
-            document.get("schema") != "cxxlens.ci-package-cache-receipt.v1"
+            document.get("schema") != config["receipt_schema"]
             or document.get("authority_digest") != authority_digest
             or document.get("key") != key
             or document.get("cache_hit") != cache_hit
@@ -407,7 +425,7 @@ def write_package_cache_receipt(
             raise SupplyChainError("package-cache receipt binding differs")
     else:
         document = {
-            "schema": "cxxlens.ci-package-cache-receipt.v1",
+            "schema": config["receipt_schema"],
             "authority_digest": authority_digest,
             "key": key,
             "cache_hit": cache_hit,

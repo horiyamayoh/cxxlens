@@ -63,6 +63,28 @@ def package_cache_authority_digest(lock: dict[str, Any]) -> str:
     ).hexdigest()
 
 
+def package_cache_config(lock: dict[str, Any]) -> dict[str, Any]:
+    config = lock.get("package_cache")
+    if not isinstance(config, dict):
+        raise ValueError("package-cache authority is missing")
+    required = (
+        "environment",
+        "documentation_environment",
+        "hit_environment",
+        "key_environment",
+        "key_template",
+        "key_version",
+        "profile_environment",
+        "receipt_environment",
+        "receipt_schema",
+        "runner_arch_environment",
+        "runner_os_environment",
+    )
+    if any(not isinstance(config.get(field), str) or not config[field] for field in required):
+        raise ValueError("package-cache authority is incomplete")
+    return config
+
+
 def locked_package_profiles(lock: dict[str, Any]) -> dict[str, dict[str, dict[str, str]]]:
     llvm = lock.get("llvm")
     documentation = lock.get("documentation")
@@ -117,7 +139,9 @@ def locked_package_profiles(lock: dict[str, Any]) -> dict[str, dict[str, dict[st
             documentation_architecture,
             documentation_digest,
         )
-    ) or len(documentation_digest) != 64:
+    ) or len(documentation_digest) != 64 or any(
+        character not in "0123456789abcdef" for character in documentation_digest
+    ):
         raise ValueError("package-cache documentation authority is invalid")
     result["documentation"] = {
         documentation_package: {
@@ -134,11 +158,15 @@ def validate_package_cache_profiles(
     lock: dict[str, Any],
     profiles: Any,
     cache_hit: str,
+    expected_profile_names: set[str] | None = None,
 ) -> dict[str, list[dict[str, str]]]:
     if not isinstance(profiles, dict) or not profiles:
         raise ValueError("package-cache provenance profiles are invalid")
+    if expected_profile_names is not None and set(profiles) != expected_profile_names:
+        raise ValueError("package-cache provenance profile scope differs")
     expected_profiles = locked_package_profiles(lock)
     allowed_sources = {"verified-cache", "verified-download"}
+    expected_source = "verified-cache" if cache_hit == "hit" else "verified-download"
     validated: dict[str, list[dict[str, str]]] = {}
     required_fields = {
         "package",
@@ -175,8 +203,10 @@ def validate_package_cache_profiles(
             source = row.get("source")
             if source not in allowed_sources:
                 raise ValueError("package-cache provenance package source is invalid")
-            if cache_hit == "hit" and source != "verified-cache":
-                raise ValueError("package-cache provenance cache-hit source differs")
+            if source != expected_source:
+                if cache_hit == "hit":
+                    raise ValueError("package-cache provenance cache-hit source differs")
+                raise ValueError("package-cache provenance cache-miss source differs")
             seen.add(package)
             canonical_rows.append(dict(row))
         if seen != set(expected):
@@ -185,32 +215,112 @@ def validate_package_cache_profiles(
     return validated
 
 
-def package_cache_provenance(lock: dict[str, Any]) -> dict[str, Any]:
-    config = lock.get("package_cache")
-    if not isinstance(config, dict):
-        raise ValueError("package-cache authority is missing")
+def package_cache_provenance(
+    lock: dict[str, Any], *, lock_digest: str | None = None
+) -> dict[str, Any]:
+    config = package_cache_config(lock)
     authority_digest = package_cache_authority_digest(lock)
-    raw_path = os.environ.get(config["receipt_environment"])
-    if not raw_path:
+    effective_lock_digest = lock_digest or file_digest(ROOT / SUPPLY_CHAIN_LOCK)
+    lock_digest_hex = effective_lock_digest.removeprefix("sha256:")
+    if len(lock_digest_hex) != 64 or any(
+        character not in "0123456789abcdef" for character in lock_digest_hex
+    ):
+        raise ValueError("package-cache lock digest is invalid")
+    environment_names = {
+        config[field]
+        for field in (
+            "environment",
+            "documentation_environment",
+            "hit_environment",
+            "key_environment",
+            "profile_environment",
+            "receipt_environment",
+            "runner_arch_environment",
+            "runner_os_environment",
+        )
+    }
+    if not any(name in os.environ for name in environment_names):
         return {
             "status": "not-requested",
+            "receipt_schema": config["receipt_schema"],
             "authority_digest": authority_digest,
+            "lock_digest": effective_lock_digest,
             "key": "unavailable",
             "cache_hit": "not-requested",
             "profiles": {},
         }
+    required_environment = {
+        field: os.environ.get(config[field])
+        for field in (
+            "environment",
+            "documentation_environment",
+            "hit_environment",
+            "key_environment",
+            "profile_environment",
+            "receipt_environment",
+            "runner_arch_environment",
+            "runner_os_environment",
+        )
+    }
+    if any(
+        not isinstance(value, str) or not value
+        for value in required_environment.values()
+    ):
+        raise ValueError("package-cache provenance environment binding is incomplete")
+    cache_directory = pathlib.Path(required_environment["environment"]).expanduser()
+    if not cache_directory.is_absolute():
+        raise ValueError("package-cache provenance cache directory is not absolute")
+    raw_path = required_environment["receipt_environment"]
     path = pathlib.Path(raw_path)
     if not path.is_absolute() or not path.is_file():
         raise ValueError("package-cache provenance receipt is unavailable")
-    document = json.loads(path.read_text(encoding="utf-8"))
-    expected_key = os.environ.get(config["key_environment"])
-    raw_hit = os.environ.get(config["hit_environment"])
-    if not expected_key or raw_hit not in {"true", "false"}:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("package-cache provenance receipt is invalid") from error
+    requested_profile = required_environment["profile_environment"]
+    documentation = required_environment["documentation_environment"]
+    runner = lock.get("runner")
+    if (
+        not isinstance(runner, dict)
+        or required_environment["runner_os_environment"] != runner.get("os")
+        or required_environment["runner_arch_environment"] != runner.get("architecture")
+    ):
+        raise ValueError("package-cache provenance runner differs from locked authority")
+    expected_profile_names = set()
+    if requested_profile != "none":
+        expected_profile_names.add(requested_profile)
+    elif documentation != "true":
+        raise ValueError("package-cache provenance profile scope is invalid")
+    if requested_profile != "none" and requested_profile not in lock["llvm"]["profiles"]:
+        raise ValueError("package-cache provenance profile scope is invalid")
+    if documentation == "true":
+        expected_profile_names.add("documentation")
+    elif documentation != "false":
+        raise ValueError("package-cache provenance documentation scope is invalid")
+    expected_key = config["key_template"]
+    replacements = {
+        "${runner.os}": required_environment["runner_os_environment"],
+        "${runner.arch}": required_environment["runner_arch_environment"],
+        "${profile}": requested_profile,
+        "${documentation}": documentation,
+        "${lock_digest}": lock_digest_hex,
+    }
+    for token, value in replacements.items():
+        expected_key = expected_key.replace(token, value)
+    if "${" in expected_key or not expected_key.startswith(
+        f"cxxlens-ci-packages-{config['key_version']}-"
+    ):
+        raise ValueError("package-cache provenance key authority is invalid")
+    if required_environment["key_environment"] != expected_key:
+        raise ValueError("package-cache provenance key differs from locked authority")
+    raw_hit = required_environment["hit_environment"]
+    if raw_hit not in {"true", "false"}:
         raise ValueError("package-cache provenance environment binding is invalid")
     expected_hit = "hit" if raw_hit == "true" else "miss"
     if (
         not isinstance(document, dict)
-        or document.get("schema") != "cxxlens.ci-package-cache-receipt.v1"
+        or document.get("schema") != config["receipt_schema"]
         or document.get("authority_digest") != authority_digest
         or document.get("key") != expected_key
         or document.get("cache_hit") != expected_hit
@@ -224,13 +334,19 @@ def package_cache_provenance(lock: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("package-cache provenance receipt binding differs")
     validated_profiles = validate_package_cache_profiles(
-        lock, document["profiles"], expected_hit
+        lock, document["profiles"], expected_hit, expected_profile_names
     )
     return {
         "status": "verified",
+        "receipt_schema": config["receipt_schema"],
         "authority_digest": authority_digest,
+        "lock_digest": effective_lock_digest,
         "key": expected_key,
         "cache_hit": expected_hit,
+        "profile": requested_profile,
+        "documentation": documentation,
+        "runner_os": required_environment["runner_os_environment"],
+        "runner_arch": required_environment["runner_arch_environment"],
         "profiles": validated_profiles,
         "receipt_digest": file_digest(path),
     }
@@ -440,7 +556,9 @@ def main() -> int:
             "kernel": run("uname", "-srmo"),
         },
         "supply_chain": supply_chain_binding,
-        "package_cache": package_cache_provenance(lock),
+        "package_cache": package_cache_provenance(
+            lock, lock_digest=supply_chain_binding["lock_digest"]
+        ),
     }
     document["digest"] = provenance_digest(document)
     args.output.parent.mkdir(parents=True, exist_ok=True)

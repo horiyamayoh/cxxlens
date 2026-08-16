@@ -29,6 +29,7 @@ from check_ng_foundation_completion import (  # noqa: E402
 )
 from collect_toolchain_provenance import (  # noqa: E402
     file_digest,
+    package_cache_authority_digest,
     pinned_actions,
     provenance_digest,
 )
@@ -51,6 +52,7 @@ class NgFoundationCompletionTest(unittest.TestCase):
         cls.audit_entries = run_audit_checker(
             ROOT, cls.manifest, cls.git_state, cls.closed
         )
+        lock = load_document(ROOT / "tools/ci/llvm22-noble.lock.json")
         cls.provenance = {
             "schema": "cxxlens.toolchain-provenance.v1",
             "source": {
@@ -91,6 +93,15 @@ class NgFoundationCompletionTest(unittest.TestCase):
                 "requirements_digest": file_digest(
                     ROOT / "tools/quality/requirements.lock"
                 ),
+            },
+            "package_cache": {
+                "status": "not-requested",
+                "receipt_schema": lock["package_cache"]["receipt_schema"],
+                "authority_digest": package_cache_authority_digest(lock),
+                "lock_digest": file_digest(ROOT / "tools/ci/llvm22-noble.lock.json"),
+                "key": "unavailable",
+                "cache_hit": "not-requested",
+                "profiles": {},
             },
         }
         cls.provenance["digest"] = provenance_digest(cls.provenance)
@@ -212,6 +223,20 @@ class NgFoundationCompletionTest(unittest.TestCase):
         with self.assertRaisesRegex(CompletionError, "supply-chain lock mismatch"):
             self.report(provenance_records=[provenance])
 
+    def test_missing_package_cache_evidence_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        del provenance["package_cache"]
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "package-cache evidence"):
+            self.report(provenance_records=[provenance])
+
+    def test_package_cache_authority_mutation_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        provenance["package_cache"]["authority_digest"] = "sha256:" + "0" * 64
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "package-cache authority"):
+            self.report(provenance_records=[provenance])
+
     def test_action_revision_mutation_is_rejected(self) -> None:
         provenance = copy.deepcopy(self.provenance)
         provenance["actions"][0]["revision"] = "0" * 40
@@ -223,6 +248,7 @@ class NgFoundationCompletionTest(unittest.TestCase):
         supply_chain = self.report()["supply_chain"]
         self.assertEqual(supply_chain["runners"][0]["label"], "ubuntu-24.04")
         self.assertEqual(supply_chain["packages"][0]["package"], "clang-22")
+        self.assertEqual(supply_chain["package_cache"][0]["status"], "not-requested")
         self.assertTrue(supply_chain["provenance_digests"])
 
     def test_report_schema_rejects_nonzero_audit(self) -> None:

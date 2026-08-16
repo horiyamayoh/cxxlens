@@ -37,6 +37,7 @@ from check_ci_supply_chain import (  # noqa: E402
 )
 
 from collect_toolchain_provenance import (  # noqa: E402
+    file_digest,
     package_cache_provenance,
 )
 
@@ -45,6 +46,98 @@ class NgCiSupplyChainTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.lock = load_lock(ROOT)
+
+    def package_rows(self, profile: str, source: str) -> list[dict[str, str]]:
+        if profile == "documentation":
+            authority = self.lock["documentation"]
+            packages = [authority["package"]]
+            architecture = authority["architecture"]
+            versions = {authority["package"]: authority["version"]}
+            digests = {authority["package"]: authority["sha256"]}
+        else:
+            packages = self.lock["llvm"]["profiles"][profile]
+            architecture = self.lock["llvm"]["architecture"]
+            versions = self.lock["llvm"]["packages"]
+            digests = self.lock["llvm"]["package_sha256"]
+        return [
+            {
+                "package": package,
+                "version": versions[package],
+                "architecture": architecture,
+                "package_digest": "sha256:" + digests[package],
+                "source": source,
+            }
+            for package in packages
+        ]
+
+    def write_receipt(
+        self,
+        path: pathlib.Path,
+        profiles: dict[str, list[dict[str, str]]],
+        *,
+        cache_hit: str = "hit",
+        authority_digest: str | None = None,
+        key: str | None = None,
+        schema: str | None = None,
+    ) -> None:
+        path.write_text(
+            json.dumps(
+                {
+                    "schema": schema or self.lock["package_cache"]["receipt_schema"],
+                    "authority_digest": authority_digest
+                    or package_cache_authority_digest(self.lock),
+                    "key": key or "cxxlens-ci-packages-v1-Linux-X64-developer-false-"
+                    + file_digest(ROOT / "tools/ci/llvm22-noble.lock.json").removeprefix(
+                        "sha256:"
+                    ),
+                    "cache_hit": cache_hit,
+                    "profiles": profiles,
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    def cache_environment(
+        self,
+        receipt: pathlib.Path,
+        *,
+        profile: str = "developer",
+        documentation: str = "false",
+        runner_os: str = "Linux",
+        runner_arch: str = "X64",
+        cache_hit: str = "true",
+        key: str | None = None,
+        include: set[str] | None = None,
+    ) -> dict[str, str]:
+        config = self.lock["package_cache"]
+        lock_digest = file_digest(
+            ROOT / "tools/ci/llvm22-noble.lock.json"
+        ).removeprefix("sha256:")
+        expected_key = config["key_template"]
+        for token, value in {
+            "${runner.os}": runner_os,
+            "${runner.arch}": runner_arch,
+            "${profile}": profile,
+            "${documentation}": documentation,
+            "${lock_digest}": lock_digest,
+        }.items():
+            expected_key = expected_key.replace(token, value)
+        values = {
+            config["environment"]: "/tmp/cxxlens-package-cache",
+            config["documentation_environment"]: documentation,
+            config["hit_environment"]: cache_hit,
+            config["key_environment"]: key or expected_key,
+            config["profile_environment"]: profile,
+            config["receipt_environment"]: str(receipt),
+            config["runner_arch_environment"]: runner_arch,
+            config["runner_os_environment"]: runner_os,
+        }
+        return (
+            values
+            if include is None
+            else {name: value for name, value in values.items() if name in include}
+        )
 
     def test_repository_contract_and_workflows_are_valid(self) -> None:
         validate_repository(ROOT)
@@ -382,82 +475,39 @@ class NgCiSupplyChainTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             receipt = pathlib.Path(temporary) / "receipt.json"
             authority_digest = package_cache_authority_digest(self.lock)
-            packages = self.lock["llvm"]["profiles"]["developer"]
-            receipt.write_text(
-                json.dumps(
-                    {
-                        "schema": "cxxlens.ci-package-cache-receipt.v1",
-                        "authority_digest": authority_digest,
-                        "key": "fixture-key",
-                        "cache_hit": "hit",
-                        "profiles": {
-                            "developer": [
-                                {
-                                    "package": package,
-                                    "version": self.lock["llvm"]["packages"][package],
-                                    "architecture": self.lock["llvm"]["architecture"],
-                                    "package_digest": "sha256:"
-                                    + self.lock["llvm"]["package_sha256"][package],
-                                    "source": "verified-cache",
-                                }
-                                for package in packages
-                            ]
-                        },
-                    },
-                    sort_keys=True,
-                ),
-                encoding="utf-8",
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
             )
-            environment = {
-                "CXXLENS_PACKAGE_CACHE_RECEIPT": str(receipt),
-                "CXXLENS_PACKAGE_CACHE_KEY": "fixture-key",
-                "CXXLENS_PACKAGE_CACHE_HIT": "true",
-            }
-            with mock.patch.dict(os.environ, environment, clear=False):
+            environment = self.cache_environment(receipt)
+            with mock.patch.dict(os.environ, environment, clear=True):
                 evidence = package_cache_provenance(self.lock)
             self.assertEqual(evidence["status"], "verified")
             self.assertEqual(evidence["authority_digest"], authority_digest)
+            self.assertEqual(
+                evidence["lock_digest"],
+                file_digest(ROOT / "tools/ci/llvm22-noble.lock.json"),
+            )
+            self.assertEqual(evidence["profile"], "developer")
+            self.assertEqual(evidence["documentation"], "false")
             self.assertEqual(
                 evidence["profiles"]["developer"][0]["source"],
                 "verified-cache",
             )
 
     def test_package_cache_provenance_rejects_non_authoritative_package_rows(self) -> None:
-        packages = self.lock["llvm"]["profiles"]["developer"]
         with tempfile.TemporaryDirectory() as temporary:
             receipt = pathlib.Path(temporary) / "receipt.json"
 
             def write_receipt(row_overrides: dict[str, str]) -> None:
-                rows = [
-                    {
-                        "package": package,
-                        "version": self.lock["llvm"]["packages"][package],
-                        "architecture": self.lock["llvm"]["architecture"],
-                        "package_digest": "sha256:"
-                        + self.lock["llvm"]["package_sha256"][package],
-                        "source": "verified-cache",
-                    }
-                    for package in packages
-                ]
+                rows = self.package_rows("developer", "verified-cache")
                 rows[0].update(row_overrides)
-                receipt.write_text(
-                    json.dumps(
-                        {
-                            "schema": "cxxlens.ci-package-cache-receipt.v1",
-                            "authority_digest": package_cache_authority_digest(self.lock),
-                            "key": "fixture-key",
-                            "cache_hit": "hit",
-                            "profiles": {"developer": rows},
-                        }
-                    ),
-                    encoding="utf-8",
+                self.write_receipt(
+                    receipt,
+                    {"developer": rows},
                 )
 
-            environment = {
-                "CXXLENS_PACKAGE_CACHE_RECEIPT": str(receipt),
-                "CXXLENS_PACKAGE_CACHE_KEY": "fixture-key",
-                "CXXLENS_PACKAGE_CACHE_HIT": "true",
-            }
+            environment = self.cache_environment(receipt)
             for field, value in (
                 ("package", "not-locked"),
                 ("version", "1:22.1.7-1"),
@@ -466,78 +516,199 @@ class NgCiSupplyChainTest(unittest.TestCase):
             ):
                 with self.subTest(field=field):
                     write_receipt({field: value})
-                    with mock.patch.dict(os.environ, environment, clear=False):
+                    with mock.patch.dict(os.environ, environment, clear=True):
                         with self.assertRaisesRegex(ValueError, "package"):
                             package_cache_provenance(self.lock)
 
             write_receipt({"source": "verified-download"})
-            with mock.patch.dict(os.environ, environment, clear=False):
+            with mock.patch.dict(os.environ, environment, clear=True):
                 with self.assertRaisesRegex(ValueError, "cache-hit source"):
                     package_cache_provenance(self.lock)
 
     def test_package_cache_provenance_rejects_incomplete_hit_and_invalid_binding(self) -> None:
-        packages = self.lock["llvm"]["profiles"]["developer"]
         with tempfile.TemporaryDirectory() as temporary:
             receipt = pathlib.Path(temporary) / "receipt.json"
-            receipt.write_text(
-                json.dumps(
-                    {
-                        "schema": "cxxlens.ci-package-cache-receipt.v1",
-                        "authority_digest": package_cache_authority_digest(self.lock),
-                        "key": "fixture-key",
-                        "cache_hit": "hit",
-                        "profiles": {
-                            "developer": [
-                                {
-                                    "package": packages[0],
-                                    "version": self.lock["llvm"]["packages"][packages[0]],
-                                    "architecture": self.lock["llvm"]["architecture"],
-                                    "package_digest": "sha256:"
-                                    + self.lock["llvm"]["package_sha256"][packages[0]],
-                                    "source": "verified-cache",
-                                }
-                            ]
-                        },
-                    }
-                ),
-                encoding="utf-8",
+            self.write_receipt(
+                receipt,
+                {
+                    "developer": [
+                        self.package_rows("developer", "verified-cache")[0]
+                    ]
+                },
             )
-            environment = {
-                "CXXLENS_PACKAGE_CACHE_RECEIPT": str(receipt),
-                "CXXLENS_PACKAGE_CACHE_KEY": "fixture-key",
-                "CXXLENS_PACKAGE_CACHE_HIT": "not-a-boolean",
-            }
-            with mock.patch.dict(os.environ, environment, clear=False):
+            environment = self.cache_environment(
+                receipt, cache_hit="not-a-boolean"
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
                 with self.assertRaisesRegex(ValueError, "environment binding"):
                     package_cache_provenance(self.lock)
 
-            environment["CXXLENS_PACKAGE_CACHE_HIT"] = "true"
-            with mock.patch.dict(os.environ, environment, clear=False):
+            environment[self.lock["package_cache"]["hit_environment"]] = "true"
+            with mock.patch.dict(os.environ, environment, clear=True):
                 with self.assertRaisesRegex(ValueError, "package set differs"):
                     package_cache_provenance(self.lock)
 
     def test_stale_package_cache_provenance_authority_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             receipt = pathlib.Path(temporary) / "receipt.json"
-            receipt.write_text(
-                json.dumps(
-                    {
-                        "schema": "cxxlens.ci-package-cache-receipt.v1",
-                        "authority_digest": "sha256:" + "0" * 64,
-                        "key": "fixture-key",
-                        "cache_hit": "miss",
-                        "profiles": {"developer": [{"source": "verified-download"}]},
-                    }
-                ),
-                encoding="utf-8",
+            environment = self.cache_environment(
+                receipt, cache_hit="false"
             )
-            environment = {
-                "CXXLENS_PACKAGE_CACHE_RECEIPT": str(receipt),
-                "CXXLENS_PACKAGE_CACHE_KEY": "fixture-key",
-                "CXXLENS_PACKAGE_CACHE_HIT": "false",
-            }
-            with mock.patch.dict(os.environ, environment, clear=False):
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-download")},
+                cache_hit="miss",
+                authority_digest="sha256:" + "0" * 64,
+                key=environment[self.lock["package_cache"]["key_environment"]],
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
                 with self.assertRaisesRegex(ValueError, "binding differs"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_without_any_cache_variables_is_not_requested(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            evidence = package_cache_provenance(self.lock)
+        self.assertEqual(evidence["status"], "not-requested")
+        self.assertEqual(evidence["profiles"], {})
+
+    def test_package_cache_provenance_rejects_partial_cache_environment(self) -> None:
+        config = self.lock["package_cache"]
+        names = (
+            "environment",
+            "documentation_environment",
+            "hit_environment",
+            "key_environment",
+            "profile_environment",
+            "receipt_environment",
+            "runner_arch_environment",
+            "runner_os_environment",
+        )
+        for field in names:
+            with self.subTest(field=field):
+                with mock.patch.dict(
+                    os.environ, {config[field]: "fixture"}, clear=True
+                ):
+                    with self.assertRaises(ValueError):
+                        package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_binds_every_locked_profile_and_rejects_cross_profile_scope(
+        self,
+    ) -> None:
+        profiles = list(self.lock["llvm"]["profiles"])
+        with tempfile.TemporaryDirectory() as temporary:
+            for profile in profiles:
+                with self.subTest(profile=profile):
+                    receipt = pathlib.Path(temporary) / f"{profile}.json"
+                    environment = self.cache_environment(
+                        receipt, profile=profile, cache_hit="false"
+                    )
+                    key = environment[self.lock["package_cache"]["key_environment"]]
+                    self.write_receipt(
+                        receipt,
+                        {profile: self.package_rows(profile, "verified-download")},
+                        cache_hit="miss",
+                        key=key,
+                    )
+                    with mock.patch.dict(os.environ, environment, clear=True):
+                        evidence = package_cache_provenance(self.lock)
+                    self.assertEqual(evidence["profile"], profile)
+
+            requested = profiles[0]
+            alternate = profiles[1]
+            receipt = pathlib.Path(temporary) / "cross-profile.json"
+            environment = self.cache_environment(
+                receipt, profile=requested, cache_hit="false"
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {alternate: self.package_rows(alternate, "verified-download")},
+                cache_hit="miss",
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "profile scope differs"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_rejects_all_profile_and_documentation_mismatch(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "all-profiles.json"
+            environment = self.cache_environment(
+                receipt, profile="developer", cache_hit="false"
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {
+                    profile: self.package_rows(profile, "verified-download")
+                    for profile in self.lock["llvm"]["profiles"]
+                },
+                cache_hit="miss",
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "profile scope differs"):
+                    package_cache_provenance(self.lock)
+
+            receipt = pathlib.Path(temporary) / "documentation-mismatch.json"
+            environment = self.cache_environment(
+                receipt, profile="developer", documentation="true", cache_hit="false"
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-download")},
+                cache_hit="miss",
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "profile scope differs"):
+                    package_cache_provenance(self.lock)
+
+            receipt = pathlib.Path(temporary) / "extra-documentation.json"
+            environment = self.cache_environment(
+                receipt, profile="developer", documentation="false", cache_hit="false"
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {
+                    "developer": self.package_rows("developer", "verified-download"),
+                    "documentation": self.package_rows(
+                        "documentation", "verified-download"
+                    ),
+                },
+                cache_hit="miss",
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "profile scope differs"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_rejects_noncanonical_key_and_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "binding.json"
+            environment = self.cache_environment(receipt, key="fixture-key")
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key="fixture-key",
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "locked authority"):
+                    package_cache_provenance(self.lock)
+
+            environment = self.cache_environment(receipt, runner_os="Windows")
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "runner differs"):
                     package_cache_provenance(self.lock)
 
 
