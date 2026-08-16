@@ -1676,6 +1676,36 @@ namespace
 		auto journal = seal_materialization_incremental_execution_journal(
 			*request_id, std::span<const materialization_incremental_task_receipt>{receipts});
 		require(journal.has_value(), "claim stream journal construction failed");
+		std::vector<sdk::canonical_value> expected_task_ids;
+		std::vector<sdk::canonical_value> expected_seals;
+		expected_task_ids.reserve(receipts.size());
+		expected_seals.reserve(receipts.size());
+		for (const auto& receipt : receipts)
+		{
+			expected_task_ids.push_back(sdk::canonical_value::from_string(receipt.task_id));
+			expected_seals.push_back(
+				sdk::canonical_value::from_string(receipt.pre_encoder_task_receipt_seal_digest));
+		}
+		auto expected_payload = sdk::canonical_binary(sdk::canonical_value::from_tuple({
+			sdk::canonical_value::from_string(*request_id),
+			receipt_u64_bytes(static_cast<std::uint64_t>(receipts.size())),
+			sdk::canonical_value::from_tuple(std::move(expected_task_ids)),
+			sdk::canonical_value::from_tuple(std::move(expected_seals)),
+		}));
+		require(expected_payload.has_value(), "claim stream journal reference encoding failed");
+		auto expected_digest = sdk::semantic_digest(
+			"cxxlens.df-0200.execution-journal-receipt-set.v1",
+			std::string{reinterpret_cast<const char*>(expected_payload->data()),
+						expected_payload->size()});
+		require(expected_digest.has_value() &&
+					journal->execution_journal_receipt_set_digest == *expected_digest,
+				"claim stream journal digest changed its canonical projection");
+		require(validate_materialization_incremental_execution_journal(*journal).has_value(),
+				"claim stream journal census validator rejected its own journal");
+		auto incomplete_journal = *journal;
+		incomplete_journal.canonical_task_ids.pop_back();
+		require(!validate_materialization_incremental_execution_journal(incomplete_journal),
+				"claim stream journal census validator accepted a missing task identity");
 		auto external = materialization_claim_stream_source::validate_external_task_receipts(
 			request, *journal, std::span<materialization_claim_stream_task>{tasks});
 		require(external.has_value(),
