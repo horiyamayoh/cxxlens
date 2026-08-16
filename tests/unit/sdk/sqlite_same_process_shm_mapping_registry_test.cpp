@@ -19521,14 +19521,14 @@ namespace
 		const auto first_open_epoch = identity("test.registry.open-epoch", 60U);
 		auto first_gate = install_eligibility(
 			*first_coordinator, fixture.family, first_connection, first_open_epoch, 60U);
-		int first_page{};
+		int reused_page{};
 		const auto first_request = writer_request(
 			fixture.family, fixture.alias_lifetime, first_connection, first_open_epoch, 60U);
 		auto first_pending = install_pending(
-			*first_coordinator, first_request, first_open_epoch, mapping(&first_page), 60U);
+			*first_coordinator, first_request, first_open_epoch, mapping(&reused_page), 60U);
 		auto first_holder = promote_writer(*first_coordinator, first_pending, first_gate);
-		require(first_holder.generation() == 1U,
-				"first registry family mints first process generation");
+		const auto first_generation = first_holder.generation();
+		require(first_generation == 1U, "first registry family mints first process generation");
 		retire_writer(*first_coordinator, first_holder, 160U);
 		require(first_coordinator->revoke_writer_eligibility(first_gate).has_value(),
 				"revoke first generation eligibility");
@@ -19553,14 +19553,15 @@ namespace
 		const auto second_open_epoch = identity("test.registry.open-epoch", 61U);
 		auto second_gate = install_eligibility(
 			*second_coordinator, fixture.family, second_connection, second_open_epoch, 61U);
-		int second_page{};
 		const auto second_request = writer_request(
 			fixture.family, fixture.alias_lifetime, second_connection, second_open_epoch, 61U);
 		auto second_pending = install_pending(
-			*second_coordinator, second_request, second_open_epoch, mapping(&second_page), 61U);
+			*second_coordinator, second_request, second_open_epoch, mapping(&reused_page), 61U);
 		auto second_holder = promote_writer(*second_coordinator, second_pending, second_gate);
-		require(second_holder.generation() == 2U,
-				"fresh family coordinator shares monotonic process generation source");
+		const auto second_generation = second_holder.generation();
+		require(second_generation == 2U && second_generation != first_generation,
+				"fresh family coordinator assigns a distinct monotonic process generation when the "
+				"native mapping pointer is reused");
 		retire_writer(*second_coordinator, second_holder, 161U);
 		require(second_coordinator->revoke_writer_eligibility(second_gate).has_value(),
 				"revoke successor generation eligibility");
