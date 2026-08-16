@@ -152,7 +152,11 @@ namespace
 	}
 
 	[[nodiscard]] std::array<std::vector<sdk::detached_row>, 6U>
-	fixture_rows(const clang22_task_input& input, const bool empty, const bool missing_call)
+	fixture_rows(const clang22_task_input& input,
+				 const bool empty,
+				 const bool missing_call,
+				 const bool omit_entity,
+				 const std::optional<std::string_view> alternate_target_resolution = std::nullopt)
 	{
 		std::array<std::vector<sdk::detached_row>, 6U> rows;
 		if (empty)
@@ -196,10 +200,17 @@ namespace
 			call_id = "cc-call:missing";
 		const auto& target_descriptor = cc::relations::call_direct_target::descriptor();
 		auto target = fixture_row{target_descriptor}
-						  .string("call", std::move(call_id))
+						  .string("call", call_id)
 						  .string("target", entity_id)
 						  .string("resolution", "syntactic_direct")
 						  .finish();
+		std::optional<sdk::detached_row> alternate_target;
+		if (alternate_target_resolution)
+			alternate_target = fixture_row{target_descriptor}
+								   .string("call", call_id)
+								   .string("target", entity_id)
+								   .string("resolution", std::string{*alternate_target_resolution})
+								   .finish();
 
 		const auto observation = [&](const observation_v2_kind kind,
 									 const std::string_view semantic_key,
@@ -225,8 +236,11 @@ namespace
 		};
 
 		rows[0U].push_back(std::move(target));
+		if (alternate_target)
+			rows[0U].push_back(std::move(*alternate_target));
 		rows[1U].push_back(std::move(call_site));
-		rows[2U].push_back(std::move(entity));
+		if (!omit_entity)
+			rows[2U].push_back(std::move(entity));
 		rows[3U].push_back(observation(
 			observation_v2_kind::call, "call:fixture", "kind", "direct_function", true));
 		rows[4U].push_back(
@@ -324,14 +338,20 @@ namespace
 			  const std::size_t index,
 			  const bool empty = false,
 			  const coverage_mode coverage = coverage_mode::exact,
-			  const bool missing_call = false)
+			  const bool missing_call = false,
+			  const bool omit_entity = false,
+			  const std::optional<std::string_view> alternate_target_resolution = std::nullopt)
 	{
 		const auto& task_request = request.tasks[index];
 		auto task = reconstruct_provider_task(
 			task_request.worker_input, request.output_descriptors, std::string{worker_semantics});
 		if (!task)
 			return sdk::unexpected(std::move(task.error()));
-		fixture_provider provider{fixture_rows(task_request.worker_input, empty, missing_call),
+		fixture_provider provider{fixture_rows(task_request.worker_input,
+											   empty,
+											   missing_call,
+											   omit_entity,
+											   alternate_target_resolution),
 								  coverage};
 		transcript_sink sink;
 		sdk::provider::protocol_writer writer{sink};
@@ -370,12 +390,13 @@ namespace
 	[[nodiscard]] std::vector<sealed_materialization_result>
 	seal_all(const validated_materialization_request& request,
 			 const bool empty = false,
-			 const coverage_mode coverage = coverage_mode::exact)
+			 const coverage_mode coverage = coverage_mode::exact,
+			 const bool omit_entity = false)
 	{
 		std::vector<sealed_materialization_result> output;
 		for (std::size_t index{}; index < request.tasks.size(); ++index)
 		{
-			auto sealed = seal_task(request, index, empty, coverage);
+			auto sealed = seal_task(request, index, empty, coverage, false, omit_entity);
 			require(sealed.has_value(),
 					"higher seal failed: " + (sealed ? std::string{} : failure(sealed.error())));
 			output.push_back(std::move(*sealed));
@@ -1063,6 +1084,67 @@ namespace
 		require(coverage_only == 7U,
 				"zero-row descriptor/task partition census differs: " +
 					std::to_string(coverage_only));
+	}
+
+	void check_full_soft_semantic_unresolved(const validated_materialization_request& request,
+											 const materialization_producer_authority& producer)
+	{
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		auto seals = seal_all(request, false, coverage_mode::exact, true);
+		auto claims = construct_materialization_claims(request, seals, producer, guarantee);
+		require(claims.has_value(),
+				"full soft-reference unresolved construction failed: " +
+					(claims ? std::string{} : failure(claims.error())));
+		const auto& batch = claims->final_claim_batch();
+		require(!batch.unresolved.empty(),
+				"full soft-reference unresolved evidence was discarded before materialization");
+		auto expected_digest = sdk::claim_batch_content_digest(
+			std::span<const sdk::claim>{batch.claims},
+			std::span<const sdk::unresolved_reference>{batch.unresolved},
+			std::span<const sdk::claim_conflict>{batch.conflicts},
+			std::span<const sdk::differential_disagreement>{batch.differential_disagreements});
+		require(expected_digest && *expected_digest == batch.content_digest,
+				"full unresolved batch digest lost typed evidence");
+
+		bool source_claim_retained{};
+		bool typed_unresolved{};
+		for (const auto& partition : claims->partitions())
+		{
+			if (partition.draft.relation_descriptor_id == "cc.call_direct_target.v1")
+			{
+				source_claim_retained = source_claim_retained || !partition.draft.claims.empty();
+				for (const auto& unresolved : partition.draft.unresolved)
+				{
+					typed_unresolved = true;
+					require(unresolved.source_relation == "cc.call_direct_target.v1" &&
+								unresolved.target_relation == "cc.entity" &&
+								unresolved.source_columns ==
+									std::vector<std::string>{"cc.call_direct_target.v1.target"} &&
+								unresolved.reason == "soft-reference-missing" &&
+								partition.draft.precision_profile == "under_approximation" &&
+								!partition.manifest.complete,
+							"full unresolved evidence was not typed or conservatively bound");
+				}
+			}
+			else
+				require(partition.draft.precision_profile == "exact",
+						"full soft downgrade weakened an unrelated exact partition");
+		}
+		require(source_claim_retained && typed_unresolved,
+				"full soft-reference path lost its source claim or partition evidence");
+
+		auto store_transaction = make_materialization_store_transaction(request, *claims);
+		require(!store_transaction &&
+					store_transaction.error().code == "materialization.coverage-incomplete" &&
+					store_transaction.error().field == "complete-final-claim-batch",
+				"full unresolved claims crossed the exact Store publication gate");
+		auto streaming_transaction =
+			make_materialization_streaming_store_transaction(request, *claims);
+		require(!streaming_transaction &&
+					streaming_transaction.error().code == "materialization.coverage-incomplete" &&
+					streaming_transaction.error().field == "complete-final-claim-batch",
+				"full unresolved claims crossed the exact streaming publication gate");
 	}
 
 	void streaming_source_receipts_replace_resident_payloads(const std::filesystem::path& root)
@@ -3983,6 +4065,162 @@ namespace
 				"incremental coordinator did not retain a successful Store publication receipt");
 	}
 
+	void check_bounded_conflict_fail_closed(const validated_materialization_request& request,
+											const materialization_producer_authority& producer)
+	{
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		auto sealed = seal_task(request,
+								0U,
+								false,
+								coverage_mode::exact,
+								false,
+								false,
+								std::optional<std::string_view>{"semantic_direct"});
+		require(sealed.has_value(), "bounded conflict fixture sealing failed");
+		auto task = construct_materialization_bounded_task_claims(
+			request, 0U, *sealed, producer, guarantee);
+		require(!task && task.error().code == "materialization.claim-invalid" &&
+					task.error().field == "cc.call_direct_target.v1" &&
+					task.error().detail == "functional-conflict",
+				"bounded functional conflict crossed the factory fail-closed gate");
+	}
+
+	void check_bounded_soft_semantic_unresolved(const validated_materialization_request& request,
+												const materialization_producer_authority& producer)
+	{
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		const auto make_task = [&](const std::size_t task_index, const bool omit_entity)
+		{
+			auto sealed =
+				seal_task(request, task_index, false, coverage_mode::exact, false, omit_entity);
+			require(sealed.has_value(), "soft-reference bounded fixture seal failed");
+			auto task = construct_materialization_bounded_task_claims(
+				request, task_index, *sealed, producer, guarantee);
+			require(task.has_value(),
+					"soft-reference bounded task construction failed: " +
+						(task ? std::string{} : failure(task.error())));
+			return std::move(*task);
+		};
+
+		auto soft_task = make_task(0U, true);
+		bool source_claim_retained{};
+		bool typed_unresolved{};
+		for (const auto& partition : soft_task.partitions)
+		{
+			if (partition.draft.relation_descriptor_id != "cc.call_direct_target.v1")
+				continue;
+			source_claim_retained = source_claim_retained || !partition.draft.claims.empty();
+			for (const auto& unresolved : partition.draft.unresolved)
+			{
+				typed_unresolved = true;
+				require(unresolved.source_relation == "cc.call_direct_target.v1" &&
+							unresolved.target_relation == "cc.entity" &&
+							unresolved.source_columns ==
+								std::vector<std::string>{"cc.call_direct_target.v1.target"} &&
+							unresolved.reason == "soft-reference-missing" &&
+							partition.draft.precision_profile == "under_approximation" &&
+							!partition.manifest.complete,
+						"soft semantic unresolved evidence was not typed or conservatively bound");
+			}
+		}
+		require(source_claim_retained && typed_unresolved,
+				"soft semantic unresolved path dropped its source claim or evidence");
+
+		auto malformed = make_task(0U, true);
+		for (auto& partition : malformed.partitions)
+			if (!partition.draft.unresolved.empty())
+				partition.draft.unresolved.front().reason = "hard-reference-missing";
+		auto malformed_source = materialization_bounded_claim_source::begin(request);
+		require(malformed_source.has_value(), "malformed unresolved source begin failed");
+		auto malformed_result = malformed_source->consume_task(std::move(malformed));
+		require(!malformed_result && malformed_result.error().field == "task" &&
+					malformed_result.error().detail == "factory-seal" &&
+					malformed_source->partition_count() == 0U,
+				"malformed soft unresolved evidence crossed bounded admission");
+
+		auto partial_source = materialization_bounded_claim_source::begin(request);
+		require(partial_source.has_value(), "partial bounded source begin failed");
+		require(partial_source->consume_task(make_task(0U, true)).has_value(),
+				"partial bounded source first task adoption failed");
+		require(partial_source->consume_task(make_task(1U, true)).has_value(),
+				"partial bounded source second task adoption failed");
+		auto partial = std::move(*partial_source).finalize();
+		require(partial && partial->sealed(), "partial bounded source finalization failed");
+		auto partial_status = partial->claim_batch_status();
+		require(partial_status && partial_status->unresolved_count != 0U &&
+					!partial_status->content_digest.empty(),
+				"bounded claim status dropped unresolved records or digest authority");
+		auto partial_store = make_materialization_streaming_store_transaction(request, *partial);
+		require(!partial_store &&
+					partial_store.error().code == "materialization.coverage-incomplete",
+				"partial bounded source crossed the exact publication gate");
+		std::size_t partial_direct_target_partitions{};
+		std::vector<sdk::claim> partial_claims;
+		std::vector<sdk::unresolved_reference> partial_unresolved;
+		auto partial_replay = partial->replay(
+			[&](sdk::partition_draft draft) -> sdk::result<void>
+			{
+				if (draft.relation_descriptor_id == "cc.call_direct_target.v1")
+				{
+					++partial_direct_target_partitions;
+					require(!draft.claims.empty() && draft.unresolved.size() == 1U,
+							"partial replay did not preserve source claim and unresolved evidence");
+				}
+				partial_claims.insert(
+					partial_claims.end(), draft.claims.begin(), draft.claims.end());
+				partial_unresolved.insert(
+					partial_unresolved.end(), draft.unresolved.begin(), draft.unresolved.end());
+				return {};
+			});
+		require(partial_replay && partial_direct_target_partitions == request.tasks.size(),
+				"bounded partial replay lost a task partition");
+		auto partial_digest = sdk::claim_batch_content_digest(
+			std::span<const sdk::claim>{partial_claims},
+			std::span<const sdk::unresolved_reference>{partial_unresolved},
+			{},
+			{});
+		require(partial_digest && *partial_digest == partial_status->content_digest,
+				"bounded unresolved digest diverged from the SDK authority");
+
+		auto resolved_source = materialization_bounded_claim_source::begin(request);
+		require(resolved_source.has_value(), "cross-task resolution source begin failed");
+		require(resolved_source->consume_task(make_task(0U, true)).has_value(),
+				"cross-task unresolved task adoption failed");
+		require(resolved_source->consume_task(make_task(1U, false)).has_value(),
+				"cross-task resolving task adoption failed");
+		auto resolved = std::move(*resolved_source).finalize();
+		require(resolved && resolved->sealed(), "cross-task soft reference finalization failed");
+		auto resolved_status = resolved->claim_batch_status();
+		require(resolved_status && resolved_status->unresolved_count == 0U &&
+					!resolved_status->content_digest.empty(),
+				"bounded final resolution retained a stale unresolved record");
+		std::size_t resolved_direct_target_partitions{};
+		bool resolved_partition_remains_downgraded{};
+		auto resolved_replay = resolved->replay(
+			[&](sdk::partition_draft draft) -> sdk::result<void>
+			{
+				if (draft.relation_descriptor_id == "cc.call_direct_target.v1")
+				{
+					++resolved_direct_target_partitions;
+					require(!draft.claims.empty() && draft.unresolved.empty(),
+							"bounded cross-task resolution dropped the source claim or left stale "
+							"evidence");
+					resolved_partition_remains_downgraded = resolved_partition_remains_downgraded ||
+						draft.precision_profile == "under_approximation";
+				}
+				return {};
+			});
+		require(resolved_replay && resolved_direct_target_partitions == request.tasks.size() &&
+					resolved_partition_remains_downgraded,
+				"bounded cross-task resolution lost a task partition");
+		auto resolved_store = make_materialization_streaming_store_transaction(request, *resolved);
+		require(!resolved_store &&
+					resolved_store.error().code == "materialization.coverage-incomplete",
+				"cross-task resolution falsely upgraded an under-approximate partition");
+	}
+
 	void check_bounded_adoption_fail_closed(const validated_materialization_request& request,
 											const materialization_producer_authority& producer)
 	{
@@ -4015,8 +4253,8 @@ namespace
 		auto metadata_drift = make_task(0U);
 		metadata_drift.partitions.front().sdk_claim_occurrence_count += 1U;
 		auto rejected = source->consume_task(std::move(metadata_drift));
-		require(!rejected && rejected.error().field == "partition" &&
-					rejected.error().detail == "claim-census" && source->partition_count() == 0U,
+		require(!rejected && rejected.error().field == "task" &&
+					rejected.error().detail == "factory-seal" && source->partition_count() == 0U,
 				"bounded adoption accepted metadata drift or mutated before validation");
 		auto retry = make_task(0U);
 		auto retry_result = source->consume_task(std::move(retry));
@@ -4110,8 +4348,8 @@ namespace
 		require(!duplicate.partitions.empty(), "duplicate partition fixture is empty");
 		duplicate.partitions.push_back(duplicate.partitions.back());
 		auto duplicate_result = duplicate_source->consume_task(std::move(duplicate));
-		require(!duplicate_result && duplicate_result.error().field == "partitions" &&
-					duplicate_result.error().detail == "noncanonical-order" &&
+		require(!duplicate_result && duplicate_result.error().field == "task" &&
+					duplicate_result.error().detail == "factory-seal" &&
 					duplicate_source->partition_count() == 0U,
 				"bounded adoption accepted a duplicate partition window");
 
@@ -4170,6 +4408,9 @@ int main(const int argc, char** argv)
 	streaming_source_receipts_replace_resident_payloads(root);
 	check_incremental_coordinator_v2_1(root);
 	check_incremental_coordinator(request, producer);
+	check_full_soft_semantic_unresolved(request, producer);
+	check_bounded_conflict_fail_closed(request, producer);
+	check_bounded_soft_semantic_unresolved(request, producer);
 	check_bounded_adoption_fail_closed(request, producer);
 	negative_authority_guarantee_order_and_coverage(request, std::move(producer));
 }

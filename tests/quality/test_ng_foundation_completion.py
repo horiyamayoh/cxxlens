@@ -29,6 +29,9 @@ from check_ng_foundation_completion import (  # noqa: E402
 )
 from collect_toolchain_provenance import (  # noqa: E402
     file_digest,
+    hash_files_digest,
+    locked_package_profiles,
+    package_cache_authority_digest,
     pinned_actions,
     provenance_digest,
 )
@@ -51,6 +54,8 @@ class NgFoundationCompletionTest(unittest.TestCase):
         cls.audit_entries = run_audit_checker(
             ROOT, cls.manifest, cls.git_state, cls.closed
         )
+        lock = load_document(ROOT / "tools/ci/llvm22-noble.lock.json")
+        cls.lock = lock
         cls.provenance = {
             "schema": "cxxlens.toolchain-provenance.v1",
             "source": {
@@ -92,8 +97,53 @@ class NgFoundationCompletionTest(unittest.TestCase):
                     ROOT / "tools/quality/requirements.lock"
                 ),
             },
+            "package_cache": {
+                "status": "not-requested",
+                "receipt_schema": lock["package_cache"]["receipt_schema"],
+                "authority_digest": package_cache_authority_digest(lock),
+                "lock_digest": file_digest(ROOT / "tools/ci/llvm22-noble.lock.json"),
+                "key": "unavailable",
+                "cache_hit": "not-requested",
+                "profiles": {},
+            },
         }
         cls.provenance["digest"] = provenance_digest(cls.provenance)
+
+    def verified_package_cache(self) -> dict:
+        lock_digest = file_digest(ROOT / "tools/ci/llvm22-noble.lock.json")
+        profile = "developer"
+        documentation = "false"
+        runner_os = self.lock["runner"]["os"]
+        runner_arch = self.lock["runner"]["architecture"]
+        key = self.lock["package_cache"]["key_template"]
+        for token, value in {
+            "${runner.os}": runner_os,
+            "${runner.arch}": runner_arch,
+            "${profile}": profile,
+            "${documentation}": documentation,
+            "${lock_hash_files_digest}": hash_files_digest(
+                ROOT / "tools/ci/llvm22-noble.lock.json"
+            ),
+        }.items():
+            key = key.replace(token, value)
+        rows = [
+            {**row, "source": "verified-download"}
+            for row in locked_package_profiles(self.lock)[profile].values()
+        ]
+        return {
+            "status": "verified",
+            "receipt_schema": self.lock["package_cache"]["receipt_schema"],
+            "authority_digest": package_cache_authority_digest(self.lock),
+            "lock_digest": lock_digest,
+            "key": key,
+            "cache_hit": "miss",
+            "profile": profile,
+            "documentation": documentation,
+            "runner_os": runner_os,
+            "runner_arch": runner_arch,
+            "profiles": {profile: rows},
+            "receipt_digest": "sha256:" + "6" * 64,
+        }
 
     def report(self, **changes: object) -> dict:
         arguments = {
@@ -212,6 +262,67 @@ class NgFoundationCompletionTest(unittest.TestCase):
         with self.assertRaisesRegex(CompletionError, "supply-chain lock mismatch"):
             self.report(provenance_records=[provenance])
 
+    def test_missing_package_cache_evidence_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        del provenance["package_cache"]
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "package-cache evidence"):
+            self.report(provenance_records=[provenance])
+
+    def test_package_cache_authority_mutation_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        provenance["package_cache"]["authority_digest"] = "sha256:" + "0" * 64
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "package-cache authority"):
+            self.report(provenance_records=[provenance])
+
+    def test_verified_package_cache_key_mutation_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        provenance["package_cache"] = self.verified_package_cache()
+        provenance["package_cache"]["key"] += "-mutated"
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "package-cache key"):
+            self.report(provenance_records=[provenance])
+
+    def test_verified_package_cache_raw_lock_digest_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        verified = self.verified_package_cache()
+        lock_path = ROOT / "tools/ci/llvm22-noble.lock.json"
+        verified["key"] = verified["key"].replace(
+            hash_files_digest(lock_path), file_digest(lock_path).removeprefix("sha256:")
+        )
+        provenance["package_cache"] = verified
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "package-cache key"):
+            self.report(provenance_records=[provenance])
+
+    def test_verified_package_cache_profile_mutation_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        verified = self.verified_package_cache()
+        verified["profile"] = "compiler"
+        verified["profiles"] = {
+            "compiler": [
+                {**row, "source": "verified-download"}
+                for row in locked_package_profiles(self.lock)["compiler"].values()
+            ]
+        }
+        provenance["package_cache"] = verified
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "package-cache key"):
+            self.report(provenance_records=[provenance])
+
+    def test_verified_package_cache_runner_mutations_are_rejected(self) -> None:
+        for field, value in (("runner_os", "Windows"), ("runner_arch", "ARM64")):
+            with self.subTest(field=field):
+                provenance = copy.deepcopy(self.provenance)
+                provenance["package_cache"] = self.verified_package_cache()
+                provenance["package_cache"][field] = value
+                provenance["digest"] = provenance_digest(provenance)
+                with self.assertRaisesRegex(
+                    CompletionError, f"package-cache {field} differs"
+                ):
+                    self.report(provenance_records=[provenance])
+
     def test_action_revision_mutation_is_rejected(self) -> None:
         provenance = copy.deepcopy(self.provenance)
         provenance["actions"][0]["revision"] = "0" * 40
@@ -223,12 +334,26 @@ class NgFoundationCompletionTest(unittest.TestCase):
         supply_chain = self.report()["supply_chain"]
         self.assertEqual(supply_chain["runners"][0]["label"], "ubuntu-24.04")
         self.assertEqual(supply_chain["packages"][0]["package"], "clang-22")
+        self.assertEqual(supply_chain["package_cache"][0]["status"], "not-requested")
         self.assertTrue(supply_chain["provenance_digests"])
 
     def test_report_schema_rejects_nonzero_audit(self) -> None:
         report = self.report()
         report["audits"]["legacy_assets"]["count"] = 1
         report["audits"]["legacy_assets"]["finding_ids"] = ["synthetic.finding"]
+        schema = load_document(
+            ROOT / "schemas/cxxlens_ng_foundation_completion_report.schema.yaml"
+        )
+        import jsonschema
+
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(schema).validate(report)
+
+    def test_report_schema_requires_verified_package_cache_fields(self) -> None:
+        report = self.report()
+        verified = self.verified_package_cache()
+        del verified["runner_arch"]
+        report["supply_chain"]["package_cache"] = [verified]
         schema = load_document(
             ROOT / "schemas/cxxlens_ng_foundation_completion_report.schema.yaml"
         )
