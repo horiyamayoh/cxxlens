@@ -165,6 +165,43 @@ namespace cxxlens::detail::clang22::materialization
 		bool empty_partition{};
 	};
 
+	struct materialization_bounded_task_claims;
+
+	/**
+	 * Unforgeable source-private token issued only by the complete bounded-task factory.
+	 *
+	 * The bounded source intentionally does not recompute the public claim-batch verdict routine.
+	 * This token therefore seals the factory as the only semantic verdict ingress; the task also
+	 * carries a deterministic integrity digest so mutating the public transport fields after
+	 * factory return cannot turn that authority into an unchecked source bypass.
+	 */
+	struct materialization_bounded_task_factory_seal
+	{
+		materialization_bounded_task_factory_seal(
+			materialization_bounded_task_factory_seal&&) noexcept = default;
+		materialization_bounded_task_factory_seal&
+		operator=(materialization_bounded_task_factory_seal&&) noexcept = default;
+		materialization_bounded_task_factory_seal(
+			const materialization_bounded_task_factory_seal&) = delete;
+		materialization_bounded_task_factory_seal&
+		operator=(const materialization_bounded_task_factory_seal&) = delete;
+
+	  private:
+		materialization_bounded_task_factory_seal() noexcept = default;
+
+		friend sdk::result<materialization_bounded_task_claims>
+		construct_materialization_bounded_task_claims(const validated_materialization_request&,
+													  std::size_t,
+													  const sealed_materialization_result&,
+													  const materialization_producer_authority&,
+													  const materialization_guarantee_authority&);
+		friend sdk::result<materialization_bounded_task_claims>
+		construct_materialization_bounded_task_claims(const materialization_v2_1_claim_authority&,
+													  std::size_t,
+													  const materialization_v2_1_task_execution&,
+													  const sealed_materialization_result&);
+	};
+
 	/**
 	 * One bounded task adoption result. The contained drafts are limited to the currently consumed
 	 * sealed task; callers must transfer them to a replayable source before advancing the task
@@ -193,8 +230,12 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			return sealed_request_entry_binding_digest_;
 		}
+		/** Reject a task whose factory-sealed verdict-bearing payload was mutated after
+		 * construction. */
+		[[nodiscard]] sdk::result<void> validate_factory_seal() const;
 
 		materialization_bounded_task_claims(
+			materialization_bounded_task_factory_seal factory_seal,
 			const std::uint64_t canonical_task_index,
 			std::string sealed_request_entry_binding_digest,
 			std::string materializer_semantics_digest,
@@ -205,20 +246,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<materialization_claim_envelope> claim_envelopes,
 			std::vector<materialization_canonicalization_edge> canonicalization_edges,
 			std::vector<materialization_origin_association> origin_associations,
-			std::vector<materialization_claim_partition> partitions)
-			: canonical_task_index{canonical_task_index},
-			  materializer_semantics_digest{std::move(materializer_semantics_digest)},
-			  direct_basis_digest{std::move(direct_basis_digest)},
-			  canonical_adoption_transform_digest{std::move(canonical_adoption_transform_digest)},
-			  base_ingestion_transform_digest{std::move(base_ingestion_transform_digest)},
-			  assumption_set_id{std::move(assumption_set_id)},
-			  claim_envelopes{std::move(claim_envelopes)},
-			  canonicalization_edges{std::move(canonicalization_edges)},
-			  origin_associations{std::move(origin_associations)},
-			  partitions{std::move(partitions)}, sealed_canonical_task_index_{canonical_task_index},
-			  sealed_request_entry_binding_digest_{std::move(sealed_request_entry_binding_digest)}
-		{
-		}
+			std::vector<materialization_claim_partition> partitions);
 
 		materialization_bounded_task_claims(const materialization_bounded_task_claims&) = delete;
 		materialization_bounded_task_claims&
@@ -231,6 +259,8 @@ namespace cxxlens::detail::clang22::materialization
 	  private:
 		std::uint64_t sealed_canonical_task_index_{};
 		std::string sealed_request_entry_binding_digest_;
+		bool factory_sealed_{};
+		std::string factory_integrity_digest_;
 	};
 
 	/**
