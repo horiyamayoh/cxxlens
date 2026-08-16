@@ -1,0 +1,121 @@
+name: Synchronize PR 317 with current main
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  synchronize:
+    if: >-
+      github.event.pull_request.number == 317 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'issue-316-ci-setup-integration'
+    runs-on: ubuntu-24.04
+    env:
+      EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Merge current main and retain both contract changes
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD_SHA}"
+          git fetch origin main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "current main is already present"
+          else
+            if ! git merge --no-ff --no-commit origin/main; then
+              conflicts="$(git diff --name-only --diff-filter=U)"
+              while IFS= read -r path; do
+                [[ -z "${path}" ]] && continue
+                case "${path}" in
+                  .github/workflows/quality.yml|tools/quality/check_ng_api_development_readiness.py)
+                    ;;
+                  *)
+                    echo "unexpected merge conflict: ${path}" >&2
+                    exit 1
+                    ;;
+                esac
+              done <<<"${conflicts}"
+
+              git checkout --ours -- \
+                .github/workflows/quality.yml \
+                tools/quality/check_ng_api_development_readiness.py
+
+              python3 - <<'PY'
+          from __future__ import annotations
+
+          import pathlib
+          import subprocess
+
+          quality_path = pathlib.Path(".github/workflows/quality.yml")
+          quality = quality_path.read_text(encoding="utf-8")
+          section_start = quality.index("  quality-contracts:\n")
+          section_end = quality.index("\n  agent-context:\n", section_start)
+          section = quality[section_start:section_end]
+          old = "          fetch-depth: 0\n"
+          if old in section:
+              section = section.replace(old, "          fetch-depth: 2\n", 1)
+          elif "          fetch-depth: 2\n" not in section:
+              raise SystemExit("quality-contracts checkout depth is unavailable")
+          quality_path.write_text(
+              quality[:section_start] + section + quality[section_end:],
+              encoding="utf-8",
+          )
+
+          checker_path = pathlib.Path(
+              "tools/quality/check_ng_api_development_readiness.py"
+          )
+          checker = checker_path.read_text(encoding="utf-8")
+          main_checker = subprocess.check_output(
+              [
+                  "git",
+                  "show",
+                  "origin/main:tools/quality/check_ng_api_development_readiness.py",
+              ],
+              text=True,
+          )
+          block_start = main_checker.index(
+              '    quality_contracts = _job(quality, "quality-contracts")\n'
+          )
+          block_end = main_checker.index(
+              '    check = _job(quality, "check-tier")\n', block_start
+          )
+          parent_history_block = main_checker[block_start:block_end]
+          if parent_history_block not in checker:
+              anchor = '    check = _job(quality, "check-tier")\n'
+              if checker.count(anchor) != 1:
+                  raise SystemExit("readiness checker insertion anchor differs")
+              checker = checker.replace(
+                  anchor, parent_history_block + anchor, 1
+              )
+          checker_path.write_text(checker, encoding="utf-8")
+          PY
+
+              git add \
+                .github/workflows/quality.yml \
+                tools/quality/check_ng_api_development_readiness.py
+            fi
+          fi
+
+          rm -f .github/workflows/sync-pr317.yml
+          git add -A
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "unresolved merge entries remain" >&2
+            exit 1
+          fi
+          if git diff --cached --quiet; then
+            echo "no synchronization commit is required"
+            exit 0
+          fi
+          git commit -m "Merge current main into CI acceleration"
+          git push origin "HEAD:${HEAD_REF}"
