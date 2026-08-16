@@ -4,12 +4,16 @@
 from __future__ import annotations
 
 import hashlib
+import errno
+import os
 import pathlib
 import re
+import stat
 import subprocess
 
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
+READ_CHUNK_SIZE = 1024 * 1024
 
 
 class GitAuthorityError(ValueError):
@@ -35,6 +39,169 @@ def _working_tree_path(root: pathlib.Path, relative: str) -> pathlib.Path:
     if not candidate.exists():
         _fail("path-missing", relative)
     return candidate
+
+
+def _safe_open_flags(*, directory: bool) -> int:
+    required = ["O_CLOEXEC", "O_NOFOLLOW"]
+    if directory:
+        required.append("O_DIRECTORY")
+    missing = [name for name in required if not hasattr(os, name)]
+    if missing:
+        raise GitAuthorityError(
+            "git-authority.safe-descriptor-unavailable:" + ",".join(missing)
+        )
+    flags = os.O_RDONLY
+    for name in required:
+        flags |= getattr(os, name)
+    return flags
+
+
+def _descriptor_error(relative: str, error: OSError) -> GitAuthorityError:
+    if error.errno == errno.ELOOP:
+        code = "path-symlink"
+    elif error.errno in {errno.ENOENT, errno.ENOTDIR}:
+        code = "path-missing"
+    elif error.errno in {errno.EACCES, errno.EPERM}:
+        code = "path-open-denied"
+    else:
+        code = "path-open-failed"
+    return GitAuthorityError(f"git-authority.{code}:{relative}")
+
+
+def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int, int]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        stat.S_IMODE(metadata.st_mode),
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _require_regular_mode(
+    metadata: os.stat_result, expected_mode: str, relative: str
+) -> None:
+    if not stat.S_ISREG(metadata.st_mode):
+        _fail("path-not-regular-file", relative)
+    if stat.S_IMODE(metadata.st_mode) != stat.S_IMODE(int(expected_mode, 8)):
+        _fail("path-mode-mismatch", relative)
+
+
+def _read_bound_worktree_file(
+    root: pathlib.Path, relative: str, expected_mode: str
+) -> bytes:
+    """Read one path through stable descriptors and rebind its final identity.
+
+    The bytes returned by this function are the only worktree value callers may
+    parse or digest.  The pathname is used only for descriptor lookup and the
+    final identity check; it is never re-read by an authority consumer.
+    """
+    root = root.resolve()
+    parts = relative.split("/")
+    directory_flags = _safe_open_flags(directory=True)
+    file_flags = _safe_open_flags(directory=False)
+    directory_fds: list[int] = []
+    leaf_fd: int | None = None
+    try:
+        try:
+            current_fd = os.open(str(root), directory_flags)
+        except OSError as error:
+            raise _descriptor_error(relative, error) from error
+        directory_fds.append(current_fd)
+
+        for component in parts[:-1]:
+            try:
+                current_fd = os.open(
+                    component, directory_flags, dir_fd=current_fd
+                )
+            except OSError as error:
+                raise _descriptor_error(relative, error) from error
+            directory_fds.append(current_fd)
+
+        parent_fd = directory_fds[-1]
+        leaf_name = parts[-1]
+        try:
+            leaf_fd = os.open(leaf_name, file_flags, dir_fd=parent_fd)
+        except OSError as error:
+            raise _descriptor_error(relative, error) from error
+
+        try:
+            before = os.fstat(leaf_fd)
+        except OSError as error:
+            raise GitAuthorityError(
+                f"git-authority.path-stat-failed:{relative}"
+            ) from error
+        _require_regular_mode(before, expected_mode, relative)
+        before_identity = _file_identity(before)
+
+        chunks: list[bytes] = []
+        while True:
+            try:
+                chunk = os.read(leaf_fd, READ_CHUNK_SIZE)
+            except OSError as error:
+                raise GitAuthorityError(
+                    f"git-authority.path-content-unavailable:{relative}"
+                ) from error
+            if not chunk:
+                break
+            chunks.append(chunk)
+        content = b"".join(chunks)
+
+        try:
+            after = os.fstat(leaf_fd)
+        except OSError as error:
+            raise GitAuthorityError(
+                f"git-authority.path-stat-failed:{relative}"
+            ) from error
+        _require_regular_mode(after, expected_mode, relative)
+        if _file_identity(after) != before_identity:
+            _fail("path-replaced-during-read", relative)
+        if len(content) != before.st_size:
+            _fail("path-size-changed-during-read", relative)
+
+        # Rebind the name from the already-open parent directory.  This catches
+        # a replacement that happened after the read but before the final check.
+        rebound_fd: int | None = None
+        try:
+            try:
+                rebound_fd = os.open(leaf_name, file_flags, dir_fd=parent_fd)
+            except OSError as error:
+                raise _descriptor_error(relative, error) from error
+            rebound = os.fstat(rebound_fd)
+            _require_regular_mode(rebound, expected_mode, relative)
+            if _file_identity(rebound) != before_identity:
+                _fail("path-replaced", relative)
+        finally:
+            if rebound_fd is not None:
+                try:
+                    os.close(rebound_fd)
+                except OSError:
+                    pass
+
+        try:
+            rebound_path = os.stat(
+                root.joinpath(*parts), follow_symlinks=False
+            )
+        except OSError as error:
+            raise _descriptor_error(relative, error) from error
+        if stat.S_ISLNK(rebound_path.st_mode):
+            _fail("path-symlink", relative)
+        _require_regular_mode(rebound_path, expected_mode, relative)
+        if _file_identity(rebound_path) != before_identity:
+            _fail("path-replaced", relative)
+        return content
+    finally:
+        if leaf_fd is not None:
+            try:
+                os.close(leaf_fd)
+            except OSError:
+                pass
+        for descriptor in reversed(directory_fds):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
 
 
 def _head_blob(root: pathlib.Path, relative: str) -> tuple[str, str, bytes]:
@@ -144,16 +311,12 @@ def bind_head_blob(root: pathlib.Path, relative: str) -> tuple[str, str, bytes]:
         or any(component in {"", ".", "..", ".git"} for component in relative.split("/"))
     ):
         _fail("path-noncanonical", relative)
-    candidate = _working_tree_path(root, relative)
+    # Keep this preflight for a precise diagnostic, but never rely on the
+    # pathname check for authority: the descriptor-bound read below is the
+    # authoritative worktree observation.
+    _working_tree_path(root, relative)
     mode, blob, content = _head_blob(root, relative)
-    if not candidate.is_file():
-        _fail("path-not-regular-file", relative)
-    try:
-        working_tree_content = candidate.read_bytes()
-    except (OSError, UnicodeError) as error:
-        raise GitAuthorityError(
-            f"git-authority.path-content-unavailable:{relative}"
-        ) from error
+    working_tree_content = _read_bound_worktree_file(root, relative, mode)
     if working_tree_content != content:
         _fail("path-content-mismatch", relative)
     _require_normal_index_entry(root, relative)
@@ -164,6 +327,20 @@ def sha256_digest(content: bytes) -> str:
     return "sha256:" + hashlib.sha256(content).hexdigest()
 
 
-def require_head_bound_paths(root: pathlib.Path, paths: list[str] | tuple[str, ...]) -> None:
+def require_head_bound_paths(
+    root: pathlib.Path, paths: list[str] | tuple[str, ...]
+) -> dict[str, bytes]:
+    return {
+        relative: record[2]
+        for relative, record in require_head_bound_records(root, paths).items()
+    }
+
+
+def require_head_bound_records(
+    root: pathlib.Path, paths: list[str] | tuple[str, ...]
+) -> dict[str, tuple[str, str, bytes]]:
+    """Bind paths once and retain their exact mode, blob, and bytes."""
+    bound: dict[str, tuple[str, str, bytes]] = {}
     for relative in paths:
-        bind_head_blob(root, relative)
+        bound[relative] = bind_head_blob(root, relative)
+    return bound

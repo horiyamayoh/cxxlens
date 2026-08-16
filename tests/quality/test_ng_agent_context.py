@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import pathlib
 import subprocess
 import sys
@@ -337,6 +338,49 @@ class AgentContextTests(unittest.TestCase):
                 ],
                 check=True,
             )
+
+    def test_adversarial_replacement_after_read_is_rejected(self) -> None:
+        relative = "AGENTS.md"
+        path = ROOT / relative
+        original = path.read_bytes()
+        original_mode = path.stat().st_mode
+        replaced = False
+        leaf_fd: int | None = None
+        real_open = agent.git_authority.os.open
+        real_read = agent.git_authority.os.read
+
+        def capture_open(name: str, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal leaf_fd
+            descriptor = real_open(name, flags, *args, **kwargs)
+            if name == relative and kwargs.get("dir_fd") is not None:
+                leaf_fd = descriptor
+            return descriptor
+
+        def read_then_replace(fd: int, size: int) -> bytes:
+            nonlocal replaced
+            chunk = real_read(fd, size)
+            if fd == leaf_fd and not replaced:
+                replacement = path.with_name(path.name + ".replacement")
+                replacement.write_bytes(original)
+                os.chmod(replacement, original_mode)
+                os.replace(replacement, path)
+                replaced = True
+            return chunk
+
+        try:
+            with mock.patch.object(
+                agent.git_authority.os, "open", side_effect=capture_open
+            ), mock.patch.object(
+                agent.git_authority.os, "read", side_effect=read_then_replace
+            ), self.assertRaisesRegex(
+                agent.git_authority.GitAuthorityError,
+                r"git-authority.path-replaced",
+            ):
+                agent.git_authority.bind_head_blob(ROOT, relative)
+        finally:
+            path.write_bytes(original)
+            os.chmod(path, original_mode)
+            path.with_name(path.name + ".replacement").unlink(missing_ok=True)
 
     def test_index_authority_flags_are_rejected(self) -> None:
         relative = agent.READINESS_SCHEMA_PATH.as_posix()

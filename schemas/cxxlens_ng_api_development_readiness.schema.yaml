@@ -318,6 +318,9 @@ properties:
           authority_scope: exact-authority-derived-developer-projection
           clean_source_required: true
           stale_policy: reject
+          workflow_job: agent-context-projection
+          non_gating: true
+          failure_policy: continue-on-error
         first_packet:
           packet_id: agent-context.issue-261.explain-translation-unit.v1
           issue: '#261'

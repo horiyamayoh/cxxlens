@@ -194,13 +194,16 @@ digest を保持します。未知の use case、未登録または forward depe
 constructibility の promotion、machine authority と異なる contract ID は fail closed です。現在、完全な template が
 authority にあるのは #261 だけであり、他の admitted family を推測して packet 化しません。
 
-CI の `agent-context` job は二つの明示的な artifact lane を生成します。`check_ng_api_development_readiness.py` が生成する
+CI の `quality` workflow は二つの明示的な artifact lane を生成します。`agent-context` job が生成する
 `cxxlens-ng-agent-context-261-${revision}`（`cxxlens-ng-agent-context-issue-261.json/.md`）は Wave 0 readiness の
-authoritative artifact です。一方、`check_ng_agent_context.py` が生成する
+authoritative artifact で、required #261/full gate の入力です。一方、独立した
+`agent-context-projection` job が `check_ng_agent_context.py` で生成する
 `cxxlens-ng-agent-context-277-${revision}`（`cxxlens-ng-agent-context-issue-277.json/.md`）は #277 の
-non-authoritative projection です。後者は developer context/completion-plan の補助であり、readiness report、release
-qualification、issue closure の入力にはなりません。artifact 名、packet schema、generator、consumer を分けることで、二つの
-generator が同じ authority を曖昧に競合しないようにしています。
+non-authoritative projection です。projection job は authority に `workflow_job: agent-context-projection`、
+`non_gating: true`、`failure_policy: continue-on-error` として記録され、workflow の `continue-on-error: true`、`needs` なし、
+他 job からの依存なしを checker が検証します。したがって projection の失敗は advisory evidence として残りますが、required
+#261 lane、readiness report、release qualification、issue closure を失敗させません。artifact 名、packet schema、generator、
+consumer を分けることで、二つの generator が同じ authority を曖昧に競合しないようにしています。
 
 `check_ng_agent_context.py` が #277 non-authoritative projection の唯一の producer です。`check_ng_api_development_readiness.py`
 は #261 readiness artifact の authority/generator であり、readiness document と workflow を検証します。#277 projection の出力は

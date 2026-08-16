@@ -183,6 +183,9 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         self.assertEqual(projection["generator"], "tools/quality/check_ng_agent_context.py")
         self.assertEqual(projection["authority"], "non-authoritative-projection")
         self.assertEqual(projection["release_authority"], "none")
+        self.assertEqual(projection["workflow_job"], "agent-context-projection")
+        self.assertTrue(projection["non_gating"])
+        self.assertEqual(projection["failure_policy"], "continue-on-error")
         mutated = copy.deepcopy(self.manifest)
         mutated["product_direction"]["agent_context"]["generator"] = (
             "tools/quality/check_ng_agent_context.py"
@@ -316,6 +319,8 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         self.assertIn("agent-context", jobs["quality-evidence"]["needs"])
         self.assertIn("agent-context", jobs["full-tier"]["needs"])
         self.assertIn("agent-context-projection", jobs)
+        self.assertTrue(jobs["agent-context-projection"]["continue-on-error"])
+        self.assertNotIn("continue-on-error", jobs["agent-context"])
         for job_name, job in jobs.items():
             needs = job.get("needs", [])
             if isinstance(needs, str):

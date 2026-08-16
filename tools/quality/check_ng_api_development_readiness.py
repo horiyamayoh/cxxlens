@@ -19,6 +19,8 @@ import re
 import sys
 import tempfile
 import types
+from contextlib import contextmanager
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 import yaml
@@ -206,6 +208,9 @@ def _product_contract(manifest: dict[str, Any]) -> tuple[dict[str, Any], dict[st
         "authority_scope": "exact-authority-derived-developer-projection",
         "clean_source_required": True,
         "stale_policy": "reject",
+        "workflow_job": "agent-context-projection",
+        "non_gating": True,
+        "failure_policy": "continue-on-error",
     }
     if agent.get("projection") != expected_projection:
         _fail("#277 projection boundary differs")
@@ -529,6 +534,8 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         _fail("stress tier must be an exact-SHA reusable workflow dependency")
 
     agent_job = _job(quality, "agent-context")
+    if agent_job.get("continue-on-error") is True:
+        _fail("authoritative #261 agent-context job must remain gating")
     authoritative_step = _step(
         agent_job, "Generate exact-SHA authoritative #261 readiness context"
     )
@@ -545,8 +552,19 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
             _fail(f"authoritative #261 agent-context generation marker is missing: {marker}")
 
     projection_job = _job(quality, "agent-context-projection")
+    if projection_job.get("continue-on-error") is not True:
+        _fail("non-authoritative #277 projection must explicitly be non-gating")
     if "needs" in projection_job:
         _fail("non-authoritative #277 projection must not have qualification dependencies")
+    for job_name, job in jobs.items():
+        needs = job.get("needs", []) if isinstance(job, dict) else []
+        if isinstance(needs, str):
+            needs = [needs]
+        if isinstance(needs, list) and "agent-context-projection" in needs:
+            _fail(
+                "non-authoritative #277 projection must not feed another CI job: "
+                f"{job_name}"
+            )
     projection_step = _step(
         projection_job, "Generate exact-SHA non-authoritative #277 projection"
     )
@@ -671,7 +689,52 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     _legacy_projection(root, manifest)
 
 
-def _require_head_bound_authorities(root: pathlib.Path) -> None:
+@contextmanager
+def _bound_authority_reads(
+    root: pathlib.Path, bound_sources: Mapping[str, bytes]
+) -> Iterator[None]:
+    """Make all subsequent authority parses consume the bound byte snapshot."""
+    original_read_bytes = pathlib.Path.read_bytes
+    original_read_text = pathlib.Path.read_text
+
+    def bound_key(path: pathlib.Path) -> str | None:
+        try:
+            return path.absolute().relative_to(root.absolute()).as_posix()
+        except ValueError:
+            return None
+
+    def read_bytes(path: pathlib.Path) -> bytes:
+        relative = bound_key(path)
+        if relative in bound_sources:
+            return bound_sources[relative]
+        return original_read_bytes(path)
+
+    def read_text(
+        path: pathlib.Path, *args: Any, **kwargs: Any
+    ) -> str:
+        relative = bound_key(path)
+        if relative in bound_sources:
+            encoding = kwargs.get("encoding")
+            if encoding is None and args:
+                encoding = args[0]
+            errors = kwargs.get("errors")
+            if errors is None and len(args) > 1:
+                errors = args[1]
+            return bound_sources[relative].decode(
+                encoding or "utf-8", errors or "strict"
+            )
+        return original_read_text(path, *args, **kwargs)
+
+    pathlib.Path.read_bytes = read_bytes
+    pathlib.Path.read_text = read_text
+    try:
+        yield
+    finally:
+        pathlib.Path.read_bytes = original_read_bytes
+        pathlib.Path.read_text = original_read_text
+
+
+def _require_head_bound_authorities(root: pathlib.Path) -> dict[str, bytes]:
     fixed_paths = [
         BASELINE_PATH,
         MANIFEST,
@@ -700,6 +763,12 @@ def _require_head_bound_authorities(root: pathlib.Path) -> None:
         DESIGN_FEEDBACK_ISSUE_TEMPLATE,
         AGENT_CONTRACT,
         AUTHORIZATION_DECISION_ADR,
+        pathlib.Path("CMakeLists.txt"),
+        pathlib.Path("include/cxxlens/sdk.hpp"),
+        pathlib.Path("tools/quality/check_ng_migration_completion.py"),
+        pathlib.Path("docs/design/adr/0089-high-level-author-sdk-and-wave0-readiness.md"),
+        pathlib.Path("docs/design/adr/0092-exact-public-callable-inventory.md"),
+        pathlib.Path("docs/design/adr/0093-implementation-learning-design-feedback.md"),
         pathlib.Path(__file__).resolve().relative_to(root),
         pathlib.Path(git_authority.__file__).resolve().relative_to(root),
     ]
@@ -721,7 +790,7 @@ def _require_head_bound_authorities(root: pathlib.Path) -> None:
         ):
             _fail("HEAD #261 authority reading set is missing")
         fixed_paths.extend(pathlib.Path(path) for path in authority_paths)
-        git_authority.require_head_bound_paths(
+        return git_authority.require_head_bound_paths(
             root,
             tuple(path.as_posix() for path in fixed_paths),
         )
@@ -733,7 +802,13 @@ def _require_head_bound_authorities(root: pathlib.Path) -> None:
 
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     if (root / ".git").exists():
-        _require_head_bound_authorities(root)
+        bound_sources = _require_head_bound_authorities(root)
+        with _bound_authority_reads(root, bound_sources):
+            manifest = _baseline_validate_documents(root)
+            validate_bounded_completion_contract(root)
+            validate_demand_closure(root, manifest)
+            _validate_required_status_documentation(root, manifest)
+        return manifest
     manifest = _baseline_validate_documents(root)
     validate_bounded_completion_contract(root)
     validate_demand_closure(root, manifest)

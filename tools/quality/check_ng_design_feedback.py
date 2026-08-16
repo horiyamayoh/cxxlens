@@ -8,7 +8,7 @@ import pathlib
 import re
 import sys
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 import jsonschema
 import yaml
@@ -110,8 +110,40 @@ def load_yaml_value(text: str, label: str) -> Any:
         fail(f"{label} YAML is invalid: {error}")
 
 
-def load_mapping(path: pathlib.Path) -> dict[str, Any]:
-    value = load_yaml_value(path.read_text(encoding="utf-8"), str(path))
+def _source_text(
+    path: pathlib.Path,
+    *,
+    source_bytes: Mapping[str, bytes] | None,
+    root: pathlib.Path | None,
+) -> str:
+    if source_bytes is None:
+        try:
+            return path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            raise DesignFeedbackError(f"cannot read source: {path}") from error
+    if root is None:
+        fail(f"bound source root is missing: {path}")
+    try:
+        relative = path.absolute().relative_to(root.absolute()).as_posix()
+    except ValueError as error:
+        raise DesignFeedbackError(f"source is outside bound root: {path}") from error
+    if relative not in source_bytes:
+        fail(f"source was not bound to HEAD: {relative}")
+    try:
+        return source_bytes[relative].decode("utf-8")
+    except UnicodeError as error:
+        raise DesignFeedbackError(f"source is not UTF-8: {relative}") from error
+
+
+def load_mapping(
+    path: pathlib.Path,
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
+    root: pathlib.Path | None = None,
+) -> dict[str, Any]:
+    value = load_yaml_value(
+        _source_text(path, source_bytes=source_bytes, root=root), str(path)
+    )
     if not isinstance(value, dict):
         fail(f"expected mapping: {path}")
     return value
@@ -128,8 +160,13 @@ def validate_schema(document: Any, schema: dict[str, Any], label: str) -> None:
         fail(f"{label} schema validation failed: {error.message}")
 
 
-def split_front_matter(path: pathlib.Path) -> tuple[dict[str, Any], str]:
-    text = path.read_text(encoding="utf-8")
+def split_front_matter(
+    path: pathlib.Path,
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
+    root: pathlib.Path | None = None,
+) -> tuple[dict[str, Any], str]:
+    text = _source_text(path, source_bytes=source_bytes, root=root)
     lines = text.splitlines()
     if not lines or lines[0] != "---":
         fail(f"design feedback record has no opening front matter: {path}")
@@ -171,7 +208,12 @@ def validate_repo_ref(root: pathlib.Path, reference: str, label: str) -> None:
         fail(f"{label} does not name a repository file: {reference}")
 
 
-def validate_authority_ref(root: pathlib.Path, reference: str) -> None:
+def validate_authority_ref(
+    root: pathlib.Path,
+    reference: str,
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
+) -> None:
     validate_repo_ref(root, reference, "authority_refs entry")
     path_text = reference.split("#", 1)[0]
     is_schema_authority = path_text.startswith("schemas/") and pathlib.PurePosixPath(
@@ -179,21 +221,30 @@ def validate_authority_ref(root: pathlib.Path, reference: str) -> None:
     ).suffix in {".yaml", ".json"}
     if path_text in NORMATIVE_AUTHORITY_FILES or is_schema_authority:
         return
-    if is_accepted_adr_ref(root, reference):
+    if is_accepted_adr_ref(root, reference, source_bytes=source_bytes):
         return
     if re.fullmatch(r"docs/design/adr/[0-9]{4}-[a-z0-9-]+\.md", path_text):
         fail(f"authority_refs ADR is not accepted: {reference}")
     fail(f"authority_refs entry is not a normative authority: {reference}")
 
 
-def is_accepted_adr_ref(root: pathlib.Path, reference: str) -> bool:
+def is_accepted_adr_ref(
+    root: pathlib.Path,
+    reference: str,
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
+) -> bool:
     path_text = reference.split("#", 1)[0]
     if not re.fullmatch(r"docs/design/adr/[0-9]{4}-[a-z0-9-]+\.md", path_text):
         return False
     path = root / path_text
-    return path.is_file() and re.search(
-        r"(?m)^- Status: Accepted(?:\s|$)", path.read_text(encoding="utf-8")
-    ) is not None
+    if not path.is_file():
+        return False
+    try:
+        text = _source_text(path, source_bytes=source_bytes, root=root)
+    except DesignFeedbackError:
+        return False
+    return re.search(r"(?m)^- Status: Accepted(?:\s|$)", text) is not None
 
 
 def local_review_ref_is_valid(root: pathlib.Path, reference: str) -> bool:
@@ -250,9 +301,13 @@ def record_paths(root: pathlib.Path) -> list[pathlib.Path]:
 
 
 def validate_record(
-    root: pathlib.Path, path: pathlib.Path, schema: dict[str, Any]
+    root: pathlib.Path,
+    path: pathlib.Path,
+    schema: dict[str, Any],
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
 ) -> Record:
-    metadata, body = split_front_matter(path)
+    metadata, body = split_front_matter(path, source_bytes=source_bytes, root=root)
     relative = path.relative_to(root)
     validate_schema(metadata, schema, f"design feedback record {relative}")
 
@@ -278,7 +333,7 @@ def validate_record(
     section_contents(body, RECORD_HEADINGS, relative)
 
     for reference in metadata["authority_refs"]:
-        validate_authority_ref(root, reference)
+        validate_authority_ref(root, reference, source_bytes=source_bytes)
     for reference in metadata["resolution_refs"]:
         validate_repo_ref(root, reference, "resolution_refs entry")
     invalid_review_refs = [
@@ -297,7 +352,7 @@ def validate_record(
 
     if metadata["status"] == "accepted" and metadata["impact"] in HIGH_RISK_IMPACTS:
         if not any(
-            is_accepted_adr_ref(root, reference)
+            is_accepted_adr_ref(root, reference, source_bytes=source_bytes)
             for reference in metadata["resolution_refs"]
         ):
             fail(f"accepted high-risk feedback has no accepted ADR resolution: {relative}")

@@ -16,7 +16,7 @@ import pathlib
 import re
 import subprocess
 import sys
-from typing import Any
+from typing import Any, Mapping
 
 import jsonschema
 import yaml
@@ -56,10 +56,43 @@ def fail(message: str) -> None:
     raise AgentContextError(message)
 
 
-def load_yaml(path: pathlib.Path) -> Any:
+def _bound_source_bytes(
+    path: pathlib.Path,
+    *,
+    bound_sources: Mapping[str, bytes] | None,
+    root: pathlib.Path | None,
+) -> bytes:
+    if bound_sources is None:
+        try:
+            return path.read_bytes()
+        except (OSError, UnicodeError) as error:
+            raise AgentContextError(f"cannot read authority file: {path}") from error
+    if root is None:
+        fail(f"agent-context.bound-source-root-missing:{path}")
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        relative = path.absolute().relative_to(root.absolute()).as_posix()
+    except ValueError as error:
+        raise AgentContextError(
+            f"agent-context.authority-file-outside-root:{path}"
+        ) from error
+    if relative not in bound_sources:
+        fail(f"agent-context.authority-file-not-bound:{relative}")
+    return bound_sources[relative]
+
+
+def load_yaml(
+    path: pathlib.Path,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+    root: pathlib.Path | None = None,
+) -> Any:
+    try:
+        return yaml.safe_load(
+            _bound_source_bytes(
+                path, bound_sources=bound_sources, root=root
+            ).decode("utf-8")
+        )
+    except (AgentContextError, UnicodeError, yaml.YAMLError) as error:
         raise AgentContextError(f"cannot load YAML: {path}: {error}") from error
 
 
@@ -87,10 +120,17 @@ def digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_bytes(value)).hexdigest()
 
 
-def file_digest(path: pathlib.Path) -> str:
+def file_digest(
+    path: pathlib.Path,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+    root: pathlib.Path | None = None,
+) -> str:
     try:
-        return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
-    except (OSError, UnicodeError) as error:
+        return "sha256:" + hashlib.sha256(
+            _bound_source_bytes(path, bound_sources=bound_sources, root=root)
+        ).hexdigest()
+    except AgentContextError as error:
         raise AgentContextError(f"cannot digest authority file: {path}") from error
 
 
@@ -176,10 +216,20 @@ def validate_path_set(values: Any, field: str, *, reject_overlap: bool) -> None:
                     fail(f"agent-context.write-path-overlap:{left}:{right}")
 
 
-def load_authorities(root: pathlib.Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    readiness = load_yaml(root / READINESS_PATH)
-    readiness_schema = load_yaml(root / READINESS_SCHEMA_PATH)
-    context_schema = load_yaml(root / CONTEXT_SCHEMA_PATH)
+def load_authorities(
+    root: pathlib.Path,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    readiness = load_yaml(
+        root / READINESS_PATH, bound_sources=bound_sources, root=root
+    )
+    readiness_schema = load_yaml(
+        root / READINESS_SCHEMA_PATH, bound_sources=bound_sources, root=root
+    )
+    context_schema = load_yaml(
+        root / CONTEXT_SCHEMA_PATH, bound_sources=bound_sources, root=root
+    )
     if not isinstance(readiness, dict) or not isinstance(readiness_schema, dict):
         fail("agent-context.readiness-authority-invalid")
     validate_schema(readiness, readiness_schema, "readiness authority")
@@ -196,11 +246,13 @@ def select_source(
     root: pathlib.Path,
     readiness: dict[str, Any],
     use_case_id: str,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     if CANONICAL_ID.fullmatch(use_case_id) is None:
         fail(f"agent-context.use-case-id-invalid:{use_case_id}")
     try:
-        report = catalog.build_report(root)
+        report = catalog.build_report(root, source_bytes=bound_sources)
     except catalog.CatalogError as error:
         fail(f"agent-context.demand-source-invalid:{error}")
     families = readiness.get("product_direction", {}).get("roadmap", {}).get(
@@ -264,6 +316,9 @@ def select_source(
         "authority_scope": "exact-authority-derived-developer-projection",
         "clean_source_required": True,
         "stale_policy": "reject",
+        "workflow_job": "agent-context-projection",
+        "non_gating": True,
+        "failure_policy": "continue-on-error",
     }
     if projection != expected_projection:
         fail("agent-context.projection-authority-mismatch")
@@ -338,19 +393,28 @@ def authority_contract_ids(
 
 
 def bind_authority_reading(
-    root: pathlib.Path, paths: Any
+    root: pathlib.Path,
+    paths: Any,
+    *,
+    bound_records: Mapping[str, tuple[str, str, bytes]] | None = None,
 ) -> list[dict[str, str]]:
     validate_path_set(paths, "authority-reading-set", reject_overlap=False)
     root = root.resolve()
     bindings: list[dict[str, str]] = []
     for relative in paths:
-        try:
-            mode, blob, content = git_authority.bind_head_blob(root, relative)
-        except git_authority.GitAuthorityError as error:
-            code = str(error).removeprefix("git-authority.")
-            if code.startswith("path-missing:"):
-                fail(f"agent-context.authority-reading-path-missing:{relative}")
-            fail(f"agent-context.authority-reading-{code}")
+        if bound_records is None:
+            try:
+                mode, blob, content = git_authority.bind_head_blob(root, relative)
+            except git_authority.GitAuthorityError as error:
+                code = str(error).removeprefix("git-authority.")
+                if code.startswith("path-missing:"):
+                    fail(f"agent-context.authority-reading-path-missing:{relative}")
+                fail(f"agent-context.authority-reading-{code}")
+        else:
+            try:
+                mode, blob, content = bound_records[relative]
+            except KeyError:
+                fail(f"agent-context.authority-reading-not-bound:{relative}")
         bindings.append(
             {
                 "path": relative,
@@ -376,13 +440,23 @@ def validate_design_feedback_metadata(metadata: dict[str, Any]) -> None:
         fail("agent-context.design-feedback-resolution-refs-mismatch")
 
 
-def bind_design_feedback(root: pathlib.Path) -> list[dict[str, Any]]:
+def bind_design_feedback(
+    root: pathlib.Path,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+) -> list[dict[str, Any]]:
     path = root / DF_0261_RECORD_PATH
     if not path.is_file():
         fail(f"agent-context.design-feedback-record-missing:{DF_0261_RECORD_PATH}")
     try:
-        schema = design_feedback.load_mapping(root / DESIGN_FEEDBACK_SCHEMA_PATH)
-        record = design_feedback.validate_record(root, path, schema)
+        schema = design_feedback.load_mapping(
+            root / DESIGN_FEEDBACK_SCHEMA_PATH,
+            source_bytes=bound_sources,
+            root=root,
+        )
+        record = design_feedback.validate_record(
+            root, path, schema, source_bytes=bound_sources
+        )
     except (
         design_feedback.DesignFeedbackError,
         OSError,
@@ -397,7 +471,7 @@ def bind_design_feedback(root: pathlib.Path) -> list[dict[str, Any]]:
         {
             "id": metadata["id"],
             "path": DF_0261_RECORD_PATH.as_posix(),
-            "digest": file_digest(path),
+            "digest": file_digest(path, bound_sources=bound_sources, root=root),
             "status": metadata["status"],
             "implementation_disposition": metadata["implementation_disposition"],
             "review_status": review["status"],
@@ -419,25 +493,61 @@ def build_context(
         fail("agent-context.exact-sha-invalid")
     if (git_value(root, "HEAD"), git_value(root, "HEAD^{tree}")) != (revision, tree):
         fail("agent-context.source-revision-or-tree-mismatch")
+    fixed_paths = (
+        READINESS_PATH.as_posix(),
+        READINESS_SCHEMA_PATH.as_posix(),
+        CONTEXT_SCHEMA_PATH.as_posix(),
+        catalog.CATALOG_SCHEMA_PATH.as_posix(),
+        DESIGN_FEEDBACK_SCHEMA_PATH.as_posix(),
+        DF_0261_RECORD_PATH.as_posix(),
+        GENERATOR_PATH.as_posix(),
+        pathlib.Path(catalog.__file__).resolve().relative_to(root).as_posix(),
+        pathlib.Path(design_feedback.__file__).resolve().relative_to(root).as_posix(),
+    )
     try:
-        git_authority.require_head_bound_paths(
-            root,
-            (
-                READINESS_PATH.as_posix(),
-                READINESS_SCHEMA_PATH.as_posix(),
-                CONTEXT_SCHEMA_PATH.as_posix(),
-                catalog.CATALOG_SCHEMA_PATH.as_posix(),
-                DESIGN_FEEDBACK_SCHEMA_PATH.as_posix(),
-                DF_0261_RECORD_PATH.as_posix(),
-                GENERATOR_PATH.as_posix(),
-                pathlib.Path(catalog.__file__).resolve().relative_to(root).as_posix(),
-                pathlib.Path(design_feedback.__file__).resolve().relative_to(root).as_posix(),
-            ),
+        initial_records = git_authority.require_head_bound_records(root, fixed_paths)
+        initial_sources = {
+            path: record[2] for path, record in initial_records.items()
+        }
+        initial_readiness = load_yaml(
+            root / READINESS_PATH,
+            bound_sources=initial_sources,
+            root=root,
         )
+        initial_direction = (
+            initial_readiness.get("product_direction")
+            if isinstance(initial_readiness, dict)
+            else None
+        )
+        initial_agent_context = (
+            initial_direction.get("agent_context")
+            if isinstance(initial_direction, dict)
+            else None
+        )
+        initial_template = (
+            initial_agent_context.get(PACKET_TEMPLATE_KEY)
+            if isinstance(initial_agent_context, dict)
+            else None
+        )
+        authority_paths = (
+            initial_template.get("authority_reading_set")
+            if isinstance(initial_template, dict)
+            else None
+        )
+        validate_path_set(authority_paths, "authority-reading-set", reject_overlap=False)
+        all_paths = tuple(dict.fromkeys((*fixed_paths, *authority_paths)))
+        bound_records = git_authority.require_head_bound_records(root, all_paths)
+        bound_sources = {
+            path: record[2] for path, record in bound_records.items()
+        }
     except (git_authority.GitAuthorityError, ValueError) as error:
         fail(f"agent-context.authority-source-{error}")
-    readiness, _readiness_schema, context_schema = load_authorities(root)
-    family, template, report = select_source(root, readiness, use_case_id)
+    readiness, _readiness_schema, context_schema = load_authorities(
+        root, bound_sources=bound_sources
+    )
+    family, template, report = select_source(
+        root, readiness, use_case_id, bound_sources=bound_sources
+    )
     if template.get("issue") != issue:
         fail(f"agent-context.issue-binding-mismatch:{issue}:{template.get('issue')}")
     if issue != family.get("tracking_issue"):
@@ -452,7 +562,7 @@ def build_context(
     if template_capability_path != [row["id"] for row in capability_path]:
         fail("agent-context.template-capability-path-drift")
     authority_reading_bindings = bind_authority_reading(
-        root, template.get("authority_reading_set")
+        root, template.get("authority_reading_set"), bound_records=bound_records
     )
     validate_path_set(template.get("allowed_write_paths"), "write-path", reject_overlap=True)
     feedback = template.get("known_design_feedback")
@@ -463,7 +573,7 @@ def build_context(
         or issue_feedback not in feedback
     ):
         fail("agent-context.design-feedback-binding-missing")
-    design_feedback_records = bind_design_feedback(root)
+    design_feedback_records = bind_design_feedback(root, bound_sources=bound_sources)
     constructibility = template.get("constructibility")
     gate = product.get("constructibility_gate")
     if not isinstance(constructibility, dict) or not isinstance(gate, dict):
@@ -534,11 +644,21 @@ def build_context(
         "revision": revision,
         "tree": tree,
         "readiness_path": READINESS_PATH.as_posix(),
-        "readiness_digest": file_digest(root / READINESS_PATH),
-        "readiness_schema_digest": file_digest(root / READINESS_SCHEMA_PATH),
+        "readiness_digest": file_digest(
+            root / READINESS_PATH, bound_sources=bound_sources, root=root
+        ),
+        "readiness_schema_digest": file_digest(
+            root / READINESS_SCHEMA_PATH, bound_sources=bound_sources, root=root
+        ),
         "demand_catalog_schema": catalog.CATALOG_SCHEMA_PATH.as_posix(),
-        "demand_catalog_digest": file_digest(root / catalog.CATALOG_SCHEMA_PATH),
-        "context_schema_digest": file_digest(root / CONTEXT_SCHEMA_PATH),
+        "demand_catalog_digest": file_digest(
+            root / catalog.CATALOG_SCHEMA_PATH,
+            bound_sources=bound_sources,
+            root=root,
+        ),
+        "context_schema_digest": file_digest(
+            root / CONTEXT_SCHEMA_PATH, bound_sources=bound_sources, root=root
+        ),
         "authority_projection_digest": digest(authority_projection),
         "generator": GENERATOR_PATH.as_posix(),
         "authority_scope": PROJECTION_AUTHORITY,
