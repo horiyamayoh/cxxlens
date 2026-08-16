@@ -724,6 +724,18 @@ set_tests_properties(
 )
 
 cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-store-outcome
+  adapter/clang22/materialization_store_outcome_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-store-outcome
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-store-outcome
+         COMMAND cxxlens-clang22-materialization-store-outcome)
+set_tests_properties(
+  adapter.clang22-materialization-store-outcome
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;store;outcome;security")
+
+cxxlens_add_test_executable(
   cxxlens-clang22-materialization-request-stream
   adapter/clang22/materialization_request_stream_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-request-stream
