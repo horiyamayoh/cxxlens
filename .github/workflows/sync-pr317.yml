@@ -2,7 +2,7 @@ name: Synchronize PR 317 with current main
 
 on:
   pull_request:
-    types: [synchronize]
+    types: [synchronize, ready_for_review]
 
 permissions:
   contents: write
