@@ -464,6 +464,13 @@ namespace cxxlens::sdk
 			permit.exact_target_.emplace(std::move(target));
 		}
 
+		[[nodiscard]] static result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
+		mint_source_borrow(sqlite_source_shm_target_namespace_epoch_borrow_minter& minter,
+						   sqlite_shm_reader_native_ok_projection_reservation& reservation)
+		{
+			return minter.mint(reservation);
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_attachment_post_map_receipt
 		reader_attachment_map_with_qualified_observation(
 			const sqlite_shm_verified_reader_attachment_post_map_receipt& source,
@@ -1725,6 +1732,8 @@ namespace
 		}
 		[[nodiscard]] result<void> recheck_retained_object() const override
 		{
+			if (fail_recheck_)
+				return error{"test.registry", "source-epoch", "injected-retained-object-drift"};
 			struct stat current{};
 			return ::fstat(descriptor_, &current) == 0 && current.st_dev == stat_.st_dev &&
 					current.st_ino == stat_.st_ino
@@ -1733,10 +1742,22 @@ namespace
 		}
 		[[nodiscard]] result<std::uint64_t> size() const override
 		{
+			if (fail_size_)
+				return error{"test.registry", "source-epoch", "injected-retained-object-size"};
 			struct stat current{};
 			if (::fstat(descriptor_, &current) != 0 || current.st_size < 0)
 				return error{"test.registry", "source-epoch", "retained-object-size"};
 			return static_cast<std::uint64_t>(current.st_size);
+		}
+
+		void fail_recheck() noexcept
+		{
+			fail_recheck_ = true;
+		}
+
+		void fail_size() noexcept
+		{
+			fail_size_ = true;
 		}
 		[[nodiscard]] result<void> read_exact(std::uint64_t, std::span<std::byte>) const override
 		{
@@ -1768,6 +1789,8 @@ namespace
 		sqlite_backend_opaque_identity entry_;
 		std::optional<sqlite_backend_opaque_identity> filesystem_;
 		std::optional<sqlite_backend_opaque_identity> mount_;
+		bool fail_recheck_{};
+		bool fail_size_{};
 	};
 
 	class source_epoch_namespace_guard final : public sqlite_source_shm_namespace_guard
@@ -1799,6 +1822,8 @@ namespace
 		[[nodiscard]] result<sqlite_backend_entry_observation>
 		retained_entry(const sqlite_backend_file_role role) const override
 		{
+			if (fail_retained_entry_)
+				return error{"test.registry", "source-epoch", "injected-retained-entry"};
 			if (!recheck())
 				return error{"test.registry", "source-epoch", "namespace-drift"};
 			for (const auto& entry : entries_)
@@ -1852,12 +1877,18 @@ namespace
 			return {};
 		}
 
+		void fail_retained_entry() noexcept
+		{
+			fail_retained_entry_ = true;
+		}
+
 	  private:
 		std::string logical_;
 		sqlite_backend_opaque_identity identity_;
 		sqlite_backend_opaque_identity parent_;
 		std::array<sqlite_backend_entry_observation, 4U> entries_;
 		std::shared_ptr<std::atomic_int> finalization_count_;
+		bool fail_retained_entry_{};
 		bool claimed_{};
 		bool finished_{};
 	};
@@ -1865,10 +1896,18 @@ namespace
 	struct source_epoch_fixture
 	{
 		explicit source_epoch_fixture(const std::uint8_t marker)
+			: source_epoch_fixture(marker, marker, marker)
+		{
+		}
+
+		source_epoch_fixture(const std::uint8_t marker,
+							 const std::uint8_t identity_marker,
+							 const std::uint8_t parent_marker)
 		{
 			static std::atomic<std::uint64_t> sequence{};
 			directory = std::filesystem::temp_directory_path() /
 				("cxxlens-registry-source-epoch-" + std::to_string(::getpid()) + '-' +
+				 std::to_string(static_cast<unsigned>(marker)) + '-' +
 				 std::to_string(sequence.fetch_add(1U)));
 			require(std::filesystem::create_directory(directory),
 					"create real source-epoch directory");
@@ -1887,11 +1926,12 @@ namespace
 			}
 			std::array<std::shared_ptr<source_epoch_held_object>, 3U> held{
 				std::make_shared<source_epoch_held_object>(
-					main, sqlite_backend_file_role::main_database, marker),
+					main, sqlite_backend_file_role::main_database, identity_marker),
 				std::make_shared<source_epoch_held_object>(
-					wal, sqlite_backend_file_role::write_ahead_log, marker),
+					wal, sqlite_backend_file_role::write_ahead_log, identity_marker),
 				std::make_shared<source_epoch_held_object>(
-					shm, sqlite_backend_file_role::shared_memory, marker)};
+					shm, sqlite_backend_file_role::shared_memory, identity_marker)};
+			shared_memory_holder = held[2U];
 			std::array<sqlite_backend_entry_observation, 4U> entries;
 			for (std::size_t index{}; index < held.size(); ++index)
 				entries[index] = {held[index]->role(),
@@ -1908,20 +1948,20 @@ namespace
 						   {},
 						   {},
 						   false};
-			const auto parent = identity("test.registry.real-source-epoch.parent", marker);
+			const auto parent = identity("test.registry.real-source-epoch.parent", parent_marker);
 			finalization_count = std::make_shared<std::atomic_int>(0);
-			auto guard = std::make_shared<source_epoch_namespace_guard>(
+			namespace_guard = std::make_shared<source_epoch_namespace_guard>(
 				main.string(),
-				identity("test.registry.real-source-epoch.guard", marker),
+				identity("test.registry.real-source-epoch.guard", identity_marker),
 				parent,
 				entries,
 				finalization_count);
 			sqlite_backend_namespace_census census{
 				"default-filesystem-v1",
-				identity("test.registry.real-source-epoch.capability", marker),
+				identity("test.registry.real-source-epoch.capability", identity_marker),
 				parent,
 				entries,
-				std::move(guard)};
+				namespace_guard};
 			auto made = make_sqlite_source_shm_target_namespace_epoch(main.string(), census);
 			require(made && *made, "make real default source target namespace epoch");
 			target = std::move(*made);
@@ -1952,6 +1992,8 @@ namespace
 		std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target;
 		sqlite_writer_shm_stat_census stat;
 		std::shared_ptr<std::atomic_int> finalization_count;
+		std::shared_ptr<source_epoch_held_object> shared_memory_holder;
+		std::shared_ptr<source_epoch_namespace_guard> namespace_guard;
 	};
 
 	struct bridge_epoch_sources
@@ -3305,6 +3347,109 @@ namespace
 						.last_issued_sequence >= before.last_issued_sequence,
 				"native-OK projection preserves the checked reader lifecycle sequence domain");
 		clean_fixture(setup.fixture);
+	}
+
+	void verify_native_ok_projection_rejects_cross_wired_source_borrow()
+	{
+		auto source_a = std::make_shared<source_epoch_fixture>(72U);
+		auto setup = make_reader_candidate_setup(72U, std::nullopt, false, source_a);
+		auto source_b = std::make_shared<source_epoch_fixture>(73U, 73U, 72U);
+		auto minter_result =
+			make_sqlite_source_shm_target_namespace_epoch_borrow_minter(source_b->target);
+		require(minter_result && minter_result->valid(),
+				"mint the independent same-parent source borrow capability");
+		auto minter = std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter>{
+			std::move(*minter_result)};
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 74U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto request = reader_attachment_map_request(
+			owner.identity.request, owner.identity.callback_identity.receipt());
+		{
+			auto reservation = setup.fixture.registry->prepare_reader_native_ok_projection(
+				setup.reader_family_pin(), owner.inflight, request);
+			require(reservation && reservation->valid(),
+					"reserve the exact source-A reader projection before cross-wiring");
+			auto borrowed =
+				sqlite_same_process_shm_lease_test_peer::mint_source_borrow(*minter, *reservation);
+			require(borrowed && borrowed->valid(),
+					"mint the source-B borrow against the source-A lease reservation");
+			auto rejected = setup.fixture.registry->attach_reader_native_ok_projection(
+				setup.reader_family_pin(), *reservation, std::move(*borrowed));
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						rejected.error().action ==
+							sqlite_shm_lease_recovery_action::deny_before_native_map,
+					"Stage C rejects a source borrow whose retained object is not the canonical "
+					"target");
+		}
+		require(!owner.inflight.valid(),
+				"cross-wired projection abandonment terminalizes the presented map owner");
+		require(!setup.session.valid(),
+				"cross-wired projection abandonment quarantines the dependent reader session");
+
+		minter.reset();
+		require(source_b->target->finish().has_value(),
+				"finish the rejected independent source epoch after its borrow drains");
+		require(setup.coordinator->snapshot().quarantined,
+				"cross-wired projection rejection quarantines the affected lease family");
+		require(source_a->target->finish().has_value(),
+				"finish the canonical source-A epoch after rejected projection cleanup");
+	}
+
+	void verify_native_ok_projection_source_observation_failures_are_ambiguous()
+	{
+		auto verify = [](const std::uint8_t marker, const int failure_kind)
+		{
+			auto source_epoch = std::make_shared<source_epoch_fixture>(marker);
+			auto setup = make_reader_candidate_setup(marker, std::nullopt, false, source_epoch);
+			auto owner = prepare_qualified_map_effect_owner(
+				setup,
+				static_cast<std::uint8_t>(marker + 1U),
+				sqlite_shm_reader_effect_identity_role::mapped_result);
+			const auto request = reader_attachment_map_request(
+				owner.identity.request, owner.identity.callback_identity.receipt());
+			{
+				auto reservation = setup.fixture.registry->prepare_reader_native_ok_projection(
+					setup.reader_family_pin(), owner.inflight, request);
+				require(reservation && reservation->valid(),
+						"reserve the source-observation failure projection");
+				auto minter_result = make_sqlite_source_shm_target_namespace_epoch_borrow_minter(
+					source_epoch->target);
+				require(minter_result && minter_result->valid(),
+						"mint source-observation failure borrow authority");
+				auto minter = std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter>{
+					std::move(*minter_result)};
+				auto borrowed = sqlite_same_process_shm_lease_test_peer::mint_source_borrow(
+					*minter, *reservation);
+				require(borrowed && borrowed->valid(), "mint source-observation failure borrow");
+				if (failure_kind == 0)
+					source_epoch->shared_memory_holder->fail_recheck();
+				else if (failure_kind == 1)
+					source_epoch->namespace_guard->fail_retained_entry();
+				else
+					source_epoch->shared_memory_holder->fail_size();
+				auto rejected = setup.fixture.registry->attach_reader_native_ok_projection(
+					setup.reader_family_pin(), *reservation, std::move(*borrowed));
+				require(!rejected &&
+							rejected.error().reason ==
+								sqlite_shm_lease_rejection_reason::lifecycle_ambiguous &&
+							rejected.error().action ==
+								sqlite_shm_lease_recovery_action::deny_before_native_map,
+						"source observation failures remain lifecycle-ambiguous");
+			}
+			require(!owner.inflight.valid(),
+					"source observation failure terminalizes the presented map owner");
+			require(!setup.session.valid(),
+					"source observation failure quarantines the dependent reader session");
+			// The writer generation still owns source_epoch here. Fixture teardown drains that
+			// authority before the source epoch's finalizer runs; finishing it early would invert
+			// the ownership order exercised by this regression.
+		};
+
+		verify(75U, 0);
+		verify(76U, 1);
+		verify(77U, 2);
 	}
 
 	void verify_native_ok_projection_group_rejects_plain_later_map()
@@ -19376,14 +19521,14 @@ namespace
 		const auto first_open_epoch = identity("test.registry.open-epoch", 60U);
 		auto first_gate = install_eligibility(
 			*first_coordinator, fixture.family, first_connection, first_open_epoch, 60U);
-		int first_page{};
+		int reused_page{};
 		const auto first_request = writer_request(
 			fixture.family, fixture.alias_lifetime, first_connection, first_open_epoch, 60U);
 		auto first_pending = install_pending(
-			*first_coordinator, first_request, first_open_epoch, mapping(&first_page), 60U);
+			*first_coordinator, first_request, first_open_epoch, mapping(&reused_page), 60U);
 		auto first_holder = promote_writer(*first_coordinator, first_pending, first_gate);
-		require(first_holder.generation() == 1U,
-				"first registry family mints first process generation");
+		const auto first_generation = first_holder.generation();
+		require(first_generation == 1U, "first registry family mints first process generation");
 		retire_writer(*first_coordinator, first_holder, 160U);
 		require(first_coordinator->revoke_writer_eligibility(first_gate).has_value(),
 				"revoke first generation eligibility");
@@ -19408,14 +19553,15 @@ namespace
 		const auto second_open_epoch = identity("test.registry.open-epoch", 61U);
 		auto second_gate = install_eligibility(
 			*second_coordinator, fixture.family, second_connection, second_open_epoch, 61U);
-		int second_page{};
 		const auto second_request = writer_request(
 			fixture.family, fixture.alias_lifetime, second_connection, second_open_epoch, 61U);
 		auto second_pending = install_pending(
-			*second_coordinator, second_request, second_open_epoch, mapping(&second_page), 61U);
+			*second_coordinator, second_request, second_open_epoch, mapping(&reused_page), 61U);
 		auto second_holder = promote_writer(*second_coordinator, second_pending, second_gate);
-		require(second_holder.generation() == 2U,
-				"fresh family coordinator shares monotonic process generation source");
+		const auto second_generation = second_holder.generation();
+		require(second_generation == 2U && second_generation != first_generation,
+				"fresh family coordinator assigns a distinct monotonic process generation when the "
+				"native mapping pointer is reused");
 		retire_writer(*second_coordinator, second_holder, 161U);
 		require(second_coordinator->revoke_writer_eligibility(second_gate).has_value(),
 				"revoke successor generation eligibility");
@@ -21122,6 +21268,8 @@ int main()
 		verify_reader_lineage_mixing_is_family_wide_and_bidirectional();
 		verify_reader_open_lineage_seal_distinguishes_active_clean_and_abandoned();
 		verify_native_ok_projection_permit_binds_live_writer_and_is_one_shot();
+		verify_native_ok_projection_rejects_cross_wired_source_borrow();
+		verify_native_ok_projection_source_observation_failures_are_ambiguous();
 		verify_native_ok_projection_group_rejects_plain_later_map();
 		verify_registry_writer_member_is_exact_and_cleanup_only();
 		verify_writer_registration_failure_rolls_back_installing_authority();

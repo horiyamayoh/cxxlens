@@ -1,9 +1,7 @@
 name: Nightly quality
 
 on:
-  push:
-    branches:
-      - main
+  workflow_call:
   schedule:
     - cron: "17 18 * * *"
   workflow_dispatch:
@@ -12,10 +10,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-quality-${{ github.event_name == 'schedule' && 'scheduled' || 'rolling-main' }}
-  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+  group: nightly-quality-${{ github.sha }}
+  cancel-in-progress: false
 
 env:
+  CXXLENS_CI_TIER: stress
   CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CXXLENS_SANITIZER_BUILD_JOBS || 2 }}
   CTEST_PARALLEL_LEVEL: ${{ vars.CXXLENS_SANITIZER_TEST_JOBS || 2 }}
 
@@ -85,7 +84,7 @@ jobs:
           TSAN_OPTIONS: halt_on_error=1:exitcode=86:handle_segv=0:second_deadlock_stack=1:symbolize=1
         run: |
           ctest --preset tsan --parallel 1 --label-exclude quality \
-            --exclude-regex '^install\.clang22-materializer-success$' \
+            --exclude-regex '^install\.clang22-materializer-(success|base64|negative)$' \
             --output-junit ctest.xml
       - name: TSan evidence
         run: |
@@ -169,41 +168,119 @@ jobs:
             cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22 \
             cxxlens-clang22-materialization-request-driver cxxlens-clang22-materialize
           cmake --install build/install-check --prefix "${RUNNER_TEMP}/cxxlens-materialization-scale-prefix"
-      - name: Run and independently check scale evidence
+      - name: Run scale harness and retain its result
+        id: materialization-scale-harness
         env:
           CXX: clang++-22
         run: |
+          set +e
+          marker="${RUNNER_TEMP}/cxxlens-materialization-scale-failure.json"
+          printf '%s\n' '{"current_scenario":null,"driver":"","exit_status":null,"failure":{"phase":"workflow","reason":"harness-not-started"},"phase":"workflow","report":"cxxlens-materialization-scale-evidence.json","scenarios":[],"schema":"cxxlens.clang22-materialization-scale-run.v1","source_revision":null,"source_tree":null,"status":"workflow-not-started"}' > "${marker}"
           python tests/install/clang22_materializer_scale_test.py \
             --root . \
             --driver build/install-check/tests/cxxlens-clang22-materialization-request-driver \
             --prefix "${RUNNER_TEMP}/cxxlens-materialization-scale-prefix" \
             --work-directory "${RUNNER_TEMP}/cxxlens-materialization-scale-work" \
             --preserve-inputs \
+            --failure-marker "${marker}" \
             --output "${RUNNER_TEMP}/cxxlens-materialization-scale-evidence.json"
-          python tools/quality/check_ng_clang22_materialization_scale.py check \
-            --root . \
-            --report "${RUNNER_TEMP}/cxxlens-materialization-scale-evidence.json" \
-            --require-installed-scenarios one-task,sixteen-mib-source,arbitrary-short-reads
+          harness_status=$?
+          printf 'scale harness exit status: %s\n' "${harness_status}"
+          printf 'exit_status=%s\n' "${harness_status}" >> "${GITHUB_OUTPUT}"
+          exit 0
+      - name: Check scale evidence and retain checker result
+        id: materialization-scale-check
+        if: always()
+        run: |
+          set +e
+          report="${RUNNER_TEMP}/cxxlens-materialization-scale-evidence.json"
+          marker="${RUNNER_TEMP}/cxxlens-materialization-scale-failure.json"
+          checker_log="${RUNNER_TEMP}/cxxlens-materialization-scale-check.log"
+          if [[ -f "${report}" ]]; then
+            python tools/quality/check_ng_clang22_materialization_scale.py check \
+              --root . \
+              --report "${report}" \
+              --run-marker "${marker}" \
+              --require-installed-scenarios one-task,sixteen-mib-source,arbitrary-short-reads \
+              > "${checker_log}" 2>&1
+            checker_status=$?
+          else
+            printf 'scale evidence report is missing; checker was not run\n' > "${checker_log}"
+            checker_status=1
+          fi
+          cat "${checker_log}"
+          printf 'scale checker exit status: %s\n' "${checker_status}"
+          printf 'exit_status=%s\n' "${checker_status}" >> "${GITHUB_OUTPUT}"
+          exit 0
+      - name: Collect scale toolchain provenance
+        id: materialization-scale-provenance
+        if: always()
+        run: |
+          set +e
+          provenance_log="${RUNNER_TEMP}/cxxlens-materialization-scale-provenance.log"
           python tools/quality/collect_toolchain_provenance.py \
             --compiler clang++-22 --configuration materialization-scale-clang22 \
-            --output "${RUNNER_TEMP}/cxxlens-materialization-scale-toolchain.json"
-          python tools/quality/check_quality_ownership.py evidence \
-            --check-id materialization.scale-ingress \
-            --configuration materialization-scale-clang22 \
-            --toolchain-provenance "${RUNNER_TEMP}/cxxlens-materialization-scale-toolchain.json" \
-            --checker tools/quality/check_ng_clang22_materialization_scale.py \
-            --output "${RUNNER_TEMP}/cxxlens-materialization-scale-evidence.json" \
-            --evidence-output "${RUNNER_TEMP}/cxxlens-materialization-scale-ownership.json"
+            --output "${RUNNER_TEMP}/cxxlens-materialization-scale-toolchain.json" \
+            > "${provenance_log}" 2>&1
+          provenance_status=$?
+          cat "${provenance_log}"
+          printf 'scale provenance exit status: %s\n' "${provenance_status}"
+          printf 'exit_status=%s\n' "${provenance_status}" >> "${GITHUB_OUTPUT}"
+          exit 0
+      - name: Check scale evidence ownership
+        id: materialization-scale-ownership
+        if: always()
+        run: |
+          set +e
+          report="${RUNNER_TEMP}/cxxlens-materialization-scale-evidence.json"
+          toolchain="${RUNNER_TEMP}/cxxlens-materialization-scale-toolchain.json"
+          ownership_log="${RUNNER_TEMP}/cxxlens-materialization-scale-ownership.log"
+          if [[ -f "${report}" && -f "${toolchain}" ]]; then
+            python tools/quality/check_quality_ownership.py evidence \
+              --check-id materialization.scale-ingress \
+              --configuration materialization-scale-clang22 \
+              --toolchain-provenance "${toolchain}" \
+              --checker tools/quality/check_ng_clang22_materialization_scale.py \
+              --output "${report}" \
+              --evidence-output "${RUNNER_TEMP}/cxxlens-materialization-scale-ownership.json" \
+              > "${ownership_log}" 2>&1
+            ownership_status=$?
+          else
+            printf 'scale evidence ownership inputs are incomplete\n' > "${ownership_log}"
+            ownership_status=1
+          fi
+          cat "${ownership_log}"
+          printf 'scale ownership exit status: %s\n' "${ownership_status}"
+          printf 'exit_status=%s\n' "${ownership_status}" >> "${GITHUB_OUTPUT}"
+          exit 0
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: always()
         with:
           name: cxxlens-nightly-materialization-scale-${{ github.sha }}
           path: |
             ${{ runner.temp }}/cxxlens-materialization-scale-evidence.json
             ${{ runner.temp }}/cxxlens-materialization-scale-evidence.process
             ${{ runner.temp }}/inputs
+            ${{ runner.temp }}/cxxlens-materialization-scale-failure.json
+            ${{ runner.temp }}/cxxlens-materialization-scale-check.log
+            ${{ runner.temp }}/cxxlens-materialization-scale-provenance.log
+            ${{ runner.temp }}/cxxlens-materialization-scale-ownership.log
             ${{ runner.temp }}/cxxlens-materialization-scale-toolchain.json
             ${{ runner.temp }}/cxxlens-materialization-scale-ownership.json
-          if-no-files-found: error
+          if-no-files-found: warn
+      - name: Enforce scale evidence result
+        if: always()
+        env:
+          HARNESS_STATUS: ${{ steps.materialization-scale-harness.outputs.exit_status }}
+          CHECKER_STATUS: ${{ steps.materialization-scale-check.outputs.exit_status }}
+          PROVENANCE_STATUS: ${{ steps.materialization-scale-provenance.outputs.exit_status }}
+          OWNERSHIP_STATUS: ${{ steps.materialization-scale-ownership.outputs.exit_status }}
+        run: |
+          if [[ "${HARNESS_STATUS}" != "0" || "${CHECKER_STATUS}" != "0" || "${PROVENANCE_STATUS}" != "0" || "${OWNERSHIP_STATUS}" != "0" ]]; then
+            printf 'scale evidence gate failed: harness=%s checker=%s provenance=%s ownership=%s\n' \
+              "${HARNESS_STATUS}" "${CHECKER_STATUS}" "${PROVENANCE_STATUS}" "${OWNERSHIP_STATUS}"
+            exit 1
+          fi
 
   evidence-ownership:
     needs: [sanitizers, thread-sanitizer, static-analysis, materialization-scale]

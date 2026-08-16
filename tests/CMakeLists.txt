@@ -1047,6 +1047,22 @@ foreach(
                installed_prefix PROCESSORS 2)
 endforeach()
 
+add_test(
+  NAME install.clang22-materializer-installation-binding
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/install/clang22_materializer_installation_binding_test.py"
+    --root "${PROJECT_SOURCE_DIR}" --prefix
+    "${CMAKE_CURRENT_BINARY_DIR}/install-consumer/relocated-prefix"
+    --evidence-dir
+    "${CMAKE_CURRENT_BINARY_DIR}/install-consumer/materialization-binding-evidence"
+)
+set_tests_properties(
+  install.clang22-materializer-installation-binding
+  PROPERTIES LABELS
+             "install;package;acceptance;consumer;materialization;failure;phase"
+             FIXTURES_REQUIRED installed_prefix PROCESSORS 2)
+
 cxxlens_configure_sanitizer_tests()
 if(CXXLENS_ENABLE_ASAN)
   set_property(
