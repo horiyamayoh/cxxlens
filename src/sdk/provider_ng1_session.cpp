@@ -464,6 +464,14 @@ namespace cxxlens::sdk::provider::detail
 		return recovery_.confirm_worker_kill();
 	}
 
+	void ng1_session_coordinator::fail_before_worker_start() noexcept
+	{
+		// No worker exists yet, so a worker-exit transition would manufacture a lifecycle event.
+		// The coordinator is nevertheless terminal for cleanup purposes and must not let its spill
+		// transaction reach the destructor while it is still open.
+		poisoned_ = true;
+	}
+
 	result<void>
 	ng1_session_coordinator::accept_durable_resume(const ng1_resume_control& control,
 												   const ng1_spill_fsync_receipt& receipt,
