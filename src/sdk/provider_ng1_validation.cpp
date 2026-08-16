@@ -473,6 +473,18 @@ namespace cxxlens::sdk::provider::detail
 		return {};
 	}
 
+	void ng1_heartbeat_state::rebase_start(const std::uint64_t started_at_ns) noexcept
+	{
+		started_at_ns_ = started_at_ns;
+		last_probe_sequence_.reset();
+		last_ack_sequence_.reset();
+		last_provider_time_ns_.reset();
+		last_probe_host_receipt_ns_.reset();
+		last_host_receipt_time_ns_.reset();
+		last_valid_ack_received_ns_.reset();
+		terminal_ = false;
+	}
+
 	result<ng1_progress_state> ng1_progress_state::create(std::string task_id,
 														  std::string dependency_group_id,
 														  const std::uint64_t started_at_ns)
@@ -602,6 +614,19 @@ namespace cxxlens::sdk::provider::detail
 			*last_completed_units_ != *total_units_)
 			return unexpected(ng1_error("progress-rate", "terminal", "total-not-reached"));
 		return {};
+	}
+
+	void ng1_progress_state::rebase_start(const std::uint64_t started_at_ns) noexcept
+	{
+		started_at_ns_ = started_at_ns;
+		last_sequence_.reset();
+		last_provider_time_ns_.reset();
+		last_host_receipt_time_ns_.reset();
+		last_completed_units_.reset();
+		rate_checkpoint_receipt_ns_.reset();
+		rate_checkpoint_completed_units_.reset();
+		total_units_.reset();
+		terminal_observed_ = false;
 	}
 
 	result<void> ng1_resume_binding::validate() const
