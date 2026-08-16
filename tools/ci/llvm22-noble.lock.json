@@ -73,7 +73,7 @@
     "suite": "llvm-toolchain-noble-22"
   },
   "local_actions": {
-    ".github/actions/setup-ci/action.yml": "5f18330e7399659f5a967e7c3dcb3810b2466a4176f03577a90955bc63403531"
+    ".github/actions/setup-ci/action.yml": "2c6b3a845e31639e7bcfc2070eb8e97f7d4159dba93ed3166d10f41cfe622a43"
   },
   "local_workflows": {
     ".github/workflows/nightly.yml": "09a19395896317772ff5662bd38f0e195c28898689eac7c3424d9d2d4606ae06"
