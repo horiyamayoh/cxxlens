@@ -695,7 +695,7 @@ def _require_head_bound_authorities(root: pathlib.Path) -> None:
         pathlib.Path(git_authority.__file__).resolve().relative_to(root),
     ]
     try:
-        _manifest_blob, manifest_bytes = git_authority.bind_head_blob(
+        _manifest_mode, _manifest_blob, manifest_bytes = git_authority.bind_head_blob(
             root, MANIFEST.as_posix()
         )
         manifest = yaml.safe_load(manifest_bytes.decode("utf-8"))

@@ -345,7 +345,7 @@ def bind_authority_reading(
     bindings: list[dict[str, str]] = []
     for relative in paths:
         try:
-            blob, content = git_authority.bind_head_blob(root, relative)
+            mode, blob, content = git_authority.bind_head_blob(root, relative)
         except git_authority.GitAuthorityError as error:
             code = str(error).removeprefix("git-authority.")
             if code.startswith("path-missing:"):
@@ -354,6 +354,7 @@ def bind_authority_reading(
         bindings.append(
             {
                 "path": relative,
+                "mode": mode,
                 "blob": blob,
                 "digest": git_authority.sha256_digest(content),
             }

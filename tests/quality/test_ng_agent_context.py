@@ -245,7 +245,8 @@ class AgentContextTests(unittest.TestCase):
         )
         for row in packet["authority_reading_bindings"]:
             self.assertTrue((ROOT / row["path"]).is_file())
-            blob, content = agent.git_authority.bind_head_blob(ROOT, row["path"])
+            mode, blob, content = agent.git_authority.bind_head_blob(ROOT, row["path"])
+            self.assertEqual(row["mode"], mode)
             self.assertEqual(row["blob"], blob)
             self.assertEqual(row["digest"], agent.git_authority.sha256_digest(content))
         with self.assertRaisesRegex(
@@ -301,6 +302,46 @@ class AgentContextTests(unittest.TestCase):
                 revision=git_value("HEAD"),
                 tree=git_value("HEAD^{tree}"),
             )
+
+    def test_index_authority_flags_are_rejected(self) -> None:
+        relative = agent.READINESS_SCHEMA_PATH.as_posix()
+        flag_commands = (
+            ("--assume-unchanged", "--no-assume-unchanged", "path-assume-unchanged"),
+            ("--skip-worktree", "--no-skip-worktree", "path-skip-worktree"),
+        )
+        for enable, disable, error_code in flag_commands:
+            with self.subTest(flag=enable):
+                try:
+                    subprocess.run(
+                        [
+                            "git",
+                            "-C",
+                            str(ROOT),
+                            "update-index",
+                            enable,
+                            "--",
+                            relative,
+                        ],
+                        check=True,
+                    )
+                    with self.assertRaisesRegex(
+                        agent.AgentContextError,
+                        rf"agent-context\.authority-reading-{error_code}",
+                    ):
+                        agent.bind_authority_reading(ROOT, [relative])
+                finally:
+                    subprocess.run(
+                        [
+                            "git",
+                            "-C",
+                            str(ROOT),
+                            "update-index",
+                            disable,
+                            "--",
+                            relative,
+                        ],
+                        check=True,
+                    )
 
     def test_design_feedback_metadata_is_exactly_blocked_pending(self) -> None:
         metadata, _ = agent.design_feedback.split_front_matter(

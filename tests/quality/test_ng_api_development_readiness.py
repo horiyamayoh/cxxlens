@@ -308,6 +308,21 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             quality["jobs"]["check-tier"]["needs"],
         )
 
+    def test_projection_is_not_a_required_qualification_dependency(self) -> None:
+        quality = yaml.safe_load(
+            (ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8")
+        )
+        jobs = quality["jobs"]
+        self.assertIn("agent-context", jobs["quality-evidence"]["needs"])
+        self.assertIn("agent-context", jobs["full-tier"]["needs"])
+        self.assertIn("agent-context-projection", jobs)
+        for job_name, job in jobs.items():
+            needs = job.get("needs", [])
+            if isinstance(needs, str):
+                needs = [needs]
+            with self.subTest(job=job_name):
+                self.assertNotIn("agent-context-projection", needs)
+
     def test_required_status_documentation_is_bound_to_readiness(self) -> None:
         document = (ROOT / readiness.BUILD_TEST_GUIDE_PATH).read_text(encoding="utf-8")
         self.assertIn("`check-tier`", document)

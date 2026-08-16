@@ -37,7 +37,7 @@ def _working_tree_path(root: pathlib.Path, relative: str) -> pathlib.Path:
     return candidate
 
 
-def _head_blob(root: pathlib.Path, relative: str) -> tuple[str, bytes]:
+def _head_blob(root: pathlib.Path, relative: str) -> tuple[str, str, bytes]:
     try:
         tree = subprocess.run(
             [
@@ -91,15 +91,50 @@ def _head_blob(root: pathlib.Path, relative: str) -> tuple[str, bytes]:
         raise GitAuthorityError(
             f"git-authority.blob-content-unavailable:{relative}"
         ) from error
-    return blob, content
+    return mode, blob, content
 
 
-def bind_head_blob(root: pathlib.Path, relative: str) -> tuple[str, bytes]:
-    """Return the exact regular ``HEAD`` blob after checking its worktree path.
+def _require_normal_index_entry(root: pathlib.Path, relative: str) -> None:
+    try:
+        index = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "--literal-pathspecs",
+                "ls-files",
+                "-v",
+                "--error-unmatch",
+                "--",
+                relative,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise GitAuthorityError(
+            f"git-authority.index-entry-unavailable:{relative}"
+        ) from error
+    records = index.stdout.splitlines()
+    if len(records) != 1 or not records[0]:
+        _fail("path-not-tracked", relative)
+    marker = chr(records[0][0])
+    if marker == "H":
+        return
+    if marker.lower() == "h":
+        _fail("path-assume-unchanged", relative)
+    if marker.lower() == "s":
+        _fail("path-skip-worktree", relative)
+    _fail("path-index-flag", relative)
+
+
+def bind_head_blob(root: pathlib.Path, relative: str) -> tuple[str, str, bytes]:
+    """Return the exact regular ``HEAD`` mode/blob after checking the worktree.
 
     The current path must exist without symlink traversal and must contain the
-    same bytes as the blob selected from ``HEAD``.  This deliberately catches
-    tracked-file mutations hidden by Git's assume-unchanged bit.
+    same bytes as the blob selected from ``HEAD``.  The index entry must also
+    be a normal entry, so assume-unchanged and skip-worktree cannot hide a
+    mutation from the authority binding.
     """
     if (
         not relative
@@ -110,7 +145,7 @@ def bind_head_blob(root: pathlib.Path, relative: str) -> tuple[str, bytes]:
     ):
         _fail("path-noncanonical", relative)
     candidate = _working_tree_path(root, relative)
-    blob, content = _head_blob(root, relative)
+    mode, blob, content = _head_blob(root, relative)
     if not candidate.is_file():
         _fail("path-not-regular-file", relative)
     try:
@@ -121,7 +156,8 @@ def bind_head_blob(root: pathlib.Path, relative: str) -> tuple[str, bytes]:
         ) from error
     if working_tree_content != content:
         _fail("path-content-mismatch", relative)
-    return blob, content
+    _require_normal_index_entry(root, relative)
+    return mode, blob, content
 
 
 def sha256_digest(content: bytes) -> str:

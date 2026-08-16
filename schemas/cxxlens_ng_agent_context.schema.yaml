@@ -284,9 +284,10 @@ $defs:
   authority_reading_binding:
     type: object
     additionalProperties: false
-    required: [path, blob, digest]
+    required: [path, mode, blob, digest]
     properties:
       path: {$ref: '#/$defs/repository_path'}
+      mode: {type: string, enum: ["100644", "100755"]}
       blob: {$ref: '#/$defs/hex40'}
       digest: {$ref: '#/$defs/digest'}
   design_feedback_record:
