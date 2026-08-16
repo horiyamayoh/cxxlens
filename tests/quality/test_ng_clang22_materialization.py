@@ -6,6 +6,7 @@ from __future__ import annotations
 import codecs
 import copy
 import hashlib
+import json
 import pathlib
 import re
 import subprocess
@@ -17,9 +18,11 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 sys.path.insert(0, str(ROOT / "tools" / "sdk"))
+sys.path.insert(0, str(ROOT / "tests" / "install"))
 
 import check_ng_clang22_materialization as materialization  # noqa: E402
 import check_ng_clang22_install_matrix as install_matrix  # noqa: E402
+import clang22_materializer_negative_test as installed_negative  # noqa: E402
 from relation_idl_compiler import (  # noqa: E402
     canonical_relation as idl_canonical_relation,
 )
@@ -625,6 +628,314 @@ class NgClang22MaterializationTests(unittest.TestCase):
                         drift,
                         request_bytes=request_bytes,
                     )
+
+    def test_installed_negative_evidence_binds_identity_report_and_receipt(self) -> None:
+        request = self.request("static", "sqlite")
+        request["publication"]["genesis"] = False
+        request["publication"]["expected_parent_publication"] = (
+            "publication:missing-parent"
+        )
+        materialization.bind_request_identity(request)
+        materialization.validate_request(ROOT, request)
+        request_bytes = materialization.canonical_json(request)
+        cause = {
+            "kind": "sdk_error",
+            "operation": "head_current",
+            "access_path": "current-selector",
+            "code": "store.current-corrupt",
+            "field": request["publication"]["series_id"],
+            "detail": {"kind": "stable", "value": "fixture-corrupt"},
+        }
+        report = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="store-stage",
+            code="materialization.store-failure",
+            store_failure_cause=cause,
+        )
+        self.validate_report(
+            request,
+            report,
+            request_bytes=request_bytes,
+            store_failure_authority=cause,
+        )
+        completed = subprocess.CompletedProcess(
+            ["installed-materializer-fixture"],
+            1,
+            materialization.canonical_json(report) + b"\n",
+            b"",
+        )
+        receipt_bytes = installed_negative.make_execution_receipt(
+            ROOT,
+            materialization,
+            completed,
+            "fixture-store-head-corrupt",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_dir = pathlib.Path(directory)
+            installed_negative.write_negative_evidence(
+                materialization,
+                evidence_dir,
+                "fixture-store-head-corrupt",
+                request_bytes,
+                completed,
+                receipt_bytes,
+                request,
+                report,
+            )
+            case_dir = evidence_dir / "fixture-store-head-corrupt"
+            manifest_path = case_dir / installed_negative.NEGATIVE_MANIFEST_FILENAME
+            manifest_bytes = manifest_path.read_bytes()
+            installed_negative.validate_negative_evidence_manifest(
+                materialization,
+                request,
+                report,
+                request_bytes,
+                completed,
+                receipt_bytes,
+                manifest_bytes,
+            )
+            report_path_drift = copy.deepcopy(json.loads(manifest_bytes))
+            report_path_drift["report"]["path"] = "replaced-report.json"
+            with self.assertRaisesRegex(AssertionError, "report path"):
+                installed_negative.validate_negative_evidence_manifest(
+                    materialization,
+                    request,
+                    report,
+                    request_bytes,
+                    completed,
+                    receipt_bytes,
+                    materialization.canonical_json(report_path_drift),
+                )
+            receipt_path_drift = copy.deepcopy(json.loads(manifest_bytes))
+            receipt_path_drift["execution_receipt"]["path"] = (
+                "replaced-execution-receipt.json"
+            )
+            with self.assertRaisesRegex(AssertionError, "execution receipt path"):
+                installed_negative.validate_negative_evidence_manifest(
+                    materialization,
+                    request,
+                    report,
+                    request_bytes,
+                    completed,
+                    receipt_bytes,
+                    materialization.canonical_json(receipt_path_drift),
+                )
+            drift = copy.deepcopy(json.loads(manifest_bytes))
+            drift["source"]["tree"] = "0" * 40
+            with self.assertRaisesRegex(AssertionError, "source identity"):
+                installed_negative.validate_negative_evidence_manifest(
+                    materialization,
+                    request,
+                    report,
+                    request_bytes,
+                    completed,
+                    receipt_bytes,
+                    materialization.canonical_json(drift),
+                )
+
+        absent_cause = {
+            "kind": "sdk_error",
+            "operation": "head_current",
+            "access_path": "current-selector",
+            "code": "store.current-not-found",
+            "field": request["publication"]["series_id"],
+            "detail": {"kind": "stable", "value": ""},
+        }
+        absent_report = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="store-stage",
+            code="materialization.store-failure",
+            store_failure_cause=absent_cause,
+        )
+        self.validate_report(
+            request,
+            absent_report,
+            request_bytes=request_bytes,
+            store_failure_authority=absent_cause,
+        )
+        absent_completed = subprocess.CompletedProcess(
+            ["installed-materializer-fixture"],
+            1,
+            materialization.canonical_json(absent_report) + b"\n",
+            b"",
+        )
+        absent_receipt = installed_negative.make_execution_receipt(
+            ROOT,
+            materialization,
+            absent_completed,
+            "fixture-store-head-absent",
+        )
+        absent_manifest = installed_negative.build_negative_evidence_manifest(
+            materialization,
+            request,
+            absent_report,
+            request_bytes,
+            absent_completed,
+            absent_receipt,
+        )
+        installed_negative.validate_negative_evidence_manifest(
+            materialization,
+            request,
+            absent_report,
+            request_bytes,
+            absent_completed,
+            absent_receipt,
+            absent_manifest,
+        )
+        self.assertEqual(
+            json.loads(absent_manifest)["report"]["head_observation"],
+            "absent",
+        )
+
+    def test_installed_negative_evidence_handles_detailed_and_unbound_reports(
+        self,
+    ) -> None:
+        detailed_request = self.request("static", "sqlite")
+        detailed_request_bytes = materialization.canonical_json(detailed_request)
+        detailed_report = self.report(detailed_request)
+        self.validate_report(
+            detailed_request,
+            detailed_report,
+            request_bytes=detailed_request_bytes,
+        )
+        installed_negative.validate_detailed_report_occurrence(
+            ROOT,
+            materialization,
+            detailed_request,
+            detailed_report,
+        )
+        measured_occurrence_drift = copy.deepcopy(detailed_report)
+        measured_occurrence_drift["installation"]["measured"][
+            "manifest_file_digest"
+        ] = "sha256:" + "0" * 64
+        with self.assertRaises(materialization.MaterializationError):
+            installed_negative.validate_detailed_report_occurrence(
+                ROOT,
+                materialization,
+                detailed_request,
+                measured_occurrence_drift,
+            )
+        detailed_completed = subprocess.CompletedProcess(
+            ["installed-materializer-fixture"],
+            0,
+            materialization.canonical_json(detailed_report) + b"\n",
+            b"",
+        )
+        detailed_receipt = installed_negative.make_execution_receipt(
+            ROOT,
+            materialization,
+            detailed_completed,
+            "fixture-store-head-baseline",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_dir = pathlib.Path(directory)
+            installed_negative.write_negative_evidence(
+                materialization,
+                evidence_dir,
+                "fixture-store-head-baseline",
+                detailed_request_bytes,
+                detailed_completed,
+                detailed_receipt,
+                detailed_request,
+                detailed_report,
+            )
+            detailed_manifest = json.loads(
+                (
+                    evidence_dir
+                    / "fixture-store-head-baseline"
+                    / installed_negative.NEGATIVE_MANIFEST_FILENAME
+                ).read_bytes()
+            )
+        self.assertEqual(detailed_manifest["binding_state"], "detailed")
+        self.assertEqual(
+            detailed_manifest["source"],
+            installed_negative.negative_source_identity(detailed_request),
+        )
+        requested_occurrence_drift = copy.deepcopy(detailed_report)
+        requested_occurrence_drift["installation"]["requested"] = {
+            "occurrence_manifest_digest": "sha256:" + "f" * 64,
+        }
+        requested_drift_manifest = installed_negative.build_negative_evidence_manifest(
+            materialization,
+            detailed_request,
+            requested_occurrence_drift,
+            detailed_request_bytes,
+            detailed_completed,
+            detailed_receipt,
+        )
+        requested_drift_projection = json.loads(requested_drift_manifest)
+        self.assertEqual(
+            requested_drift_projection["source"]["occurrence_manifest_digest"],
+            detailed_report["installation"]["measured"]["manifest_file_digest"],
+        )
+        installed_negative.validate_negative_evidence_manifest(
+            materialization,
+            detailed_request,
+            requested_occurrence_drift,
+            detailed_request_bytes,
+            detailed_completed,
+            detailed_receipt,
+            requested_drift_manifest,
+        )
+
+        unbound_request = self.request("static", "sqlite")
+        unbound_request_bytes = materialization.canonical_json(unbound_request)
+        bound_worker_failure = materialization.compact_failure_report(
+            unbound_request_bytes,
+            request=unbound_request,
+            phase="worker-launch",
+            code="materialization.worker-failure",
+        )
+        self.validate_report(
+            unbound_request,
+            bound_worker_failure,
+            request_bytes=unbound_request_bytes,
+        )
+        unbound_worker_failure = copy.deepcopy(bound_worker_failure)
+        unbound_worker_failure.pop("binding")
+        with self.assertRaises(materialization.MaterializationError):
+            self.validate_report(
+                unbound_request,
+                unbound_worker_failure,
+                request_bytes=unbound_request_bytes,
+            )
+        unbound_completed = subprocess.CompletedProcess(
+            ["installed-materializer-fixture"],
+            1,
+            materialization.canonical_json(unbound_worker_failure) + b"\n",
+            b"",
+        )
+        unbound_receipt = installed_negative.make_execution_receipt(
+            ROOT,
+            materialization,
+            unbound_completed,
+            "fixture-worker-failure-unbound",
+        )
+        unbound_manifest = installed_negative.build_negative_evidence_manifest(
+            materialization,
+            unbound_request,
+            unbound_worker_failure,
+            unbound_request_bytes,
+            unbound_completed,
+            unbound_receipt,
+        )
+        installed_negative.validate_negative_evidence_manifest(
+            materialization,
+            unbound_request,
+            unbound_worker_failure,
+            unbound_request_bytes,
+            unbound_completed,
+            unbound_receipt,
+            unbound_manifest,
+        )
+        unbound_projection = json.loads(unbound_manifest)
+        self.assertEqual(unbound_projection["binding_state"], "unbound")
+        self.assertIsNone(unbound_projection["source"])
+        self.assertIsNone(unbound_projection["request"])
+        self.assertFalse(unbound_projection["qualification"]["native_positive_qualification"])
 
     def test_report_schema_errors_use_report_invalid_family(self) -> None:
         request = self.request()

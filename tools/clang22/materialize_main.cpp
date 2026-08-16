@@ -1822,8 +1822,34 @@ int main(const int argc, char**)
 							{"materialization.spool-failure", "task-index", "create"});
 	auto envelope = scan_materialization_request_envelope(**raw_request, {}, task_index->get());
 	if (!envelope)
+	{
+		const auto& source = envelope.error();
+		if (is_materialization_admission_no_response(source))
+			return no_response();
+		if (source.field == "request-envelope")
+		{
+			if (auto passed = journal->pass_json_decode(); !passed)
+				return no_response();
+		}
+		else if (source.field == "request-version")
+		{
+			if (auto passed = journal->pass_json_decode(); !passed)
+				return no_response();
+			if (auto passed = journal->pass_request_envelope(); !passed)
+				return no_response();
+		}
+		else if (source.field == "request-schema")
+		{
+			if (auto passed = journal->pass_json_decode(); !passed)
+				return no_response();
+			if (auto passed = journal->pass_request_envelope(); !passed)
+				return no_response();
+			if (auto passed = journal->pass_request_version(); !passed)
+				return no_response();
+		}
 		return emit_failure(std::move(*journal),
-							{"materialization.request-invalid", "request-envelope", "strict-json"});
+							{source.code, source.field, source.detail});
+	}
 	if (auto passed = journal->pass_json_decode(); !passed)
 		return no_response();
 	if (auto passed = journal->pass_request_envelope(); !passed)

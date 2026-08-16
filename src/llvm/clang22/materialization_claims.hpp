@@ -171,6 +171,8 @@ namespace cxxlens::detail::clang22::materialization
 	 */
 	struct materialization_bounded_task_claims
 	{
+		/** Caller-visible ordinal; adoption also checks the sealed source-private copy below. */
+		std::uint64_t canonical_task_index{};
 		std::string materializer_semantics_digest;
 		std::string direct_basis_digest;
 		std::string canonical_adoption_transform_digest;
@@ -181,7 +183,19 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<materialization_origin_association> origin_associations;
 		std::vector<materialization_claim_partition> partitions;
 
+		/** Source-private request-entry seal issued with the validated task/result pair. */
+		[[nodiscard]] std::uint64_t sealed_canonical_task_index() const noexcept
+		{
+			return sealed_canonical_task_index_;
+		}
+		[[nodiscard]] std::string_view sealed_request_entry_binding_digest() const noexcept
+		{
+			return sealed_request_entry_binding_digest_;
+		}
+
 		materialization_bounded_task_claims(
+			const std::uint64_t canonical_task_index,
+			std::string sealed_request_entry_binding_digest,
 			std::string materializer_semantics_digest,
 			std::string direct_basis_digest,
 			std::string canonical_adoption_transform_digest,
@@ -191,14 +205,17 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<materialization_canonicalization_edge> canonicalization_edges,
 			std::vector<materialization_origin_association> origin_associations,
 			std::vector<materialization_claim_partition> partitions)
-			: materializer_semantics_digest{std::move(materializer_semantics_digest)},
+			: canonical_task_index{canonical_task_index},
+			  materializer_semantics_digest{std::move(materializer_semantics_digest)},
 			  direct_basis_digest{std::move(direct_basis_digest)},
 			  canonical_adoption_transform_digest{std::move(canonical_adoption_transform_digest)},
 			  base_ingestion_transform_digest{std::move(base_ingestion_transform_digest)},
 			  assumption_set_id{std::move(assumption_set_id)},
 			  claim_envelopes{std::move(claim_envelopes)},
 			  canonicalization_edges{std::move(canonicalization_edges)},
-			  origin_associations{std::move(origin_associations)}, partitions{std::move(partitions)}
+			  origin_associations{std::move(origin_associations)},
+			  partitions{std::move(partitions)}, sealed_canonical_task_index_{canonical_task_index},
+			  sealed_request_entry_binding_digest_{std::move(sealed_request_entry_binding_digest)}
 		{
 		}
 
@@ -209,6 +226,10 @@ namespace cxxlens::detail::clang22::materialization
 			default;
 		materialization_bounded_task_claims&
 		operator=(materialization_bounded_task_claims&&) noexcept = default;
+
+	  private:
+		std::uint64_t sealed_canonical_task_index_{};
+		std::string sealed_request_entry_binding_digest_;
 	};
 
 	/**

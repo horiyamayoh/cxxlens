@@ -681,6 +681,39 @@ namespace
 		{
 			test_parent parent;
 			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint FZ-post raw capability");
+			auto setup = minted->no_effect_request();
+			const auto main = canonical_empty_main(1U);
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main", main)),
+					"write FZ-post main fixture");
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main-wal", {})),
+					"write FZ-post zero-byte WAL fixture");
+			auto classify = setup;
+			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
+			auto observed = observe_sqlite_disposable_raw_empty_family(*minted, classify);
+			require(observed.has_value() &&
+						observed->family.family ==
+							sqlite_disposable_empty_family::exact_pre_or_post_zero_wal &&
+						observed->family.phase == sqlite_disposable_family_phase::post &&
+						observed->observation.main_header ==
+							sqlite_disposable_main_header_state::rollback_empty &&
+						observed->wal && observed->wal->byte_count == 0U,
+					"FZ-post raw family preserves rollback-empty header and zero WAL");
+			auto planned = plan_sqlite_disposable_empty_normalization(observed->observation);
+			require(
+				planned.has_value() &&
+					planned->route ==
+						sqlite_disposable_normalization_route::establish_rollback_empty_anchor &&
+					!planned->uses_existing_zero_byte_wal &&
+					!planned->may_handoff_to_ordinary_fresh_initialization,
+				"FZ-post raw family selects only a rollback-empty anchor route");
+		}
+
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint FO raw capability");
 			auto setup = minted->no_effect_request();
 			const auto main = canonical_empty_main(1U);

@@ -479,7 +479,12 @@ namespace cxxlens::detail::clang22::materialization
 		return materialization_bounded_claim_source{
 			std::move(*request_id),
 			request.engine,
-			static_cast<std::uint64_t>(request.tasks.size())};
+			static_cast<std::uint64_t>(request.tasks.size()),
+			[&request](const std::size_t task_index)
+			{
+				return seal_materialization_incremental_selected_request_entry_binding(request,
+																					   task_index);
+			}};
 	}
 
 	sdk::result<materialization_bounded_claim_source> materialization_bounded_claim_source::begin(
@@ -490,7 +495,18 @@ namespace cxxlens::detail::clang22::materialization
 		return materialization_bounded_claim_source{
 			std::string{authority.materialization_request_id()},
 			*authority.engine(),
-			authority.task_count()};
+			authority.task_count(),
+			[&authority](const std::size_t task_index) -> sdk::result<std::string>
+			{
+				auto* request = authority.request();
+				if (request == nullptr || task_index > std::numeric_limits<std::uint64_t>::max())
+					return sdk::unexpected(source_error("task-binding", "authority"));
+				auto task = request->task_metadata_binding(static_cast<std::uint64_t>(task_index));
+				if (!task)
+					return sdk::unexpected(source_error("task-binding", "metadata"));
+				return seal_materialization_incremental_selected_request_entry_binding(
+					authority, task_index, *task);
+			}};
 	}
 
 	sdk::result<void>
@@ -502,6 +518,43 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			failed_ = true;
 			return sdk::unexpected(source_error("lifecycle", "task-count"));
+		}
+		// The task result is still caller-owned at this point. The public ordinal is checked
+		// against the source-private copy sealed with the validated request/task pair, then the
+		// sealed entry binding is checked against the request authority. Reject every mismatch
+		// before creating or appending to any private spool so relabeling cannot inflate retained
+		// staging state.
+		if (task.canonical_task_index != task.sealed_canonical_task_index())
+		{
+			failed_ = true;
+			return sdk::unexpected(source_error("task-binding", "sealed-index"));
+		}
+		if (task.sealed_canonical_task_index() != consumed_task_count_)
+		{
+			failed_ = true;
+			return sdk::unexpected(source_error("task-order", "canonical-next"));
+		}
+		if (!selected_request_entry_binding_resolver_ ||
+			consumed_task_count_ > std::numeric_limits<std::size_t>::max())
+		{
+			failed_ = true;
+			return sdk::unexpected(source_error("task-binding", "sealed-request-entry"));
+		}
+		try
+		{
+			auto expected_binding = selected_request_entry_binding_resolver_(
+				static_cast<std::size_t>(consumed_task_count_));
+			if (!expected_binding ||
+				task.sealed_request_entry_binding_digest() != *expected_binding)
+			{
+				failed_ = true;
+				return sdk::unexpected(source_error("task-binding", "sealed-request-entry"));
+			}
+		}
+		catch (const std::bad_alloc&)
+		{
+			failed_ = true;
+			return sdk::unexpected(source_error("task-binding", "allocation"));
 		}
 		if (task.partitions.empty())
 		{
