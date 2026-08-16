@@ -1,6 +1,6 @@
 # cxxlens
 
-> **cxxlens は、コンパイラの観測結果を、再現可能・問い合わせ可能・証拠付きの意味知識へ変換し、分からない場合には何が足りないかまで返す基盤です。**
+> **cxxlens は、コンパイラの観測結果を、再現可能・問い合わせ可能・証拠付きの意味知識へ変換し、分からない場合には何が足りないかまで返す基盤である。**
 
 `cxxlens` は、静的解析器・言語解析器・意味検索・移行・リファクタリング支援を構築するための
 C++23 Semantic Relation Platform です。versioned relation、semantic claim、immutable snapshot、
