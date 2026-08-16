@@ -64,3 +64,4 @@ jobs:
           echo '>>>BEGIN_READINESS_B64'
           base64 -w 120 tools/quality/check_ng_api_development_readiness.py
           echo '>>>END_READINESS_B64'
+          echo 'overlay-export-complete'
