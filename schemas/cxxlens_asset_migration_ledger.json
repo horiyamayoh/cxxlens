@@ -1,5 +1,5 @@
 {
-  "asset_count": 673,
+  "asset_count": 675,
   "assets": [
     {
       "authority": "active",
@@ -1431,6 +1431,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0261-source-closure-vfs.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/doxygen-main.md",
       "removal_issue": null,
       "replacement": null,
@@ -2566,6 +2573,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_store_conformance_vectors.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/logical_path_segments.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4714,7 +4728,7 @@
     }
   ],
   "classifications": {
-    "active": 637,
+    "active": 639,
     "archived": 35,
     "generated": 1
   },
