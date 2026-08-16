@@ -190,6 +190,22 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] bool operator==(const ng1_spill_fsync_receipt&) const = default;
 	};
 
+	/**
+	 * Source-private durable frontier for the latest accepted resume checkpoint.
+	 *
+	 * The receipt proves the exact spill prefix; the generation proves which resume
+	 * publication is latest. Keeping both values in the port-owned frontier prevents
+	 * a fresh coordinator from treating a matching but older receipt as current.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_spill_resume_frontier
+	{
+		ng1_spill_fsync_receipt receipt;
+		std::uint64_t resume_generation{};
+
+		[[nodiscard]] result<void> validate() const;
+		[[nodiscard]] bool operator==(const ng1_spill_resume_frontier&) const = default;
+	};
+
 	/** Exact identity binding for one source-private staged spill prefix. */
 	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_spill_binding
 	{

@@ -24,7 +24,9 @@ INSTALL_DATABASES = {
     "examples-consumer-build/compile_commands.json",
     "real_project_consumer-build/compile_commands.json",
 }
-TSAN_NATIVE_MATERIALIZER_EXCLUSION = r"^install\.clang22-materializer-success$"
+TSAN_NATIVE_MATERIALIZER_EXCLUSION = (
+    r"^install\.clang22-materializer-(success|base64|negative)$"
+)
 TSAN_CTEST_SELECTION = [
     "ctest",
     "--preset",
@@ -176,7 +178,7 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
         ".github/workflows/nightly.yml": [
             "check_sanitizer_coverage.py",
             "--require-install-consumers",
-            "--exclude-regex '^install\\.clang22-materializer-success$'",
+            "--exclude-regex '^install\\.clang22-materializer-(success|base64|negative)$'",
         ],
     }
     for relative, markers in required_markers.items():

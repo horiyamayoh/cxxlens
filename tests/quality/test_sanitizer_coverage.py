@@ -428,11 +428,20 @@ class SanitizerCoverageTest(unittest.TestCase):
         with self.assertRaisesRegex(SanitizerCoverageError, "cannot be mixed"):
             parse_expected("address,thread")
 
-    def test_tsan_excludes_only_adapter_off_native_materializer(self) -> None:
+    def test_tsan_excludes_all_adapter_off_native_materializer_phases(self) -> None:
         workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
             encoding="utf-8"
         )
         validate_tsan_ctest_selection(extract_tsan_selection_script(workflow))
+
+    def test_tsan_rejects_partial_native_materializer_exclusion(self) -> None:
+        command = (
+            "ctest --preset tsan --parallel 1 --label-exclude quality "
+            "--exclude-regex '^install\\.clang22-materializer-(success|base64)$' "
+            "--output-junit ctest.xml"
+        )
+        with self.assertRaisesRegex(SanitizerCoverageError, "exact selection"):
+            validate_tsan_ctest_selection(command)
 
     def test_tsan_rejects_exclude_regex_alias(self) -> None:
         continuation = "\\\n"

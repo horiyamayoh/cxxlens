@@ -79,6 +79,24 @@ namespace
 			return bytes_;
 		}
 
+		result<std::optional<ng1_spill_resume_frontier>> read_resume_frontier() const override
+		{
+			return frontier_;
+		}
+
+		result<void> persist_resume_frontier(const ng1_spill_resume_frontier& value) override
+		{
+			if (auto valid = value.validate(); !valid)
+				return unexpected(std::move(valid.error()));
+			if (frontier_ &&
+				(value.resume_generation <= frontier_->resume_generation ||
+				 value.receipt.fsync_sequence <= frontier_->receipt.fsync_sequence))
+				return unexpected(
+					error{"provider.resume-token-stale", "resume_frontier", "not-increasing"});
+			frontier_ = value;
+			return {};
+		}
+
 		result<void> cleanup() override
 		{
 			cleaned_ = true;
@@ -88,6 +106,7 @@ namespace
 	  private:
 		std::vector<std::byte> bytes_;
 		std::uint64_t fsync_sequence_{};
+		std::optional<ng1_spill_resume_frontier> frontier_;
 		bool cleaned_{};
 	};
 
