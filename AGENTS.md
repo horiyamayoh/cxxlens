@@ -49,6 +49,35 @@ coding agent は authority 全体から作業契約を推測しない。goal/use
 allowed write paths、required evidence、既知 design feedback、forbidden shortcuts、completion commands を持つ
 最小 context を生成または issue に固定してから書き込みを開始する。
 
+## Issue completion and qualification boundary
+
+通常の implementation issue の既定完了クラスは **bounded implementation completion** とする。
+issue を閉じるために distribution 全体の production qualification を再実行・再証明してはならない。
+
+bounded implementation completion は、担当 issue の exact contract と明示 scope に対して次を要求する。
+
+- 宣言した実装範囲が完成し、scope 内に placeholder、silent fallback、既知の correctness/security/invariant blocker が残っていない
+- 変更した振る舞いと直接 dependency closure に対する positive/negative test、必要な determinism/resource/error evidence が成功する
+- 変更した public contract、schema、catalog、Doxygen、example、生成 inventory のうち直接影響するものが整合する
+- scope 外の native/platform/static/shared/install/consumer/Nightly/release evidence は、必要なら別 issue または tracked gap に
+  owner、依存順、完了条件とともに残す
+- PR と issue close evidence が、実装完了、support/stability、production qualification を混同せず、
+  `production qualification: not claimed` または issue が所有する限定的な qualification claim を明示する
+- Learning checkpoint を `none` または関連 DF ID として記録する
+
+通常の issue には、全 static/shared matrix、installed consumer 全件、native toolchain/platform matrix、`full`/`stress`、
+Nightly、release evaluation、terminal production-scope closure、無関係な issue/gate の完了を要求しない。
+それらは merged `main`、Nightly/release workflow、または exact contract と label で明示された
+`integration-gate` / `readiness-gate` / qualification issue が所有する。
+
+後続の統合 gate が失敗した場合は、まず統合 failure を owner issue に記録する。閉じた implementation issue を再度開くのは、
+その failure が当該 issue の bounded acceptance を誤りと証明した場合、または当該 scope に regression がある場合だけとする。
+単に製品全体が未認定であることは reopen 理由にしない。
+
+この節は、下位の development prose にある「各 implementation issue の close に exact merged-main production
+qualification が必要」という一般化を置換する。protected-main と最終 release qualification 自体は弱めず、
+責任を個別実装から統合／release gate へ移す。
+
 ## Goal standing authorization
 
 Repository policy `CXXLENS_AGENT_AUTHORIZATION_V1` は、`/goal` が
@@ -68,7 +97,8 @@ issue/PR workflow は standing authorization の範囲とする。当初想定�
 destructive/history rewrite、branch protection、secret/permission、課金、外部 production deploy、active issue/PR workflow 外の
 第三者連絡、ユーザー変更との解消不能な競合、authority で決められない重大な public semantics は、対象と effect を開示して fresh
 approval を得る。sandbox/system/platform の approval は standing authorization で迂回しない。`main` は unit branch、PR、exact-head
-required checks、review resolution、merge、exact merged-main qualification の順でのみ更新する。
+required checks、review resolution、merge、exact merged-main integration evaluation の順でのみ更新する。
+integration evaluation は bounded implementation completion と production qualification を混同しない。
 
 ## Required implementation rules
 
@@ -104,13 +134,23 @@ required checks、review resolution、merge、exact merged-main qualification �
 
 ## Commands and completion
 
+通常の issue は、issue に固定した affected target/test/checker を実行する。代表例は次のとおり。
+
 ```sh
 CXX=clang++ cmake --preset dev-clang
-cmake --build --preset dev-clang
-ctest --preset dev-clang
-cmake --build --preset dev-clang --target cxxlens-quality
+cmake --build --preset dev-clang --target <affected-targets>
+ctest --preset dev-clang -R '<affected-tests>' --output-on-failure
+python3 tools/quality/run_gate.py fast --preset dev-clang \
+  --report build/dev-clang/fast-report.json
 ```
+
+public contract/schema/documentation を変更した場合は、その変更に直接対応する validator/checker を追加する。
+`cmake --build --preset dev-clang --target cxxlens-quality`、`run_gate.py check|full|stress`、install/native matrix、
+Nightly/release command は、その checker または qualification surface を issue が明示的に所有する場合だけ issue 完了条件に含める。
+それ以外の全体 evidence は `main` と統合／release gate が所有する。
 
 公開 API は header/signature/ownership、error/unresolved/coverage、ID/order、schema/invariant、
 positive/negative test、example、catalog ID に加え、consumer/use-case trace、需要側 closure disposition、
-actionable unknown/completion plan、必要な constructibility witness が揃うまで完成扱いにしない。
+actionable unknown/completion plan、必要な constructibility witness が **当該 issue の宣言範囲内で** 揃えば
+bounded implementation completion として完成扱いにできる。production-supported または release-qualified の宣言は、
+対応する独立 qualification gate が成功するまで行わない。

@@ -1659,6 +1659,25 @@ namespace
 					sealed_execution->sealed && sealed_execution->provider_identity &&
 					sealed_execution->runtime_receipt,
 				receipt_failure);
+		auto runtime_binding =
+			detail::validate_provider_process_runtime_binding(*sealed_execution, receipt_request);
+		require(runtime_binding.has_value(),
+				"accepted process task was not bound to its sealed runtime receipt");
+		auto stale_input_request = receipt_request;
+		stale_input_request.task_input_digest =
+			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+		auto stale_input = detail::validate_provider_process_runtime_binding(*sealed_execution,
+																			 stale_input_request);
+		require(!stale_input && stale_input.error().code == "provider.task-binding-mismatch" &&
+					stale_input.error().field == "task_input_digest",
+				"stale task input digest reached the runtime handoff");
+		auto mutated_raw_observation = *sealed_execution;
+		mutated_raw_observation.raw_frame_stream.back() ^= std::byte{1U};
+		auto mutated_raw = detail::validate_provider_process_runtime_binding(
+			mutated_raw_observation, receipt_request);
+		require(!mutated_raw && mutated_raw.error().code == "provider.task-binding-mismatch" &&
+					mutated_raw.error().field == "runtime_receipt.raw_observation",
+				"mutated raw provider output reached the runtime handoff");
 		auto missing_runtime_receipt = *sealed_execution;
 		missing_runtime_receipt.runtime_receipt.reset();
 		require(!missing_runtime_receipt.succeeded(),

@@ -8844,10 +8844,17 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<
+				sqlite_shm_reader_native_ok_projection_source_observation>
+			observe_reader_native_ok_projection_source(
+				const sqlite_shm_reader_native_ok_projection_reservation& reservation,
+				const sqlite_source_shm_target_namespace_epoch_reader_borrow& borrow);
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
 			attach_reader_native_ok_projection(
 				sqlite_shm_reader_native_ok_projection_reservation& reservation,
-				sqlite_source_shm_target_namespace_epoch_reader_borrow borrow);
+				sqlite_source_shm_target_namespace_epoch_reader_borrow borrow,
+				sqlite_shm_reader_native_ok_projection_source_observation source_observation);
 
 			[[nodiscard]]
 			sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
@@ -23690,10 +23697,90 @@ namespace cxxlens::sdk
 			std::atomic_bool emergency_quarantine_{false};
 		};
 
+		sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_source_observation>
+		sqlite_shm_mapping_lease_state::observe_reader_native_ok_projection_source(
+			const sqlite_shm_reader_native_ok_projection_reservation& reservation,
+			const sqlite_source_shm_target_namespace_epoch_reader_borrow& borrow)
+		{
+			if (!reservation.valid() || !borrow.valid())
+				return sqlite_shm_unexpected(
+					rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+							  sqlite_shm_lease_recovery_action::deny_before_native_map));
+			try
+			{
+				const auto reservation_state = reservation.state_.get();
+				if (reservation_state == nullptr || reservation_state->lease.lock().get() != this)
+					return sqlite_shm_unexpected(
+						stale_token(sqlite_shm_lease_recovery_action::deny_before_native_map));
+				const auto requested_target =
+					reservation_state->request.expected_attachment.target_identity();
+				if (!requested_target || !borrow.recheck())
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+
+				auto retained = borrow.retained_entry(sqlite_backend_file_role::shared_memory);
+				if (!retained)
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+				const auto retained_mount = retained->held_object
+					? retained->held_object->object_mount_identity()
+					: std::optional<sqlite_backend_opaque_identity>{};
+				if (retained->role != sqlite_backend_file_role::shared_memory ||
+					retained->state != sqlite_backend_entry_state::held_regular ||
+					!retained->object_identity || !retained->directory_entry_identity ||
+					!retained->held_object ||
+					retained->held_object->role() != sqlite_backend_file_role::shared_memory ||
+					!retained->direct_regular_entry || !retained_mount)
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+
+				std::optional<sqlite_backend_opaque_identity> retained_filesystem;
+				if (retained->object_filesystem_profile)
+					retained_filesystem = *retained->object_filesystem_profile;
+				else if (retained->held_object->object_filesystem_profile())
+					retained_filesystem = *retained->held_object->object_filesystem_profile();
+				auto retained_size = retained->held_object->size();
+				if (!retained_filesystem || !retained_size)
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+
+				auto observed_target = sqlite_shm_reader_attachment_target_identity{
+					borrow.identity(),
+					borrow.parent_namespace_identity(),
+					*retained->object_identity,
+					*retained->directory_entry_identity,
+					*retained_filesystem,
+					*retained_mount,
+					*retained_size};
+				if (observed_target.parent_namespace != requested_target->parent_namespace ||
+					observed_target.shm_object != requested_target->shm_object ||
+					observed_target.shm_entry != requested_target->shm_entry ||
+					observed_target.filesystem != requested_target->filesystem ||
+					observed_target.mount != requested_target->mount ||
+					observed_target.sealed_shm_size != requested_target->sealed_shm_size)
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+				return sqlite_shm_reader_native_ok_projection_source_observation{
+					std::move(observed_target)};
+			}
+			catch (...)
+			{
+				return sqlite_shm_unexpected(
+					rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+							  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+			}
+		}
+
 		sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
 		sqlite_shm_mapping_lease_state::attach_reader_native_ok_projection(
 			sqlite_shm_reader_native_ok_projection_reservation& reservation,
-			sqlite_source_shm_target_namespace_epoch_reader_borrow borrow)
+			sqlite_source_shm_target_namespace_epoch_reader_borrow borrow,
+			sqlite_shm_reader_native_ok_projection_source_observation source_observation)
 		{
 			if (!reservation.valid() || !borrow.valid())
 				return sqlite_shm_unexpected(
@@ -23725,13 +23812,14 @@ namespace cxxlens::sdk
 				const auto holder_target = holder->map_receipt.target_identity();
 				if (!requested || !holder_target || map->request != reservation_state->request ||
 					!borrow.matches_projection_reservation(reservation) ||
-					borrow.parent_namespace_identity() != requested->parent_namespace ||
-					holder_target->parent_namespace != requested->parent_namespace)
+					source_observation.target.namespace_epoch != borrow.identity() ||
+					source_observation.target.parent_namespace != requested->parent_namespace ||
+					source_observation.target.parent_namespace != holder_target->parent_namespace)
 					return sqlite_shm_unexpected(
 						rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
 								  sqlite_shm_lease_recovery_action::deny_before_native_map));
 				auto exact_target = *requested;
-				exact_target.namespace_epoch = borrow.identity();
+				exact_target.namespace_epoch = source_observation.target.namespace_epoch;
 				map->native_ok_projection_exact_target = std::move(exact_target);
 				map->native_ok_projection_reservation_armed = false;
 				map->native_ok_projection_permit_armed = true;
@@ -25380,12 +25468,22 @@ namespace cxxlens::sdk
 		return reservation.state_->mint_capability.mint(reservation);
 	}
 
+	sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_source_observation>
+	sqlite_same_process_shm_mapping_lease_coordinator::observe_reader_native_ok_projection_source(
+		const sqlite_shm_reader_native_ok_projection_reservation& reservation,
+		const sqlite_source_shm_target_namespace_epoch_reader_borrow& borrow)
+	{
+		return state_->observe_reader_native_ok_projection_source(reservation, borrow);
+	}
+
 	sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
 	sqlite_same_process_shm_mapping_lease_coordinator::attach_reader_native_ok_projection(
 		sqlite_shm_reader_native_ok_projection_reservation& reservation,
-		sqlite_source_shm_target_namespace_epoch_reader_borrow borrow)
+		sqlite_source_shm_target_namespace_epoch_reader_borrow borrow,
+		sqlite_shm_reader_native_ok_projection_source_observation source_observation)
 	{
-		return state_->attach_reader_native_ok_projection(reservation, std::move(borrow));
+		return state_->attach_reader_native_ok_projection(
+			reservation, std::move(borrow), std::move(source_observation));
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>

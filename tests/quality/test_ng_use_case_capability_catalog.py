@@ -29,6 +29,14 @@ class UseCaseCapabilityCatalogTests(unittest.TestCase):
         self.assertEqual(report["projection"]["status"], "declaration-only-not-qualified")
         self.assertEqual(len(report["use_cases"]), 7)
         self.assertEqual(
+            next(
+                entry["disposition"]
+                for entry in report["use_cases"]
+                if entry["id"] == "repository-semantic-query"
+            ),
+            "blocked",
+        )
+        self.assertEqual(
             report["use_cases"][0]["id"],
             "abi-ir-binary-evidence",
         )

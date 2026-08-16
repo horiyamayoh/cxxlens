@@ -85,6 +85,7 @@ properties:
             pattern: '^[a-z][a-z0-9-]*$'
         disposition:
           enum:
+            - blocked
             - tracked-gap
             - tracked-roadmap
             - optional-versioned-capability

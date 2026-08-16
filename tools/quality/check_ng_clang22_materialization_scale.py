@@ -60,6 +60,8 @@ FORBIDDEN_RESIDENCY = [
     "all-task-payloads",
     "task-count-times-catalog-count",
 ]
+RUN_MARKER_SCHEMA = "cxxlens.clang22-materialization-scale-run.v1"
+RUN_MARKER_STATUSES = {"passed", "failed", "aborted"}
 
 
 class ScaleEvidenceError(ValueError):
@@ -75,6 +77,11 @@ def parse_args() -> argparse.Namespace:
         "--require-installed-scenarios",
         default="",
         help="comma-separated installed-positive scenario IDs required by this check",
+    )
+    parser.add_argument(
+        "--run-marker",
+        type=pathlib.Path,
+        help="independently check the harness progress/result/failure marker",
     )
     return parser.parse_args()
 
@@ -103,6 +110,102 @@ def git_value(root: pathlib.Path, expression: str) -> str:
     return subprocess.check_output(
         ["git", "rev-parse", expression], cwd=root, text=True
     ).strip()
+
+
+def load_run_marker(marker_path: pathlib.Path) -> dict[str, Any]:
+    raw = marker_path.read_bytes()
+    try:
+        marker = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise ScaleEvidenceError(f"scale run marker is not JSON: {error}") from error
+    if raw != canonical_json(marker):
+        raise ScaleEvidenceError("scale run marker is not canonical JSON")
+    if not isinstance(marker, dict):
+        raise ScaleEvidenceError("scale run marker is not an object")
+    return marker
+
+
+def check_run_marker(
+    root: pathlib.Path,
+    marker_path: pathlib.Path,
+    report_path: pathlib.Path | None = None,
+) -> dict[str, Any]:
+    marker = load_run_marker(marker_path)
+    required = {
+        "schema",
+        "status",
+        "exit_status",
+        "source_revision",
+        "source_tree",
+        "driver",
+        "report",
+        "phase",
+        "current_scenario",
+        "scenarios",
+        "failure",
+    }
+    if set(marker) != required:
+        raise ScaleEvidenceError("scale run marker fields are incomplete or unexpected")
+    if marker["schema"] != RUN_MARKER_SCHEMA:
+        raise ScaleEvidenceError("scale run marker schema is not exact")
+    if marker["status"] not in RUN_MARKER_STATUSES:
+        raise ScaleEvidenceError(f"scale run marker has an invalid status: {marker['status']}")
+    if marker["source_revision"] != git_value(root, "HEAD"):
+        raise ScaleEvidenceError("scale run marker revision is not bound to the checked tree")
+    if marker["source_tree"] != git_value(root, "HEAD^{tree}"):
+        raise ScaleEvidenceError("scale run marker tree is not bound to the checked tree")
+    if not isinstance(marker["driver"], str) or not marker["driver"]:
+        raise ScaleEvidenceError("scale run marker driver is missing")
+    if not isinstance(marker["report"], str) or not marker["report"]:
+        raise ScaleEvidenceError("scale run marker report name is missing")
+    if report_path is not None and marker["report"] != report_path.name:
+        raise ScaleEvidenceError("scale run marker is bound to a different report")
+    if marker["phase"] != "complete" or marker["current_scenario"] is not None:
+        raise ScaleEvidenceError("scale run marker did not reach a terminal phase")
+    if not isinstance(marker["scenarios"], list):
+        raise ScaleEvidenceError("scale run marker scenarios are not a list")
+
+    scenario_ids: list[str] = []
+    for scenario in marker["scenarios"]:
+        if not isinstance(scenario, dict):
+            raise ScaleEvidenceError("scale run marker contains a non-object scenario")
+        if set(scenario) != {"id", "expected", "status", "input", "admission", "installed"}:
+            raise ScaleEvidenceError("scale run marker scenario fields are not exact")
+        scenario_id = scenario["id"]
+        expected = "reject" if scenario_id == "raw-request-limit-plus-one" else "pass"
+        if scenario_id not in REQUIRED_SCENARIOS or scenario_id in scenario_ids:
+            raise ScaleEvidenceError("scale run marker scenario census is duplicated or unknown")
+        if scenario["expected"] != expected:
+            raise ScaleEvidenceError(f"scale run marker expected boundary differs: {scenario_id}")
+        if scenario["status"] not in {"passed", "failed", "aborted"}:
+            raise ScaleEvidenceError(f"scale run marker scenario is not terminal: {scenario_id}")
+        if scenario["input"] != "generated":
+            raise ScaleEvidenceError(f"scale run marker lacks generated input: {scenario_id}")
+        if scenario["admission"] not in {"passed", "expected-rejection", "failed"}:
+            raise ScaleEvidenceError(f"scale run marker lacks admission result: {scenario_id}")
+        if scenario["installed"] not in {None, "passed", "expected-rejection", "failed"}:
+            raise ScaleEvidenceError(f"scale run marker has an invalid installed result: {scenario_id}")
+        scenario_ids.append(scenario_id)
+
+    failure = marker["failure"]
+    if marker["status"] == "passed":
+        if marker["exit_status"] != 0 or set(scenario_ids) != REQUIRED_SCENARIOS:
+            raise ScaleEvidenceError("passed scale run marker is incomplete")
+        if any(scenario["status"] != "passed" for scenario in marker["scenarios"]):
+            raise ScaleEvidenceError("passed scale run marker contains a failed scenario")
+        if failure is not None:
+            raise ScaleEvidenceError("passed scale run marker contains a failure")
+    elif marker["status"] == "failed":
+        if marker["exit_status"] != 1 or not any(
+            scenario["status"] == "failed" for scenario in marker["scenarios"]
+        ):
+            raise ScaleEvidenceError("failed scale run marker lacks a failed scenario")
+        if not isinstance(failure, dict) or failure.get("scenario_id") not in scenario_ids:
+            raise ScaleEvidenceError("failed scale run marker lacks its owning scenario")
+    else:
+        if marker["exit_status"] not in {2, 130} or not isinstance(failure, dict):
+            raise ScaleEvidenceError("aborted scale run marker lacks its failure boundary")
+    return marker
 
 
 def load_report(root: pathlib.Path, report_path: pathlib.Path) -> dict[str, Any]:
@@ -435,6 +538,8 @@ def main() -> int:
     if unknown:
         raise ScaleEvidenceError(f"unknown required installed scenario: {sorted(unknown)}")
     check_report(root, report_path, required_installed)
+    if args.run_marker is not None:
+        check_run_marker(root, args.run_marker.resolve(), report_path)
     print(f"verified {len(REQUIRED_SCENARIOS)} materialization scale scenarios")
     return 0
 
