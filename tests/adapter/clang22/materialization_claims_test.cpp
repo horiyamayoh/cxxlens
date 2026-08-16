@@ -26,6 +26,7 @@
 
 #include "llvm/clang22/materialization_bounded_claim_source.hpp"
 #include "llvm/clang22/materialization_claim_stream.hpp"
+#include "llvm/clang22/materialization_identity.hpp"
 #include "llvm/clang22/materialization_incremental_coordinator.hpp"
 #include "llvm/clang22/materialization_incremental_ingress.hpp"
 #include "llvm/clang22/materialization_incremental_receipt.hpp"
@@ -486,6 +487,63 @@ namespace
 		return std::move(*request);
 	}
 
+	[[nodiscard]] validated_materialization_request
+	coherent_rebound_request(const validated_materialization_request& request)
+	{
+		auto root_object = *request.document.root().as_object();
+		auto publication_object = *root_object.at("publication").as_object();
+		auto selector_object = *publication_object.at("selector").as_object();
+		const auto rebound_channel = std::string{"channel:clang22-cross-request"};
+		selector_object.at("channel_id") = *json_string(rebound_channel);
+		publication_object.at("selector") = *json_object(std::move(selector_object));
+		auto rebound_selector = request.publication.selector;
+		rebound_selector.channel_id = rebound_channel;
+		publication_object.at("series_id") = *json_string(rebound_selector.id());
+		root_object.at("publication") = *json_object(std::move(publication_object));
+		auto rebound_root = json_object(std::move(root_object));
+		require(rebound_root.has_value(), "coherent rebound request root construction failed");
+
+		constexpr std::array identity_members{
+			std::string_view{"materialization_request_id"},
+			std::string_view{"request_digest"},
+			std::string_view{"semantic_request_digest"},
+		};
+		auto request_projection = object_without(*rebound_root, identity_members);
+		require(request_projection.has_value(), "coherent rebound request projection failed");
+		auto request_digest =
+			projection_digest("cxxlens.clang22-materialization-request.v2", *request_projection);
+		require(request_digest.has_value(), "coherent rebound request digest failed");
+
+		auto semantic_object = *request_projection->as_object();
+		auto semantic_publication = *semantic_object.at("publication").as_object();
+		for (const auto member : {std::string_view{"backend"},
+								  std::string_view{"series_id"},
+								  std::string_view{"expected_parent_publication"},
+								  std::string_view{"sqlite_path"}})
+			semantic_publication.erase(std::string{member});
+		semantic_object.at("publication") = *json_object(std::move(semantic_publication));
+		auto semantic_projection = json_object(std::move(semantic_object));
+		require(semantic_projection.has_value(), "coherent rebound semantic projection failed");
+		auto semantic_digest =
+			projection_digest("cxxlens.clang22-semantic-request.v2", *semantic_projection);
+		require(semantic_digest.has_value(), "coherent rebound semantic digest failed");
+
+		root_object = *rebound_root->as_object();
+		root_object.at("materialization_request_id") =
+			*json_string("materialization:" + *request_digest);
+		root_object.at("request_digest") = *json_string(*request_digest);
+		root_object.at("semantic_request_digest") = *json_string(*semantic_digest);
+		rebound_root = json_object(std::move(root_object));
+		require(rebound_root.has_value(), "coherent rebound request identity construction failed");
+		auto document = parse_json_object(canonical_json(*rebound_root));
+		require(document.has_value(), "coherent rebound request JSON parse failed");
+		auto rebound = validate_materialization_request(std::move(*document));
+		require(rebound.has_value(),
+				"coherent rebound request validation failed: " +
+					(rebound ? std::string{} : failure(rebound.error())));
+		return std::move(*rebound);
+	}
+
 	void replace_once(std::string& value, const std::string_view from, const std::string_view to)
 	{
 		const auto offset = value.find(from);
@@ -829,6 +887,111 @@ namespace
 					streaming_transaction->draft.catalog_semantic_digest ==
 						request.tasks.front().worker_input.project_catalog.catalog_digest,
 				"sealed claims did not produce the streaming Store metadata");
+		auto coherent_request_b = coherent_rebound_request(request);
+		auto request_a_id = materialization_incremental_request_id(request);
+		auto request_b_id = materialization_incremental_request_id(coherent_request_b);
+		require(request_a_id.has_value() && request_b_id.has_value() &&
+					*request_a_id != *request_b_id &&
+					coherent_request_b.catalog.catalog_id == request.catalog.catalog_id &&
+					coherent_request_b.catalog.catalog_digest == request.catalog.catalog_digest &&
+					coherent_request_b.tasks.size() == request.tasks.size(),
+				"coherent rebound request did not preserve the catalog/task census while changing "
+				"identity");
+		auto cross_request_store =
+			make_materialization_store_transaction(coherent_request_b, *claims);
+		require(!cross_request_store &&
+					cross_request_store.error().code == "materialization.task-binding-mismatch" &&
+					cross_request_store.error().field == "request" &&
+					cross_request_store.error().detail == "request-identity-or-task-census",
+				"claims from request A were accepted for coherent request B Store metadata");
+		auto cross_request_streaming =
+			make_materialization_streaming_store_transaction(coherent_request_b, *claims);
+		require(!cross_request_streaming &&
+					cross_request_streaming.error().code ==
+						"materialization.task-binding-mismatch" &&
+					cross_request_streaming.error().field == "request" &&
+					cross_request_streaming.error().detail == "request-identity-or-task-census",
+				"claims from request A were accepted for coherent request B streaming metadata");
+		const auto require_claims_request_binding_rejection =
+			[&](validated_materialization_request candidate, const std::string_view mutation)
+		{
+			auto transaction = make_materialization_store_transaction(candidate, *claims);
+			require(!transaction &&
+						transaction.error().code == "materialization.task-binding-mismatch" &&
+						transaction.error().field == "request" &&
+						transaction.error().detail == "request-identity-or-task-census",
+					"claims Store metadata accepted a mutable request " + std::string{mutation});
+			auto streaming = make_materialization_streaming_store_transaction(candidate, *claims);
+			require(!streaming &&
+						streaming.error().code == "materialization.task-binding-mismatch" &&
+						streaming.error().field == "request" &&
+						streaming.error().detail == "request-identity-or-task-census",
+					"claims streaming Store metadata accepted a mutable request " +
+						std::string{mutation});
+		};
+
+		auto mutated_task = request;
+		mutated_task.tasks.front().worker_payload.push_back(std::byte{0x01});
+		require_claims_request_binding_rejection(std::move(mutated_task), "task payload");
+
+		auto rebound_task = request;
+		rebound_task.tasks.front().worker_input.budget.wall_ms += 1U;
+		auto rebound_payload = encode_task_input(rebound_task.tasks.front().worker_input);
+		require(rebound_payload.has_value(),
+				"coherent mutable task payload fixture encoding failed");
+		rebound_task.tasks.front().worker_payload = *rebound_payload;
+		rebound_task.tasks.front().task_input_digest = sdk::content_digest(
+			std::span<const std::byte>{rebound_payload->data(), rebound_payload->size()});
+		require_claims_request_binding_rejection(std::move(rebound_task),
+												 "coherent task payload and digest");
+
+		auto mutated_task_identity = request;
+		mutated_task_identity.tasks.front().provider_task_id += ":rebound";
+		require_claims_request_binding_rejection(std::move(mutated_task_identity),
+												 "provider task identity");
+
+		auto mutated_execution = request;
+		mutated_execution.tasks.front().provider_execution_id += ":rebound";
+		require_claims_request_binding_rejection(std::move(mutated_execution),
+												 "provider execution identity");
+
+		auto mutated_sandbox = request;
+		mutated_sandbox.tasks.front().sandbox.policy_digest = "sha256:" + std::string(64U, 'f');
+		require_claims_request_binding_rejection(std::move(mutated_sandbox), "task sandbox");
+
+		auto mutated_outputs = request;
+		mutated_outputs.output_descriptors.front().descriptor_digest =
+			"semantic-v2:sha256:" + std::string(64U, 'd');
+		require_claims_request_binding_rejection(std::move(mutated_outputs), "output descriptor");
+
+		auto rebound_catalog = sdk::project_catalog::make(
+			"project://mutated", request.catalog.environment_digest, request.catalog.compile_units);
+		require(rebound_catalog.has_value(), "claims mutable catalog fixture construction failed");
+		auto mutated_catalog = request;
+		mutated_catalog.catalog = std::move(*rebound_catalog);
+		require_claims_request_binding_rejection(std::move(mutated_catalog), "catalog");
+
+		auto mutated_publication = request;
+		mutated_publication.publication.selector.channel_id = "channel:mutated";
+		require_claims_request_binding_rejection(std::move(mutated_publication), "publication");
+
+		auto mutated_backend = request;
+		mutated_backend.publication.backend = "sqlite";
+		require_claims_request_binding_rejection(std::move(mutated_backend), "publication backend");
+
+		auto mutated_genesis = request;
+		mutated_genesis.publication.genesis = !request.publication.genesis;
+		require_claims_request_binding_rejection(std::move(mutated_genesis), "publication genesis");
+
+		auto mutated_parent = request;
+		mutated_parent.publication.expected_parent_publication = std::string{"publication:rebound"};
+		require_claims_request_binding_rejection(std::move(mutated_parent),
+												 "expected parent publication");
+
+		auto mutated_sqlite_path = request;
+		mutated_sqlite_path.publication.sqlite_path = std::string{"project://rebound.sqlite"};
+		require_claims_request_binding_rejection(std::move(mutated_sqlite_path),
+												 "publication sqlite path");
 		materialization_claim_partition_replay_source partition_source{*claims};
 		std::vector<std::string> replayed_partition_ids;
 		auto replay = partition_source.replay(
@@ -3564,10 +3727,46 @@ namespace
 		require(!mismatched_streaming_transaction &&
 					mismatched_streaming_transaction.error().code ==
 						"materialization.task-binding-mismatch" &&
-					mismatched_streaming_transaction.error().field == "store.source" &&
+					mismatched_streaming_transaction.error().field == "request" &&
 					mismatched_streaming_transaction.error().detail ==
 						"request-identity-or-task-census",
 				"bounded Store metadata accepted a source with a mismatched request task census");
+
+		const auto require_request_binding_rejection =
+			[&](validated_materialization_request candidate, const std::string_view mutation)
+		{
+			auto transaction =
+				make_materialization_streaming_store_transaction(candidate, *exact_finalized);
+			require(!transaction &&
+						transaction.error().code == "materialization.task-binding-mismatch" &&
+						transaction.error().field == "request" &&
+						transaction.error().detail == "request-identity-or-task-census",
+					"bounded Store metadata accepted a mutable request " + std::string{mutation});
+		};
+		auto coherent_request_b = coherent_rebound_request(request);
+		auto cross_request_streaming =
+			make_materialization_streaming_store_transaction(coherent_request_b, *exact_finalized);
+		require(!cross_request_streaming &&
+					cross_request_streaming.error().code ==
+						"materialization.task-binding-mismatch" &&
+					cross_request_streaming.error().field == "store.source" &&
+					cross_request_streaming.error().detail == "request-identity-or-task-census",
+				"bounded source from request A was accepted for coherent request B");
+
+		auto mutated_task = request;
+		mutated_task.tasks.front().worker_payload.push_back(std::byte{0x01});
+		require_request_binding_rejection(std::move(mutated_task), "task payload");
+
+		auto rebound_catalog = sdk::project_catalog::make(
+			"project://mutated", request.catalog.environment_digest, request.catalog.compile_units);
+		require(rebound_catalog.has_value(), "mutable catalog fixture construction failed");
+		auto mutated_catalog = request;
+		mutated_catalog.catalog = std::move(*rebound_catalog);
+		require_request_binding_rejection(std::move(mutated_catalog), "catalog");
+
+		auto mutated_publication = request;
+		mutated_publication.publication.selector.channel_id = "channel:mutated";
+		require_request_binding_rejection(std::move(mutated_publication), "publication");
 
 		auto over_adoption_source = materialization_bounded_claim_source::begin(request);
 		require(over_adoption_source.has_value(), "over-adoption bounded source begin failed");
