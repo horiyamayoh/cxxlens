@@ -78,7 +78,6 @@ completion の対象選択と反復高速化には使用できます。統合 ga
 
 品質 evidence の owner と fail-closed fallback は `schemas/cxxlens_ng_quality_ownership.yaml` を参照してください。
 
-
 ## GitHub PR integration automation
 
 CI setup は `.github/actions/setup-ci/action.yml` が一元管理します。`actions/setup-python`、
