@@ -1347,6 +1347,13 @@ int main()
 	trailing_lf_task.source_content_base64.push_back('\n');
 	require(!encode_task_input(trailing_lf_task),
 			"task.v3 encoder accepted trailing non-alphabet Base64 data");
+	constexpr std::size_t maximum_source_base64_bytes = ((16U * 1024U * 1024U + 2U) / 3U) * 4U;
+	auto oversized_base64_task = task;
+	oversized_base64_task.source_content_base64.assign(maximum_source_base64_bytes + 4U, 'A');
+	auto oversized_base64 = encode_task_input(oversized_base64_task);
+	require(!oversized_base64 && oversized_base64.error().field == "source.content_base64" &&
+				oversized_base64.error().detail == "maximum-bytes",
+			"one-shot task.v3 encoder did not reject Base64 beyond the selected schema bound");
 	auto missing_source_authority = task;
 	missing_source_authority.source_snapshot.clear();
 	require(!encode_task_input(missing_source_authority),

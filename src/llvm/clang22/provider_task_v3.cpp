@@ -28,6 +28,8 @@ namespace cxxlens::detail::clang22
 		const sdk::semantic_version provider_version{1U, 0U, 0U};
 		constexpr std::uint32_t maximum_arguments = 4096U;
 		constexpr std::uint64_t maximum_source_bytes = 16U * 1024U * 1024U;
+		constexpr std::uint64_t maximum_source_base64_bytes =
+			((maximum_source_bytes + 2U) / 3U) * 4U;
 		constexpr std::array<std::string_view, 6U> exact_descriptor_ids{
 			"cc.call_direct_target.v1",
 			"cc.call_site.v1",
@@ -126,6 +128,9 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] sdk::result<std::string> base64_decode(const std::string_view input)
 		{
+			if (static_cast<std::uint64_t>(input.size()) > maximum_source_base64_bytes)
+				return sdk::unexpected(provider_error(
+					"provider.frontend-request-invalid", "source.content_base64", "maximum-bytes"));
 			if (input.size() % 4U != 0U)
 				return sdk::unexpected(
 					provider_error("provider.frontend-request-invalid", "source.content_base64"));
@@ -1007,14 +1012,18 @@ namespace cxxlens::detail::clang22
 				 budget.open_files,
 				 budget.subprocesses,
 			 })
+		{
 			if (value > signed_max)
 				return invalid("budget", "signed-int64-overflow");
+		}
 		if (source_receipt == nullptr)
 		{
 			if (source_content_digest != sdk::content_digest(std::as_bytes(std::span{source})))
 				return invalid("source.content_digest", "mismatch");
 			auto decoded_source = base64_decode(source_content_base64);
-			if (!decoded_source || *decoded_source != source)
+			if (!decoded_source)
+				return invalid("source.content_base64", decoded_source.error().detail);
+			if (*decoded_source != source)
 				return invalid("source.content_base64", "decoded-bytes-mismatch");
 		}
 		else if (!source.empty() || !source_content_base64.empty() ||
@@ -1136,8 +1145,6 @@ namespace cxxlens::detail::clang22
 	namespace
 	{
 		constexpr std::uint64_t maximum_task_input_bytes = 64U * 1024U * 1024U;
-		constexpr std::uint64_t maximum_source_base64_bytes =
-			((maximum_source_bytes + 2U) / 3U) * 4U;
 		constexpr std::size_t maximum_canonical_depth = 64U;
 		constexpr std::array<std::size_t, 5U> source_base64_value_path{4U, 15U, 1U, 0U, 1U};
 
