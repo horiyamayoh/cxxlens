@@ -101,8 +101,8 @@ namespace cxxlens::provider::clang22
 	{
 		if (source_snapshot.empty() || file.empty())
 			return sdk::unexpected(native_error("native.input-invalid", "source-identity"));
-		if (logical_path.empty() || logical_path.front() == '/' ||
-			logical_path.front() == '\\' || logical_path.find('\0') != std::string::npos ||
+		if (logical_path.empty() || logical_path.front() == '/' || logical_path.front() == '\\' ||
+			logical_path.find('\0') != std::string::npos ||
 			detail::contains_parent_path_segment(logical_path))
 			return sdk::unexpected(
 				native_error("native.input-invalid", "logical_path", logical_path));

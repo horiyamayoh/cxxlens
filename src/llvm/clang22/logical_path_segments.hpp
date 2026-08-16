@@ -7,8 +7,7 @@ namespace cxxlens::provider::clang22::detail
 {
 	// Existing single-source SDK preflight only. The source-closure identity,
 	// Unicode, case, and compiler VFS rules remain blocked under DF-0261.
-	[[nodiscard]] constexpr bool
-	contains_parent_path_segment(const std::string_view value) noexcept
+	[[nodiscard]] constexpr bool contains_parent_path_segment(const std::string_view value) noexcept
 	{
 		std::size_t begin{};
 		while (begin <= value.size())
