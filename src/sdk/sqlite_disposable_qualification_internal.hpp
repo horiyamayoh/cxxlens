@@ -20,6 +20,7 @@ namespace cxxlens::detail::sqlite_qualification
 	class sqlite_disposable_qualification_capability;
 	enum class sqlite_disposable_qualification_verdict : std::uint8_t;
 	class sqlite_disposable_raw_family_observer;
+	struct sqlite_disposable_fz_post_cleanup_result;
 
 	/** Exact opened-object identity retained by the disposable qualification harness. */
 	struct sqlite_disposable_object_identity
@@ -166,6 +167,10 @@ namespace cxxlens::detail::sqlite_qualification
 			const sqlite_disposable_qualification_request& request,
 			std::string_view leaf,
 			std::span<const std::byte> bytes) noexcept;
+		friend cxxlens::sdk::result<sqlite_disposable_fz_post_cleanup_result>
+		cleanup_sqlite_disposable_fz_post_wal_for_testing(
+			sqlite_disposable_qualification_capability& capability,
+			const sqlite_disposable_qualification_request& request) noexcept;
 		friend class sqlite_disposable_raw_family_observer;
 	};
 
