@@ -607,6 +607,75 @@ namespace
 			return std::nullopt;
 		return requested;
 	}
+
+	void check_ng1_post_fork_guard_kills_group_without_ack()
+	{
+		if (!pidfd_runtime_available())
+			return;
+		int ready[2]{};
+		require(::pipe(ready) == 0, "NG1 post-fork guard readiness pipe failed");
+		const auto child = ::fork();
+		require(child >= 0, "NG1 post-fork guard fork failed");
+		if (child == 0)
+		{
+			(void)::close(ready[0]);
+			if (::setpgid(0, 0) != 0)
+				::_exit(120);
+			const auto descendant = ::fork();
+			if (descendant < 0)
+				::_exit(121);
+			if (descendant == 0)
+			{
+				(void)::close(ready[1]);
+				for (;;)
+					(void)::pause();
+			}
+			const auto written = ::write(ready[1], &descendant, sizeof(descendant));
+			(void)::close(ready[1]);
+			if (written != static_cast<ssize_t>(sizeof(descendant)))
+				::_exit(122);
+			for (;;)
+				(void)::pause();
+		}
+
+		(void)::close(ready[1]);
+		bool ready_ok{};
+		pid_t descendant{};
+		int descendant_pidfd{-1};
+		bool descendant_alive_before_cleanup{};
+		{
+			// Deliberately do not provide an ACK/established marker.  This models the
+			// parent being descheduled until the bounded process-group handshake expires.
+			cxxlens::sdk::provider::detail::ng1_post_fork_process_guard guard{
+				static_cast<int>(child)};
+			pollfd descriptor{ready[0], POLLIN | POLLHUP | POLLERR, 0};
+			if (::poll(&descriptor, 1U, 1000) > 0)
+			{
+				const auto received = ::read(ready[0], &descendant, sizeof(descendant));
+				ready_ok = received == static_cast<ssize_t>(sizeof(descendant));
+			}
+			(void)::close(ready[0]);
+			if (ready_ok)
+			{
+				descendant_pidfd = open_pidfd(descendant);
+				descendant_alive_before_cleanup =
+					descendant_pidfd >= 0 && !pidfd_exited(descendant_pidfd);
+			}
+		} // The guard must kill the unacknowledged group's descendant before returning.
+
+		bool descendant_exited_after_cleanup{};
+		if (descendant_pidfd >= 0)
+		{
+			descendant_exited_after_cleanup =
+				wait_pidfd_exit(descendant_pidfd, std::chrono::milliseconds{500});
+			(void)::close(descendant_pidfd);
+		}
+		require(ready_ok, "NG1 post-fork guard did not observe the descendant");
+		require(descendant_alive_before_cleanup,
+				"NG1 post-fork guard descendant was not alive before cleanup");
+		require(descendant_exited_after_cleanup,
+				"NG1 post-fork guard leaked a descendant when the ACK was unobserved");
+	}
 #endif
 
 	[[nodiscard]] provider_fallback_tuple fallback_tuple(const provider_candidate& value,
@@ -2782,6 +2851,10 @@ int main(const int argument_count, const char* const* arguments)
 	check_host_transcript_validator(executable);
 	check_sealed_provider_validation();
 	check_semantic_input_digests(executable);
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+	check_ng1_post_fork_guard_kills_group_without_ack();
+#endif
 	check_ng1_live_duplex_process();
 	check_process_faults(executable);
 	check_prior_snapshot_preserved(executable);
