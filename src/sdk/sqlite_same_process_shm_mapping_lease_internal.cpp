@@ -23705,6 +23705,39 @@ namespace cxxlens::sdk
 				if (reservation_state == nullptr || reservation_state->lease.lock().get() != this)
 					return sqlite_shm_unexpected(
 						stale_token(sqlite_shm_lease_recovery_action::deny_before_native_map));
+				const auto requested_target =
+					reservation_state->request.expected_attachment.target_identity();
+				if (!requested_target || !borrow.recheck())
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::lifecycle_ambiguous,
+								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+				auto retained = borrow.retained_entry(sqlite_backend_file_role::shared_memory);
+				if (!retained || retained->role != sqlite_backend_file_role::shared_memory ||
+					retained->state != sqlite_backend_entry_state::held_regular ||
+					!retained->object_identity || !retained->directory_entry_identity ||
+					!retained->held_object ||
+					retained->held_object->role() != sqlite_backend_file_role::shared_memory ||
+					!retained->direct_regular_entry ||
+					!retained->held_object->object_mount_identity())
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+								  sqlite_shm_lease_recovery_action::deny_before_native_map));
+				std::optional<sqlite_backend_opaque_identity> retained_filesystem;
+				if (retained->object_filesystem_profile)
+					retained_filesystem = *retained->object_filesystem_profile;
+				else if (retained->held_object->object_filesystem_profile())
+					retained_filesystem = *retained->held_object->object_filesystem_profile();
+				auto retained_size = retained->held_object->size();
+				if (!retained_filesystem || !retained_size ||
+					borrow.parent_namespace_identity() != requested_target->parent_namespace ||
+					*retained->object_identity != requested_target->shm_object ||
+					*retained->directory_entry_identity != requested_target->shm_entry ||
+					*retained_filesystem != requested_target->filesystem ||
+					*retained->held_object->object_mount_identity() != requested_target->mount ||
+					*retained_size != requested_target->sealed_shm_size)
+					return sqlite_shm_unexpected(
+						rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+								  sqlite_shm_lease_recovery_action::deny_before_native_map));
 				std::scoped_lock lock{mutex_};
 				const auto map =
 					find_by_token(reader_attachment_maps_, reservation_state->map_token);

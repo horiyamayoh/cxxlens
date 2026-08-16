@@ -464,6 +464,13 @@ namespace cxxlens::sdk
 			permit.exact_target_.emplace(std::move(target));
 		}
 
+		[[nodiscard]] static result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
+		mint_source_borrow(sqlite_source_shm_target_namespace_epoch_borrow_minter& minter,
+						   sqlite_shm_reader_native_ok_projection_reservation& reservation)
+		{
+			return minter.mint(reservation);
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_reader_attachment_post_map_receipt
 		reader_attachment_map_with_qualified_observation(
 			const sqlite_shm_verified_reader_attachment_post_map_receipt& source,
@@ -1865,10 +1872,18 @@ namespace
 	struct source_epoch_fixture
 	{
 		explicit source_epoch_fixture(const std::uint8_t marker)
+			: source_epoch_fixture(marker, marker, marker)
+		{
+		}
+
+		source_epoch_fixture(const std::uint8_t marker,
+							 const std::uint8_t identity_marker,
+							 const std::uint8_t parent_marker)
 		{
 			static std::atomic<std::uint64_t> sequence{};
 			directory = std::filesystem::temp_directory_path() /
 				("cxxlens-registry-source-epoch-" + std::to_string(::getpid()) + '-' +
+				 std::to_string(static_cast<unsigned>(marker)) + '-' +
 				 std::to_string(sequence.fetch_add(1U)));
 			require(std::filesystem::create_directory(directory),
 					"create real source-epoch directory");
@@ -1887,11 +1902,11 @@ namespace
 			}
 			std::array<std::shared_ptr<source_epoch_held_object>, 3U> held{
 				std::make_shared<source_epoch_held_object>(
-					main, sqlite_backend_file_role::main_database, marker),
+					main, sqlite_backend_file_role::main_database, identity_marker),
 				std::make_shared<source_epoch_held_object>(
-					wal, sqlite_backend_file_role::write_ahead_log, marker),
+					wal, sqlite_backend_file_role::write_ahead_log, identity_marker),
 				std::make_shared<source_epoch_held_object>(
-					shm, sqlite_backend_file_role::shared_memory, marker)};
+					shm, sqlite_backend_file_role::shared_memory, identity_marker)};
 			std::array<sqlite_backend_entry_observation, 4U> entries;
 			for (std::size_t index{}; index < held.size(); ++index)
 				entries[index] = {held[index]->role(),
@@ -1908,17 +1923,17 @@ namespace
 						   {},
 						   {},
 						   false};
-			const auto parent = identity("test.registry.real-source-epoch.parent", marker);
+			const auto parent = identity("test.registry.real-source-epoch.parent", parent_marker);
 			finalization_count = std::make_shared<std::atomic_int>(0);
 			auto guard = std::make_shared<source_epoch_namespace_guard>(
 				main.string(),
-				identity("test.registry.real-source-epoch.guard", marker),
+				identity("test.registry.real-source-epoch.guard", identity_marker),
 				parent,
 				entries,
 				finalization_count);
 			sqlite_backend_namespace_census census{
 				"default-filesystem-v1",
-				identity("test.registry.real-source-epoch.capability", marker),
+				identity("test.registry.real-source-epoch.capability", identity_marker),
 				parent,
 				entries,
 				std::move(guard)};
@@ -3305,6 +3320,54 @@ namespace
 						.last_issued_sequence >= before.last_issued_sequence,
 				"native-OK projection preserves the checked reader lifecycle sequence domain");
 		clean_fixture(setup.fixture);
+	}
+
+	void verify_native_ok_projection_rejects_cross_wired_source_borrow()
+	{
+		auto source_a = std::make_shared<source_epoch_fixture>(72U);
+		auto setup = make_reader_candidate_setup(72U, std::nullopt, false, source_a);
+		auto source_b = std::make_shared<source_epoch_fixture>(73U, 73U, 72U);
+		auto minter_result =
+			make_sqlite_source_shm_target_namespace_epoch_borrow_minter(source_b->target);
+		require(minter_result && minter_result->valid(),
+				"mint the independent same-parent source borrow capability");
+		auto minter = std::optional<sqlite_source_shm_target_namespace_epoch_borrow_minter>{
+			std::move(*minter_result)};
+		auto owner = prepare_qualified_map_effect_owner(
+			setup, 74U, sqlite_shm_reader_effect_identity_role::mapped_result);
+		const auto request = reader_attachment_map_request(
+			owner.identity.request, owner.identity.callback_identity.receipt());
+		{
+			auto reservation = setup.fixture.registry->prepare_reader_native_ok_projection(
+				setup.reader_family_pin(), owner.inflight, request);
+			require(reservation && reservation->valid(),
+					"reserve the exact source-A reader projection before cross-wiring");
+			auto borrowed =
+				sqlite_same_process_shm_lease_test_peer::mint_source_borrow(*minter, *reservation);
+			require(borrowed && borrowed->valid(),
+					"mint the source-B borrow against the source-A lease reservation");
+			auto rejected = setup.fixture.registry->attach_reader_native_ok_projection(
+				setup.reader_family_pin(), *reservation, std::move(*borrowed));
+			require(!rejected &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						rejected.error().action ==
+							sqlite_shm_lease_recovery_action::deny_before_native_map,
+					"Stage C rejects a source borrow whose retained object is not the canonical "
+					"target");
+		}
+		require(!owner.inflight.valid(),
+				"cross-wired projection abandonment terminalizes the presented map owner");
+		require(!setup.session.valid(),
+				"cross-wired projection abandonment quarantines the dependent reader session");
+
+		minter.reset();
+		require(source_b->target->finish().has_value(),
+				"finish the rejected independent source epoch after its borrow drains");
+		require(setup.coordinator->snapshot().quarantined,
+				"cross-wired projection rejection quarantines the affected lease family");
+		require(source_a->target->finish().has_value(),
+				"finish the canonical source-A epoch after rejected projection cleanup");
 	}
 
 	void verify_native_ok_projection_group_rejects_plain_later_map()
@@ -21122,6 +21185,7 @@ int main()
 		verify_reader_lineage_mixing_is_family_wide_and_bidirectional();
 		verify_reader_open_lineage_seal_distinguishes_active_clean_and_abandoned();
 		verify_native_ok_projection_permit_binds_live_writer_and_is_one_shot();
+		verify_native_ok_projection_rejects_cross_wired_source_borrow();
 		verify_native_ok_projection_group_rejects_plain_later_map();
 		verify_registry_writer_member_is_exact_and_cleanup_only();
 		verify_writer_registration_failure_rolls_back_installing_authority();
