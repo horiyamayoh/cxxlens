@@ -166,18 +166,26 @@ namespace cxxlens::detail::clang22::materialization
 				identity.final_relation_compile_unit_id == task.worker_input.compile_unit;
 		}
 
+		[[nodiscard]] bool identity_matches_v2_1_metadata(
+			const materialization_incremental_task_identity& identity,
+			const std::size_t task_index,
+			const materialization_v2_1_task_metadata_receipt& metadata) noexcept
+		{
+			return metadata.task_index == task_index &&
+				identity.canonical_task_ordinal == task_index &&
+				identity.provider_task_id == metadata.provider_task_id &&
+				identity.task_input_digest == metadata.task_input_digest &&
+				identity.selected_catalog_compile_unit_id ==
+				metadata.selected_catalog_compile_unit_id &&
+				identity.final_relation_compile_unit_id == metadata.final_relation_compile_unit_id;
+		}
+
 		[[nodiscard]] bool
 		identity_matches_v2_1_task(const materialization_incremental_task_identity& identity,
 								   const std::size_t task_index,
 								   const materialization_v2_1_task_execution& task) noexcept
 		{
-			return identity.canonical_task_ordinal == task_index &&
-				identity.provider_task_id == task.metadata.provider_task_id &&
-				identity.task_input_digest == task.metadata.task_input_digest &&
-				identity.selected_catalog_compile_unit_id ==
-				task.metadata.selected_catalog_compile_unit_id &&
-				identity.final_relation_compile_unit_id ==
-				task.metadata.final_relation_compile_unit_id;
+			return identity_matches_v2_1_metadata(identity, task_index, task.metadata);
 		}
 
 		[[nodiscard]] sdk::result<void>
@@ -417,6 +425,16 @@ namespace cxxlens::detail::clang22::materialization
 										return binding == nullptr;
 									}))
 				return sdk::unexpected(coordinator_error("bindings", "missing-task"));
+
+			for (std::size_t task_index{}; task_index < task_count_size; ++task_index)
+			{
+				auto metadata = request.task_metadata(static_cast<std::uint64_t>(task_index));
+				if (!metadata)
+					return sdk::unexpected(std::move(metadata.error()));
+				if (!identity_matches_v2_1_metadata(
+						by_task[task_index]->task_identity, task_index, *metadata))
+					return sdk::unexpected(coordinator_error("bindings", "task-identity-mismatch"));
+			}
 
 			std::set<std::string, std::less<>> plan_ids;
 			for (const auto& [partition_id, entry] : plan_entries)
@@ -929,6 +947,8 @@ namespace cxxlens::detail::clang22::materialization
 						partition.current_state->partition_id != partition.partition_id)
 						return sdk::unexpected(
 							coordinator_error("bindings", "partition-task-mismatch"));
+					if (partition.current_state->corruption_detected)
+						return sdk::unexpected(coordinator_error("current", "corrupt-partition"));
 					if (auto valid = validate_plan_entry_binding(*plan_entry->second, partition);
 						!valid)
 						return sdk::unexpected(std::move(valid.error()));
