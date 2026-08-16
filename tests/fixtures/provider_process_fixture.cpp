@@ -217,7 +217,7 @@ int main(const int argument_count, const char* const* arguments)
 				if (::write(ready_pipe[1U], &ready, sizeof(ready)) != sizeof(ready))
 					::_exit(EXIT_FAILURE);
 				(void)::close(ready_pipe[1U]);
-				std::this_thread::sleep_for(std::chrono::seconds{5});
+				std::this_thread::sleep_for(std::chrono::seconds{30});
 				::_exit(EXIT_SUCCESS);
 			}
 			const auto start_time = process_start_time();
@@ -232,7 +232,7 @@ int main(const int argument_count, const char* const* arguments)
 			if (::write(ready_pipe[1U], &ready, sizeof(ready)) != sizeof(ready))
 				::_exit(EXIT_FAILURE);
 			(void)::close(ready_pipe[1U]);
-			std::this_thread::sleep_for(std::chrono::seconds{5});
+			std::this_thread::sleep_for(std::chrono::seconds{30});
 			::_exit(EXIT_SUCCESS);
 		}
 		(void)::close(ready_pipe[1U]);
