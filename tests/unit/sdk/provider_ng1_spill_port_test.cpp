@@ -77,7 +77,7 @@ namespace
 	}
 
 	[[nodiscard]] result<void> persist_frontier(std::optional<ng1_spill_resume_frontier>& current,
-																const ng1_spill_resume_frontier& next)
+												const ng1_spill_resume_frontier& next)
 	{
 		if (auto valid = next.validate(); !valid)
 			return unexpected(std::move(valid.error()));
@@ -91,7 +91,7 @@ namespace
 	}
 
 	[[nodiscard]] ng1_spill_record record_with_payload_size(const ng1_spill_binding& value,
-																													 const std::uint64_t ordinal,
+															const std::uint64_t ordinal,
 															const std::uint64_t sequence,
 															const std::size_t payload_size)
 	{
