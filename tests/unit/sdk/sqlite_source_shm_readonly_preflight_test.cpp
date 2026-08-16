@@ -182,11 +182,13 @@ namespace
 					exact_mapped, &vfs_identity, &app_data_identity, false, true),
 				"warm proof accepts mapped events with exact callback pointer evidence");
 
-		const auto native_ok_null = event(0, 0, false, false);
+		auto native_ok_null = event(0, 0, false, false);
+		native_ok_null.returned_status = cant_initialize;
 		require(!validate_sqlite_source_shm_readonly_map_sequence(
 					std::array{native_ok_null}, &vfs_identity, &app_data_identity, true, false),
 				"qualified readonly proof rejects native SQLITE_OK without a mapping");
-		const auto native_ok_mapped = event(0, 0, true, false);
+		auto native_ok_mapped = event(0, 0, true, false);
+		native_ok_mapped.returned_status = readonly;
 		require(!validate_sqlite_source_shm_readonly_map_sequence(
 					std::array{native_ok_mapped}, &vfs_identity, &app_data_identity, false, false),
 				"qualified readonly proof rejects native SQLITE_OK with a mapping");
