@@ -4,6 +4,7 @@
 #include <deque>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -60,9 +61,19 @@ namespace
 		return std::string{"sha256:"} + std::string(64U, fill);
 	}
 
+	struct spill_state
+	{
+		bool cleaned{};
+	};
+
 	class memory_spill_storage final : public ng1_spill_storage_port
 	{
 	  public:
+		explicit memory_spill_storage(std::shared_ptr<spill_state> state = {})
+			: state_{state ? std::move(state) : std::make_shared<spill_state>()}
+		{
+		}
+
 		result<void> append(const std::span<const std::byte> bytes) override
 		{
 			bytes_.insert(bytes_.end(), bytes.begin(), bytes.end());
@@ -99,6 +110,7 @@ namespace
 
 		result<void> cleanup() override
 		{
+			state_->cleaned = true;
 			cleaned_ = true;
 			return {};
 		}
@@ -107,6 +119,7 @@ namespace
 		std::vector<std::byte> bytes_;
 		std::uint64_t fsync_sequence_{};
 		std::optional<ng1_spill_resume_frontier> frontier_;
+		std::shared_ptr<spill_state> state_;
 		bool cleaned_{};
 	};
 
@@ -211,6 +224,27 @@ namespace
 		std::shared_ptr<process_state> state_;
 	};
 
+	class rejecting_process_port final : public ng1_duplex_process_port
+	{
+	  public:
+		result<std::unique_ptr<ng1_duplex_process>>
+		start(const process_invocation&, protocol_limits, const std::stop_token) const override
+		{
+			return unexpected(
+				error{"provider.process-request-invalid", "ng1-live", "injected-launch-failure"});
+		}
+	};
+
+	class throwing_process_port final : public ng1_duplex_process_port
+	{
+	  public:
+		result<std::unique_ptr<ng1_duplex_process>>
+		start(const process_invocation&, protocol_limits, const std::stop_token) const override
+		{
+			throw std::bad_alloc{};
+		}
+	};
+
 	struct fixture
 	{
 		ng1_session_binding heartbeat{
@@ -242,19 +276,21 @@ namespace
 		configuration(std::shared_ptr<clock_state> clock,
 					  std::shared_ptr<observation_state> observation,
 					  std::shared_ptr<process_state> process,
-					  const std::uint64_t maximum_retained_frames = 3U) const
+					  const std::uint64_t maximum_retained_frames = 3U,
+					  std::shared_ptr<spill_state> spill_lifecycle = {}) const
 		{
 			process_invocation invocation;
 			invocation.argv = {"fake-provider"};
 			protocol_limits limits;
 			limits.minimum_minor = 1U;
 			limits.maximum_minor = 1U;
-			return {ng1_session_configuration{heartbeat,
-											  "dependency:test",
-											  resume,
-											  spill,
-											  1'000U,
-											  std::make_unique<memory_spill_storage>()},
+			return {ng1_session_configuration{
+						heartbeat,
+						"dependency:test",
+						resume,
+						this->spill,
+						1'000U,
+						std::make_unique<memory_spill_storage>(std::move(spill_lifecycle))},
 					invocation,
 					limits,
 					maximum_retained_frames,
@@ -422,6 +458,44 @@ namespace
 			ng1_resume_control{}, ng1_spill_fsync_receipt{}, false, false, 0U);
 		require(!rejected_resume, "live-driver resume cleanup was not fail-closed");
 		require(driver->cleanup(), "live-driver resume session cleanup failed");
+	}
+
+	void test_live_driver_cleans_session_when_process_start_fails()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		auto spill = std::make_shared<spill_state>();
+		auto configuration = values.configuration(clock, observation, process, 3U, spill);
+		configuration.processes = std::make_unique<rejecting_process_port>();
+
+		auto rejected = ng1_live_session_driver::start(std::move(configuration), {});
+		require(!rejected && rejected.error().code == "provider.process-request-invalid" &&
+					rejected.error().detail == "injected-launch-failure",
+				"live-driver did not preserve the process launch failure");
+		require(
+			spill->cleaned,
+			"live-driver destroyed an unstarted session without cleaning its private spill port");
+	}
+
+	void test_live_driver_cleans_session_when_process_start_throws()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		auto spill = std::make_shared<spill_state>();
+		auto configuration = values.configuration(clock, observation, process, 3U, spill);
+		configuration.processes = std::make_unique<throwing_process_port>();
+
+		auto rejected = ng1_live_session_driver::start(std::move(configuration), {});
+		require(!rejected && rejected.error().code == "provider.process-launch-failed" &&
+					rejected.error().field == "ng1-live" &&
+					rejected.error().detail == "process-port-allocation-failed",
+				"live-driver did not convert the process-port exception into a structured failure");
+		require(spill->cleaned,
+				"live-driver did not clean the spill port after a process-port exception");
 	}
 
 	void test_live_driver_rebases_task_timers_at_acceptance()
@@ -612,6 +686,8 @@ int main()
 	test_live_control_bridge_and_bounded_retention();
 	test_live_driver_rejects_retention_overflow();
 	test_live_driver_rejects_host_resume_without_receipt();
+	test_live_driver_cleans_session_when_process_start_fails();
+	test_live_driver_cleans_session_when_process_start_throws();
 	test_live_driver_rebases_task_timers_at_acceptance();
 	test_shared_validator_accepts_explicit_ng1_controls();
 	return 0;
