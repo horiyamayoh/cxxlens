@@ -8,6 +8,8 @@
 
 #include <cxxlens/provider/clang22.hpp>
 
+#include "llvm/clang22/logical_path_segments.hpp"
+
 #if CXXLENS_HAS_CLANG22
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
@@ -100,7 +102,8 @@ namespace cxxlens::provider::clang22
 		if (source_snapshot.empty() || file.empty())
 			return sdk::unexpected(native_error("native.input-invalid", "source-identity"));
 		if (logical_path.empty() || logical_path.front() == '/' ||
-			logical_path.find("..") != std::string::npos)
+			logical_path.front() == '\\' || logical_path.find('\0') != std::string::npos ||
+			detail::contains_parent_path_segment(logical_path))
 			return sdk::unexpected(
 				native_error("native.input-invalid", "logical_path", logical_path));
 		if (source.empty())
