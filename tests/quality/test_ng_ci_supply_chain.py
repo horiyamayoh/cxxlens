@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import pathlib
@@ -42,6 +43,15 @@ from collect_toolchain_provenance import (  # noqa: E402
     hash_files_digest,
     package_cache_provenance,
 )
+
+
+def github_hash_files_simulation(*paths: pathlib.Path) -> str:
+    """Model GitHub's hashFiles per-file hex-digest concatenation."""
+
+    per_file_hex_digests = sorted(
+        hashlib.sha256(path.read_bytes()).hexdigest() for path in paths
+    )
+    return hashlib.sha256("".join(per_file_hex_digests).encode("utf-8")).hexdigest()
 
 
 class NgCiSupplyChainTest(unittest.TestCase):
@@ -362,8 +372,23 @@ class NgCiSupplyChainTest(unittest.TestCase):
         )
         self.assertEqual(
             hash_files_digest(lock_path),
-            "596a855e4995898c6deb0943b385ca7f5657d52da3e6c61423a24c8ed5a4d5f2",
+            "80430a40a6191474280380d2615334078f89a58808493238dd06ee7c7595663f",
         )
+        self.assertEqual(
+            hash_files_digest(lock_path), github_hash_files_simulation(lock_path)
+        )
+        self.assertNotEqual(
+            hash_files_digest(lock_path),
+            hashlib.sha256(hashlib.sha256(lock_path.read_bytes()).digest()).hexdigest(),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            first = pathlib.Path(temporary) / "first"
+            second = pathlib.Path(temporary) / "second"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+            expected = github_hash_files_simulation(second, first)
+            self.assertEqual(hash_files_digest(first, second), expected)
+            self.assertEqual(hash_files_digest(second, first), expected)
         with tempfile.TemporaryDirectory() as temporary:
             receipt = pathlib.Path(temporary) / "raw-key.json"
             hashfiles_key = self.cache_environment(receipt)[

@@ -31,11 +31,13 @@ def file_digest(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def hash_files_digest(path: pathlib.Path) -> str:
-    """Reproduce hashFiles for the single exact lock file used by CI."""
+def hash_files_digest(*paths: pathlib.Path) -> str:
+    """Reproduce hashFiles for the exact set of files matched by CI."""
 
-    file_digest_bytes = hashlib.sha256(path.read_bytes()).digest()
-    return hashlib.sha256(file_digest_bytes).hexdigest()
+    per_file_hex_digests = sorted(
+        hashlib.sha256(path.read_bytes()).hexdigest() for path in paths
+    )
+    return hashlib.sha256("".join(per_file_hex_digests).encode("utf-8")).hexdigest()
 
 
 def local_reference_lock(
