@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      - name: Reconstruct and apply the validated non-workflow payload
+      - name: Reconstruct and apply the validated payload
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -59,10 +59,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
+            .github/workflows/quality.yml \
+            .github/workflows/nightly.yml \
             tools/quality/check_ng_api_development_readiness.py \
             tests/quality/test_ng_api_development_readiness.py \
             schemas/cxxlens_ng_api_development_readiness.yaml \
             schemas/cxxlens_ng_api_development_readiness.schema.yaml
           git diff --cached --check
-          git commit -m "Add #261 demand graph and agent context (#291)"
+          git commit -m "Adopt tiered CI and #261 agent context (#291)"
           git push origin "HEAD:${GITHUB_REF_NAME}"
