@@ -123,6 +123,7 @@ properties:
         supply_side: every-admitted-public-surface-has-contract-implementation-and-evidence
         demand_side: every-admitted-use-case-has-an-executable-capability-path-or-explicit-tracked-gap
         complete: no-orphan-public-surface-and-no-orphan-admitted-use-case
+        tracking_issue: '#275'
       result_contract:
         states:
         - proved
@@ -149,6 +150,7 @@ properties:
         - physical-explain
       roadmap:
         capability_strategy: versioned-packs-over-kernel-growth
+        tracking_issue: '#278'
         priority:
         - source-closure-capture-replay
         - semantic-graph
@@ -177,7 +179,8 @@ properties:
           - include-macro
           - inheritance-override-template
           - richer-call-relations
-          disposition: planned-issue-required-before-write
+          disposition: tracked-roadmap
+          tracking_issue: '#278'
         - id: program-analysis
           stage: C-program-analysis
           flagship: resource-lifetime-and-taint-path
@@ -208,7 +211,8 @@ properties:
           - dependency-closure
           - incremental-invalidation
           - coverage-delta
-          disposition: planned-issue-required-before-write
+          disposition: tracked-roadmap
+          tracking_issue: '#278'
         - id: abi-ir-binary-evidence
           stage: E-cross-provider-evidence
           flagship: abi-break-and-compiler-upgrade-risk
@@ -217,7 +221,8 @@ properties:
           - llvm-ir-provider
           - object-binary-provider
           - provider-consensus
-          disposition: planned-issue-required-before-write
+          disposition: tracked-roadmap
+          tracking_issue: '#278'
         - id: agent-guided-extension
           stage: cross-cutting
           flagship: minimal-task-context
@@ -226,8 +231,8 @@ properties:
           - authority-slice
           - exact-write-scope
           - evidence-plan
-          disposition: active
-          tracking_issue: '#271'
+          disposition: implementation-tracked
+          tracking_issue: '#277'
       capability_admission:
         initial_maturity:
         - experimental
@@ -244,6 +249,7 @@ properties:
         - same-sha-qualification
       constructibility_gate:
         contract: development.constructibility-gate.v1
+        tracking_issue: '#276'
         applies_to:
         - public-semantics
         - identity
@@ -262,6 +268,7 @@ properties:
         acceptance_rule: all-applicable-witnesses-before-high-risk-authority-acceptance
       agent_context:
         contract: agent.minimal-context.v1
+        tracking_issue: '#277'
         source: machine-readable-authorities
         required_fields:
         - goal-use-case

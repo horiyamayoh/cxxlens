@@ -33,6 +33,7 @@ product_direction:
     supply_side: every-admitted-public-surface-has-contract-implementation-and-evidence
     demand_side: every-admitted-use-case-has-an-executable-capability-path-or-explicit-tracked-gap
     complete: no-orphan-public-surface-and-no-orphan-admitted-use-case
+    tracking_issue: '#275'
   result_contract:
     states: [proved, disproved, unknown, partial, conflicting]
     required_explanations: [why-proved, why-disproved, why-unknown, what-is-missing, what-would-upgrade-the-result]
@@ -40,6 +41,7 @@ product_direction:
     preserved_semantics: [coverage, closure, unresolved, conflict, differential-disagreement, guarantee, provenance, logical-explain, physical-explain]
   roadmap:
     capability_strategy: versioned-packs-over-kernel-growth
+    tracking_issue: '#278'
     priority:
       - source-closure-capture-replay
       - semantic-graph
@@ -60,7 +62,8 @@ product_direction:
         stage: B-semantic-graph
         flagship: find-references-and-call-hierarchy
         capabilities: [declaration-definition-reference, include-macro, inheritance-override-template, richer-call-relations]
-        disposition: planned-issue-required-before-write
+        disposition: tracked-roadmap
+        tracking_issue: '#278'
       - id: program-analysis
         stage: C-program-analysis
         flagship: resource-lifetime-and-taint-path
@@ -77,29 +80,33 @@ product_direction:
         stage: D-change-and-transformation
         flagship: semantic-diff-and-impact
         capabilities: [snapshot-diff, dependency-closure, incremental-invalidation, coverage-delta]
-        disposition: planned-issue-required-before-write
+        disposition: tracked-roadmap
+        tracking_issue: '#278'
       - id: abi-ir-binary-evidence
         stage: E-cross-provider-evidence
         flagship: abi-break-and-compiler-upgrade-risk
         capabilities: [abi-relations, llvm-ir-provider, object-binary-provider, provider-consensus]
-        disposition: planned-issue-required-before-write
+        disposition: tracked-roadmap
+        tracking_issue: '#278'
       - id: agent-guided-extension
         stage: cross-cutting
         flagship: minimal-task-context
         capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]
-        disposition: active
-        tracking_issue: '#271'
+        disposition: implementation-tracked
+        tracking_issue: '#277'
   capability_admission:
     initial_maturity: [experimental, versioned]
     stable_requires: [two-independent-consumers-or-foundational-invariant, explicit-partiality-and-versioning, lower-level-escape-path, experimental-period]
     production_requires: [exact-support-tuple, real-project-evidence, positive-negative-failure-evidence, same-sha-qualification]
   constructibility_gate:
     contract: development.constructibility-gate.v1
+    tracking_issue: '#276'
     applies_to: [public-semantics, identity, protocol, persistence, irreversible-effects, resource-bounds]
     required_witnesses: [executable-state-machine, field-availability-by-phase, phase-authentic-outcome-union, minimal-witness-implementation, bounded-resource-witness, crash-effect-matrix, independent-counterexample-review]
     acceptance_rule: all-applicable-witnesses-before-high-risk-authority-acceptance
   agent_context:
     contract: agent.minimal-context.v1
+    tracking_issue: '#277'
     source: machine-readable-authorities
     required_fields: [goal-use-case, capability-gap, authority-reading-set, exact-contract-ids, allowed-write-paths, required-evidence, known-design-feedback, forbidden-shortcuts, completion-commands]
     handwritten_shadow_authority: forbidden
