@@ -219,3 +219,11 @@ may be implemented. The current source continues to reject every native `SQLITE_
 qualified readonly-SHM profile. Production activation remains blocked until the exact
 implementation and complete positive/negative counterexample matrix receive their distinct
 independent review.
+
+2026-08-17: Requested base main `15087378588f18fd69f7c90849785fba4c1b96f0` is the exact
+validation baseline; feature commit `dd812d9888760d3374892f56dc6fb7e2867a38fd` adds a
+test-only fail-closed checkpoint to the leaseless readonly-SHM map-sequence validator. The
+existing accepted `CANTINIT/null` and `READONLY/non-null` controls remain positive cases,
+while both native `SQLITE_OK/null` and native `SQLITE_OK/non-null` are now explicit negative
+cases. No source activation, projection exception, public surface, or qualification claim
+changed; #205 remains open and production-blocked.
