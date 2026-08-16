@@ -75,7 +75,7 @@ jobs:
       - name: Apply the reviewed issue 316 migration
         run: python3 .github/bootstrap/apply_issue_316.py
 
-      - name: Normalize common setup command and refresh its authority digest
+      - name: Normalize generated contracts and refresh authority digests
         run: |
           python3 - <<'PY'
           import hashlib
@@ -108,6 +108,25 @@ jobs:
           lock_path.write_text(
               json.dumps(lock, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
               encoding="utf-8",
+          )
+
+          test_path = pathlib.Path("tests/quality/test_ng_ci_supply_chain.py")
+          test_text = test_path.read_text(encoding="utf-8")
+          fixture_old = (
+              '            workflows = root / ".github/workflows"\n'
+              '            workflows.mkdir(parents=True)\n'
+              '            shutil.copy2(ROOT / ".github/workflows/quality.yml", workflows / "quality.yml")\n'
+          )
+          fixture_new = (
+              '            workflows = root / ".github/workflows"\n'
+              '            workflows.mkdir(parents=True)\n'
+              '            shutil.copytree(ROOT / ".github/actions", root / ".github/actions")\n'
+              '            shutil.copy2(ROOT / ".github/workflows/quality.yml", workflows / "quality.yml")\n'
+          )
+          if test_text.count(fixture_old) != 1:
+              raise SystemExit("reusable-workflow fixture shape differs")
+          test_path.write_text(
+              test_text.replace(fixture_old, fixture_new, 1), encoding="utf-8"
           )
           PY
 
