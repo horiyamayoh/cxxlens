@@ -178,8 +178,8 @@ PR は high-risk contract の独立反証 review、外部 contributor、また�
 review evidence 自体で満たします。
 
 通常の implementation issue は、commit が `main` に到達し、担当 scope の bounded implementation completion evidence、残余 gap の
-明示 ownership、completion evidence、learning checkpoint が揃えば閉じられます。Foundation、Wave 0、G5、`release-evaluation`、
-normal/final production-scope report は、その issue が明示的に所有しない限り integration/readiness/qualification gate の責務です。
+明示 ownership、completion evidence、learning checkpoint が揃えば閉じられます。Foundation、Wave 0、G5、`release-evaluation`、normal/final
+production-scope report は、その issue が明示的に所有しない限り integration/readiness/qualification gate の責務です。
 
 それらの aggregate gate は exact main SHA の required checks と fail-closed evidence を引き続き検証します。
 `release-evaluation: not-qualified` は評価器の fail-closed success だけを意味し、`gate.release`、GR、production support を満たしません。
