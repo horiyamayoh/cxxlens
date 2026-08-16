@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   bootstrap:
-    if: github.event.head_commit.message == 'Bootstrap exact PR 317 overlay'
+    if: github.event.head_commit.message == 'Stage exact PR 317 overlay'
     runs-on: ubuntu-24.04
     env:
       HEAD_REF: issue-316-ci-setup-integration
@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-      - name: Merge current main and apply the reviewed exact overlay
+      - name: Merge main and stage the exact workflow blob
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
@@ -27,6 +27,7 @@ jobs:
           git fetch origin "${HEAD_REF}" main
           test "$(git rev-parse "origin/${HEAD_REF}")" = "${EXPECTED_HEAD_SHA}"
           git checkout -B "${HEAD_REF}" "origin/${HEAD_REF}"
+          branch_head="$(git rev-parse HEAD)"
 
           if ! git merge --no-ff --no-commit origin/main; then
             conflicts="$(git diff --name-only --diff-filter=U)"
@@ -47,15 +48,17 @@ jobs:
 
           main_checker="${RUNNER_TEMP}/main-readiness.py"
           cp tools/quality/check_ng_api_development_readiness.py "${main_checker}"
-          git show "${REVIEWED_SOURCE_COMMIT}:.github/workflows/quality.yml" > .github/workflows/quality.yml
-          git show "${REVIEWED_SOURCE_COMMIT}:tools/quality/check_ng_api_development_readiness.py" > tools/quality/check_ng_api_development_readiness.py
+          git show "${REVIEWED_SOURCE_COMMIT}:.github/workflows/quality.yml" \
+            > "${RUNNER_TEMP}/quality.yml"
+          git show "${REVIEWED_SOURCE_COMMIT}:tools/quality/check_ng_api_development_readiness.py" \
+            > tools/quality/check_ng_api_development_readiness.py
 
-          python3 - "${main_checker}" <<'PY'
+          python3 - "${main_checker}" "${RUNNER_TEMP}/quality.yml" <<'PY'
           from __future__ import annotations
           import pathlib
           import sys
 
-          quality_path = pathlib.Path('.github/workflows/quality.yml')
+          quality_path = pathlib.Path(sys.argv[2])
           quality = quality_path.read_text(encoding='utf-8')
           section_start = quality.index('  quality-contracts:\n')
           section_end = quality.index('\n  agent-context:\n', section_start)
@@ -80,12 +83,16 @@ jobs:
           checker_path.write_text(checker, encoding='utf-8')
           PY
 
-          rm -f \
+          # The workflow token may not update workflow paths. Keep the branch's
+          # current workflows unchanged in this transport commit.
+          git rm -rf --ignore-unmatch .github/workflows
+          git checkout "${branch_head}" -- .github/workflows
+
+          # Generate final inventory as if the three temporary workflows were absent.
+          git rm -f --ignore-unmatch \
             .github/workflows/apply-pr317-overlay.yml \
             .github/workflows/export-pr317-overlay.yml \
-            .github/workflows/sync-pr317.yml \
-            .github/workflows/bootstrap-pr317.yml
-
+            .github/workflows/sync-pr317.yml
           python3 tools/quality/check_documentation_consistency.py generate --root .
           python3 - <<'PY'
           from __future__ import annotations
@@ -104,9 +111,16 @@ jobs:
               raise SystemExit('asset ledger checksum row differs')
           sums.write_text(updated, encoding='utf-8')
           PY
+          git checkout "${branch_head}" -- .github/workflows
+          cp "${RUNNER_TEMP}/quality.yml" tools/ci/staged-quality.yml
 
           python3 -m pip install --require-hashes --only-binary=:all: \
             --requirement tools/quality/requirements.lock
+          cp tools/ci/staged-quality.yml .github/workflows/quality.yml
+          rm -f \
+            .github/workflows/apply-pr317-overlay.yml \
+            .github/workflows/export-pr317-overlay.yml \
+            .github/workflows/sync-pr317.yml
           python3 -m py_compile \
             tools/ci/bootstrap_supply_chain.py \
             tools/quality/check_ci_supply_chain.py \
@@ -115,7 +129,14 @@ jobs:
           python3 tools/quality/check_ci_supply_chain.py check --root .
           python3 tools/quality/check_ng_api_development_readiness.py check --root .
           python3 tools/quality/check_documentation_consistency.py check --root .
+          git rm -rf --ignore-unmatch .github/workflows
+          git checkout "${branch_head}" -- .github/workflows
+
           git add -A
+          if git diff --cached --name-only -- .github/workflows | grep -q .; then
+            echo 'transport commit unexpectedly changes workflow paths' >&2
+            exit 1
+          fi
           git diff --cached --check
           git commit -m 'Merge current main into CI setup commonization'
           git push --force-with-lease="refs/heads/${HEAD_REF}:${EXPECTED_HEAD_SHA}" \
