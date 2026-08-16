@@ -908,6 +908,67 @@ namespace
 					std::to_string(coverage_only));
 	}
 
+	void check_full_soft_semantic_unresolved(const validated_materialization_request& request,
+											 const materialization_producer_authority& producer)
+	{
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		auto seals = seal_all(request, false, coverage_mode::exact, true);
+		auto claims = construct_materialization_claims(request, seals, producer, guarantee);
+		require(claims.has_value(),
+				"full soft-reference unresolved construction failed: " +
+					(claims ? std::string{} : failure(claims.error())));
+		const auto& batch = claims->final_claim_batch();
+		require(!batch.unresolved.empty(),
+				"full soft-reference unresolved evidence was discarded before materialization");
+		auto expected_digest = sdk::claim_batch_content_digest(
+			std::span<const sdk::claim>{batch.claims},
+			std::span<const sdk::unresolved_reference>{batch.unresolved},
+			std::span<const sdk::claim_conflict>{batch.conflicts},
+			std::span<const sdk::differential_disagreement>{batch.differential_disagreements});
+		require(expected_digest && *expected_digest == batch.content_digest,
+				"full unresolved batch digest lost typed evidence");
+
+		bool source_claim_retained{};
+		bool typed_unresolved{};
+		for (const auto& partition : claims->partitions())
+		{
+			if (partition.draft.relation_descriptor_id == "cc.call_direct_target.v1")
+			{
+				source_claim_retained = source_claim_retained || !partition.draft.claims.empty();
+				for (const auto& unresolved : partition.draft.unresolved)
+				{
+					typed_unresolved = true;
+					require(unresolved.source_relation == "cc.call_direct_target.v1" &&
+								unresolved.target_relation == "cc.entity" &&
+								unresolved.source_columns ==
+									std::vector<std::string>{"cc.call_direct_target.v1.target"} &&
+								unresolved.reason == "soft-reference-missing" &&
+								partition.draft.precision_profile == "under_approximation" &&
+								!partition.manifest.complete,
+							"full unresolved evidence was not typed or conservatively bound");
+				}
+			}
+			else
+				require(partition.draft.precision_profile == "exact",
+						"full soft downgrade weakened an unrelated exact partition");
+		}
+		require(source_claim_retained && typed_unresolved,
+				"full soft-reference path lost its source claim or partition evidence");
+
+		auto store_transaction = make_materialization_store_transaction(request, *claims);
+		require(!store_transaction &&
+					store_transaction.error().code == "materialization.coverage-incomplete" &&
+					store_transaction.error().field == "complete-final-claim-batch",
+				"full unresolved claims crossed the exact Store publication gate");
+		auto streaming_transaction =
+			make_materialization_streaming_store_transaction(request, *claims);
+		require(!streaming_transaction &&
+					streaming_transaction.error().code == "materialization.coverage-incomplete" &&
+					streaming_transaction.error().field == "complete-final-claim-batch",
+				"full unresolved claims crossed the exact streaming publication gate");
+	}
+
 	void streaming_source_receipts_replace_resident_payloads(const std::filesystem::path& root)
 	{
 		auto request = request_fixture();
@@ -3792,6 +3853,7 @@ int main(const int argc, char** argv)
 	streaming_source_receipts_replace_resident_payloads(root);
 	check_incremental_coordinator_v2_1(root);
 	check_incremental_coordinator(request, producer);
+	check_full_soft_semantic_unresolved(request, producer);
 	check_bounded_soft_semantic_unresolved(request, producer);
 	check_bounded_adoption_fail_closed(request, producer);
 	negative_authority_guarantee_order_and_coverage(request, std::move(producer));
