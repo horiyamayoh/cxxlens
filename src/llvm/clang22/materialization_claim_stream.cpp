@@ -435,10 +435,8 @@ namespace cxxlens::detail::clang22::materialization
 				journal.canonical_task_ids.size() != tasks.size() ||
 				journal.ordered_task_receipt_seal_digests.size() != tasks.size())
 				return sdk::unexpected(stream_error("execution-journal", "task-census"));
-			std::vector<materialization_incremental_task_receipt> receipts;
 			try
 			{
-				receipts.reserve(tasks.size());
 				for (std::size_t index{}; index < tasks.size(); ++index)
 				{
 					if (auto valid = validate_materialization_incremental_task_receipt(
@@ -451,12 +449,9 @@ namespace cxxlens::detail::clang22::materialization
 						journal.ordered_task_receipt_seal_digests[index] !=
 							tasks[index].receipt.pre_encoder_task_receipt_seal_digest)
 						return sdk::unexpected(stream_error("execution-journal", "task-binding"));
-					receipts.push_back(tasks[index].receipt);
 				}
-				const auto recomputed = seal_materialization_incremental_execution_journal(
-					std::string{request_id},
-					std::span<const materialization_incremental_task_receipt>{receipts});
-				if (!recomputed || *recomputed != journal)
+				if (auto valid = validate_materialization_incremental_execution_journal(journal);
+					!valid)
 					return sdk::unexpected(stream_error("execution-journal", "seal-mismatch"));
 				return {};
 			}
@@ -482,8 +477,6 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(stream_error("execution-journal", "task-census"));
 			try
 			{
-				std::vector<materialization_incremental_task_receipt> receipts;
-				receipts.reserve(tasks.size());
 				for (std::size_t index{}; index < tasks.size(); ++index)
 				{
 					const auto& receipt = tasks[index].receipt;
@@ -494,12 +487,13 @@ namespace cxxlens::detail::clang22::materialization
 						journal.ordered_task_receipt_seal_digests[index] !=
 							receipt.pre_encoder_task_receipt_seal_digest)
 						return sdk::unexpected(stream_error("execution-journal", "task-binding"));
-					receipts.push_back(receipt);
+					if (auto valid =
+							validate_materialization_incremental_task_receipt_seal(receipt);
+						!valid)
+						return sdk::unexpected(stream_error("execution-journal", "seal-mismatch"));
 				}
-				const auto recomputed = seal_materialization_incremental_execution_journal(
-					std::string{request_id},
-					std::span<const materialization_incremental_task_receipt>{receipts});
-				if (!recomputed || *recomputed != journal)
+				if (auto valid = validate_materialization_incremental_execution_journal(journal);
+					!valid)
 					return sdk::unexpected(stream_error("execution-journal", "seal-mismatch"));
 				return {};
 			}
