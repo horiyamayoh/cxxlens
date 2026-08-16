@@ -13,6 +13,16 @@
 
 namespace cxxlens::sdk::provider::detail
 {
+	/** The reserved NG1 heartbeat wire id, kept source-private until NG1 activation. */
+	inline constexpr std::uint16_t ng1_heartbeat_message_id = 23U;
+	inline constexpr message_type ng1_heartbeat_message_type =
+		static_cast<message_type>(ng1_heartbeat_message_id);
+
+	[[nodiscard]] constexpr bool is_ng1_heartbeat_message(const message_type value) noexcept
+	{
+		return static_cast<std::uint16_t>(value) == ng1_heartbeat_message_id;
+	}
+
 	/** Source-private typed heartbeat control value for the NG1 protocol. */
 	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_heartbeat_control
 	{

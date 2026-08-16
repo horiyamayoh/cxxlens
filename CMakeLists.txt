@@ -285,8 +285,16 @@ cxxlens_enable_sanitizers(cxxlens_provider_runtime_internal)
 
 add_library(
   cxxlens_provider_sdk
-  ${CXXLENS_LIBRARY_TYPE} src/sdk/provider.cpp src/sdk/incremental.cpp
-  src/runtime/provider_process_adapter.cpp src/sdk/provider_runtime.cpp
+  ${CXXLENS_LIBRARY_TYPE}
+  src/sdk/provider.cpp
+  src/sdk/incremental.cpp
+  src/runtime/provider_process_adapter.cpp
+  src/sdk/provider_runtime.cpp
+  src/sdk/provider_ng1_validation.cpp
+  src/sdk/provider_ng1_transport.cpp
+  src/sdk/provider_ng1_recovery.cpp
+  src/sdk/provider_ng1_spill_port_internal.cpp
+  src/sdk/provider_ng1_session.cpp
   src/sdk/testing.cpp)
 add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
 cxxlens_configure_component(cxxlens_provider_sdk provider_sdk)

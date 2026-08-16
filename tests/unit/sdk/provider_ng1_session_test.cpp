@@ -403,6 +403,80 @@ namespace
 		require(missing_progress->cleanup(), "missing-progress cleanup failed");
 	}
 
+	void test_live_frame_adapter_binds_wire_controls_to_host_receipts()
+	{
+		const fixture values;
+		auto session = ng1_session_coordinator::create(values.configuration());
+		require(session, "live adapter session creation failed");
+		ng1_live_session_adapter adapter{*session};
+
+		auto make_frame = [](const provider::message_type type,
+							 std::vector<std::byte> control,
+							 const std::uint64_t sequence)
+		{
+			provider::frame value;
+			value.type = type;
+			value.stream_id = 7U;
+			value.sequence = sequence;
+			value.protocol_major = 1U;
+			value.protocol_minor = 1U;
+			value.control = std::move(control);
+			return value;
+		};
+
+		auto probe_control = encode_ng1_heartbeat_control(
+			values.heartbeat_control(ng1_heartbeat_kind::probe, 0U, 1'000U));
+		require(probe_control, "live adapter probe encoding failed");
+		auto probe = make_frame(ng1_heartbeat_message_type, std::move(*probe_control), 0U);
+		auto host_observed = adapter.observe_host_frame(probe, 1'000U, 0U, digest("staged"));
+		require(host_observed && *host_observed, "live adapter did not admit host probe");
+
+		auto ack_control = encode_ng1_heartbeat_control(
+			values.heartbeat_control(ng1_heartbeat_kind::ack, 0U, 1'001U));
+		require(ack_control, "live adapter ACK encoding failed");
+		auto ack = make_frame(ng1_heartbeat_message_type, std::move(*ack_control), 1U);
+		auto provider_observed = adapter.observe_provider_frame(ack, 1'001U, 0U, digest("staged"));
+		require(provider_observed && *provider_observed, "live adapter did not admit provider ACK");
+
+		auto progress_control =
+			encode_ng1_progress_control(values.progress_control(0U, 1'001U, 0U));
+		require(progress_control, "live adapter progress encoding failed");
+		auto progress =
+			make_frame(provider::message_type::progress, std::move(*progress_control), 2U);
+		provider_observed = adapter.observe_provider_frame(progress, 1'001U, 0U, digest("staged"));
+		require(provider_observed && *provider_observed, "live adapter did not admit progress");
+
+		provider::frame ordinary;
+		ordinary.type = provider::message_type::batch_begin;
+		auto ordinary_result =
+			adapter.observe_provider_frame(ordinary, 1'002U, 0U, digest("staged"));
+		require(ordinary_result && !*ordinary_result,
+				"live adapter consumed an ordinary shared-validator frame");
+		auto rejected = session->reject_output();
+		require(!rejected, "live adapter incomplete output was not rejected");
+		require(session->cleanup(), "live adapter session cleanup failed");
+
+		auto resume_session = ng1_session_coordinator::create(values.configuration());
+		require(resume_session, "live adapter resume session creation failed");
+		require(resume_session->append_spill(values.spill_record()),
+				"live adapter resume spill append failed");
+		auto receipt = resume_session->fsync_spill(0U, 0U, digest("staged"));
+		require(receipt, "live adapter resume spill fsync failed");
+		require(resume_session->observe_worker_exit(), "live adapter resume worker exit failed");
+		ng1_live_session_adapter resume_adapter{*resume_session};
+		auto resume_control = encode_ng1_resume_control(values.resume_control());
+		require(resume_control, "live adapter resume encoding failed");
+		auto resume = make_frame(provider::message_type::resume, std::move(*resume_control), 0U);
+		require(
+			resume_adapter.accept_provider_resume_frame(resume, 2'000U, *receipt, false, false, 0U),
+			"live adapter did not admit durable resume frame");
+		require(resume_session->state() == ng1_recovery_state::resume_replay,
+				"live adapter resume frame skipped replay state");
+		auto rejected_resume = resume_session->reject_output();
+		require(!rejected_resume, "live adapter incomplete replay was not rejected");
+		require(resume_session->cleanup(), "live adapter resume cleanup failed");
+	}
+
 	void test_timeout_kill_resume_checks_local_spill_prefix()
 	{
 		const fixture values;
@@ -673,6 +747,7 @@ namespace
 int main()
 {
 	test_complete_session_requires_progress_and_cleans_spill();
+	test_live_frame_adapter_binds_wire_controls_to_host_receipts();
 	test_timeout_kill_resume_checks_local_spill_prefix();
 	test_session_rejects_unbound_or_nonmonotonic_observations();
 	test_session_requires_local_receipt_and_poisoned_spill_is_terminal();
