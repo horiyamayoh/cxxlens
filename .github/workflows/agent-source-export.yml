@@ -47,7 +47,7 @@ jobs:
             tests/fixtures/provider_process_fixture.cpp \
             tests/unit/sdk/provider_runtime_test.cpp
           git diff --check
-          python3 tools/quality/check_format.py --clang-format clang-format-22
+          python3 tools/quality/check_format.py --root . --clang-format clang-format-22
           cmake -S . -B build/agent-remediation -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCXXLENS_CLANG_ADAPTER=OFF \
@@ -60,13 +60,17 @@ jobs:
           ctest --test-dir build/agent-remediation \
             --tests-regex '^unit.sdk-provider-runtime$' \
             --output-on-failure
-      - name: Publish remediated exact head
+          git diff --binary > "${RUNNER_TEMP}/validated-remediation.patch"
+      - name: Preserve exact validated remediation
         if: steps.remediation.outputs.present == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Fix NG1 duplex process lifecycle blockers"
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-agent-remediation-${{ github.sha }}
+          path: |
+            .github/workflows/quality.yml
+            src/runtime/provider_process_adapter.cpp
+            tests/fixtures/provider_process_fixture.cpp
+            tests/unit/sdk/provider_runtime_test.cpp
+            ${{ runner.temp }}/validated-remediation.patch
+          if-no-files-found: error
+          retention-days: 1
