@@ -192,9 +192,15 @@ namespace cxxlens::detail::clang22::materialization
 			const sdk::incremental::partition_candidate candidate{*binding.current_state,
 																  std::move(prior_state)};
 			const std::span<const sdk::incremental::partition_candidate> candidates{&candidate, 1U};
+			if (!plan_entry.planner_binding || *plan_entry.planner_binding != candidate)
+				return sdk::unexpected(coordinator_error("bindings", "plan-state-mismatch"));
 			auto derived_plan = sdk::incremental::make_materialization_plan(candidates);
-			if (!derived_plan || derived_plan->entries.size() != 1U ||
-				derived_plan->entries.front() != plan_entry)
+			if (!derived_plan || derived_plan->entries.size() != 1U)
+				return sdk::unexpected(coordinator_error("bindings", "plan-state-mismatch"));
+			const auto& derived_entry = derived_plan->entries.front();
+			if (derived_entry.partition_id != plan_entry.partition_id ||
+				derived_entry.decision != plan_entry.decision ||
+				derived_entry.reason != plan_entry.reason)
 				return sdk::unexpected(coordinator_error("bindings", "plan-state-mismatch"));
 			return {};
 		}

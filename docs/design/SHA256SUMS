@@ -79,7 +79,7 @@ e447a09ba2f553e15af14a811c551885fab873c593b4e66b25f1ef42f392a9e3  ../../schemas/
 b6f7005ee2e7c62642ce9e376c1aa361aa9ac70ba923dd065ba035f0d09ef6f4  ../../schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
 fb183d5bd606d45d1a0dc0347ded1e3bfbac3855d079c0dc4fe041d0e56b9c04  ../../schemas/cxxlens_ng_public_api_catalog.yaml
 a0599e26cfea7572064308e6ac413fc237c4d8562a155354c10717b708613ece  ../../schemas/cxxlens_ng_public_api_catalog.schema.yaml
-3cc90815c74c12149b3cc08a78abb765127c82604785222351fe8c5e06962ec3  ../../schemas/cxxlens_ng_public_callable_inventory.yaml
+1d14e4b7a9f24524caf83e7ed07e4522e63c6868b42a0934d02a30f0db4917de  ../../schemas/cxxlens_ng_public_callable_inventory.yaml
 87ee46594b94e4e7dbff1f8e845908b1703a5179c4e46ab882b2f7819e45338c  ../../schemas/cxxlens_ng_public_callable_inventory.schema.yaml
 813c3a2ae6728c9109c4c8d09da040b869e918ef24ab5fc7ecabd7f51d6d66e7  ../../schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml
 1eef0eb4fd0605bb4f9e4f63a91fc104bbd10eb0386aa7a6defb43caa2d90dca  ../../schemas/cxxlens_ng_acceptance_manifest.yaml
@@ -110,7 +110,7 @@ e35fb601c9652abb581d2d2f359456c5db094363981801f8c5925acc0cba4c31  ../../schemas/
 2cd9773019c2b5ef6028a1e6085715a338db9d306708a62bb6cfa26f8d334cd1  ../../schemas/cxxlens_ng_release_qualification.schema.yaml
 9255bae9ab5f34d8bf5283c36049392ed5f6e06de4619ee9802a9cc51a03e42a  ../../schemas/cxxlens_ng_release_qualification_report.schema.yaml
 37651790879fbee5ef2e632e80d165fe64a2840a97b8f7aceed647d78a416a19  ../../schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml
-87b7d93b1528c9e1ce3f4c7d04a7b5476ea0be5f5ef9cfb2c609510a7657c3aa  ../../schemas/cxxlens_ng_production_scope_closure.yaml
+8842b65d2e1570e704ff1b17287178d8b9f5faf275d8da6c3d03b18e8e3688a4  ../../schemas/cxxlens_ng_production_scope_closure.yaml
 368e13c425aa8e6261062f564632445d967c8f69da8841b9ca2fa8a4a53eb59d  ../../schemas/cxxlens_ng_production_scope_closure.schema.yaml
 a43c7748ea604fd99631b00ae2f431bd816cbcc88f00313554b07aec2617f381  ../../schemas/cxxlens_ng_production_scope_closure_report.schema.yaml
 0f710f1973b5eb195df7d41fe79bd2f85bd59f983c4dee77a760cfcb2ce6ef06  ../../schemas/cxxlens_ng_compatibility_request.schema.yaml

@@ -283,10 +283,19 @@ namespace cxxlens::sdk::incremental
 		{
 			if ((entry.decision != action::reuse && entry.decision != action::recompute) ||
 				!validate_strong_id(entry.partition_id) || !ids.insert(entry.partition_id).second ||
+				!entry.planner_binding ||
 				(entry.decision == action::reuse &&
 				 entry.reason != "sdk.incremental-exact-reuse") ||
 				(entry.decision == action::recompute &&
 				 !std::ranges::contains(recompute_reasons, entry.reason)))
+				return unexpected(
+					make_error("sdk.incremental-plan-entry-invalid", entry.partition_id));
+			const std::array binding{*entry.planner_binding};
+			auto derived = make_materialization_plan(binding);
+			if (!derived || derived->entries.size() != 1U ||
+				derived->entries.front().partition_id != entry.partition_id ||
+				derived->entries.front().decision != entry.decision ||
+				derived->entries.front().reason != entry.reason)
 				return unexpected(
 					make_error("sdk.incremental-plan-entry-invalid", entry.partition_id));
 			if (entry.decision == action::recompute)
@@ -310,7 +319,10 @@ namespace cxxlens::sdk::incremental
 		{
 			if (auto valid = candidate.current.validate(); !valid)
 				return unexpected(std::move(valid.error()));
-			plan_entry entry{candidate.current.partition_id, action::recompute, {}};
+			plan_entry entry{candidate.current.partition_id,
+							 action::recompute,
+							 {},
+							 std::optional<partition_candidate>{candidate}};
 			if (!candidate.prior)
 				entry.reason = "sdk.incremental-no-prior";
 			else

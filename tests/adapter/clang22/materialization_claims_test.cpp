@@ -3033,6 +3033,8 @@ namespace
 		auto affected_plan = incremental::make_materialization_plan(affected_candidates);
 		require(affected_plan && affected_plan->frontend_provider_executions == 1U,
 				"incremental fixture did not isolate one changed partition");
+		require(affected_plan->entries.front().planner_binding.has_value(),
+				"incremental planner did not retain the exact candidate binding");
 		prior = seal_all(request);
 		std::vector<materialization_incremental_task_binding> affected_bindings;
 		affected_bindings.emplace_back(
@@ -3118,6 +3120,60 @@ namespace
 						invalid.error().detail == "plan-state-mismatch" &&
 						invalid_executor.calls == 0U && invalid_executor.reuse_calls == 0U,
 					"plan/state mismatch reached the executor");
+		}
+
+		{
+			auto planner_current = first;
+			planner_current.input.source_digest = incremental_digest('e');
+			auto binding_current = first;
+			binding_current.input.source_digest = incremental_digest('f');
+			const std::array lossy_candidates{
+				incremental::partition_candidate{planner_current, first},
+				incremental::partition_candidate{second, second},
+			};
+			auto lossy_plan = incremental::make_materialization_plan(lossy_candidates);
+			require(lossy_plan &&
+						lossy_plan->entries.front().decision == incremental::action::recompute &&
+						lossy_plan->entries.front().reason == "sdk.incremental-source-changed",
+					"lossy planner binding fixture did not produce the expected decision/reason");
+			auto lossy_prior = seal_all(request);
+			std::vector<materialization_incremental_task_binding> lossy_bindings;
+			lossy_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:b",
+									1U,
+									second,
+									second,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(second, lossy_prior[1U])}));
+			lossy_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:a",
+									0U,
+									binding_current,
+									first,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(first, lossy_prior[0U])}));
+			fixture_incremental_executor lossy_executor{request,
+														producer,
+														guarantee,
+														false,
+														false,
+														false,
+														1U,
+														false,
+														std::move(lossy_prior)};
+			auto lossy = run_materialization_incremental_coordinator(request,
+																	 *lossy_plan,
+																	 std::move(lossy_bindings),
+																	 lossy_executor,
+																	 producer,
+																	 guarantee);
+			require(!lossy && lossy.error().code == "materialization.incremental-invalid" &&
+						lossy.error().field == "bindings" &&
+						lossy.error().detail == "plan-state-mismatch" &&
+						lossy_executor.calls == 0U && lossy_executor.reuse_calls == 0U,
+					"lossy decision/reason comparison accepted a different candidate state");
 		}
 
 		prior = seal_all(request);

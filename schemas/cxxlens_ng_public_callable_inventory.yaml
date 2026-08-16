@@ -704,6 +704,9 @@ allocator:
   - fully_qualified_name: cxxlens::sdk::incremental::materialization_plan::validate
     callable_kind: member
     next_overload_slot: 1
+  - fully_qualified_name: cxxlens::sdk::incremental::partition_candidate::operator==
+    callable_kind: operator
+    next_overload_slot: 1
   - fully_qualified_name: cxxlens::sdk::incremental::partition_state::operator==
     callable_kind: operator
     next_overload_slot: 1
@@ -1730,7 +1733,7 @@ allocator:
   - fully_qualified_name: cxxlens::source::relations::span::span_column::ref
     callable_kind: static
     next_overload_slot: 1
-inventory_digest: sha256:b55cbe297df5af185f724df7513ecf94aeb4825ce09f1faa36a43a98933ca35d
+inventory_digest: sha256:9370c2df97007df743e20da02c7452ab0df4a57c89ff14dd24155e4dfdefe608
 callables:
 - id: cpp.callable.00100ca7a0bda4b73503b24a4e6f6d33be47b954c7553cab8f70e85f9e77f492
   identity:
@@ -2094,10 +2097,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: bounded_transitive_closure'
     source_anchor:
       ast:
-        line: 149
+        line: 151
         column: 39
       doxygen:
-        line: 149
+        line: 151
         column: 9
 - id: cpp.callable.03a2f35373eb06a9bd7d961cbe331ec88e3a1a355054b22054c8cd8d6cd76f9a
   identity:
@@ -5319,10 +5322,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: plan_entry :: operator =='
     source_anchor:
       ast:
-        line: 78
+        line: 80
         column: 22
       doxygen:
-        line: 78
+        line: 80
         column: 7
 - id: cpp.callable.203868f229603f4759fd3c2db2eaeca65ae1f853222fabf05023dc379ae7e9bd
   identity:
@@ -5494,10 +5497,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: materialization_plan :: operator =='
     source_anchor:
       ast:
-        line: 91
+        line: 93
         column: 22
       doxygen:
-        line: 91
+        line: 93
         column: 7
 - id: cpp.callable.20bdf33297e8bd3178c3c5ec2d08bca0ab0648c893123a89156999a20af9d34f
   identity:
@@ -5646,10 +5649,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: closure_row :: operator =='
     source_anchor:
       ast:
-        line: 131
+        line: 133
         column: 22
       doxygen:
-        line: 131
+        line: 133
         column: 7
 - id: cpp.callable.2179afb4204fdba5b0ee1e327081f9f4b057981e24a5178f272bf131247524a9
   identity:
@@ -14236,7 +14239,7 @@ callables:
   callable_kind: operator
   signature:
     source: '[ [ nodiscard ] ] bool cxxlens :: sdk :: incremental :: partition_state :: operator == ( const partition_state
-      & ) const = default'
+      & ) const noexcept = default'
     return_type: bool
     parameters:
     - type: const partition_state &
@@ -14257,7 +14260,7 @@ callables:
     qualifiers:
       cv: const
       ref: none
-      noexcept: none
+      noexcept: noexcept
     declaration_state: defaulted
   declaring_header: include/cxxlens/sdk/incremental.hpp
   origin: defaulted
@@ -15354,10 +15357,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: closure_result :: operator =='
     source_anchor:
       ast:
-        line: 145
+        line: 147
         column: 22
       doxygen:
-        line: 145
+        line: 147
         column: 7
 - id: cpp.callable.7139b445b7a595123adad09de98459a6bb121dc4555371330451240af531adc1
   identity:
@@ -18053,10 +18056,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: closure_result :: validate'
     source_anchor:
       ast:
-        line: 144
+        line: 146
         column: 30
       doxygen:
-        line: 144
+        line: 146
         column: 9
 - id: cpp.callable.7f12e3e193cfd45e54eadb7420863eff41bdcb40bc2c49491a752b8a81880c3c
   identity:
@@ -19243,10 +19246,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: make_materialization_plan'
     source_anchor:
       ast:
-        line: 96
+        line: 98
         column: 2
       doxygen:
-        line: 96
+        line: 98
         column: 1
 - id: cpp.callable.8918d3b9ba71f7172572bc4f2395ffb0be32f17a55c85830ada6bf9c3bcf7672
   identity:
@@ -23201,10 +23204,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: closure_request :: validate'
     source_anchor:
       ast:
-        line: 120
+        line: 122
         column: 30
       doxygen:
-        line: 120
+        line: 122
         column: 9
 - id: cpp.callable.ab8418013bda0a3aaaa7f42c124a76484a20b5c576f44c456b13e086d3fd2cb3
   identity:
@@ -25410,10 +25413,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: closure_edge :: validate'
     source_anchor:
       ast:
-        line: 107
+        line: 109
         column: 30
       doxygen:
-        line: 107
+        line: 109
         column: 9
 - id: cpp.callable.bf2934094f077b66ffb18727de970c741937a9c1591fb51669a4fce534c33196
   identity:
@@ -27692,6 +27695,59 @@ callables:
       doxygen:
         line: 111
         column: 14
+- id: cpp.callable.d41ea33f3490b877d2ea6f2362b6e6d2ac2bb1618a7bca5fb8726e1d4048e456
+  identity:
+    overload_slot: 0
+  catalog_entry: public.incremental
+  package: author-sdk
+  target: cxxlens::provider_sdk
+  fully_qualified_name: cxxlens::sdk::incremental::partition_candidate::operator==
+  callable_kind: operator
+  signature:
+    source: '[ [ nodiscard ] ] bool cxxlens :: sdk :: incremental :: partition_candidate :: operator == ( const partition_candidate
+      & ) const noexcept ( false ) = default'
+    return_type: bool
+    parameters:
+    - type: const partition_candidate &
+      name: ''
+      default: null
+    template_parameters: []
+    constraints: []
+    specifiers:
+      static: false
+      virtual: false
+      pure_virtual: false
+      inline: false
+      constexpr: false
+      consteval: false
+      explicit: false
+      override: false
+      final: false
+    qualifiers:
+      cv: const
+      ref: none
+      noexcept: noexcept ( false )
+    declaration_state: defaulted
+  declaring_header: include/cxxlens/sdk/incremental.hpp
+  origin: defaulted
+  status: implemented
+  stability: source-versioned
+  qualification: NG1
+  owner: '#166'
+  evidence:
+    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    implementation: src/sdk/incremental.cpp
+    test: tests/unit/sdk/g5_runtime_test.cpp
+    example: examples/sdk/incremental_materialization.cpp
+    doxygen_key: sha256:80bbceadf56805202312d40b2d564806c8a69cbdd5f5ab35b551389c56481164
+    doxygen_name: 'cxxlens :: sdk :: incremental :: partition_candidate :: operator =='
+    source_anchor:
+      ast:
+        line: 63
+        column: 22
+      doxygen:
+        line: 63
+        column: 7
 - id: cpp.callable.d433116378fbe1808e506a988080d73780e9fa733e200f6d70b67749dd681721
   identity:
     overload_slot: 0
@@ -29618,10 +29674,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: materialization_plan :: validate'
     source_anchor:
       ast:
-        line: 90
+        line: 92
         column: 30
       doxygen:
-        line: 90
+        line: 92
         column: 9
 - id: cpp.callable.e6558857b15542b69ba45b5c60a727f7b85f9c4ae3591d9deefca71ac3db9daa
   identity:
@@ -31582,10 +31638,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: incremental :: closure_edge :: operator =='
     source_anchor:
       ast:
-        line: 108
+        line: 110
         column: 22
       doxygen:
-        line: 108
+        line: 110
         column: 7
 - id: cpp.callable.f6a6b3fdab5e5a78ee1b7da4c5472d07777a6a736ab0c30324049d61f4236a32
   identity:
@@ -31904,7 +31960,7 @@ callables:
   callable_kind: operator
   signature:
     source: '[ [ nodiscard ] ] bool cxxlens :: sdk :: incremental :: input_fingerprint :: operator == ( const input_fingerprint
-      & ) const = default'
+      & ) const noexcept = default'
     return_type: bool
     parameters:
     - type: const input_fingerprint &
@@ -31925,7 +31981,7 @@ callables:
     qualifiers:
       cv: const
       ref: none
-      noexcept: none
+      noexcept: noexcept
     declaration_state: defaulted
   declaring_header: include/cxxlens/sdk/incremental.hpp
   origin: defaulted

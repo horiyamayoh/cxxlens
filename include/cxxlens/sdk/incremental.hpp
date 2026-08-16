@@ -60,6 +60,7 @@ namespace cxxlens::sdk::incremental
 	{
 		partition_state current;
 		std::optional<partition_state> prior;
+		[[nodiscard]] bool operator==(const partition_candidate&) const = default;
 	};
 
 	/** @brief Closed action set for a deterministic materialization plan. */
@@ -69,12 +70,13 @@ namespace cxxlens::sdk::incremental
 		recompute,
 	};
 
-	/** @brief One canonical partition decision with a stable machine reason. */
+	/** @brief One canonical partition decision retaining its exact planner input. */
 	struct plan_entry
 	{
 		std::string partition_id;
 		action decision{action::recompute};
 		std::string reason;
+		std::optional<partition_candidate> planner_binding;
 		[[nodiscard]] bool operator==(const plan_entry&) const = default;
 	};
 
