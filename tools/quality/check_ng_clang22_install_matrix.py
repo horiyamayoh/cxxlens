@@ -52,10 +52,49 @@ MATRIX = (
     ("shared", "sqlite"),
 )
 BACKENDS = ("memory", "sqlite")
+EXECUTABLE_ROLES = frozenset(
+    {"materializer-executable", "worker-executable"}
+)
 
 
 class InstallMatrixError(ValueError):
     """The installed evidence is incomplete or does not bind exactly."""
+
+
+def resolve_installed_executable(
+    prefix: pathlib.Path,
+    canonical_relative_path: str,
+    executable_suffix: str = "",
+) -> pathlib.Path:
+    """Resolve a canonical manifest executable path to its installed file.
+
+    Occurrence manifests intentionally retain the platform-neutral canonical
+    path.  The configured CMake executable suffix affects only the filesystem
+    name used to launch or measure that executable; it is never written back
+    into the manifest or request identity.
+    """
+
+    if not isinstance(canonical_relative_path, str) or not canonical_relative_path:
+        raise InstallMatrixError("installed executable path is not a non-empty string")
+    relative = pathlib.PurePosixPath(canonical_relative_path)
+    if (
+        relative.is_absolute()
+        or "\\" in canonical_relative_path
+        or "\x00" in canonical_relative_path
+        or relative.as_posix() != canonical_relative_path
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
+        raise InstallMatrixError(
+            f"installed executable path is not canonical: {canonical_relative_path!r}"
+        )
+    if not isinstance(executable_suffix, str) or any(
+        character in executable_suffix for character in ("\x00", "/", "\\")
+    ):
+        raise InstallMatrixError(
+            f"configured executable suffix is not a filename suffix: {executable_suffix!r}"
+        )
+    candidate = prefix.joinpath(*relative.parts)
+    return candidate.with_name(candidate.name + executable_suffix)
 
 
 def installed_worker_host_transcript(
@@ -184,6 +223,7 @@ def capture_installed_raw_provider_transcripts(
     prefix: pathlib.Path,
     request: dict[str, Any],
     occurrence: dict[str, Any],
+    executable_suffix: str = "",
 ) -> dict[tuple[str, str, str], bytes]:
     """Capture raw stdout from the installed worker, independently of report rows."""
 
@@ -195,7 +235,9 @@ def capture_installed_raw_provider_transcripts(
         worker_record.get("path"), str
     ):
         raise InstallMatrixError("installed occurrence lacks a worker executable")
-    worker = prefix / worker_record["path"]
+    worker = resolve_installed_executable(
+        prefix, worker_record["path"], executable_suffix
+    )
     if not worker.is_file() or worker.is_symlink():
         raise InstallMatrixError(f"installed worker is not a regular file: {worker}")
     if worker_record.get("digest") != request["worker"].get(
@@ -431,6 +473,7 @@ def validate_installed_prefix_occurrence(
     prefix: pathlib.Path,
     occurrence: dict[str, Any],
     occurrence_bytes: bytes,
+    executable_suffix: str = "",
 ) -> None:
     """Re-measure the exact installed occurrence behind an evidence triplet."""
 
@@ -446,7 +489,12 @@ def validate_installed_prefix_occurrence(
                 "installed occurrence manifest differs from the retained evidence"
             )
         for entry in occurrence["files"]:
-            candidate = prefix / entry["path"]
+            if entry["role"] in EXECUTABLE_ROLES:
+                candidate = resolve_installed_executable(
+                    prefix, entry["path"], executable_suffix
+                )
+            else:
+                candidate = prefix / entry["path"]
             resolved = candidate.resolve()
             if prefix not in resolved.parents:
                 raise InstallMatrixError(
@@ -454,7 +502,8 @@ def validate_installed_prefix_occurrence(
                 )
             if candidate.is_symlink() or not candidate.is_file():
                 raise InstallMatrixError(
-                    f"installed occurrence entry is not a regular file: {entry['path']}"
+                    "installed occurrence entry is not a regular file: "
+                    f"{entry['path']} (resolved: {candidate})"
                 )
             observed_digest = digest_bytes(candidate.read_bytes())
             if observed_digest != entry["digest"]:
@@ -628,6 +677,7 @@ def validate_triplet(
     paths: dict[str, pathlib.Path],
     expected_source: dict[str, str],
     prefix: pathlib.Path | None,
+    executable_suffix: str = "",
 ) -> dict[str, Any]:
     request, request_bytes = load_object(
         paths[REQUEST_FILENAME], f"materialization request {paths[REQUEST_FILENAME]}"
@@ -648,7 +698,9 @@ def validate_triplet(
         root, paths[OCCURRENCE_FILENAME]
     )
     if prefix is not None:
-        validate_installed_prefix_occurrence(prefix, occurrence, occurrence_bytes)
+        validate_installed_prefix_occurrence(
+            prefix, occurrence, occurrence_bytes, executable_suffix
+        )
     if (
         occurrence["source_revision"] != expected_source["revision"]
         or occurrence["source_tree"] != expected_source["tree"]
@@ -790,6 +842,7 @@ def build_report(
     evidence_dir: pathlib.Path,
     require_exact_matrix: bool,
     prefix: pathlib.Path | None = None,
+    executable_suffix: str = "",
 ) -> dict[str, Any]:
     expected_source = {
         "revision": git_value(root, "HEAD"),
@@ -797,7 +850,9 @@ def build_report(
     }
     entries: dict[tuple[str, str], dict[str, Any]] = {}
     for parent, paths in artifact_paths(evidence_dir).items():
-        entry = validate_triplet(root, paths, expected_source, prefix)
+        entry = validate_triplet(
+            root, paths, expected_source, prefix, executable_suffix
+        )
         key = (entry["configuration"], entry["backend"])
         if key in entries:
             raise InstallMatrixError(f"duplicate materialization matrix entry: {key}")
@@ -879,6 +934,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--executable-suffix",
+        default="",
+        help=(
+            "configured CMake executable suffix used only to resolve installed "
+            "filesystem paths; occurrence manifest paths remain canonical"
+        ),
+    )
+    parser.add_argument(
         "--require-exact-matrix",
         action="store_true",
         help="reject a single static or shared configuration instead of returning partial evidence",
@@ -890,6 +953,7 @@ def main() -> int:
             args.evidence_dir.resolve(),
             args.require_exact_matrix,
             args.prefix.resolve() if args.prefix is not None else None,
+            args.executable_suffix,
         )
         if args.output is not None:
             write_json(args.output.resolve(), report)

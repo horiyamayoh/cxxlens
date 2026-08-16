@@ -1081,7 +1081,7 @@ add_test(
     "${PROJECT_SOURCE_DIR}/tests/install/clang22_materializer_installation_binding_test.py"
     --root "${PROJECT_SOURCE_DIR}" --prefix
     "${CMAKE_CURRENT_BINARY_DIR}/install-consumer/relocated-prefix"
-    --evidence-dir
+    --executable-suffix "${CMAKE_EXECUTABLE_SUFFIX}" --evidence-dir
     "${CMAKE_CURRENT_BINARY_DIR}/install-consumer/materialization-binding-evidence"
 )
 set_tests_properties(
