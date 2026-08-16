@@ -616,7 +616,7 @@ namespace cxxlens::detail::clang22::materialization
 			auto stored = record_string(value.tuple[1], "origin_associations.stored-ref");
 			auto row = record_string(value.tuple[3], "origin_associations.row");
 			if (!id || !stored || !row)
-				return sdk::unexpected(!id			 ? std::move(id.error())
+				return sdk::unexpected(!id ? std::move(id.error())
 										   : !stored ? std::move(stored.error())
 													 : std::move(row.error()));
 			std::array<std::string, 7U> context_values;
