@@ -31,6 +31,17 @@ def file_digest(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def local_workflow_lock(root: pathlib.Path) -> dict[str, str]:
+    try:
+        lock = json.loads((root / SUPPLY_CHAIN_LOCK).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"could not read local workflow lock: {error}") from error
+    workflows = lock.get("local_workflows")
+    if not isinstance(workflows, dict):
+        raise ValueError("local workflow lock is missing")
+    return workflows
+
+
 def provenance_digest(document: dict[str, Any]) -> str:
     projection = {key: value for key, value in document.items() if key != "digest"}
     return "sha256:" + hashlib.sha256(
@@ -130,7 +141,36 @@ def pinned_actions(root: pathlib.Path) -> list[dict[str, str]]:
             else:
                 continue
             reference = reference.split("#", 1)[0].rstrip()
-            if reference == "./.github/workflows/nightly.yml":
+            if reference.startswith("./"):
+                local_reference = pathlib.PurePosixPath(reference[2:])
+                if (
+                    not reference.startswith("./.github/workflows/")
+                    or local_reference.is_absolute()
+                    or ".." in local_reference.parts
+                    or local_reference.as_posix() != reference[2:]
+                ):
+                    raise ValueError(
+                        f"local workflow reference is not a tracked workflow: {workflow}: {reference}"
+                    )
+                local_path = root / local_reference
+                if not local_path.is_file():
+                    raise ValueError(
+                        f"local workflow reference is unavailable: {workflow}: {reference}"
+                    )
+                expected_digest = local_workflow_lock(root).get(local_reference.as_posix())
+                if (
+                    not isinstance(expected_digest, str)
+                    or len(expected_digest) != 64
+                    or any(character not in "0123456789abcdef" for character in expected_digest)
+                ):
+                    raise ValueError(
+                        f"local workflow is absent from supply-chain lock: {workflow}: {reference}"
+                    )
+                actual_digest = file_digest(local_path).removeprefix("sha256:")
+                if actual_digest != expected_digest:
+                    raise ValueError(
+                        f"local workflow differs from supply-chain lock: {workflow}: {reference}"
+                    )
                 continue
             name, separator, revision = reference.partition("@")
             if not separator or len(revision) != 40 or any(

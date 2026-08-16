@@ -1,5 +1,5 @@
 {
-  "asset_count": 681,
+  "asset_count": 683,
   "assets": [
     {
       "authority": "active",
@@ -3993,6 +3993,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_api_development_readiness_wave0_baseline.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_ci_supply_chain.py",
       "removal_issue": null,
       "replacement": null,
@@ -4483,6 +4490,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_api_development_readiness_wave0_baseline.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_clang22_install_matrix.py",
       "removal_issue": null,
       "replacement": null,
@@ -4770,7 +4784,7 @@
     }
   ],
   "classifications": {
-    "active": 645,
+    "active": 647,
     "archived": 35,
     "generated": 1
   },

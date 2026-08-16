@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import re
@@ -44,6 +45,10 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
 
 def normalized_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def local_workflow_digest(path: pathlib.Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def parse_direct_requirements(path: pathlib.Path) -> dict[str, str]:
@@ -108,7 +113,42 @@ def validate_workflow(path: pathlib.Path, lock: dict[str, Any]) -> None:
         if stripped.startswith("- uses:") or stripped.startswith("uses:"):
             reference = stripped.removeprefix("-").strip().removeprefix("uses:")
             reference = reference.split("#", 1)[0].strip()
-            if reference == "./.github/workflows/nightly.yml":
+            if reference.startswith("./"):
+                local_reference = pathlib.PurePosixPath(reference[2:])
+                if (
+                    not reference.startswith("./.github/workflows/")
+                    or local_reference.is_absolute()
+                    or ".." in local_reference.parts
+                    or local_reference.as_posix() != reference[2:]
+                ):
+                    raise CiSupplyChainError(
+                        f"local workflow reference is not repository-scoped: {path}: {reference}"
+                    )
+                repository_root = path.parents[2]
+                local_path = repository_root / local_reference
+                if not local_path.is_file():
+                    raise CiSupplyChainError(
+                        f"local workflow reference is unavailable: {path}: {reference}"
+                    )
+                local_workflows = lock.get("local_workflows")
+                if not isinstance(local_workflows, dict):
+                    raise CiSupplyChainError(
+                        f"local workflow lock is missing: {path}: {reference}"
+                    )
+                expected_digest = local_workflows.get(local_reference.as_posix())
+                if (
+                    not isinstance(expected_digest, str)
+                    or len(expected_digest) != 64
+                    or any(character not in "0123456789abcdef" for character in expected_digest)
+                ):
+                    raise CiSupplyChainError(
+                        f"local workflow is absent from supply-chain lock: {path}: {reference}"
+                    )
+                actual_digest = local_workflow_digest(local_path)
+                if actual_digest != expected_digest:
+                    raise CiSupplyChainError(
+                        f"local workflow differs from supply-chain lock: {path}: {reference}"
+                    )
                 continue
             name, separator, revision = reference.partition("@")
             if not separator or expected_actions.get(name) != revision:

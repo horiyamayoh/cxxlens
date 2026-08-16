@@ -1123,15 +1123,21 @@ def validate_documents(
         "uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16",
         "name: cxxlens-nightly-evidence-${{ github.sha }}",
         "path: build/release-evaluation-nightly",
+        "name: cxxlens-nightly-evidence-consumed-${{ github.sha }}",
+        "build/release-evaluation-nightly/nightly-evidence-set.json",
     ):
         if marker not in evaluation_body:
             fail(f"exact-main Nightly evidence workflow marker is missing: {marker}")
     for forbidden in (
+        "gh api",
+        "actions/workflows/nightly.yml/runs",
+        "for attempt in",
+        "sleep 30",
+        "run-id",
+        "nightly-run",
         "id: nightly-run",
         "gh api --method GET",
-        "actions/workflows/nightly.yml/runs",
         "for attempt in $(seq 1 180)",
-        "sleep 30",
         'run-id: ${{ steps.nightly-run.outputs.run-id }}',
     ):
         if forbidden in evaluation_body:
