@@ -112,6 +112,13 @@ class NgFoundationCompletionTest(unittest.TestCase):
     def test_static_foundation_contract_is_complete(self) -> None:
         self.assertEqual(self.manifest["maturity"], "implemented")
 
+    def test_contract_pending_catalog_entry_is_reported_not_promoted(self) -> None:
+        report = self.report()
+        self.assertEqual(
+            report["public_api_contract_pending"],
+            [{"id": "public.snapshot-store-sqlite-v3", "owner_issue": "#181"}],
+        )
+
     def test_provider_protocol_version_drift_is_rejected(self) -> None:
         expected = copy.deepcopy(self.manifest["version_contracts"])
         expected["provider_protocol"] = "1.0.0"
