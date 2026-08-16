@@ -125,6 +125,8 @@ class NgCiSupplyChainTest(unittest.TestCase):
             return_value=pathlib.Path(temporary),
         ), mock.patch(
             "bootstrap_supply_chain.download", return_value=b"substituted"
+        ), mock.patch(
+            "bootstrap_supply_chain.package_cache_hit_claimed", return_value=False
         ), mock.patch("bootstrap_supply_chain.run") as run:
             with self.assertRaisesRegex(SupplyChainError, "checksum mismatch"):
                 install_documentation(self.lock)
