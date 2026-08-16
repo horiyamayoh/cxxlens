@@ -2627,9 +2627,8 @@ namespace
 					blocked_send_finish->status == process_status::timed_out,
 				"NG1 send deadline discarded timeout process evidence");
 
-		// The leader can exit while a descendant retains the output pipe.  Forced cleanup must
-		// still address the original process group after leader reap, rather than waiting for the
-		// wall deadline and leaking the descendant.
+		// The leader can exit while a descendant retains the output pipe.  The bounded finish
+		// path must preserve its typed timeout while killing the original process group.
 		namespace fs = std::filesystem;
 		const auto descendant_marker = fs::temp_directory_path() /
 			("cxxlens-ng1-live-descendant-" + std::to_string(::getpid()) + ".pid");
@@ -2640,22 +2639,23 @@ namespace
 		require(descendant_budget.has_value(),
 				"could not derive a process budget for the NG1 live descendant test");
 		const auto descendant_command =
-			"/usr/bin/sleep 5 & child=$!; start=$(/usr/bin/awk '{print $22}' /proc/$child/stat); "
-			"printf '%s %s\\n' \"$child\" \"$start\" > " +
+			"/usr/bin/sleep 5 & child=$!; read -r pid comm state ppid pgrp session tty_nr tpgid "
+			"flags minflt cminflt majflt cmajflt utime stime cutime cstime priority nice "
+			"num_threads itrealvalue start_time rest < /proc/$child/stat; printf '%s %s\\n' "
+			"\"$child\" \"$start_time\" > " +
 			descendant_marker.string() + "; exit 0";
 		auto descendant = make_invocation({"/bin/sh", "-c", descendant_command});
 		descendant.budget.subprocesses = *descendant_budget;
 		descendant.budget.wall_ms = 2000U;
+		const auto descendant_deadline_origin = std::chrono::steady_clock::now();
 		auto descendant_process = start_process(descendant);
 		std::optional<holder_observation> observed_descendant;
-		// start() acknowledges process-group setup before exec reaches the shell command.  The
-		// live channel evaluates its wall deadline on send/receive/finish, so using the 2-second
-		// operation budget as the post-start marker-readiness deadline races with a busy runner.
-		// Keep readiness independently bounded; finish() still enforces the original operation
-		// deadline and performs the process-group cleanup assertion below.
-		const auto marker_wait_ms = std::max<std::uint64_t>(descendant.budget.wall_ms, 5'000U);
+		// Use shell builtins for the /proc read so marker readiness stays inside the live
+		// operation deadline without spawning a helper process after the descendant fork.  The
+		// origin is captured before start_process(), whose internal deadline starts during the
+		// call, so descheduling after startup cannot extend this readiness window.
 		const auto marker_deadline =
-			std::chrono::steady_clock::now() + std::chrono::milliseconds{marker_wait_ms};
+			descendant_deadline_origin + std::chrono::milliseconds{descendant.budget.wall_ms};
 		while (std::chrono::steady_clock::now() < marker_deadline && !observed_descendant)
 		{
 			observed_descendant = observe_descendant(descendant_marker);
@@ -2665,19 +2665,22 @@ namespace
 		require(observed_descendant.has_value(),
 				"NG1 live descendant identity could not be observed before cleanup");
 		std::this_thread::sleep_for(std::chrono::milliseconds{50});
+		const bool descendant_alive_before_cleanup = !pidfd_exited(observed_descendant->pidfd);
 		const auto descendant_finished = descendant_process->finish({});
-		const bool descendant_exited_before_cleanup =
+		const bool descendant_exited_after_cleanup =
 			wait_pidfd_exit(observed_descendant->pidfd, std::chrono::milliseconds{500});
-		if (!descendant_exited_before_cleanup)
+		if (!descendant_exited_after_cleanup)
 		{
 			(void)kill_pidfd(observed_descendant->pidfd);
 			(void)wait_pidfd_exit(observed_descendant->pidfd, std::chrono::seconds{2});
 		}
+		const bool descendant_timed_out = descendant_finished.has_value() &&
+			descendant_finished->status == process_status::timed_out;
 		const bool descendant_exited = pidfd_exited(observed_descendant->pidfd);
 		(void)::close(observed_descendant->pidfd);
 		fs::remove(descendant_marker, marker_error);
-		require(descendant_finished.has_value() && descendant_exited_before_cleanup &&
-					descendant_exited && !marker_error,
+		require(descendant_timed_out && descendant_alive_before_cleanup &&
+					descendant_exited_after_cleanup && descendant_exited && !marker_error,
 				"NG1 live process-group cleanup leaked a post-reap descendant");
 
 		// While the provider is writing a large stderr burst, the host must continue draining it

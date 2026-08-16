@@ -931,6 +931,28 @@ void issue_attribute_words();
         ):
             self.assertIn(marker, workflow)
 
+    def test_nightly_clean_full_keeps_parent_history(self) -> None:
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("\n  clean-full:\n", workflow)
+        clean_full = workflow.split("\n  clean-full:\n", 1)[1]
+        self.assertIn("\n          fetch-depth: 0\n", clean_full)
+        self.assertNotIn("\n          fetch-depth: 1\n", clean_full)
+
+    def test_timeout_regression_probe_compiles_pidfd_enum(self) -> None:
+        tests_cmake = (ROOT / "tests/CMakeLists.txt").read_text(encoding="utf-8")
+        self.assertIn(
+            "return waitid(P_PIDFD, 0, &status, WEXITED | WNOHANG);", tests_cmake
+        )
+        self.assertNotIn("#ifndef P_PIDFD", tests_cmake)
+        self.assertIn(
+            "CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)", tests_cmake
+        )
+        self.assertNotIn(
+            "CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)", tests_cmake
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
