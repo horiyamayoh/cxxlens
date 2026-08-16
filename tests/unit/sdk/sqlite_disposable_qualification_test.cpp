@@ -851,6 +851,30 @@ namespace
 		{
 			test_parent parent;
 			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint parent-sync fault capability");
+			const auto setup = minted->no_effect_request();
+			auto normalize = setup;
+			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main", canonical_empty_main(1U))),
+					"write parent-sync fault main fixture");
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main-wal", {})),
+					"write parent-sync fault zero-byte WAL fixture");
+			set_sqlite_disposable_parent_sync_failure_for_testing(*minted, true);
+			const auto rejected =
+				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			require(!rejected && rejected.error().detail == "normalization-parent-sync-uncertain",
+					"parent sync failure is an opaque post-effect result");
+			const auto repeated =
+				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			require(!repeated && repeated.error().detail == "normalization-capability-consumed",
+					"parent sync uncertainty cannot be retried");
+		}
+
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint FZ-pre normalization negative capability");
 			const auto setup = minted->no_effect_request();
 			auto normalize = setup;
