@@ -45,7 +45,7 @@ def command_output(command: list[str], root: pathlib.Path) -> str:
     ).stdout.strip()
 
 
-def source_identity(root: pathlib.Path) -> dict[str, str]:
+def git_source_identity(root: pathlib.Path) -> dict[str, str]:
     return {
         "revision": command_output(["git", "rev-parse", "HEAD"], root),
         "tree": command_output(["git", "rev-parse", "HEAD^{tree}"], root),
@@ -95,6 +95,51 @@ def installed_occurrence_source(prefix: pathlib.Path) -> dict[str, str] | None:
             f"installed occurrence provenance has invalid revision/tree: {path}"
         )
     return {key: str(value) for key, value in source.items()}
+
+
+def source_identity(
+    root: pathlib.Path,
+    prefix: pathlib.Path,
+    configured_revision: str | None = None,
+    configured_tree: str | None = None,
+) -> dict[str, str]:
+    if (configured_revision is None) != (configured_tree is None):
+        raise InstallArtifactError(
+            "configured source identity requires both revision and tree"
+        )
+    configured = None
+    if configured_revision is not None and configured_tree is not None:
+        configured = {
+            "revision": configured_revision,
+            "tree": configured_tree,
+        }
+        if not all(exact_source_identity(value) for value in configured.values()):
+            raise InstallArtifactError(
+                "configured source identity must contain exact lowercase revision/tree"
+            )
+
+    occurrence = installed_occurrence_source(prefix)
+    if configured is not None:
+        expected = configured
+    else:
+        try:
+            expected = git_source_identity(root)
+        except (OSError, subprocess.CalledProcessError):
+            if occurrence is None:
+                raise
+            expected = occurrence
+
+    if occurrence is not None and occurrence != expected:
+        differences = ", ".join(
+            f"{key} expected={expected[key]} actual={occurrence[key]}"
+            for key in ("revision", "tree")
+            if occurrence[key] != expected[key]
+        )
+        raise InstallArtifactError(
+            "installed occurrence source provenance mismatch; refusing to create or "
+            f"verify a stale artifact ({differences})"
+        )
+    return expected
 
 
 def toolchain(compiler: pathlib.Path, root: pathlib.Path) -> dict[str, str]:
@@ -150,19 +195,11 @@ def build_manifest(
     prefix: pathlib.Path,
     compiler: pathlib.Path,
     configuration: str,
+    *,
+    source_revision: str | None = None,
+    source_tree: str | None = None,
 ) -> dict[str, Any]:
-    source = source_identity(root)
-    occurrence_source = installed_occurrence_source(prefix)
-    if occurrence_source is not None and occurrence_source != source:
-        differences = ", ".join(
-            f"{key} expected={source[key]} actual={occurrence_source[key]}"
-            for key in ("revision", "tree")
-            if occurrence_source[key] != source[key]
-        )
-        raise InstallArtifactError(
-            "installed occurrence source provenance mismatch; refusing to create or "
-            f"verify a stale artifact ({differences})"
-        )
+    source = source_identity(root, prefix, source_revision, source_tree)
     files = prefix_files(prefix)
     document: dict[str, Any] = {
         "schema": "cxxlens.install-artifact-manifest.v1",
@@ -190,9 +227,19 @@ def verify_manifest(
     compiler: pathlib.Path,
     configuration: str,
     document: dict[str, Any],
+    *,
+    source_revision: str | None = None,
+    source_tree: str | None = None,
 ) -> None:
     jsonschema.Draft202012Validator(load_schema(root)).validate(document)
-    expected = build_manifest(root, prefix, compiler, configuration)
+    expected = build_manifest(
+        root,
+        prefix,
+        compiler,
+        configuration,
+        source_revision=source_revision,
+        source_tree=source_tree,
+    )
     if document != expected:
         mismatches: list[str] = []
         for field in ("source", "configuration", "configuration_digest", "prefix_digest"):
@@ -259,12 +306,19 @@ def main() -> int:
     parser.add_argument("--compiler", type=pathlib.Path, required=True)
     parser.add_argument("--configuration", required=True)
     parser.add_argument("--manifest", type=pathlib.Path, required=True)
+    parser.add_argument("--source-revision")
+    parser.add_argument("--source-tree")
     args = parser.parse_args()
     root = args.root.resolve()
     try:
         if args.command == "create":
             document = build_manifest(
-                root, args.prefix.resolve(), args.compiler, args.configuration
+                root,
+                args.prefix.resolve(),
+                args.compiler,
+                args.configuration,
+                source_revision=args.source_revision,
+                source_tree=args.source_tree,
             )
             jsonschema.Draft202012Validator(load_schema(root)).validate(document)
             args.manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -280,6 +334,8 @@ def main() -> int:
                 args.compiler,
                 args.configuration,
                 document,
+                source_revision=args.source_revision,
+                source_tree=args.source_tree,
             )
     except (
         InstallArtifactError,

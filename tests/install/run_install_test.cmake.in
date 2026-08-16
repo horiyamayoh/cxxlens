@@ -13,6 +13,8 @@ endif()
 set(cxxlens_clang22_available "@CXXLENS_CLANG22_AVAILABLE@")
 set(cxxlens_clang22_adapter "@CXXLENS_CLANG_ADAPTER@")
 set(cxxlens_clang22_unavailable_reason "@CXXLENS_CLANG22_UNAVAILABLE_REASON@")
+set(artifact_source_arguments --source-revision "@CXXLENS_SOURCE_REVISION@"
+                              --source-tree "@CXXLENS_SOURCE_TREE@")
 
 # These phases are the installed native-provider qualification boundary.  An
 # AUTO/OFF structured-unavailable build remains useful for the portable SDK and
@@ -119,10 +121,10 @@ if(PHASE STREQUAL "relocation")
     COMMAND
       "@Python3_EXECUTABLE@"
       "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/install_artifact_manifest.py"
-      create --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix
-      "${install_prefix}" --compiler "@CMAKE_CXX_COMPILER@" --configuration
-      "${artifact_configuration}" --manifest "${artifact_manifest}"
-      COMMAND_ERROR_IS_FATAL ANY)
+      create --root "@CMAKE_CURRENT_SOURCE_DIR@/.."
+      ${artifact_source_arguments} --prefix "${install_prefix}" --compiler
+      "@CMAKE_CXX_COMPILER@" --configuration "${artifact_configuration}"
+      --manifest "${artifact_manifest}" COMMAND_ERROR_IS_FATAL ANY)
   return()
 endif()
 
@@ -130,10 +132,10 @@ execute_process(
   COMMAND
     "@Python3_EXECUTABLE@"
     "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/install_artifact_manifest.py"
-    verify --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
-    --compiler "@CMAKE_CXX_COMPILER@" --configuration
-    "${artifact_configuration}" --manifest "${artifact_manifest}"
-    COMMAND_ERROR_IS_FATAL ANY)
+    verify --root "@CMAKE_CURRENT_SOURCE_DIR@/.." ${artifact_source_arguments}
+    --prefix "${install_prefix}" --compiler "@CMAKE_CXX_COMPILER@"
+    --configuration "${artifact_configuration}" --manifest
+    "${artifact_manifest}" COMMAND_ERROR_IS_FATAL ANY)
 
 if(PHASE STREQUAL "shared-runtime-layout")
   if(NOT "@CXXLENS_BUILD_SHARED@" STREQUAL "ON")
