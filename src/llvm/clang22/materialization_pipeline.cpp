@@ -91,30 +91,61 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	} // namespace
 
-		[[nodiscard]] sdk::result<void>
-		validate_exact_claims(const sealed_materialization_claims& claims)
+	[[nodiscard]] sdk::result<void>
+	validate_exact_claims(const sealed_materialization_claims& claims)
+	{
+		const auto& final_batch = claims.final_claim_batch();
+		if (!final_batch.unresolved.empty())
+			return sdk::unexpected(sdk::error{"materialization.coverage-incomplete",
+											  "complete-final-claim-batch",
+											  "nonzero-unresolved"});
+		if (!final_batch.conflicts.empty() || !final_batch.differential_disagreements.empty())
+			return sdk::unexpected(sdk::error{"materialization.claim-invalid",
+											  "complete-final-claim-batch",
+											  "nonzero-conflict-or-differential"});
+		if (claims.partitions().empty())
+			return sdk::unexpected(
+				sdk::error{"materialization.coverage-incomplete", "partitions", "empty"});
+		for (const auto& partition : claims.partitions())
 		{
-			if (!claims.final_claim_batch().unresolved.empty())
+			if (partition.draft.precision_profile != "exact" || !partition.manifest.complete ||
+				partition.draft.coverage.empty() || !partition.draft.unresolved.empty())
 				return sdk::unexpected(sdk::error{"materialization.coverage-incomplete",
-												  "complete-final-claim-batch",
-												  "nonzero-unresolved"});
-			for (const auto& partition : claims.partitions())
-				if (partition.draft.precision_profile != "exact")
+												  "partition-coverage",
+												  "empty-incomplete-or-non-exact"});
+			for (const auto& coverage : partition.draft.coverage)
+			{
+				if (auto valid = coverage.validate(); !valid)
+					return sdk::unexpected(sdk::error{
+						"materialization.coverage-incomplete", "partition-coverage", "invalid"});
+				if (coverage.state != "covered")
 					return sdk::unexpected(sdk::error{"materialization.coverage-incomplete",
-													  "guarantee",
-													  "non-exact-precision-profile"});
-			return {};
+													  "partition-coverage",
+													  "non-covered"});
+			}
+			for (const auto& claim : partition.draft.claims)
+			{
+				if (auto valid = claim.guarantee.validate(); !valid)
+					return sdk::unexpected(
+						sdk::error{"materialization.claim-invalid", "guarantee", "invalid"});
+				if (claim.guarantee.approximation != partition.draft.precision_profile ||
+					claim.guarantee.scope != partition.draft.scope ||
+					claim.guarantee.assumptions != partition.draft.assumption_set_id)
+					return sdk::unexpected(sdk::error{
+						"materialization.coverage-incomplete", "guarantee", "partition-binding"});
+			}
 		}
+		return {};
+	}
 
-		[[nodiscard]] sdk::result<void>
-		validate_exact_bounded_source(const materialization_bounded_claim_source& source)
-		{
-			if (!source.exact_publication_ready())
-				return sdk::unexpected(sdk::error{
-					"materialization.coverage-incomplete", "claims", "non-exact-or-unresolved"});
-			return {};
-		}
-	} // namespace
+	[[nodiscard]] sdk::result<void>
+	validate_exact_bounded_source(const materialization_bounded_claim_source& source)
+	{
+		if (!source.exact_publication_ready())
+			return sdk::unexpected(sdk::error{
+				"materialization.coverage-incomplete", "claims", "non-exact-or-unresolved"});
+		return {};
+	}
 	sdk::result<prepared_store_transaction>
 	make_materialization_store_transaction(const validated_materialization_request& request,
 										   const sealed_materialization_claims& claims)

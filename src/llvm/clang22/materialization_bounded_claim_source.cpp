@@ -29,6 +29,19 @@ namespace cxxlens::detail::clang22::materialization
 			return {"materialization.claim-source-invalid", std::move(field), std::move(detail)};
 		}
 
+		constexpr std::array<std::string_view, 6U> base_descriptor_ids{"build.project.v1",
+																	   "build.toolchain_context.v1",
+																	   "build.variant.v1",
+																	   "source.file.v1",
+																	   "build.compile_unit.v1",
+																	   "source.span.v1"};
+
+		[[nodiscard]] bool is_base_descriptor(const std::string_view descriptor_id) noexcept
+		{
+			return std::ranges::find(base_descriptor_ids, descriptor_id) !=
+				base_descriptor_ids.end();
+		}
+
 		[[nodiscard]] std::array<std::byte, 8U> encode_u64(const std::uint64_t value) noexcept
 		{
 			std::array<std::byte, 8U> output{};
@@ -85,6 +98,15 @@ namespace cxxlens::detail::clang22::materialization
 			for (const auto& coverage : partition.draft.coverage)
 				if (auto valid = coverage.validate(); !valid)
 					return sdk::unexpected(source_error("partition", "coverage"));
+			for (const auto& claim : partition.draft.claims)
+			{
+				if (auto valid = claim.guarantee.validate(); !valid)
+					return sdk::unexpected(source_error("partition.guarantee", "invalid"));
+				if (claim.guarantee.approximation != partition.draft.precision_profile ||
+					claim.guarantee.scope != partition.draft.scope ||
+					claim.guarantee.assumptions != partition.draft.assumption_set_id)
+					return sdk::unexpected(source_error("partition.guarantee", "identity-binding"));
+			}
 			for (const auto& unresolved : partition.draft.unresolved)
 			{
 				if (unresolved.source_relation != partition.draft.relation_descriptor_id)
@@ -235,6 +257,15 @@ namespace cxxlens::detail::clang22::materialization
 						 values.end());
 		}
 
+		[[nodiscard]] bool same_unresolved_metadata(const sdk::unresolved_reference& left,
+													const sdk::unresolved_reference& right) noexcept
+		{
+			return left.source_assertion == right.source_assertion &&
+				left.source_relation == right.source_relation &&
+				left.target_relation == right.target_relation &&
+				left.source_columns == right.source_columns && left.reason == right.reason;
+		}
+
 		using spooled_claim_consumer = std::function<sdk::result<void>(const sdk::claim&)>;
 
 		[[nodiscard]] sdk::result<void>
@@ -330,6 +361,12 @@ namespace cxxlens::detail::clang22::materialization
 		validate_bounded_task(const sdk::relation_engine& engine,
 							  const materialization_bounded_task_claims& task)
 		{
+			// The complete factory is the only semantic verdict ingress. The source accepts its
+			// hard/soft-reference and conflict/differential result only with an unforgeable token
+			// and full-payload integrity seal; mutation after factory return is therefore fail
+			// closed.
+			if (auto valid = task.validate_factory_seal(); !valid)
+				return sdk::unexpected(source_error("task", "factory-seal"));
 			if (task.partitions.empty())
 				return sdk::unexpected(source_error("partitions", "empty"));
 
@@ -579,7 +616,7 @@ namespace cxxlens::detail::clang22::materialization
 			auto stored = record_string(value.tuple[1], "origin_associations.stored-ref");
 			auto row = record_string(value.tuple[3], "origin_associations.row");
 			if (!id || !stored || !row)
-				return sdk::unexpected(!id ? std::move(id.error())
+				return sdk::unexpected(!id			 ? std::move(id.error())
 										   : !stored ? std::move(stored.error())
 													 : std::move(row.error()));
 			std::array<std::string, 7U> context_values;
@@ -904,7 +941,14 @@ namespace cxxlens::detail::clang22::materialization
 						return sdk::unexpected(source_error("coverage", "identity-collision"));
 				}
 				for (const auto& unresolved : partition.draft.unresolved)
+				{
+					for (const auto& prior : found->second.unresolved)
+						if (prior.source_assertion == unresolved.source_assertion &&
+							!same_unresolved_metadata(prior, unresolved))
+							return sdk::unexpected(
+								source_error("partition.unresolved", "ambiguous-source-assertion"));
 					found->second.unresolved.push_back(unresolved);
+				}
 				for (const auto& ref : partition.stored_claim_refs)
 					found->second.stored_claim_refs.insert(ref);
 				for (const auto& content : partition.claim_content_ids)
@@ -939,6 +983,84 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			return sdk::unexpected(source_error("claims", "allocation"));
 		}
+	}
+
+	sdk::result<bool> materialization_bounded_claim_source::assess_exact_publication_state()
+	{
+		if (engine_ == nullptr || partitions_.empty())
+			return false;
+		bool ready = true;
+		for (auto& [partition_id, state] : partitions_)
+		{
+			(void)partition_id;
+			if (!state.claims)
+				return sdk::unexpected(source_error("claims", "missing-spool"));
+			const bool base = is_base_descriptor(state.identity.relation_descriptor_id);
+			bool task_coverage{};
+			bool dependency_coverage{};
+			bool base_coverage{};
+			if (state.coverage.empty())
+				ready = false;
+			for (const auto& [coverage_id, coverage] : state.coverage)
+			{
+				(void)coverage_id;
+				if (auto valid = coverage.validate(); !valid)
+					return sdk::unexpected(source_error("partition.coverage", "invalid"));
+				if (coverage.state != "covered")
+					ready = false;
+				if (coverage.domain == "materialization.task")
+					task_coverage = true;
+				else if (coverage.domain == "materialization.dependency-group")
+					dependency_coverage = true;
+				else if (coverage.domain == "materialization.base-descriptor")
+					base_coverage = true;
+				else
+					ready = false;
+			}
+			if ((base && (!base_coverage || task_coverage || dependency_coverage)) ||
+				(!base && (base_coverage || !task_coverage || !dependency_coverage)))
+				ready = false;
+			if (state.identity.precision_profile != "exact" || !state.unresolved.empty())
+				ready = false;
+
+			sdk::partition_draft draft = state.identity;
+			draft.coverage.reserve(state.coverage.size());
+			for (const auto& [coverage_id, coverage] : state.coverage)
+			{
+				(void)coverage_id;
+				draft.coverage.push_back(coverage);
+			}
+			std::uint64_t decoded_claim_count{};
+			auto replayed = for_each_spooled_claim(
+				*state.claims,
+				*engine_,
+				[&](const sdk::claim& claim) -> sdk::result<void>
+				{
+					if (auto valid = claim.guarantee.validate(); !valid)
+						return sdk::unexpected(source_error("partition.guarantee", "invalid"));
+					if (claim.guarantee.approximation != state.identity.precision_profile ||
+						claim.guarantee.scope != state.identity.scope ||
+						claim.guarantee.assumptions != state.identity.assumption_set_id)
+						ready = false;
+					if (decoded_claim_count == std::numeric_limits<std::uint64_t>::max())
+						return sdk::unexpected(source_error("partition", "claim-count-overflow"));
+					++decoded_claim_count;
+					draft.claims.push_back(claim);
+					return {};
+				});
+			if (!replayed)
+				return sdk::unexpected(std::move(replayed.error()));
+			if (decoded_claim_count != state.appended_claim_count ||
+				state.empty != draft.claims.empty())
+				ready = false;
+			draft.unresolved = state.unresolved;
+			auto manifest = sdk::make_partition_manifest(*engine_, draft);
+			if (!manifest)
+				return sdk::unexpected(source_error("partition", "manifest"));
+			if (!manifest->complete)
+				ready = false;
+		}
+		return ready;
 	}
 
 	sdk::result<materialization_bounded_claim_source>
@@ -1077,6 +1199,16 @@ namespace cxxlens::detail::clang22::materialization
 				if (auto sealed = spool->seal(); !sealed)
 					return sdk::unexpected(source_error("report-metadata", "spool-seal"));
 			sealed_ = true;
+			auto status = claim_batch_status();
+			if (!status)
+				return sdk::unexpected(std::move(status.error()));
+			conflict_count_ = status->conflict_count;
+			differential_disagreement_count_ = status->differential_disagreement_count;
+			auto exact = assess_exact_publication_state();
+			if (!exact)
+				return sdk::unexpected(std::move(exact.error()));
+			exact_publication_ready_ =
+				*exact && conflict_count_ == 0U && differential_disagreement_count_ == 0U;
 			completed = true;
 			return std::move(*this);
 		}
@@ -1243,6 +1375,29 @@ namespace cxxlens::detail::clang22::materialization
 			runs.reserve(partitions_.size());
 			std::uint64_t claim_count{};
 			std::vector<sdk::unresolved_reference> unresolved;
+			struct occurrence_key
+			{
+				std::string descriptor;
+				std::vector<std::byte> occurrence;
+				[[nodiscard]] bool operator<(const occurrence_key& other) const noexcept
+				{
+					return std::tie(descriptor, occurrence) <
+						std::tie(other.descriptor, other.occurrence);
+				}
+			};
+			struct verdict_entry
+			{
+				std::string descriptor;
+				std::string semantic_key;
+				std::string content;
+				std::string assertion;
+				std::string interpretation;
+				sdk::claim_condition presence;
+				std::vector<std::byte> occurrence;
+				std::string payload_digest;
+			};
+			std::set<occurrence_key> non_multiset_occurrences;
+			std::map<std::pair<std::string, std::string>, std::vector<verdict_entry>> verdict_index;
 
 			if (auto replayed = replay(
 					[&](sdk::partition_draft draft) -> sdk::result<void>
@@ -1262,6 +1417,32 @@ namespace cxxlens::detail::clang22::materialization
 							auto occurrence = sdk::detail::claim_occurrence_projection(claim);
 							if (!occurrence)
 								return sdk::unexpected(std::move(occurrence.error()));
+							auto descriptor = engine_->require_id(claim.descriptor);
+							if (!descriptor)
+								return sdk::unexpected(std::move(descriptor.error()));
+							const occurrence_key occurrence_identity{claim.descriptor, *occurrence};
+							if (descriptor->descriptor().merge != sdk::merge_mode::multiset &&
+								!non_multiset_occurrences.insert(occurrence_identity).second)
+								continue;
+							std::string payload_digest;
+							if (descriptor->descriptor().merge ==
+								sdk::merge_mode::functional_assertion)
+							{
+								auto payload = sdk::detail::functional_payload_digest(
+									descriptor->descriptor(), claim.row);
+								if (!payload)
+									return sdk::unexpected(std::move(payload.error()));
+								payload_digest = std::move(*payload);
+							}
+							verdict_index[{claim.descriptor, claim.semantic_key}].push_back(
+								{claim.descriptor,
+								 claim.semantic_key,
+								 claim.content,
+								 claim.assertion,
+								 claim.interpretation,
+								 claim.presence,
+								 *occurrence,
+								 std::move(payload_digest)});
 							auto record = sdk::canonical_value::from_tuple({
 								sdk::canonical_value::from_string("claim"),
 								sdk::canonical_value::from_string(claim.content),
@@ -1347,6 +1528,71 @@ namespace cxxlens::detail::clang22::materialization
 			}
 			if (ordered_count != claim_count)
 				return sdk::unexpected(source_error("claims", "census-mismatch"));
+
+			std::set<std::tuple<std::string,
+								std::string,
+								std::string,
+								std::vector<std::string>,
+								std::vector<std::string>,
+								std::vector<std::string>>>
+				conflicts;
+			std::set<std::tuple<std::string,
+								std::string,
+								std::string,
+								std::string,
+								std::string,
+								std::string,
+								std::vector<std::string>>>
+				differential_disagreements;
+			for (auto& [key, values] : verdict_index)
+			{
+				auto descriptor = engine_->require_id(key.first);
+				if (!descriptor)
+					return sdk::unexpected(std::move(descriptor.error()));
+				if (descriptor->descriptor().merge != sdk::merge_mode::functional_assertion)
+					continue;
+				std::ranges::sort(values,
+								  [](const verdict_entry& left, const verdict_entry& right)
+								  {
+									  return left.occurrence < right.occurrence;
+								  });
+				for (std::size_t left_index{}; left_index < values.size(); ++left_index)
+					for (std::size_t right_index = left_index + 1U; right_index < values.size();
+						 ++right_index)
+					{
+						const auto& left = values[left_index];
+						const auto& right = values[right_index];
+						if (left.content == right.content ||
+							left.payload_digest == right.payload_digest)
+							continue;
+						auto overlap = left.presence.overlap(right.presence);
+						if (!overlap)
+							return sdk::unexpected(std::move(overlap.error()));
+						if (overlap->empty())
+							continue;
+						if (left.interpretation == right.interpretation)
+						{
+							std::vector<std::string> assertions{left.assertion, right.assertion};
+							std::vector<std::string> contents{left.content, right.content};
+							std::ranges::sort(assertions);
+							std::ranges::sort(contents);
+							conflicts.emplace(left.descriptor,
+											  key.second,
+											  left.interpretation,
+											  *overlap,
+											  std::move(assertions),
+											  std::move(contents));
+						}
+						else
+							differential_disagreements.emplace(left.descriptor,
+															   key.second,
+															   left.interpretation,
+															   right.interpretation,
+															   left.content,
+															   right.content,
+															   *overlap);
+					}
+			}
 
 			canonicalize_unresolved(unresolved);
 			if (unresolved.size() > std::numeric_limits<std::uint64_t>::max())
@@ -1501,9 +1747,13 @@ namespace cxxlens::detail::clang22::materialization
 			if (!finished || !finished->starts_with("sha256:") || finished->size() != 71U)
 				return sdk::unexpected(source_error("claims", "digest-finalize"));
 			const auto stream_digest = "semantic-v2:" + *finished;
-			// Functional conflicts and differential disagreements remain fatal at task admission.
 			return materialization_bounded_claim_batch_status{
-				stream_digest, claim_count, unresolved_count, 0U, 0U, partitions_.size()};
+				stream_digest,
+				claim_count,
+				unresolved_count,
+				static_cast<std::uint64_t>(conflicts.size()),
+				static_cast<std::uint64_t>(differential_disagreements.size()),
+				partitions_.size()};
 		}
 		catch (const std::bad_alloc&)
 		{

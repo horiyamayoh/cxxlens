@@ -149,15 +149,7 @@ namespace cxxlens::detail::clang22::materialization
 		/** Exact installed publication remains closed while any partial guarantee is retained. */
 		[[nodiscard]] bool exact_publication_ready() const noexcept
 		{
-			if (!sealed_ || failed_)
-				return false;
-			for (const auto& [partition_id, state] : partitions_)
-			{
-				(void)partition_id;
-				if (state.identity.precision_profile != "exact" || !state.unresolved.empty())
-					return false;
-			}
-			return true;
+			return sealed_ && !failed_ && exact_publication_ready_;
 		}
 
 	  private:
@@ -187,6 +179,9 @@ namespace cxxlens::detail::clang22::materialization
 		{
 		}
 
+		/** Validate every retained coverage/guarantee field before opening exact publication. */
+		[[nodiscard]] sdk::result<bool> assess_exact_publication_state();
+
 		materialization_claim_request_binding request_binding_;
 		std::string materialization_request_id_;
 		const sdk::relation_engine* engine_{};
@@ -205,5 +200,8 @@ namespace cxxlens::detail::clang22::materialization
 		std::unique_ptr<materialization_replayable_spool> origin_associations_;
 		bool sealed_{};
 		bool failed_{};
+		bool exact_publication_ready_{};
+		std::uint64_t conflict_count_{};
+		std::uint64_t differential_disagreement_count_{};
 	};
 } // namespace cxxlens::detail::clang22::materialization

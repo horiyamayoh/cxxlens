@@ -3779,8 +3779,8 @@ namespace
 		auto malformed_source = materialization_bounded_claim_source::begin(request);
 		require(malformed_source.has_value(), "malformed unresolved source begin failed");
 		auto malformed_result = malformed_source->consume_task(std::move(malformed));
-		require(!malformed_result && malformed_result.error().field == "partition.unresolved" &&
-					malformed_result.error().detail == "typed-record" &&
+		require(!malformed_result && malformed_result.error().field == "task" &&
+					malformed_result.error().detail == "factory-seal" &&
 					malformed_source->partition_count() == 0U,
 				"malformed soft unresolved evidence crossed bounded admission");
 
@@ -3897,8 +3897,8 @@ namespace
 		auto metadata_drift = make_task(0U);
 		metadata_drift.partitions.front().sdk_claim_occurrence_count += 1U;
 		auto rejected = source->consume_task(std::move(metadata_drift));
-		require(!rejected && rejected.error().field == "partition" &&
-					rejected.error().detail == "claim-census" && source->partition_count() == 0U,
+		require(!rejected && rejected.error().field == "task" &&
+					rejected.error().detail == "factory-seal" && source->partition_count() == 0U,
 				"bounded adoption accepted metadata drift or mutated before validation");
 		auto retry = make_task(0U);
 		auto retry_result = source->consume_task(std::move(retry));
@@ -3992,8 +3992,8 @@ namespace
 		require(!duplicate.partitions.empty(), "duplicate partition fixture is empty");
 		duplicate.partitions.push_back(duplicate.partitions.back());
 		auto duplicate_result = duplicate_source->consume_task(std::move(duplicate));
-		require(!duplicate_result && duplicate_result.error().field == "partitions" &&
-					duplicate_result.error().detail == "noncanonical-order" &&
+		require(!duplicate_result && duplicate_result.error().field == "task" &&
+					duplicate_result.error().detail == "factory-seal" &&
 					duplicate_source->partition_count() == 0U,
 				"bounded adoption accepted a duplicate partition window");
 
