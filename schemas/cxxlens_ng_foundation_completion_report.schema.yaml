@@ -10,6 +10,7 @@ required:
   - git
   - authority_digests
   - version_contracts
+  - public_api_contract_pending
   - evidence_claims
   - ci
   - supply_chain
@@ -38,6 +39,16 @@ properties:
     type: object
     minProperties: 11
     additionalProperties: {type: string, minLength: 1}
+  public_api_contract_pending:
+    type: array
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, owner_issue]
+      properties:
+        id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
+        owner_issue: {type: string, pattern: '^#[0-9]+$'}
   evidence_claims:
     type: object
     minProperties: 7

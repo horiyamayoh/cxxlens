@@ -886,58 +886,58 @@ namespace cxxlens::sdk::provider
 											 canonical_value::from_tuple(std::move(projected)));
 		}
 
-		[[nodiscard]] result<std::string>
-		sealed_transcript_receipt_digest(const std::string_view task_id,
-										 const std::string_view terminal,
-										 const detail::sealed_provider_transcript& sealed)
+		[[nodiscard]] result<std::string> sealed_transcript_receipt_digest_projection(
+			const std::string_view task_id,
+			const std::string_view terminal,
+			const std::span<const detail::provider_sealed_transcript_batch_receipt_projection>
+				batches,
+			const std::span<const coverage_unit> coverage_records,
+			const std::span<const unresolved_item> unresolved_records,
+			const std::span<const evidence_item> evidence_records)
 		{
 			if (task_id.empty() || terminal.empty())
 				return cxxlens::sdk::unexpected(runtime_error(
 					"provider.protocol-state-invalid", "runtime-receipt", "terminal-projection"));
-			std::vector<canonical_value> batches;
-			batches.reserve(sealed.batches().size());
-			for (const auto& batch : sealed.batches())
+			std::vector<canonical_value> projected_batches;
+			projected_batches.reserve(batches.size());
+			for (const auto& batch : batches)
 			{
-				if (batch.task_id() != task_id)
+				if (batch.task_id != task_id)
 					return cxxlens::sdk::unexpected(runtime_error(
 						"provider.protocol-state-invalid", "runtime-receipt", "batch-task"));
-				std::vector<std::string> row_forms;
-				row_forms.reserve(batch.rows().size());
-				for (const auto& row : batch.rows())
-					row_forms.push_back(row.canonical_form());
-				batches.push_back(canonical_value::from_tuple({
-					canonical_value::from_string(std::string{batch.task_id()}),
-					canonical_value::from_string(std::string{batch.descriptor_id()}),
-					canonical_value::from_string(std::string{batch.descriptor_digest()}),
-					canonical_value::from_string(std::string{batch.dependency_group_id()}),
-					canonical_value::from_string(std::string{batch.atomic_output_group_id()}),
-					canonical_value::from_string(std::string{batch.batch_id()}),
-					canonical_value::from_string(std::string{batch.batch_digest()}),
-					runtime_string_tuple(batch.ordered_chunk_digests()),
-					runtime_string_tuple(row_forms),
+				projected_batches.push_back(canonical_value::from_tuple({
+					canonical_value::from_string(batch.task_id),
+					canonical_value::from_string(batch.descriptor_id),
+					canonical_value::from_string(batch.descriptor_digest),
+					canonical_value::from_string(batch.dependency_group_id),
+					canonical_value::from_string(batch.atomic_output_group_id),
+					canonical_value::from_string(batch.batch_id),
+					canonical_value::from_string(batch.batch_digest),
+					runtime_string_tuple(batch.ordered_chunk_digests),
+					runtime_string_tuple(batch.row_canonical_forms),
 				}));
 			}
-			std::vector<canonical_value> coverage;
-			coverage.reserve(sealed.coverage().size());
-			for (const auto& record : sealed.coverage())
-				coverage.push_back(canonical_value::from_tuple({
+			std::vector<canonical_value> projected_coverage;
+			projected_coverage.reserve(coverage_records.size());
+			for (const auto& record : coverage_records)
+				projected_coverage.push_back(canonical_value::from_tuple({
 					canonical_value::from_string(record.kind),
 					canonical_value::from_string(record.id),
 					canonical_value::from_string(record.state),
 					canonical_value::from_string(record.reason),
 				}));
-			std::vector<canonical_value> unresolved;
-			unresolved.reserve(sealed.unresolved().size());
-			for (const auto& record : sealed.unresolved())
-				unresolved.push_back(canonical_value::from_tuple({
+			std::vector<canonical_value> projected_unresolved;
+			projected_unresolved.reserve(unresolved_records.size());
+			for (const auto& record : unresolved_records)
+				projected_unresolved.push_back(canonical_value::from_tuple({
 					canonical_value::from_string(record.code),
 					canonical_value::from_string(record.subject),
 					canonical_value::from_string(record.detail),
 				}));
-			std::vector<canonical_value> evidence;
-			evidence.reserve(sealed.evidence().size());
-			for (const auto& record : sealed.evidence())
-				evidence.push_back(canonical_value::from_tuple({
+			std::vector<canonical_value> projected_evidence;
+			projected_evidence.reserve(evidence_records.size());
+			for (const auto& record : evidence_records)
+				projected_evidence.push_back(canonical_value::from_tuple({
 					canonical_value::from_string(record.kind),
 					canonical_value::from_string(record.subject),
 					canonical_value::from_string(record.producer),
@@ -948,11 +948,43 @@ namespace cxxlens::sdk::provider
 				canonical_value::from_tuple({
 					canonical_value::from_string(std::string{task_id}),
 					canonical_value::from_string(std::string{terminal}),
-					canonical_value::from_tuple(std::move(batches)),
-					canonical_value::from_tuple(std::move(coverage)),
-					canonical_value::from_tuple(std::move(unresolved)),
-					canonical_value::from_tuple(std::move(evidence)),
+					canonical_value::from_tuple(std::move(projected_batches)),
+					canonical_value::from_tuple(std::move(projected_coverage)),
+					canonical_value::from_tuple(std::move(projected_unresolved)),
+					canonical_value::from_tuple(std::move(projected_evidence)),
 				}));
+		}
+
+		[[nodiscard]] result<std::string>
+		sealed_transcript_receipt_digest(const std::string_view task_id,
+										 const std::string_view terminal,
+										 const detail::sealed_provider_transcript& sealed)
+		{
+			std::vector<detail::provider_sealed_transcript_batch_receipt_projection> batches;
+			batches.reserve(sealed.batches().size());
+			for (const auto& batch : sealed.batches())
+			{
+				detail::provider_sealed_transcript_batch_receipt_projection projection;
+				projection.task_id = std::string{batch.task_id()};
+				projection.descriptor_id = std::string{batch.descriptor_id()};
+				projection.descriptor_digest = std::string{batch.descriptor_digest()};
+				projection.dependency_group_id = std::string{batch.dependency_group_id()};
+				projection.atomic_output_group_id = std::string{batch.atomic_output_group_id()};
+				projection.batch_id = std::string{batch.batch_id()};
+				projection.batch_digest = std::string{batch.batch_digest()};
+				projection.ordered_chunk_digests.assign(batch.ordered_chunk_digests().begin(),
+														batch.ordered_chunk_digests().end());
+				projection.row_canonical_forms.reserve(batch.rows().size());
+				for (const auto& row : batch.rows())
+					projection.row_canonical_forms.push_back(row.canonical_form());
+				batches.push_back(std::move(projection));
+			}
+			return sealed_transcript_receipt_digest_projection(task_id,
+															   terminal,
+															   batches,
+															   sealed.coverage(),
+															   sealed.unresolved(),
+															   sealed.evidence());
 		}
 	} // namespace
 
@@ -982,6 +1014,18 @@ namespace cxxlens::sdk::provider
 												  const detail::sealed_provider_transcript& sealed)
 		{
 			return sealed_transcript_receipt_digest(task_id, terminal, sealed);
+		}
+
+		result<std::string> provider_sealed_transcript_receipt_digest(
+			const std::string_view task_id,
+			const std::string_view terminal,
+			const std::span<const provider_sealed_transcript_batch_receipt_projection> batches,
+			const std::span<const coverage_unit> coverage,
+			const std::span<const unresolved_item> unresolved,
+			const std::span<const evidence_item> evidence)
+		{
+			return sealed_transcript_receipt_digest_projection(
+				task_id, terminal, batches, coverage, unresolved, evidence);
 		}
 
 		result<std::string>

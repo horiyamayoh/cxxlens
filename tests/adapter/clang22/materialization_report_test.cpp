@@ -192,6 +192,45 @@ namespace
 			sdk::content_digest(std::as_bytes(std::span{task_id.data(), task_id.size()}));
 	}
 
+	[[nodiscard]] std::string
+	sealed_receipt_digest_for_capture(const detailed_task_report_capture& capture)
+	{
+		std::vector<sdk::provider::detail::provider_sealed_transcript_batch_receipt_projection>
+			batches;
+		batches.reserve(capture.batches.size());
+		for (const auto& batch : capture.batches)
+		{
+			sdk::provider::detail::provider_sealed_transcript_batch_receipt_projection projection;
+			projection.task_id = batch.task_id;
+			projection.descriptor_id = batch.descriptor_id;
+			projection.descriptor_digest = batch.descriptor_digest;
+			projection.dependency_group_id = batch.dependency_group_id;
+			projection.atomic_output_group_id = batch.atomic_output_group_id;
+			projection.batch_id = batch.batch_id;
+			projection.batch_digest = batch.batch_digest;
+			projection.ordered_chunk_digests = batch.ordered_chunk_digests;
+			for (const auto& row : batch.rows)
+				projection.row_canonical_forms.push_back(row.row_canonical_form);
+			batches.push_back(std::move(projection));
+		}
+		std::vector<sdk::provider::coverage_unit> coverage;
+		coverage.reserve(capture.coverage.size());
+		for (const auto& value : capture.coverage)
+			coverage.push_back({value.kind, value.id, value.state, value.reason});
+		std::vector<sdk::provider::unresolved_item> unresolved;
+		unresolved.reserve(capture.unresolved.size());
+		for (const auto& value : capture.unresolved)
+			unresolved.push_back({value.code, value.subject, value.detail});
+		std::vector<sdk::provider::evidence_item> evidence;
+		evidence.reserve(capture.evidence.size());
+		for (const auto& value : capture.evidence)
+			evidence.push_back({value.kind, value.subject, value.producer, value.summary});
+		auto digest = sdk::provider::detail::provider_sealed_transcript_receipt_digest(
+			capture.provider_task_id, "provider.success", batches, coverage, unresolved, evidence);
+		require(digest.has_value(), "sealed report leaf fixture receipt derivation failed");
+		return *digest;
+	}
+
 	[[nodiscard]] compact_request_binding request_binding()
 	{
 		return {
@@ -937,8 +976,6 @@ namespace
 		capture.frame_count = 1U;
 		capture.frame_transcript_digest =
 			"semantic-v2:sha256:8888888888888888888888888888888888888888888888888888888888888888";
-		capture.sealed_transcript_digest =
-			"semantic-v2:sha256:9999999999999999999999999999999999999999999999999999999999999999";
 		capture.coverage.push_back({"canonical", "coverage:test", "complete", ""});
 		capture.unresolved.push_back({"provider.unavailable", task_id, "observation unavailable"});
 		capture.evidence.push_back({"provider", task_id, "clang22", "sealed"});
@@ -977,6 +1014,7 @@ namespace
 																   batch.ordered_chunk_digests,
 																   {}});
 		capture.batches.push_back(std::move(batch));
+		capture.sealed_transcript_digest = sealed_receipt_digest_for_capture(capture);
 		auto span_id = sdk::source_span_identity("snapshot:test", "file:test", 1U, 2U, "expansion");
 		require(span_id.has_value(), "report capture fixture span identity failed");
 		capture.observation_rows.push_back(
@@ -1691,6 +1729,47 @@ namespace
 		return model;
 	}
 
+	void sealed_provider_transcript_report_leaf_binding_is_fail_closed()
+	{
+		auto model = valid_detailed_success_model();
+		auto encoded = encode_detailed_success_report(model);
+		require(encoded.has_value() && encoded->find("\"row_canonical_form\"") != std::string::npos,
+				"detailed report leaf did not retain the sealed row canonical form");
+
+		auto row_drift = model;
+		auto& task = row_drift.tasks.front();
+		auto& batch = task.batches.front();
+		auto& row = batch.rows.front();
+		row.row_canonical_form += "-drift";
+		row.row_digest = sdk::content_digest(
+			std::as_bytes(std::span{row.row_canonical_form.data(), row.row_canonical_form.size()}));
+		auto row_set = sdk::semantic_digest("cxxlens.clang22.materialization-report.row-set.v1",
+											"0:" + row.row_canonical_form + "\n");
+		require(row_set.has_value(),
+				"sealed report leaf negative fixture row-set derivation failed");
+		batch.row_set_digest = *row_set;
+		for (auto& observation : task.observation_rows)
+			observation.observation_row_digest = row.row_digest;
+		auto row_rejected = encode_detailed_success_report(row_drift);
+		require(!row_rejected &&
+					row_rejected.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "provider_sealed_transcript",
+								   "transcript-mismatch:leaf-binding"},
+				"report encoder accepted a row mutation with a stale sealed transcript receipt");
+
+		auto receipt_drift = model;
+		receipt_drift.tasks.front().sealed_transcript_digest =
+			"semantic-v2:sha256:" + std::string(64U, 'f');
+		auto receipt_rejected = encode_detailed_success_report(receipt_drift);
+		require(!receipt_rejected &&
+					receipt_rejected.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "provider_sealed_transcript",
+								   "transcript-mismatch:leaf-binding"},
+				"report encoder accepted a runtime sealed receipt mutation");
+	}
+
 	void detailed_report_capacity_reservation_is_compositional_and_closed()
 	{
 		auto model = valid_detailed_success_model();
@@ -1853,6 +1932,7 @@ int main(const int argument_count, const char* const* arguments)
 	static_cast<void>(failed_head_observation_is_four_state_and_path_bound());
 	store_stage_and_publication_boundary_are_closed();
 	bounded_detailed_projection_never_promotes_unverified_store();
+	sealed_provider_transcript_report_leaf_binding_is_fail_closed();
 	report_capture_spool_replays_one_task_at_a_time();
 	prior_artifact_codec_is_canonical_and_bounded();
 	sqlite_prior_artifact_sidecar_is_selector_bound();
