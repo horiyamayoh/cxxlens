@@ -11,12 +11,12 @@ permissions:
 
 concurrency:
   group: apply-issue-291
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   apply:
     if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -36,12 +36,23 @@ jobs:
             | sed -E 's/^ISSUE291_PAYLOAD_[0-9]{4}://' \
             | tr -d '\n' \
             > "${RUNNER_TEMP}/issue291.tar.gz.b64"
-          base64 --decode "${RUNNER_TEMP}/issue291.tar.gz.b64" \
-            > "${RUNNER_TEMP}/issue291.tar.gz"
-          echo "e870e758fd0a08d2f00b99a184e49f01884c798f328153d6f0a6ceacec698585  ${RUNNER_TEMP}/issue291.tar.gz" \
-            | sha256sum --check
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import os
+          import pathlib
+
+          temporary = pathlib.Path(os.environ["RUNNER_TEMP"])
+          encoded = (temporary / "issue291.tar.gz.b64").read_bytes()
+          payload = base64.b64decode(encoded, validate=True)
+          digest = hashlib.sha256(payload).hexdigest()
+          expected = "e870e758fd0a08d2f00b99a184e49f01884c798f328153d6f0a6ceacec698585"
+          if digest != expected:
+              raise SystemExit(f"payload digest mismatch: {digest}")
+          (temporary / "issue291.tar.gz").write_bytes(payload)
+          PY
           tar -xzf "${RUNNER_TEMP}/issue291.tar.gz" -C .
-          python -m py_compile \
+          python3 -m py_compile \
             tools/quality/check_ng_api_development_readiness.py \
             tests/quality/test_ng_api_development_readiness.py
           git diff --check
