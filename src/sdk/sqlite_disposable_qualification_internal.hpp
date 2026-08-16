@@ -218,9 +218,9 @@ namespace cxxlens::detail::sqlite_qualification
 		const sqlite_disposable_qualification_request& request) noexcept;
 
 	/**
-	 * Deterministic internal test signal at the final-check-to-unlink boundary. It discloses no
-	 * retained descriptor, locator, leaf, or binding; a test must use its own fixture authority.
-	 * This seam is not linked into any production component.
+	 * Deterministic internal test signal between the initial source census and the final
+	 * pre-remove recheck. It discloses no retained descriptor, locator, leaf, or binding; a test
+	 * must use its own fixture authority. This seam is not linked into any production component.
 	 */
 	CXXLENS_SQLITE_QUALIFICATION_HIDDEN void set_sqlite_disposable_pre_remove_signal_for_testing(
 		sqlite_disposable_qualification_capability& capability,
