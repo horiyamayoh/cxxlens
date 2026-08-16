@@ -764,6 +764,110 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "absent",
         )
 
+    def test_installed_negative_evidence_handles_detailed_and_unbound_reports(
+        self,
+    ) -> None:
+        detailed_request = self.request("static", "sqlite")
+        detailed_request_bytes = materialization.canonical_json(detailed_request)
+        detailed_report = self.report(detailed_request)
+        self.validate_report(
+            detailed_request,
+            detailed_report,
+            request_bytes=detailed_request_bytes,
+        )
+        detailed_completed = subprocess.CompletedProcess(
+            ["installed-materializer-fixture"],
+            0,
+            materialization.canonical_json(detailed_report) + b"\n",
+            b"",
+        )
+        detailed_receipt = installed_negative.make_execution_receipt(
+            ROOT,
+            materialization,
+            detailed_completed,
+            "fixture-store-head-baseline",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_dir = pathlib.Path(directory)
+            installed_negative.write_negative_evidence(
+                materialization,
+                evidence_dir,
+                "fixture-store-head-baseline",
+                detailed_request_bytes,
+                detailed_completed,
+                detailed_receipt,
+                detailed_request,
+                detailed_report,
+            )
+            detailed_manifest = json.loads(
+                (
+                    evidence_dir
+                    / "fixture-store-head-baseline"
+                    / installed_negative.NEGATIVE_MANIFEST_FILENAME
+                ).read_bytes()
+            )
+        self.assertEqual(detailed_manifest["binding_state"], "detailed")
+        self.assertEqual(
+            detailed_manifest["source"],
+            installed_negative.negative_source_identity(detailed_request),
+        )
+
+        unbound_request = self.request("static", "sqlite")
+        unbound_request_bytes = materialization.canonical_json(unbound_request)
+        bound_worker_failure = materialization.compact_failure_report(
+            unbound_request_bytes,
+            request=unbound_request,
+            phase="worker-launch",
+            code="materialization.worker-failure",
+        )
+        self.validate_report(
+            unbound_request,
+            bound_worker_failure,
+            request_bytes=unbound_request_bytes,
+        )
+        unbound_worker_failure = copy.deepcopy(bound_worker_failure)
+        unbound_worker_failure.pop("binding")
+        with self.assertRaises(materialization.MaterializationError):
+            self.validate_report(
+                unbound_request,
+                unbound_worker_failure,
+                request_bytes=unbound_request_bytes,
+            )
+        unbound_completed = subprocess.CompletedProcess(
+            ["installed-materializer-fixture"],
+            1,
+            materialization.canonical_json(unbound_worker_failure) + b"\n",
+            b"",
+        )
+        unbound_receipt = installed_negative.make_execution_receipt(
+            ROOT,
+            materialization,
+            unbound_completed,
+            "fixture-worker-failure-unbound",
+        )
+        unbound_manifest = installed_negative.build_negative_evidence_manifest(
+            materialization,
+            unbound_request,
+            unbound_worker_failure,
+            unbound_request_bytes,
+            unbound_completed,
+            unbound_receipt,
+        )
+        installed_negative.validate_negative_evidence_manifest(
+            materialization,
+            unbound_request,
+            unbound_worker_failure,
+            unbound_request_bytes,
+            unbound_completed,
+            unbound_receipt,
+            unbound_manifest,
+        )
+        unbound_projection = json.loads(unbound_manifest)
+        self.assertEqual(unbound_projection["binding_state"], "unbound")
+        self.assertIsNone(unbound_projection["source"])
+        self.assertIsNone(unbound_projection["request"])
+        self.assertFalse(unbound_projection["qualification"]["native_positive_qualification"])
+
     def test_report_schema_errors_use_report_invalid_family(self) -> None:
         request = self.request()
         mutations = {

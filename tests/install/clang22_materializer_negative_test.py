@@ -233,6 +233,84 @@ def evidence_artifact(
     }
 
 
+def evidence_binding_state(report: dict[str, Any]) -> str:
+    """Classify report binding without manufacturing a missing compact binding."""
+
+    response_kind = report.get("response_kind")
+    if response_kind == "detailed":
+        if "binding" in report:
+            fail("detailed evidence report unexpectedly retained compact binding")
+        return "detailed"
+    if response_kind != "compact_failure":
+        fail("negative evidence report kind is outside the closed report union")
+    if "binding" not in report:
+        return "unbound"
+    binding = report["binding"]
+    if not isinstance(binding, dict):
+        fail("compact evidence report binding is not an object")
+    state = binding.get("state")
+    if state not in {"raw-input-only", "request-bound"}:
+        fail("compact evidence report binding state is outside the closed set")
+    return state
+
+
+def detailed_source_identity(
+    request: dict[str, Any],
+    report: dict[str, Any],
+) -> dict[str, Any]:
+    """Cross-bind a detailed report's own source/install projection to its input."""
+
+    expected = negative_source_identity(request)
+    try:
+        measured = report["installation"]["measured"]
+        actual = {
+            "revision": report["source"]["revision"],
+            "tree": report["source"]["tree"],
+            "package_configuration": measured["configuration"],
+            "occurrence_manifest_digest": report["installation"]["requested"][
+                "occurrence_manifest_digest"
+            ],
+            "materializer_digest": measured["tool"]["digest"],
+            "worker_digest": measured["worker"]["digest"],
+        }
+    except (KeyError, TypeError) as error:
+        fail(f"detailed evidence report lacks exact source identity: {error}")
+    if actual != expected:
+        fail("detailed evidence report source identity differs from the request")
+    expected_request = {
+        "materialization_request_id": request["materialization_request_id"],
+        "request_digest": request["request_digest"],
+        "semantic_request_digest": request["semantic_request_digest"],
+    }
+    if report.get("request") != expected_request:
+        fail("detailed evidence report request identity differs from the request")
+    return expected
+
+
+def report_store_projection(report: dict[str, Any]) -> dict[str, Any]:
+    """Project compact effects or detailed publication Store evidence uniformly."""
+
+    if "effects" in report:
+        try:
+            return {
+                "head_observation": report["effects"]["head_observation"],
+                "store_failure_cause": report["effects"]["store_failure_cause"],
+            }
+        except (KeyError, TypeError) as error:
+            fail(f"compact evidence report lacks exact Store projection: {error}")
+    try:
+        publication = report["publication"]
+        store_failure = publication["store_failure"]
+        return {
+            "head_observation": publication["head_observation"],
+            "store_failure_cause": (
+                None if store_failure is None else store_failure["cause"]
+            ),
+        }
+    except (KeyError, TypeError) as error:
+        fail(f"detailed evidence report lacks exact Store projection: {error}")
+
+
 def build_negative_evidence_manifest(
     oracle: Any,
     request: dict[str, Any] | None,
@@ -247,23 +325,41 @@ def build_negative_evidence_manifest(
         receipt: dict[str, Any] = json.loads(receipt_bytes)
     except json.JSONDecodeError as error:
         fail(f"negative execution receipt is not JSON: {error}")
-    if request is None:
-        if report["binding"]["state"] != "raw-input-only":
-            fail("raw negative evidence has a bound report without a request")
-        source = None
-        request_binding = None
-    else:
+    binding_state = evidence_binding_state(report)
+    if binding_state == "detailed":
+        if request is None:
+            fail("detailed evidence requires its exact input request")
+        source = detailed_source_identity(request, report)
+        request_binding = {
+            "materialization_request_id": request["materialization_request_id"],
+            "request_digest": request["request_digest"],
+            "semantic_request_digest": request["semantic_request_digest"],
+        }
+    elif binding_state == "request-bound":
+        if request is None:
+            fail("request-bound negative evidence lacks its input request")
         expected_binding = {
             "materialization_request_id": request["materialization_request_id"],
             "request_digest": request["request_digest"],
             "semantic_request_digest": request["semantic_request_digest"],
         }
-        if report["binding"]["state"] != "request-bound":
-            fail("request-bound negative evidence lost its binding state")
-        if report["binding"]["request"] != expected_binding:
+        if report["binding"].get("request") != expected_binding:
             fail("negative report request binding differs from the input request")
         source = negative_source_identity(request)
         request_binding = expected_binding
+    elif binding_state == "raw-input-only":
+        if request is not None:
+            fail("raw negative evidence was supplied with a request")
+        source = None
+        request_binding = None
+    else:
+        # A compact response without binding is an unauthenticated observation.
+        # Keep its raw report/receipt, but never attribute it to the request or
+        # installed source identity.
+        source = None
+        request_binding = None
+
+    store_projection = report_store_projection(report)
 
     if receipt["actual_exit_status"] != completed.returncode:
         fail("negative evidence receipt exit status differs from the process")
@@ -278,7 +374,7 @@ def build_negative_evidence_manifest(
 
     manifest = {
         "schema": NEGATIVE_EVIDENCE_SCHEMA,
-        "binding_state": report["binding"]["state"],
+        "binding_state": binding_state,
         "source": source,
         "request": request_binding,
         "report": {
@@ -287,8 +383,8 @@ def build_negative_evidence_manifest(
             "response_kind": report["response_kind"],
             "result": report["result"],
             "error": report["error"],
-            "head_observation": report["effects"]["head_observation"],
-            "store_failure_cause": report["effects"]["store_failure_cause"],
+            "head_observation": store_projection["head_observation"],
+            "store_failure_cause": store_projection["store_failure_cause"],
         },
         "execution_receipt": {
             "path": NEGATIVE_RECEIPT_FILENAME,
@@ -328,15 +424,27 @@ def validate_negative_evidence_manifest(
         fail(f"negative evidence manifest is not JSON: {error}")
     if manifest["schema"] != NEGATIVE_EVIDENCE_SCHEMA:
         fail("negative evidence manifest schema differs")
-    if manifest["binding_state"] != report["binding"]["state"]:
+    binding_state = evidence_binding_state(report)
+    if manifest["binding_state"] != binding_state:
         fail("negative evidence binding state differs from report")
-    expected_source = None if request is None else negative_source_identity(request)
+    if binding_state == "detailed":
+        if request is None:
+            fail("detailed evidence requires its exact input request")
+        expected_source = detailed_source_identity(request, report)
+    elif binding_state == "request-bound":
+        if request is None:
+            fail("request-bound negative evidence lacks its input request")
+        expected_source = negative_source_identity(request)
+    else:
+        expected_source = None
     if manifest["source"] != expected_source:
         fail("negative evidence source identity differs from the request")
     expected_request = (
         None
-        if request is None
+        if binding_state not in {"detailed", "request-bound"}
         else {
+            # Detailed reports have no compact binding field, but their exact
+            # top-level request projection is still independently validated.
             "materialization_request_id": request["materialization_request_id"],
             "request_digest": request["request_digest"],
             "semantic_request_digest": request["semantic_request_digest"],
@@ -352,11 +460,12 @@ def validate_negative_evidence_manifest(
         fail("negative evidence result differs")
     if manifest["report"]["error"] != report["error"]:
         fail("negative evidence error projection differs")
+    store_projection = report_store_projection(report)
     if (
         manifest["report"]["head_observation"]
-        != report["effects"]["head_observation"]
+        != store_projection["head_observation"]
         or manifest["report"]["store_failure_cause"]
-        != report["effects"]["store_failure_cause"]
+        != store_projection["store_failure_cause"]
     ):
         fail("negative evidence Store outcome projection differs")
     if manifest["execution_receipt"]["sha256"] != oracle.content_digest(
@@ -445,8 +554,9 @@ def assert_raw_failure(
     evidence_dir: pathlib.Path | None,
 ) -> dict[str, Any]:
     report = assert_compact_response(root, oracle, completed, payload, None)
+    binding_state = evidence_binding_state(report)
     if (
-        report["binding"]["state"] != "raw-input-only"
+        binding_state != "raw-input-only"
         or report["error"]["phase"] != expected_phase
         or report["error"]["code"] != "materialization.request-invalid"
         or report["effects"]["store_draft_state"] != "not-created"
@@ -668,8 +778,9 @@ def assert_corrupt_head_failure(
         expected_failure,
     )
     cause = report["effects"]["store_failure_cause"]
+    binding_state = evidence_binding_state(report)
     if (
-        report["binding"]["state"] != "request-bound"
+        binding_state != "request-bound"
         or report["error"]["phase"] != "store-stage"
         or report["error"]["code"] != "materialization.store-failure"
         or report["effects"]["store_draft_state"] != "discarded"
