@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "materialization_request.hpp"
+#include "materialization_request_binding.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -28,6 +29,7 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		const materialization_claim_stream_source* claim_stream{};
 		const materialization_incremental_execution_journal_receipt* execution_journal{};
+		std::optional<materialization_claim_request_binding> expected_request_binding;
 	};
 
 	/** Fully prepared SDK transaction input. This boundary only consumes Store-ready values. */

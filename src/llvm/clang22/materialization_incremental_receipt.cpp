@@ -376,13 +376,16 @@ namespace cxxlens::detail::clang22::materialization
 		{
 		  public:
 			[[nodiscard]] static sdk::result<std::string>
-			build(const std::string_view materialization_request_id,
+			build(const materialization_claim_request_binding& request_binding,
 				  const std::span<const std::string> task_ids,
 				  const std::span<const std::string> seals)
 			{
 				if (task_ids.empty() || task_ids.size() != seals.size() ||
-					!sdk::validate_strong_id(materialization_request_id))
+					!sdk::validate_strong_id(request_binding.materialization_request_id))
 					return sdk::unexpected(receipt_error("execution-journal", "identity"));
+				auto binding_digest = seal_materialization_claim_request_binding(request_binding);
+				if (!binding_digest || *binding_digest != request_binding.canonical_binding_digest)
+					return sdk::unexpected(receipt_error("execution-journal", "request-binding"));
 				if (task_ids.size() > std::numeric_limits<std::uint64_t>::max())
 					return sdk::unexpected(receipt_error("execution-journal", "length-overflow"));
 				for (std::size_t index{}; index < task_ids.size(); ++index)
@@ -406,19 +409,21 @@ namespace cxxlens::detail::clang22::materialization
 
 				auto marker_size = encoded_string_size(semantic_marker);
 				auto domain_size = encoded_string_size(execution_journal_domain);
-				auto request_size = encoded_string_size(materialization_request_id);
+				auto binding_size = encoded_string_size(request_binding.canonical_binding_digest);
+				auto request_size = encoded_string_size(request_binding.materialization_request_id);
 				auto task_tuple_size = encoded_string_tuple_size(task_ids);
 				auto seal_tuple_size = encoded_string_tuple_size(seals);
-				if (!marker_size || !domain_size || !request_size || !task_tuple_size ||
-					!seal_tuple_size)
+				if (!marker_size || !domain_size || !binding_size || !request_size ||
+					!task_tuple_size || !seal_tuple_size)
 					return sdk::unexpected(receipt_error("execution-journal", "length-overflow"));
 
 				std::uint64_t inner_items{};
-				if (!checked_add(*request_size, 17U, inner_items) ||
+				if (!checked_add(*binding_size, *request_size, inner_items) ||
+					!checked_add(inner_items, 17U, inner_items) ||
 					!checked_add(inner_items, *task_tuple_size, inner_items) ||
 					!checked_add(inner_items, *seal_tuple_size, inner_items))
 					return sdk::unexpected(receipt_error("execution-journal", "length-overflow"));
-				auto inner_size = encoded_tuple_size(4U, inner_items);
+				auto inner_size = encoded_tuple_size(5U, inner_items);
 				if (!inner_size)
 					return sdk::unexpected(std::move(inner_size.error()));
 				std::uint64_t payload_size{};
@@ -462,10 +467,15 @@ namespace cxxlens::detail::clang22::materialization
 				valid = output.update_byte(0x05U);
 				if (!valid)
 					return sdk::unexpected(std::move(valid.error()));
-				valid = output.update_u64(4U);
+				valid = output.update_u64(5U);
 				if (!valid)
 					return sdk::unexpected(std::move(valid.error()));
-				valid = output.write_framed_string(*request_size, materialization_request_id);
+				valid = output.write_framed_string(*binding_size,
+												   request_binding.canonical_binding_digest);
+				if (!valid)
+					return sdk::unexpected(std::move(valid.error()));
+				valid = output.write_framed_string(*request_size,
+												   request_binding.materialization_request_id);
 				if (!valid)
 					return sdk::unexpected(std::move(valid.error()));
 				valid = output.write_framed_u64_bytes(static_cast<std::uint64_t>(task_ids.size()));
@@ -2978,8 +2988,15 @@ namespace cxxlens::detail::clang22::materialization
 			journal.ordered_task_receipt_seal_digests.size() !=
 				static_cast<std::size_t>(journal.exact_task_count))
 			return sdk::unexpected(receipt_error("execution-journal", "task-census"));
+		if (journal.request_binding.materialization_request_id !=
+				journal.materialization_request_id ||
+			journal.request_binding.task_count != journal.exact_task_count)
+			return sdk::unexpected(receipt_error("execution-journal", "request-binding"));
+		auto binding_digest = seal_materialization_claim_request_binding(journal.request_binding);
+		if (!binding_digest || *binding_digest != journal.request_binding.canonical_binding_digest)
+			return sdk::unexpected(receipt_error("execution-journal", "request-binding"));
 		auto digest = execution_journal_digest_builder::build(
-			journal.materialization_request_id,
+			journal.request_binding,
 			std::span<const std::string>{journal.canonical_task_ids},
 			std::span<const std::string>{journal.ordered_task_receipt_seal_digests});
 		if (!digest)
@@ -2991,11 +3008,11 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<materialization_incremental_execution_journal_receipt>
 	seal_materialization_incremental_execution_journal(
-		std::string materialization_request_id,
+		materialization_claim_request_binding request_binding,
 		const std::span<const materialization_incremental_task_receipt> task_receipts)
 	{
 		return seal_materialization_incremental_execution_journal(
-			std::move(materialization_request_id),
+			std::move(request_binding),
 			task_receipts.size(),
 			[task_receipts](const std::size_t index)
 			{
@@ -3005,13 +3022,16 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<materialization_incremental_execution_journal_receipt>
 	seal_materialization_incremental_execution_journal(
-		std::string materialization_request_id,
+		materialization_claim_request_binding request_binding,
 		const std::size_t task_count,
 		const materialization_incremental_task_receipt_reader& task_receipt_at)
 	{
-		if (task_count == 0U || !sdk::validate_strong_id(materialization_request_id) ||
-			!task_receipt_at)
+		if (task_count == 0U || request_binding.task_count != task_count || !task_receipt_at)
 			return sdk::unexpected(receipt_error("execution-journal", "identity"));
+		auto binding_digest = seal_materialization_claim_request_binding(request_binding);
+		if (!binding_digest || *binding_digest != request_binding.canonical_binding_digest)
+			return sdk::unexpected(receipt_error("execution-journal", "request-binding"));
+		const auto request_id = request_binding.materialization_request_id;
 		if (task_count > std::numeric_limits<std::uint64_t>::max())
 			return sdk::unexpected(receipt_error("execution-journal", "length-overflow"));
 		std::vector<std::string> task_ids;
@@ -3021,8 +3041,7 @@ namespace cxxlens::detail::clang22::materialization
 		for (std::size_t index{}; index < task_count; ++index)
 		{
 			const auto* receipt = task_receipt_at(index);
-			if (receipt == nullptr ||
-				receipt->materialization_request_id != materialization_request_id ||
+			if (receipt == nullptr || receipt->materialization_request_id != request_id ||
 				receipt->canonical_task_ordinal != index || !receipt->successful_seal ||
 				!sdk::validate_strong_id(receipt->task_id))
 				return sdk::unexpected(receipt_error("execution-journal", "task-order"));
@@ -3033,13 +3052,14 @@ namespace cxxlens::detail::clang22::materialization
 			seals.push_back(receipt->pre_encoder_task_receipt_seal_digest);
 		}
 		auto digest =
-			execution_journal_digest_builder::build(materialization_request_id,
+			execution_journal_digest_builder::build(request_binding,
 													std::span<const std::string>{task_ids},
 													std::span<const std::string>{seals});
 		if (!digest)
 			return sdk::unexpected(std::move(digest.error()));
 		return materialization_incremental_execution_journal_receipt{
-			std::move(materialization_request_id),
+			std::move(request_binding),
+			request_id,
 			static_cast<std::uint64_t>(task_ids.size()),
 			std::move(task_ids),
 			std::move(seals),

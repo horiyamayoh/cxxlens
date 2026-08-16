@@ -120,6 +120,13 @@ namespace cxxlens::detail::clang22::materialization
 				lower_hex(value.substr(prefix.size()));
 		}
 
+		[[nodiscard]] bool semantic_digest_value(const std::string_view value) noexcept
+		{
+			constexpr std::string_view prefix{"semantic-v2:sha256:"};
+			return value.size() == prefix.size() + 64U && value.starts_with(prefix) &&
+				lower_hex(value.substr(prefix.size()));
+		}
+
 		[[nodiscard]] bool revision(const std::string_view value) noexcept
 		{
 			return value.size() == 40U && lower_hex(value);
@@ -134,6 +141,15 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::canonical_value text(std::string value)
 		{
 			return sdk::canonical_value::from_string(std::move(value));
+		}
+
+		[[nodiscard]] sdk::canonical_value u64_bytes(const std::uint64_t value)
+		{
+			std::vector<std::byte> raw(sizeof(value));
+			for (std::size_t index{}; index < raw.size(); ++index)
+				raw[index] = static_cast<std::byte>(
+					(value >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
+			return sdk::canonical_value::from_bytes(std::move(raw));
 		}
 
 		[[nodiscard]] sdk::canonical_value texts(const std::span<const std::string> values)
@@ -1448,23 +1464,98 @@ namespace cxxlens::detail::clang22::materialization
 		return partitions_;
 	}
 
-	sdk::result<materialization_claim_request_binding>
-	make_materialization_claim_request_binding(const validated_materialization_request& request)
+	sdk::result<std::string>
+	seal_materialization_claim_request_binding(const materialization_claim_request_binding& binding)
 	{
-		if (request.tasks.size() > std::numeric_limits<std::uint64_t>::max())
+		if (binding.task_count == 0U ||
+			!sdk::validate_strong_id(binding.materialization_request_id) ||
+			!semantic_digest_value(binding.request_digest) ||
+			!semantic_digest_value(binding.semantic_request_digest) ||
+			!sdk::validate_strong_id(binding.catalog_id) ||
+			!semantic_digest_value(binding.catalog_digest))
 			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
 											   "request",
 											   "request-identity-or-task-census"));
+		return digest_projection("cxxlens.df-0200.materialization-request-binding.v1",
+								 sdk::canonical_value::from_tuple({
+									 text(binding.materialization_request_id),
+									 text(binding.request_digest),
+									 text(binding.semantic_request_digest),
+									 text(binding.catalog_id),
+									 text(binding.catalog_digest),
+									 u64_bytes(binding.task_count),
+								 }));
+	}
+
+	sdk::result<materialization_claim_request_binding>
+	make_materialization_claim_request_binding(const validated_materialization_request& request)
+	{
+		if (request.tasks.empty() ||
+			request.tasks.size() > std::numeric_limits<std::uint64_t>::max())
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "request",
+											   "request-identity-or-task-census"));
+		if (auto valid = request.catalog.validate(); !valid)
+			return sdk::unexpected(claim_error("materialization.identity-mismatch",
+											   "project.catalog",
+											   nested_error(valid.error())));
 		auto request_id = materialization_incremental_request_id(request);
 		if (!request_id)
 			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
 											   "request",
 											   "request-identity-or-task-census"));
-		return materialization_claim_request_binding{
+		const auto& root = request.document.root();
+		auto request_digest = json_text(root, "request_digest", "request.request_digest");
+		auto semantic_request_digest =
+			json_text(root, "semantic_request_digest", "request.semantic_request_digest");
+		if (!request_digest || !semantic_request_digest)
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "request",
+											   "request-identity-or-task-census"));
+		materialization_claim_request_binding binding{
 			std::move(*request_id),
+			std::string{*request_digest},
+			std::string{*semantic_request_digest},
 			request.catalog.catalog_id,
 			request.catalog.catalog_digest,
-			static_cast<std::uint64_t>(request.tasks.size())};
+			static_cast<std::uint64_t>(request.tasks.size()),
+			{}};
+		auto digest = seal_materialization_claim_request_binding(binding);
+		if (!digest)
+			return sdk::unexpected(std::move(digest.error()));
+		binding.canonical_binding_digest = std::move(*digest);
+		return binding;
+	}
+
+	sdk::result<materialization_claim_request_binding> make_materialization_claim_request_binding(
+		const materialization_v2_1_claim_authority& authority)
+	{
+		auto* request = authority.request();
+		const auto* catalog = authority.catalog();
+		if (request == nullptr || catalog == nullptr || authority.task_count() == 0U ||
+			request->request().task_count() != authority.task_count() ||
+			authority.materialization_request_id() !=
+				request->identity().materialization_request_id)
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "request",
+											   "request-identity-or-task-census"));
+		if (auto valid = catalog->validate(); !valid)
+			return sdk::unexpected(claim_error("materialization.identity-mismatch",
+											   "project.catalog",
+											   nested_error(valid.error())));
+		const auto& identity = request->identity();
+		materialization_claim_request_binding binding{identity.materialization_request_id,
+													  identity.request_digest,
+													  identity.semantic_request_digest,
+													  catalog->catalog_id,
+													  catalog->catalog_digest,
+													  authority.task_count(),
+													  {}};
+		auto digest = seal_materialization_claim_request_binding(binding);
+		if (!digest)
+			return sdk::unexpected(std::move(digest.error()));
+		binding.canonical_binding_digest = std::move(*digest);
+		return binding;
 	}
 
 	sdk::result<void>

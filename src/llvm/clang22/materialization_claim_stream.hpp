@@ -108,10 +108,9 @@ namespace cxxlens::detail::clang22::materialization
 			  const materialization_incremental_execution_journal_receipt& journal,
 			  std::vector<materialization_claim_stream_task> tasks);
 
-		/** Validate a v2.1 journal by request identity/count without a legacy task vector. */
+		/** Validate a journal against a complete source-private request authority. */
 		[[nodiscard]] static sdk::result<materialization_claim_stream_source>
-		begin(std::string materialization_request_id,
-			  std::uint64_t task_count,
+		begin(materialization_claim_request_binding request_binding,
 			  const materialization_incremental_execution_journal_receipt& journal,
 			  std::vector<materialization_claim_stream_task> tasks);
 
@@ -125,8 +124,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::span<materialization_claim_stream_task> tasks);
 
 		[[nodiscard]] static sdk::result<void> validate_external_task_receipts(
-			std::string_view materialization_request_id,
-			std::uint64_t task_count,
+			const materialization_claim_request_binding& request_binding,
 			const materialization_incremental_execution_journal_receipt& journal,
 			std::span<materialization_claim_stream_task> tasks);
 
@@ -137,6 +135,12 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] std::string_view materialization_request_id() const noexcept
 		{
 			return materialization_request_id_;
+		}
+
+		/** Return the complete request/catalog authority retained by this sealed source. */
+		[[nodiscard]] const materialization_claim_request_binding& request_binding() const noexcept
+		{
+			return request_binding_;
 		}
 
 		[[nodiscard]] std::size_t task_count() const noexcept
@@ -171,13 +175,15 @@ namespace cxxlens::detail::clang22::materialization
 		build_states(std::string_view request_id,
 					 std::vector<materialization_claim_stream_task>& tasks);
 
-		materialization_claim_stream_source(std::string materialization_request_id,
+		materialization_claim_stream_source(materialization_claim_request_binding request_binding,
 											std::vector<task_state> tasks)
-			: materialization_request_id_{std::move(materialization_request_id)},
+			: request_binding_{std::move(request_binding)},
+			  materialization_request_id_{request_binding_.materialization_request_id},
 			  tasks_{std::move(tasks)}
 		{
 		}
 
+		materialization_claim_request_binding request_binding_;
 		std::string materialization_request_id_;
 		std::vector<task_state> tasks_;
 	};

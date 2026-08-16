@@ -2032,10 +2032,9 @@ int main(const int argc, char**)
 								  request_subject,
 								  source);
 	}
-	streaming_transaction->external_authority = {
-		coordinated->claim_stream(),
-		&*execution_census.execution_journal_receipt,
-	};
+	streaming_transaction->external_authority.claim_stream = coordinated->claim_stream();
+	streaming_transaction->external_authority.execution_journal =
+		&*execution_census.execution_journal_receipt;
 	if (auto completed = journal->complete_materialization_validation(); !completed)
 		return no_response();
 	std::unique_ptr<materialization_rooted_store_opener> rooted_opener;

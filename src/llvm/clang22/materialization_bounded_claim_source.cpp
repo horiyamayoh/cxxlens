@@ -490,13 +490,11 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (authority.task_count() == 0U || authority.engine() == nullptr)
 			return sdk::unexpected(source_error("request", "empty-or-unbound"));
-		materialization_claim_request_binding request_binding{
-			std::string{authority.materialization_request_id()},
-			authority.catalog() != nullptr ? authority.catalog()->catalog_id : std::string{},
-			authority.catalog() != nullptr ? authority.catalog()->catalog_digest : std::string{},
-			authority.task_count()};
+		auto request_binding = make_materialization_claim_request_binding(authority);
+		if (!request_binding)
+			return sdk::unexpected(source_error("request", "binding"));
 		return materialization_bounded_claim_source{
-			std::move(request_binding),
+			std::move(*request_binding),
 			*authority.engine(),
 			authority.task_count(),
 			[&authority](const std::size_t task_index) -> sdk::result<std::string>

@@ -824,7 +824,7 @@ namespace cxxlens::detail::clang22::materialization
 
 	materialization_incremental_ingress::materialization_incremental_ingress(
 		const validated_materialization_request& request,
-		std::string request_id,
+		materialization_claim_request_binding request_binding,
 		std::vector<std::vector<std::string>> expected_partition_ids,
 		const materialization_producer_authority* producer_authority,
 		const materialization_guarantee_authority* guarantee_authority,
@@ -832,7 +832,8 @@ namespace cxxlens::detail::clang22::materialization
 		const validated_materialization_request_v2_1* v2_request,
 		const materialization_v2_1_claim_authority* claim_authority,
 		const std::size_t v2_task_count)
-		: request_{&request}, request_id_{std::move(request_id)},
+		: request_{&request}, request_binding_{std::move(request_binding)},
+		  request_id_{request_binding_.materialization_request_id},
 		  expected_partition_ids_{std::move(expected_partition_ids)},
 		  producer_authority_{producer_authority}, guarantee_authority_{guarantee_authority},
 		  dynamic_partition_ids_{dynamic_partition_ids}, v2_request_{v2_request},
@@ -841,15 +842,16 @@ namespace cxxlens::detail::clang22::materialization
 	}
 
 	materialization_incremental_ingress::materialization_incremental_ingress(
-		std::string request_id,
+		materialization_claim_request_binding request_binding,
 		const std::size_t task_count,
 		const validated_materialization_request_v2_1& request,
 		const materialization_v2_1_claim_authority& claim_authority,
 		const materialization_incremental_selected_request_binding_set& binding_set)
-		: request_{}, request_id_{std::move(request_id)}, expected_partition_ids_(task_count),
-		  producer_authority_{}, guarantee_authority_{}, dynamic_partition_ids_{true},
-		  v2_request_{&request}, claim_authority_{&claim_authority}, binding_set_{&binding_set},
-		  v2_task_count_{task_count}
+		: request_{}, request_binding_{std::move(request_binding)},
+		  request_id_{request_binding_.materialization_request_id},
+		  expected_partition_ids_(task_count), producer_authority_{}, guarantee_authority_{},
+		  dynamic_partition_ids_{true}, v2_request_{&request}, claim_authority_{&claim_authority},
+		  binding_set_{&binding_set}, v2_task_count_{task_count}
 	{
 	}
 
@@ -861,9 +863,9 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			if (request.tasks.empty() || expected_partition_ids.size() != request.tasks.size())
 				return sdk::unexpected(ingress_error("tasks", "exact-census"));
-			auto request_id = materialization_incremental_request_id(request);
-			if (!request_id)
-				return sdk::unexpected(std::move(request_id.error()));
+			auto request_binding = make_materialization_claim_request_binding(request);
+			if (!request_binding)
+				return sdk::unexpected(std::move(request_binding.error()));
 			std::set<std::string, std::less<>> all_partitions;
 			for (auto& partition_ids : expected_partition_ids)
 			{
@@ -879,7 +881,7 @@ namespace cxxlens::detail::clang22::materialization
 				}
 			}
 			return materialization_incremental_ingress{
-				request, std::move(*request_id), std::move(expected_partition_ids)};
+				request, std::move(*request_binding), std::move(expected_partition_ids)};
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -897,9 +899,9 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			if (request.tasks.empty() || expected_partition_ids.size() != request.tasks.size())
 				return sdk::unexpected(ingress_error("tasks", "exact-census"));
-			auto request_id = materialization_incremental_request_id(request);
-			if (!request_id)
-				return sdk::unexpected(std::move(request_id.error()));
+			auto request_binding = make_materialization_claim_request_binding(request);
+			if (!request_binding)
+				return sdk::unexpected(std::move(request_binding.error()));
 			std::set<std::string, std::less<>> all_partitions;
 			for (const auto& partition_ids : expected_partition_ids)
 			{
@@ -913,7 +915,7 @@ namespace cxxlens::detail::clang22::materialization
 							ingress_error("partitions", "identity-or-duplicate"));
 			}
 			return materialization_incremental_ingress{request,
-													   std::move(*request_id),
+													   std::move(*request_binding),
 													   std::move(expected_partition_ids),
 													   &producer_authority,
 													   &guarantee_authority};
@@ -934,12 +936,12 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			if (request.tasks.empty())
 				return sdk::unexpected(ingress_error("tasks", "exact-census"));
-			auto request_id = materialization_incremental_request_id(request);
-			if (!request_id)
-				return sdk::unexpected(std::move(request_id.error()));
+			auto request_binding = make_materialization_claim_request_binding(request);
+			if (!request_binding)
+				return sdk::unexpected(std::move(request_binding.error()));
 			return materialization_incremental_ingress{
 				request,
-				std::move(*request_id),
+				std::move(*request_binding),
 				std::vector<std::vector<std::string>>(request.tasks.size()),
 				&producer_authority,
 				&guarantee_authority,
@@ -967,10 +969,10 @@ namespace cxxlens::detail::clang22::materialization
 				seal_materialization_incremental_selected_request_binding_set(claim_authority);
 			if (!expected_binding_set || *expected_binding_set != binding_set)
 				return sdk::unexpected(ingress_error("selected-request-set", "binding"));
-			auto request_id = materialization_incremental_request_id(claim_authority);
-			if (!request_id)
-				return sdk::unexpected(std::move(request_id.error()));
-			return materialization_incremental_ingress{std::move(*request_id),
+			auto request_binding = make_materialization_claim_request_binding(claim_authority);
+			if (!request_binding)
+				return sdk::unexpected(std::move(request_binding.error()));
+			return materialization_incremental_ingress{std::move(*request_binding),
 													   static_cast<std::size_t>(task_count),
 													   request,
 													   claim_authority,
@@ -1109,7 +1111,7 @@ namespace cxxlens::detail::clang22::materialization
 				claim_stream_tasks_.size() != expected_task_count)
 				return sdk::unexpected(ingress_error("tasks", "incomplete"));
 			auto journal = seal_materialization_incremental_execution_journal(
-				request_id_,
+				request_binding_,
 				expected_task_count,
 				[&](const std::size_t index)
 				{

@@ -744,9 +744,12 @@ namespace cxxlens::detail::clang22::materialization
 			if (!ingress_result)
 				return sdk::unexpected(coordinator_error("receipt", ingress_result.error().detail));
 			census.execution_journal_receipt = ingress_result->journal;
+			auto request_binding = make_materialization_claim_request_binding(claim_authority);
+			if (!request_binding)
+				return sdk::unexpected(
+					coordinator_error("claim-stream", request_binding.error().detail));
 			auto claim_stream = materialization_claim_stream_source::begin(
-				request.identity().materialization_request_id,
-				task_count,
+				std::move(*request_binding),
 				ingress_result->journal,
 				std::move(ingress_result->claim_stream_tasks));
 			if (!claim_stream)

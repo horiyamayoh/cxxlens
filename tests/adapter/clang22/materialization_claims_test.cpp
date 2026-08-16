@@ -1391,6 +1391,7 @@ namespace
 		for (const auto& seal : journal.ordered_task_receipt_seal_digests)
 			seals.push_back(sdk::canonical_value::from_string(seal));
 		auto payload = sdk::canonical_binary(sdk::canonical_value::from_tuple({
+			sdk::canonical_value::from_string(journal.request_binding.canonical_binding_digest),
 			sdk::canonical_value::from_string(journal.materialization_request_id),
 			receipt_u64_bytes(journal.exact_task_count),
 			sdk::canonical_value::from_tuple(std::move(task_ids)),
@@ -1654,10 +1655,10 @@ namespace
 			receipts.push_back(std::move(*receipt));
 		}
 
-		auto request_id = materialization_incremental_request_id(request);
-		require(request_id.has_value(), "incremental receipt request identity failed");
+		auto request_binding = make_materialization_claim_request_binding(request);
+		require(request_binding.has_value(), "incremental receipt request binding failed");
 		auto journal = seal_materialization_incremental_execution_journal(
-			*request_id, std::span<const materialization_incremental_task_receipt>{receipts});
+			*request_binding, std::span<const materialization_incremental_task_receipt>{receipts});
 		require(journal.has_value() && journal->exact_task_count == request.tasks.size() &&
 					journal->canonical_task_ids.size() == request.tasks.size() &&
 					journal->ordered_task_receipt_seal_digests.size() == request.tasks.size(),
@@ -1713,14 +1714,15 @@ namespace
 		auto ordinal_drift = receipts;
 		ordinal_drift[1U].canonical_task_ordinal = ordinal_drift[0U].canonical_task_ordinal;
 		auto ordinal_drift_journal = seal_materialization_incremental_execution_journal(
-			*request_id, std::span<const materialization_incremental_task_receipt>{ordinal_drift});
+			*request_binding,
+			std::span<const materialization_incremental_task_receipt>{ordinal_drift});
 		require(!ordinal_drift_journal &&
 					failure(ordinal_drift_journal.error()) ==
 						"materialization.incremental-receipt-invalid/execution-journal/task-order",
 				"incremental journal accepted receipt ordinal drift");
 		std::swap(receipts[0U], receipts[1U]);
 		auto reordered_journal = seal_materialization_incremental_execution_journal(
-			*request_id, std::span<const materialization_incremental_task_receipt>{receipts});
+			*request_binding, std::span<const materialization_incremental_task_receipt>{receipts});
 		require(!reordered_journal &&
 					failure(reordered_journal.error()) ==
 						"materialization.incremental-receipt-invalid/execution-journal/task-order",
@@ -1870,10 +1872,11 @@ namespace
 			receipts.push_back(*receipt);
 			tasks.emplace_back(std::move(*receipt), std::move(spools));
 		}
-		auto request_id = materialization_incremental_request_id(request);
-		require(request_id.has_value(), "claim stream request identity failed");
+		auto request_binding = make_materialization_claim_request_binding(request);
+		require(request_binding.has_value(), "claim stream request binding failed");
+		const auto& request_id = request_binding->materialization_request_id;
 		auto journal = seal_materialization_incremental_execution_journal(
-			*request_id, std::span<const materialization_incremental_task_receipt>{receipts});
+			*request_binding, std::span<const materialization_incremental_task_receipt>{receipts});
 		require(journal.has_value(), "claim stream journal construction failed");
 		std::vector<sdk::canonical_value> expected_task_ids;
 		std::vector<sdk::canonical_value> expected_seals;
@@ -1886,7 +1889,8 @@ namespace
 				sdk::canonical_value::from_string(receipt.pre_encoder_task_receipt_seal_digest));
 		}
 		auto expected_payload = sdk::canonical_binary(sdk::canonical_value::from_tuple({
-			sdk::canonical_value::from_string(*request_id),
+			sdk::canonical_value::from_string(request_binding->canonical_binding_digest),
+			sdk::canonical_value::from_string(request_id),
 			receipt_u64_bytes(static_cast<std::uint64_t>(receipts.size())),
 			sdk::canonical_value::from_tuple(std::move(expected_task_ids)),
 			sdk::canonical_value::from_tuple(std::move(expected_seals)),
@@ -1944,10 +1948,7 @@ namespace
 				"claim stream external validator rejected unchanged sealed task streams: " +
 					(external ? std::string{} : failure(external.error())));
 		auto raw_external = materialization_claim_stream_source::validate_external_task_receipts(
-			*request_id,
-			static_cast<std::uint64_t>(request.tasks.size()),
-			*journal,
-			std::span<materialization_claim_stream_task>{tasks});
+			*request_binding, *journal, std::span<materialization_claim_stream_task>{tasks});
 		require(raw_external.has_value(),
 				"raw claim stream external validator rejected unchanged sealed task streams: " +
 					(raw_external ? std::string{} : failure(raw_external.error())));
@@ -1967,8 +1968,7 @@ namespace
 				receipt, std::vector<std::unique_ptr<materialization_replayable_spool>>{});
 		auto raw_missing_stream =
 			materialization_claim_stream_source::validate_external_task_receipts(
-				*request_id,
-				static_cast<std::uint64_t>(request.tasks.size()),
+				*request_binding,
 				*journal,
 				std::span<materialization_claim_stream_task>{missing_streams});
 		require(
@@ -1976,6 +1976,44 @@ namespace
 				failure(raw_missing_stream.error()) ==
 					"materialization.claim-stream-invalid/partitions/empty",
 			"raw claim stream external validator accepted receipts without sealed event spools");
+
+		auto request_b = coherent_rebound_request(request);
+		auto request_binding_b = make_materialization_claim_request_binding(request_b);
+		require(request_binding_b.has_value() &&
+					request_binding_b->materialization_request_id !=
+						request_binding->materialization_request_id &&
+					request_binding_b->catalog_id == request_binding->catalog_id &&
+					request_binding_b->catalog_digest == request_binding->catalog_digest &&
+					request_binding_b->task_count == request_binding->task_count,
+				"cross-request claim stream fixture did not preserve the catalog/task census");
+		std::vector<materialization_claim_stream_task> tasks_b;
+		std::vector<materialization_incremental_task_receipt> receipts_b;
+		tasks_b.reserve(request_b.tasks.size());
+		receipts_b.reserve(request_b.tasks.size());
+		for (std::size_t index{}; index < request_b.tasks.size(); ++index)
+		{
+			auto result = seal_task(request_b, index);
+			require(result.has_value(), "cross-request claim stream task seal failed");
+			const auto binding = materialization_incremental_task_binding{
+				incremental_identity(request_b, index),
+				std::vector<materialization_incremental_partition_binding>{
+					materialization_incremental_partition_binding{"partition:claim-stream-" +
+																  std::to_string(index)}}};
+			auto receipt = fixture_completeness_receipt(request_b, index, binding, *result);
+			require(receipt.has_value(), "cross-request claim stream task receipt failed");
+			auto spools = fixture_partition_spools(request_b, index, binding, *result);
+			receipts_b.push_back(*receipt);
+			tasks_b.emplace_back(std::move(*receipt), std::move(spools));
+		}
+		auto journal_b = seal_materialization_incremental_execution_journal(
+			*request_binding_b,
+			std::span<const materialization_incremental_task_receipt>{receipts_b});
+		require(journal_b.has_value(), "cross-request claim stream journal construction failed");
+		auto source_b =
+			materialization_claim_stream_source::begin(request_b, *journal_b, std::move(tasks_b));
+		require(source_b.has_value() && source_b->task_count() == request_binding->task_count &&
+					source_b->partition_count() == request.tasks.size(),
+				"cross-request claim stream source did not preserve the exact census");
 
 		auto source =
 			materialization_claim_stream_source::begin(request, *journal, std::move(tasks));
@@ -1985,17 +2023,52 @@ namespace
 		const materialization_store_external_authority external_authority{
 			&*source,
 			&*journal,
+			*request_binding,
 		};
 		auto external_valid = validate_materialization_store_external_authority(external_authority);
 		require(external_valid.has_value(),
 				"Store external authority rejected the sealed journal: " +
 					(external_valid ? std::string{} : failure(external_valid.error())));
+		const materialization_store_external_authority cross_request_stream_and_journal{
+			&*source_b,
+			&*journal_b,
+			*request_binding,
+		};
+		auto cross_request_external =
+			validate_materialization_store_external_authority(cross_request_stream_and_journal);
+		require(!cross_request_external &&
+					failure(cross_request_external.error()) ==
+						"store.external-authority/request-binding/mismatch",
+				"Store external authority accepted request B stream and journal for request A");
+		const materialization_store_external_authority cross_request_stream{
+			&*source_b,
+			&*journal,
+			*request_binding,
+		};
+		cross_request_external =
+			validate_materialization_store_external_authority(cross_request_stream);
+		require(!cross_request_external &&
+					failure(cross_request_external.error()) ==
+						"store.external-authority/request-binding/mismatch",
+				"Store external authority accepted request B stream for request A journal");
+		const materialization_store_external_authority cross_request_journal{
+			&*source,
+			&*journal_b,
+			*request_binding,
+		};
+		cross_request_external =
+			validate_materialization_store_external_authority(cross_request_journal);
+		require(!cross_request_external &&
+					failure(cross_request_external.error()) ==
+						"store.external-authority/request-binding/mismatch",
+				"Store external authority accepted request B journal for request A stream");
 		auto tampered_journal = *journal;
 		tampered_journal.execution_journal_receipt_set_digest =
 			"semantic-v2:sha256:" + std::string(64U, 'f');
 		const materialization_store_external_authority tampered_authority{
 			&*source,
 			&tampered_journal,
+			*request_binding,
 		};
 		require(!validate_materialization_store_external_authority(tampered_authority),
 				"Store external authority accepted a tampered execution journal");
@@ -2689,6 +2762,33 @@ namespace
 					"v2.1 bounded source did not bind the production Store metadata to the exact "
 					"request "
 					"census");
+			const auto source_binding = outcome->bounded_claim_source().request_binding();
+			auto catalog_rebound_binding = source_binding;
+			catalog_rebound_binding.catalog_id =
+				"catalog:semantic-v2:sha256:" + std::string(64U, 'f');
+			catalog_rebound_binding.catalog_digest = "semantic-v2:sha256:" + std::string(64U, 'e');
+			auto catalog_rebound_digest =
+				seal_materialization_claim_request_binding(catalog_rebound_binding);
+			require(catalog_rebound_digest.has_value(),
+					"v2.1 catalog-rebinding fixture binding seal failed");
+			catalog_rebound_binding.canonical_binding_digest = std::move(*catalog_rebound_digest);
+			// The source accessor is const by contract; the test mutates only this source-private
+			// fixture to model an independently rebound catalog while retaining the request
+			// authority.
+			const_cast<materialization_claim_request_binding&>(
+				outcome->bounded_claim_source().request_binding()) = catalog_rebound_binding;
+			const auto catalog_rebound_transaction =
+				make_materialization_streaming_store_transaction(*authority,
+																 outcome->bounded_claim_source());
+			const_cast<materialization_claim_request_binding&>(
+				outcome->bounded_claim_source().request_binding()) = source_binding;
+			require(!catalog_rebound_transaction &&
+						catalog_rebound_transaction.error().code ==
+							"materialization.task-binding-mismatch" &&
+						catalog_rebound_transaction.error().field == "store.source" &&
+						catalog_rebound_transaction.error().detail ==
+							"request-identity-or-task-census",
+					"v2.1 authority accepted a catalog-rebound typed source");
 		}
 
 		{
