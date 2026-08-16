@@ -2922,6 +2922,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_store_outcome.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_store_outcome.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_streaming_claims.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3742,6 +3756,13 @@
     {
       "authority": "active",
       "path": "tests/adapter/clang22/materialization_seal_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_store_outcome_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
