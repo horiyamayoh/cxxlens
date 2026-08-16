@@ -12,12 +12,21 @@ import pathlib
 import re
 import shutil
 import subprocess
+import sys
 from typing import Any
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SUPPLY_CHAIN_LOCK = pathlib.Path("tools/ci/llvm22-noble.lock.json")
 REQUIREMENTS_LOCK = pathlib.Path("tools/quality/requirements.lock")
+sys.path.insert(0, str(ROOT / "tools" / "ci"))
+
+from bootstrap_supply_chain import (  # noqa: E402
+    PACKAGE_CACHE_SCHEMA,
+    cache_provenance_digest,
+    package_authority,
+    package_cache_key,
+)
 
 
 def run(*command: str) -> str:
@@ -68,6 +77,7 @@ def package_versions(lock: dict[str, Any]) -> list[dict[str, str]]:
         package: {
             "version": version,
             "digest": lock["llvm"]["package_sha256"][package],
+            "architecture": lock["llvm"]["architecture"],
         }
         for package, version in lock["llvm"]["packages"].items()
     }
@@ -75,6 +85,7 @@ def package_versions(lock: dict[str, Any]) -> list[dict[str, str]]:
     packages[documentation["package"]] = {
         "version": documentation["version"],
         "digest": documentation["sha256"],
+        "architecture": documentation["architecture"],
     }
     result = []
     for package, authority in sorted(packages.items()):
@@ -86,6 +97,7 @@ def package_versions(lock: dict[str, Any]) -> list[dict[str, str]]:
                 {
                     "package": package,
                     "version": version,
+                    "architecture": authority["architecture"],
                     "package_digest": "sha256:" + authority["digest"],
                 }
             )
@@ -203,12 +215,81 @@ def supply_chain(root: pathlib.Path) -> tuple[dict[str, Any], dict[str, str]]:
     return lock, binding
 
 
+def load_package_cache_provenance(
+    path: pathlib.Path, root: pathlib.Path
+) -> dict[str, Any]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"could not read package-cache provenance: {error}") from error
+    if not isinstance(document, dict) or document.get("schema") != PACKAGE_CACHE_SCHEMA:
+        raise ValueError("unknown package-cache provenance schema")
+    if document.get("digest") != cache_provenance_digest(document):
+        raise ValueError("package-cache provenance digest mismatch")
+    lock = json.loads((root / SUPPLY_CHAIN_LOCK).read_text(encoding="utf-8"))
+    lock_digest = file_digest(root / SUPPLY_CHAIN_LOCK)
+    if document.get("cache_key_authority_digest") != lock_digest:
+        raise ValueError("package-cache provenance authority digest mismatch")
+    profile = document.get("profile")
+    if not isinstance(profile, str):
+        raise ValueError("package-cache provenance profile is missing")
+    expected = package_authority(lock, profile)
+    status = document.get("cache_status")
+    source = document.get("cache_source")
+    if status not in {"disabled", "hit", "miss", "invalid"}:
+        raise ValueError("package-cache provenance status is invalid")
+    if source not in {"verified-cache", "verified-download"}:
+        raise ValueError("package-cache provenance source is invalid")
+    if (status == "hit") != (source == "verified-cache"):
+        raise ValueError("package-cache provenance status/source mismatch")
+    if document.get("transport_only") is not True:
+        raise ValueError("package-cache provenance must be transport-only")
+    expected_dependency_resolution = (
+        "locked-apt-repository"
+        if profile != "documentation"
+        else "locked-package-archive"
+    )
+    expected_repository_refresh = (
+        "verified-before-install" if profile != "documentation" else "not-required"
+    )
+    if document.get("dependency_resolution") != expected_dependency_resolution:
+        raise ValueError("package-cache provenance dependency source mismatch")
+    if document.get("repository_refresh") != expected_repository_refresh:
+        raise ValueError("package-cache provenance repository refresh mismatch")
+    if document.get("cache_key") != package_cache_key(lock, profile, lock_digest):
+        raise ValueError("package-cache provenance key mismatch")
+    rows = document.get("packages")
+    if not isinstance(rows, list) or len(rows) != len(expected):
+        raise ValueError("package-cache provenance package set is incomplete")
+    by_name: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("package-cache provenance package row is invalid")
+        name = row.get("package")
+        if not isinstance(name, str) or name in by_name or name not in expected:
+            raise ValueError("package-cache provenance package identity is invalid")
+        expected_row = {
+            "package": name,
+            "version": expected[name]["version"],
+            "architecture": expected[name]["architecture"],
+            "sha256": "sha256:" + expected[name]["sha256"],
+            "source": source,
+        }
+        if row != expected_row:
+            raise ValueError(f"package-cache provenance differs from lock: {name}")
+        by_name[name] = row
+    if set(by_name) != set(expected):
+        raise ValueError("package-cache provenance package set differs from profile")
+    return document
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--compiler", default="clang++-22")
     parser.add_argument("--configuration", required=True)
+    parser.add_argument("--package-cache-provenance", type=pathlib.Path)
     args = parser.parse_args()
     root = args.root.resolve()
     lock, supply_chain_binding = supply_chain(root)
@@ -243,6 +324,16 @@ def main() -> int:
         },
         "supply_chain": supply_chain_binding,
     }
+    package_cache_path = args.package_cache_provenance
+    if package_cache_path is None:
+        configured_path = os.environ.get("CXXLENS_PACKAGE_CACHE_PROVENANCE")
+        package_cache_path = pathlib.Path(configured_path) if configured_path else None
+    if package_cache_path is not None:
+        if not package_cache_path.is_absolute():
+            package_cache_path = root / package_cache_path
+        document["package_cache"] = load_package_cache_provenance(
+            package_cache_path, root
+        )
     document["digest"] = provenance_digest(document)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

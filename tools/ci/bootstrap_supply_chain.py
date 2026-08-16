@@ -8,6 +8,7 @@ import hashlib
 import json
 import pathlib
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 LOCK = pathlib.Path("tools/ci/llvm22-noble.lock.json")
 KEYRING = pathlib.Path("/etc/apt/keyrings/cxxlens-llvm.gpg")
 SOURCE_LIST = pathlib.Path("/etc/apt/sources.list.d/cxxlens-llvm.list")
+PACKAGE_CACHE_SCHEMA = "cxxlens.ci-package-cache-provenance.v2"
 
 
 class SupplyChainError(ValueError):
@@ -63,6 +65,197 @@ def installed_package_version(package: str) -> str:
         text=True,
     )
     return completed.stdout.strip() if completed.returncode == 0 else ""
+
+
+def package_authority(
+    lock: dict[str, Any], profile_name: str
+) -> dict[str, dict[str, str]]:
+    if profile_name == "documentation":
+        documentation = lock["documentation"]
+        return {
+            documentation["package"]: {
+                "package": documentation["package"],
+                "version": documentation["version"],
+                "architecture": documentation["architecture"],
+                "sha256": documentation["sha256"],
+            }
+        }
+    llvm = lock["llvm"]
+    profiles = llvm["profiles"]
+    if profile_name not in profiles:
+        raise SupplyChainError(f"unknown LLVM install profile: {profile_name}")
+    return {
+        name: {
+            "package": name,
+            "version": llvm["packages"][name],
+            "architecture": llvm["architecture"],
+            "sha256": llvm["package_sha256"][name],
+        }
+        for name in profiles[profile_name]
+    }
+
+
+def package_cache_key(
+    lock: dict[str, Any], profile_name: str, lock_digest: str
+) -> str:
+    expected = package_authority(lock, profile_name)
+    architecture = next(iter(expected.values()))["architecture"]
+    return (
+        f"cxxlens-package-cache-v1-{lock['runner']['label']}-"
+        f"{architecture}-{profile_name}-{lock_digest.removeprefix('sha256:')}"
+    )
+
+
+def package_fields(archive: pathlib.Path) -> dict[str, str]:
+    return {
+        field: run(["dpkg-deb", "--field", str(archive), field], capture=True)
+        for field in ("Package", "Version", "Architecture")
+    }
+
+
+def validate_package_archive(
+    archive: pathlib.Path, expected: dict[str, str], label: str
+) -> None:
+    fields = package_fields(archive)
+    expected_fields = {
+        "Package": expected["package"],
+        "Version": expected["version"],
+        "Architecture": expected["architecture"],
+    }
+    if fields != expected_fields:
+        raise SupplyChainError(
+            f"{label} metadata mismatch: expected {expected_fields}, received {fields}"
+        )
+    verify_bytes(archive.read_bytes(), expected["sha256"], label)
+
+
+def package_cache_filename(expected: dict[str, str]) -> str:
+    return f"{expected['package']}-{expected['sha256']}.deb"
+
+
+def resolve_cached_archives(
+    cache_directory: pathlib.Path | None,
+    expected: dict[str, dict[str, str]],
+) -> tuple[dict[str, pathlib.Path] | None, str, str | None]:
+    if cache_directory is None:
+        return None, "disabled", None
+    cache_directory.mkdir(parents=True, exist_ok=True)
+    candidates = sorted(cache_directory.glob("*.deb"))
+    if not candidates:
+        return None, "miss", None
+    if len(candidates) != len(expected):
+        return (
+            None,
+            "invalid",
+            f"cached package count mismatch: expected {len(expected)}, received {len(candidates)}",
+        )
+    resolved: dict[str, pathlib.Path] = {}
+    try:
+        for archive in candidates:
+            fields = package_fields(archive)
+            name = fields["Package"]
+            if name not in expected or name in resolved:
+                raise SupplyChainError(f"unexpected or duplicate cached package: {archive.name}")
+            validate_package_archive(archive, expected[name], archive.name)
+            resolved[name] = archive
+    except (OSError, SupplyChainError, KeyError) as error:
+        return None, "invalid", str(error)
+    if set(resolved) != set(expected):
+        return None, "invalid", "cached package set differs from profile"
+    return resolved, "hit", None
+
+
+def replace_package_cache(
+    cache_directory: pathlib.Path,
+    archives: dict[str, pathlib.Path],
+    expected: dict[str, dict[str, str]],
+) -> None:
+    cache_directory.mkdir(parents=True, exist_ok=True)
+    for archive in cache_directory.glob("*.deb"):
+        archive.unlink()
+    for name in sorted(archives):
+        destination = cache_directory / package_cache_filename(expected[name])
+        temporary = destination.with_name(destination.name + ".tmp")
+        shutil.copyfile(archives[name], temporary)
+        temporary.replace(destination)
+
+
+def copy_cached_archives(
+    archives: dict[str, pathlib.Path],
+    expected: dict[str, dict[str, str]],
+    directory: pathlib.Path,
+) -> dict[str, pathlib.Path]:
+    private: dict[str, pathlib.Path] = {}
+    for name in sorted(archives):
+        archive = directory / f"{name}.deb"
+        shutil.copyfile(archives[name], archive)
+        validate_package_archive(archive, expected[name], f"cached package {name}")
+        private[name] = archive
+    return private
+
+
+def cache_provenance_digest(document: dict[str, Any]) -> str:
+    projection = {key: value for key, value in document.items() if key != "digest"}
+    return "sha256:" + hashlib.sha256(
+        json.dumps(projection, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def build_package_cache_provenance(
+    lock: dict[str, Any],
+    profile_name: str,
+    lock_digest: str,
+    cache_status: str,
+    cache_source: str,
+) -> dict[str, Any]:
+    expected = package_authority(lock, profile_name)
+    if cache_status not in {"disabled", "hit", "miss", "invalid"}:
+        raise SupplyChainError(f"unknown package cache status: {cache_status}")
+    if cache_source not in {"verified-cache", "verified-download"}:
+        raise SupplyChainError(f"unknown package cache source: {cache_source}")
+    if (cache_status == "hit") != (cache_source == "verified-cache"):
+        raise SupplyChainError("package cache status/source mismatch")
+    document: dict[str, Any] = {
+        "schema": PACKAGE_CACHE_SCHEMA,
+        "profile": profile_name,
+        "transport_only": True,
+        "cache_status": cache_status,
+        "cache_source": cache_source,
+        "dependency_resolution": (
+            "locked-apt-repository"
+            if profile_name != "documentation"
+            else "locked-package-archive"
+        ),
+        "repository_refresh": (
+            "verified-before-install"
+            if profile_name != "documentation"
+            else "not-required"
+        ),
+        "cache_key": package_cache_key(lock, profile_name, lock_digest),
+        "cache_key_authority_digest": lock_digest,
+        "packages": [
+            {
+                "package": name,
+                "version": expected[name]["version"],
+                "architecture": expected[name]["architecture"],
+                "sha256": "sha256:" + expected[name]["sha256"],
+                "source": cache_source,
+            }
+            for name in sorted(expected)
+        ],
+    }
+    document["digest"] = cache_provenance_digest(document)
+    return document
+
+
+def write_package_cache_provenance(
+    output: pathlib.Path, document: dict[str, Any]
+) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
@@ -124,6 +317,8 @@ def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
         raise SupplyChainError("LLVM package digest is not SHA-256")
     if not isinstance(profiles, dict) or not profiles:
         raise SupplyChainError("LLVM profiles are missing")
+    if llvm.get("architecture") != "amd64":
+        raise SupplyChainError("LLVM package architecture is not amd64")
     for name, members in profiles.items():
         if not isinstance(members, list) or not members or len(members) != len(set(members)):
             raise SupplyChainError(f"LLVM profile is empty or duplicated: {name}")
@@ -198,75 +393,7 @@ def verify_key(content: bytes, expected_fingerprint: str, directory: pathlib.Pat
     return keyring
 
 
-def assert_runner(lock: dict[str, Any]) -> None:
-    if platform.machine() != "x86_64":
-        raise SupplyChainError(f"unsupported runner architecture: {platform.machine()}")
-    os_release = pathlib.Path("/etc/os-release").read_text(encoding="utf-8")
-    values = dict(
-        line.split("=", 1) for line in os_release.splitlines() if "=" in line
-    )
-    if values.get("ID", "").strip('"') != "ubuntu" or values.get(
-        "VERSION_ID", ""
-    ).strip('"') != "24.04":
-        raise SupplyChainError("LLVM lock requires Ubuntu 24.04")
-    if lock["runner"]["architecture"] != "X64":
-        raise SupplyChainError("runner architecture lock is inconsistent")
-
-
-def install_documentation(lock: dict[str, Any]) -> None:
-    documentation = lock["documentation"]
-    content = download(documentation["url"])
-    verify_bytes(content, documentation["sha256"], "Doxygen package")
-    with tempfile.TemporaryDirectory(prefix="cxxlens-documentation-package-") as temporary:
-        archive = pathlib.Path(temporary) / "doxygen.deb"
-        archive.write_bytes(content)
-        fields = {
-            field: run(
-                ["dpkg-deb", "--field", str(archive), field], capture=True
-            )
-            for field in ("Package", "Version", "Architecture")
-        }
-        expected = {
-            "Package": documentation["package"],
-            "Version": documentation["version"],
-            "Architecture": documentation["architecture"],
-        }
-        if fields != expected:
-            raise SupplyChainError(
-                f"Doxygen package metadata mismatch: expected {expected}, received {fields}"
-            )
-        if (
-            installed_package_version(documentation["package"])
-            != documentation["version"]
-        ):
-            run(
-                [
-                    "sudo",
-                    "apt-get",
-                    "install",
-                    "--yes",
-                    "--no-install-recommends",
-                    "--no-upgrade",
-                    str(archive),
-                ]
-            )
-    actual = installed_package_version(documentation["package"])
-    if actual != documentation["version"]:
-        raise SupplyChainError(f"installed Doxygen version mismatch: {actual}")
-    version = run(["doxygen", "--version"], capture=True)
-    if version != documentation["expected_release"]:
-        raise SupplyChainError(f"Doxygen release mismatch: {version}")
-
-
-def install(root: pathlib.Path, profile_name: str) -> None:
-    lock = load_lock(root)
-    assert_runner(lock)
-    if profile_name == "documentation":
-        install_documentation(lock)
-        return
-    llvm = lock["llvm"]
-    if profile_name not in llvm["profiles"]:
-        raise SupplyChainError(f"unknown LLVM install profile: {profile_name}")
+def configure_llvm_repository(llvm: dict[str, Any]) -> None:
     signing_key = llvm["signing_key"]
     key_content = download(signing_key["url"])
     verify_bytes(key_content, signing_key["sha256"], "LLVM signing key")
@@ -302,50 +429,162 @@ def install(root: pathlib.Path, profile_name: str) -> None:
             "update",
         ]
     )
-    package_requests = [
-        f"{name}={llvm['packages'][name]}" for name in llvm["profiles"][profile_name]
-    ]
-    with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-packages-") as temporary:
-        package_directory = pathlib.Path(temporary)
-        run(["apt-get", "download", *package_requests], cwd=package_directory)
-        archives: dict[str, pathlib.Path] = {}
-        for archive in sorted(package_directory.glob("*.deb")):
-            name = run(["dpkg-deb", "--field", str(archive), "Package"], capture=True)
-            version = run(["dpkg-deb", "--field", str(archive), "Version"], capture=True)
-            if name not in llvm["profiles"][profile_name] or version != llvm["packages"][name]:
-                raise SupplyChainError(f"downloaded LLVM package identity mismatch: {archive.name}")
-            verify_bytes(archive.read_bytes(), llvm["package_sha256"][name], archive.name)
-            if name in archives:
-                raise SupplyChainError(f"duplicate downloaded LLVM package: {name}")
-            archives[name] = archive
-        if set(archives) != set(llvm["profiles"][profile_name]):
-            raise SupplyChainError("downloaded LLVM package set differs from profile")
-        run(
-            [
-                "sudo",
-                "apt-get",
-                "install",
-                "--yes",
-                "--no-install-recommends",
-                "--no-upgrade",
-                *[str(archives[name]) for name in llvm["profiles"][profile_name]],
-            ]
-        )
-    for name in llvm["profiles"][profile_name]:
+
+
+def assert_runner(lock: dict[str, Any]) -> None:
+    if platform.machine() != "x86_64":
+        raise SupplyChainError(f"unsupported runner architecture: {platform.machine()}")
+    os_release = pathlib.Path("/etc/os-release").read_text(encoding="utf-8")
+    values = dict(
+        line.split("=", 1) for line in os_release.splitlines() if "=" in line
+    )
+    if values.get("ID", "").strip('"') != "ubuntu" or values.get(
+        "VERSION_ID", ""
+    ).strip('"') != "24.04":
+        raise SupplyChainError("LLVM lock requires Ubuntu 24.04")
+    if lock["runner"]["architecture"] != "X64":
+        raise SupplyChainError("runner architecture lock is inconsistent")
+
+
+def install_package_archives(archives: dict[str, pathlib.Path]) -> None:
+    run(
+        [
+            "sudo",
+            "apt-get",
+            "install",
+            "--yes",
+            "--no-install-recommends",
+            "--no-upgrade",
+            *[str(archives[name]) for name in sorted(archives)],
+        ]
+    )
+
+
+def install_documentation(
+    lock: dict[str, Any],
+    package_cache_directory: pathlib.Path | None = None,
+) -> tuple[str, str]:
+    expected = package_authority(lock, "documentation")
+    archives, cache_status, _ = resolve_cached_archives(
+        package_cache_directory, expected
+    )
+    cache_source = "verified-cache" if archives is not None else "verified-download"
+    if archives is None:
+        documentation = lock["documentation"]
+        content = download(documentation["url"])
+        verify_bytes(content, documentation["sha256"], "Doxygen package")
+        with tempfile.TemporaryDirectory(
+            prefix="cxxlens-documentation-package-"
+        ) as temporary:
+            archive = pathlib.Path(temporary) / "doxygen.deb"
+            archive.write_bytes(content)
+            validate_package_archive(archive, expected["doxygen"], "Doxygen package")
+            archives = {"doxygen": archive}
+            if package_cache_directory is not None:
+                replace_package_cache(package_cache_directory, archives, expected)
+            if installed_package_version("doxygen") != expected["doxygen"]["version"]:
+                install_package_archives(archives)
+    else:
+        with tempfile.TemporaryDirectory(
+            prefix="cxxlens-cached-documentation-package-"
+        ) as temporary:
+            private_archives = copy_cached_archives(
+                archives, expected, pathlib.Path(temporary)
+            )
+            if installed_package_version("doxygen") != expected["doxygen"]["version"]:
+                install_package_archives(private_archives)
+    actual = installed_package_version("doxygen")
+    if actual != expected["doxygen"]["version"]:
+        raise SupplyChainError(f"installed Doxygen version mismatch: {actual}")
+    version = run(["doxygen", "--version"], capture=True)
+    if version != lock["documentation"]["expected_release"]:
+        raise SupplyChainError(f"Doxygen release mismatch: {version}")
+    return cache_status, cache_source
+
+
+def install_llvm(
+    lock: dict[str, Any],
+    profile_name: str,
+    package_cache_directory: pathlib.Path | None = None,
+) -> tuple[str, str]:
+    expected = package_authority(lock, profile_name)
+    llvm = lock["llvm"]
+    configure_llvm_repository(llvm)
+    archives, cache_status, _ = resolve_cached_archives(
+        package_cache_directory, expected
+    )
+    cache_source = "verified-cache" if archives is not None else "verified-download"
+    if archives is None:
+        package_requests = [
+            f"{name}={expected[name]['version']}" for name in sorted(expected)
+        ]
+        with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-packages-") as temporary:
+            package_directory = pathlib.Path(temporary)
+            run(["apt-get", "download", *package_requests], cwd=package_directory)
+            archives = {}
+            for archive in sorted(package_directory.glob("*.deb")):
+                fields = package_fields(archive)
+                name = fields["Package"]
+                if name not in expected or name in archives:
+                    raise SupplyChainError(
+                        f"downloaded LLVM package identity mismatch: {archive.name}"
+                    )
+                validate_package_archive(archive, expected[name], archive.name)
+                archives[name] = archive
+            if set(archives) != set(expected):
+                raise SupplyChainError("downloaded LLVM package set differs from profile")
+            if package_cache_directory is not None:
+                replace_package_cache(package_cache_directory, archives, expected)
+            install_package_archives(archives)
+    else:
+        with tempfile.TemporaryDirectory(
+            prefix="cxxlens-cached-llvm-packages-"
+        ) as temporary:
+            private_archives = copy_cached_archives(
+                archives, expected, pathlib.Path(temporary)
+            )
+            install_package_archives(private_archives)
+    for name in sorted(expected):
         actual = run(
             ["dpkg-query", "--showformat=${Version}", "--show", name], capture=True
         )
-        if actual != llvm["packages"][name]:
+        if actual != expected[name]["version"]:
             raise SupplyChainError(
                 f"installed package version mismatch: {name}: {actual}"
             )
     version = run(["clang++-22", "--version"], capture=True).splitlines()[0]
     if llvm["expected_release"] not in version:
         raise SupplyChainError(f"Clang release mismatch: {version}")
-    if "clang-tidy-22" in llvm["profiles"][profile_name]:
+    if "clang-tidy-22" in expected:
         tidy = run(["clang-tidy-22", "--version"], capture=True)
         if llvm["expected_release"] not in tidy:
             raise SupplyChainError("clang-tidy release mismatch")
+    return cache_status, cache_source
+
+
+def install(
+    root: pathlib.Path,
+    profile_name: str,
+    package_cache_directory: pathlib.Path | None = None,
+    provenance_output: pathlib.Path | None = None,
+) -> dict[str, Any]:
+    lock = load_lock(root)
+    assert_runner(lock)
+    lock_digest = "sha256:" + sha256_bytes((root / LOCK).read_bytes())
+    if profile_name == "documentation":
+        cache_status, cache_source = install_documentation(
+            lock, package_cache_directory
+        )
+    else:
+        cache_status, cache_source = install_llvm(
+            lock, profile_name, package_cache_directory
+        )
+    provenance = build_package_cache_provenance(
+        lock, profile_name, lock_digest, cache_status, cache_source
+    )
+    if provenance_output is not None:
+        write_package_cache_provenance(provenance_output, provenance)
+    return provenance
 
 
 def arguments() -> argparse.Namespace:
@@ -355,6 +594,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--profile")
     parser.add_argument("--artifact", type=pathlib.Path)
     parser.add_argument("--sha256")
+    parser.add_argument("--package-cache-dir", type=pathlib.Path)
+    parser.add_argument("--provenance-output", type=pathlib.Path)
     return parser.parse_args()
 
 
@@ -367,7 +608,16 @@ def main() -> int:
         elif args.command == "install":
             if not args.profile:
                 raise SupplyChainError("install requires --profile")
-            install(root, args.profile)
+            install(
+                root,
+                args.profile,
+                args.package_cache_dir.resolve()
+                if args.package_cache_dir is not None
+                else None,
+                args.provenance_output.resolve()
+                if args.provenance_output is not None
+                else None,
+            )
         else:
             if not args.artifact or not args.sha256:
                 raise SupplyChainError("verify-artifact requires --artifact and --sha256")
