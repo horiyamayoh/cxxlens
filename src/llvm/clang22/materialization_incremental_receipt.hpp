@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <string>
 #include <vector>
@@ -92,6 +93,10 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] bool
 		operator==(const materialization_incremental_execution_journal_receipt&) const = default;
 	};
+
+	/** Source-private receipt access that avoids assembling a second all-task receipt vector. */
+	using materialization_incremental_task_receipt_reader =
+		std::function<const materialization_incremental_task_receipt*(std::size_t)>;
 
 	/** Derive the selected request identity without trusting any task receipt field. */
 	[[nodiscard]] sdk::result<std::string>
@@ -233,9 +238,24 @@ namespace cxxlens::detail::clang22::materialization
 		const materialization_v2_1_task_execution& task,
 		const materialization_incremental_task_receipt& receipt);
 
+	/** Recompute one task seal without retaining a second receipt object. */
+	[[nodiscard]] sdk::result<void> validate_materialization_incremental_task_receipt_seal(
+		const materialization_incremental_task_receipt& receipt);
+
+	/** Recompute the journal digest from its retained task identity/seal census. */
+	[[nodiscard]] sdk::result<void> validate_materialization_incremental_execution_journal(
+		const materialization_incremental_execution_journal_receipt& journal);
+
 	/** Seal the exact canonical-order task receipt set; task receipts cannot bind this value. */
 	[[nodiscard]] sdk::result<materialization_incremental_execution_journal_receipt>
 	seal_materialization_incremental_execution_journal(
 		std::string materialization_request_id,
 		std::span<const materialization_incremental_task_receipt> task_receipts);
+
+	/** Seal the exact receipt set through a source-private bounded reader. */
+	[[nodiscard]] sdk::result<materialization_incremental_execution_journal_receipt>
+	seal_materialization_incremental_execution_journal(
+		std::string materialization_request_id,
+		std::size_t task_count,
+		const materialization_incremental_task_receipt_reader& task_receipt_at);
 } // namespace cxxlens::detail::clang22::materialization
