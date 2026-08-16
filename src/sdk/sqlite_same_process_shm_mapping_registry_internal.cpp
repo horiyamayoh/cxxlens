@@ -2238,6 +2238,42 @@ namespace cxxlens::sdk
 									 sqlite_shm_lease_recovery_action::deny_before_native_map);
 				try
 				{
+					std::shared_ptr<sqlite_same_process_shm_mapping_lease_coordinator> coordinator;
+					{
+						std::scoped_lock lock{mutex_};
+						if (pin.state_.get() != this)
+							return rejection(
+								sqlite_shm_lease_rejection_reason::receipt_mismatch,
+								sqlite_shm_lease_recovery_action::deny_before_native_map);
+						synchronize_activity_controls_locked();
+						synchronize_reader_open_controls_locked();
+						synchronize_coordinator_quarantines_locked();
+						if (admission_quarantined_locked())
+							return rejection(sqlite_shm_lease_rejection_reason::quarantined,
+											 sqlite_shm_lease_recovery_action::quarantine_no_retry);
+						auto* family_pin = current_family_pin_locked(pin);
+						auto* alias = find_alias_locked(pin.alias_token_);
+						auto* family = find_family_epoch_locked(pin.family_epoch_);
+						if (family_pin == nullptr || alias == nullptr || family == nullptr ||
+							!family->coordinator ||
+							alias->phase != sqlite_shm_registry_alias_phase::registered ||
+							family->phase != sqlite_shm_registry_family_phase::active ||
+							!exact_family_admission_visible_locked(*family))
+							return rejection(
+								sqlite_shm_lease_rejection_reason::retiring,
+								sqlite_shm_lease_recovery_action::deny_before_native_map);
+						coordinator = family->coordinator;
+					}
+
+					// Filesystem and retained-source observations intentionally happen without the
+					// process-wide registry mutex.  The second locked phase below revalidates the
+					// short-lived family/token binding before publishing the permit.
+					auto source_observation =
+						coordinator->observe_reader_native_ok_projection_source(reservation,
+																				borrow);
+					if (!source_observation)
+						return source_observation.error();
+
 					std::scoped_lock lock{mutex_};
 					if (pin.state_.get() != this)
 						return rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
@@ -2252,14 +2288,14 @@ namespace cxxlens::sdk
 					auto* alias = find_alias_locked(pin.alias_token_);
 					auto* family = find_family_epoch_locked(pin.family_epoch_);
 					if (family_pin == nullptr || alias == nullptr || family == nullptr ||
-						!family->coordinator ||
+						!family->coordinator || family->coordinator != coordinator ||
 						alias->phase != sqlite_shm_registry_alias_phase::registered ||
 						family->phase != sqlite_shm_registry_family_phase::active ||
 						!exact_family_admission_visible_locked(*family))
 						return rejection(sqlite_shm_lease_rejection_reason::retiring,
 										 sqlite_shm_lease_recovery_action::deny_before_native_map);
-					return family->coordinator->attach_reader_native_ok_projection(
-						reservation, std::move(borrow));
+					return coordinator->attach_reader_native_ok_projection(
+						reservation, std::move(borrow), std::move(*source_observation));
 				}
 				catch (...)
 				{
