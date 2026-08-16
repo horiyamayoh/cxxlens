@@ -432,10 +432,10 @@ check_cxx_source_compiles(
 #ifndef SYS_pidfd_send_signal
 #error "The timeout regression requires pidfd_send_signal"
 #endif
-#ifndef P_PIDFD
-#error "The timeout regression requires P_PIDFD"
-#endif
-int main() { return 0; }
+int main() {
+  siginfo_t status{};
+  return waitid(P_PIDFD, 0, &status, WEXITED | WNOHANG);
+}
 ]=]
   CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
