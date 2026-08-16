@@ -1,0 +1,42 @@
+name: Fix exact PR 317 cache test isolation
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message == 'Fix exact PR 317 cache test isolation'
+    runs-on: ubuntu-24.04
+    env:
+      HEAD_REF: issue-316-ci-setup-integration
+      EXPECTED_HEAD_SHA: 1550ffc1b17e2b6ef1c25cfbdb1c30eaba73c49f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Apply and validate the isolated cache test
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin "${HEAD_REF}"
+          test "$(git rev-parse "origin/${HEAD_REF}")" = "${EXPECTED_HEAD_SHA}"
+          git checkout -B "${HEAD_REF}" "origin/${HEAD_REF}"
+          python3 tools/ci/fix_pr317_test_isolation.py
+          test ! -e tools/ci/fix_pr317_test_isolation.py
+          python3 -m pip install --require-hashes --only-binary=:all: \
+            --requirement tools/quality/requirements.lock
+          python3 -m py_compile tests/quality/test_ng_ci_supply_chain.py
+          python3 tests/quality/test_ng_ci_supply_chain.py
+          python3 tools/quality/check_ci_supply_chain.py check --root .
+          python3 tools/quality/check_ng_api_development_readiness.py check --root .
+          python3 tools/quality/check_documentation_consistency.py check --root .
+          git diff --check
+          git add -A
+          git commit -m 'Isolate checksum test from restored package cache'
+          git push --force-with-lease="refs/heads/${HEAD_REF}:${EXPECTED_HEAD_SHA}" \
+            origin "HEAD:refs/heads/${HEAD_REF}"
