@@ -620,15 +620,20 @@ def build_report(
     generated_at: str,
     expected_revision: str,
 ) -> dict[str, Any]:
-    report = _baseline_build_report(
-        root,
-        manifest,
-        evidence_dir,
-        run_url,
-        ci_jobs,
-        generated_at,
-        expected_revision,
-    )
+    baseline_current_git_state = _baseline.current_git_state
+    _baseline.current_git_state = current_git_state
+    try:
+        report = _baseline_build_report(
+            root,
+            manifest,
+            evidence_dir,
+            run_url,
+            ci_jobs,
+            generated_at,
+            expected_revision,
+        )
+    finally:
+        _baseline.current_git_state = baseline_current_git_state
     json_path, markdown_path = _packet_paths(evidence_dir)
     packet = json.loads(json_path.read_text(encoding="utf-8"))
     git = report["git"]
