@@ -1730,7 +1730,7 @@ allocator:
   - fully_qualified_name: cxxlens::source::relations::span::span_column::ref
     callable_kind: static
     next_overload_slot: 1
-inventory_digest: sha256:a48cc97da7572988002672832e3ec20ab3bb953812ece1b0269e122608dc0f92
+inventory_digest: sha256:b55cbe297df5af185f724df7513ecf94aeb4825ce09f1faa36a43a98933ca35d
 callables:
 - id: cpp.callable.00100ca7a0bda4b73503b24a4e6f6d33be47b954c7553cab8f70e85f9e77f492
   identity:
@@ -4957,9 +4957,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:376a4732203fdb9ffdcf5be8604b78dce32753d1576c2e2e7761d9cc7405b3dd
     doxygen_name: 'cxxlens :: provider :: clang22 :: with_translation_unit'
@@ -9068,9 +9068,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:4589942986855eaa5ab369952357b1bc1cb7665ac26545d30a255f9921d92fff
     doxygen_name: 'cxxlens :: provider :: clang22 :: source_range_identity :: validate'
@@ -9774,9 +9774,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:323c52fff65c0a57f1156df34e03ff051c46781268114224875b7c2dac6593ef
     doxygen_name: 'cxxlens :: provider :: clang22 :: detached_source_span :: validate'
@@ -11993,9 +11993,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:5be5c3fe6205cdd7cd1204bdf0d534fbc46eb0258ce7a9ad9cba957ad27e9347
     doxygen_name: 'cxxlens :: provider :: clang22 :: borrowed_translation_unit :: source_manager'
@@ -14114,9 +14114,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:d0dc448cf2380fe5485bdedc528af12b8e5a094318859d9f0a40fff05b80fc50
     doxygen_name: 'cxxlens :: provider :: clang22 :: borrowed_translation_unit :: borrowed_translation_unit'
@@ -16437,9 +16437,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:8f85c6c922829f250f9a9394dd779b07b3c3ad724726c986172bf8f230614265
     doxygen_name: 'cxxlens :: provider :: clang22 :: borrowed_translation_unit :: borrowed_translation_unit'
@@ -18556,9 +18556,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:b14928e86a929b8e6651cec43b8f5f25d736d5b1cd49c9783422961bdefd68ae
     doxygen_name: 'cxxlens :: provider :: clang22 :: normalize_source'
@@ -22081,9 +22081,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:e1393ea1a36c026ea5bf52fae7ddc8bd473b2e9df68e8ad5622a4f90c525df2b
     doxygen_name: 'cxxlens :: provider :: clang22 :: borrowed_translation_unit :: operator ='
@@ -22236,9 +22236,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:9a17361feebc7a16bb145188a3d300569876ceda243af21712dcaf06deef7d23
     doxygen_name: 'cxxlens :: provider :: clang22 :: borrowed_translation_unit :: operator ='
@@ -24425,9 +24425,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:c84eabeea192b05e862afb3c126c8e4b393e0fcd66b568e06fa7415413021280
     doxygen_name: 'cxxlens :: provider :: clang22 :: detach_scalar'
@@ -27367,9 +27367,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:1058dd9fc054d1c41787b9909d30003d049e0ab6da797e91753a497010baeb40
     doxygen_name: 'cxxlens :: provider :: clang22 :: detached_source_origin :: validate'
@@ -27679,9 +27679,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:fecbad8cde6aa4b0b05f695c2d02d4b384e48392b5acc61e06102ed519e1a536
     doxygen_name: 'cxxlens :: provider :: clang22 :: detect_native_escape'
@@ -31304,9 +31304,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:377c906f2113ff7dcef9eea528069d4298b472f4944924225bd7b12523081d23
     doxygen_name: 'cxxlens :: provider :: clang22 :: translation_unit_input :: validate'
@@ -32766,9 +32766,9 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
+    catalog_digest: sha256:d1e11c5b3eb72f6fcf2fe861874e1786e48fe08c63ec10d5cab5838efcbc675c
     implementation: src/llvm/clang22/provider_sdk.cpp
-    test: tests/public_headers/provider_clang22_header_test.cpp
+    test: tests/public_headers/provider_clang22_translation_unit_input_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
     doxygen_key: sha256:ac74060cf6031410eb6d18ff4f8ac26858dd26f2a860effd23ef2aa83e14d3da
     doxygen_name: 'cxxlens :: provider :: clang22 :: borrowed_translation_unit :: ast'
