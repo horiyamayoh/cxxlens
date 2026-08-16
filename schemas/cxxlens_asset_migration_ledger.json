@@ -1,5 +1,5 @@
 {
-  "asset_count": 694,
+  "asset_count": 695,
   "assets": [
     {
       "authority": "active",
@@ -4616,6 +4616,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_git_authority.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_migration_completion.py",
       "removal_issue": null,
       "replacement": null,
@@ -4861,7 +4868,7 @@
     }
   ],
   "classifications": {
-    "active": 658,
+    "active": 659,
     "archived": 35,
     "generated": 1
   },
