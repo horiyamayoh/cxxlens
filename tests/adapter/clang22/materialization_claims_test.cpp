@@ -155,7 +155,8 @@ namespace
 	fixture_rows(const clang22_task_input& input,
 				 const bool empty,
 				 const bool missing_call,
-				 const bool omit_entity)
+				 const bool omit_entity,
+				 const std::optional<std::string_view> alternate_target_resolution = std::nullopt)
 	{
 		std::array<std::vector<sdk::detached_row>, 6U> rows;
 		if (empty)
@@ -199,10 +200,17 @@ namespace
 			call_id = "cc-call:missing";
 		const auto& target_descriptor = cc::relations::call_direct_target::descriptor();
 		auto target = fixture_row{target_descriptor}
-						  .string("call", std::move(call_id))
+						  .string("call", call_id)
 						  .string("target", entity_id)
 						  .string("resolution", "syntactic_direct")
 						  .finish();
+		std::optional<sdk::detached_row> alternate_target;
+		if (alternate_target_resolution)
+			alternate_target = fixture_row{target_descriptor}
+								   .string("call", call_id)
+								   .string("target", entity_id)
+								   .string("resolution", std::string{*alternate_target_resolution})
+								   .finish();
 
 		const auto observation = [&](const observation_v2_kind kind,
 									 const std::string_view semantic_key,
@@ -228,6 +236,8 @@ namespace
 		};
 
 		rows[0U].push_back(std::move(target));
+		if (alternate_target)
+			rows[0U].push_back(std::move(*alternate_target));
 		rows[1U].push_back(std::move(call_site));
 		if (!omit_entity)
 			rows[2U].push_back(std::move(entity));
@@ -329,15 +339,20 @@ namespace
 			  const bool empty = false,
 			  const coverage_mode coverage = coverage_mode::exact,
 			  const bool missing_call = false,
-			  const bool omit_entity = false)
+			  const bool omit_entity = false,
+			  const std::optional<std::string_view> alternate_target_resolution = std::nullopt)
 	{
 		const auto& task_request = request.tasks[index];
 		auto task = reconstruct_provider_task(
 			task_request.worker_input, request.output_descriptors, std::string{worker_semantics});
 		if (!task)
 			return sdk::unexpected(std::move(task.error()));
-		fixture_provider provider{
-			fixture_rows(task_request.worker_input, empty, missing_call, omit_entity), coverage};
+		fixture_provider provider{fixture_rows(task_request.worker_input,
+											   empty,
+											   missing_call,
+											   omit_entity,
+											   alternate_target_resolution),
+								  coverage};
 		transcript_sink sink;
 		sdk::provider::protocol_writer writer{sink};
 		const sdk::provider::protocol_credit credit{64U * 1024U * 1024U, 65536U};
@@ -3730,6 +3745,27 @@ namespace
 				"incremental coordinator did not retain a successful Store publication receipt");
 	}
 
+	void check_bounded_conflict_fail_closed(const validated_materialization_request& request,
+											const materialization_producer_authority& producer)
+	{
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		auto sealed = seal_task(request,
+								0U,
+								false,
+								coverage_mode::exact,
+								false,
+								false,
+								std::optional<std::string_view>{"semantic_direct"});
+		require(sealed.has_value(), "bounded conflict fixture sealing failed");
+		auto task = construct_materialization_bounded_task_claims(
+			request, 0U, *sealed, producer, guarantee);
+		require(!task && task.error().code == "materialization.claim-invalid" &&
+					task.error().field == "cc.call_direct_target.v1" &&
+					task.error().detail == "functional-conflict",
+				"bounded functional conflict crossed the factory fail-closed gate");
+	}
+
 	void check_bounded_soft_semantic_unresolved(const validated_materialization_request& request,
 												const materialization_producer_authority& producer)
 	{
@@ -4053,6 +4089,7 @@ int main(const int argc, char** argv)
 	check_incremental_coordinator_v2_1(root);
 	check_incremental_coordinator(request, producer);
 	check_full_soft_semantic_unresolved(request, producer);
+	check_bounded_conflict_fail_closed(request, producer);
 	check_bounded_soft_semantic_unresolved(request, producer);
 	check_bounded_adoption_fail_closed(request, producer);
 	negative_authority_guarantee_order_and_coverage(request, std::move(producer));

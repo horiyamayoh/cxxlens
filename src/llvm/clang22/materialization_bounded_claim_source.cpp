@@ -713,15 +713,6 @@ namespace cxxlens::detail::clang22::materialization
 			return update_digest(digest, std::span<const std::byte>{data, value.size()}, field);
 		}
 
-		[[nodiscard]] sdk::result<void>
-		update_empty_tuple(materialization_digest_accumulator& digest, const std::string_view field)
-		{
-			const std::array<std::byte, 1U> tag{std::byte{0x05U}};
-			if (auto updated = update_digest(digest, tag, field); !updated)
-				return updated;
-			const auto length = encode_u64(0U);
-			return update_digest(digest, length, field);
-		}
 	} // namespace
 
 	sdk::result<materialization_bounded_claim_source>
@@ -1576,6 +1567,9 @@ namespace cxxlens::detail::clang22::materialization
 							std::vector<std::string> contents{left.content, right.content};
 							std::ranges::sort(assertions);
 							std::ranges::sort(contents);
+							assertions.erase(std::ranges::unique(assertions).begin(),
+											 assertions.end());
+							contents.erase(std::ranges::unique(contents).begin(), contents.end());
 							conflicts.emplace(left.descriptor,
 											  key.second,
 											  left.interpretation,
@@ -1593,6 +1587,62 @@ namespace cxxlens::detail::clang22::materialization
 															   *overlap);
 					}
 			}
+
+			const auto canonical_strings = [](const std::vector<std::string>& values)
+			{
+				std::vector<sdk::canonical_value> output;
+				output.reserve(values.size());
+				for (const auto& value : values)
+					output.push_back(sdk::canonical_value::from_string(value));
+				return sdk::canonical_value::from_tuple(std::move(output));
+			};
+			std::vector<sdk::canonical_value> conflict_records;
+			conflict_records.reserve(conflicts.size());
+			for (const auto& [relation,
+							  semantic_key,
+							  interpretation,
+							  overlap_fragments,
+							  assertions,
+							  contents] : conflicts)
+				conflict_records.push_back(sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string("conflict"),
+					sdk::canonical_value::from_string(relation),
+					sdk::canonical_value::from_string(semantic_key),
+					sdk::canonical_value::from_string(interpretation),
+					canonical_strings(overlap_fragments),
+					canonical_strings(assertions),
+					canonical_strings(contents),
+				}));
+			auto conflict_binary = sdk::canonical_binary(
+				sdk::canonical_value::from_tuple(std::move(conflict_records)));
+			if (!conflict_binary ||
+				conflict_binary->size() > std::numeric_limits<std::uint64_t>::max())
+				return sdk::unexpected(source_error("claims.conflicts", "encode"));
+
+			std::vector<sdk::canonical_value> differential_records;
+			differential_records.reserve(differential_disagreements.size());
+			for (const auto& [relation,
+							  semantic_key,
+							  left_interpretation,
+							  right_interpretation,
+							  left_content,
+							  right_content,
+							  overlap_fragments] : differential_disagreements)
+				differential_records.push_back(sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string("differential"),
+					sdk::canonical_value::from_string(relation),
+					sdk::canonical_value::from_string(semantic_key),
+					sdk::canonical_value::from_string(left_interpretation),
+					sdk::canonical_value::from_string(right_interpretation),
+					sdk::canonical_value::from_string(left_content),
+					sdk::canonical_value::from_string(right_content),
+					canonical_strings(overlap_fragments),
+				}));
+			auto differential_binary = sdk::canonical_binary(
+				sdk::canonical_value::from_tuple(std::move(differential_records)));
+			if (!differential_binary ||
+				differential_binary->size() > std::numeric_limits<std::uint64_t>::max())
+				return sdk::unexpected(source_error("claims.differential", "encode"));
 
 			canonicalize_unresolved(unresolved);
 			if (unresolved.size() > std::numeric_limits<std::uint64_t>::max())
@@ -1643,8 +1693,12 @@ namespace cxxlens::detail::clang22::materialization
 			};
 			const auto unresolved_tuple_size =
 				static_cast<std::uint64_t>(unresolved_binary->size());
+			const auto conflict_tuple_size = static_cast<std::uint64_t>(conflict_binary->size());
+			const auto differential_tuple_size =
+				static_cast<std::uint64_t>(differential_binary->size());
 			if (!add_child(claim_batch_marker_size) || !add_child(claims_tuple_size) ||
-				!add_child(unresolved_tuple_size) || !add_child(9U) || !add_child(9U))
+				!add_child(unresolved_tuple_size) || !add_child(conflict_tuple_size) ||
+				!add_child(differential_tuple_size))
 				return sdk::unexpected(source_error("claims", "size-overflow"));
 			std::uint64_t inner_payload_size{};
 			if (!checked_add(9U, child_sum, inner_payload_size))
@@ -1735,14 +1789,18 @@ namespace cxxlens::detail::clang22::materialization
 			if (auto updated = update_digest(*digest, *unresolved_binary, "claims.digest");
 				!updated)
 				return sdk::unexpected(std::move(updated.error()));
-			for (std::size_t index{}; index < 2U; ++index)
+			const auto append_section =
+				[&](const std::vector<std::byte>& section) -> sdk::result<void>
 			{
-				const auto empty_length = encode_u64(9U);
-				if (auto updated = update_digest(*digest, empty_length, "claims.digest"); !updated)
-					return sdk::unexpected(std::move(updated.error()));
-				if (auto updated = update_empty_tuple(*digest, "claims.digest"); !updated)
-					return sdk::unexpected(std::move(updated.error()));
-			}
+				const auto length = encode_u64(static_cast<std::uint64_t>(section.size()));
+				if (auto updated = update_digest(*digest, length, "claims.digest"); !updated)
+					return updated;
+				return update_digest(*digest, section, "claims.digest");
+			};
+			if (auto appended = append_section(*conflict_binary); !appended)
+				return sdk::unexpected(std::move(appended.error()));
+			if (auto appended = append_section(*differential_binary); !appended)
+				return sdk::unexpected(std::move(appended.error()));
 			auto finished = digest->finish();
 			if (!finished || !finished->starts_with("sha256:") || finished->size() != 71U)
 				return sdk::unexpected(source_error("claims", "digest-finalize"));
