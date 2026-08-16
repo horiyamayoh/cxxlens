@@ -221,6 +221,24 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             quality["jobs"]["check-tier"]["needs"],
         )
 
+    def test_public_callable_workflow_requires_parent_history(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            self.assertEqual(text.count("fetch-depth: 2"), 1)
+            workflow.write_text(
+                text.replace("fetch-depth: 2", "fetch-depth: 1", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                readiness.ReadinessError,
+                "public callable stable-ID check requires fetch-depth: 2",
+            ):
+                readiness.validate_documents(root)
+
     def test_required_check_tier_cannot_be_removed(self) -> None:
         import tempfile
 
