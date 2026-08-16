@@ -676,11 +676,9 @@ def validate_agent_context_packet(
         _fail("#277 exact projection generator is unavailable")
     del manifest
     try:
-        agent_context.validate_context(
+        agent_context.validate_context_integrity(
             root,
             packet,
-            use_case_id=USE_CASE_ID,
-            issue=ISSUE_ID,
             revision=revision,
             tree=tree,
         )

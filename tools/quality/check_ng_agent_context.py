@@ -570,6 +570,52 @@ def validate_context(
         fail("agent-context.canonical-digest-mismatch")
 
 
+def validate_context_integrity(
+    root: pathlib.Path,
+    packet: dict[str, Any],
+    *,
+    revision: str,
+    tree: str,
+) -> None:
+    """Validate an already-produced packet without acting as its generator.
+
+    The readiness report consumer uses this path so it can validate an artifact's
+    exact provenance and local authority digests without reconstructing a second
+    packet generator.  The public plan/check CLI continues to use ``build_context``
+    and therefore requires a clean source worktree before generation or checking.
+    """
+    _readiness, _readiness_schema, context_schema = load_authorities(root)
+    validate_schema(packet, context_schema, "agent-context")
+    binding = packet.get("binding")
+    if not isinstance(binding, dict) or (
+        binding.get("revision"), binding.get("tree")
+    ) != (revision, tree):
+        fail("agent-context.stale-or-not-machine-derived")
+    if binding.get("worktree") != "clean" or binding.get("generator") != GENERATOR_PATH.as_posix():
+        fail("agent-context.stale-or-not-machine-derived")
+    readings = bind_authority_reading(root, packet["authority_reading_set"])
+    if readings != packet["authority_reading_bindings"]:
+        fail("agent-context.stale-or-not-machine-derived")
+    if binding.get("authority_reading_digest") != digest(readings):
+        fail("agent-context.stale-or-not-machine-derived")
+    records = bind_design_feedback(root)
+    if records != packet["design_feedback_records"]:
+        fail("agent-context.stale-or-not-machine-derived")
+    if binding.get("design_feedback_records_digest") != digest(records):
+        fail("agent-context.stale-or-not-machine-derived")
+    gate = _readiness["product_direction"]["constructibility_gate"]
+    gate_digest = digest(gate)
+    if (
+        binding.get("constructibility_authority_digest") != gate_digest
+        or packet["constructibility"].get("authority_digest") != gate_digest
+    ):
+        fail("agent-context.stale-or-not-machine-derived")
+    without_digest = copy.deepcopy(packet)
+    actual = without_digest.pop("canonical_digest", None)
+    if actual != digest(without_digest):
+        fail("agent-context.canonical-digest-mismatch")
+
+
 def render_markdown(packet: dict[str, Any]) -> str:
     def bullets(values: list[str]) -> str:
         return "\n".join(f"- {value}" for value in values)
