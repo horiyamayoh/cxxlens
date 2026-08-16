@@ -262,7 +262,11 @@ namespace cxxlens::sdk::provider::detail
 			std::uint64_t value{};
 			for (std::size_t index{}; index < width; ++index)
 				value = (value << 8U) | std::to_integer<std::uint64_t>(input[offset + index]);
-			const auto minimum = width == 1U ? 24U : (std::uint64_t{1U} << (width * 8U - 8U));
+			// CBOR additional-info widths are 1, 2, 4, and 8 bytes.  The
+			// shortest value for the latter three is 2^8, 2^16, and 2^32;
+			// using width * 8 - 8 incorrectly made valid 4/8-byte arguments
+			// appear non-shortest during spill recovery.
+			const auto minimum = width == 1U ? 24U : (std::uint64_t{1U} << (width * 4U));
 			if (value < minimum)
 				return unexpected(corrupt_error("cbor", "non-shortest"));
 			return std::pair{value, offset + width};

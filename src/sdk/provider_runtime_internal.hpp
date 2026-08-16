@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,27 @@ namespace cxxlens::sdk::provider::detail
 		std::string atomic_output_group_id;
 		std::string batch_id;
 		std::uint64_t stream_id{};
+	};
+
+	/**
+	 * Exact source-private batch projection used by the sealed-transcript receipt.
+	 *
+	 * This deliberately contains the canonical row forms rather than a report-specific row-set
+	 * digest.  A materialization report can therefore reprove that its retained leaf is the same
+	 * projection that the shared runtime sealed, without reimplementing the receipt codec or using
+	 * a diagnostic process digest as authority.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN provider_sealed_transcript_batch_receipt_projection
+	{
+		std::string task_id;
+		std::string descriptor_id;
+		std::string descriptor_digest;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::string batch_digest;
+		std::vector<std::string> ordered_chunk_digests;
+		std::vector<std::string> row_canonical_forms;
 	};
 
 	/** Closed runtime-owned evidence derived from raw bytes, decoded frames, and one immutable
@@ -108,6 +130,15 @@ namespace cxxlens::sdk::provider::detail
 	provider_sealed_transcript_receipt_digest(std::string_view task_id,
 											  std::string_view terminal,
 											  const sealed_provider_transcript& sealed);
+	/** Recompute the same receipt from a lossless source-private report leaf projection. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
+	provider_sealed_transcript_receipt_digest(
+		std::string_view task_id,
+		std::string_view terminal,
+		std::span<const provider_sealed_transcript_batch_receipt_projection> batches,
+		std::span<const coverage_unit> coverage,
+		std::span<const unresolved_item> unresolved,
+		std::span<const evidence_item> evidence);
 	/** Recompute the exact frame transcript receipt from a bounded decoded frame stream. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
 	provider_frame_transcript_receipt_digest(std::span<const frame> frames);

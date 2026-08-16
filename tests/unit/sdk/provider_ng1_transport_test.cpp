@@ -413,6 +413,26 @@ namespace
 		trailing.push_back(std::byte{0x00});
 		auto trailing_result = decode_ng1_progress_control(trailing);
 		require(!trailing_result, "trailing CBOR bytes were accepted");
+
+		const std::vector<std::byte> oversized_control(65'537U, std::byte{0x00});
+		auto oversized_heartbeat = decode_ng1_heartbeat_control(oversized_control);
+		require(!oversized_heartbeat &&
+					oversized_heartbeat.error().code == "provider.protocol-state-invalid" &&
+					oversized_heartbeat.error().field == "control" &&
+					oversized_heartbeat.error().detail == "limit-exceeded",
+				"oversized heartbeat control was parsed before the protocol limit");
+		auto oversized_progress = decode_ng1_progress_control(oversized_control);
+		require(!oversized_progress &&
+					oversized_progress.error().code == "provider.protocol-state-invalid" &&
+					oversized_progress.error().field == "control" &&
+					oversized_progress.error().detail == "limit-exceeded",
+				"oversized progress control was parsed before the protocol limit");
+		auto oversized_resume = decode_ng1_resume_control(oversized_control);
+		require(!oversized_resume &&
+					oversized_resume.error().code == "provider.protocol-state-invalid" &&
+					oversized_resume.error().field == "control" &&
+					oversized_resume.error().detail == "limit-exceeded",
+				"oversized resume control was parsed before the protocol limit");
 	}
 } // namespace
 

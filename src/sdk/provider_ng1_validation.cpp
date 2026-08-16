@@ -515,13 +515,16 @@ namespace cxxlens::sdk::provider::detail
 		if (total_units_ && sample.total_units != *total_units_)
 			return unexpected(ng1_error("progress-rate", "total_units", "changed"));
 		if (sample.host_receipt_time_ns < started_at_ns_)
-			return unexpected(ng1_error("progress-rate", "host_receipt_time_ns", "before-start"));
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "host_receipt_time_ns", "before-start"));
 		if (sample.provider_monotonic_time_ns > sample.host_receipt_time_ns)
 			return unexpected(ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "future"));
 		if (last_host_receipt_time_ns_ && sample.host_receipt_time_ns < *last_host_receipt_time_ns_)
-			return unexpected(ng1_error("progress-rate", "host_receipt_time_ns", "backwards"));
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "host_receipt_time_ns", "backwards"));
 		if (last_provider_time_ns_ && sample.provider_monotonic_time_ns < *last_provider_time_ns_)
-			return unexpected(ng1_error("progress-rate", "monotonic_time_ns", "backwards"));
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "backwards"));
 
 		auto next_sequence = last_sequence_;
 		if (auto valid = accept_contiguous(

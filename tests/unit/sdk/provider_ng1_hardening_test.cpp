@@ -210,6 +210,38 @@ namespace
 		require(!future_result && future_result.error().code == "provider.heartbeat-clock-invalid",
 				"future provider progress timestamp was accepted");
 
+		auto backwards = ng1_progress_state::create("task:test", "dependency:test", 0U);
+		require(backwards.has_value(), "backwards progress state creation failed");
+		require(backwards->observe(progress_sample(0U, 10U, 10U, 0U)),
+				"backwards progress setup failed");
+		auto backwards_result = backwards->observe(progress_sample(1U, 9U, 11U, 1U));
+		require(!backwards_result &&
+					backwards_result.error().code == "provider.heartbeat-clock-invalid" &&
+					backwards_result.error().field == "monotonic_time_ns",
+				"backwards provider progress timestamp was not classified as a clock failure");
+		require(backwards->observe(progress_sample(1U, 10U, 11U, 1U)),
+				"rejected provider timestamp regression mutated progress state");
+
+		auto before_start = ng1_progress_state::create("task:test", "dependency:test", 10U);
+		require(before_start.has_value(), "before-start progress state creation failed");
+		auto before_start_result = before_start->observe(progress_sample(0U, 9U, 9U, 0U));
+		require(!before_start_result &&
+					before_start_result.error().code == "provider.heartbeat-clock-invalid" &&
+					before_start_result.error().field == "host_receipt_time_ns",
+				"progress receipt before task start was not classified as a clock failure");
+
+		auto receipt_backwards = ng1_progress_state::create("task:test", "dependency:test", 0U);
+		require(receipt_backwards.has_value(), "backwards receipt state creation failed");
+		require(receipt_backwards->observe(progress_sample(0U, 10U, 10U, 0U)),
+				"backwards receipt setup failed");
+		auto receipt_backwards_result = receipt_backwards->observe(progress_sample(1U, 9U, 9U, 1U));
+		require(!receipt_backwards_result &&
+					receipt_backwards_result.error().code == "provider.heartbeat-clock-invalid" &&
+					receipt_backwards_result.error().field == "host_receipt_time_ns",
+				"backwards host receipt was not classified as a clock failure");
+		require(receipt_backwards->observe(progress_sample(1U, 11U, 11U, 1U)),
+				"rejected host receipt regression mutated progress state");
+
 		auto initial_deadline = ng1_progress_state::create("task:test", "dependency:test", 0U);
 		require(initial_deadline.has_value(), "initial progress deadline state creation failed");
 		auto initial_deadline_result =

@@ -77,7 +77,7 @@ namespace
 	}
 
 	[[nodiscard]] result<void> persist_frontier(std::optional<ng1_spill_resume_frontier>& current,
-												const ng1_spill_resume_frontier& next)
+																const ng1_spill_resume_frontier& next)
 	{
 		if (auto valid = next.validate(); !valid)
 			return unexpected(std::move(valid.error()));
@@ -88,6 +88,22 @@ namespace
 				error{"provider.resume-token-stale", "resume_frontier", "not-increasing"});
 		current = next;
 		return {};
+	}
+
+	[[nodiscard]] ng1_spill_record record_with_payload_size(const ng1_spill_binding& value,
+																													 const std::uint64_t ordinal,
+															const std::uint64_t sequence,
+															const std::size_t payload_size)
+	{
+		auto output = record(value, ordinal, sequence, "");
+		output.payload_bytes.assign(payload_size, std::byte{0x5a});
+		auto payload_digest = ng1_spill_payload_digest(output.payload_bytes);
+		require(payload_digest.has_value(), "large spill payload digest construction failed");
+		output.payload_digest = *payload_digest;
+		auto record_digest = ng1_spill_record_digest(output);
+		require(record_digest.has_value(), "large spill record digest construction failed");
+		output.record_digest = *record_digest;
+		return output;
 	}
 
 	class fake_spill_port final : public ng1_spill_storage_port
@@ -313,6 +329,24 @@ namespace
 		require(session->cleanup(), "corruption spill cleanup failed");
 	}
 
+	void test_recovery_accepts_four_byte_cbor_lengths()
+	{
+		const auto spill_binding = binding();
+		auto storage = std::make_unique<fake_spill_port>();
+		auto session = ng1_spill_staging_session::create(spill_binding, std::move(storage));
+		require(session.has_value(), "large-record spill session creation failed");
+		const auto large = record_with_payload_size(spill_binding, 0U, 0U, 65'536U);
+		require(session->append(large), "64 KiB spill record append failed");
+
+		auto recovered = session->recover();
+		require(recovered.has_value(),
+				"valid four-byte CBOR length was rejected during spill recovery");
+		require(recovered->total_bytes() == session->total_bytes() &&
+					recovered->total_records() == 1U,
+				"large spill recovery changed prefix accounting");
+		require(session->cleanup(), "large-record spill cleanup failed");
+	}
+
 	void test_fsync_and_cleanup_fail_closed()
 	{
 		const auto spill_binding = binding();
@@ -365,6 +399,7 @@ int main()
 	test_restore_rehydrates_prefix_and_fsync_frontier();
 	test_append_failure_poison_and_atomicity();
 	test_recovery_rejects_digest_corruption();
+	test_recovery_accepts_four_byte_cbor_lengths();
 	test_fsync_and_cleanup_fail_closed();
 	return 0;
 }

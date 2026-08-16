@@ -1,9 +1,7 @@
 name: Nightly quality
 
 on:
-  push:
-    branches:
-      - main
+  workflow_call:
   schedule:
     - cron: "17 18 * * *"
   workflow_dispatch:
@@ -12,10 +10,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-quality-${{ github.event_name == 'schedule' && 'scheduled' || 'rolling-main' }}
-  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+  group: nightly-quality-${{ github.sha }}
+  cancel-in-progress: false
 
 env:
+  CXXLENS_CI_TIER: stress
   CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CXXLENS_SANITIZER_BUILD_JOBS || 2 }}
   CTEST_PARALLEL_LEVEL: ${{ vars.CXXLENS_SANITIZER_TEST_JOBS || 2 }}
 
