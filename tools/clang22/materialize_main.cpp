@@ -1056,6 +1056,15 @@ namespace
 			if (!outcome || !outcome->succeeded() || !outcome->sealed || !outcome->runtime_receipt)
 				return sdk::unexpected(sdk::error{
 					"materialization.worker-failure", task.provider_task_id, "execution"});
+			if (auto bound = sdk::provider::detail::validate_provider_process_runtime_binding(
+					*outcome, *process_request);
+				!bound)
+			{
+				return sdk::unexpected(sdk::error{
+					"materialization.worker-failure",
+					task.provider_task_id,
+					"runtime-binding:" + bound.error().code + ":" + bound.error().field});
+			}
 			const auto task_metadata = execution.metadata;
 			streamed_validated_materialization_task_request seal_request{
 				std::move(execution.input),
@@ -1445,8 +1454,17 @@ namespace
 				*processes_, *process_request, replay);
 			if (!outcome || !outcome->succeeded() || !outcome->sealed || !outcome->runtime_receipt)
 				return sdk::unexpected(sdk::error{"materialization.worker-failure",
-												  execution.metadata.provider_task_id,
-												  "execution"});
+											  execution.metadata.provider_task_id,
+											  "execution"});
+			if (auto bound = sdk::provider::detail::validate_provider_process_runtime_binding(
+					*outcome, *process_request);
+				!bound)
+			{
+				return sdk::unexpected(sdk::error{
+					"materialization.worker-failure",
+					execution.metadata.provider_task_id,
+					"runtime-binding:" + bound.error().code + ":" + bound.error().field});
+			}
 			if (auto consumed = consume_materialization_v2_1_task_window(execution); !consumed)
 				return sdk::unexpected(std::move(consumed.error()));
 			const auto task_metadata = execution.metadata;
