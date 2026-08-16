@@ -10,17 +10,22 @@ import sys
 import unittest
 import tempfile
 
+import yaml
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools/quality"))
 
 from check_quality_ownership import (  # noqa: E402
+    CONSTRUCTIBILITY_MANIFEST,
+    CONSTRUCTIBILITY_SCHEMA,
     MANIFEST,
     QualityOwnershipError,
     canonical_digest,
     evidence_id,
     load_yaml,
     select_mode,
+    validate_constructibility_projection,
     validate_evidence,
     validate_manifest,
 )
@@ -246,6 +251,61 @@ class QualityOwnershipTest(unittest.TestCase):
         self.assertIn('--source-revision "@CXXLENS_SOURCE_REVISION@"', install_script)
         self.assertIn('--source-tree "@CXXLENS_SOURCE_TREE@"', install_script)
 
+
+class ConstructibilityGateProjectionTest(unittest.TestCase):
+    @staticmethod
+    def copied_authority_root(temporary: str) -> pathlib.Path:
+        root = pathlib.Path(temporary)
+        for relative in (CONSTRUCTIBILITY_MANIFEST, CONSTRUCTIBILITY_SCHEMA):
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, destination)
+        return root
+
+    @staticmethod
+    def write_manifest(root: pathlib.Path, manifest: dict) -> None:
+        (root / CONSTRUCTIBILITY_MANIFEST).write_text(
+            yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+    def test_admitted_projection_passes_and_reports_file_provenance(self) -> None:
+        result = validate_constructibility_projection(ROOT)
+        self.assertEqual(result["contract"], "development.constructibility-gate.v1")
+        self.assertEqual(result["gate_issue"], "#276")
+        self.assertEqual(result["blocked_issue"], "#261")
+        self.assertEqual(result["disposition"], "blocked")
+        self.assertEqual(result["witness_count"], 7)
+        self.assertTrue(result["manifest_digest"].startswith("sha256:"))
+        self.assertTrue(result["schema_digest"].startswith("sha256:"))
+
+    def test_authority_schema_rejects_constructibility_mutations(self) -> None:
+        mutations = (
+            lambda manifest: manifest["product_direction"]["constructibility_gate"][
+                "required_witnesses"
+            ].append("synthetic-witness"),
+            lambda manifest: manifest["product_direction"]["agent_context"]["first_packet"][
+                "constructibility"
+            ].__setitem__("disposition", "constructible"),
+            lambda manifest: manifest["product_direction"]["agent_context"]["first_packet"][
+                "constructibility"
+            ].__setitem__("disposition", "not-applicable"),
+            lambda manifest: manifest["product_direction"]["agent_context"]["first_packet"][
+                "constructibility"
+            ].__setitem__("gate_issue", "#261"),
+            lambda manifest: manifest["product_direction"]["agent_context"]["first_packet"][
+                "exact_contract_ids"
+            ].remove("development.constructibility-gate.v1"),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = self.copied_authority_root(temporary)
+                    manifest = load_yaml(root / CONSTRUCTIBILITY_MANIFEST)
+                    mutate(manifest)
+                    self.write_manifest(root, manifest)
+                    with self.assertRaises(QualityOwnershipError):
+                        validate_constructibility_projection(root)
 
 if __name__ == "__main__":
     unittest.main()

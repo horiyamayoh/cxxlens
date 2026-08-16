@@ -4,6 +4,19 @@ NG foundation 完了後の通常開発は kernel redesign ではなく、version
 recipe 利用者、typed/dynamic query 作者、portable provider 作者、native provider 作者は同じ relation descriptor、
 Logical Query IR、coverage、unresolved、guarantee、provenance を共有します。
 
+## Constructibility before acceptance
+
+Issue #276 の既存 authority は、`schemas/cxxlens_ng_api_development_readiness.yaml` とその versioned schema にある
+`development.constructibility-gate.v1` の witness inventory です。現在の bounded checker
+`tools/quality/check_quality_ownership.py constructibility` は、この既存 schema を検証し、#261 の agent context が同じ gate に
+bound された `blocked` disposition のままであることと、manifest/schema の SHA-256 provenance を確認します。
+
+これは witness inventory の disposition projection に限った preflight です。phase graph、phase ごとの field availability、
+phase-authentic outcome union、resource/crash/recovery witness の実装や、high-risk contract の acceptance は追加しません。
+`blocked` の DF を `constructible` または `not-applicable` に昇格せず、#191/#194/#195/#198/#199/#200/#201/#202/#205/#261 の
+authority・implementation disposition も変更しません。そうした実装には、該当 contract、独立 review、learning checkpoint
+を先に受理する必要があります。
+
 ## Start from a use case
 
 拡張の開始点は API や relation の案ではなく、独立 consumer が答えたい質問です。

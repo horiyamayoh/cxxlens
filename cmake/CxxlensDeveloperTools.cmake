@@ -137,6 +137,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-ng-constructibility-gate-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_quality_ownership.py"
+    constructibility --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-ng-sqlite-store-v3-qualification-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -235,6 +243,7 @@ add_dependencies(
   cxxlens-ng-provider-runtime-check
   cxxlens-ng-production-scope-closure-check
   cxxlens-ng-api-development-readiness-check
+  cxxlens-ng-constructibility-gate-check
   cxxlens-ng-ci-supply-chain-check
   cxxlens-ng-migration-completion-check
   cxxlens-ng-query-contract-check

@@ -22,6 +22,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = pathlib.Path("schemas/cxxlens_ng_quality_ownership.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_quality_ownership.schema.yaml")
 EVIDENCE_SCHEMA = pathlib.Path("schemas/cxxlens_ng_quality_evidence.schema.yaml")
+CONSTRUCTIBILITY_MANIFEST = pathlib.Path(
+    "schemas/cxxlens_ng_api_development_readiness.yaml"
+)
+CONSTRUCTIBILITY_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_api_development_readiness.schema.yaml"
+)
+CONSTRUCTIBILITY_CONTRACT = "development.constructibility-gate.v1"
+CONSTRUCTIBILITY_GATE_ISSUE = "#276"
+CONSTRUCTIBILITY_BLOCKED_ISSUE = "#261"
 EVIDENCE_FIELDS = (
     "logical_check_id",
     "check_version",
@@ -44,6 +53,80 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise QualityOwnershipError(f"expected mapping: {path}")
     return value
+
+
+def validate_constructibility_projection(root: pathlib.Path) -> dict[str, Any]:
+    """Validate the admitted #276 witness inventory and blocked #261 binding.
+
+    The readiness manifest and schema remain the authority.  This quality-owned
+    projection intentionally does not define phase graphs, field availability,
+    resource formulas, or high-risk acceptance semantics.
+    """
+
+    manifest_path = root / CONSTRUCTIBILITY_MANIFEST
+    schema_path = root / CONSTRUCTIBILITY_SCHEMA
+    manifest = load_yaml(manifest_path)
+    schema = load_yaml(schema_path)
+    try:
+        jsonschema.Draft202012Validator.check_schema(schema)
+        jsonschema.Draft202012Validator(schema).validate(manifest)
+    except (jsonschema.SchemaError, jsonschema.ValidationError) as error:
+        raise QualityOwnershipError(
+            f"readiness authority schema validation failed: {error.message}"
+        ) from error
+
+    product_direction = manifest.get("product_direction")
+    if not isinstance(product_direction, dict):
+        raise QualityOwnershipError(
+            "readiness authority lacks the product-direction projection"
+        )
+    gate = product_direction.get("constructibility_gate")
+    context = product_direction.get("agent_context")
+    packet = context.get("first_packet") if isinstance(context, dict) else None
+    disposition = packet.get("constructibility") if isinstance(packet, dict) else None
+    if not isinstance(gate, dict) or not isinstance(packet, dict):
+        raise QualityOwnershipError(
+            "readiness authority lacks the admitted constructibility projection"
+        )
+    if gate.get("contract") != CONSTRUCTIBILITY_CONTRACT:
+        raise QualityOwnershipError(
+            "constructibility projection contract is not the admitted v1 contract"
+        )
+    if gate.get("tracking_issue") != CONSTRUCTIBILITY_GATE_ISSUE:
+        raise QualityOwnershipError(
+            "constructibility projection is not tracked by issue #276"
+        )
+    if packet.get("issue") != CONSTRUCTIBILITY_BLOCKED_ISSUE:
+        raise QualityOwnershipError(
+            "constructibility disposition is not bound to issue #261"
+        )
+    if CONSTRUCTIBILITY_CONTRACT not in packet.get("exact_contract_ids", []):
+        raise QualityOwnershipError(
+            "#261 packet does not carry the admitted constructibility contract"
+        )
+    if not isinstance(disposition, dict):
+        raise QualityOwnershipError("#261 constructibility disposition is missing")
+    if disposition.get("disposition") != "blocked":
+        raise QualityOwnershipError(
+            "blocked #261 constructibility disposition cannot be promoted"
+        )
+    if disposition.get("gate_issue") != gate.get("tracking_issue"):
+        raise QualityOwnershipError(
+            "#261 constructibility disposition is not bound to the gate issue"
+        )
+
+    def digest(path: pathlib.Path) -> str:
+        return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+    return {
+        "contract": gate["contract"],
+        "gate_issue": gate["tracking_issue"],
+        "blocked_issue": packet["issue"],
+        "disposition": disposition["disposition"],
+        "witness_count": len(gate["required_witnesses"]),
+        "manifest_digest": digest(manifest_path),
+        "schema_digest": digest(schema_path),
+    }
 
 
 def canonical_digest(value: Any) -> str:
@@ -385,7 +468,10 @@ def validate_manifest(root: pathlib.Path, manifest: dict[str, Any]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("check", "select", "evidence", "aggregate"))
+    parser.add_argument(
+        "command",
+        choices=("check", "constructibility", "select", "evidence", "aggregate"),
+    )
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     parser.add_argument("--check-id")
     parser.add_argument("--configuration")
@@ -408,6 +494,19 @@ def main() -> int:
         root = args.root.resolve()
         if args.command == "select":
             print(select_mode(args.paths))
+            return 0
+        if args.command == "constructibility":
+            result = validate_constructibility_projection(root)
+            print(
+                "constructibility gate projection passed: "
+                f"contract={result['contract']} "
+                f"gate={result['gate_issue']} "
+                f"blocked={result['blocked_issue']} "
+                f"disposition={result['disposition']} "
+                f"witnesses={result['witness_count']} "
+                f"manifest={result['manifest_digest']} "
+                f"schema={result['schema_digest']}"
+            )
             return 0
         manifest = load_yaml(root / MANIFEST)
         validate_manifest(root, manifest)
