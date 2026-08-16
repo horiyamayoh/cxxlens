@@ -1,4 +1,6 @@
+#include <exception>
 #include <limits>
+#include <new>
 #include <string_view>
 #include <utility>
 
@@ -11,6 +13,11 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] error driver_error(std::string field, std::string detail)
 		{
 			return {"provider.protocol-state-invalid", std::move(field), std::move(detail)};
+		}
+
+		[[nodiscard]] error process_start_exception_error(const std::string_view detail)
+		{
+			return {"provider.process-launch-failed", "ng1-live", std::string{detail}};
 		}
 
 		[[nodiscard]] bool same_frame(const frame& left, const frame& right) noexcept
@@ -46,10 +53,55 @@ namespace cxxlens::sdk::provider::detail
 		auto session = ng1_session_coordinator::create(std::move(configuration.session));
 		if (!session)
 			return cxxlens::sdk::unexpected(std::move(session.error()));
-		auto process = configuration.processes->start(
-			configuration.invocation, configuration.limits, cancellation);
+		bool process_start_cleanup_attempted{};
+		auto cleanup_failed_start = [&]() -> result<void>
+		{
+			if (process_start_cleanup_attempted)
+				return {};
+			process_start_cleanup_attempted = true;
+			session->fail_before_worker_start();
+			return session->cleanup();
+		};
+		result<std::unique_ptr<ng1_duplex_process>> process =
+			[&]() -> result<std::unique_ptr<ng1_duplex_process>>
+		{
+			try
+			{
+				return configuration.processes->start(
+					configuration.invocation, configuration.limits, cancellation);
+			}
+			catch (const std::bad_alloc&)
+			{
+				auto cleanup = cleanup_failed_start();
+				if (!cleanup)
+					return cxxlens::sdk::unexpected(std::move(cleanup.error()));
+				return cxxlens::sdk::unexpected(
+					process_start_exception_error("process-port-allocation-failed"));
+			}
+			catch (const std::exception&)
+			{
+				auto cleanup = cleanup_failed_start();
+				if (!cleanup)
+					return cxxlens::sdk::unexpected(std::move(cleanup.error()));
+				return cxxlens::sdk::unexpected(
+					process_start_exception_error("process-port-exception"));
+			}
+			catch (...)
+			{
+				auto cleanup = cleanup_failed_start();
+				if (!cleanup)
+					return cxxlens::sdk::unexpected(std::move(cleanup.error()));
+				return cxxlens::sdk::unexpected(
+					process_start_exception_error("process-port-unknown-exception"));
+			}
+		}();
 		if (!process)
-			return cxxlens::sdk::unexpected(std::move(process.error()));
+		{
+			auto launch_error = std::move(process.error());
+			if (auto cleanup = cleanup_failed_start(); !cleanup)
+				return cxxlens::sdk::unexpected(std::move(cleanup.error()));
+			return cxxlens::sdk::unexpected(std::move(launch_error));
+		}
 		return ng1_live_session_driver{std::move(*session),
 									   std::move(*process),
 									   std::move(configuration.clock),

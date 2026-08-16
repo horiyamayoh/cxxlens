@@ -12,6 +12,32 @@
 namespace cxxlens::sdk::provider::detail
 {
 	/**
+	 * Own a forked NG1 child until the live process channel takes ownership.
+	 *
+	 * The group-id probe is deliberately conservative: a child PID allocated by fork cannot be
+	 * an unrelated process-group leader while it remains waitable.  Cleanup therefore attempts the
+	 * child process group even when the parent has not observed the setup ACK, then signals the
+	 * leader as a fallback and waits for that exact child.  This keeps a partial launch fail-closed
+	 * without depending on an ACK arriving before the bounded handshake deadline.
+	 */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_post_fork_process_guard
+	{
+	  public:
+		explicit ng1_post_fork_process_guard(int child) noexcept;
+		ng1_post_fork_process_guard(const ng1_post_fork_process_guard&) = delete;
+		ng1_post_fork_process_guard& operator=(const ng1_post_fork_process_guard&) = delete;
+		~ng1_post_fork_process_guard() noexcept;
+
+		/** Transfer child and process-group ownership to the live process object. */
+		void release() noexcept;
+
+	  private:
+		void cleanup() noexcept;
+
+		int child_{};
+	};
+
+	/**
 	 * Source-private bidirectional process channel for a future NG1 session.
 	 *
 	 * The channel owns framed transport only. It does not validate the NG1 lifecycle, publish

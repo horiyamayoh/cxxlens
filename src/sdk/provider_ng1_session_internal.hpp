@@ -211,6 +211,12 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void> observe_heartbeat_timeout();
 		[[nodiscard]] result<void> observe_progress_rate_failure();
 		[[nodiscard]] result<void> confirm_worker_kill();
+		/**
+		 * Close a session whose worker was never created because the process port rejected launch.
+		 * This marks the private spill transaction failed without inventing a worker-exit event;
+		 * the caller must still invoke cleanup() before the coordinator is destroyed.
+		 */
+		void fail_before_worker_start() noexcept;
 
 		/** Admit a resume only after local spill bytes and the host receipt agree. */
 		[[nodiscard]] result<void> accept_durable_resume(const ng1_resume_control& control,
