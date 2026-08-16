@@ -128,8 +128,11 @@ terminal production-scope closure、無関係な gate/issue の完了を要求�
 
 ## Verification
 
-API-development readiness unit test は完全な policy を positive fixture として受理し、policy ID binding、platform carve-out、
-fresh-approval tier、external-blocker rule、通常会話での non-activation の各欠落と direct-main 文言の再導入を個別に拒否する。
+API-development readiness unit test は完全な policy と activated goal の bounded-completion contract を positive fixture として受理し、
+policy ID binding、platform carve-out、fresh-approval tier、external-blocker rule、通常会話での non-activation の各欠落と
+direct-main 文言の再導入を個別に拒否する。readiness checker は bounded issue close marker、residual-gap ownership、
+aggregate qualification owner、reopen 条件を exact text と marker の両方で検証し、旧来の issue-local merged-main qualification 要件を
+再導入した goal を fail closed にする。
 scenario review は PR CI の局所 fixture 修正が notify-and-continue であること、force-push・branch protection 変更・production deploy が
 target/effect-specific fresh approval であること、通常の質問で standing authorization が起動しないことを反証する。
 
@@ -138,4 +141,5 @@ claim しないこと、explicit integration/readiness/qualification issue だ�
 integration failure の routing/reopen rule が決定論的であることを検証する。
 
 変更 PR は exact-head required checks、review resolution を満たしてから merge する。merged-main integration evaluation と final
-production qualification は対応する gate owner が継続し、ordinary implementation issue の close と混同しない。
+production qualification は対応する gate owner が継続し、ordinary implementation issue の close と混同しない。goal document、
+readiness checker、positive/negative readiness tests が同じ bounded-completion boundary を検証するまで、この amendment は完成扱いにしない。

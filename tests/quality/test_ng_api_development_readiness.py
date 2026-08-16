@@ -648,6 +648,50 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(ReadinessError, "direct-main"):
                 validate_documents(root)
 
+    def test_bounded_completion_contract_is_required_in_activated_goal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`completion-class: bounded-implementation`",
+                    "completion class marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "bounded completion marker"):
+                validate_documents(root)
+
+    def test_legacy_issue_close_qualification_is_rejected_from_goal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8")
+                + "\nmerged-main qualification と learning checkpoint 後の active issue close\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ReadinessError, "legacy issue-close requirement"
+            ):
+                validate_documents(root)
+
+    def test_bounded_goal_keeps_aggregate_exact_sha_qualification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "それらの aggregate gate は exact merged-main SHA の required checks と fail-closed evidence を引き続き検証します。",
+                    "aggregate gate wording removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ReadinessError, "bounded completion contract text"
+            ):
+                validate_documents(root)
+
     def test_gate_owner_drift_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

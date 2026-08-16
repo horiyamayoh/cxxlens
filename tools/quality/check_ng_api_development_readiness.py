@@ -101,6 +101,27 @@ AUTHORIZATION_GOAL_MARKERS = (
     "direct-main: prohibited",
     "fresh-approval-reuse: forbidden",
 )
+BOUNDED_COMPLETION_GOAL_MARKERS = (
+    "completion-class: bounded-implementation",
+    "production-qualification: not-claimed-by-default",
+    "issue-close-owner: bounded-issue-or-explicit-qualification-gate",
+    "aggregate-qualification-owner: exact-merged-main-integration-readiness-release",
+    "reopen-condition: bounded-acceptance-or-scope-regression-only",
+)
+BOUNDED_COMPLETION_GOAL_TEXT = (
+    "通常の implementation issue の既定完了クラスは **bounded implementation completion**",
+    "issue を閉じるために distribution 全体の production qualification を再実行・再証明してはなりません。",
+    "`production qualification: not claimed`",
+    "Foundation、Wave 0、G5、`release-evaluation`、normal/final",
+    "exact merged-main SHA の required checks と fail-closed evidence",
+    "全 tracked gap の解消後は `release-evaluation: qualified`",
+    "final-mode production-scope report を同じ exact",
+    "過去 SHA の成功を最終 SHA の evidence として流用しません。",
+)
+LEGACY_GOAL_ISSUE_CLOSE_PATTERNS = (
+    re.compile(r"merged-main qualification と learning checkpoint 後の active issue close"),
+    re.compile(r"production scope に tracked gap がある intermediate unit の merge 後"),
+)
 LEGACY_DIRECT_MAIN_PATTERNS = (
     re.compile(r"(?:`main`|main)\s*(?:へ|に)\s*(?:直接\s*)?push\s*する"),
     re.compile(r"push\s+(?:directly\s+)?to\s+`?main`?", re.IGNORECASE),
@@ -1114,6 +1135,17 @@ def validate_agent_authorization_contract(root: pathlib.Path) -> None:
     )
     if goal_example.search(goal) is None:
         fail("short goal example does not bind the authorization policy ID")
+
+    for marker in BOUNDED_COMPLETION_GOAL_MARKERS:
+        if goal.count(f"`{marker}`") != 1:
+            fail(f"bounded completion marker is missing or duplicated in goal: {marker}")
+    normalized_goal = re.sub(r"\s+", " ", goal)
+    for phrase in BOUNDED_COMPLETION_GOAL_TEXT:
+        if re.sub(r"\s+", " ", phrase) not in normalized_goal:
+            fail(f"bounded completion contract text is missing from goal: {phrase}")
+    for pattern in LEGACY_GOAL_ISSUE_CLOSE_PATTERNS:
+        if pattern.search(goal):
+            fail("legacy issue-close requirement remains in the activated goal contract")
 
 
 def normalize_active_write_path(issue: str, value: str) -> tuple[str, ...]:
