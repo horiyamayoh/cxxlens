@@ -40,6 +40,7 @@ jobs:
           cat .github/agent-remediation.part-* > "${RUNNER_TEMP}/agent-remediation.patch"
           git apply --check "${RUNNER_TEMP}/agent-remediation.patch"
           git apply "${RUNNER_TEMP}/agent-remediation.patch"
+          python3 -c 'from pathlib import Path; p=Path("tests/unit/sdk/provider_runtime_test.cpp"); s=p.read_text(); assert s.count("fs:temp_directory_path()") == 1; p.write_text(s.replace("fs:temp_directory_path()", "fs::temp_directory_path()"))'
           rm .github/agent-remediation.part-*
           rm .github/workflows/agent-source-export.yml
           clang-format-22 -i \
