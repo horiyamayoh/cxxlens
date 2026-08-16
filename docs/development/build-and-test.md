@@ -115,7 +115,7 @@ Foundation 完了を遡及的に失敗させません。tracked manifest 自身�
 header admission、Relation Registry による generated header binding、gate owner、workflow job 名、最大四つの active write unit と
 unit 間の contract/path 非重複を検証します。write path は同一だけでなく祖先・子孫 ownership も conflict です。
 production/readiness qualification が所有する required status check は `build-test (OFF)`、`build-test (ON)`、
-`gcc-public-headers`、`install-consumer (OFF)`、`install-consumer (ON)`、`quality-contracts`、`quality-evidence` の exact set です。
+`gcc-public-headers`、`install-consumer (OFF)`、`install-consumer (ON)`、`quality-contracts`、`quality-evidence`、`check-tier` の exact set です。
 通常の implementation issue はこの集合を自らの completion claim として再所有しません。main 保護または hosted workflow が
 merge 前に同じ集合を要求する期間でも、その結果は repository integration guard であり、issue の意味を production qualification へ
 拡張しません。main へ SHA が入った後に `foundation-completion` と `wave0-readiness` が実行され、後者は全 artifact、JUnit、
