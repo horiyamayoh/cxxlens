@@ -13,6 +13,7 @@
 #include <cxxlens/sdk/provider.hpp>
 
 #include "json_internal.hpp"
+#include "provider_ng1_transport_internal.hpp"
 #include "provider_validation_internal.hpp"
 
 namespace cxxlens::sdk::provider
@@ -48,6 +49,7 @@ namespace cxxlens::sdk::provider
 			static_cast<std::uint16_t>(frame_flag::end_of_stream);
 		constexpr std::uint16_t known_flag_mask = required_extension_flag |
 			optional_extension_flag | compressed_payload_flag | end_of_stream_flag;
+		constexpr std::uint16_t ng1_heartbeat_wire_type = detail::ng1_heartbeat_message_id;
 
 		[[nodiscard]] bool has_flag(const std::uint16_t flags, const frame_flag flag) noexcept
 		{
@@ -819,6 +821,7 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.oversized-payload", "payload"));
 		const auto type = static_cast<std::uint16_t>(value.type);
+		const bool reserved_ng1_heartbeat = type == ng1_heartbeat_wire_type;
 		const bool optional_extension = has_flag(value.flags, frame_flag::optional_extension);
 		if (value.protocol_major != limits.protocol_major)
 			return cxxlens::sdk::unexpected(
@@ -827,6 +830,12 @@ namespace cxxlens::sdk::provider
 			value.protocol_minor > limits.maximum_minor)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.protocol-minor-mismatch", "minor"));
+		if (reserved_ng1_heartbeat && value.protocol_minor != 1U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-minor-mismatch", "ng1-heartbeat"));
+		if (reserved_ng1_heartbeat && (value.flags != 0U || !value.payload.empty()))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-state-invalid", "ng1-heartbeat"));
 		if ((value.flags & ~known_flag_mask) != 0U ||
 			(has_flag(value.flags, frame_flag::required_extension) && optional_extension) ||
 			(optional_extension && has_flag(value.flags, frame_flag::end_of_stream)) ||
@@ -844,7 +853,8 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.invalid-frame-flags", "end-of-stream"));
 		if (type == 0U ||
-			(type > static_cast<std::uint16_t>(message_type::close) && !optional_extension))
+			(type > static_cast<std::uint16_t>(message_type::close) && !optional_extension &&
+			 !reserved_ng1_heartbeat))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.unknown-message-type", "type"));
 
@@ -882,6 +892,8 @@ namespace cxxlens::sdk::provider
 		const auto flags = read_big_endian<std::uint16_t>(input, 10U);
 		const auto control_length = read_big_endian<std::uint32_t>(input, 28U);
 		const auto payload_length = read_big_endian<std::uint64_t>(input, 32U);
+		const bool reserved_ng1_heartbeat =
+			read_big_endian<std::uint16_t>(input, 8U) == ng1_heartbeat_wire_type;
 		if (control_length > limits.max_control_bytes || payload_length > limits.max_payload_bytes)
 			return cxxlens::sdk::unexpected(provider_error("provider.oversized-frame", "length"));
 		if (payload_length >
@@ -912,6 +924,12 @@ namespace cxxlens::sdk::provider
 		if (protocol_minor < limits.minimum_minor || protocol_minor > limits.maximum_minor)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.protocol-minor-mismatch", "minor"));
+		if (reserved_ng1_heartbeat && protocol_minor != 1U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-minor-mismatch", "ng1-heartbeat"));
+		if (reserved_ng1_heartbeat && (flags != 0U || payload_length != 0U))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-state-invalid", "ng1-heartbeat"));
 		if ((flags & ~known_flag_mask) != 0U)
 			return cxxlens::sdk::unexpected(
 				provider_error(has_flag(flags, frame_flag::required_extension)
@@ -941,7 +959,7 @@ namespace cxxlens::sdk::provider
 		if (required_extension)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.unknown-required-extension", "type"));
-		if (!known_type && !optional_extension)
+		if (!known_type && !optional_extension && !reserved_ng1_heartbeat)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.unknown-message-type", "type"));
 		return output;
