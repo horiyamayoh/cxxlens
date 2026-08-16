@@ -1144,63 +1144,36 @@ def validate_documents(
         if isinstance(evaluation_definition, dict)
         else None
     )
-    accelerated_needs = (
-        "needs: [nightly-quality, g5-qualification, sqlite-store-v3-qualification]"
-    )
-    legacy_needs = "needs: [g5-qualification, sqlite-store-v3-qualification]"
-    common_evaluation_markers = (
+    for marker in (
+        "needs: [nightly-quality, g5-qualification, sqlite-store-v3-qualification]",
         "check_ng_release_qualification.py evaluate",
         "--nightly-evidence-dir build/release-evaluation-nightly",
         '--github-output "${GITHUB_OUTPUT}"',
         "qualification: ${{ steps.evaluate.outputs.qualification }}",
         "timeout-minutes: 100",
-    )
-    if accelerated_needs in evaluation_body:
-        for marker in (
-            accelerated_needs,
-            *common_evaluation_markers,
-        ):
-            if marker not in evaluation_body:
-                fail(f"release evaluation workflow marker is missing: {marker}")
-        validate_accelerated_nightly_download_step(evaluation_steps)
-        for forbidden in (
-            "id: nightly-run",
-            "gh api --method GET",
-            "actions/workflows/nightly.yml/runs",
-            "for attempt in $(seq 1 180)",
-            "sleep 30",
-            "run-id: ${{ steps.nightly-run.outputs.run-id }}",
-        ):
-            if forbidden in evaluation_body:
-                fail(f"accelerated release evaluation retains forbidden polling: {forbidden}")
-    elif legacy_needs in evaluation_body:
-        for marker in (legacy_needs, *common_evaluation_markers):
-            if marker not in evaluation_body:
-                fail(f"release evaluation workflow marker is missing: {marker}")
-        for marker in (
-            "id: nightly-run",
-            'gh api --method GET',
-            'actions/workflows/nightly.yml/runs',
-            "-f head_sha=\"${GITHUB_SHA}\"",
-            "for attempt in $(seq 1 180)",
-            "sleep 30",
-            '.event == "push"',
-            '.event == "schedule"',
-            '.event == "workflow_dispatch"',
-            '"${status}" != "completed"',
-            '"${conclusion}" != "success"',
-            'name: cxxlens-nightly-evidence-${{ github.sha }}',
-            'github-token: ${{ github.token }}',
-            'repository: ${{ github.repository }}',
-            'run-id: ${{ steps.nightly-run.outputs.run-id }}',
-        ):
-            if marker not in evaluation_body:
-                fail(f"exact-main Nightly evidence workflow marker is missing: {marker}")
-    else:
-        fail(
-            "release evaluation workflow must declare either accelerated or legacy "
-            f"Nightly dependency: {accelerated_needs}"
-        )
+    ):
+        if marker not in evaluation_job.group("body"):
+            fail(f"release evaluation workflow marker is missing: {marker}")
+    evaluation_body = evaluation_job.group("body")
+    validate_accelerated_nightly_download_step(evaluation_steps)
+    for forbidden in (
+        "gh api",
+        "actions/workflows/nightly.yml/runs",
+        "for attempt in",
+        "sleep 30",
+        "run-id",
+        "nightly-run",
+    ):
+        if forbidden in evaluation_body:
+            fail(f"release evaluation polling marker is forbidden: {forbidden}")
+    for marker in (
+        "name: cxxlens-nightly-evidence-${{ github.sha }}",
+        "path: build/release-evaluation-nightly",
+        "name: cxxlens-nightly-evidence-consumed-${{ github.sha }}",
+        "build/release-evaluation-nightly/nightly-evidence-set.json",
+    ):
+        if marker not in evaluation_body:
+            fail(f"same-run Nightly evidence workflow marker is missing: {marker}")
     for marker in (
         "needs: [release-evaluation]",
         "needs.release-evaluation.outputs.qualification == 'qualified'",
