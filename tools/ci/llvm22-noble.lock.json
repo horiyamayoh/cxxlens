@@ -5,6 +5,9 @@
     "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
     "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02"
   },
+  "local_workflows": {
+    ".github/workflows/nightly.yml": "7d85c8356497dc14cfadc56d5df005638df0f1e7e3f22e2a97a97e90de8f4a4b"
+  },
   "authority": {
     "adr": "docs/design/adr/0072-ci-supply-chain-provenance.md",
     "issue": "#141",
