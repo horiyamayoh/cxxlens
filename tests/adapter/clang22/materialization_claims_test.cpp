@@ -3569,6 +3569,33 @@ namespace
 						"request-identity-or-task-census",
 				"bounded Store metadata accepted a source with a mismatched request task census");
 
+		const auto require_request_binding_rejection =
+			[&](validated_materialization_request candidate, const std::string_view mutation)
+		{
+			auto transaction =
+				make_materialization_streaming_store_transaction(candidate, *exact_finalized);
+			require(!transaction &&
+						transaction.error().code == "materialization.task-binding-mismatch" &&
+						transaction.error().field == "request" &&
+						transaction.error().detail == "request-identity-or-task-census",
+					"bounded Store metadata accepted a mutable request " + std::string{mutation});
+		};
+
+		auto mutated_task = request;
+		mutated_task.tasks.front().worker_payload.push_back(std::byte{0x01});
+		require_request_binding_rejection(std::move(mutated_task), "task payload");
+
+		auto rebound_catalog = sdk::project_catalog::make(
+			"project://mutated", request.catalog.environment_digest, request.catalog.compile_units);
+		require(rebound_catalog.has_value(), "mutable catalog fixture construction failed");
+		auto mutated_catalog = request;
+		mutated_catalog.catalog = std::move(*rebound_catalog);
+		require_request_binding_rejection(std::move(mutated_catalog), "catalog");
+
+		auto mutated_publication = request;
+		mutated_publication.publication.selector.channel_id = "channel:mutated";
+		require_request_binding_rejection(std::move(mutated_publication), "publication");
+
 		auto over_adoption_source = materialization_bounded_claim_source::begin(request);
 		require(over_adoption_source.has_value(), "over-adoption bounded source begin failed");
 		require(over_adoption_source->consume_task(make_task(0U)).has_value(),

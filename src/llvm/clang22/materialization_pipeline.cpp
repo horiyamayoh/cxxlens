@@ -6,6 +6,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "materialization_incremental_receipt.hpp"
 
@@ -13,6 +14,58 @@ namespace cxxlens::detail::clang22::materialization
 {
 	namespace
 	{
+		/** Rebind the legacy request's mutable projections to its retained document authority. */
+		[[nodiscard]] sdk::result<void>
+		validate_legacy_request_binding(const validated_materialization_request& request)
+		{
+			auto rebound = validate_materialization_request(request.document);
+			if (!rebound)
+				return sdk::unexpected(sdk::error{"materialization.task-binding-mismatch",
+												  "request",
+												  "request-identity-or-task-census"});
+			const auto& expected = *rebound;
+			if (request.catalog.catalog_id != expected.catalog.catalog_id ||
+				request.catalog.catalog_digest != expected.catalog.catalog_digest ||
+				request.catalog.logical_root != expected.catalog.logical_root ||
+				request.catalog.environment_digest != expected.catalog.environment_digest ||
+				request.catalog.compile_units != expected.catalog.compile_units ||
+				request.engine.registry_digest() != expected.engine.registry_digest() ||
+				request.engine.generation() != expected.engine.generation() ||
+				request.engine.descriptors() != expected.engine.descriptors() ||
+				request.output_descriptors != expected.output_descriptors ||
+				request.publication.backend != expected.publication.backend ||
+				request.publication.selector != expected.publication.selector ||
+				request.publication.series_id != expected.publication.series_id ||
+				request.publication.genesis != expected.publication.genesis ||
+				request.publication.expected_parent_publication !=
+					expected.publication.expected_parent_publication ||
+				request.publication.sqlite_path != expected.publication.sqlite_path ||
+				request.tasks.size() != expected.tasks.size())
+				return sdk::unexpected(sdk::error{"materialization.task-binding-mismatch",
+												  "request",
+												  "request-identity-or-task-census"});
+
+			for (std::size_t index{}; index < request.tasks.size(); ++index)
+			{
+				const auto& actual = request.tasks[index];
+				const auto& bound = expected.tasks[index];
+				auto actual_payload = encode_task_input(actual.worker_input);
+				auto bound_payload = encode_task_input(bound.worker_input);
+				if (!actual_payload || !bound_payload || *actual_payload != *bound_payload ||
+					actual.provider_task_id != bound.provider_task_id ||
+					actual.provider_execution_id != bound.provider_execution_id ||
+					actual.task_input_digest != bound.task_input_digest ||
+					actual.sandbox.minimum != bound.sandbox.minimum ||
+					actual.sandbox.policy_digest != bound.sandbox.policy_digest ||
+					actual.worker_payload != bound.worker_payload ||
+					actual.source_receipt != bound.source_receipt)
+					return sdk::unexpected(sdk::error{"materialization.task-binding-mismatch",
+													  "request",
+													  "request-identity-or-task-census"});
+			}
+			return {};
+		}
+
 		[[nodiscard]] sdk::result<void>
 		validate_bounded_source_binding(const std::string_view expected_request_id,
 										const std::uint64_t expected_task_count,
@@ -140,6 +193,8 @@ namespace cxxlens::detail::clang22::materialization
 		if (auto valid = validate_bounded_source_binding(
 				*request_id, static_cast<std::uint64_t>(request.tasks.size()), source);
 			!valid)
+			return sdk::unexpected(std::move(valid.error()));
+		if (auto valid = validate_legacy_request_binding(request); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		streaming_prepared_store_transaction result;
 		result.draft = {request.publication.selector,
