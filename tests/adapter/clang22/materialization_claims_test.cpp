@@ -2216,6 +2216,7 @@ namespace
 					  const validated_task_request&,
 					  const materialization_incremental_task_binding&) override
 		{
+			++reuse_calls;
 			if (request_task_index >= reusable_.size() || !reusable_[request_task_index])
 				return sdk::unexpected(
 					sdk::error{"fixture.incremental-prior-missing", "cache", "deliberate"});
@@ -2281,6 +2282,7 @@ namespace
 		}
 
 		std::size_t calls{};
+		std::size_t reuse_calls{};
 		std::size_t returned_executions{};
 		std::vector<std::size_t> called_indices;
 
@@ -2722,13 +2724,12 @@ namespace
 																 executor,
 																 *authority,
 																 *binding_set);
-			require(
-				!outcome && outcome.error().code == "materialization.incremental-invalid" &&
-					outcome.error().field == "prior" &&
-					outcome.error().detail == "artifact-receipt-mismatch" &&
-					executor.execute_calls == 1U && executor.reuse_calls == 1U &&
-					executor.finalize_calls == 0U,
-				"v2.1 reuse accepted a result whose digest was not bound to the prior artifact");
+			require(!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+						outcome.error().field == "prior" &&
+						outcome.error().detail == "artifact-receipt-mismatch" &&
+						executor.execute_calls == 0U && executor.reuse_calls == 0U &&
+						executor.finalize_calls == 0U && executor.called_indices.empty(),
+					"v2.1 earlier recompute ran before a later tampered reuse was rejected");
 		}
 
 		{
@@ -3357,6 +3358,54 @@ namespace
 		auto affected_plan = incremental::make_materialization_plan(affected_candidates);
 		require(affected_plan && affected_plan->frontend_provider_executions == 1U,
 				"incremental fixture did not isolate one changed partition");
+
+		{
+			auto tampered_prior = seal_all(request);
+			auto later_tampered =
+				incremental_binding(request,
+									"partition:b",
+									1U,
+									unchanged,
+									second,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(second, tampered_prior[1U])});
+			later_tampered.partitions.front().prior_artifact->sealed_artifact_digest =
+				incremental_digest('f');
+			std::vector<materialization_incremental_task_binding> tampered_bindings;
+			tampered_bindings.emplace_back(std::move(later_tampered));
+			tampered_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:a",
+									0U,
+									changed,
+									first,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(first, tampered_prior[0U])}));
+			fixture_incremental_executor tampered_executor{request,
+														   producer,
+														   guarantee,
+														   false,
+														   false,
+														   false,
+														   1U,
+														   false,
+														   std::move(tampered_prior)};
+			auto tampered =
+				run_materialization_incremental_coordinator(request,
+															*affected_plan,
+															std::move(tampered_bindings),
+															tampered_executor,
+															producer,
+															guarantee);
+			require(!tampered && tampered.error().code == "materialization.incremental-invalid" &&
+						tampered.error().field == "prior" &&
+						tampered.error().detail == "artifact-receipt-mismatch" &&
+						tampered_executor.calls == 0U && tampered_executor.reuse_calls == 0U &&
+						tampered_executor.returned_executions == 0U &&
+						tampered_executor.called_indices.empty(),
+					"legacy earlier recompute ran before a later tampered reuse was rejected");
+		}
+
 		prior = seal_all(request);
 		std::vector<materialization_incremental_task_binding> affected_bindings;
 		affected_bindings.emplace_back(

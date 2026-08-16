@@ -224,6 +224,37 @@ namespace cxxlens::detail::clang22::materialization
 				task.metadata.final_relation_compile_unit_id;
 		}
 
+		[[nodiscard]] bool canonical_sealed_artifact_digest(const std::string_view value) noexcept
+		{
+			constexpr std::string_view prefix{
+				"materialization.incremental-sealed-artifact:sha256:"};
+			return value.size() == prefix.size() + 64U && value.starts_with(prefix) &&
+				std::ranges::all_of(value.substr(prefix.size()),
+									[](const char byte)
+									{
+										return (byte >= '0' && byte <= '9') ||
+											(byte >= 'a' && byte <= 'f');
+									});
+		}
+
+		/**
+		 * Validate only binding-owned reuse authority. The loaded result is checked again after the
+		 * executor/cache boundary against this preflight authority.
+		 */
+		[[nodiscard]] sdk::result<void> validate_reuse_partition_binding(
+			const materialization_incremental_partition_binding& binding)
+		{
+			if (!binding.current_state || !binding.prior_artifact ||
+				!binding.prior_artifact->state.validate() ||
+				binding.prior_artifact->state.partition_id != binding.partition_id ||
+				binding.prior_artifact->state.corruption_detected ||
+				binding.prior_artifact->state != *binding.current_state)
+				return sdk::unexpected(coordinator_error("prior", "sealed-artifact-mismatch"));
+			if (!canonical_sealed_artifact_digest(binding.prior_artifact->sealed_artifact_digest))
+				return sdk::unexpected(coordinator_error("prior", "artifact-receipt-mismatch"));
+			return {};
+		}
+
 		[[nodiscard]] sdk::error execution_error(const std::string_view detail)
 		{
 			return sdk::error{
@@ -446,6 +477,17 @@ namespace cxxlens::detail::clang22::materialization
 				recompute_partition_count != plan.frontend_provider_executions)
 				return sdk::unexpected(coordinator_error("bindings", "plan-partition-census"));
 
+			for (std::size_t task_index{}; task_index < task_count_size; ++task_index)
+			{
+				if (*task_actions[task_index] != sdk::incremental::action::reuse)
+					continue;
+				for (const auto& partition : by_task[task_index]->partitions)
+				{
+					if (auto valid = validate_reuse_partition_binding(partition); !valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+			}
+
 			auto cursor_result = make_materialization_v2_1_task_cursor(request);
 			if (!cursor_result)
 				return sdk::unexpected(std::move(cursor_result.error()));
@@ -584,6 +626,17 @@ namespace cxxlens::detail::clang22::materialization
 			if (binding_ids != plan_ids ||
 				recompute_partition_count != plan.frontend_provider_executions)
 				return sdk::unexpected(coordinator_error("bindings", "plan-partition-census"));
+
+			for (std::size_t task_index{}; task_index < task_count_size; ++task_index)
+			{
+				if (*task_actions[task_index] != sdk::incremental::action::reuse)
+					continue;
+				for (const auto& partition : by_task[task_index]->partitions)
+				{
+					if (auto valid = validate_reuse_partition_binding(partition); !valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+			}
 
 			auto ingress_begin = materialization_incremental_ingress::begin_dynamic(
 				request, claim_authority, binding_set);
@@ -981,6 +1034,17 @@ namespace cxxlens::detail::clang22::materialization
 				recompute_partition_count != plan.frontend_provider_executions)
 				return sdk::unexpected(coordinator_error("bindings", "plan-partition-census"));
 
+			for (std::size_t task_index{}; task_index < by_task.size(); ++task_index)
+			{
+				if (*task_actions[task_index] != sdk::incremental::action::reuse)
+					continue;
+				for (const auto& partition : by_task[task_index]->partitions)
+				{
+					if (auto valid = validate_reuse_partition_binding(partition); !valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+			}
+
 			const bool dynamic_typed_partition_ids = executor.dynamic_typed_partition_ids();
 			std::vector<std::vector<std::string>> expected_partition_ids(request.tasks.size());
 			if (!dynamic_typed_partition_ids)
@@ -1142,14 +1206,8 @@ namespace cxxlens::detail::clang22::materialization
 					{
 						for (const auto& partition : binding->partitions)
 						{
-							if (!partition.prior_artifact ||
-								!partition.prior_artifact->state.validate() ||
-								partition.prior_artifact->state.partition_id !=
-									partition.partition_id ||
-								partition.prior_artifact->state.corruption_detected ||
-								partition.prior_artifact->state != *partition.current_state)
-								return sdk::unexpected(
-									coordinator_error("prior", "sealed-artifact-mismatch"));
+							if (auto valid = validate_reuse_partition_binding(partition); !valid)
+								return sdk::unexpected(std::move(valid.error()));
 						}
 						auto prior =
 							executor.load_reusable(task_index, request.tasks[task_index], *binding);
