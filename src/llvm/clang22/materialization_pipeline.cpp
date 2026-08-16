@@ -25,6 +25,30 @@ namespace cxxlens::detail::clang22::materialization
 												  "request-identity-or-task-census"});
 			return {};
 		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_exact_claims(const sealed_materialization_claims& claims)
+		{
+			if (!claims.final_claim_batch().unresolved.empty())
+				return sdk::unexpected(sdk::error{"materialization.coverage-incomplete",
+												  "complete-final-claim-batch",
+												  "nonzero-unresolved"});
+			for (const auto& partition : claims.partitions())
+				if (partition.draft.precision_profile != "exact")
+					return sdk::unexpected(sdk::error{"materialization.coverage-incomplete",
+													  "guarantee",
+													  "non-exact-precision-profile"});
+			return {};
+		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_exact_bounded_source(const materialization_bounded_claim_source& source)
+		{
+			if (!source.exact_publication_ready())
+				return sdk::unexpected(sdk::error{
+					"materialization.coverage-incomplete", "claims", "non-exact-or-unresolved"});
+			return {};
+		}
 	} // namespace
 
 	sdk::result<prepared_store_transaction>
@@ -38,6 +62,8 @@ namespace cxxlens::detail::clang22::materialization
 		if (auto valid = catalog.validate(); !valid)
 			return sdk::unexpected(sdk::error{
 				"materialization.identity-mismatch", "project.catalog", valid.error().code});
+		if (auto valid = validate_exact_claims(claims); !valid)
+			return sdk::unexpected(std::move(valid.error()));
 
 		prepared_store_transaction result;
 		result.draft = {request.publication.selector,
@@ -96,6 +122,8 @@ namespace cxxlens::detail::clang22::materialization
 		if (auto valid = catalog.validate(); !valid)
 			return sdk::unexpected(sdk::error{
 				"materialization.identity-mismatch", "project.catalog", valid.error().code});
+		if (auto valid = validate_exact_claims(claims); !valid)
+			return sdk::unexpected(std::move(valid.error()));
 		std::set<std::string, std::less<>> partition_ids;
 		for (const auto& partition : claims.partitions())
 		{
@@ -141,6 +169,8 @@ namespace cxxlens::detail::clang22::materialization
 				*request_id, static_cast<std::uint64_t>(request.tasks.size()), source);
 			!valid)
 			return sdk::unexpected(std::move(valid.error()));
+		if (auto valid = validate_exact_bounded_source(source); !valid)
+			return sdk::unexpected(std::move(valid.error()));
 		streaming_prepared_store_transaction result;
 		result.draft = {request.publication.selector,
 						{1U, 0U, 0U},
@@ -167,6 +197,8 @@ namespace cxxlens::detail::clang22::materialization
 		if (auto valid = validate_bounded_source_binding(
 				authority.materialization_request_id(), authority.task_count(), source);
 			!valid)
+			return sdk::unexpected(std::move(valid.error()));
+		if (auto valid = validate_exact_bounded_source(source); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		const auto& publication = authority.request()->request().publication();
 		streaming_prepared_store_transaction result;

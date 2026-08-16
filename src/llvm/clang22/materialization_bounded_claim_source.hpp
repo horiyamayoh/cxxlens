@@ -140,6 +140,20 @@ namespace cxxlens::detail::clang22::materialization
 			return sealed_;
 		}
 
+		/** Exact installed publication remains closed while any partial guarantee is retained. */
+		[[nodiscard]] bool exact_publication_ready() const noexcept
+		{
+			if (!sealed_ || failed_)
+				return false;
+			for (const auto& [partition_id, state] : partitions_)
+			{
+				(void)partition_id;
+				if (state.identity.precision_profile != "exact" || !state.unresolved.empty())
+					return false;
+			}
+			return true;
+		}
+
 	  private:
 		struct partition_state
 		{

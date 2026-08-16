@@ -538,6 +538,77 @@ namespace cxxlens::detail::clang22::materialization
 				*cell.value);
 		}
 
+		[[nodiscard]] sdk::result<std::vector<std::string>>
+		reference_container_elements(const sdk::detached_cell& cell)
+		{
+			if (cell.state != sdk::cell_state::present || !cell.value)
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "reference-container",
+												   "unknown-or-missing-cell"));
+			const auto* encoded = std::get_if<std::vector<std::byte>>(&*cell.value);
+			if (encoded == nullptr)
+				return sdk::unexpected(
+					claim_error("materialization.claim-invalid", "reference-container", "type"));
+			std::vector<std::string> output;
+			for (std::size_t offset{}; offset < encoded->size();)
+			{
+				if (encoded->size() - offset < sizeof(std::uint32_t))
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "reference-container",
+													   "truncated-length"));
+				std::uint32_t length{};
+				for (std::size_t byte{}; byte < sizeof(length); ++byte)
+					length |= std::to_integer<std::uint32_t>((*encoded)[offset + byte])
+						<< (byte * 8U);
+				offset += sizeof(length);
+				if (length == 0U || length > encoded->size() - offset)
+					return sdk::unexpected(claim_error(
+						"materialization.claim-invalid", "reference-container", "invalid-length"));
+				std::string element;
+				element.reserve(length);
+				for (std::size_t byte{}; byte < length; ++byte)
+					element.push_back(static_cast<char>((*encoded)[offset + byte]));
+				offset += length;
+				output.push_back(std::move(element));
+			}
+			return output;
+		}
+
+		void canonicalize_unresolved(std::vector<sdk::unresolved_reference>& values)
+		{
+			std::ranges::sort(
+				values,
+				[](const sdk::unresolved_reference& left, const sdk::unresolved_reference& right)
+				{
+					return std::tie(left.source_assertion,
+									left.source_relation,
+									left.target_relation,
+									left.source_columns,
+									left.reason) < std::tie(right.source_assertion,
+															right.source_relation,
+															right.target_relation,
+															right.source_columns,
+															right.reason);
+				});
+			values.erase(std::unique(values.begin(),
+									 values.end(),
+									 [](const sdk::unresolved_reference& left,
+										const sdk::unresolved_reference& right)
+									 {
+										 return std::tie(left.source_assertion,
+														 left.source_relation,
+														 left.target_relation,
+														 left.source_columns,
+														 left.reason) ==
+											 std::tie(right.source_assertion,
+													  right.source_relation,
+													  right.target_relation,
+													  right.source_columns,
+													  right.reason);
+									 }),
+						 values.end());
+		}
+
 		[[nodiscard]] sdk::result<std::string> base_row_digest(const sdk::relation_engine& engine,
 															   const sdk::detached_row& row)
 		{
@@ -1788,12 +1859,11 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(claim_error("materialization.claim-invalid",
 											   "complete-final-claim-batch",
 											   nested_error(committed.error())));
-		if (!committed->unresolved.empty() || !committed->conflicts.empty() ||
-			!committed->differential_disagreements.empty())
+		if (!committed->conflicts.empty() || !committed->differential_disagreements.empty())
 		{
 			return sdk::unexpected(claim_error("materialization.claim-invalid",
 											   "complete-final-claim-batch",
-											   "nonzero-unresolved-conflict-or-differential"));
+											   "nonzero-conflict-or-differential"));
 		}
 
 		std::map<std::string, const sdk::claim*, std::less<>> committed_claims_by_ref;
@@ -1810,6 +1880,7 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		std::map<partition_key, partition_accumulator> partition_groups;
+		std::map<std::string, std::vector<partition_accumulator*>, std::less<>> source_partitions;
 		const auto partition_for = [&](const std::string_view descriptor_id,
 									   const materialization_semantic_task_context& context,
 									   std::string producer_semantics,
@@ -1885,6 +1956,9 @@ namespace cxxlens::detail::clang22::materialization
 												   "partition.claim-ref",
 												   "aliases-different-occurrence"));
 			(*partition)->claim_contents.insert(claim_value.content);
+			auto& owners = source_partitions[claim_value.assertion];
+			if (std::ranges::find(owners, *partition) == owners.end())
+				owners.push_back(*partition);
 		}
 
 		for (std::size_t task_index{}; task_index < contexts.size(); ++task_index)
@@ -1942,6 +2016,83 @@ namespace cxxlens::detail::clang22::materialization
 			}
 		}
 
+		for (const auto& unresolved : committed->unresolved)
+		{
+			if (unresolved.source_assertion.empty() || unresolved.source_relation.empty() ||
+				unresolved.target_relation.empty() || unresolved.source_columns.empty() ||
+				unresolved.reason != "soft-reference-missing")
+				return sdk::unexpected(claim_error(
+					"materialization.claim-invalid", "partition.unresolved", "typed-record"));
+			const auto owners = source_partitions.find(unresolved.source_assertion);
+			if (owners == source_partitions.end() || owners->second.empty())
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "partition.unresolved",
+												   "source-claim-owner-missing"));
+			auto source = request.engine.require_id(unresolved.source_relation);
+			if (!source)
+				return sdk::unexpected(std::move(source.error()));
+			const sdk::relation_reference_descriptor* matched{};
+			for (const auto& reference : source->descriptor().references)
+			{
+				if (reference.target_relation != unresolved.target_relation ||
+					reference.source_columns != unresolved.source_columns)
+					continue;
+				if (matched != nullptr ||
+					reference.strength != sdk::reference_strength::soft_semantic)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition.unresolved",
+													   "soft-reference-binding"));
+				matched = &reference;
+			}
+			if (matched == nullptr || matched->source_columns.empty() ||
+				matched->source_columns.size() != matched->target_columns.size() ||
+				(matched->container_elements && matched->source_columns.size() != 1U))
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "partition.unresolved",
+												   "reference-shape-or-missing"));
+			for (auto* owner : owners->second)
+			{
+				if (owner->draft.relation_descriptor_id != unresolved.source_relation)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition.unresolved",
+													   "source-relation-binding"));
+				const sdk::claim* source_claim{};
+				for (const auto& [claim_ref, claim] : owner->claims_by_ref)
+				{
+					(void)claim_ref;
+					if (claim.assertion != unresolved.source_assertion)
+						continue;
+					if (source_claim != nullptr)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   "partition.unresolved",
+														   "source-claim-ambiguous"));
+					source_claim = &claim;
+				}
+				if (source_claim == nullptr ||
+					source_claim->descriptor != unresolved.source_relation)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition.unresolved",
+													   "source-claim-binding"));
+				for (const auto& column : matched->source_columns)
+				{
+					const auto cell = source_claim->row.cells.find(column);
+					if (cell == source_claim->row.cells.end() ||
+						cell->second.state != sdk::cell_state::present || !cell->second.value)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   "partition.unresolved",
+														   "source-cell-binding"));
+					if (matched->container_elements)
+					{
+						auto elements = reference_container_elements(cell->second);
+						if (!elements)
+							return sdk::unexpected(std::move(elements.error()));
+					}
+				}
+				owner->draft.unresolved.push_back(unresolved);
+				owner->draft.precision_profile = "under_approximation";
+			}
+		}
+
 		std::map<std::string, std::uint64_t, std::less<>> association_count_by_ref;
 		for (const auto& [association_id, association] : associations)
 		{
@@ -1964,6 +2115,7 @@ namespace cxxlens::detail::clang22::materialization
 				(void)coverage_id;
 				accumulator.draft.coverage.push_back(coverage);
 			}
+			canonicalize_unresolved(accumulator.draft.unresolved);
 			auto manifest = sdk::make_partition_manifest(request.engine, accumulator.draft);
 			if (!manifest)
 				return sdk::unexpected(claim_error("materialization.claim-invalid",
@@ -1981,7 +2133,8 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<std::string> contents{accumulator.claim_contents.begin(),
 											  accumulator.claim_contents.end()};
 			if (manifest->claim_count != contents.size() ||
-				manifest->complete != !accumulator.coverage.empty())
+				manifest->complete !=
+					(!accumulator.coverage.empty() && accumulator.draft.unresolved.empty()))
 				return sdk::unexpected(claim_error("materialization.claim-invalid",
 												   "partition-manifest",
 												   "census-or-completeness"));
@@ -2256,6 +2409,8 @@ namespace cxxlens::detail::clang22::materialization
 			std::array<bool, 6U> output_nonempty{};
 			std::set<std::string, std::less<>> base_seen;
 			std::map<partition_key, partition_accumulator> partition_groups;
+			std::map<std::string, std::vector<partition_accumulator*>, std::less<>>
+				source_partitions;
 
 			const auto partition_for = [&](const std::string_view descriptor_id,
 										   const materialization_semantic_task_context& owner,
@@ -2407,6 +2562,9 @@ namespace cxxlens::detail::clang22::materialization
 													   "partition.claim-ref",
 													   "aliases-different-occurrence"));
 				(*partition)->claim_contents.insert(final.content);
+				auto& owners = source_partitions[final.assertion];
+				if (std::ranges::find(owners, *partition) == owners.end())
+					owners.push_back(*partition);
 				return {};
 			};
 
@@ -2619,6 +2777,10 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(std::move(descriptor.error()));
 				for (const auto& reference : descriptor->descriptor().references)
 				{
+					if (reference.source_columns.empty() ||
+						reference.source_columns.size() != reference.target_columns.size())
+						return sdk::unexpected(claim_error(
+							"materialization.claim-invalid", value->descriptor, "reference-shape"));
 					const auto absent = [&]()
 					{
 						return std::ranges::any_of(
@@ -2632,96 +2794,125 @@ namespace cxxlens::detail::clang22::materialization
 					};
 					if (absent())
 						continue;
-					const auto matches = [&](const std::optional<std::string_view> element)
+					const auto matches =
+						[&](const std::optional<std::string_view> element) -> sdk::result<bool>
 					{
-						return std::ranges::any_of(
-							reference_space,
-							[&](const sdk::claim* target)
+						for (const auto* target : reference_space)
+						{
+							auto target_descriptor = request.engine.require_id(target->descriptor);
+							if (!target_descriptor)
+								return sdk::unexpected(std::move(target_descriptor.error()));
+							if (target_descriptor->descriptor().name != reference.target_relation)
+								continue;
+							if (value->interpretation != target->interpretation ||
+								value->presence.universe != target->presence.universe ||
+								!std::ranges::includes(target->presence.fragments,
+													   value->presence.fragments))
+								continue;
+							bool matched = true;
+							for (std::size_t index{}; index < reference.source_columns.size();
+								 ++index)
 							{
-								auto target_descriptor =
-									request.engine.require_id(target->descriptor);
-								if (!target_descriptor ||
-									target_descriptor->descriptor().name !=
-										reference.target_relation)
-									return false;
-								if (value->interpretation != target->interpretation ||
-									value->presence.universe != target->presence.universe ||
-									!std::ranges::includes(target->presence.fragments,
-														   value->presence.fragments))
-									return false;
-								for (std::size_t index{}; index < reference.source_columns.size();
-									 ++index)
+								const auto left =
+									value->row.cells.find(reference.source_columns[index]);
+								const auto right =
+									target->row.cells.find(reference.target_columns[index]);
+								if (left == value->row.cells.end() ||
+									right == target->row.cells.end() ||
+									left->second.state != sdk::cell_state::present ||
+									right->second.state != sdk::cell_state::present ||
+									!left->second.value || !right->second.value)
 								{
-									const auto left =
-										value->row.cells.find(reference.source_columns[index]);
-									const auto right =
-										target->row.cells.find(reference.target_columns[index]);
-									if (left == value->row.cells.end() ||
-										right == target->row.cells.end() ||
-										left->second.state != sdk::cell_state::present ||
-										right->second.state != sdk::cell_state::present ||
-										!left->second.value || !right->second.value)
-										return false;
-									if (reference.container_elements)
-									{
-										if (!element)
-											return false;
-										const auto* target_value =
-											std::get_if<std::string>(&*right->second.value);
-										if (target_value == nullptr || *target_value != *element)
-											return false;
-									}
-									else if (left->second.value != right->second.value)
-										return false;
+									matched = false;
+									break;
 								}
+								if (reference.container_elements)
+								{
+									if (!element)
+									{
+										matched = false;
+										break;
+									}
+									const auto* target_value =
+										std::get_if<std::string>(&*right->second.value);
+									if (target_value == nullptr || *target_value != *element)
+									{
+										matched = false;
+										break;
+									}
+								}
+								else if (left->second.value != right->second.value)
+								{
+									matched = false;
+									break;
+								}
+							}
+							if (matched)
 								return true;
-							});
+						}
+						return false;
 					};
 					bool resolved{};
 					if (reference.container_elements)
 					{
+						if (reference.source_columns.size() != 1U)
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   value->descriptor,
+															   "reference-container-shape"));
 						const auto source = value->row.cells.find(reference.source_columns.front());
-						std::vector<std::string> elements;
-						if (source != value->row.cells.end() && source->second.value)
+						if (source == value->row.cells.end())
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   value->descriptor,
+															   "reference-container-source"));
+						auto elements = reference_container_elements(source->second);
+						if (!elements)
+							return sdk::unexpected(std::move(elements.error()));
+						resolved = !elements->empty();
+						for (const auto& element : *elements)
 						{
-							if (const auto* encoded =
-									std::get_if<std::vector<std::byte>>(&*source->second.value))
-							{
-								for (std::size_t offset{}; offset < encoded->size();)
-								{
-									if (encoded->size() - offset < sizeof(std::uint32_t))
-										break;
-									std::uint32_t length{};
-									for (std::size_t byte{}; byte < sizeof(length); ++byte)
-										length |= std::to_integer<std::uint32_t>(
-													  (*encoded)[offset + byte])
-											<< (byte * 8U);
-									offset += sizeof(length);
-									if (length == 0U || length > encoded->size() - offset)
-										break;
-									elements.emplace_back(
-										reinterpret_cast<const char*>(encoded->data() + offset),
-										length);
-									offset += length;
-								}
-							}
+							auto matched = matches(std::string_view{element});
+							if (!matched)
+								return sdk::unexpected(std::move(matched.error()));
+							resolved = resolved && *matched;
 						}
-						resolved = !elements.empty() &&
-							std::ranges::all_of(elements,
-												[&](const std::string& element)
-												{
-													return matches(std::string_view{element});
-												});
 					}
 					else
-						resolved = matches(std::nullopt);
+					{
+						auto matched = matches(std::nullopt);
+						if (!matched)
+							return sdk::unexpected(std::move(matched.error()));
+						resolved = *matched;
+					}
 					if (!resolved)
-						return sdk::unexpected(
-							claim_error("materialization.claim-invalid",
-										value->descriptor,
-										reference.strength == sdk::reference_strength::hard
-											? "hard-reference-missing"
-											: "soft-reference-unresolved"));
+					{
+						if (reference.strength == sdk::reference_strength::hard)
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   value->descriptor,
+															   "hard-reference-missing"));
+						const auto owners = source_partitions.find(value->assertion);
+						if (owners == source_partitions.end() || owners->second.empty())
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   "partition.unresolved",
+															   "source-claim-owner-missing"));
+						const sdk::unresolved_reference unresolved{
+							value->assertion,
+							value->descriptor,
+							reference.target_relation,
+							reference.source_columns,
+							"soft-reference-missing",
+						};
+						for (auto* owner : owners->second)
+						{
+							if (owner->draft.relation_descriptor_id != value->descriptor)
+								return sdk::unexpected(claim_error("materialization.claim-invalid",
+																   "partition.unresolved",
+																   "source-relation-binding"));
+							owner->draft.unresolved.push_back(unresolved);
+							// Keep the exact source claim, but downgrade the containing partition
+							// because its soft semantic closure is open.
+							owner->draft.precision_profile = "under_approximation";
+						}
+					}
 				}
 			}
 
@@ -2781,6 +2972,7 @@ namespace cxxlens::detail::clang22::materialization
 					(void)coverage_id;
 					accumulator.draft.coverage.push_back(coverage);
 				}
+				canonicalize_unresolved(accumulator.draft.unresolved);
 				auto manifest = sdk::make_partition_manifest(request.engine, accumulator.draft);
 				if (!manifest)
 					return sdk::unexpected(claim_error("materialization.claim-invalid",
@@ -2798,7 +2990,8 @@ namespace cxxlens::detail::clang22::materialization
 				std::vector<std::string> contents{accumulator.claim_contents.begin(),
 												  accumulator.claim_contents.end()};
 				if (manifest->claim_count != contents.size() ||
-					manifest->complete != !accumulator.coverage.empty())
+					manifest->complete !=
+						(!accumulator.coverage.empty() && accumulator.draft.unresolved.empty()))
 					return sdk::unexpected(claim_error("materialization.claim-invalid",
 													   "partition-manifest",
 													   "census-or-completeness"));

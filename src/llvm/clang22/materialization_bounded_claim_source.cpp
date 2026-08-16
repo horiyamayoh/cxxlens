@@ -4,12 +4,15 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <new>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <span>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -83,10 +86,228 @@ namespace cxxlens::detail::clang22::materialization
 				if (auto valid = coverage.validate(); !valid)
 					return sdk::unexpected(source_error("partition", "coverage"));
 			for (const auto& unresolved : partition.draft.unresolved)
-				if (unresolved.source_assertion.empty() || unresolved.source_relation.empty() ||
-					unresolved.target_relation.empty())
-					return sdk::unexpected(source_error("partition", "unresolved"));
+			{
+				if (unresolved.source_relation != partition.draft.relation_descriptor_id)
+					return sdk::unexpected(
+						source_error("partition.unresolved", "source-relation-binding"));
+				auto source = engine.require_id(unresolved.source_relation);
+				if (!source)
+					return sdk::unexpected(std::move(source.error()));
+				if (unresolved.source_assertion.empty() || unresolved.target_relation.empty() ||
+					unresolved.source_columns.empty() ||
+					unresolved.reason != "soft-reference-missing")
+					return sdk::unexpected(source_error("partition.unresolved", "typed-record"));
+				const sdk::relation_reference_descriptor* matched{};
+				for (const auto& reference : source->descriptor().references)
+				{
+					if (reference.target_relation != unresolved.target_relation ||
+						reference.source_columns != unresolved.source_columns)
+						continue;
+					if (matched != nullptr ||
+						reference.strength != sdk::reference_strength::soft_semantic)
+						return sdk::unexpected(
+							source_error("partition.unresolved", "soft-reference-binding"));
+					matched = &reference;
+				}
+				if (matched == nullptr)
+					return sdk::unexpected(
+						source_error("partition.unresolved", "reference-missing"));
+				if (matched->source_columns.empty() ||
+					matched->source_columns.size() != matched->target_columns.size() ||
+					(matched->container_elements && matched->source_columns.size() != 1U))
+					return sdk::unexpected(source_error("partition.unresolved", "reference-shape"));
+				if (partition.draft.precision_profile == "exact")
+					return sdk::unexpected(source_error("partition.unresolved", "exact-profile"));
+				if (!std::ranges::any_of(partition.draft.claims,
+										 [&](const sdk::claim& claim)
+										 {
+											 return claim.assertion ==
+												 unresolved.source_assertion &&
+												 claim.descriptor == unresolved.source_relation;
+										 }))
+					return sdk::unexpected(
+						source_error("partition.unresolved", "source-claim-binding"));
+			}
 			return {};
+		}
+
+		[[nodiscard]] bool
+		reference_source_absent(const sdk::claim& source,
+								const sdk::relation_reference_descriptor& reference)
+		{
+			return std::ranges::any_of(reference.source_columns,
+									   [&](const std::string& column)
+									   {
+										   const auto found = source.row.cells.find(column);
+										   return found == source.row.cells.end() ||
+											   found->second.state == sdk::cell_state::absent;
+									   });
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::string>>
+		reference_container_elements(const sdk::detached_cell& cell)
+		{
+			if (cell.state != sdk::cell_state::present || !cell.value)
+				return sdk::unexpected(
+					source_error("reference-container", "unknown-or-missing-cell"));
+			const auto* encoded = std::get_if<std::vector<std::byte>>(&*cell.value);
+			if (encoded == nullptr)
+				return sdk::unexpected(source_error("reference-container", "type"));
+			std::vector<std::string> output;
+			for (std::size_t offset{}; offset < encoded->size();)
+			{
+				if (encoded->size() - offset < sizeof(std::uint32_t))
+					return sdk::unexpected(source_error("reference-container", "truncated-length"));
+				std::uint32_t length{};
+				for (std::size_t byte{}; byte < sizeof(length); ++byte)
+					length |= std::to_integer<std::uint32_t>((*encoded)[offset + byte])
+						<< (byte * 8U);
+				offset += sizeof(length);
+				if (length == 0U || length > encoded->size() - offset)
+					return sdk::unexpected(source_error("reference-container", "invalid-length"));
+				output.emplace_back(reinterpret_cast<const char*>(encoded->data() + offset),
+									length);
+				offset += length;
+			}
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<const sdk::relation_reference_descriptor*>
+		soft_reference_for(const sdk::relation_engine& engine,
+						   const sdk::unresolved_reference& unresolved)
+		{
+			if (unresolved.source_assertion.empty() || unresolved.source_relation.empty() ||
+				unresolved.target_relation.empty() || unresolved.source_columns.empty() ||
+				unresolved.reason != "soft-reference-missing")
+				return sdk::unexpected(source_error("partition.unresolved", "typed-record"));
+			auto source = engine.require_id(unresolved.source_relation);
+			if (!source)
+				return sdk::unexpected(std::move(source.error()));
+			const sdk::relation_reference_descriptor* matched{};
+			for (const auto& reference : source->descriptor().references)
+			{
+				if (reference.target_relation != unresolved.target_relation ||
+					reference.source_columns != unresolved.source_columns)
+					continue;
+				if (matched != nullptr ||
+					reference.strength != sdk::reference_strength::soft_semantic)
+					return sdk::unexpected(
+						source_error("partition.unresolved", "soft-reference-binding"));
+				matched = &reference;
+			}
+			if (matched == nullptr)
+				return sdk::unexpected(source_error("partition.unresolved", "reference-missing"));
+			return matched;
+		}
+
+		void canonicalize_unresolved(std::vector<sdk::unresolved_reference>& values)
+		{
+			std::ranges::sort(
+				values,
+				[](const sdk::unresolved_reference& left, const sdk::unresolved_reference& right)
+				{
+					return std::tie(left.source_assertion,
+									left.source_relation,
+									left.target_relation,
+									left.source_columns,
+									left.reason) < std::tie(right.source_assertion,
+															right.source_relation,
+															right.target_relation,
+															right.source_columns,
+															right.reason);
+				});
+			values.erase(std::unique(values.begin(),
+									 values.end(),
+									 [](const sdk::unresolved_reference& left,
+										const sdk::unresolved_reference& right)
+									 {
+										 return std::tie(left.source_assertion,
+														 left.source_relation,
+														 left.target_relation,
+														 left.source_columns,
+														 left.reason) ==
+											 std::tie(right.source_assertion,
+													  right.source_relation,
+													  right.target_relation,
+													  right.source_columns,
+													  right.reason);
+									 }),
+						 values.end());
+		}
+
+		using spooled_claim_consumer = std::function<sdk::result<void>(const sdk::claim&)>;
+
+		[[nodiscard]] sdk::result<void>
+		for_each_spooled_claim(materialization_replayable_spool& spool,
+							   const sdk::relation_engine& engine,
+							   const spooled_claim_consumer& consumer)
+		{
+			std::uint64_t offset{};
+			while (offset < spool.size_bytes())
+			{
+				if (spool.size_bytes() - offset < sizeof(std::uint64_t))
+					return sdk::unexpected(source_error("claims", "truncated-length"));
+				std::array<std::byte, sizeof(std::uint64_t)> length_bytes{};
+				if (auto read = read_exact(spool, offset, length_bytes); !read)
+					return read;
+				offset += length_bytes.size();
+				const auto length = decode_u64(length_bytes);
+				if (length > spool.size_bytes() - offset ||
+					length > std::numeric_limits<std::size_t>::max())
+					return sdk::unexpected(source_error("claims", "length"));
+				std::vector<std::byte> encoded(static_cast<std::size_t>(length));
+				if (auto read = read_exact(spool, offset, encoded); !read)
+					return read;
+				offset += length;
+				auto claim = sdk::detail::decode_store_claim(encoded, engine);
+				if (!claim)
+					return sdk::unexpected(std::move(claim.error()));
+				if (auto consumed = consumer(*claim); !consumed)
+					return consumed;
+			}
+			return {};
+		}
+
+		[[nodiscard]] sdk::result<bool>
+		reference_matches(const sdk::relation_engine& engine,
+						  const sdk::claim& source,
+						  const sdk::relation_reference_descriptor& reference,
+						  const sdk::claim& target,
+						  const std::optional<std::string_view> element)
+		{
+			auto target_descriptor = engine.require_id(target.descriptor);
+			if (!target_descriptor)
+				return sdk::unexpected(std::move(target_descriptor.error()));
+			if (target_descriptor->descriptor().name != reference.target_relation)
+				return false;
+			if (source.interpretation != target.interpretation ||
+				source.presence.universe != target.presence.universe ||
+				!std::ranges::includes(target.presence.fragments, source.presence.fragments))
+				return false;
+			if (reference.source_columns.size() != reference.target_columns.size() ||
+				reference.source_columns.empty())
+				return sdk::unexpected(source_error("reference", "column-shape"));
+			for (std::size_t index{}; index < reference.source_columns.size(); ++index)
+			{
+				const auto left = source.row.cells.find(reference.source_columns[index]);
+				const auto right = target.row.cells.find(reference.target_columns[index]);
+				if (left == source.row.cells.end() || right == target.row.cells.end() ||
+					left->second.state != sdk::cell_state::present ||
+					right->second.state != sdk::cell_state::present || !left->second.value ||
+					!right->second.value)
+					return false;
+				if (reference.container_elements)
+				{
+					if (!element)
+						return false;
+					const auto* target_value = std::get_if<std::string>(&*right->second.value);
+					if (target_value == nullptr || *target_value != *element)
+						return false;
+				}
+				else if (left->second.value != right->second.value)
+					return false;
+			}
+			return true;
 		}
 
 		[[nodiscard]] sdk::result<std::string> canonical_claim_ref(const std::string_view role,
@@ -729,23 +950,137 @@ namespace cxxlens::detail::clang22::materialization
 		}
 		bool completed = false;
 		const consume_failure_guard failure_guard{failed_, completed};
-		for (auto& [partition_id, state] : partitions_)
+		try
 		{
-			(void)partition_id;
-			if (!state.claims)
-				return sdk::unexpected(source_error("claims", "missing-spool"));
-			if (auto sealed = state.claims->seal(); !sealed)
-				return sdk::unexpected(source_error("claims", "spool-seal"));
+			for (auto& [partition_id, state] : partitions_)
+			{
+				(void)partition_id;
+				if (!state.claims)
+					return sdk::unexpected(source_error("claims", "missing-spool"));
+				canonicalize_unresolved(state.unresolved);
+				std::vector<sdk::unresolved_reference> residual;
+				for (const auto& unresolved : state.unresolved)
+				{
+					if (unresolved.source_relation != state.identity.relation_descriptor_id)
+						return sdk::unexpected(
+							source_error("partition.unresolved", "identity-binding"));
+					auto reference = soft_reference_for(*engine_, unresolved);
+					if (!reference)
+						return sdk::unexpected(std::move(reference.error()));
+
+					bool source_seen{};
+					bool unresolved_remains{};
+					auto sources = for_each_spooled_claim(
+						*state.claims,
+						*engine_,
+						[&](const sdk::claim& source) -> sdk::result<void>
+						{
+							if (source.assertion != unresolved.source_assertion)
+								return {};
+							source_seen = true;
+							if (source.descriptor != unresolved.source_relation ||
+								reference_source_absent(source, **reference))
+								return sdk::unexpected(
+									source_error("partition.unresolved", "source-binding"));
+
+							const auto target_exists =
+								[&](const std::optional<std::string_view> element)
+								-> sdk::result<bool>
+							{
+								bool found{};
+								for (auto& [target_partition_id, target_state] : partitions_)
+								{
+									(void)target_partition_id;
+									if (found || !target_state.claims)
+										continue;
+									auto targets = for_each_spooled_claim(
+										*target_state.claims,
+										*engine_,
+										[&](const sdk::claim& target) -> sdk::result<void>
+										{
+											if (found)
+												return {};
+											auto matches = reference_matches(
+												*engine_, source, **reference, target, element);
+											if (!matches)
+												return sdk::unexpected(std::move(matches.error()));
+											found = *matches;
+											return {};
+										});
+									if (!targets)
+										return sdk::unexpected(std::move(targets.error()));
+								}
+								return found;
+							};
+
+							bool resolved{};
+							if ((*reference)->container_elements)
+							{
+								if ((*reference)->source_columns.empty())
+									return sdk::unexpected(
+										source_error("reference", "container-columns"));
+								const auto cell =
+									source.row.cells.find((*reference)->source_columns.front());
+								if (cell == source.row.cells.end())
+									return sdk::unexpected(
+										source_error("reference", "container-source"));
+								auto elements = reference_container_elements(cell->second);
+								if (!elements)
+									return sdk::unexpected(std::move(elements.error()));
+								resolved = !elements->empty();
+								for (const auto& element : *elements)
+								{
+									auto matched = target_exists(std::string_view{element});
+									if (!matched)
+										return sdk::unexpected(std::move(matched.error()));
+									if (!*matched)
+										resolved = false;
+								}
+							}
+							else
+							{
+								auto matched = target_exists(std::nullopt);
+								if (!matched)
+									return sdk::unexpected(std::move(matched.error()));
+								resolved = *matched;
+							}
+							if (!resolved)
+								unresolved_remains = true;
+							return {};
+						});
+					if (!sources)
+						return sdk::unexpected(std::move(sources.error()));
+					if (!source_seen)
+						return sdk::unexpected(
+							source_error("partition.unresolved", "source-claim-missing"));
+					if (unresolved_remains)
+						residual.push_back(unresolved);
+				}
+				canonicalize_unresolved(residual);
+				state.unresolved = std::move(residual);
+			}
+
+			for (auto& [partition_id, state] : partitions_)
+			{
+				(void)partition_id;
+				if (auto sealed = state.claims->seal(); !sealed)
+					return sdk::unexpected(source_error("claims", "spool-seal"));
+			}
+			if (!claim_envelopes_ || !canonicalization_edges_ || !origin_associations_)
+				return sdk::unexpected(source_error("report-metadata", "missing-spool"));
+			for (auto* spool : {claim_envelopes_.get(),
+								canonicalization_edges_.get(),
+								origin_associations_.get()})
+				if (auto sealed = spool->seal(); !sealed)
+					return sdk::unexpected(source_error("report-metadata", "spool-seal"));
+			sealed_ = true;
+			completed = true;
+			return std::move(*this);
 		}
-		if (!claim_envelopes_ || !canonicalization_edges_ || !origin_associations_)
-			return sdk::unexpected(source_error("report-metadata", "missing-spool"));
-		for (auto* spool :
-			 {claim_envelopes_.get(), canonicalization_edges_.get(), origin_associations_.get()})
-			if (auto sealed = spool->seal(); !sealed)
-				return sdk::unexpected(source_error("report-metadata", "spool-seal"));
-		sealed_ = true;
-		completed = true;
-		return std::move(*this);
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(source_error("claims", "allocation"));
+		}
 	}
 
 	sdk::result<void> materialization_bounded_claim_source::replay(
@@ -904,16 +1239,17 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<claim_run> runs;
 			runs.reserve(partitions_.size());
 			std::uint64_t claim_count{};
-			std::uint64_t unresolved_count{};
+			std::vector<sdk::unresolved_reference> unresolved;
 
 			if (auto replayed = replay(
 					[&](sdk::partition_draft draft) -> sdk::result<void>
 					{
 						runs.push_back({records->size_bytes(), records->size_bytes()});
 						if (draft.unresolved.size() >
-							std::numeric_limits<std::uint64_t>::max() - unresolved_count)
+							std::numeric_limits<std::size_t>::max() - unresolved.size())
 							return sdk::unexpected(source_error("claims.unresolved", "overflow"));
-						unresolved_count += static_cast<std::uint64_t>(draft.unresolved.size());
+						unresolved.insert(
+							unresolved.end(), draft.unresolved.begin(), draft.unresolved.end());
 						if (draft.claims.size() >
 							std::numeric_limits<std::uint64_t>::max() - claim_count)
 							return sdk::unexpected(source_error("claims", "count-overflow"));
@@ -1009,12 +1345,32 @@ namespace cxxlens::detail::clang22::materialization
 			if (ordered_count != claim_count)
 				return sdk::unexpected(source_error("claims", "census-mismatch"));
 
-			if (unresolved_count != 0U)
-				// Task admission rejects functional conflicts and differential disagreements before
-				// they become bounded partitions; zero here is the source contract, not an inferred
-				// absence from the streaming census.
-				return materialization_bounded_claim_batch_status{
-					{}, claim_count, unresolved_count, 0U, 0U, partitions_.size()};
+			canonicalize_unresolved(unresolved);
+			if (unresolved.size() > std::numeric_limits<std::uint64_t>::max())
+				return sdk::unexpected(source_error("claims.unresolved", "overflow"));
+			const auto unresolved_count = static_cast<std::uint64_t>(unresolved.size());
+			std::vector<sdk::canonical_value> unresolved_records;
+			unresolved_records.reserve(unresolved.size());
+			for (const auto& value : unresolved)
+			{
+				std::vector<sdk::canonical_value> source_columns;
+				source_columns.reserve(value.source_columns.size());
+				for (const auto& column : value.source_columns)
+					source_columns.push_back(sdk::canonical_value::from_string(column));
+				unresolved_records.push_back(sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string("unresolved"),
+					sdk::canonical_value::from_string(value.source_assertion),
+					sdk::canonical_value::from_string(value.source_relation),
+					sdk::canonical_value::from_string(value.target_relation),
+					sdk::canonical_value::from_tuple(std::move(source_columns)),
+					sdk::canonical_value::from_string(value.reason),
+				}));
+			}
+			auto unresolved_binary = sdk::canonical_binary(
+				sdk::canonical_value::from_tuple(std::move(unresolved_records)));
+			if (!unresolved_binary ||
+				unresolved_binary->size() > std::numeric_limits<std::uint64_t>::max())
+				return sdk::unexpected(source_error("claims.unresolved", "encode"));
 
 			if (auto sealed = records->seal(); !sealed)
 				return sdk::unexpected(source_error("claim-status", "spool-seal"));
@@ -1036,8 +1392,10 @@ namespace cxxlens::detail::clang22::materialization
 				return checked_add(8U, encoded_size, framed) &&
 					checked_add(child_sum, framed, child_sum);
 			};
+			const auto unresolved_tuple_size =
+				static_cast<std::uint64_t>(unresolved_binary->size());
 			if (!add_child(claim_batch_marker_size) || !add_child(claims_tuple_size) ||
-				!add_child(9U) || !add_child(9U) || !add_child(9U))
+				!add_child(unresolved_tuple_size) || !add_child(9U) || !add_child(9U))
 				return sdk::unexpected(source_error("claims", "size-overflow"));
 			std::uint64_t inner_payload_size{};
 			if (!checked_add(9U, child_sum, inner_payload_size))
@@ -1122,7 +1480,13 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(std::move(updated.error()));
 				offset += static_cast<std::uint64_t>(*received);
 			}
-			for (std::size_t index{}; index < 3U; ++index)
+			const auto unresolved_length = encode_u64(unresolved_tuple_size);
+			if (auto updated = update_digest(*digest, unresolved_length, "claims.digest"); !updated)
+				return sdk::unexpected(std::move(updated.error()));
+			if (auto updated = update_digest(*digest, *unresolved_binary, "claims.digest");
+				!updated)
+				return sdk::unexpected(std::move(updated.error()));
+			for (std::size_t index{}; index < 2U; ++index)
 			{
 				const auto empty_length = encode_u64(9U);
 				if (auto updated = update_digest(*digest, empty_length, "claims.digest"); !updated)
@@ -1134,10 +1498,9 @@ namespace cxxlens::detail::clang22::materialization
 			if (!finished || !finished->starts_with("sha256:") || finished->size() != 71U)
 				return sdk::unexpected(source_error("claims", "digest-finalize"));
 			const auto stream_digest = "semantic-v2:" + *finished;
-			// The task contract above is the sole authority for these two zero-valued fields. This
-			// bounded status path deliberately does not materialize or recompute their detail rows.
+			// Functional conflicts and differential disagreements remain fatal at task admission.
 			return materialization_bounded_claim_batch_status{
-				stream_digest, claim_count, 0U, 0U, 0U, partitions_.size()};
+				stream_digest, claim_count, unresolved_count, 0U, 0U, partitions_.size()};
 		}
 		catch (const std::bad_alloc&)
 		{
