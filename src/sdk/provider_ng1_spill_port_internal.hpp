@@ -65,6 +65,15 @@ namespace cxxlens::sdk::provider::detail
 			  std::string staged_digest);
 		/** Re-read and validate the complete stored prefix from the private port. */
 		[[nodiscard]] result<ng1_spill_prefix_state> recover();
+		/**
+		 * Rehydrate a fresh staging transaction from one exact host-observed fsync receipt.
+		 *
+		 * The receipt is checked against bytes re-read through the injected port; this method does
+		 * not itself prove persistence or launch/restart a worker.  A caller must keep worker
+		 * termination and resume-token acceptance as separate lifecycle observations.
+		 */
+		[[nodiscard]] result<void>
+		restore_from_fsync_receipt(const ng1_spill_fsync_receipt& receipt);
 
 		/** Cleanup after final report/token disposal or after recovery classification. */
 		[[nodiscard]] result<void> cleanup();

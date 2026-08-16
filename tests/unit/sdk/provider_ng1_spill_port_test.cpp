@@ -164,6 +164,64 @@ namespace
 				"system spill cleanup was retryable after terminal disposal");
 	}
 
+	void test_restore_rehydrates_prefix_and_fsync_frontier()
+	{
+		const auto spill_binding = binding();
+		auto first_storage = std::make_unique<fake_spill_port>();
+		auto* first_raw = first_storage.get();
+		auto first = ng1_spill_staging_session::create(spill_binding, std::move(first_storage));
+		require(first.has_value(), "restore predecessor session creation failed");
+		auto first_record = record(spill_binding, 0U, 0U, "first");
+		require(first->append(first_record), "restore predecessor append failed");
+		auto first_receipt = first->fsync(0U, 0U, digest("staged-0"));
+		require(first_receipt.has_value(), "restore predecessor fsync failed");
+		const auto durable_bytes = first_raw->bytes;
+
+		auto restart_storage = std::make_unique<fake_spill_port>();
+		restart_storage->bytes = durable_bytes;
+		restart_storage->fsync_value = 2U;
+		auto restarted =
+			ng1_spill_staging_session::create(spill_binding, std::move(restart_storage));
+		require(restarted.has_value(), "restore staging session creation failed");
+		require(restarted->restore_from_fsync_receipt(*first_receipt),
+				"restore rejected an exact durable prefix");
+		require(restarted->total_records() == 1U &&
+					restarted->total_bytes() == first->total_bytes(),
+				"restore did not install the exact prefix counters");
+		auto second_record = record(spill_binding, 1U, 1U, "second");
+		require(restarted->append(second_record), "restored staging append failed");
+		auto second_receipt = restarted->fsync(1U, 1U, digest("staged-1"));
+		require(second_receipt.has_value() && second_receipt->fsync_sequence == 2U &&
+					second_receipt->total_records == 2U,
+				"restore did not retain the monotonic fsync frontier");
+		require(first->cleanup(), "restore predecessor cleanup failed");
+		require(restarted->cleanup(), "restored staging cleanup failed");
+
+		auto corrupted_storage = std::make_unique<fake_spill_port>();
+		corrupted_storage->bytes = durable_bytes;
+		auto corrupted =
+			ng1_spill_staging_session::create(spill_binding, std::move(corrupted_storage));
+		require(corrupted.has_value(), "restore corruption session creation failed");
+		auto bad_receipt = *first_receipt;
+		++bad_receipt.total_records;
+		auto rejected = corrupted->restore_from_fsync_receipt(bad_receipt);
+		require(!rejected && rejected.error().code == "provider.spill-corrupt" &&
+					corrupted->poisoned(),
+				"restore accepted a receipt for a different prefix");
+		require(corrupted->cleanup(), "restore corruption cleanup failed");
+
+		auto nonfresh_storage = std::make_unique<fake_spill_port>();
+		auto nonfresh =
+			ng1_spill_staging_session::create(spill_binding, std::move(nonfresh_storage));
+		require(nonfresh.has_value(), "non-fresh restore session creation failed");
+		require(nonfresh->append(first_record), "non-fresh restore setup append failed");
+		auto nonfresh_result = nonfresh->restore_from_fsync_receipt(*first_receipt);
+		require(!nonfresh_result && nonfresh_result.error().code == "provider.recovery-failed" &&
+					nonfresh->poisoned(),
+				"restore overlaid a non-fresh staging session");
+		require(nonfresh->cleanup(), "non-fresh restore cleanup failed");
+	}
+
 	void test_append_failure_poison_and_atomicity()
 	{
 		const auto spill_binding = binding();
@@ -273,6 +331,7 @@ namespace
 int main()
 {
 	test_system_port_round_trip();
+	test_restore_rehydrates_prefix_and_fsync_frontier();
 	test_append_failure_poison_and_atomicity();
 	test_recovery_rejects_digest_corruption();
 	test_fsync_and_cleanup_fail_closed();

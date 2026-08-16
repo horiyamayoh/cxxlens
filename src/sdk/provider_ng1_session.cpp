@@ -497,6 +497,28 @@ namespace cxxlens::sdk::provider::detail
 			*token, receipt, open_dependency_group, terminal, highest_observed_sequence);
 	}
 
+	result<void>
+	ng1_session_coordinator::restore_durable_resume(const ng1_resume_control& control,
+													const ng1_spill_fsync_receipt& receipt,
+													const bool open_dependency_group,
+													const bool terminal,
+													const std::uint64_t highest_observed_sequence)
+	{
+		if (auto open = ensure_open("restore-resume"); !open)
+			return open;
+		if (recovery_.state() != ng1_recovery_state::worker_killed)
+			return unexpected(recovery_error("state", "resume-not-pending"));
+		if (latest_fsync_receipt_)
+			return reject_resume(error{"provider.resume-replay-invalid",
+									   "fsync_receipt",
+									   "coordinator-observation-present"});
+		if (auto restored = spill_.restore_from_fsync_receipt(receipt); !restored)
+			return reject_resume(std::move(restored.error()));
+		latest_fsync_receipt_ = receipt;
+		return accept_durable_resume(
+			control, receipt, open_dependency_group, terminal, highest_observed_sequence);
+	}
+
 	result<std::uint64_t> ng1_session_coordinator::replay_start_sequence() const
 	{
 		if (auto open = ensure_open("replay"); !open)

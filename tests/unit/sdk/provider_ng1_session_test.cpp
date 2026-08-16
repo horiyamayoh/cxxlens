@@ -83,6 +83,55 @@ namespace
 		bool cleaned_{};
 	};
 
+	struct durable_spill_state
+	{
+		std::vector<std::byte> bytes;
+		std::uint64_t fsync_sequence{};
+	};
+
+	class restartable_spill_storage final : public ng1_spill_storage_port
+	{
+	  public:
+		explicit restartable_spill_storage(std::shared_ptr<durable_spill_state> state)
+			: state_{std::move(state)}
+		{
+		}
+
+		result<void> append(const std::span<const std::byte> bytes) override
+		{
+			if (cleaned_)
+				return unexpected(error{"provider.recovery-failed", "append", "cleaned"});
+			state_->bytes.insert(state_->bytes.end(), bytes.begin(), bytes.end());
+			return {};
+		}
+
+		result<std::uint64_t> fsync() override
+		{
+			if (cleaned_)
+				return unexpected(error{"provider.recovery-failed", "fsync", "cleaned"});
+			return ++state_->fsync_sequence;
+		}
+
+		result<std::vector<std::byte>> read_all() const override
+		{
+			if (cleaned_)
+				return unexpected(error{"provider.recovery-failed", "read", "cleaned"});
+			return state_->bytes;
+		}
+
+		result<void> cleanup() override
+		{
+			if (cleaned_)
+				return unexpected(error{"provider.recovery-failed", "cleanup", "already"});
+			cleaned_ = true;
+			return {};
+		}
+
+	  private:
+		std::shared_ptr<durable_spill_state> state_;
+		bool cleaned_{};
+	};
+
 	class failing_spill_storage final : public ng1_spill_storage_port
 	{
 	  public:
@@ -188,14 +237,12 @@ namespace
 								"batch:test",
 								7U};
 
-		[[nodiscard]] ng1_session_configuration configuration() const
+		[[nodiscard]] ng1_session_configuration
+		configuration(std::unique_ptr<ng1_spill_storage_port> storage = {}) const
 		{
-			return {heartbeat,
-					"dependency:test",
-					resume,
-					spill,
-					1'000U,
-					std::make_unique<memory_spill_storage>()};
+			if (!storage)
+				storage = std::make_unique<memory_spill_storage>();
+			return {heartbeat, "dependency:test", resume, spill, 1'000U, std::move(storage)};
 		}
 
 		[[nodiscard]] ng1_heartbeat_control heartbeat_control(const ng1_heartbeat_kind kind,
@@ -526,6 +573,96 @@ namespace
 		require(corrupted->cleanup(), "corrupted-receipt cleanup failed");
 	}
 
+	void test_fresh_coordinator_rehydrates_durable_prefix()
+	{
+		const fixture values;
+		auto durable = std::make_shared<durable_spill_state>();
+		auto predecessor = ng1_session_coordinator::create(
+			values.configuration(std::make_unique<restartable_spill_storage>(durable)));
+		require(predecessor, "durable predecessor session creation failed");
+		require(predecessor->append_spill(values.spill_record()),
+				"durable predecessor spill append failed");
+		auto receipt = predecessor->fsync_spill(0U, 0U, digest("staged"));
+		require(receipt, "durable predecessor fsync failed");
+		require(predecessor->observe_worker_exit(), "durable predecessor exit failed");
+
+		auto restarted = ng1_session_coordinator::create(
+			values.configuration(std::make_unique<restartable_spill_storage>(durable)));
+		require(restarted, "fresh restart session creation failed");
+		require(restarted->observe_worker_exit(), "fresh restart exit observation failed");
+		require(
+			restarted->restore_durable_resume(values.resume_control(), *receipt, false, false, 0U),
+			"fresh coordinator did not restore the durable prefix");
+		require(restarted->spill_total_records() == predecessor->spill_total_records() &&
+					restarted->spill_total_bytes() == predecessor->spill_total_bytes(),
+				"fresh coordinator did not install the exact durable prefix");
+		auto replay_start = restarted->replay_start_sequence();
+		require(replay_start && *replay_start == 1U,
+				"fresh coordinator replay did not start after the durable ACK");
+
+		auto output = values.output_receipt();
+		auto replay = make_ng1_replay_validation_receipt(output, values.replay_runtime_receipt());
+		require(replay, "fresh coordinator replay receipt construction failed");
+		require(restarted->accept_replay(*replay), "fresh coordinator replay was rejected");
+		require(restarted->state() == ng1_recovery_state::resumed,
+				"fresh coordinator did not enter resumed state");
+
+		auto predecessor_rejected = predecessor->reject_output();
+		require(!predecessor_rejected && predecessor->state() == ng1_recovery_state::failed,
+				"predecessor was reusable after restart handoff");
+		require(predecessor->cleanup(), "durable predecessor cleanup failed");
+		auto restarted_rejected = restarted->reject_output();
+		require(!restarted_rejected && restarted->state() == ng1_recovery_state::failed,
+				"restarted session did not classify rejected output");
+		require(restarted->cleanup(), "fresh restart cleanup failed");
+	}
+
+	void test_fresh_coordinator_resume_requires_exit_and_exact_receipt()
+	{
+		const fixture values;
+		auto durable = std::make_shared<durable_spill_state>();
+		auto predecessor = ng1_session_coordinator::create(
+			values.configuration(std::make_unique<restartable_spill_storage>(durable)));
+		require(predecessor, "resume-negative predecessor creation failed");
+		require(predecessor->append_spill(values.spill_record()),
+				"resume-negative predecessor append failed");
+		auto receipt = predecessor->fsync_spill(0U, 0U, digest("staged"));
+		require(receipt, "resume-negative predecessor fsync failed");
+
+		auto no_exit = ng1_session_coordinator::create(
+			values.configuration(std::make_unique<restartable_spill_storage>(durable)));
+		require(no_exit, "resume-negative fresh session creation failed");
+		auto before_exit =
+			no_exit->restore_durable_resume(values.resume_control(), *receipt, false, false, 0U);
+		require(!before_exit && before_exit.error().field == "state" &&
+					no_exit->state() == ng1_recovery_state::running,
+				"fresh coordinator accepted resume without worker termination");
+		require(no_exit->observe_worker_exit(), "resume-negative exit observation failed");
+		auto no_exit_cleanup = no_exit->reject_output();
+		require(!no_exit_cleanup && no_exit->state() == ng1_recovery_state::failed,
+				"resume-negative session did not fail closed for cleanup");
+		require(no_exit->cleanup(), "resume-negative no-exit cleanup failed");
+
+		auto corrupted = ng1_session_coordinator::create(
+			values.configuration(std::make_unique<restartable_spill_storage>(durable)));
+		require(corrupted, "resume-negative corrupted session creation failed");
+		require(corrupted->observe_worker_exit(), "resume-negative corrupted exit failed");
+		auto bad_receipt = *receipt;
+		++bad_receipt.total_records;
+		auto rejected = corrupted->restore_durable_resume(
+			values.resume_control(), bad_receipt, false, false, 0U);
+		require(!rejected && rejected.error().code == "provider.spill-corrupt" &&
+					corrupted->state() == ng1_recovery_state::failed,
+				"fresh coordinator accepted a receipt for a different spill prefix");
+		require(corrupted->cleanup(), "resume-negative corrupted cleanup failed");
+
+		require(predecessor->observe_worker_exit(), "resume-negative predecessor exit failed");
+		auto predecessor_cleanup = predecessor->reject_output();
+		require(!predecessor_cleanup && predecessor->state() == ng1_recovery_state::failed,
+				"resume-negative predecessor did not fail closed");
+		require(predecessor->cleanup(), "resume-negative predecessor cleanup failed");
+	}
+
 	void test_session_rejects_unbound_or_nonmonotonic_observations()
 	{
 		const fixture values;
@@ -749,6 +886,8 @@ int main()
 	test_complete_session_requires_progress_and_cleans_spill();
 	test_live_frame_adapter_binds_wire_controls_to_host_receipts();
 	test_timeout_kill_resume_checks_local_spill_prefix();
+	test_fresh_coordinator_rehydrates_durable_prefix();
+	test_fresh_coordinator_resume_requires_exit_and_exact_receipt();
 	test_session_rejects_unbound_or_nonmonotonic_observations();
 	test_session_requires_local_receipt_and_poisoned_spill_is_terminal();
 	test_session_rejects_bad_replay_and_post_cleanup_calls();

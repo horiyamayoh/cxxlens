@@ -534,7 +534,9 @@ namespace cxxlens::sdk::provider::detail
 			{
 				if (descriptor_ < 0 || cleaned_)
 					return unexpected(port_error("read", "terminal-port"));
-				struct stat metadata{};
+				struct stat metadata
+				{
+				};
 				if (::fstat(descriptor_, &metadata) != 0 || metadata.st_size < 0)
 					return unexpected(port_error("read", "stat"));
 				const auto size = static_cast<std::uint64_t>(metadata.st_size);
@@ -813,6 +815,52 @@ namespace cxxlens::sdk::provider::detail
 			poisoned_ = true;
 			return unexpected(port_error("recovery", "effect-unknown"));
 		}
+	}
+
+	result<void>
+	ng1_spill_staging_session::restore_from_fsync_receipt(const ng1_spill_fsync_receipt& receipt)
+	{
+		if (!storage_ || cleaned_ || poisoned_)
+			return unexpected(port_error("restore", "terminal-session"));
+		if (prefix_.total_bytes() != 0U || prefix_.total_records() != 0U || has_fsync_sequence_)
+		{
+			poisoned_ = true;
+			return unexpected(port_error("restore", "non-fresh-session"));
+		}
+		if (auto valid = receipt.validate(); !valid)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(valid.error()));
+		}
+		if (receipt.provider_id != binding_.provider_id ||
+			receipt.protocol_session_id != binding_.protocol_session_id ||
+			receipt.task_id != binding_.task_id || receipt.stream_id != binding_.stream_id)
+		{
+			poisoned_ = true;
+			return unexpected(corrupt_error("receipt", "binding-mismatch"));
+		}
+
+		auto recovered = recover();
+		if (!recovered)
+			return unexpected(std::move(recovered.error()));
+		auto expected = recovered->observe_host_fsync(receipt.highest_contiguous_acked_sequence,
+													  receipt.staged_digest,
+													  receipt.fsync_sequence);
+		if (!expected)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(expected.error()));
+		}
+		if (*expected != receipt)
+		{
+			poisoned_ = true;
+			return unexpected(corrupt_error("receipt", "prefix-mismatch"));
+		}
+
+		prefix_ = std::move(*recovered);
+		last_fsync_sequence_ = receipt.fsync_sequence;
+		has_fsync_sequence_ = true;
+		return {};
 	}
 
 	result<void> ng1_spill_staging_session::cleanup()

@@ -217,6 +217,17 @@ namespace cxxlens::sdk::provider::detail
 														 bool open_dependency_group,
 														 bool terminal,
 														 std::uint64_t highest_observed_sequence);
+		/**
+		 * Rehydrate a fresh coordinator's spill prefix before accepting a durable resume.
+		 *
+		 * The host must separately observe worker termination first.  This source-private seam
+		 * does not launch, kill, restart, or advertise an NG1 provider capability.
+		 */
+		[[nodiscard]] result<void> restore_durable_resume(const ng1_resume_control& control,
+														  const ng1_spill_fsync_receipt& receipt,
+														  bool open_dependency_group,
+														  bool terminal,
+														  std::uint64_t highest_observed_sequence);
 		[[nodiscard]] result<std::uint64_t> replay_start_sequence() const;
 		[[nodiscard]] result<void>
 		accept_replay(const ng1_replay_validation_receipt& replay_receipt);
