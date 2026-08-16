@@ -31,6 +31,28 @@ CONSTRUCTIBILITY_SCHEMA = pathlib.Path(
 CONSTRUCTIBILITY_CONTRACT = "development.constructibility-gate.v1"
 CONSTRUCTIBILITY_GATE_ISSUE = "#276"
 CONSTRUCTIBILITY_BLOCKED_ISSUE = "#261"
+CONSTRUCTIBILITY_GATE_PROJECTION = {
+    "contract": CONSTRUCTIBILITY_CONTRACT,
+    "tracking_issue": CONSTRUCTIBILITY_GATE_ISSUE,
+    "applies_to": [
+        "public-semantics",
+        "identity",
+        "protocol",
+        "persistence",
+        "irreversible-effects",
+        "resource-bounds",
+    ],
+    "required_witnesses": [
+        "executable-state-machine",
+        "field-availability-by-phase",
+        "phase-authentic-outcome-union",
+        "minimal-witness-implementation",
+        "bounded-resource-witness",
+        "crash-effect-matrix",
+        "independent-counterexample-review",
+    ],
+    "acceptance_rule": "all-applicable-witnesses-before-high-risk-authority-acceptance",
+}
 EVIDENCE_FIELDS = (
     "logical_check_id",
     "check_version",
@@ -88,13 +110,9 @@ def validate_constructibility_projection(root: pathlib.Path) -> dict[str, Any]:
         raise QualityOwnershipError(
             "readiness authority lacks the admitted constructibility projection"
         )
-    if gate.get("contract") != CONSTRUCTIBILITY_CONTRACT:
+    if gate != CONSTRUCTIBILITY_GATE_PROJECTION:
         raise QualityOwnershipError(
-            "constructibility projection contract is not the admitted v1 contract"
-        )
-    if gate.get("tracking_issue") != CONSTRUCTIBILITY_GATE_ISSUE:
-        raise QualityOwnershipError(
-            "constructibility projection is not tracked by issue #276"
+            "constructibility gate projection differs from the pinned v1 contract"
         )
     if packet.get("issue") != CONSTRUCTIBILITY_BLOCKED_ISSUE:
         raise QualityOwnershipError(
