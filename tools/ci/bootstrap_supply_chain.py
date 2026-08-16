@@ -245,6 +245,43 @@ def assert_runner(lock: dict[str, Any]) -> None:
         raise SupplyChainError("runner architecture lock is inconsistent")
 
 
+
+def configure_llvm_repository(llvm: dict[str, Any], key_content: bytes) -> None:
+    """Install the verified LLVM source and refresh its exact package index."""
+    signing_key = llvm["signing_key"]
+    with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-bootstrap-") as temporary:
+        directory = pathlib.Path(temporary)
+        keyring = verify_key(
+            key_content, signing_key["primary_fingerprint"], directory
+        )
+        source = directory / "cxxlens-llvm.list"
+        source.write_text(
+            "deb [arch={architecture} signed-by={keyring}] {repository} "
+            "{suite} {component}\n".format(
+                architecture=llvm["architecture"],
+                keyring=KEYRING,
+                repository=llvm["repository"],
+                suite=llvm["suite"],
+                component=llvm["component"],
+            ),
+            encoding="utf-8",
+        )
+        run(["sudo", "install", "-D", "-m", "0644", str(keyring), str(KEYRING)])
+        run(["sudo", "install", "-D", "-m", "0644", str(source), str(SOURCE_LIST)])
+    run(
+        [
+            "sudo",
+            "apt-get",
+            "-o",
+            f"Dir::Etc::sourcelist={SOURCE_LIST}",
+            "-o",
+            "Dir::Etc::sourceparts=-",
+            "-o",
+            "APT::Get::List-Cleanup=0",
+            "update",
+        ]
+    )
+
 def package_cache_authority_digest(lock: dict[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(
         json.dumps(
@@ -477,8 +514,7 @@ def install(root: pathlib.Path, profile_name: str) -> None:
     signing_key = llvm["signing_key"]
     key_content = download(signing_key["url"])
     verify_bytes(key_content, signing_key["sha256"], "LLVM signing key")
-    with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-key-") as temporary:
-        verify_key(key_content, signing_key["primary_fingerprint"], pathlib.Path(temporary))
+    configure_llvm_repository(llvm, key_content)
 
     archives: dict[str, pathlib.Path] = {}
     sources: dict[str, str] = {}
@@ -500,38 +536,6 @@ def install(root: pathlib.Path, profile_name: str) -> None:
             sources[name] = "verified-cache"
 
     if missing:
-        with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-bootstrap-") as temporary:
-            directory = pathlib.Path(temporary)
-            keyring = verify_key(
-                key_content, signing_key["primary_fingerprint"], directory
-            )
-            source = directory / "cxxlens-llvm.list"
-            source.write_text(
-                "deb [arch={architecture} signed-by={keyring}] {repository} "
-                "{suite} {component}\n".format(
-                    architecture=llvm["architecture"],
-                    keyring=KEYRING,
-                    repository=llvm["repository"],
-                    suite=llvm["suite"],
-                    component=llvm["component"],
-                ),
-                encoding="utf-8",
-            )
-            run(["sudo", "install", "-D", "-m", "0644", str(keyring), str(KEYRING)])
-            run(["sudo", "install", "-D", "-m", "0644", str(source), str(SOURCE_LIST)])
-        run(
-            [
-                "sudo",
-                "apt-get",
-                "-o",
-                f"Dir::Etc::sourcelist={SOURCE_LIST}",
-                "-o",
-                "Dir::Etc::sourceparts=-",
-                "-o",
-                "APT::Get::List-Cleanup=0",
-                "update",
-            ]
-        )
         package_requests = [f"{name}={llvm['packages'][name]}" for name in missing]
         with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-packages-") as temporary:
             package_directory = pathlib.Path(temporary)

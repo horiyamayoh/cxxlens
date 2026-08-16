@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tools/ci"))
 
 from bootstrap_supply_chain import (  # noqa: E402
     SupplyChainError,
+    install,
     install_documentation,
     load_lock,
     package_cache_authority_digest,
@@ -263,6 +264,26 @@ class NgCiSupplyChainTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(SupplyChainError, "must be absolute"):
                 package_cache_directory(self.lock)
+
+    def test_cache_hit_configures_repository_before_archive_resolution(self) -> None:
+        lock = copy.deepcopy(self.lock)
+        events = mock.Mock()
+        with mock.patch("bootstrap_supply_chain.load_lock", return_value=lock), \
+             mock.patch("bootstrap_supply_chain.assert_runner"), \
+             mock.patch("bootstrap_supply_chain.download", return_value=b"verified-key"), \
+             mock.patch("bootstrap_supply_chain.verify_bytes"), \
+             mock.patch("bootstrap_supply_chain.configure_llvm_repository") as configure, \
+             mock.patch("bootstrap_supply_chain.package_cache_directory", return_value=pathlib.Path("/tmp/cache")), \
+             mock.patch("bootstrap_supply_chain.package_cache_hit_claimed", return_value=True), \
+             mock.patch("bootstrap_supply_chain.resolve_cached_archive", side_effect=RuntimeError("archive-resolution")) as resolve:
+            events.attach_mock(configure, "configure")
+            events.attach_mock(resolve, "resolve")
+            with self.assertRaisesRegex(RuntimeError, "archive-resolution"):
+                install(ROOT, "compiler")
+        self.assertEqual(
+            events.mock_calls[0],
+            mock.call.configure(lock["llvm"], b"verified-key"),
+        )
 
     def test_verified_cached_package_is_reused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
