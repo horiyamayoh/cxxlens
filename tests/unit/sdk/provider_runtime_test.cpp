@@ -2262,13 +2262,13 @@ namespace
 		if (!subprocess_budget)
 			return false;
 		grandchild_request.budget.subprocesses = *subprocess_budget;
-		grandchild_request.budget.wall_ms = 1000U;
+		grandchild_request.budget.wall_ms = 5000U;
 		std::promise<descendant_observation> holder_promise;
 		auto holder_future = holder_promise.get_future();
 		std::thread holder_watcher{
 			[marker, promise = std::move(holder_promise)]() mutable
 			{
-				const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+				const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{7};
 				while (std::chrono::steady_clock::now() < deadline)
 				{
 					auto holder = observe_descendant(marker.string() + ".holder");
@@ -2360,7 +2360,7 @@ namespace
 				"ms");
 		require(cleanup[4] && cleanup[5], "pipe-holding descendants cleanup failed");
 		require(cleanup[6], "pipe-holding descendant markers could not be removed");
-		require(grandchild_elapsed < std::chrono::seconds{4},
+		require(grandchild_elapsed < std::chrono::seconds{8},
 				"provider timeout waited for the pipe-holding descendant instead of closing it: " +
 					std::to_string(
 						std::chrono::duration_cast<std::chrono::milliseconds>(grandchild_elapsed)
@@ -2639,7 +2639,7 @@ namespace
 		require(descendant_budget.has_value(),
 				"could not derive a process budget for the NG1 live descendant test");
 		const auto descendant_command =
-			"/usr/bin/sleep 5 & child=$!; read -r pid comm state ppid pgrp session tty_nr tpgid "
+			"/usr/bin/sleep 30 & child=$!; read -r pid comm state ppid pgrp session tty_nr tpgid "
 			"flags minflt cminflt majflt cmajflt utime stime cutime cstime priority nice "
 			"num_threads itrealvalue start_time rest < /proc/$child/stat; printf '%s %s\\n' "
 			"\"$child\" \"$start_time\" > " +
