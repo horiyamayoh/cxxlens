@@ -202,7 +202,7 @@ authoritative artifact で、required #261/full gate の入力です。一方、
 non-authoritative projection です。projection job は authority に `workflow_job: agent-context-projection`、
 `non_gating: true`、`failure_policy: continue-on-error` として記録され、workflow の `continue-on-error: true`、`needs` なし、
 他 job からの依存なしを checker が検証します。したがって projection の失敗は advisory evidence として残りますが、required
-#261 lane、readiness report、release qualification、issue closure を失敗させません。artifact 名、packet schema、generator、
+`#261` lane、readiness report、release qualification、issue closure を失敗させません。artifact 名、packet schema、generator、
 consumer を分けることで、二つの generator が同じ authority を曖昧に競合しないようにしています。
 
 `check_ng_agent_context.py` が #277 non-authoritative projection の唯一の producer です。`check_ng_api_development_readiness.py`
