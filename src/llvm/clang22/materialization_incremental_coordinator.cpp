@@ -395,6 +395,8 @@ namespace cxxlens::detail::clang22::materialization
 						partition.current_state->partition_id != partition.partition_id)
 						return sdk::unexpected(
 							coordinator_error("bindings", "partition-task-mismatch"));
+					if (partition.current_state->corruption_detected)
+						return sdk::unexpected(coordinator_error("current", "corrupt-partition"));
 					if (auto valid = validate_plan_entry_binding(*plan_entry->second, partition);
 						!valid)
 						return sdk::unexpected(std::move(valid.error()));
@@ -531,6 +533,8 @@ namespace cxxlens::detail::clang22::materialization
 						partition.current_state->partition_id != partition.partition_id)
 						return sdk::unexpected(
 							coordinator_error("bindings", "partition-task-mismatch"));
+					if (partition.current_state->corruption_detected)
+						return sdk::unexpected(coordinator_error("current", "corrupt-partition"));
 					if (auto valid = validate_plan_entry_binding(*plan_entry->second, partition);
 						!valid)
 						return sdk::unexpected(std::move(valid.error()));
@@ -614,6 +618,15 @@ namespace cxxlens::detail::clang22::materialization
 				if (!artifact_digest || *artifact_digest != output.receipt.sealed_artifact_digest)
 					return sdk::unexpected(
 						coordinator_error("executor", "artifact-receipt-mismatch"));
+				if (action == sdk::incremental::action::reuse &&
+					!std::ranges::all_of(binding.partitions,
+										 [&](const auto& partition)
+										 {
+											 return partition.prior_artifact &&
+												 partition.prior_artifact->sealed_artifact_digest ==
+												 *artifact_digest;
+										 }))
+					return sdk::unexpected(coordinator_error("prior", "artifact-receipt-mismatch"));
 				auto pre_encoder = std::move(*output.receipt.pre_encoder_seal);
 				if (pre_encoder.result_artifact_digest != *artifact_digest ||
 					pre_encoder.partition_ids != output.receipt.covered_partition_ids ||

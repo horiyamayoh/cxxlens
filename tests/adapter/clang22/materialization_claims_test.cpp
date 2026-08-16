@@ -2583,13 +2583,15 @@ namespace
 	[[nodiscard]] v2_1_plan_fixture
 	make_v2_1_plan_fixture(validated_materialization_request_v2_1& request,
 						   const std::array<std::string, 2U>& artifact_digests,
-						   const bool warm_zero)
+						   const bool warm_zero,
+						   const bool corrupt_current = false)
 	{
 		auto first = incremental_state("partition:a");
 		auto second = incremental_state("partition:b");
 		auto current_first = first;
 		if (!warm_zero)
 			current_first.input.source_digest = incremental_digest('e');
+		current_first.corruption_detected = corrupt_current;
 		const std::array candidates{
 			incremental::partition_candidate{current_first, first},
 			incremental::partition_candidate{second, second},
@@ -2693,6 +2695,44 @@ namespace
 
 		{
 			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 prior-artifact binding admission failed");
+			auto authority = make_materialization_v2_1_claim_authority(
+				*accepted, v2_1_producer_authority(root), guarantee);
+			require(authority.has_value(), "v2.1 prior-artifact binding authority failed");
+			auto binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*authority);
+			require(binding_set.has_value(), "v2.1 prior-artifact binding set failed");
+			auto results = v2_1_reference_results();
+			std::array<std::string, 2U> artifact_digests;
+			for (std::size_t index{}; index < results.size(); ++index)
+			{
+				auto digest = seal_materialization_incremental_artifact_digest(results[index]);
+				require(digest.has_value(), "v2.1 prior-artifact binding digest failed");
+				artifact_digests[index] = std::move(*digest);
+			}
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false);
+			fixture.bindings[1U].partitions.front().prior_artifact->sealed_artifact_digest =
+				"semantic-v2:sha256:" + std::string(64U, 'f');
+			fixture_v2_1_executor executor{
+				*authority, *binding_set, std::move(results), v2_1_receipt_mode::valid};
+			auto outcome =
+				run_materialization_incremental_coordinator_v2_1(*accepted,
+																 fixture.plan,
+																 std::move(fixture.bindings),
+																 executor,
+																 *authority,
+																 *binding_set);
+			require(
+				!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+					outcome.error().field == "prior" &&
+					outcome.error().detail == "artifact-receipt-mismatch" &&
+					executor.execute_calls == 1U && executor.reuse_calls == 1U &&
+					executor.finalize_calls == 0U,
+				"v2.1 reuse accepted a result whose digest was not bound to the prior artifact");
+		}
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
 			require(accepted.has_value(), "v2.1 plan-state mismatch request admission failed");
 			auto authority = make_materialization_v2_1_claim_authority(
 				*accepted, v2_1_producer_authority(root), guarantee);
@@ -2726,6 +2766,70 @@ namespace
 						executor.execute_calls == 0U && executor.reuse_calls == 0U &&
 						executor.finalize_calls == 0U,
 					"v2.1 plan/state mismatch reached the executor");
+		}
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 corruption admission failed");
+			auto authority = make_materialization_v2_1_claim_authority(
+				*accepted, v2_1_producer_authority(root), guarantee);
+			require(authority.has_value(), "v2.1 corruption authority failed");
+			auto binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*authority);
+			require(binding_set.has_value(), "v2.1 corruption binding set failed");
+			auto results = v2_1_reference_results();
+			std::array<std::string, 2U> artifact_digests;
+			for (std::size_t index{}; index < results.size(); ++index)
+			{
+				auto digest = seal_materialization_incremental_artifact_digest(results[index]);
+				require(digest.has_value(), "v2.1 corruption artifact digest failed");
+				artifact_digests[index] = std::move(*digest);
+			}
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false, true);
+			fixture_v2_1_executor executor{
+				*authority, *binding_set, std::move(results), v2_1_receipt_mode::valid};
+			auto outcome =
+				run_materialization_incremental_coordinator_v2_1(*accepted,
+																 fixture.plan,
+																 std::move(fixture.bindings),
+																 executor,
+																 *authority,
+																 *binding_set);
+			require(!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+						outcome.error().field == "current" &&
+						outcome.error().detail == "corrupt-partition" &&
+						executor.execute_calls == 0U && executor.reuse_calls == 0U &&
+						executor.finalize_calls == 0U,
+					"v2.1 self-consistent corrupted state reached the executor");
+		}
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 direct cursor admission failed");
+			const std::array<std::string, 2U> artifact_digests{incremental_digest('1'),
+															   incremental_digest('2')};
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false);
+			// The invalid binding is the later task; all bindings must be checked before the
+			// cursor is allowed to hand the first task to the consumer.
+			fixture.bindings[1U].partitions.front().current_state->input.source_digest =
+				incremental_digest('e');
+			std::size_t consumer_calls{};
+			auto outcome = run_materialization_incremental_v2_1_task_cursor(
+				*accepted,
+				fixture.plan,
+				std::span<const materialization_incremental_task_binding>{fixture.bindings},
+				[&](const std::size_t,
+					const incremental::action,
+					materialization_v2_1_task_execution&,
+					const materialization_incremental_task_binding&) -> sdk::result<void>
+				{
+					++consumer_calls;
+					return {};
+				});
+			require(!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+						outcome.error().field == "bindings" &&
+						outcome.error().detail == "plan-state-mismatch" && consumer_calls == 0U,
+					"v2.1 direct cursor invoked the consumer before validating a late binding");
 		}
 
 		{
