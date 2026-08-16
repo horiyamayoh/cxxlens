@@ -4,16 +4,21 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  actions: write
+  contents: write
+
 jobs:
   apply-remediation:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
+
       - name: Detect complete staged remediation
         id: remediation
         shell: bash
@@ -27,10 +32,12 @@ jobs:
           else
             echo "present=false" >> "${GITHUB_OUTPUT}"
           fi
+
       - name: Install exact Clang 22 toolchain
         if: steps.remediation.outputs.present == 'true'
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
-      - name: Apply, format, build, and test remediation
+
+      - name: Apply, clean, format, build, and test remediation
         if: steps.remediation.outputs.present == 'true'
         env:
           CXX: clang++-22
@@ -41,8 +48,15 @@ jobs:
           git apply --check "${RUNNER_TEMP}/agent-remediation.patch"
           git apply "${RUNNER_TEMP}/agent-remediation.patch"
           python3 -c 'from pathlib import Path; p=Path("tests/unit/sdk/provider_runtime_test.cpp"); s=p.read_text(); assert s.count("fs:temp_directory_path()") == 1; p.write_text(s.replace("fs:temp_directory_path()", "fs::temp_directory_path()"))'
-          rm .github/agent-remediation.part-*
-          rm .github/workflows/agent-source-export.yml
+
+          # Restore the authoritative Quality workflow and remove every temporary
+          # remediation/export artifact before validating or publishing the branch.
+          git restore --source=origin/main -- .github/workflows/quality.yml
+          rm -f .github/agent-remediation.part-*
+          rm -f .github/workflows/agent-source-export.yml
+          rm -f .github/workflows/apply-ng1-duplex-review-fixes.yml
+          rm -f tools/agent/apply_ng1_duplex_review_fixes.py
+
           clang-format-22 -i \
             src/runtime/provider_process_adapter.cpp \
             tests/fixtures/provider_process_fixture.cpp \
@@ -61,17 +75,16 @@ jobs:
           ctest --test-dir build/agent-remediation \
             --tests-regex '^unit.sdk-provider-runtime$' \
             --output-on-failure
-          git diff --binary > "${RUNNER_TEMP}/validated-remediation.patch"
-      - name: Preserve exact validated remediation
+          cmake --build build/agent-remediation --target cxxlens-quality
+
+      - name: Commit exact validated remediation
         if: steps.remediation.outputs.present == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
-        with:
-          name: cxxlens-agent-remediation-${{ github.sha }}
-          path: |
-            .github/workflows/quality.yml
-            src/runtime/provider_process_adapter.cpp
-            tests/fixtures/provider_process_fixture.cpp
-            tests/unit/sdk/provider_runtime_test.cpp
-            ${{ runner.temp }}/validated-remediation.patch
-          if-no-files-found: error
-          retention-days: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Fix NG1 duplex process review findings"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
