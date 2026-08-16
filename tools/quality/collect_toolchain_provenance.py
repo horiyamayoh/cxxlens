@@ -120,6 +120,9 @@ def python_distributions(path: pathlib.Path) -> list[dict[str, str]]:
 
 def pinned_actions(root: pathlib.Path) -> list[dict[str, str]]:
     actions: list[dict[str, str]] = []
+    local_reusable_workflows = {
+        pathlib.Path(".github/workflows/nightly.yml")
+    }
     for workflow in sorted((root / ".github/workflows").glob("*.yml")):
         for line in workflow.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
@@ -130,6 +133,16 @@ def pinned_actions(root: pathlib.Path) -> list[dict[str, str]]:
             else:
                 continue
             reference = reference.split("#", 1)[0].rstrip()
+            if reference.startswith("./.github/workflows/"):
+                local_workflow = pathlib.Path(reference[2:])
+                if (
+                    local_workflow not in local_reusable_workflows
+                    or not (root / local_workflow).is_file()
+                ):
+                    raise ValueError(
+                        f"unknown local reusable workflow: {workflow}: {reference}"
+                    )
+                continue
             name, separator, revision = reference.partition("@")
             if not separator or len(revision) != 40 or any(
                 character not in "0123456789abcdef" for character in revision

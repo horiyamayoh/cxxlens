@@ -100,6 +100,28 @@ class NgCiSupplyChainTest(unittest.TestCase):
                 with self.assertRaisesRegex(CiSupplyChainError, "action differs"):
                     validate_workflow(workflow, self.lock)
 
+    def test_known_local_reusable_workflow_is_not_an_external_action(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workflow = pathlib.Path(temporary) / "workflow.yml"
+            workflow.write_text(
+                "jobs:\n  check:\n    runs-on: ubuntu-24.04\n"
+                "    uses: ./.github/workflows/nightly.yml\n",
+                encoding="utf-8",
+            )
+            validate_workflow(workflow, self.lock)
+
+    def test_unknown_local_reusable_workflow_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workflow = pathlib.Path(temporary) / "workflow.yml"
+            workflow.write_text(
+                "jobs:\n  check:\n    uses: ./.github/workflows/unknown.yml\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                CiSupplyChainError, "unknown local reusable workflow"
+            ):
+                validate_workflow(workflow, self.lock)
+
     def test_remote_root_script_bootstrap_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workflow = pathlib.Path(temporary) / "workflow.yml"

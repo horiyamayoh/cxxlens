@@ -26,6 +26,9 @@ WORKFLOWS = (
     pathlib.Path(".github/workflows/quality.yml"),
     pathlib.Path(".github/workflows/nightly.yml"),
 )
+LOCAL_REUSABLE_WORKFLOWS = frozenset(
+    {pathlib.Path(".github/workflows/nightly.yml")}
+)
 REQUIREMENT = re.compile(
     r"^([A-Za-z0-9_.-]+)==([^\s]+)\s+--hash=sha256:([0-9a-f]{64})$"
 )
@@ -108,6 +111,13 @@ def validate_workflow(path: pathlib.Path, lock: dict[str, Any]) -> None:
         if stripped.startswith("- uses:") or stripped.startswith("uses:"):
             reference = stripped.removeprefix("-").strip().removeprefix("uses:")
             reference = reference.split("#", 1)[0].strip()
+            if reference.startswith("./.github/workflows/"):
+                local_workflow = pathlib.Path(reference[2:])
+                if local_workflow not in LOCAL_REUSABLE_WORKFLOWS:
+                    raise CiSupplyChainError(
+                        f"unknown local reusable workflow: {path}: {reference}"
+                    )
+                continue
             name, separator, revision = reference.partition("@")
             if not separator or expected_actions.get(name) != revision:
                 raise CiSupplyChainError(f"workflow action differs from lock: {path}: {reference}")
@@ -164,7 +174,7 @@ def validate_repository(root: pathlib.Path) -> None:
         (root / workflow).read_text(encoding="utf-8") for workflow in WORKFLOWS
     )
     expected_profiles = {
-        "--profile developer": 9,
+        "--profile developer": 10,
         "--profile compiler": 0,
         "--profile static-analysis": 1,
         "--profile documentation": 1,
@@ -174,7 +184,7 @@ def validate_repository(root: pathlib.Path) -> None:
             raise CiSupplyChainError(
                 f"workflow bootstrap profile count differs: {marker}: expected {expected}"
             )
-    if workflow_text.count("collect_toolchain_provenance.py") < 8:
+    if workflow_text.count("collect_toolchain_provenance.py") < 10:
         raise CiSupplyChainError("toolchain provenance is not collected by all evidence jobs")
     collector = (root / "tools/quality/collect_toolchain_provenance.py").read_text(
         encoding="utf-8"
