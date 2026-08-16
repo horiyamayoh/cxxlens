@@ -124,6 +124,12 @@ namespace cxxlens::detail::clang22::materialization
 			return materialization_request_id_;
 		}
 
+		/** Return the exact task census sealed into this source's request authority. */
+		[[nodiscard]] std::uint64_t task_count() const noexcept
+		{
+			return expected_task_count_;
+		}
+
 		[[nodiscard]] std::size_t partition_count() const noexcept
 		{
 			return partitions_.size();
@@ -132,6 +138,20 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] bool sealed() const noexcept
 		{
 			return sealed_;
+		}
+
+		/** Exact installed publication remains closed while any partial guarantee is retained. */
+		[[nodiscard]] bool exact_publication_ready() const noexcept
+		{
+			if (!sealed_ || failed_)
+				return false;
+			for (const auto& [partition_id, state] : partitions_)
+			{
+				(void)partition_id;
+				if (state.identity.precision_profile != "exact" || !state.unresolved.empty())
+					return false;
+			}
+			return true;
 		}
 
 	  private:
