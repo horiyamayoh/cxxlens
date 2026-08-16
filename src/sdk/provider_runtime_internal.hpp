@@ -168,6 +168,18 @@ namespace cxxlens::sdk::provider::detail
 		}
 	};
 
+	/**
+	 * Validate the source-private handoff from an accepted process task to materialization.
+	 *
+	 * The validator binds the selected provider, task/input digests, sealed input, and runtime
+	 * receipt before a caller may adopt the sealed provider transcript.  It does not derive or
+	 * accept a provider-execution identity; that identity remains owned by materialization
+	 * admission.
+	 */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<void>
+	validate_provider_process_runtime_binding(const provider_process_validation_outcome& outcome,
+											  const process_task_request& request);
+
 	/** Launch once and share the exact typed validation pass with the public process runtime. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<provider_process_validation_outcome>
 	execute_provider_process(const provider_process_port& processes,
