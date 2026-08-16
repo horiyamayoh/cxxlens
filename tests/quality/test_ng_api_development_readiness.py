@@ -44,6 +44,13 @@ _baseline = _load_baseline_tests()
 class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
     """Retain the complete previous corpus and replace only superseded CI tests."""
 
+    def copied_root(self, temporary: str) -> pathlib.Path:
+        root = super().copied_root(temporary)
+        destination = root / readiness.BUILD_TEST_GUIDE_PATH
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / readiness.BUILD_TEST_GUIDE_PATH, destination)
+        return root
+
     def complete_evidence(
         self, evidence_dir: pathlib.Path, git_state: dict[str, object]
     ) -> pathlib.Path:
@@ -220,6 +227,24 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             "sqlite-store-v3-qualification",
             quality["jobs"]["check-tier"]["needs"],
         )
+
+    def test_required_status_documentation_is_bound_to_readiness(self) -> None:
+        document = (ROOT / readiness.BUILD_TEST_GUIDE_PATH).read_text(encoding="utf-8")
+        self.assertIn("`check-tier`", document)
+
+    def test_required_status_documentation_cannot_omit_check_tier(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / readiness.BUILD_TEST_GUIDE_PATH
+            text = path.read_text(encoding="utf-8")
+            path.write_text(text.replace("、`check-tier`", "", 1), encoding="utf-8")
+            with self.assertRaisesRegex(
+                readiness.ReadinessError,
+                "required status checks differ from readiness authority",
+            ):
+                readiness.validate_documents(root)
 
     def test_public_callable_workflow_requires_parent_history(self) -> None:
         import tempfile
