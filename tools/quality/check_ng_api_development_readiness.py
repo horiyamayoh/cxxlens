@@ -13,12 +13,9 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
-import importlib.util
 import json
 import pathlib
 import re
-import shutil
-import subprocess
 import sys
 import tempfile
 import types
@@ -28,8 +25,10 @@ import yaml
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-BASELINE_REVISION = "c4b8c9df6f7fa53656c39447b191ba723ebe2040"
-BASELINE_PATH = "tools/quality/check_ng_api_development_readiness.py"
+BASELINE_PATH = pathlib.Path(
+    "tools/quality/check_ng_api_development_readiness_wave0_baseline.py"
+)
+BASELINE_DIGEST = "sha256:4e81eff25e898794381624a82d9d3c06ef9d219ddcb32de3721cd2b56f32089f"
 MANIFEST_PATH = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
 QUALITY_PATH = pathlib.Path(".github/workflows/quality.yml")
 NIGHTLY_PATH = pathlib.Path(".github/workflows/nightly.yml")
@@ -68,21 +67,20 @@ class AccelerationError(ValueError):
 
 
 def _load_baseline() -> types.ModuleType:
-    completed = subprocess.run(
-        ["git", "-C", str(ROOT), "show", f"{BASELINE_REVISION}:{BASELINE_PATH}"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
+    baseline_path = ROOT / BASELINE_PATH
+    if not baseline_path.is_file():
         raise RuntimeError(
-            "the frozen readiness baseline is unavailable; use a full-history "
-            f"checkout containing {BASELINE_REVISION}: {completed.stderr.strip()}"
+            "the tracked frozen readiness baseline is unavailable: "
+            f"{BASELINE_PATH.as_posix()}"
         )
+    baseline_source = baseline_path.read_bytes()
+    actual_digest = "sha256:" + hashlib.sha256(baseline_source).hexdigest()
+    if actual_digest != BASELINE_DIGEST:
+        raise RuntimeError("the tracked frozen readiness baseline digest differs")
     module = types.ModuleType("_cxxlens_wave0_readiness_baseline")
-    module.__file__ = str(ROOT / BASELINE_PATH)
+    module.__file__ = str(baseline_path)
     module.__package__ = None
-    exec(compile(completed.stdout, module.__file__, "exec"), module.__dict__)
+    exec(compile(baseline_source.decode("utf-8"), module.__file__, "exec"), module.__dict__)
     return module
 
 
@@ -403,6 +401,11 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         "quality-evidence",
     ]:
         _fail("check tier evidence closure differs")
+    required_contexts = manifest.get("required_status_checks", {}).get("contexts")
+    if not isinstance(required_contexts, list) or "check-tier" not in required_contexts:
+        _fail("check tier must be a required pull-request status context")
+    if "sqlite-store-v3-qualification" not in check["needs"]:
+        _fail("required check tier must depend on sqlite qualification")
     full = _job(quality, "full-tier")
     main_condition = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     if _normalized_condition(full.get("if")) != main_condition:
@@ -486,7 +489,13 @@ def _legacy_projection(root: pathlib.Path, manifest: dict[str, Any]) -> None:
         (projected / QUALITY_PATH).parent.mkdir(parents=True, exist_ok=True)
         (projected / QUALITY_PATH).write_text(quality, encoding="utf-8")
         (projected / NIGHTLY_PATH).write_text(nightly, encoding="utf-8")
-        _baseline_validate_workflow(projected, manifest)
+        legacy_manifest = copy.deepcopy(manifest)
+        legacy_manifest["required_status_checks"]["contexts"] = [
+            context
+            for context in legacy_manifest["required_status_checks"]["contexts"]
+            if context != "check-tier"
+        ]
+        _baseline_validate_workflow(projected, legacy_manifest)
 
 
 def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
@@ -573,28 +582,61 @@ def render_agent_context_markdown(packet: dict[str, Any]) -> str:
     )
     reads = "\n".join(f"- `{value}`" for value in packet["authority_reading_set"])
     writes = "\n".join(f"- `{value}`" for value in packet["allowed_write_paths"])
+    contracts = "\n".join(f"- `{value}`" for value in packet["exact_contract_ids"])
+    feedback = "\n".join(f"- `{value}`" for value in packet["known_design_feedback"])
+    shortcuts = "\n".join(f"- `{value}`" for value in packet["forbidden_shortcuts"])
     commands = "\n".join(f"- `{value}`" for value in packet["completion_commands"])
+    expected_states = ", ".join(f"`{value}`" for value in packet["expected_result_states"])
+    constructibility = json.dumps(
+        packet["constructibility"], ensure_ascii=False, sort_keys=True, indent=2
+    )
+    binding = json.dumps(packet["binding"], ensure_ascii=False, sort_keys=True, indent=2)
+    complete_packet = json.dumps(packet, ensure_ascii=False, sort_keys=True, indent=2)
     return (
         "# cxxlens issue #261 agent context\n\n"
+        f"- Schema: `{packet['schema']}`\n"
         f"- Packet: `{packet['packet_id']}`\n"
+        f"- Issue: `{packet['issue']}`\n"
         f"- Use case: `{packet['use_case_id']}`\n"
+        f"- Consumer: `{packet['consumer']}`\n"
+        f"- Goal: `{packet['goal']}`\n"
+        f"- Expected result states: {expected_states}\n"
         f"- Revision: `{packet['binding']['revision']}`\n"
         f"- Tree: `{packet['binding']['tree']}`\n"
         f"- Authority digest: `{packet['binding']['authority_projection_digest']}`\n"
         f"- Packet digest: `{packet['canonical_digest']}`\n"
-        f"- Disposition: **blocked** (`{packet['blocked_reason']}`)\n\n"
+        f"- Blocked reason: `{packet['blocked_reason']}`\n\n"
         "## Capability path\n\n"
         f"`{path}`\n\n"
+        "## Exact contract IDs\n\n"
+        f"{contracts}\n\n"
         "## Minimum authority reading set\n\n"
         f"{reads}\n\n"
         "## Allowed write paths\n\n"
         f"{writes}\n\n"
         "## Required evidence\n\n"
         f"{evidence}\n\n"
+        "## Known design feedback\n\n"
+        f"{feedback}\n\n"
+        "## Constructibility\n\n"
+        "```json\n"
+        f"{constructibility}\n"
+        "```\n\n"
+        "## Forbidden shortcuts\n\n"
+        f"{shortcuts}\n\n"
         "## Completion plan\n\n"
         f"{plan}\n\n"
         "## Completion commands\n\n"
-        f"{commands}\n"
+        f"{commands}\n\n"
+        "## Exact binding\n\n"
+        "```json\n"
+        f"{binding}\n"
+        "```\n\n"
+        "## Complete packet fields\n\n"
+        "The following canonical JSON block mirrors every field in the paired packet.\n\n"
+        "```json\n"
+        f"{complete_packet}\n"
+        "```\n"
     )
 
 
@@ -689,9 +731,14 @@ def _plan(arguments: list[str]) -> int:
 
 
 # Make the frozen baseline's internal global lookups use the composed contracts.
+def _current_git_state_for_baseline(root: pathlib.Path) -> dict[str, Any]:
+    return current_git_state(root)
+
+
 _baseline.validate_workflow = validate_workflow
 _baseline.validate_documents = validate_documents
 _baseline.build_report = build_report
+_baseline.current_git_state = _current_git_state_for_baseline
 
 
 def main() -> int:
