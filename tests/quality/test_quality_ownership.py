@@ -159,6 +159,30 @@ class QualityOwnershipTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "not pinned"):
                 pinned_actions(root)
 
+    def test_tracked_reusable_workflow_is_not_external_action(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "quality.yml").write_text(
+                "jobs:\n  nightly:\n    uses: ./.github/workflows/nightly.yml\n",
+                encoding="utf-8",
+            )
+            (workflows / "nightly.yml").write_text("name: nightly\n", encoding="utf-8")
+            self.assertEqual(pinned_actions(root), [])
+
+    def test_unavailable_reusable_workflow_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "quality.yml").write_text(
+                "jobs:\n  nightly:\n    uses: ./.github/workflows/missing.yml\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "not a tracked workflow"):
+                pinned_actions(root)
+
     def test_install_artifact_binding_and_file_swap_are_fail_closed(self) -> None:
         compiler = pathlib.Path(shutil.which("c++") or "")
         with tempfile.TemporaryDirectory() as temporary:

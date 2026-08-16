@@ -38,6 +38,21 @@ class NgCiSupplyChainTest(unittest.TestCase):
     def test_repository_contract_and_workflows_are_valid(self) -> None:
         validate_repository(ROOT)
 
+    def test_tracked_reusable_workflow_is_repository_scoped(self) -> None:
+        validate_workflow(ROOT / ".github/workflows/quality.yml", self.lock)
+
+    def test_unavailable_reusable_workflow_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text(
+                "jobs:\n  check:\n    uses: ./.github/workflows/missing.yml\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(CiSupplyChainError, "unavailable"):
+                validate_workflow(workflow, self.lock)
+
     def test_checksum_mismatch_is_rejected_before_effect(self) -> None:
         with self.assertRaisesRegex(SupplyChainError, "checksum mismatch"):
             verify_bytes(b"substituted", "0" * 64, "fixture")

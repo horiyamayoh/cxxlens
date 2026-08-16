@@ -130,6 +130,18 @@ def pinned_actions(root: pathlib.Path) -> list[dict[str, str]]:
             else:
                 continue
             reference = reference.split("#", 1)[0].rstrip()
+            if reference.startswith("./"):
+                local_reference = pathlib.PurePosixPath(reference[2:])
+                if (
+                    not reference.startswith("./.github/workflows/")
+                    or local_reference.is_absolute()
+                    or ".." in local_reference.parts
+                    or not (root / local_reference).is_file()
+                ):
+                    raise ValueError(
+                        f"local workflow reference is not a tracked workflow: {workflow}: {reference}"
+                    )
+                continue
             name, separator, revision = reference.partition("@")
             if not separator or len(revision) != 40 or any(
                 character not in "0123456789abcdef" for character in revision

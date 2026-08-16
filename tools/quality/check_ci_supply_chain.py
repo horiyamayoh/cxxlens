@@ -108,6 +108,22 @@ def validate_workflow(path: pathlib.Path, lock: dict[str, Any]) -> None:
         if stripped.startswith("- uses:") or stripped.startswith("uses:"):
             reference = stripped.removeprefix("-").strip().removeprefix("uses:")
             reference = reference.split("#", 1)[0].strip()
+            if reference.startswith("./"):
+                local_reference = pathlib.PurePosixPath(reference[2:])
+                if (
+                    not reference.startswith("./.github/workflows/")
+                    or local_reference.is_absolute()
+                    or ".." in local_reference.parts
+                ):
+                    raise CiSupplyChainError(
+                        f"local workflow reference is not repository-scoped: {path}: {reference}"
+                    )
+                repository_root = path.parents[2]
+                if not (repository_root / local_reference).is_file():
+                    raise CiSupplyChainError(
+                        f"local workflow reference is unavailable: {path}: {reference}"
+                    )
+                continue
             name, separator, revision = reference.partition("@")
             if not separator or expected_actions.get(name) != revision:
                 raise CiSupplyChainError(f"workflow action differs from lock: {path}: {reference}")
@@ -164,7 +180,7 @@ def validate_repository(root: pathlib.Path) -> None:
         (root / workflow).read_text(encoding="utf-8") for workflow in WORKFLOWS
     )
     expected_profiles = {
-        "--profile developer": 9,
+        "--profile developer": 10,
         "--profile compiler": 0,
         "--profile static-analysis": 1,
         "--profile documentation": 1,
