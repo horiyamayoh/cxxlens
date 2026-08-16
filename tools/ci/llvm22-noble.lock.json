@@ -73,7 +73,7 @@
     "suite": "llvm-toolchain-noble-22"
   },
   "local_actions": {
-    ".github/actions/setup-ci/action.yml": "2c6b3a845e31639e7bcfc2070eb8e97f7d4159dba93ed3166d10f41cfe622a43"
+    ".github/actions/setup-ci/action.yml": "8b67575b14cf4126c631ea86785479222d127d02dcf4a6ebe08be977b40f4298"
   },
   "local_workflows": {
     ".github/workflows/nightly.yml": "09a19395896317772ff5662bd38f0e195c28898689eac7c3424d9d2d4606ae06"
@@ -82,12 +82,17 @@
     "correctness_role": "transport-optimization-only",
     "directory": "~/.cache/cxxlens/packages",
     "environment": "CXXLENS_PACKAGE_CACHE",
+    "documentation_environment": "CXXLENS_PACKAGE_CACHE_DOCUMENTATION",
     "hit_environment": "CXXLENS_PACKAGE_CACHE_HIT",
     "key_environment": "CXXLENS_PACKAGE_CACHE_KEY",
-    "key_template": "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-${profile}-${documentation}-${lock_digest}",
+    "key_template": "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-${profile}-${documentation}-${lock_hash_files_digest}",
     "key_version": "v1",
+    "profile_environment": "CXXLENS_PACKAGE_CACHE_PROFILE",
     "receipt_environment": "CXXLENS_PACKAGE_CACHE_RECEIPT",
+    "receipt_schema": "cxxlens.ci-package-cache-receipt.v2",
     "restore_keys": false,
+    "runner_arch_environment": "CXXLENS_PACKAGE_CACHE_RUNNER_ARCH",
+    "runner_os_environment": "CXXLENS_PACKAGE_CACHE_RUNNER_OS",
     "scope": "exact-downloaded-debs-only"
   },
   "python": {
@@ -100,6 +105,7 @@
   "runner": {
     "architecture": "X64",
     "label": "ubuntu-24.04",
+    "os": "Linux",
     "provenance_environment": [
       "ImageOS",
       "ImageVersion",
