@@ -2116,6 +2116,13 @@ int main(const int argc, char**)
 		postpublication_exception_error.code = "materialization.report-invalid";
 		postpublication_exception_error.field = "postpublication";
 		postpublication_exception_error.detail = "exception";
+		const auto reserved_report_bytes = prepublication->reserved_bytes;
+		if (auto consumed = prepublication->consume_reserved_capacity(reserved_report_bytes);
+			!consumed)
+			return emit_typed_failure(std::move(*journal),
+									  "materialization.report-invalid",
+									  request_subject,
+									  consumed.error());
 	}
 	catch (const std::bad_alloc&)
 	{
