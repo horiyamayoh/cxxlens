@@ -81,4 +81,4 @@ runs:
     - name: Install exact Python quality dependencies
       if: ${{ inputs.python-dependencies == 'true' }}
       shell: bash
-      run: python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock
+      run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
