@@ -70,6 +70,12 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
 		begin(const validated_materialization_request& request);
 
+		/** Begin from already validated exact request identity and task census. */
+		[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
+		begin(std::string materialization_request_id,
+			  const sdk::relation_engine& engine,
+			  std::uint64_t expected_task_count);
+
 		/** Begin a bounded source using v2.1 request authority without a legacy task vector. */
 		[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
 		begin(const materialization_v2_1_claim_authority& authority);

@@ -1,3 +1,4 @@
+#include "llvm/clang22/materialization_bounded_claim_source.hpp"
 #include "llvm/clang22/materialization_store.hpp"
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <span>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -68,6 +70,252 @@ namespace
 		auto built = registry.build("engine-materialization-store-test");
 		require(built.has_value(), "test relation engine build failed");
 		return std::move(*built);
+	}
+
+
+	[[nodiscard]] sdk::relation_descriptor soft_target_descriptor()
+	{
+		sdk::relation_descriptor value;
+		value.id = "company.test.target.v1";
+		value.name = "company.test.target";
+		value.version = {1U, 0U, 0U};
+		value.semantic_major = 1U;
+		value.semantics = "company.test.target/1";
+		value.owner_namespace = "company.test";
+		value.columns = {
+			{"company.test.target.v1.key",
+			 "key",
+			 {sdk::scalar_kind::typed_id, "company_target_id", false},
+			 true,
+			 sdk::column_role::claim_key},
+		};
+		value.key_columns = {"company.test.target.v1.key"};
+		value.merge = sdk::merge_mode::set;
+		value.descriptor_digest =
+			*sdk::semantic_digest("cxxlens.relation-descriptor-binding.v2",
+								  value.contract_digest + "\n" + value.canonical_form());
+		return value;
+	}
+
+	[[nodiscard]] sdk::relation_descriptor soft_source_descriptor()
+	{
+		const auto target = soft_target_descriptor();
+		sdk::relation_descriptor value;
+		value.id = "company.test.source.v1";
+		value.name = "company.test.source";
+		value.version = {1U, 0U, 0U};
+		value.semantic_major = 1U;
+		value.semantics = "company.test.source/1";
+		value.owner_namespace = "company.test";
+		value.columns = {
+			{"company.test.source.v1.key",
+			 "key",
+			 {sdk::scalar_kind::typed_id, "company_source_id", false},
+			 true,
+			 sdk::column_role::claim_key},
+			{"company.test.source.v1.target",
+			 "target",
+			 {sdk::scalar_kind::typed_id, "company_target_id", false},
+			 true,
+			 sdk::column_role::authoritative_payload},
+		};
+		value.key_columns = {"company.test.source.v1.key"};
+		value.references = {{
+			{"company.test.source.v1.target"},
+			target.name,
+			{"company.test.target.v1.key"},
+			sdk::reference_strength::soft_semantic,
+			false,
+		}};
+		value.merge = sdk::merge_mode::set;
+		value.descriptor_digest =
+			*sdk::semantic_digest("cxxlens.relation-descriptor-binding.v2",
+								  value.contract_digest + "\n" + value.canonical_form());
+		return value;
+	}
+
+	[[nodiscard]] sdk::relation_engine soft_reference_engine()
+	{
+		sdk::relation_registry registry;
+		require(registry.add(soft_target_descriptor()).has_value(),
+				"soft target descriptor registration failed");
+		require(registry.add(soft_source_descriptor()).has_value(),
+				"soft source descriptor registration failed");
+		auto built = registry.build("engine-materialization-soft-unresolved-test");
+		require(built.has_value(), "soft-reference relation engine build failed");
+		return std::move(*built);
+	}
+
+	[[nodiscard]] sdk::detached_row soft_target_row(std::string key)
+	{
+		const auto relation = soft_target_descriptor();
+		sdk::row_builder builder{relation};
+		require(builder
+					.set({relation.id, relation.columns[0U].id, relation.columns[0U].type},
+						 sdk::detached_cell::typed("company_target_id", std::move(key)))
+					.has_value(),
+				"soft target row key rejected");
+		auto finished = std::move(builder).finish();
+		require(finished.has_value(), "soft target row did not finish");
+		return std::move(*finished);
+	}
+
+	[[nodiscard]] sdk::detached_row
+	soft_source_row(std::string key, std::string target)
+	{
+		const auto relation = soft_source_descriptor();
+		sdk::row_builder builder{relation};
+		require(builder
+					.set({relation.id, relation.columns[0U].id, relation.columns[0U].type},
+						 sdk::detached_cell::typed("company_source_id", std::move(key)))
+					.has_value(),
+				"soft source row key rejected");
+		require(builder
+					.set({relation.id, relation.columns[1U].id, relation.columns[1U].type},
+						 sdk::detached_cell::typed("company_target_id", std::move(target)))
+					.has_value(),
+				"soft source row target rejected");
+		auto finished = std::move(builder).finish();
+		require(finished.has_value(), "soft source row did not finish");
+		return std::move(*finished);
+	}
+
+	[[nodiscard]] sdk::claim soft_claim(const sdk::relation_engine& value,
+										sdk::detached_row row_value,
+										std::string provenance)
+	{
+		constexpr std::string_view producer_digest =
+			"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+		sdk::observation observation{
+			std::move(row_value),
+			{"universe-materialization-soft-unresolved", {"all"}},
+			"company.test.canonical-1",
+			{"company.test.provider", std::string{producer_digest}},
+			{"sha256:9999999999999999999999999999999999999999999999999999999999999999"},
+			std::move(provenance),
+			{"exact", "partition", "assumptions:none", {"schema_validated"}},
+		};
+		auto claim = sdk::make_assertion(value, std::move(observation));
+		require(claim.has_value(), "soft-reference test claim rejected");
+		return std::move(*claim);
+	}
+
+	[[nodiscard]] std::vector<sdk::unresolved_reference>
+	soft_unresolved_for(const sdk::relation_engine& value, const sdk::claim& claim)
+	{
+		sdk::claim_batch batch;
+		require(batch.add(claim).has_value(), "soft-reference claim batch add failed");
+		auto committed = std::move(batch).commit(value);
+		require(committed.has_value() && committed->claims.size() == 1U &&
+					committed->unresolved.size() == 1U &&
+					committed->unresolved.front().reason == "soft-reference-missing",
+				"SDK reference authority did not produce one soft unresolved");
+		return committed->unresolved;
+	}
+
+	[[nodiscard]] std::string stored_claim_ref(const sdk::claim& claim)
+	{
+		auto singleton = sdk::claim_batch_content_digest(
+			std::span<const sdk::claim>{&claim, 1U}, {}, {}, {});
+		require(singleton.has_value(), "soft-reference singleton digest failed");
+		const std::array fields{
+			sdk::canonical_value::from_string("stored_final"),
+			sdk::canonical_value::from_string(*singleton),
+		};
+		auto reference =
+			sdk::canonical_identity_digest("materialization-claim-envelope", fields);
+		require(reference.has_value(), "soft-reference claim ref failed");
+		return std::move(*reference);
+	}
+
+	[[nodiscard]] materialization_bounded_task_claims
+	soft_bounded_task(const sdk::relation_engine& value,
+					  sdk::claim claim,
+					  std::vector<sdk::unresolved_reference> unresolved,
+					  const std::string& suffix)
+	{
+		auto claim_ref = stored_claim_ref(claim);
+		auto singleton = sdk::claim_batch_content_digest(
+			std::span<const sdk::claim>{&claim, 1U}, {}, {}, {});
+		require(singleton.has_value(), "soft-reference singleton digest failed");
+		auto basis = sdk::claim_input_basis_digest(claim.input_basis);
+		require(basis.has_value(), "soft-reference input basis digest failed");
+
+		sdk::partition_draft draft;
+		draft.relation_descriptor_id = claim.descriptor;
+		draft.scope = claim.guarantee.scope;
+		draft.condition = claim.presence;
+		draft.interpretation = claim.interpretation;
+		draft.producer_semantics = claim.producer.semantic_contract;
+		draft.producer_input_basis_digest = std::move(*basis);
+		draft.precision_profile = claim.guarantee.approximation;
+		draft.assumption_set_id = claim.guarantee.assumptions;
+		draft.claims = {claim};
+		draft.coverage = {{"materialization.task", "task:" + suffix, "covered", ""}};
+		draft.unresolved = std::move(unresolved);
+		auto manifest = sdk::make_partition_manifest(value, draft);
+		require(manifest.has_value(), "soft-reference partition manifest failed");
+		const sdk::snapshot_partition_binding binding{
+			manifest->partition_id,
+			draft.relation_descriptor_id,
+			draft.scope,
+			draft.condition,
+			draft.interpretation,
+			draft.producer_semantics,
+			draft.producer_input_basis_digest,
+			draft.precision_profile,
+			draft.assumption_set_id,
+		};
+		materialization_claim_envelope envelope{
+			"stored_final",
+			"row:" + suffix,
+			claim_ref,
+			std::move(*singleton),
+			claim,
+		};
+		materialization_origin_association association{
+			"association:" + suffix,
+			claim_ref,
+			{"provider-task:" + suffix,
+			 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+			 "catalog-unit:" + suffix,
+			 "compile-unit:" + suffix,
+			 "universe-materialization-soft-unresolved",
+			 "all",
+			 "company.test.canonical-1"},
+			claim.content,
+			std::nullopt,
+		};
+		materialization_claim_partition partition{
+			std::move(draft),
+			std::move(*manifest),
+			binding,
+			{claim_ref},
+			{claim.content},
+			1U,
+			1U,
+			false,
+		};
+		return {
+			"sha256:2222222222222222222222222222222222222222222222222222222222222222",
+			"sha256:3333333333333333333333333333333333333333333333333333333333333333",
+			"sha256:4444444444444444444444444444444444444444444444444444444444444444",
+			"sha256:5555555555555555555555555555555555555555555555555555555555555555",
+			"assumptions:none",
+			{std::move(envelope)},
+			{},
+			{std::move(association)},
+			{std::move(partition)},
+		};
+	}
+
+	[[nodiscard]] materialization_bounded_claim_source
+	begin_soft_source(const sdk::relation_engine& value, const std::uint64_t task_count)
+	{
+		auto source = materialization_bounded_claim_source::begin(
+			"materialization-request:soft-unresolved", value, task_count);
+		require(source.has_value(), "soft-reference bounded source begin failed");
+		return std::move(*source);
 	}
 
 	[[nodiscard]] sdk::snapshot_series_selector selector(const sdk::relation_engine& value)
@@ -647,6 +895,204 @@ namespace
 				"streaming Store changed the exact publication or manifest identity");
 	}
 
+
+	void bounded_soft_unresolved_is_published_losslessly()
+	{
+		const auto value = soft_reference_engine();
+		const auto source_claim = soft_claim(
+			value,
+			soft_source_row("source:one", "target:missing"),
+			"evidence:soft-source");
+		const auto unresolved = soft_unresolved_for(value, source_claim);
+		auto source = begin_soft_source(value, 1U);
+		require(source
+					.consume_task(soft_bounded_task(
+						value, source_claim, unresolved, "source-only"))
+					.has_value(),
+				"soft unresolved task was rejected by bounded source");
+		auto sealed = std::move(source).finalize();
+		require(sealed.has_value(), "soft unresolved bounded source did not seal");
+		auto replay_source = std::move(*sealed);
+
+		auto status = replay_source.claim_batch_status();
+		require(status.has_value() && !status->content_digest.empty() &&
+					status->claim_count == 1U && status->unresolved_count == 1U &&
+					status->conflict_count == 0U &&
+					status->differential_disagreement_count == 0U,
+				"soft unresolved claim-batch status was not canonical");
+		auto expected_digest = sdk::claim_batch_content_digest(
+			std::span<const sdk::claim>{&source_claim, 1U}, unresolved, {}, {});
+		require(expected_digest.has_value() &&
+					status->content_digest == *expected_digest,
+				"bounded soft unresolved digest differs from SDK authority");
+
+		std::vector<sdk::partition_draft> replayed;
+		require(replay_source
+					.replay([&](sdk::partition_draft draft) -> sdk::result<void>
+							{
+								replayed.push_back(std::move(draft));
+								return {};
+							})
+					.has_value(),
+				"soft unresolved partition replay failed");
+		require(replayed.size() == 1U && replayed.front().claims.size() == 1U &&
+					replayed.front().unresolved == unresolved,
+				"soft unresolved partition lost source claim or typed unresolved");
+		auto manifest = sdk::make_partition_manifest(value, replayed.front());
+		require(manifest.has_value() && !manifest->complete,
+				"soft unresolved partition was falsely marked complete");
+
+		const auto selector_value = selector(value);
+		const auto memory_request =
+			publication_request(selector_value, "memory", std::nullopt);
+		streaming_prepared_store_transaction memory_plan{
+			{memory_request.selector,
+			 {1U, 0U, 0U},
+			 "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+			 memory_request.expected_parent_publication},
+			{},
+			{}};
+		auto memory = execute_materialization_store_streaming(
+			value, memory_request, std::move(memory_plan), replay_source);
+		require(!memory.first_issue && memory.publish_returned_record &&
+					memory.publish_returned_handle && memory.verification_store,
+				"memory Store rejected a valid soft unresolved publication");
+		require(memory.publish_returned_handle->unresolved_items() == unresolved,
+				"memory Store lost the typed unresolved record");
+		auto source_relation = value.require_id(soft_source_descriptor().id);
+		require(source_relation.has_value(), "soft source relation lookup failed");
+		auto rows = memory.publish_returned_handle->open(*source_relation);
+		require(rows.has_value(), "soft source row query was unavailable");
+		auto first = rows->next();
+		require(first && first->has_value(),
+				"soft unresolved source row was discarded");
+		auto end = rows->next();
+		require(end && !*end, "soft unresolved source row query was not finite");
+		auto memory_export = memory.verification_store->canonical_export(
+			memory.publish_returned_record->snapshot_id);
+		require(memory_export.has_value(), "memory soft unresolved export failed");
+
+		temporary_working_directory working_directory;
+		const auto sqlite_request = publication_request(
+			selector_value, "sqlite", std::nullopt, "soft-unresolved.sqlite");
+		streaming_prepared_store_transaction sqlite_plan{
+			{sqlite_request.selector,
+			 {1U, 0U, 0U},
+			 "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+			 sqlite_request.expected_parent_publication},
+			{},
+			{}};
+		auto sqlite = execute_materialization_store_streaming(
+			value, sqlite_request, std::move(sqlite_plan), replay_source);
+		if (sqlite.first_issue)
+		{
+			const auto* unavailable =
+				std::get_if<materialization_store_sdk_failure>(&*sqlite.first_issue);
+			require(unavailable &&
+						unavailable->operation == materialization_store_operation::store_open &&
+						unavailable->error.code == "store.backend-unavailable" &&
+						unavailable->error.field == "sqlite" &&
+						unavailable->error.detail == "source-shm-readonly-qualification",
+					"SQLite soft unresolved publication failed for an unexpected reason");
+			return;
+		}
+		require(sqlite.publish_returned_record && sqlite.verification_store,
+				"SQLite soft unresolved publication returned no committed record");
+		sqlite.verification_store.reset();
+		auto reopened =
+			sdk::open_sqlite_snapshot_store("soft-unresolved.sqlite", value);
+		require(reopened.has_value(), "SQLite soft unresolved Store did not reopen");
+		auto current = reopened->current(selector_value);
+		require(current.has_value() && current->unresolved_items() == unresolved,
+				"reopened SQLite Store lost the typed unresolved record");
+		auto sqlite_export = reopened->canonical_export(current->id());
+		require(sqlite_export.has_value() && *sqlite_export == *memory_export,
+				"memory and reopened SQLite soft unresolved exports diverged");
+	}
+
+	struct soft_source_summary
+	{
+		materialization_bounded_claim_batch_status status;
+		std::vector<sdk::partition_manifest> manifests;
+	};
+
+	[[nodiscard]] soft_source_summary
+	run_cross_task_soft_resolution(const sdk::relation_engine& value,
+								   const sdk::claim& source_claim,
+								   const sdk::claim& target_claim,
+								   const bool reverse)
+	{
+		auto source = begin_soft_source(value, 2U);
+		auto source_task = soft_bounded_task(
+			value, source_claim, soft_unresolved_for(value, source_claim), "source");
+		auto target_task =
+			soft_bounded_task(value, target_claim, {}, "target");
+		if (reverse)
+		{
+			require(source.consume_task(std::move(target_task)).has_value(),
+					"reverse target task consumption failed");
+			require(source.consume_task(std::move(source_task)).has_value(),
+					"reverse source task consumption failed");
+		}
+		else
+		{
+			require(source.consume_task(std::move(source_task)).has_value(),
+					"source task consumption failed");
+			require(source.consume_task(std::move(target_task)).has_value(),
+					"target task consumption failed");
+		}
+		auto sealed = std::move(source).finalize();
+		require(sealed.has_value(), "cross-task soft resolution did not seal");
+		auto replay_source = std::move(*sealed);
+		auto status = replay_source.claim_batch_status();
+		require(status.has_value(), "cross-task soft resolution status failed");
+		std::vector<sdk::partition_manifest> manifests;
+		require(replay_source
+					.replay([&](sdk::partition_draft draft) -> sdk::result<void>
+							{
+								require(draft.unresolved.empty(),
+										"cross-task target left a residual unresolved");
+								auto manifest = sdk::make_partition_manifest(value, draft);
+								require(manifest.has_value() && manifest->complete,
+										"resolved cross-task partition was not complete");
+								manifests.push_back(std::move(*manifest));
+								return {};
+							})
+					.has_value(),
+				"cross-task soft resolution replay failed");
+		std::ranges::sort(manifests, {}, &sdk::partition_manifest::partition_id);
+		return {std::move(*status), std::move(manifests)};
+	}
+
+	void bounded_cross_task_soft_resolution_is_order_independent()
+	{
+		const auto value = soft_reference_engine();
+		const auto source_claim = soft_claim(
+			value,
+			soft_source_row("source:one", "target:shared"),
+			"evidence:soft-source");
+		const auto target_claim = soft_claim(
+			value,
+			soft_target_row("target:shared"),
+			"evidence:soft-target");
+		const auto forward =
+			run_cross_task_soft_resolution(value, source_claim, target_claim, false);
+		const auto reverse =
+			run_cross_task_soft_resolution(value, source_claim, target_claim, true);
+		require(forward.status.unresolved_count == 0U &&
+					reverse.status.unresolved_count == 0U &&
+					forward.status.claim_count == 2U &&
+					reverse.status.claim_count == 2U &&
+					forward.status.content_digest == reverse.status.content_digest &&
+					forward.manifests == reverse.manifests,
+				"cross-task soft resolution depends on task order");
+		const std::array claims{source_claim, target_claim};
+		auto expected = sdk::claim_batch_content_digest(claims, {}, {}, {});
+		require(expected.has_value() &&
+					forward.status.content_digest == *expected,
+				"cross-task bounded digest differs from SDK authority");
+	}
+
 	void sqlite_reopen_failure_retains_commit()
 	{
 		temporary_working_directory working_directory;
@@ -754,6 +1200,8 @@ int main()
 	sqlite_publish_race_recovers_exact_receipts();
 	typed_prepublication_failures();
 	streaming_store_replays_and_rechecks_exact_partitions();
+	bounded_soft_unresolved_is_published_losslessly();
+	bounded_cross_task_soft_resolution_is_order_independent();
 	sqlite_reopen_failure_retains_commit();
 	return 0;
 }
