@@ -177,6 +177,37 @@ properties:
                     architecture: {type: string, minLength: 1}
                     package_digest: {$ref: '#/$defs/digest'}
                     source: {enum: [verified-cache, verified-download]}
+          allOf:
+            - if:
+                properties:
+                  status: {const: verified}
+                required: [status]
+              then:
+                required:
+                  - profile
+                  - documentation
+                  - runner_os
+                  - runner_arch
+                  - receipt_digest
+                properties:
+                  cache_hit: {enum: [hit, miss]}
+            - if:
+                properties:
+                  status: {const: not-requested}
+                required: [status]
+              then:
+                properties:
+                  cache_hit: {const: not-requested}
+                  profiles:
+                    type: object
+                    maxProperties: 0
+                not:
+                  anyOf:
+                    - required: [profile]
+                    - required: [documentation]
+                    - required: [runner_os]
+                    - required: [runner_arch]
+                    - required: [receipt_digest]
       python_distributions:
         type: array
         minItems: 1

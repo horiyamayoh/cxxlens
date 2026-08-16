@@ -21,6 +21,7 @@ import yaml
 
 from collect_toolchain_provenance import (
     package_cache_authority_digest,
+    package_cache_config,
     pinned_actions,
     provenance_digest,
     validate_package_cache_profiles,
@@ -129,6 +130,49 @@ def load_provenance_directory(directory: pathlib.Path) -> list[dict[str, Any]]:
     return records
 
 
+def canonical_package_cache_key(
+    lock: dict[str, Any],
+    lock_digest: str,
+    profile: str,
+    documentation: str,
+    runner_os: str,
+    runner_arch: str,
+) -> str:
+    """Reconstruct the cache key from locked authority, not submitted evidence."""
+
+    config = package_cache_config(lock)
+    lock_digest_hex = lock_digest.removeprefix("sha256:")
+    if len(lock_digest_hex) != 64 or any(
+        character not in "0123456789abcdef" for character in lock_digest_hex
+    ):
+        fail("verified package-cache lock digest is invalid")
+
+    runner = lock.get("runner")
+    if not isinstance(runner, dict):
+        fail("verified package-cache runner authority is invalid")
+    if runner_os != runner.get("os"):
+        fail("verified package-cache runner_os differs from locked authority")
+    if runner_arch != runner.get("architecture"):
+        fail("verified package-cache runner_arch differs from locked authority")
+
+    expected_key = config["key_template"]
+    for token, value in {
+        "${runner.os}": runner.get("os"),
+        "${runner.arch}": runner.get("architecture"),
+        "${profile}": profile,
+        "${documentation}": documentation,
+        "${lock_digest}": lock_digest_hex,
+    }.items():
+        if not isinstance(value, str) or not value:
+            fail("verified package-cache key authority is invalid")
+        expected_key = expected_key.replace(token, value)
+    if "${" in expected_key or not expected_key.startswith(
+        f"cxxlens-ci-packages-{config['key_version']}-"
+    ):
+        fail("verified package-cache key authority is invalid")
+    return expected_key
+
+
 def validate_package_cache_evidence(
     root: pathlib.Path,
     evidence: Any,
@@ -191,6 +235,19 @@ def validate_package_cache_evidence(
         fail("verified package-cache scope is empty")
     if documentation == "true":
         expected_profiles.add("documentation")
+    for field in ("key", "runner_os", "runner_arch"):
+        if not isinstance(evidence.get(field), str) or not evidence[field]:
+            fail(f"verified package-cache {field} is unavailable")
+    expected_key = canonical_package_cache_key(
+        lock,
+        expected_lock_digest,
+        profile,
+        documentation,
+        evidence["runner_os"],
+        evidence["runner_arch"],
+    )
+    if evidence["key"] != expected_key:
+        fail("verified package-cache key differs from locked authority")
     try:
         validate_package_cache_profiles(
             lock,
@@ -200,9 +257,6 @@ def validate_package_cache_evidence(
         )
     except ValueError as error:
         fail(f"invalid verified package-cache evidence: {error}")
-    for field in ("key", "runner_os", "runner_arch"):
-        if not isinstance(evidence.get(field), str) or not evidence[field]:
-            fail(f"verified package-cache {field} is unavailable")
     receipt_digest = evidence.get("receipt_digest")
     if (
         not isinstance(receipt_digest, str)
