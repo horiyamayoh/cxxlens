@@ -525,6 +525,7 @@ namespace
 	{
 		holder_observation holder;
 		holder_observation sentinel;
+		std::chrono::steady_clock::time_point ready_at{};
 	};
 
 	[[nodiscard]] std::optional<holder_observation>
@@ -2255,6 +2256,21 @@ namespace
 		require(!marker_error, "could not remove stale holder descendant marker");
 		fs::remove(sentinel_marker, marker_error);
 		require(!marker_error, "could not remove stale sentinel descendant marker");
+		const auto negative_marker = fs::path{marker.string() + ".negative"};
+		fs::remove(negative_marker, marker_error);
+		require(!marker_error, "could not remove stale negative descendant marker");
+		{
+			std::ofstream negative_marker_output{negative_marker};
+			require(negative_marker_output.good(),
+					"could not create the negative descendant marker");
+			negative_marker_output << "partial-marker";
+			require(negative_marker_output.good(),
+					"could not write the negative descendant marker");
+		}
+		require(!observe_descendant(negative_marker),
+				"descendant observation accepted an incomplete marker");
+		fs::remove(negative_marker, marker_error);
+		require(!marker_error, "could not remove the negative descendant marker");
 		auto grandchild_request = task(select(executable, "timeout-grandchild:" + marker.string()));
 		// The fixture forks after launch; derive the budget from the inherited ceiling and
 		// current same-UID thread count instead of assuming a fixed host process count.
@@ -2275,7 +2291,9 @@ namespace
 					auto sentinel = observe_descendant(marker.string() + ".sentinel");
 					if (holder && sentinel)
 					{
-						promise.set_value({std::move(*holder), std::move(*sentinel)});
+						promise.set_value({std::move(*holder),
+										   std::move(*sentinel),
+										   std::chrono::steady_clock::now()});
 						return;
 					}
 					if (holder)
@@ -2289,9 +2307,13 @@ namespace
 		};
 		const auto grandchild_started = std::chrono::steady_clock::now();
 		auto grandchild_report = runtime.execute(grandchild_request);
-		const auto grandchild_elapsed = std::chrono::steady_clock::now() - grandchild_started;
+		const auto grandchild_finished = std::chrono::steady_clock::now();
 		const auto grandchild_terminal =
 			grandchild_report ? grandchild_report->terminal : grandchild_report.error().code;
+		// Capture the typed terminal before any observation fallback or descendant cleanup.  The
+		// cleanup assertions below must not turn a valid timeout into an observation-only result.
+		const bool typed_timeout_terminal =
+			grandchild_report && grandchild_report->terminal == "provider.timeout";
 		const auto cleanup_descendant = [&](const descendant_observation observation)
 		{
 			const bool holder_valid = observation.holder.valid;
@@ -2335,6 +2357,15 @@ namespace
 		};
 		const auto descendants = holder_future.get();
 		holder_watcher.join();
+		// Executable verification is part of runtime setup and is materially slower under
+		// sanitizer instrumentation.  The cleanup bound starts at the positive fixture readiness
+		// observation, so it measures timeout/RAII behavior rather than hashing cold-start time.
+		const auto observation_origin =
+			descendants.ready_at != std::chrono::steady_clock::time_point{} &&
+				descendants.ready_at <= grandchild_finished
+			? descendants.ready_at
+			: grandchild_started;
+		const auto grandchild_elapsed = grandchild_finished - observation_origin;
 		auto observed_descendants = descendants;
 		if (!observed_descendants.holder.valid)
 			if (auto holder = observe_descendant(holder_marker))
@@ -2343,7 +2374,7 @@ namespace
 			if (auto sentinel = observe_descendant(sentinel_marker))
 				observed_descendants.sentinel = std::move(*sentinel);
 		const auto cleanup = cleanup_descendant(observed_descendants);
-		require(grandchild_report && grandchild_report->terminal == "provider.timeout",
+		require(typed_timeout_terminal,
 				"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal);
 		require(cleanup[0] && cleanup[1],
 				"pipe-holding process-group descendant identities could not be observed");
@@ -2360,6 +2391,8 @@ namespace
 				"ms");
 		require(cleanup[4] && cleanup[5], "pipe-holding descendants cleanup failed");
 		require(cleanup[6], "pipe-holding descendant markers could not be removed");
+		fs::remove(negative_marker, marker_error);
+		require(!marker_error, "could not clean up the negative descendant marker");
 		require(grandchild_elapsed < std::chrono::seconds{8},
 				"provider timeout waited for the pipe-holding descendant instead of closing it: " +
 					std::to_string(
