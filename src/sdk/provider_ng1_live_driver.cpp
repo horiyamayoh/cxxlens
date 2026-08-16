@@ -140,6 +140,26 @@ namespace cxxlens::sdk::provider::detail
 		return {};
 	}
 
+	result<void> ng1_live_session_driver::synchronize_process_outcome()
+	{
+		switch (session_.state())
+		{
+			case ng1_recovery_state::running:
+				return session_.observe_worker_exit();
+			case ng1_recovery_state::heartbeat_timeout:
+			case ng1_recovery_state::progress_rate_failure:
+				return session_.confirm_worker_kill();
+			case ng1_recovery_state::cancel_requested:
+			case ng1_recovery_state::worker_killed:
+			case ng1_recovery_state::resume_replay:
+			case ng1_recovery_state::resumed:
+			case ng1_recovery_state::completed:
+			case ng1_recovery_state::failed:
+				return {};
+		}
+		return cxxlens::sdk::unexpected(driver_error("process-outcome", "unknown-recovery-state"));
+	}
+
 	result<std::uint64_t> ng1_live_session_driver::now_ns() const
 	{
 		if (!clock_)
@@ -275,7 +295,11 @@ namespace cxxlens::sdk::provider::detail
 		if (auto open = ensure_open("finish"); !open)
 			return cxxlens::sdk::unexpected(std::move(open.error()));
 		auto output = process_->finish(cancellation);
+		if (!output)
+			return cxxlens::sdk::unexpected(std::move(output.error()));
 		ended_ = true;
+		if (auto synchronized = synchronize_process_outcome(); !synchronized)
+			return cxxlens::sdk::unexpected(std::move(synchronized.error()));
 		return output;
 	}
 
@@ -284,7 +308,11 @@ namespace cxxlens::sdk::provider::detail
 		if (auto open = ensure_open("terminate"); !open)
 			return cxxlens::sdk::unexpected(std::move(open.error()));
 		auto output = process_->terminate(status);
+		if (!output)
+			return cxxlens::sdk::unexpected(std::move(output.error()));
 		ended_ = true;
+		if (auto synchronized = synchronize_process_outcome(); !synchronized)
+			return cxxlens::sdk::unexpected(std::move(synchronized.error()));
 		return output;
 	}
 
