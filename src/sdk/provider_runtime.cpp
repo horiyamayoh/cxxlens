@@ -17,6 +17,7 @@
 #include <cxxlens/sdk/provider.hpp>
 
 #include "json_internal.hpp"
+#include "provider_ng1_transport_internal.hpp"
 #include "provider_runtime_internal.hpp"
 #include "provider_validation_internal.hpp"
 
@@ -1821,7 +1822,8 @@ namespace cxxlens::sdk::provider
 			for (std::size_t index = 0U; index < frames.size(); ++index)
 			{
 				const auto& value = frames[index];
-				if (value.stream_id != 1U || value.sequence != expected_sequence++)
+				if (value.stream_id != request.expected_stream_id ||
+					value.sequence != expected_sequence++)
 					return fail("provider.protocol-state-invalid", request.task_id, "sequence");
 				const auto optional_extension =
 					(value.flags & static_cast<std::uint16_t>(frame_flag::optional_extension)) !=
@@ -1839,6 +1841,18 @@ namespace cxxlens::sdk::provider
 					 value.type != message_type::task_failed))
 					return fail(
 						"provider.protocol-state-invalid", request.task_id, "terminal-order");
+				if (is_ng1_heartbeat_message(value.type))
+				{
+					if (!request.ng1_control_transcript || value.protocol_minor != 1U ||
+						value.flags != 0U || !value.payload.empty())
+						return fail(
+							"provider.protocol-state-invalid", request.task_id, "ng1-heartbeat");
+					auto heartbeat = decode_ng1_heartbeat_control(value.control);
+					if (!heartbeat)
+						return fail(
+							"provider.protocol-state-invalid", request.task_id, "ng1-heartbeat");
+					continue;
+				}
 				if (optional_extension)
 					continue;
 				std::optional<std::string> control;
@@ -2126,6 +2140,17 @@ namespace cxxlens::sdk::provider
 					}
 					case message_type::progress:
 					{
+						if (request.ng1_control_transcript)
+						{
+							auto progress = decode_ng1_progress_control(value.control);
+							if (!accepted || batch || progress_seen || !progress ||
+								progress->task_id != request.task_id || !value.payload.empty())
+								return fail("provider.protocol-state-invalid",
+											request.task_id,
+											"ng1-progress");
+							progress_seen = true;
+							break;
+						}
 						auto records = decode_evidence_metadata(value.control);
 						if (!accepted || batch || progress_seen || !records ||
 							!value.payload.empty())

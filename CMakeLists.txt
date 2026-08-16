@@ -295,6 +295,7 @@ add_library(
   src/sdk/provider_ng1_recovery.cpp
   src/sdk/provider_ng1_spill_port_internal.cpp
   src/sdk/provider_ng1_session.cpp
+  src/sdk/provider_ng1_live_driver.cpp
   src/sdk/testing.cpp)
 add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
 cxxlens_configure_component(cxxlens_provider_sdk provider_sdk)

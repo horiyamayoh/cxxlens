@@ -116,4 +116,4 @@ a43c7748ea604fd99631b00ae2f431bd816cbcc88f00313554b07aec2617f381  ../../schemas/
 0f710f1973b5eb195df7d41fe79bd2f85bd59f983c4dee77a760cfcb2ce6ef06  ../../schemas/cxxlens_ng_compatibility_request.schema.yaml
 c3ac088188fb995b76064d3b24075292a377c4a6d7e021173d5541ed3afbf442  ../../schemas/cxxlens_ng_compatibility_report.schema.yaml
 66a139a97e7bc4260683ba2d94b96d62db19d69273399817cc6bbda18292fb9e  ../../schemas/cxxlens_asset_migration_policy.yaml
-df949200099ab45e2ca0cfa6849df9c6cd41518b68f4e3cf833bdabd10082288  ../../schemas/cxxlens_asset_migration_ledger.json
+505936ecab447c7d3156a5eca9ef5c4ae740be188c55fa71612a44b0ecda9ee9  ../../schemas/cxxlens_asset_migration_ledger.json
