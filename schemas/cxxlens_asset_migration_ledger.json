@@ -1,5 +1,5 @@
 {
-  "asset_count": 673,
+  "asset_count": 674,
   "assets": [
     {
       "authority": "active",
@@ -3069,6 +3069,13 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/provider_ng1_process_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/provider_ng1_recovery.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4714,7 +4721,7 @@
     }
   ],
   "classifications": {
-    "active": 637,
+    "active": 638,
     "archived": 35,
     "generated": 1
   },

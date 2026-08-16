@@ -37,6 +37,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "sdk/provider_ng1_process_internal.hpp"
+#include "sdk/provider_ng1_transport_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 #include "sdk/provider_validation_internal.hpp"
 
@@ -2422,6 +2424,103 @@ namespace
 				"failed worker destroyed or replaced the prior snapshot");
 	}
 
+	void check_ng1_live_duplex_process()
+	{
+#if defined(__linux__) && defined(__GLIBC__)
+		const auto policy = baseline_policy();
+		process_invocation invocation;
+		invocation.argv = {"/bin/cat"};
+		invocation.budget.wall_ms = 3000U;
+		invocation.budget.cpu_ms = 3000U;
+		invocation.budget.address_space_bytes = provider_address_space_budget;
+		invocation.budget.transport_bytes = 1024U * 1024U;
+		invocation.budget.output_bytes = 1024U * 1024U;
+		invocation.budget.open_files = 64U;
+		invocation.budget.subprocesses = provider_subprocess_budget;
+		invocation.sandbox = {sandbox_assurance::enforced, policy.policy_digest()};
+		invocation.expected_binary_digest = executable_digest("/bin/cat");
+
+		protocol_limits limits;
+		limits.minimum_minor = 1U;
+		limits.maximum_minor = 1U;
+		auto port = detail::make_system_ng1_duplex_process_port();
+		require(port != nullptr, "NG1 live process port was not created");
+		auto process = port->start(invocation, limits, {});
+		if (!process)
+			require(false, "NG1 live process launch failed: " + process.error().code);
+		auto staged_digest = semantic_digest("test.ng1.live", "staged");
+		require(staged_digest.has_value(), "NG1 live staged digest construction failed");
+
+		detail::ng1_heartbeat_control control{"cxxlens.provider-control.heartbeat.v1",
+											  detail::ng1_heartbeat_kind::ack,
+											  "provider:test",
+											  {1U, 2U, 3U},
+											  "session:test",
+											  "task:test",
+											  7U,
+											  0U,
+											  123U,
+											  0U,
+											  *staged_digest};
+		auto encoded_control = detail::encode_ng1_heartbeat_control(control);
+		require(encoded_control.has_value(), "NG1 live heartbeat encoding failed");
+		frame wire;
+		wire.type = detail::ng1_heartbeat_message_type;
+		wire.stream_id = 7U;
+		wire.sequence = 0U;
+		wire.control = *encoded_control;
+		wire.protocol_major = 1U;
+		wire.protocol_minor = 1U;
+		auto sent = (*process)->send_frame(wire);
+		require(sent.has_value(), "NG1 live frame send failed");
+		auto received = (*process)->receive_frame({});
+		require(received.has_value() && received->has_value(),
+				"NG1 live frame receive reached EOF");
+		require(received->value().type == wire.type &&
+					received->value().stream_id == wire.stream_id &&
+					received->value().sequence == wire.sequence &&
+					received->value().control == wire.control &&
+					received->value().payload == wire.payload &&
+					received->value().protocol_major == wire.protocol_major &&
+					received->value().protocol_minor == wire.protocol_minor &&
+					received->value().flags == wire.flags,
+				"NG1 live frame round trip changed wire data");
+		auto finished = (*process)->finish({});
+		std::string finish_detail{
+			"NG1 live process did not finish with exact identity and exit evidence"};
+		if (finished)
+		{
+			finish_detail += " status=" + std::to_string(static_cast<int>(finished->status));
+			finish_detail += " exit=" + std::to_string(finished->exit_code);
+			finish_detail += " signal=" + std::to_string(finished->termination_signal);
+			finish_detail += " digest=" + finished->measured_executable_digest;
+			finish_detail += " stderr=" + finished->standard_error;
+		}
+		else
+			finish_detail += " error=" + finished.error().code + ":" + finished.error().detail;
+		require(finished.has_value() && finished->status == process_status::exited &&
+					finished->exit_code == 0 &&
+					finished->measured_executable_digest == invocation.expected_binary_digest,
+				finish_detail);
+		require(finished->sandbox.achieved == sandbox_assurance::enforced,
+				"NG1 live process lost enforced sandbox evidence");
+
+		auto rejected_process = port->start(invocation, limits, {});
+		if (!rejected_process)
+			require(false,
+					"NG1 live negative process launch failed: " + rejected_process.error().code);
+		wire.flags = static_cast<std::uint16_t>(frame_flag::optional_extension);
+		auto rejected = (*rejected_process)->send_frame(wire);
+		require(!rejected && rejected.error().code == "provider.protocol-state-invalid",
+				"NG1 live channel accepted optional flags on the reserved heartbeat");
+		auto terminated = (*rejected_process)->terminate(process_status::cancelled);
+		require(terminated.has_value() && terminated->status == process_status::cancelled,
+				"NG1 live channel did not preserve explicit cancellation evidence");
+#else
+		// The unavailable implementation is intentionally fail-closed on non-Linux platforms.
+#endif
+	}
+
 } // namespace
 
 int main(const int argument_count, const char* const* arguments)
@@ -2460,6 +2559,7 @@ int main(const int argument_count, const char* const* arguments)
 	check_host_transcript_validator(executable);
 	check_sealed_provider_validation();
 	check_semantic_input_digests(executable);
+	check_ng1_live_duplex_process();
 	check_process_faults(executable);
 	check_prior_snapshot_preserved(executable);
 }
