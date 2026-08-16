@@ -1125,9 +1125,9 @@ def validate_documents(
         if forbidden in evaluation_body:
             fail(f"release evaluation polling marker is forbidden: {forbidden}")
     for marker in (
-        'name: cxxlens-nightly-evidence-${{ github.sha }}',
+        "name: cxxlens-nightly-evidence-${{ github.sha }}",
         "path: build/release-evaluation-nightly",
-        'name: cxxlens-nightly-evidence-consumed-${{ github.sha }}',
+        "name: cxxlens-nightly-evidence-consumed-${{ github.sha }}",
         "build/release-evaluation-nightly/nightly-evidence-set.json",
     ):
         if marker not in evaluation_body:

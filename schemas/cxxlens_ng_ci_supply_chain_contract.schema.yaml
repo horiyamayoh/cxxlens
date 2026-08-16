@@ -54,12 +54,13 @@ properties:
   workflow:
     type: object
     additionalProperties: false
-    required: [files, action_revision, runner_label, bootstrap_profiles]
+    required: [files, action_revision, local_workflow_digest, runner_label, bootstrap_profiles]
     properties:
       files:
         type: array
         const: [.github/workflows/quality.yml, .github/workflows/nightly.yml]
       action_revision: {const: full-commit-sha}
+      local_workflow_digest: {const: sha256-from-supply-chain-lock}
       runner_label: {const: ubuntu-24.04}
       bootstrap_profiles:
         type: array
