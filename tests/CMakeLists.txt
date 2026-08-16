@@ -1104,6 +1104,7 @@ add_custom_target(cxxlens-ng-test-binaries)
 add_dependencies(
   cxxlens-ng-test-binaries
   cxxlens-clang-worker-22
+  cxxlens-clang22-materialize
   cxxlens-clang22-provider-normalizer
   cxxlens-clang22-provider-worker-protocol
   cxxlens-clang22-materialization-json
@@ -1113,6 +1114,7 @@ add_dependencies(
   cxxlens-clang22-materialization-claims
   cxxlens-clang22-materialization-seal
   cxxlens-clang22-materialization-store
+  cxxlens-clang22-materialization-store-outcome
   cxxlens-clang22-materialization-request-stream
   cxxlens-clang22-materialization-request-identity
   cxxlens-clang22-materialization-task-spool
@@ -1142,6 +1144,9 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-disposable-qualification
   cxxlens-unit-sdk-sqlite-limit-length-precedence
   cxxlens-unit-sdk-sqlite-payload-streaming
+  cxxlens-unit-sdk-sqlite-shm-process-port
+  cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration
+  cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer
   cxxlens-unit-sdk-sqlite-shm-identity-issuer
   cxxlens-unit-sdk-sqlite-shm-mapping-lease
   cxxlens-unit-sdk-sqlite-shm-mapping-registry
@@ -1156,4 +1161,27 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-wal-recovery-workspace
   cxxlens-unit-sdk-sqlite-wal-receipt
   cxxlens-unit-sdk-store
+  cxxlens-unit-sdk-sqlite-writer-gate-outcome
+  cxxlens-df0200-claim-batch-corpus
+  cxxlens-sdk-example-typed_query
+  cxxlens-sdk-example-dynamic_query
+  cxxlens-sdk-example-portable_provider
+  cxxlens-sdk-example-recipe
+  cxxlens-sdk-example-relation_claim_batch
+  cxxlens-sdk-example-snapshot_store
+  cxxlens-sdk-example-query_execution
+  cxxlens-sdk-example-incremental_materialization
+  cxxlens-sdk-example-clang22-native
+  cxxlens-sdk-negative-dynamic_literal_type_mismatch
+  cxxlens-sdk-negative-unordered_limit
+  cxxlens-sdk-negative-invalid_recipe
+  cxxlens-sdk-negative-provider_no_credit
   cxxlens-g5-runtime)
+
+if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)
+  add_dependencies(cxxlens-ng-test-binaries cxxlens-sanitizer-canary)
+endif()
+if(CXXLENS_ENABLE_TSAN)
+  add_dependencies(cxxlens-ng-test-binaries cxxlens-tsan-test-canary
+                   cxxlens-tsan-provider-canary)
+endif()
