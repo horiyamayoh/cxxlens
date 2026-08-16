@@ -4,7 +4,7 @@
 次の短い goal からこの文書を参照します。
 
 ```text
-/goal docs/development/agent-api-development-goal.md を実行契約として CXXLENS_AGENT_AUTHORIZATION_V1 を適用し、cxxlens を需要側・供給側の双方で閉じた証拠付き意味知識基盤へ育て、issue 単位の branch/PR/merge と最終 SHA の CI evidence まで継続してください。
+/goal docs/development/agent-api-development-goal.md を実行契約として CXXLENS_AGENT_AUTHORIZATION_V1 を適用し、cxxlens を需要側・供給側の双方で閉じた証拠付き意味知識基盤へ育て、issue-scoped commit を fast-forward で main に直接 push し、exact main SHA の CI evidence まで継続してください。
 ```
 
 ## Autonomous execution and approval boundary
@@ -15,9 +15,9 @@ authorization をいつでも revoke または narrow でき、その後の操�
 
 | 区分 | 実行境界 |
 | --- | --- |
-| Standing authorization | read-only audit、active unit 内の編集・生成・test/build、同一 issue の CI 根本修正、unit branch/commit/push、canonical cxxlens repository 上の active issue/PR に限定した更新・check rerun・review 対応、exact-head gate 後の active PR merge、merge 済み bounded implementation evidence と learning checkpoint 後の active issue close は再承認不要。明示的な integration/readiness/qualification issue は自身の qualification evidence まで満たす |
+| Standing authorization | read-only audit、active unit 内の編集・生成・test/build、同一 issue の CI 根本修正、issue-scoped commit、最新 `main` への fast-forward push、canonical repository 上の active issue 更新、push 後の exact-main check 監視・根本修正、bounded implementation evidence と learning checkpoint 後の active issue close は再承認不要。明示的な integration/readiness/qualification issue は自身の qualification evidence まで満たす |
 | Notify and continue | 当初想定外の supporting test/file が必要でも、同一 contract・同一 issue 内で可逆なら、原因、追加 scope、検証方法を commentary で通知して継続します。これは approval gate ではありません |
-| Fresh user approval | destructive operation/history rewrite、branch protection 変更、secret/permission 追加、課金、外部 production deploy、active issue/PR workflow 外の顧客・第三者への連絡、ユーザー変更との解消不能な競合、authority で決められない重大な public semantics は停止します。対象、effect、不可逆性または rollback を開示し、exact target/effect に限定した承認を得ます |
+| Fresh user approval | destructive operation/history rewrite、branch protection 変更、secret/permission 追加、課金、外部 production deploy、active issue workflow 外の顧客・第三者への連絡、ユーザー変更との解消不能な競合、authority で決められない重大な public semantics は停止します。対象、effect、不可逆性または rollback を開示し、exact target/effect に限定した承認を得ます |
 | External blocker | 必須 reviewer、toolchain、service、permission を取得できない場合は、証拠と選択肢を示して停止します |
 | Platform approval | sandbox、system、host platform が要求する権限確認は standing authorization で迂回しません |
 
@@ -31,14 +31,14 @@ checker が prose の偶然一致に依存せず境界を固定できるよう�
 - `external-blocker: evidence-options-stop`
 - `platform-approval: never-bypass`
 - `skill-compatibility: prior-goal-authorization-satisfies-generic-approval`
-- `protected-main: unit-branch-pr-exact-head-review-merge-exact-merged-main`
-- `direct-main: prohibited`
+- `direct-main: issue-scoped-fast-forward-push-post-push-integration`
+- `pull-request: optional-for-risk-review-or-external-contribution`
 - `fresh-approval-reuse: forbidden`
 - `revocation: user-anytime`
 - `completion-class: bounded-implementation`
 - `production-qualification: not-claimed-by-default`
 - `issue-close-owner: bounded-issue-or-explicit-qualification-gate`
-- `aggregate-qualification-owner: exact-merged-main-integration-readiness-release`
+- `aggregate-qualification-owner: exact-main-integration-readiness-release`
 - `reopen-condition: bounded-acceptance-or-scope-regression-only`
 
 skill が一般的な explicit approval を要求しても、操作が active policy の standing-authorization 範囲に明示されていれば、
@@ -47,9 +47,10 @@ goal 開始時の承認で満たされたものとします。skill の診断、
 維持します。
 
 standing authorization は repository 内の active unit を越える mutable authority を与えません。canonical repository の active
-issue/PR における通常の review 応答と、顧客・第三者への外部連絡を区別します。fresh approval は開示した exact target/effect にだけ
-有効で、別 target、別 effect、後続操作へ categorical に流用しません。platform approval も別の capability gate であり、この contract
-は迂回しません。
+issue における通常更新と、顧客・第三者への外部連絡を区別します。fresh approval は開示した exact target/effect にだけ有効で、
+別 target、別 effect、後続操作へ categorical に流用しません。platform approval も別の capability gate であり、この contract は
+迂回しません。PR は high-risk contract の独立反証 review、外部 contribution、または明示要求に使える任意の mechanism ですが、
+通常の active unit を `main` に反映するための必須 gate ではありません。
 
 ## Mission
 
@@ -432,12 +433,12 @@ bounded implementation completion は、担当 issue の exact contract と明�
 - 変更した public contract、schema、catalog、Doxygen、example、生成 inventory のうち直接影響するものが整合する
 - scope 外の native/platform/static/shared/install/consumer/Nightly/release evidence は、必要なら別 issue または tracked gap に
   owner、依存順、完了条件とともに残す
-- PR と issue close evidence が、実装完了、support/stability、production qualification を混同せず、
+- commit と issue close evidence が、実装完了、support/stability、production qualification を混同せず、
   `production qualification: not claimed` または issue が所有する限定的な qualification claim を明示する
 - Learning checkpoint を `none` または関連 DF ID として記録する
 
 通常の issue には、全 static/shared matrix、installed consumer 全件、native toolchain/platform matrix、`full`/`stress`、
-Nightly、release evaluation、terminal production-scope closure、無関係な issue/gate の完了を要求しません。それらは merged `main`、
+Nightly、release evaluation、terminal production-scope closure、無関係な issue/gate の完了を要求しません。それらは pushed `main`、
 Nightly/release workflow、または exact contract と label で明示された `integration-gate` / `readiness-gate` /
 qualification issue が所有します。
 
@@ -445,29 +446,33 @@ qualification issue が所有します。
 その failure が当該 issue の bounded acceptance を誤りと証明した場合、または当該 scope に regression がある場合だけです。
 単に製品全体が未認定であることは reopen 理由にしません。
 
-この境界は protected-main、final aggregate qualification、fail-closed exact-SHA evidence を弱めません。責任とタイミングを
-個別 implementation issue から merged-main integration/readiness/release gate へ移すだけです。
-
+この境界は direct-to-main の fast-forward discipline、final aggregate qualification、fail-closed exact-SHA evidence を弱めません。
+責任とタイミングを個別 implementation issue から exact-main integration/readiness/release gate へ移すだけです。
 ## Commit, push, issue closure
 
 1つの GitHub issue を1つの active write unit とし、issue、contract ID、repository-relative write path を宣言します。
 同時 active unit は最大四つまで許可しますが、異なる unit の contract ID は disjoint、write path は同一・祖先・子孫関係を含めて
 非重複でなければなりません。shared authority/contract、依存実装、同じ path prefix を所有する作業は直列化します。
 
-対象差分だけを commit して branch へ push し、PR を作成します。各 PR の exact-head required checks、未解決 review の解消、
-branch protection、bounded conflict-scoped active-unit invariant を確認した後に merge します。protected `main` は PR workflow だけで
-更新します。
+各 unit は最新の `origin/main` から開始します。push 前に remote head を再取得し、対象差分だけを self-review して affected
+build/test/quality command を実行します。1つの issue の差分を issue-scoped commit にまとめ、`main` へ fast-forward push します。
+remote `main` が進んでいた場合は最新 head へ安全に載せ直して再検証し、force-push、history rewrite、未解決 conflict の押し込みを
+行いません。
 
-通常の implementation issue は、merge 後に担当 scope の bounded implementation completion evidence、残余 gap の明示 ownership、
-completion evidence、learning checkpoint が揃えば閉じられます。Foundation、Wave 0、G5、`release-evaluation`、normal/final
+PR は high-risk contract の独立反証 review、外部 contributor、またはユーザーの明示要求に使える任意の review mechanism です。
+通常 unit の completion や `main` 反映の必須条件にはしません。high-risk change に必要な independent review は、PR の有無ではなく
+review evidence 自体で満たします。
+
+通常の implementation issue は、commit が `main` に到達し、担当 scope の bounded implementation completion evidence、残余 gap の
+明示 ownership、completion evidence、learning checkpoint が揃えば閉じられます。Foundation、Wave 0、G5、`release-evaluation`、normal/final
 production-scope report は、その issue が明示的に所有しない限り integration/readiness/qualification gate の責務です。
 
-それらの aggregate gate は exact merged-main SHA の required checks と fail-closed evidence を引き続き検証します。
+それらの aggregate gate は exact main SHA の required checks と fail-closed evidence を引き続き検証します。
 `release-evaluation: not-qualified` は評価器の fail-closed success だけを意味し、`gate.release`、GR、production support を満たしません。
 その結果だけを理由に bounded implementation issue を reopen してはならず、bounded acceptance の誤りまたは scope regression がある場合に限ります。
 
 全 tracked gap の解消後は `release-evaluation: qualified`、strict GR report、final-mode production-scope report を同じ exact
-merged-main SHA で確認します。複数 issue の無関係な変更を1 commit にまとめません。
+main SHA で確認します。複数 issue の無関係な変更を1 commit にまとめません。
 
 issue には完了前に次の evidence をコメントします。
 
@@ -484,18 +489,16 @@ issue には完了前に次の evidence をコメントします。
 通常の implementation issue は bounded implementation completion を満たした場合だけ `completed` として閉じます。明示的な
 integration/readiness/qualification issue は、自身の exact contract に定めた aggregate qualification も満たした場合だけ閉じます。
 未実装、未検証、未認定の作業を `not planned` で隠しません。
-
 ## CI monitoring and progress
 
-各 unit の merge 後と全対象 issue の完了後に、exact merged-main SHA の required CI を監視します。失敗した場合は job、step、
-log、artifact を調査し、根本原因を修正します。新しい SHA の全 required CI が緑になるまで継続し、過去 SHA の成功を最終 SHA の
-evidence として流用しません。これは repository integration/release gate の証拠であり、通常 issue の bounded close 条件へ
-aggregate qualification を逆輸入するものではありません。
+各 unit の `main` push 後と全対象 issue の完了後に、push された exact main SHA の required CI を監視します。失敗した場合は job、
+step、log、artifact を調査し、根本原因を修正した fast-forward commit または明示的 revert を追加します。新しい SHA の全 required
+CI が緑になるまで継続し、過去 SHA の成功を最終 SHA の evidence として流用しません。これは repository
+integration/release gate の証拠であり、通常 issue の bounded close 条件へ aggregate qualification を逆輸入するものではありません。
 
 作業中は日本語で簡潔に、現在の use case/capability/issue、完了事項、根拠、検証、残作業、blocker、design feedback を報告します。
 生の長大な log ではなく、結論と証拠を要約します。authority から決定できない重大な public semantics だけをユーザーへ確認し、
 それ以外は安全で reversible な判断を行います。
-
 ## Final completion criteria
 
 次をすべて満たすまで goal を完了しません。

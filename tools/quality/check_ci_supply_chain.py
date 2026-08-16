@@ -27,7 +27,6 @@ SETUP_ACTION = pathlib.Path(".github/actions/setup-ci/action.yml")
 WORKFLOWS = (
     pathlib.Path(".github/workflows/quality.yml"),
     pathlib.Path(".github/workflows/nightly.yml"),
-    pathlib.Path(".github/workflows/pr-integration.yml"),
 )
 REQUIREMENT = re.compile(
     r"^([A-Za-z0-9_.-]+)==([^\s]+)\s+--hash=sha256:([0-9a-f]{64})$"

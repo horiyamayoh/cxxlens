@@ -37,13 +37,48 @@ PACKET_JSON_NAME = "cxxlens-ng-agent-context-issue-261.json"
 PACKET_MARKDOWN_NAME = "cxxlens-ng-agent-context-issue-261.md"
 USE_CASE_ID = "repository-semantic-query.explain-translation-unit.v1"
 ISSUE_ID = "#261"
+DIRECT_MAIN_AGENT_CONTRACT = pathlib.Path("AGENTS.md")
+DIRECT_MAIN_GOAL_CONTRACT = pathlib.Path(
+    "docs/development/agent-api-development-goal.md"
+)
+DIRECT_MAIN_DECISION_ADR = pathlib.Path(
+    "docs/design/adr/0094-risk-tiered-goal-authorization.md"
+)
+DIRECT_MAIN_POLICY_ID = "CXXLENS_AGENT_AUTHORIZATION_V1"
+DIRECT_MAIN_POLICY_TOKEN = re.compile(
+    rf"(?<![A-Za-z0-9_]){re.escape(DIRECT_MAIN_POLICY_ID)}(?![A-Za-z0-9_])"
+)
+DIRECT_MAIN_COMMON_MARKERS = (
+    "activation: explicit-goal-contract-reference",
+    "non-activation: ordinary-request",
+    "standing-scope: canonical-repository-active-unit",
+    "platform-approval: never-bypass",
+    "direct-main: issue-scoped-fast-forward-push-post-push-integration",
+)
+DIRECT_MAIN_GOAL_MARKERS = (
+    *DIRECT_MAIN_COMMON_MARKERS,
+    "notify-and-continue: reversible-same-contract-issue",
+    "fresh-approval: exact-target-effect-after-disclosure",
+    "external-blocker: evidence-options-stop",
+    "skill-compatibility: prior-goal-authorization-satisfies-generic-approval",
+    "pull-request: optional-for-risk-review-or-external-contribution",
+    "fresh-approval-reuse: forbidden",
+    "revocation: user-anytime",
+)
+LEGACY_PROTECTED_MAIN_PATTERNS = (
+    re.compile(
+        r"protected-main:\s*"
+        r"unit-branch-pr-exact-head-review-merge-exact-merged-main"
+    ),
+    re.compile(r"direct-main:\s*prohibited"),
+)
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 CANONICAL_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\.v[0-9]+(?:_[0-9]+)?$")
 BOUNDED_COMPLETION_GOAL_MARKERS = (
     "completion-class: bounded-implementation",
     "production-qualification: not-claimed-by-default",
     "issue-close-owner: bounded-issue-or-explicit-qualification-gate",
-    "aggregate-qualification-owner: exact-merged-main-integration-readiness-release",
+    "aggregate-qualification-owner: exact-main-integration-readiness-release",
     "reopen-condition: bounded-acceptance-or-scope-regression-only",
 )
 BOUNDED_COMPLETION_GOAL_TEXT = (
@@ -51,7 +86,7 @@ BOUNDED_COMPLETION_GOAL_TEXT = (
     "issue を閉じるために distribution 全体の production qualification を再実行・再証明してはなりません。",
     "`production qualification: not claimed`",
     "Foundation、Wave 0、G5、`release-evaluation`、normal/final",
-    "exact merged-main SHA の required checks と fail-closed evidence",
+    "exact main SHA の required checks と fail-closed evidence",
     "全 tracked gap の解消後は `release-evaluation: qualified`",
     "final-mode production-scope report を同じ exact",
     "過去 SHA の成功を最終 SHA の evidence として流用しません。",
@@ -128,6 +163,48 @@ def _file_digest(path: pathlib.Path) -> str:
 def _normalized_condition(value: Any) -> str:
     return " ".join(value.split()) if isinstance(value, str) else ""
 
+
+def validate_direct_main_authorization_contract(root: pathlib.Path) -> None:
+    decision = root / DIRECT_MAIN_DECISION_ADR
+    if not decision.is_file():
+        _fail(
+            "agent authorization decision ADR is missing: "
+            f"{DIRECT_MAIN_DECISION_ADR}"
+        )
+    if "- Status: Accepted" not in decision.read_text(encoding="utf-8"):
+        _fail("agent authorization decision ADR is not accepted")
+
+    documents = {
+        DIRECT_MAIN_AGENT_CONTRACT: DIRECT_MAIN_COMMON_MARKERS,
+        DIRECT_MAIN_GOAL_CONTRACT: DIRECT_MAIN_GOAL_MARKERS,
+    }
+    for relative, markers in documents.items():
+        path = root / relative
+        if not path.is_file():
+            _fail(f"agent authorization contract is missing: {relative}")
+        text = path.read_text(encoding="utf-8")
+        if len(DIRECT_MAIN_POLICY_TOKEN.findall(text)) != 1:
+            _fail(
+                "agent authorization policy ID must appear exactly once in "
+                f"{relative}"
+            )
+        for marker in markers:
+            if text.count(f"`{marker}`") != 1:
+                _fail(
+                    "agent authorization marker is missing or duplicated in "
+                    f"{relative}: {marker}"
+                )
+        if any(pattern.search(text) for pattern in LEGACY_PROTECTED_MAIN_PATTERNS):
+            _fail(f"legacy protected-main workflow is forbidden in {relative}")
+
+    goal = (root / DIRECT_MAIN_GOAL_CONTRACT).read_text(encoding="utf-8")
+    goal_example = re.compile(
+        rf"(?m)^/goal\s+{re.escape(DIRECT_MAIN_GOAL_CONTRACT.as_posix())}"
+        rf".*(?<![A-Za-z0-9_]){re.escape(DIRECT_MAIN_POLICY_ID)}"
+        rf"(?![A-Za-z0-9_])"
+    )
+    if goal_example.search(goal) is None:
+        _fail("short goal example does not bind the authorization policy ID")
 
 def validate_bounded_completion_contract(root: pathlib.Path) -> None:
     """Keep the activated /goal contract aligned with completion-policy #291."""
@@ -806,6 +883,7 @@ def _current_git_state_for_baseline(root: pathlib.Path) -> dict[str, Any]:
     return current_git_state(root)
 
 
+_baseline.validate_agent_authorization_contract = validate_direct_main_authorization_contract
 _baseline.validate_workflow = validate_workflow
 _baseline.validate_documents = validate_documents
 _baseline.build_report = build_report

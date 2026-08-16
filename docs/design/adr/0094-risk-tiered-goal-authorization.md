@@ -1,145 +1,78 @@
-# ADR 0094: `/goal` delegationを risk-tiered standing authorization に束縛する
+# ADR 0094: `/goal` delegation と direct-to-main integration を risk-tiered に束縛する
 
 - Status: Accepted
 - Date: 2026-07-19
+- Last amended: 2026-08-16
 - Issue: #176
 - Design feedback: DF-0177 / #177
 - Depends on: ADR 0088, ADR 0089, ADR 0093
-- Amended by: ADR 0095; workflow amendment #263; completion-policy amendment #291
+- Amended by: ADR 0095; workflow amendment #263; completion-policy amendment #291; direct-to-main amendment 2026-08-16
 
 ## Context
 
-cxxlens の API-development goal は、issue 単位の実装、CI 修復、commit、push、issue/PR 更新、CI 監視を
-統括 agent へ委任する。しかし、その委任が後続 skill の approval gate をどの範囲で満たすか、通常の質問でも有効になるか、
-どの操作で fresh user approval が必要かを定義していない。このため、同一 issue 内の可逆な CI fixture 修復でも重複した
-会話承認が発生し得る。
+cxxlens は issue 単位の実装、検証、commit、push、CI 修復、issue 更新をコーディングエージェントへ委任する。
+従来は全変更を branch/PR/merge に通し、個別 issue と全体 integration の証拠を同じ搬送路へ結合していた。この方式は
+exact-head review には強い一方、bounded implementation completion を採用した現在の開発では待ち行列と重複確認を生み、
+独立した小さな変更まで PR gate に滞留させる。
 
-同時に goal 文書には完了 issue を `main` へ push する古い記述があり、現在の protected-main 運用に必要な PR、exact-head
-check、review resolution、merge、merged-main qualification を表現していない。自律性を高めるには、許可範囲を曖昧に広げるのではなく、
-通常 unit work と high-impact boundary を同じ durable contract で分離する必要がある。
-
-運用開始後、別の過剰結合が明らかになった。個別 implementation issue の完了条件へ Foundation、Wave 0、G5、install/native matrix、
-Nightly、release evaluation、terminal production-scope closure まで取り込むと、担当 scope の実装と直接品質証拠が完成しても、
-製品全体の未認定や無関係な lane の失敗だけで issue を閉じられない。これは final correctness を強くするのではなく、
-同じ production qualification を各 issue が重複所有することで throughput と責任境界を悪化させる。
+必要なのは品質証拠の削除ではなく、そのタイミングの変更である。局所品質は push 前に affected checks で確認し、全体品質は
+push 後の exact `main` SHA で fail closed に評価する。履歴改変や競合の押し込みを許さず、失敗時に修正または revert するなら、
+direct-to-main は bounded issue throughput と aggregate qualification を両立できる。
 
 ## Decision
 
-repository 限定の policy `CXXLENS_AGENT_AUTHORIZATION_V1` を採用する。この policy は、`/goal` が
-`docs/development/agent-api-development-goal.md` を実行契約として policy ID とともに明示参照した実行中だけ有効とする。
-通常の質問、診断依頼、read-only review から暗黙に起動しない。ユーザーは実行中でも authorization を revoke または narrow できる。
+repository 限定 policy `CXXLENS_AGENT_AUTHORIZATION_V1` を採用し続ける。この policy は
+`docs/development/agent-api-development-goal.md` と policy ID を明示参照した goal の実行中だけ有効で、通常の質問や read-only
+review から暗黙に起動しない。
 
-操作を次の五区分へ分ける。
+通常の active unit は次の順で処理する。
 
-1. **Standing authorization**: read-only audit、active unit 内の編集・生成・test/build、同一 issue の CI 根本修正、
-   unit branch/commit/push、canonical cxxlens repository 上の active issue/PR に限定した更新・check rerun・review 対応、
-   exact-head gate を満たした active PR の merge、および merge 済み bounded implementation completion evidence と
-   learning checkpoint を満たした active issue の close は再承認不要とする。明示的な integration/readiness/qualification issue は、
-   自身が所有する qualification evidence も満たしてから close する。無関係な issue、PR、branch の mutable state は含めない。
-2. **Notify and continue**: 当初想定外の supporting test/file が必要でも、同一 contract・同一 issue 内で可逆なら、原因、追加 scope、
-   検証方法を commentary で通知して継続する。これは approval gate ではない。
-3. **Fresh user approval**: destructive operation/history rewrite、branch protection 変更、secret/permission 追加、課金、外部 production
-   deploy、canonical cxxlens repository の active issue/PR workflow 外にいる顧客・第三者への連絡、ユーザー変更との解消不能な競合、
-   authority で決められない重大な public semantics は停止する。対象、effect、不可逆性または rollback 方法を開示し、その exact
-   target/effect に限定した明示承認を得る。別 target や後続 effect へ categorical に流用しない。
-4. **External blocker**: 必須 reviewer、toolchain、service、permission を取得できない場合は、証拠と選択肢を示して停止する。
-5. **Platform approval**: sandbox、system、host platform が要求する権限確認は standing authorization で迂回しない。
+1. issue、contract ID、repository-relative write path を宣言し、他 unit との contract/path conflict を排除する。
+2. 最新の `origin/main` から作業し、affected positive/negative test、必要な quality check、self-review を実行する。
+3. unrelated change を含めない issue-scoped commit を作る。
+4. remote head を再確認し、fast-forward で `main` へ直接 push する。
+5. push された exact main SHA の CI を監視し、失敗時は根本修正 commit または明示的 revert を追加する。
+6. bounded implementation evidence、残余 gap ownership、learning checkpoint を issue に記録する。
 
-skill が一般的な explicit approval を要求しても、その操作が active policy の standing-authorization 範囲に列挙されていれば、
-goal 開始時の承認で満たされたものとする。skill が要求する診断、focused plan、結果報告は省略せず、approval のためだけに会話を
-停止しない。skill がより具体的な安全条件を持つ場合や操作が列挙範囲外の場合は、その条件または fresh-approval gate を維持する。
+force-push、history rewrite、未解決 conflict の押し込み、複数 issue の無関係な差分の同梱は禁止する。remote `main` が進んだ場合は
+最新 head へ安全に載せ直し、affected checks を再実行する。
 
-protected `main` への変更は、unit branch、PR、exact-head required checks、未解決 review の解消、merge、exact merged-main
-integration evaluation の順で行う。直接 main push を durable workflow として認可しない。merge は branch protection、
-exact-head required checks、review、bounded conflict-scoped active-unit invariant を満たした場合に限る。
+PR は high-risk public contract の independent counterexample review、外部 contributor、またはユーザーの明示要求に使える任意の
+review mechanism とする。通常 unit の `main` 反映や close の必須 gate にはしない。high-risk change に必要な review は PR の有無ではなく、
+review evidence と constructibility gate で判定する。
 
-通常の implementation issue close は、merge 済みであること、担当 scope の bounded implementation completion evidence、
-残余 gap の明示 ownership、completion evidence、learning checkpoint を要求するが、Foundation/Wave 0/G5/Nightly/release または
-terminal production-scope qualification を当該 issue が明示的に所有しない限り待たない。protected-main の repository guard と
-issue の semantic completion claim は区別する。
+standing authorization は active unit 内の可逆な編集、build/test、CI 根本修正、issue-scoped commit、fast-forward main push、
+active issue 更新、exact-main CI 監視、bounded close を含む。destructive operation/history rewrite、branch protection、
+secret/permission、課金、外部 production deploy、第三者連絡、重大な未決 public semantics は fresh user approval を要求する。
+platform approval は迂回しない。
 
-`AGENTS.md` と goal document は policy ID をそれぞれ exactly once 参照し、API-development readiness checker は activation と
-通常会話での non-activation、standing authorization の active-unit scope、notification、target/effect-specific fresh approval、
-external blocker、platform carve-out、protected-main workflow、revoke/narrow、および skill compatibility の binding を fail closed に
-検証する。旧 direct-main workflow の再導入も拒否する。
+binding marker は次とする。
 
-### Workflow amendment #263 — bounded conflict-scoped parallel units
+- `activation: explicit-goal-contract-reference`
+- `non-activation: ordinary-request`
+- `standing-scope: canonical-repository-active-unit`
+- `direct-main: issue-scoped-fast-forward-push-post-push-integration`
+- `pull-request: optional-for-risk-review-or-external-contribution`
+- `history-rewrite: prohibited`
+- `platform-approval: never-bypass`
 
-repository 全体を一つの write lock とする運用は、contract と path が独立した Nightly 修復、provider hardening、runtime 実装まで
-不必要に直列化した。active write unit は最大四つまで許可する。ただし各 unit は issue、contract ID、repository-relative write path を
-宣言し、異なる unit 間で contract ID が一致する場合、または write path が同一・祖先・子孫関係にある場合は conflict として
-fail closed にする。shared authority を変更する work は共通 contract ID/path を宣言するため引き続き直列になる。
-
-standing authorization は各 unit の境界を越えない。並列 unit を理由に別 issue/branch の mutable state を変更する権限は生じず、
-各 PR は独立に exact-head checks と review resolution を満たす。merged-main integration evaluation はその gate owner が集約し、
-ordinary implementation issue が同じ production qualification を重複所有しない。最大数は throughput の上限であり、
-依存関係または evidence cost が直列化を要求する場合に四レーンを使い切る義務はない。
-
-### ADR 0095 amendment — intermediate evaluation と final GR
-
-ADR 0095 は authorization tier と protected-main branch/PR sequence を変更しない。production scope に tracked gap が残る間の
-post-merge evidence だけを、required checks、Foundation、Wave 0、G5、別名の `release-evaluation`、normal terminal scope report に
-分離する。green な `release-evaluation: not-qualified` は `gate.release`、GR、production support を満たさない。全 gap 解消後の final
-workflow は `release-evaluation: qualified`、`release-qualification` の strict GR v1、final terminal scope report を要求する。
-
-この post-merge integration evaluation は final product claim のために維持するが、completion-policy amendment #291 により、
-ordinary implementation issue の close 条件ではない。明示的な integration/readiness/qualification issue だけが、自身の exact contract に
-列挙した post-merge evidence を close 条件として所有する。
-
-### Completion-policy amendment #291 — bounded implementation completion
-
-通常の implementation issue の既定 completion class を次に固定する。
-
-```text
-completion-class: bounded-implementation
-production-qualification: not-claimed
-```
-
-bounded implementation completion は担当 issue の宣言 scope に対して次を要求する。
-
-- exact contract の実装が完成し、scope 内に placeholder、silent fallback、既知 correctness/security/invariant blocker がない
-- 変更した振る舞いと直接 dependency closure の positive/negative test、および必要な determinism/resource/error evidence が成功する
-- 直接影響する public contract、schema、catalog、Doxygen、example、documentation、generated inventory が整合する
-- scope 外の integration/native/platform/static/shared/install/consumer/Nightly/release work に別 owner、依存順、完了条件がある
-- PR/close evidence が implementation completion、support/stability、production qualification を混同しない
-- Learning checkpoint が `none` または関連 DF ID として記録される
-
-通常の issue に全 static/shared matrix、全 installed consumer、native/platform matrix、`full`/`stress`、Nightly、release evaluation、
-terminal production-scope closure、無関係な gate/issue の完了を要求しない。それらは merged `main`、Nightly/release workflow、
-または exact contract と label で明示された integration/readiness/qualification issue が所有する。
-
-後続 integration failure はまずその gate owner に記録する。閉じた implementation issue を reopen するのは、その failure が
-当該 issue の bounded acceptance を誤りと証明した場合、または当該 scope の regression を示した場合だけとする。
-製品全体が未認定であること自体は reopen 理由にしない。
-
-この amendment は final release qualification、`production-supported` の意味、fail-closed exact-SHA evidence、protected-main review を
-弱めない。資格証拠を削除するのではなく、個別 issue から本来の integration/release owner へ移す。
+通常の implementation issue は bounded implementation completion を所有し、full/stress/Nightly/release/production-scope qualification は
+exact main SHA の integration/readiness/release owner が一度だけ所有する。後続 failure で issue を reopen するのは、bounded acceptance
+の誤りまたは当該 scope の regression が証明された場合だけとする。
 
 ## Consequences
 
-- 同一 issue・同一 contract 内の通常実装と CI 根本修正は、診断報告後に重複承認なしで継続できる。
-- supporting file の追加は scope drift として隠さず通知するが、可逆な unit 内変更だけなら会話停止を要求しない。
-- ordinary issue は担当 scope の品質確認に集中し、製品全体の未認定だけで開いたままにならない。
-- integration/release gate は clean exact-SHA の全体 evidence を一度だけ所有し、production claim の強度を維持する。
-- destructive または外部影響を持つ操作、重大な意味決定、platform permission は standing authorization から明示的に除外される。
-- goal 外の通常会話は従来どおり request scope に従い、この policy から追加 authority を得ない。
-- personal skill と curated plugin cache は変更せず、repository contract 側で compatibility を定義する。
-- protected-main workflow が execution contract と checker の両方に固定される。
+- PR 待ちを通常変更のクリティカルパスから外し、独立 issue の throughput を上げられる。
+- push 前の affected checks と push 後の exact-main CI の責務が分離される。
+- main CI failure は隠さず、修正 commit または revert により履歴上で追跡できる。
+- force-push と history rewrite は引き続き禁止され、fast-forward の線形履歴を維持する。
+- PR と独立 review は必要な高リスク変更・外部 contribution で引き続き利用できる。
+- production qualification の強度は維持しつつ、個別 issue への重複要求を避ける。
 
 ## Verification
 
-API-development readiness unit test は完全な policy と activated goal の bounded-completion contract を positive fixture として受理し、
-policy ID binding、platform carve-out、fresh-approval tier、external-blocker rule、通常会話での non-activation の各欠落と
-direct-main 文言の再導入を個別に拒否する。readiness checker は bounded issue close marker、residual-gap ownership、
-aggregate qualification owner、reopen 条件を exact text と marker の両方で検証し、旧来の issue-local merged-main qualification 要件を
-再導入した goal を fail closed にする。
-scenario review は PR CI の局所 fixture 修正が notify-and-continue であること、force-push・branch protection 変更・production deploy が
-target/effect-specific fresh approval であること、通常の質問で standing authorization が起動しないことを反証する。
+readiness checker は policy ID の exact binding、direct-main marker、PR optional marker、fast-forward/post-push integration contract、
+fresh approval、platform carve-out を fail closed に検証する。旧 PR-mandatory marker または direct-main prohibition の再導入を拒否する。
 
-completion-policy review は ordinary issue が bounded evidence と tracked residual gap で close できること、production qualification を
-claim しないこと、explicit integration/readiness/qualification issue だけが full/stress/Nightly/release evidence を所有すること、
-integration failure の routing/reopen rule が決定論的であることを検証する。
-
-変更 PR は exact-head required checks、review resolution を満たしてから merge する。merged-main integration evaluation と final
-production qualification は対応する gate owner が継続し、ordinary implementation issue の close と混同しない。goal document、
-readiness checker、positive/negative readiness tests が同じ bounded-completion boundary を検証するまで、この amendment は完成扱いにしない。
+scenario test は、通常 unit の fast-forward main pushが許可されること、remote head 変化時に再同期・再検証すること、CI failure が
+修正または revert に至ること、force-push・history rewrite・branch protection 変更が standing authorization に含まれないことを確認する。

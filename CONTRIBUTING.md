@@ -43,60 +43,45 @@ test、service の順に具体化してください。
 公開 API の意味、LLVM 対応方針、schema compatibility、決定性、安全 gate を変更する場合は
 ADR と設計レビューが必要です。単純な実装詳細や既存契約内のバグ修正には ADR は不要です。
 
-## Issue / Pull request の完了条件
+## Issue / change の完了条件
 
-通常の issue とその PR は、次の bounded evidence が揃えば閉じられます。
+通常の implementation issue は、担当 scope の **bounded implementation completion** を満たした時点で完了できます。
+製品全体の production qualification を個別 issue の close 条件へ重複して持ち込みません。
 
-- issue の exact scope と contract が実装され、scope 内に placeholder、silent fallback、既知 blocker が残っていない。
-- 変更した振る舞いと直接 dependency closure の positive/negative test が成功する。
-- 必要な format、public-header、schema、documentation、generated-inventory check が成功する。
-- 公開 callable が [Doxygen 規約](docs/development/doxygen-style.md)を満たす。
-- public header が LLVM/Clang 型を露出しない。
-- absolute path、時刻、iteration order、診断文を stable identity に使用しない。
-- scope 外に残る integration/native/install/platform/Nightly/release gap は、owner と依存順を持つ別 issue または
-  tracked gap に記録する。
-- PR に `production qualification: not claimed`、または当該 issue が所有する限定的な qualification claim を記載する。
-- `Learning checkpoint: none` または関連 DF ID を記載する。
+最低限、次を issue/commit evidence に残してください。
 
-通常の issue close に、製品全体の static/shared/install/native matrix、`full`/`stress`、exact merged-main
-release evaluation、terminal production-scope closure、無関係な gate の成功は要求しません。
+- issue の exact contract と write scope
+- 実装した差分と直接 dependency closure
+- affected positive/negative test と必要な quality check
+- 直接影響する contract/schema/catalog/documentation の更新
+- scope 外に残る gap の owner、依存順、完了条件
+- `production qualification: not claimed` または当該 issue が所有する限定的な claim
+- `Learning checkpoint: none` または関連 DF ID
+
+## Direct-to-main workflow
+
+通常の変更は PR を経由せず、次の順で `main` に直接反映します。
+
+1. 最新の `origin/main` を取得し、active unit の contract/path が他作業と競合しないことを確認する。
+2. issue scope の変更だけを実装し、affected build/test/quality check と self-review を行う。
+3. unrelated change を含めない issue-scoped commit を作成する。
+4. remote head が変わっていないことを確認して、fast-forward で `main` へ push する。
+5. push された exact main SHA の CI を監視し、失敗時は根本修正 commit または revert を直ちに追加する。
+6. bounded completion evidence と CI run URL を issue に記録して close 判定を行う。
+
+force-push、history rewrite、未解決 conflict の押し込みは禁止です。remote `main` が進んだ場合は最新 head へ安全に載せ直し、
+affected checks を再実行してから push します。
+
+PR は high-risk contract の独立反証 review、外部 contributor、または明示要求に使える任意の mechanism です。通常変更の必須 gate
+ではありません。PR を使う場合も、その成否を issue の production qualification claim と混同しません。
 
 ## Production qualification の所有者
 
-production qualification は個別 implementation issue ではなく、merged `main`、Nightly/release workflow、または
-exact contract と label で明示された `integration-gate` / `readiness-gate` / qualification issue が所有します。
+CI の責務は次の三層に分けます。
 
-CI tier の責任は次のとおりです。
+- **pre-push / affected checks**: 担当 issue の変更範囲と直接 dependency closure を確認する。
+- **pushed `main` / exact-SHA integration**: push 後の正確な `main` SHA に対して full integration evidence を作る。
+- **Nightly / release / production-scope**: stress、release qualification、production support claim を所有する。
 
-- PR: issue-focused evidence と `fast`/`check` の repository guard
-- merged `main`: clean exact-SHA `full`
-- Nightly/release: `stress`、sanitizer、install/native、release evidence
-
-cache や changed-file selection は final production correctness evidence ではありませんが、bounded implementation
-completion の対象選択と反復高速化には使用できます。統合 gate の失敗だけを理由に閉じた implementation issue を再度開かず、
-その failure が当該 issue の bounded acceptance を誤りと証明した場合だけ reopen します。
-
-品質 evidence の owner と fail-closed fallback は `schemas/cxxlens_ng_quality_ownership.yaml` を参照してください。
-
-
-## GitHub PR integration automation
-
-CI setup は `.github/actions/setup-ci/action.yml` が一元管理します。`actions/setup-python`、
-exact LLVM/Doxygen bootstrap、hash-locked Python dependencies を各 job に複製しません。
-`setup-python` の pip wheel cache と、lock digest・runner OS/arch・profile に完全一致する LLVM/Doxygen `.deb` cache を
-反復高速化に使います。cache hit でも package SHA-256、name、exact epoch-qualified version、architecture と LLVM
-signing-key fingerprint を再検証し、fallback restore key は使用しません。verified cache/download の別は provenance
-receipt に残します。cache は `full` / `stress` の correctness evidence ではありません。
-
-同一 repository の PR branch を最新 `main` へ更新するには、PR conversation に
-`/update-branch` と単独行でコメントします。Owner、Member、Collaborator だけが実行できます。
-
-Quality の exact-head run が成功した時点で自動 squash merge してよい PR は、本文に次の
-単独行を含めます。
-
-```text
-automerge: squash
-```
-
-automation は draft、cross-repository head、SHA mismatch、branch protection/review failure を
-fail-closed で拒否します。merge 済みの同一 repository branch は自動削除されます。
+通常 issue は第一層を必須とし、第二層の失敗は integration owner に記録しつつ、当該 scope の regression なら修正します。
+第三層は明示的な integration/readiness/qualification issue だけが close 条件として所有します。

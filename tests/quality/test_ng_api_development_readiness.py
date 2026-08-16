@@ -44,6 +44,57 @@ _baseline = _load_baseline_tests()
 class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
     """Retain the complete previous corpus and replace only superseded CI tests."""
 
+
+    def test_authorization_protected_main_workflow_is_required(self) -> None:
+        "The composed contract requires the direct-main workflow marker."
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / readiness.DIRECT_MAIN_GOAL_CONTRACT
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`direct-main: issue-scoped-fast-forward-push-post-push-integration`",
+                    "direct-main marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(readiness.ReadinessError, "direct-main"):
+                readiness.validate_documents(root)
+
+    def test_authorization_direct_main_prohibition_is_required(self) -> None:
+        "The composed contract requires PRs to remain optional."
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / readiness.DIRECT_MAIN_GOAL_CONTRACT
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`pull-request: optional-for-risk-review-or-external-contribution`",
+                    "pull-request marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(readiness.ReadinessError, "pull-request"):
+                readiness.validate_documents(root)
+
+    def test_legacy_direct_main_workflow_is_rejected(self) -> None:
+        "The composed contract rejects restoration of the old PR-only marker."
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / readiness.DIRECT_MAIN_GOAL_CONTRACT
+            goal.write_text(
+                goal.read_text(encoding="utf-8")
+                + "\n`protected-main: "
+                "unit-branch-pr-exact-head-review-merge-exact-merged-main`\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(readiness.ReadinessError, "protected-main"):
+                readiness.validate_documents(root)
+
     def complete_evidence(
         self, evidence_dir: pathlib.Path, git_state: dict[str, object]
     ) -> pathlib.Path:
@@ -362,7 +413,7 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             goal = root / readiness.AGENT_GOAL_PATH
             goal.write_text(
                 goal.read_text(encoding="utf-8").replace(
-                    "それらの aggregate gate は exact merged-main SHA の required checks と fail-closed evidence を引き続き検証します。",
+                    "それらの aggregate gate は exact main SHA の required checks と fail-closed evidence を引き続き検証します。",
                     "aggregate gate wording removed",
                 ),
                 encoding="utf-8",

@@ -80,26 +80,29 @@ qualification が必要」という一般化を置換する。protected-main と
 
 ## Goal standing authorization
 
-Repository policy `CXXLENS_AGENT_AUTHORIZATION_V1` は、`/goal` が
-`docs/development/agent-api-development-goal.md` を policy ID とともに実行契約として明示参照した実行中だけ有効とする。
-通常の質問、診断、read-only review から暗黙に起動せず、ユーザーはいつでも authorization を revoke または narrow できる。
+Repository policy `CXXLENS_AGENT_AUTHORIZATION_V1` を明示参照する goal は、この repository の active unit に限って
+standing authorization を有効化します。
 
 - `activation: explicit-goal-contract-reference`
 - `non-activation: ordinary-request`
 - `standing-scope: canonical-repository-active-unit`
 - `platform-approval: never-bypass`
-- `protected-main: unit-branch-pr-exact-head-review-merge-exact-merged-main`
+- `direct-main: issue-scoped-fast-forward-push-post-push-integration`
 
-active unit 内の可逆な実装、検証、同一 issue の CI 根本修正、unit branch/commit/push、canonical repository 上の active
-issue/PR workflow は standing authorization の範囲とする。当初想定外の supporting file が同一 contract・同一 issue 内で必要なら、
-原因、追加 scope、検証方法を通知して継続する。
+active unit 内の可逆な実装・生成・build/test、同一 issue の CI 根本修正、issue-scoped commit、最新 `main` への
+fast-forward push、active issue の更新、push 後の exact-main CI 監視と修正は再承認不要です。通常の質問、診断、read-only
+review、または policy を明示しない依頼から、この権限を暗黙に取得してはなりません。
 
-destructive/history rewrite、branch protection、secret/permission、課金、外部 production deploy、active issue/PR workflow 外の
-第三者連絡、ユーザー変更との解消不能な競合、authority で決められない重大な public semantics は、対象と effect を開示して fresh
-approval を得る。sandbox/system/platform の approval は standing authorization で迂回しない。`main` は unit branch、PR、exact-head
-required checks、review resolution、merge、exact merged-main integration evaluation の順でのみ更新する。
-integration evaluation は bounded implementation completion と production qualification を混同しない。
+PR は既定の搬送路ではありません。high-risk contract の独立反証 review、外部 contributor、またはユーザーが明示した場合に限る
+任意の review mechanism とします。PR を使う場合も、active unit と bounded completion の責務境界は変えません。
 
+`main` 更新前に最新の remote head を取得し、active unit の contract/path 非競合、対象差分、affected build/test を確認します。
+`main` は fast-forward だけで更新し、force-push、history rewrite、未確認の unrelated change の同梱を禁止します。push 後は
+その exact `main` SHA の CI を監視し、失敗時は根本修正 commit または revert を直ちに追加して issue に記録します。
+
+destructive operation/history rewrite、branch protection・secret・permission の変更、課金、外部 production deploy、顧客・第三者への
+連絡、解消不能なユーザー変更との競合、authority から決められない重大な public semantics は、対象と effect を開示した fresh user
+approval を要求します。sandbox/system/host platform の approval gate はこの policy で迂回しません。
 ## Required implementation rules
 
 - C++23 を使用し、公開 namespace/type/function は設計書の lower snake case に従う。
