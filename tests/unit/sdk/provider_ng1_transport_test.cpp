@@ -283,6 +283,53 @@ namespace
 		require(!mutated_result, "resume projection mutation was encoded");
 	}
 
+	void test_reserved_heartbeat_wire_codec_is_minor_one_only()
+	{
+		const auto control = encode_ng1_heartbeat_control(heartbeat_control());
+		require(control, "reserved heartbeat setup encoding failed");
+		provider::frame wire;
+		wire.type = ng1_heartbeat_message_type;
+		wire.stream_id = 7U;
+		wire.sequence = 3U;
+		wire.control = *control;
+		wire.protocol_major = 1U;
+		wire.protocol_minor = 1U;
+
+		provider::protocol_limits ng1_limits;
+		ng1_limits.protocol_major = 1U;
+		ng1_limits.minimum_minor = 1U;
+		ng1_limits.maximum_minor = 1U;
+		auto encoded = provider::encode_frame(wire, ng1_limits);
+		require(encoded, "reserved heartbeat wire encoding failed");
+		auto decoded = provider::decode_frame(*encoded, ng1_limits);
+		require(decoded, "reserved heartbeat wire decoding failed");
+		require(decoded->type == ng1_heartbeat_message_type && decoded->control == wire.control &&
+					decoded->payload.empty(),
+				"reserved heartbeat wire round trip changed the frame");
+		auto stream = provider::decode_frame_stream(*encoded, ng1_limits);
+		require(stream && stream->size() == 1U &&
+					stream->front().type == ng1_heartbeat_message_type,
+				"reserved heartbeat stream decoding failed");
+
+		auto ng0_wire = wire;
+		ng0_wire.protocol_minor = 0U;
+		provider::protocol_limits ng0_limits;
+		ng0_limits.protocol_major = 1U;
+		ng0_limits.minimum_minor = 0U;
+		ng0_limits.maximum_minor = 0U;
+		require(!provider::encode_frame(ng0_wire, ng0_limits),
+				"reserved heartbeat was admitted on NG0");
+
+		auto flagged = wire;
+		flagged.flags = static_cast<std::uint16_t>(provider::frame_flag::optional_extension);
+		require(!provider::encode_frame(flagged, ng1_limits),
+				"reserved heartbeat accepted optional-extension flags");
+		auto payload = wire;
+		payload.payload.push_back(std::byte{0x01});
+		require(!provider::encode_frame(payload, ng1_limits),
+				"reserved heartbeat accepted a non-empty payload");
+	}
+
 	void test_strict_cbor_rejections()
 	{
 		const auto encoded = encode_ng1_progress_control(progress_control());
@@ -374,6 +421,7 @@ int main()
 	test_heartbeat_round_trip_and_validator_bridge();
 	test_progress_round_trip_and_validator_bridge();
 	test_resume_round_trip_digest_and_validator_bridge();
+	test_reserved_heartbeat_wire_codec_is_minor_one_only();
 	test_strict_cbor_rejections();
 	return 0;
 }
