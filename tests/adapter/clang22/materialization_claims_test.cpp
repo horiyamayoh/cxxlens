@@ -1216,6 +1216,31 @@ namespace
 		return sdk::canonical_value::from_bytes(std::move(raw));
 	}
 
+	[[nodiscard]] std::string execution_journal_digest_for_test(
+		const materialization_incremental_execution_journal_receipt& journal)
+	{
+		std::vector<sdk::canonical_value> task_ids;
+		std::vector<sdk::canonical_value> seals;
+		task_ids.reserve(journal.canonical_task_ids.size());
+		seals.reserve(journal.ordered_task_receipt_seal_digests.size());
+		for (const auto& task_id : journal.canonical_task_ids)
+			task_ids.push_back(sdk::canonical_value::from_string(task_id));
+		for (const auto& seal : journal.ordered_task_receipt_seal_digests)
+			seals.push_back(sdk::canonical_value::from_string(seal));
+		auto payload = sdk::canonical_binary(sdk::canonical_value::from_tuple({
+			sdk::canonical_value::from_string(journal.materialization_request_id),
+			receipt_u64_bytes(journal.exact_task_count),
+			sdk::canonical_value::from_tuple(std::move(task_ids)),
+			sdk::canonical_value::from_tuple(std::move(seals)),
+		}));
+		require(payload.has_value(), "journal negative fixture encoding failed");
+		auto digest = sdk::semantic_digest(
+			"cxxlens.df-0200.execution-journal-receipt-set.v1",
+			std::string{reinterpret_cast<const char*>(payload->data()), payload->size()});
+		require(digest.has_value(), "journal negative fixture digest failed");
+		return std::move(*digest);
+	}
+
 	[[nodiscard]] std::vector<sdk::canonical_value>
 	receipt_texts(const std::initializer_list<std::string_view> values)
 	{
@@ -1522,10 +1547,21 @@ namespace
 		auto tampered_validation =
 			validate_materialization_incremental_task_receipt(request, 0U, tampered);
 		require(!tampered_validation, "incremental receipt accepted a seal mutation");
+		auto ordinal_drift = receipts;
+		ordinal_drift[1U].canonical_task_ordinal = ordinal_drift[0U].canonical_task_ordinal;
+		auto ordinal_drift_journal = seal_materialization_incremental_execution_journal(
+			*request_id, std::span<const materialization_incremental_task_receipt>{ordinal_drift});
+		require(!ordinal_drift_journal &&
+					failure(ordinal_drift_journal.error()) ==
+						"materialization.incremental-receipt-invalid/execution-journal/task-order",
+				"incremental journal accepted receipt ordinal drift");
 		std::swap(receipts[0U], receipts[1U]);
 		auto reordered_journal = seal_materialization_incremental_execution_journal(
 			*request_id, std::span<const materialization_incremental_task_receipt>{receipts});
-		require(!reordered_journal, "incremental journal accepted reordered task receipts");
+		require(!reordered_journal &&
+					failure(reordered_journal.error()) ==
+						"materialization.incremental-receipt-invalid/execution-journal/task-order",
+				"incremental journal accepted reordered task receipts");
 	}
 
 	void check_incremental_ingress(const validated_materialization_request& request)
@@ -1704,8 +1740,41 @@ namespace
 				"claim stream journal census validator rejected its own journal");
 		auto incomplete_journal = *journal;
 		incomplete_journal.canonical_task_ids.pop_back();
-		require(!validate_materialization_incremental_execution_journal(incomplete_journal),
+		auto incomplete_validation =
+			validate_materialization_incremental_execution_journal(incomplete_journal);
+		require(!incomplete_validation &&
+					failure(incomplete_validation.error()) ==
+						"materialization.incremental-receipt-invalid/execution-journal/task-census",
 				"claim stream journal census validator accepted a missing task identity");
+		auto duplicate_seal = *journal;
+		duplicate_seal.ordered_task_receipt_seal_digests[1U] =
+			duplicate_seal.ordered_task_receipt_seal_digests[0U];
+		duplicate_seal.execution_journal_receipt_set_digest =
+			execution_journal_digest_for_test(duplicate_seal);
+		auto duplicate_seal_validation =
+			validate_materialization_incremental_execution_journal(duplicate_seal);
+		require(!duplicate_seal_validation &&
+					failure(duplicate_seal_validation.error()) ==
+						"materialization.incremental-receipt-invalid/execution-journal/task-seal",
+				"incremental journal accepted a duplicate receipt seal");
+		auto missing_seal = *journal;
+		missing_seal.ordered_task_receipt_seal_digests.pop_back();
+		auto missing_seal_validation =
+			validate_materialization_incremental_execution_journal(missing_seal);
+		require(!missing_seal_validation &&
+					failure(missing_seal_validation.error()) ==
+						"materialization.incremental-receipt-invalid/execution-journal/task-census",
+				"claim stream journal census validator accepted a missing receipt seal");
+		auto reordered_journal_projection = *journal;
+		std::swap(reordered_journal_projection.canonical_task_ids[0U],
+				  reordered_journal_projection.canonical_task_ids[1U]);
+		std::swap(reordered_journal_projection.ordered_task_receipt_seal_digests[0U],
+				  reordered_journal_projection.ordered_task_receipt_seal_digests[1U]);
+		reordered_journal_projection.execution_journal_receipt_set_digest =
+			execution_journal_digest_for_test(reordered_journal_projection);
+		require(validate_materialization_incremental_execution_journal(reordered_journal_projection)
+					.has_value(),
+				"journal boundary rejected a unique reordered projection before external binding");
 		auto external = materialization_claim_stream_source::validate_external_task_receipts(
 			request, *journal, std::span<materialization_claim_stream_task>{tasks});
 		require(external.has_value(),
@@ -1719,6 +1788,15 @@ namespace
 		require(raw_external.has_value(),
 				"raw claim stream external validator rejected unchanged sealed task streams: " +
 					(raw_external ? std::string{} : failure(raw_external.error())));
+		auto reordered_external =
+			materialization_claim_stream_source::validate_external_task_receipts(
+				request,
+				reordered_journal_projection,
+				std::span<materialization_claim_stream_task>{tasks});
+		require(!reordered_external &&
+					failure(reordered_external.error()) ==
+						"materialization.claim-stream-invalid/execution-journal/task-binding",
+				"external journal binding accepted reordered task receipts");
 		std::vector<materialization_claim_stream_task> missing_streams;
 		missing_streams.reserve(receipts.size());
 		for (const auto& receipt : receipts)
@@ -3492,6 +3570,42 @@ namespace
 					duplicate_result.error().detail == "noncanonical-order" &&
 					duplicate_source->partition_count() == 0U,
 				"bounded adoption accepted a duplicate partition window");
+
+		auto out_of_order_source = materialization_bounded_claim_source::begin(request);
+		require(out_of_order_source.has_value(), "out-of-order source begin failed");
+		auto out_of_order = out_of_order_source->consume_task(make_task(1U));
+		require(!out_of_order && out_of_order.error().field == "task-order" &&
+					out_of_order.error().detail == "canonical-next" &&
+					out_of_order_source->partition_count() == 0U,
+				"bounded adoption staged an out-of-order task window");
+
+		auto duplicate_task_source = materialization_bounded_claim_source::begin(request);
+		require(duplicate_task_source.has_value(), "duplicate task source begin failed");
+		require(duplicate_task_source->consume_task(make_task(0U)).has_value(),
+				"duplicate task source first window adoption failed");
+		const auto partition_count_before_duplicate = duplicate_task_source->partition_count();
+		auto relabeled_task = make_task(0U);
+		relabeled_task.canonical_task_index = 1U;
+		auto relabeled_result = duplicate_task_source->consume_task(std::move(relabeled_task));
+		require(!relabeled_result && relabeled_result.error().field == "task-binding" &&
+					relabeled_result.error().detail == "sealed-index" &&
+					duplicate_task_source->partition_count() == partition_count_before_duplicate,
+				"bounded adoption accepted a relabeled duplicate task window");
+
+		auto duplicate_task_source_after_relabel =
+			materialization_bounded_claim_source::begin(request);
+		require(duplicate_task_source_after_relabel.has_value(),
+				"duplicate task source after relabel begin failed");
+		require(duplicate_task_source_after_relabel->consume_task(make_task(0U)).has_value(),
+				"duplicate task source after relabel first window adoption failed");
+		const auto partition_count_before_duplicate_after_relabel =
+			duplicate_task_source_after_relabel->partition_count();
+		auto duplicate_task = duplicate_task_source_after_relabel->consume_task(make_task(0U));
+		require(!duplicate_task && duplicate_task.error().field == "task-order" &&
+					duplicate_task.error().detail == "canonical-next" &&
+					duplicate_task_source_after_relabel->partition_count() ==
+						partition_count_before_duplicate_after_relabel,
+				"bounded adoption staged a duplicate task window");
 	}
 } // namespace
 

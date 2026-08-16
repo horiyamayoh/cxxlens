@@ -202,6 +202,32 @@ namespace
 					verified->kind ==
 						materialization_store_publication_outcome_kind::committed_verified,
 				"fully verified Store observation was not classified as committed_verified");
+
+		auto compacted_snapshot = verified_observation();
+		compacted_snapshot.verification_receipts[2U].projection->publication =
+			record("publication:compacted",
+				   "series:compacted",
+				   compacted_snapshot.candidate_manifest->id,
+				   7U,
+				   "publication:prior");
+		compacted_snapshot.verification_receipts[2U].projection->publication.physical_generation =
+			99U;
+		const auto compacted =
+			classify_materialization_store_publication_outcome(compacted_snapshot);
+		require(compacted &&
+					compacted->kind ==
+						materialization_store_publication_outcome_kind::committed_verified,
+				"open(snapshot) rejected a semantically matching compacted publication");
+
+		auto wrong_snapshot = verified_observation();
+		wrong_snapshot.verification_receipts[2U].projection->publication.snapshot_id =
+			"snapshot:other";
+		const auto rejected_snapshot =
+			classify_materialization_store_publication_outcome(wrong_snapshot);
+		require(!rejected_snapshot &&
+					rejected_snapshot.error() ==
+						cxxlens::sdk::error{"store.transaction-state", "publish", {}},
+				"open(snapshot) accepted a publication for a different snapshot");
 	}
 
 	void unknown_or_forged_tuples_fail_closed()

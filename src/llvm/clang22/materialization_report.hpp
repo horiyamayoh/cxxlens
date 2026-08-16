@@ -126,8 +126,9 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
-	 * Owned, bounded evidence copied from one successful provider validation pass. Raw frames and
-	 * row payloads are deliberately not retained; row identity is represented by row_set_digest.
+	 * Owned, bounded evidence copied from one successful provider validation pass. Raw frames are
+	 * retained only as source-private diagnostic bytes; sealed row canonical forms are retained so
+	 * the report leaf can be reproved against the shared provider receipt.
 	 */
 	struct detailed_task_report_capture
 	{
@@ -306,6 +307,14 @@ namespace cxxlens::detail::clang22::materialization
 		const sealed_materialization_result& materialized,
 		const materialization_v2_1_task_metadata_receipt& metadata,
 		const detailed_report_limits& limits = {});
+
+	/**
+	 * Recompute and bind one installed report leaf to the shared sealed provider transcript
+	 * receipt. This is source-private validation only; it does not qualify a provider or activate a
+	 * public release surface.
+	 */
+	[[nodiscard]] sdk::result<void> validate_detailed_task_report_sealed_transcript_leaf(
+		const detailed_task_report_capture& capture, const detailed_report_limits& limits = {});
 
 	/** Encode one bounded task capture for a source-private durable artifact. */
 	[[nodiscard]] sdk::result<std::vector<std::byte>>

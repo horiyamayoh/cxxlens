@@ -17,6 +17,7 @@
 #include <cxxlens/sdk.hpp>
 
 #include "../../../src/sdk/sqlite_backend_observation_internal.hpp"
+#include "../../../src/sdk/sqlite_wal_recovery_workspace_internal.hpp"
 #include "../../support/sqlite_store_fixture.hpp"
 
 namespace cxxlens::sdk
@@ -358,6 +359,57 @@ namespace
 		// A mid-factory identity replacement must be injected after the source census and before
 		// finish_private_read().  The public API has no deterministic barrier at that boundary;
 		// sleep/thread races are deliberately not used as an oracle here.
+	}
+
+	void check_active_wal_fault_has_no_same_attempt_fallback()
+	{
+		const auto value = engine();
+		temporary_directory directory{"sqlite-store-active-wal-fault-recovery"};
+		const auto path = directory.path() / "active.sqlite";
+		const auto expected = seed_current(path, value);
+
+		active_wal_sidecar_fixture active{path};
+		const auto before_fault = capture_files(path);
+		const auto recovery_workspace_attempts_before_fault =
+			sdk::sqlite_wal_recovery_workspace_builder_attempt_count_for_testing();
+		auto rejected = sdk::open_sqlite_snapshot_store(path.string(), value);
+		require_error(rejected,
+					  {"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"},
+					  "active WAL+SHM qualification fault did not fail closed");
+		require(
+			sdk::sqlite_wal_recovery_workspace_builder_attempt_count_for_testing() ==
+				recovery_workspace_attempts_before_fault,
+			"active WAL+SHM qualification failure entered WAL-only recovery in the same attempt");
+		require(capture_files(path) == before_fault,
+				"active WAL+SHM qualification fault changed the source family");
+
+		// A failed active-WAL attempt must not close-and-reopen into a private copy or silently
+		// select the SHM-absent route. Only this explicit fixture transition makes the next
+		// independent attempt eligible for the existing WAL-only recovery route.
+		active.close();
+		require(std::filesystem::remove(shm_path(path)),
+				"active WAL+SHM fault fixture SHM removal failed");
+		const auto after_fault = capture_files(path);
+		require(!after_fault.bytes_by_name.contains(path.filename().string() + "-shm") &&
+					after_fault.bytes_by_name.at(path.filename().string()) ==
+						before_fault.bytes_by_name.at(path.filename().string()) &&
+					after_fault.bytes_by_name.at(path.filename().string() + "-wal") ==
+						before_fault.bytes_by_name.at(path.filename().string() + "-wal"),
+				"active WAL+SHM fault fixture did not leave an exact main/WAL recovery input");
+
+		auto recovered = sdk::open_sqlite_snapshot_store(path.string(), value);
+		require(
+			sdk::sqlite_wal_recovery_workspace_builder_attempt_count_for_testing() ==
+				recovery_workspace_attempts_before_fault + 1U,
+			"explicit SHM-absent transition did not enter exactly one WAL-only recovery workspace");
+		require(recovered.has_value(),
+				"explicit SHM-absent recovery did not select the WAL-only route");
+		require_current(*recovered,
+						value,
+						expected,
+						"explicit SHM-absent recovery changed the logical authority");
+		require(capture_files(path) == after_fault,
+				"WAL-only recovery after the active fault changed the source family");
 	}
 
 	void check_source_shm_read_lock_route_guard()
@@ -925,6 +977,7 @@ int main()
 	check_active_wal_direct_entry_gate_precedes_reads_and_qualification();
 	check_active_branch_header_precedes_qualification();
 	check_active_current_happy_path();
+	check_active_wal_fault_has_no_same_attempt_fallback();
 	check_wal_only_eager_read_and_mutation_handoff();
 	check_closed_wal_classifier();
 	check_closed_sidecar_topology();

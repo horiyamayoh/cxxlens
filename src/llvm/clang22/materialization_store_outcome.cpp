@@ -126,7 +126,17 @@ namespace cxxlens::detail::clang22::materialization
 					return false;
 				const auto& projection = *receipt.projection;
 				if (projection.physical_backend != observation.backend ||
-					projection.publication != record || projection.manifest != manifest)
+					projection.manifest != manifest)
+					return false;
+				if (receipt.path == materialization_store_path::open_snapshot)
+				{
+					const auto& publication = projection.publication;
+					if (publication.snapshot_id != record.snapshot_id ||
+						publication.state != sdk::publication_state::committed ||
+						publication.corrupt)
+						return false;
+				}
+				else if (projection.publication != record)
 					return false;
 			}
 			return true;
