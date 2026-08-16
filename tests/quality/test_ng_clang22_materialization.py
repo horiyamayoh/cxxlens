@@ -5640,14 +5640,22 @@ class NgClang22MaterializationTests(unittest.TestCase):
         report_source = (
             ROOT / "src/llvm/clang22/materialization_public_report.cpp"
         ).read_text(encoding="utf-8")
+        checked_capacity = source.index(
+            "check_public_materialization_capacity_reservation(report_limits)"
+        )
         consume = source.index(
-            "prepublication->consume_reserved_capacity(reserved_report_bytes)"
+            "prepublication->consume_reserved_capacity(*capacity_reservation)"
         )
         publication_gate = source.index(
             "if (!begin_production_publication_gate())"
         )
         publication_attempt = source.index(
             "auto postpublication = std::move(*journal).begin_publication();"
+        )
+        self.assertLess(
+            checked_capacity,
+            consume,
+            "the independently checked capacity proof must precede consumption",
         )
         self.assertLess(
             consume,
@@ -5658,6 +5666,11 @@ class NgClang22MaterializationTests(unittest.TestCase):
             publication_gate,
             publication_attempt,
             "publication gate must precede the Store publication attempt",
+        )
+        self.assertIn(
+            "public_input.capacity_reservation = &*capacity_reservation;",
+            source,
+            "the post-publication builder must receive the checked capacity proof",
         )
         self.assertIn(
             '"reservation-not-consumed"',

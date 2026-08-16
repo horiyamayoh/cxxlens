@@ -1975,6 +1975,12 @@ int main(const int argc, char**)
 	const detailed_report_limits report_limits{};
 	if (admitted_request.task_count() > report_limits.max_tasks)
 		return no_response();
+	auto capacity_reservation = check_public_materialization_capacity_reservation(report_limits);
+	if (!capacity_reservation)
+		return emit_typed_failure(std::move(*journal),
+							  "materialization.report-invalid",
+							  request_subject,
+							  capacity_reservation.error());
 	auto task_report_spool_result = detailed_task_report_replayable_spool::create(report_limits);
 	if (!task_report_spool_result)
 		return no_response();
@@ -2081,7 +2087,7 @@ int main(const int argc, char**)
 		*observed,
 		occurrence->manifest(),
 		occurrence->receipt(),
-		report_limits.max_projection_bytes);
+		*capacity_reservation);
 	if (!prepublication)
 		return emit_typed_failure(std::move(*journal),
 								  "materialization.report-invalid",
@@ -2116,8 +2122,7 @@ int main(const int argc, char**)
 		postpublication_exception_error.code = "materialization.report-invalid";
 		postpublication_exception_error.field = "postpublication";
 		postpublication_exception_error.detail = "exception";
-		const auto reserved_report_bytes = prepublication->reserved_bytes;
-		if (auto consumed = prepublication->consume_reserved_capacity(reserved_report_bytes);
+		if (auto consumed = prepublication->consume_reserved_capacity(*capacity_reservation);
 			!consumed)
 			return emit_typed_failure(std::move(*journal),
 									  "materialization.report-invalid",
@@ -2171,6 +2176,7 @@ int main(const int argc, char**)
 		public_input.occurrence_receipt = &occurrence->receipt();
 		public_input.bounded_claims = &coordinated->bounded_claim_source();
 		public_input.store = &postpublication->store_observation();
+		public_input.capacity_reservation = &*capacity_reservation;
 		public_input.prepublication = &*prepublication;
 		auto execution_projection = materialization_execution_census_projection(execution_census);
 		if (!execution_projection)

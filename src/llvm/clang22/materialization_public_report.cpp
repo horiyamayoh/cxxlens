@@ -4858,19 +4858,95 @@ namespace cxxlens::detail::clang22::materialization
 			worker.installed_binary_digest, *worker_digest, "installation.worker");
 	}
 
-	sdk::result<void> public_materialization_prepublication_projection::consume_reserved_capacity(
-		const std::size_t required_bytes)
+	public_materialization_capacity_reservation::public_materialization_capacity_reservation(
+		const std::size_t reserved_bytes, std::string proof_digest) noexcept
+		: reserved_bytes_(reserved_bytes), proof_digest_(std::move(proof_digest))
 	{
-		if (capacity_consumed)
+	}
+
+	public_materialization_prepublication_projection::
+		public_materialization_prepublication_projection(std::string binding_digest,
+														 std::string request_digest,
+														 std::string semantic_request_digest,
+														 std::string occurrence_inventory_digest,
+														 const std::uint64_t task_count,
+														 const std::size_t reserved_bytes,
+														 std::string capacity_proof_digest)
+		: binding_digest_(std::move(binding_digest)), request_digest_(std::move(request_digest)),
+		  semantic_request_digest_(std::move(semantic_request_digest)),
+		  occurrence_inventory_digest_(std::move(occurrence_inventory_digest)),
+		  task_count_(task_count), reserved_bytes_(reserved_bytes),
+		  capacity_proof_digest_(std::move(capacity_proof_digest))
+	{
+	}
+
+	sdk::result<public_materialization_capacity_reservation>
+	check_public_materialization_capacity_reservation(const detailed_report_limits& limits)
+	{
+		const detailed_report_limits authority{};
+		if (limits.max_tasks != authority.max_tasks ||
+			limits.max_batches_per_task != authority.max_batches_per_task ||
+			limits.max_chunks_per_batch != authority.max_chunks_per_batch ||
+			limits.max_side_channel_records != authority.max_side_channel_records ||
+			limits.max_string_bytes != authority.max_string_bytes ||
+			limits.max_projection_bytes != authority.max_projection_bytes)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "authority-profile"});
+		try
+		{
+			std::vector<sdk::canonical_value> proof_fields{
+				sdk::canonical_value::from_string(std::to_string(limits.max_tasks)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_batches_per_task)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_chunks_per_batch)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_side_channel_records)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_string_bytes)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_projection_bytes))};
+			auto proof = sdk::canonical_identity_digest(
+				"cxxlens.clang22.materialization-report-capacity.v1", proof_fields);
+			if (!proof)
+				return sdk::unexpected(std::move(proof.error()));
+			return public_materialization_capacity_reservation{limits.max_projection_bytes,
+															   std::move(*proof)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "proof-allocation"});
+		}
+	}
+
+	sdk::result<void> public_materialization_prepublication_projection::consume_reserved_capacity(
+		const public_materialization_capacity_reservation& capacity)
+	{
+		if (state_ == lifecycle_state::consumed)
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report.capacity", "already-consumed"});
-		if (reserved_bytes == 0U)
+		if (reserved_bytes_ == 0U || capacity.reserved_bytes() == 0U)
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report.capacity", "zero-reservation"});
-		if (required_bytes != reserved_bytes)
+		if (reserved_bytes_ != capacity.reserved_bytes() ||
+			capacity_proof_digest_ != capacity.proof_digest())
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report.capacity", "reservation-mismatch"});
-		capacity_consumed = true;
+		state_ = lifecycle_state::consumed;
+		return {};
+	}
+
+	sdk::result<void> public_materialization_prepublication_projection::validate_reserved_capacity(
+		const public_materialization_capacity_reservation& capacity,
+		const std::size_t maximum_report_bytes) const
+	{
+		if (maximum_report_bytes == 0U || reserved_bytes_ == 0U || capacity.reserved_bytes() == 0U)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "zero-reservation"});
+		if (maximum_report_bytes != capacity.reserved_bytes() ||
+			reserved_bytes_ != capacity.reserved_bytes() ||
+			capacity_proof_digest_ != capacity.proof_digest())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "reservation-mismatch"});
+		if (state_ != lifecycle_state::consumed)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "reservation-not-consumed"});
 		return {};
 	}
 
@@ -4880,11 +4956,12 @@ namespace cxxlens::detail::clang22::materialization
 		const raw_input_observation& raw_input,
 		const materialization_occurrence_manifest& occurrence_manifest,
 		const materialization_occurrence_receipt& occurrence_receipt,
-		const std::size_t maximum_report_bytes)
+		const public_materialization_capacity_reservation& capacity)
 	{
 		try
 		{
-			if (maximum_report_bytes == 0U || raw_input.byte_limit == 0U || !raw_input.complete ||
+			if (capacity.reserved_bytes() == 0U || capacity.proof_digest().empty() ||
+				raw_input.byte_limit == 0U || !raw_input.complete ||
 				raw_input.observed_size_bytes > raw_input.byte_limit ||
 				raw_input.observed_prefix_digest.empty())
 				return sdk::unexpected(
@@ -4915,7 +4992,8 @@ namespace cxxlens::detail::clang22::materialization
 				sdk::canonical_value::from_string(occurrence_manifest.occurrence_payload_digest),
 				sdk::canonical_value::from_string(occurrence_manifest.inventory_digest),
 				sdk::canonical_value::from_string(std::to_string(task_count)),
-				sdk::canonical_value::from_string(std::to_string(maximum_report_bytes))};
+				sdk::canonical_value::from_string(std::to_string(capacity.reserved_bytes())),
+				sdk::canonical_value::from_string(std::string{capacity.proof_digest()})};
 			auto binding = sdk::canonical_identity_digest(
 				"cxxlens.clang22.prepublication-report.v1", binding_fields);
 			if (!binding)
@@ -4926,7 +5004,8 @@ namespace cxxlens::detail::clang22::materialization
 				identity.semantic_request_digest,
 				occurrence_manifest.inventory_digest,
 				task_count,
-				maximum_report_bytes};
+				capacity.reserved_bytes(),
+				std::string{capacity.proof_digest()}};
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -4977,6 +5056,8 @@ namespace cxxlens::detail::clang22::materialization
 			missing.emplace_back("claims");
 		if (input.store == nullptr)
 			missing.emplace_back("store.observation");
+		if (input.capacity_reservation == nullptr)
+			missing.emplace_back("prepublication_capacity_reservation");
 		if (input.task_reports != nullptr && input.task_report_spool != nullptr)
 			return sdk::unexpected(
 				report_error({public_materialization_report_error_kind::invalid_projection,
@@ -5023,12 +5104,18 @@ namespace cxxlens::detail::clang22::materialization
 							  {},
 							  "report",
 							  "zero-limit"}));
+		if (input.maximum_report_bytes != input.capacity_reservation->reserved_bytes())
+			return sdk::unexpected(
+				report_error({public_materialization_report_error_kind::invalid_projection,
+							  {},
+							  "report.capacity",
+							  "reservation-mismatch"}));
 		auto prepublication =
 			prepare_public_materialization_prepublication_projection(*input.request,
 																	 *input.raw_input,
 																	 *input.occurrence_manifest,
 																	 *input.occurrence_receipt,
-																	 input.maximum_report_bytes);
+																	 *input.capacity_reservation);
 		if (!prepublication || input.prepublication == nullptr ||
 			*prepublication != *input.prepublication)
 			return sdk::unexpected(
@@ -5036,12 +5123,10 @@ namespace cxxlens::detail::clang22::materialization
 							  {},
 							  "prepublication_projection",
 							  "recompute-mismatch"}));
-		if (!input.prepublication->reservation_consumed())
-			return sdk::unexpected(
-				report_error({public_materialization_report_error_kind::invalid_projection,
-							  {},
-							  "report.capacity",
-							  "reservation-not-consumed"}));
+		auto capacity_state = input.prepublication->validate_reserved_capacity(
+			*input.capacity_reservation, input.maximum_report_bytes);
+		if (!capacity_state)
+			return sdk::unexpected(std::move(capacity_state.error()));
 
 		const auto& request = input.request->request();
 		const auto& tool = request.tool();
