@@ -204,7 +204,7 @@ generator が同じ authority を曖昧に競合しないようにしていま�
 
 `check_ng_agent_context.py` が #277 non-authoritative projection の唯一の producer です。`check_ng_api_development_readiness.py`
 は #261 readiness artifact の authority/generator であり、readiness document と workflow を検証します。#277 projection の出力は
-#261 の source-closure implementation や #276 の constructibility acceptance を進めるものではなく、
+Issue #261 の source-closure implementation や #276 の constructibility acceptance を進めるものではなく、
 source-closure/VFS、provider qualification、real-project evidence、golden path 評価、`agent-autonomous-completion-rate`
 の測定、Nightly の release qualification は別の accepted slice が必要です。この generator の出力だけで constructible、
 qualified、production-ready を主張してはいけません。
