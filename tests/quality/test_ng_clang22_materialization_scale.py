@@ -276,8 +276,9 @@ class NgClang22MaterializationScaleTests(unittest.TestCase):
         self.assertIn("if-no-files-found: warn", scale_job)
         self.assertIn("HARNESS_STATUS: ${{ steps.materialization-scale-harness.outputs.exit_status }}", scale_job)
         self.assertIn("CHECKER_STATUS: ${{ steps.materialization-scale-check.outputs.exit_status }}", scale_job)
+        self.assertIn("PROVENANCE_STATUS: ${{ steps.materialization-scale-provenance.outputs.exit_status }}", scale_job)
         self.assertIn("scale evidence ownership was not generated", scale_job)
-        self.assertIn('if [[ "${HARNESS_STATUS}" != "0" || "${CHECKER_STATUS}" != "0" ]]', scale_job)
+        self.assertIn('if [[ "${HARNESS_STATUS}" != "0" || "${CHECKER_STATUS}" != "0" || "${PROVENANCE_STATUS}" != "0" ]]', scale_job)
         self.assertNotIn("continue-on-error:", scale_job)
 
 
