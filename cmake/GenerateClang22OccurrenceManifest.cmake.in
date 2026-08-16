@@ -9,15 +9,28 @@ set(CXXLENS_PROVENANCE_EXPECTED_TREE "@CXXLENS_SOURCE_TREE@")
 include("@CMAKE_CURRENT_BINARY_DIR@/VerifyClang22SourceProvenance.cmake")
 
 set(_cxxlens_occurrence_prefix "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+set(_cxxlens_occurrence_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")
 set(_cxxlens_occurrence_files "")
 set(_cxxlens_occurrence_separator "")
 
+function(_cxxlens_occurrence_resolve_path role relative_path resolved_path)
+  set(_resolved "${relative_path}")
+  if("${role}" STREQUAL "materializer-executable"
+     OR "${role}" STREQUAL "worker-executable")
+    string(APPEND _resolved "${_cxxlens_occurrence_executable_suffix}")
+  endif()
+  set(${resolved_path} "${_resolved}" PARENT_SCOPE)
+endfunction()
+
 function(_cxxlens_occurrence_append role relative_path)
-  set(_absolute "${_cxxlens_occurrence_prefix}/${relative_path}")
+  _cxxlens_occurrence_resolve_path(
+    "${role}" "${relative_path}" _resolved_relative_path)
+  set(_absolute "${_cxxlens_occurrence_prefix}/${_resolved_relative_path}")
   if(NOT EXISTS "${_absolute}")
     message(
       FATAL_ERROR
-        "Clang 22 occurrence inventory entry is missing: ${relative_path}")
+        "Clang 22 occurrence inventory entry is missing: ${relative_path} (resolved path: ${_resolved_relative_path})"
+    )
   endif()
   file(SHA256 "${_absolute}" _digest)
   set(_entry
