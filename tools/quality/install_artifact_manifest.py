@@ -18,6 +18,9 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_install_artifact_manifest.schema.yaml")
+OCCURRENCE_RELATIVE_PATH = pathlib.Path(
+    "share/cxxlens/materialization/clang22/occurrence-v1.json"
+)
 
 
 class InstallArtifactError(ValueError):
@@ -40,6 +43,58 @@ def command_output(command: list[str], root: pathlib.Path) -> str:
     return subprocess.run(
         command, cwd=root, check=True, capture_output=True, text=True
     ).stdout.strip()
+
+
+def source_identity(root: pathlib.Path) -> dict[str, str]:
+    return {
+        "revision": command_output(["git", "rev-parse", "HEAD"], root),
+        "tree": command_output(["git", "rev-parse", "HEAD^{tree}"], root),
+    }
+
+
+def exact_source_identity(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 40
+        and value == value.lower()
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def installed_occurrence_source(prefix: pathlib.Path) -> dict[str, str] | None:
+    """Read the installed occurrence's source binding when this is a cxxlens prefix.
+
+    The generic quality-ownership fixture intentionally uses a small arbitrary
+    prefix without an occurrence manifest, so absence remains allowed here.
+    Actual cxxlens installs always contain this fixed source-private witness.
+    """
+
+    path = prefix / OCCURRENCE_RELATIVE_PATH
+    if not path.exists() and not path.is_symlink():
+        return None
+    if path.is_symlink() or not path.is_file():
+        raise InstallArtifactError(
+            f"installed occurrence provenance is not a regular file: {path}"
+        )
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise InstallArtifactError(
+            f"installed occurrence provenance cannot be read: {path}: {error}"
+        ) from error
+    if not isinstance(document, dict):
+        raise InstallArtifactError(
+            f"installed occurrence provenance is not a JSON object: {path}"
+        )
+    source = {
+        "revision": document.get("source_revision"),
+        "tree": document.get("source_tree"),
+    }
+    if not all(exact_source_identity(value) for value in source.values()):
+        raise InstallArtifactError(
+            f"installed occurrence provenance has invalid revision/tree: {path}"
+        )
+    return {key: str(value) for key, value in source.items()}
 
 
 def toolchain(compiler: pathlib.Path, root: pathlib.Path) -> dict[str, str]:
@@ -96,13 +151,22 @@ def build_manifest(
     compiler: pathlib.Path,
     configuration: str,
 ) -> dict[str, Any]:
+    source = source_identity(root)
+    occurrence_source = installed_occurrence_source(prefix)
+    if occurrence_source is not None and occurrence_source != source:
+        differences = ", ".join(
+            f"{key} expected={source[key]} actual={occurrence_source[key]}"
+            for key in ("revision", "tree")
+            if occurrence_source[key] != source[key]
+        )
+        raise InstallArtifactError(
+            "installed occurrence source provenance mismatch; refusing to create or "
+            f"verify a stale artifact ({differences})"
+        )
     files = prefix_files(prefix)
     document: dict[str, Any] = {
         "schema": "cxxlens.install-artifact-manifest.v1",
-        "source": {
-            "revision": command_output(["git", "rev-parse", "HEAD"], root),
-            "tree": command_output(["git", "rev-parse", "HEAD^{tree}"], root),
-        },
+        "source": source,
         "configuration": configuration,
         "configuration_digest": canonical_digest(configuration),
         "toolchain": toolchain(compiler, root),
@@ -130,8 +194,60 @@ def verify_manifest(
     jsonschema.Draft202012Validator(load_schema(root)).validate(document)
     expected = build_manifest(root, prefix, compiler, configuration)
     if document != expected:
+        mismatches: list[str] = []
+        for field in ("source", "configuration", "configuration_digest", "prefix_digest"):
+            if document.get(field) != expected.get(field):
+                if field == "source":
+                    for identity in ("revision", "tree"):
+                        actual_value = document.get("source", {}).get(identity)
+                        expected_value = expected["source"][identity]
+                        if actual_value != expected_value:
+                            mismatches.append(
+                                f"source.{identity} expected={expected_value} actual={actual_value}"
+                            )
+                else:
+                    mismatches.append(
+                        f"{field} expected={expected.get(field)} actual={document.get(field)}"
+                    )
+        actual_toolchain = document.get("toolchain", {})
+        expected_toolchain = expected["toolchain"]
+        for field in ("compiler", "identity", "binary_digest", "digest"):
+            if actual_toolchain.get(field) != expected_toolchain[field]:
+                mismatches.append(
+                    f"toolchain.{field} expected={expected_toolchain[field]} "
+                    f"actual={actual_toolchain.get(field)}"
+                )
+
+        expected_files = {row["path"]: row for row in expected["files"]}
+        actual_files = {row["path"]: row for row in document.get("files", [])}
+        missing = sorted(set(expected_files) - set(actual_files))
+        extra = sorted(set(actual_files) - set(expected_files))
+        changed = []
+        for path in sorted(set(expected_files) & set(actual_files)):
+            if expected_files[path] != actual_files[path]:
+                changed.append(path)
+        if missing or extra or changed:
+            file_detail = (
+                f"files expected={len(expected_files)} actual={len(actual_files)}"
+            )
+            if missing:
+                file_detail += f" missing={missing[:4]}"
+            if extra:
+                file_detail += f" extra={extra[:4]}"
+            if changed:
+                file_detail += f" changed={changed[:4]}"
+            mismatches.append(file_detail)
+        if document.get("manifest_digest") != expected["manifest_digest"]:
+            mismatches.append(
+                "manifest_digest "
+                f"expected={expected['manifest_digest']} "
+                f"actual={document.get('manifest_digest')}"
+            )
+        if not mismatches:
+            mismatches.append("document fields differ")
         raise InstallArtifactError(
-            "installed artifact revision/tree/configuration/toolchain/file binding mismatch"
+            "installed artifact revision/tree/configuration/toolchain/file binding "
+            f"mismatch: {'; '.join(mismatches)}"
         )
 
 

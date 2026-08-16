@@ -10,6 +10,22 @@ if(NOT DEFINED PHASE)
   message(FATAL_ERROR "install test requires an explicit PHASE")
 endif()
 
+set(cxxlens_clang22_available "@CXXLENS_CLANG22_AVAILABLE@")
+set(cxxlens_clang22_adapter "@CXXLENS_CLANG_ADAPTER@")
+set(cxxlens_clang22_unavailable_reason "@CXXLENS_CLANG22_UNAVAILABLE_REASON@")
+
+# These phases are the installed native-provider qualification boundary.  An
+# AUTO/OFF structured-unavailable build remains useful for the portable SDK and
+# its unavailable-mode consumers, but it must not enter a native positive or
+# negative evidence run and later look like a provider failure.
+if(PHASE MATCHES "^clang22-materializer-(success|base64|negative)$"
+   AND NOT "${cxxlens_clang22_available}" STREQUAL "TRUE")
+  message(
+    FATAL_ERROR
+      "installed Clang 22 qualification is unavailable before execution: adapter=${cxxlens_clang22_adapter}, reason=${cxxlens_clang22_unavailable_reason}; configure a clean build with CXXLENS_CLANG_ADAPTER=ON and an exact LLVM_DIR/Clang package, then rerun this phase. No native evidence was produced."
+  )
+endif()
+
 function(run_clean expected_result)
   execute_process(
     COMMAND "@CMAKE_COMMAND@" -E env --unset=LD_LIBRARY_PATH

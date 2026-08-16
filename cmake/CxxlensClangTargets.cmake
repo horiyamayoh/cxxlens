@@ -190,6 +190,9 @@ function(cxxlens_configure_clang22 target)
   set(CXXLENS_CLANG22_LIBRARY_DIRS
       ""
       CACHE INTERNAL "Exact LLVM/Clang 22 runtime library directories" FORCE)
+  set(CXXLENS_CLANG22_UNAVAILABLE_REASON
+      ""
+      CACHE INTERNAL "Reason the exact Clang 22 adapter is unavailable" FORCE)
   set(CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY
       FALSE
       CACHE INTERNAL
@@ -205,45 +208,16 @@ function(cxxlens_configure_clang22 target)
 
   if(CXXLENS_CLANG_ADAPTER STREQUAL "OFF")
     target_compile_definitions(${target} PRIVATE CXXLENS_HAS_CLANG22=0)
+    set(CXXLENS_CLANG22_UNAVAILABLE_REASON
+        "disabled-by-user"
+        CACHE INTERNAL "Reason the exact Clang 22 adapter is unavailable" FORCE)
     set(CXXLENS_CLANG22_AVAILABLE
         FALSE
         CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
-    return()
-  endif()
-
-  find_package(LLVM 22.1 CONFIG QUIET)
-  if(LLVM_FOUND AND LLVM_VERSION_MAJOR EQUAL 22)
-    get_filename_component(_cxxlens_llvm_cmake_dir "${LLVM_CMAKE_DIR}" REALPATH)
-    get_filename_component(_cxxlens_llvm_cmake_root
-                           "${_cxxlens_llvm_cmake_dir}" DIRECTORY)
-    find_library(
-      _cxxlens_clang_basic_library
-      NAMES clangBasic
-      PATHS ${LLVM_LIBRARY_DIRS}
-      NO_DEFAULT_PATH NO_CACHE)
-    if(_cxxlens_clang_basic_library)
-      find_package(Clang CONFIG QUIET PATHS "${_cxxlens_llvm_cmake_root}/clang"
-                   NO_DEFAULT_PATH)
-    endif()
-  endif()
-
-  if(NOT LLVM_FOUND
-     OR NOT LLVM_VERSION_MAJOR EQUAL 22
-     OR NOT Clang_FOUND)
-    if(CXXLENS_CLANG_ADAPTER STREQUAL "ON")
-      message(
-        FATAL_ERROR
-          "Exact LLVM/Clang 22 development packages are required when CXXLENS_CLANG_ADAPTER=ON"
-      )
-    endif()
     message(
       STATUS
-        "Exact LLVM/Clang 22 not found; building the structured unavailable adapter"
+        "Exact LLVM/Clang 22 adapter unavailable: CXXLENS_CLANG_ADAPTER=OFF (structured unavailable build)"
     )
-    target_compile_definitions(${target} PRIVATE CXXLENS_HAS_CLANG22=0)
-    set(CXXLENS_CLANG22_AVAILABLE
-        FALSE
-        CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
     return()
   endif()
 
@@ -261,13 +235,69 @@ function(cxxlens_configure_clang22 target)
       clangSerialization
       clangTooling
       clangToolingCore)
-  foreach(component IN LISTS _cxxlens_clang22_components)
-    if(NOT TARGET ${component})
+  set(_cxxlens_clang22_unavailable_reason "")
+  find_package(LLVM 22.1 CONFIG QUIET)
+  if(NOT LLVM_FOUND)
+    set(_cxxlens_clang22_unavailable_reason "llvm-package-not-found")
+  elseif(NOT LLVM_VERSION_MAJOR STREQUAL "22")
+    set(_cxxlens_clang22_unavailable_reason "llvm-major-mismatch")
+  elseif(NOT LLVM_CMAKE_DIR OR NOT LLVM_LIBRARY_DIRS)
+    set(_cxxlens_clang22_unavailable_reason "llvm-package-metadata-incomplete")
+  else()
+    get_filename_component(_cxxlens_llvm_cmake_dir "${LLVM_CMAKE_DIR}" REALPATH)
+    get_filename_component(_cxxlens_llvm_cmake_root
+                           "${_cxxlens_llvm_cmake_dir}" DIRECTORY)
+    find_library(
+      _cxxlens_clang_basic_library
+      NAMES clangBasic
+      PATHS ${LLVM_LIBRARY_DIRS}
+      NO_DEFAULT_PATH NO_CACHE)
+    if(NOT _cxxlens_clang_basic_library)
+      set(_cxxlens_clang22_unavailable_reason "clang-basic-library-missing")
+    else()
+      find_package(Clang CONFIG QUIET PATHS "${_cxxlens_llvm_cmake_root}/clang"
+                   NO_DEFAULT_PATH)
+      if(NOT Clang_FOUND)
+        set(_cxxlens_clang22_unavailable_reason "clang-package-not-found")
+      endif()
+    endif()
+  endif()
+
+  if(_cxxlens_clang22_unavailable_reason STREQUAL "")
+    set(_cxxlens_clang22_missing_targets "")
+    foreach(component IN LISTS _cxxlens_clang22_components)
+      if(NOT TARGET ${component})
+        list(APPEND _cxxlens_clang22_missing_targets "${component}")
+      endif()
+    endforeach()
+    if(_cxxlens_clang22_missing_targets)
+      string(JOIN "," _cxxlens_clang22_missing_target_text
+             ${_cxxlens_clang22_missing_targets})
+      set(_cxxlens_clang22_unavailable_reason
+          "required-targets-missing:${_cxxlens_clang22_missing_target_text}")
+    endif()
+  endif()
+
+  if(NOT _cxxlens_clang22_unavailable_reason STREQUAL "")
+    set(CXXLENS_CLANG22_UNAVAILABLE_REASON
+        "${_cxxlens_clang22_unavailable_reason}"
+        CACHE INTERNAL "Reason the exact Clang 22 adapter is unavailable" FORCE)
+    if(CXXLENS_CLANG_ADAPTER STREQUAL "ON")
       message(
-        FATAL_ERROR "Required explicit Clang 22 target is missing: ${component}"
+        FATAL_ERROR
+          "Exact LLVM/Clang 22 development packages are required when CXXLENS_CLANG_ADAPTER=ON (reason=${_cxxlens_clang22_unavailable_reason}; LLVM_DIR=${LLVM_DIR}; Clang_DIR=${Clang_DIR})"
       )
     endif()
-  endforeach()
+    message(
+      STATUS
+        "Exact LLVM/Clang 22 unavailable (reason=${_cxxlens_clang22_unavailable_reason}; LLVM_DIR=${LLVM_DIR}; Clang_DIR=${Clang_DIR}); building the structured unavailable adapter"
+    )
+    target_compile_definitions(${target} PRIVATE CXXLENS_HAS_CLANG22=0)
+    set(CXXLENS_CLANG22_AVAILABLE
+        FALSE
+        CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
+    return()
+  endif()
 
   target_compile_definitions(${target} PRIVATE CXXLENS_HAS_CLANG22=1)
   target_compile_definitions(

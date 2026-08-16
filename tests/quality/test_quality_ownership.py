@@ -184,8 +184,28 @@ class QualityOwnershipTest(unittest.TestCase):
                         verify_manifest(ROOT, prefix, compiler, "static-test", changed)
 
             artifact.write_text("substituted\n", encoding="utf-8")
-            with self.assertRaisesRegex(InstallArtifactError, "binding mismatch"):
+            with self.assertRaisesRegex(
+                InstallArtifactError,
+                r"binding mismatch: .*files .*changed=\['artifact.txt'\]",
+            ):
                 verify_manifest(ROOT, prefix, compiler, "static-test", baseline)
+
+    def test_install_artifact_rejects_stale_occurrence_provenance(self) -> None:
+        compiler = pathlib.Path(shutil.which("c++") or "")
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = pathlib.Path(temporary) / "prefix"
+            occurrence = prefix / "share/cxxlens/materialization/clang22"
+            occurrence.mkdir(parents=True)
+            (prefix / "artifact.txt").write_text("accepted\n", encoding="utf-8")
+            (occurrence / "occurrence-v1.json").write_text(
+                '{"source_revision":"' + "0" * 40 + '","source_tree":"' + "0" * 40 + '"}\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                InstallArtifactError,
+                "occurrence source provenance mismatch.*refusing to create",
+            ):
+                build_manifest(ROOT, prefix, compiler, "static-test")
 
 
 if __name__ == "__main__":
