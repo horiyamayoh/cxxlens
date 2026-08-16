@@ -27,6 +27,8 @@ namespace cxxlens::provider::clang22::detail
 
 	static_assert(!contains_parent_path_segment("main.cpp"));
 	static_assert(!contains_parent_path_segment("src/foo..bar.hpp"));
+	static_assert(!contains_parent_path_segment("src/..hidden.hpp"));
+	static_assert(!contains_parent_path_segment("src/hidden..hpp"));
 	static_assert(!contains_parent_path_segment("project://src/.hidden.hpp"));
 	static_assert(!contains_parent_path_segment("..."));
 	static_assert(contains_parent_path_segment(".."));
