@@ -92,7 +92,9 @@ jobs:
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
 
       - name: Install locked Python quality dependencies
-        run: python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: \
+            --requirement tools/quality/requirements.lock
 
       - name: Format the bounded change
         run: |
