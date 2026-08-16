@@ -400,6 +400,12 @@ target_link_libraries(cxxlens-provider-process-fixture
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-runtime
                             unit/sdk/provider_runtime_test.cpp)
+if(NOT CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-runtime
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+endif()
 target_link_libraries(cxxlens-unit-sdk-provider-runtime
                       PRIVATE cxxlens::provider_sdk)
 target_include_directories(cxxlens-unit-sdk-provider-runtime
@@ -534,9 +540,13 @@ target_sources(
   cxxlens-unit-sdk-provider-ng1-session
   PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
           "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
+if(NOT CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-ng1-session
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+endif()
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
                       PRIVATE cxxlens::provider_sdk)
 target_include_directories(cxxlens-unit-sdk-provider-ng1-session
@@ -550,6 +560,34 @@ add_test(NAME unit.sdk-provider-ng1-session
 set_tests_properties(
   unit.sdk-provider-ng1-session
   PROPERTIES LABELS "unit;sdk;provider;ng1;session;recovery;spill;fail-closed")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-live-driver
+                            unit/sdk/provider_ng1_live_driver_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-live-driver
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_live_driver.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
+if(NOT CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-ng1-live-driver
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+endif()
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-live-driver
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-live-driver
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-unit-sdk-provider-ng1-live-driver
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+add_test(NAME unit.sdk-provider-ng1-live-driver
+         COMMAND cxxlens-unit-sdk-provider-ng1-live-driver)
+set_tests_properties(
+  unit.sdk-provider-ng1-live-driver
+  PROPERTIES LABELS "unit;sdk;provider;ng1;live;transport;session;fail-closed")
 
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)
@@ -848,6 +886,18 @@ add_test(NAME public-api.provider-clang22-header
 set_tests_properties(public-api.provider-clang22-header
                      PROPERTIES LABELS "public-api;native-sdk;clang22")
 
+cxxlens_add_test_executable(
+  cxxlens-public-api-provider-clang22-translation-unit-input
+  public_headers/provider_clang22_translation_unit_input_test.cpp)
+target_link_libraries(cxxlens-public-api-provider-clang22-translation-unit-input
+                      PRIVATE cxxlens::clang22_provider_sdk)
+add_test(NAME acceptance.public-api.provider-clang22-translation-unit-input
+         COMMAND cxxlens-public-api-provider-clang22-translation-unit-input)
+set_tests_properties(
+  acceptance.public-api.provider-clang22-translation-unit-input
+  PROPERTIES LABELS
+             "acceptance;public-api;native-sdk;clang22;validation;security")
+
 foreach(
   example IN
   ITEMS typed_query
@@ -1045,6 +1095,7 @@ add_dependencies(
   cxxlens-provider-process-fixture
   cxxlens-public-header-cxxlens
   cxxlens-public-header-provider-clang22
+  cxxlens-public-api-provider-clang22-translation-unit-input
   cxxlens-public-header-sdk
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
@@ -1053,6 +1104,7 @@ add_dependencies(
   cxxlens-unit-sdk-provider-ng1-transport
   cxxlens-unit-sdk-provider-ng1-recovery-adapter
   cxxlens-unit-sdk-provider-ng1-session
+  cxxlens-unit-sdk-provider-ng1-live-driver
   cxxlens-unit-sdk-query-runtime
   cxxlens-unit-sdk-sqlite-connection-lifecycle
   cxxlens-unit-sdk-sqlite-default-forwarding-vfs

@@ -19,6 +19,36 @@ authority を読んだ後、実装前に `docs/development/implementation-learni
 および同じ contract/path を参照する未解決 design feedback record を読む。mental model と feedback record は non-normative であり、
 上記 authority を上書きしない。
 
+## Product direction and demand closure
+
+製品方向は次の一文で固定する。
+
+> cxxlens は、コンパイラの観測結果を、再現可能・問い合わせ可能・証拠付きの意味知識へ変換し、
+> 分からない場合には何が足りないかまで返す基盤である。
+
+新しい public surface、relation、provider、analysis、model、recipe を提案・実装する前に、次を exact に宣言する。
+
+- 独立 consumer と、その consumer が答えたい質問または実行したい use case
+- 既存 capability graph で満たせる部分と、足りない capability
+- `proved`、`disproved`、`unknown`、`partial`、`conflicting` のどの結果を返すか
+- coverage、closure、unresolved、conflict、differential disagreement、guarantee、provenance の保持方法
+- `unknown` の原因と、結果を強化する dependency-ordered completion plan
+- 追加 surface が orphan にならない根拠、または需要側 tracked gap
+- exact contract ID、authority、write scope、evidence、support/stability disposition
+
+公開 API 数、relation 数、green test 数だけを製品完成の根拠にしない。供給側 inventory に orphan surface がなく、
+admitted use case に executable capability path または明示 tracked gap があり、最終的に両側の orphan がゼロであることを要求する。
+
+高リスク contract は acceptance 前に constructibility を反証する。public semantics、identity、protocol、persistence、
+不可逆 effect、resource bound を変更する場合は、executable state machine、field availability by phase、
+phase-authentic outcome union、minimal witness、bounded resource witness、crash/effect matrix、
+independent counterexample review を揃える。実装時に存在しない値を report へ要求したり、失敗 phase より後の identity を
+捏造したりしてはならない。
+
+coding agent は authority 全体から作業契約を推測しない。goal/use case、capability gap、最小 reading set、exact contract ID、
+allowed write paths、required evidence、既知 design feedback、forbidden shortcuts、completion commands を持つ
+最小 context を生成または issue に固定してから書き込みを開始する。
+
 ## Goal standing authorization
 
 Repository policy `CXXLENS_AGENT_AUTHORIZATION_V1` は、`/goal` が
@@ -49,6 +79,7 @@ required checks、review resolution、merge、exact merged-main qualification �
 - AST pointer を保存、所有、別スレッドへ移送しない。raw owning pointer を導入しない。
 - unordered container の iteration order を serialization や ID に使用しない。
 - read result は empty と unresolved を区別し、evidence/coverage/guarantee を落とさない。
+- `unknown` は不足 input/capability/model/evidence と completion plan を失わない。
 - mutation/generation は plan、独立 validator、dry-run、transaction の順を崩さない。
 - public API/relation/provider を変更したら次世代 catalog/registry、Doxygen、acceptance test、設計
   traceability を更新する。旧124 API catalogへ新規surfaceを追加しない。
@@ -63,7 +94,9 @@ required checks、review resolution、merge、exact merged-main qualification �
 - compile command や variant の silent fallback/first-wins
 - macro expansion range への直接 edit
 - conflict、stale digest、variant、reparse failure の無視
-- unsupported surface の omission
+- unsupported surface、consumer gap、unresolved capability の omission
+- API 数や relation 数だけによる completion claim
+- actionable な不足理由を持たない generic `unknown`
 - diagnostic prose substring による制御
 - shell command の文字列連結
 - test に合わせた上位 contract の縮小
@@ -79,4 +112,5 @@ cmake --build --preset dev-clang --target cxxlens-quality
 ```
 
 公開 API は header/signature/ownership、error/unresolved/coverage、ID/order、schema/invariant、
-positive/negative test、example、catalog ID が揃うまで完成扱いにしない。
+positive/negative test、example、catalog ID に加え、consumer/use-case trace、需要側 closure disposition、
+actionable unknown/completion plan、必要な constructibility witness が揃うまで完成扱いにしない。

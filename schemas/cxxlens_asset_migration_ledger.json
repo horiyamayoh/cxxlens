@@ -1,5 +1,5 @@
 {
-  "asset_count": 675,
+  "asset_count": 680,
   "assets": [
     {
       "authority": "active",
@@ -3083,6 +3083,27 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/provider_ng1_live_driver.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/provider_ng1_live_driver_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/provider_ng1_process_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/provider_ng1_recovery.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3937,6 +3958,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/public_headers/provider_clang22_translation_unit_input_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/public_headers/sdk_header_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4169,6 +4197,13 @@
     {
       "authority": "active",
       "path": "tests/unit/sdk/provider_ng1_hardening_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/unit/sdk/provider_ng1_live_driver_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4728,7 +4763,7 @@
     }
   ],
   "classifications": {
-    "active": 639,
+    "active": 644,
     "archived": 35,
     "generated": 1
   },

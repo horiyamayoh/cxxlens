@@ -203,6 +203,6 @@ and `\` as parent-segment separators, rejects root-relative leading separators,
 and rejects embedded NUL in the existing logical-path input.
 
 This disposition does not accept a source-closure identity, request version,
-wire feature, reuse/cache rule, compiler VFS, or production qualification. Issue
-#261 remains open. An independent reviewer and an accepted ADR are required
+wire feature, reuse/cache rule, compiler VFS, or production qualification. The
+tracking issue #261 remains open. An independent reviewer and an accepted ADR are required
 before implementation crosses any of those boundaries.
