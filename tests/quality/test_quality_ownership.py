@@ -184,8 +184,67 @@ class QualityOwnershipTest(unittest.TestCase):
                         verify_manifest(ROOT, prefix, compiler, "static-test", changed)
 
             artifact.write_text("substituted\n", encoding="utf-8")
-            with self.assertRaisesRegex(InstallArtifactError, "binding mismatch"):
+            with self.assertRaisesRegex(
+                InstallArtifactError,
+                r"binding mismatch: .*files .*changed=\['artifact.txt'\]",
+            ):
                 verify_manifest(ROOT, prefix, compiler, "static-test", baseline)
+
+    def test_install_artifact_rejects_stale_occurrence_provenance(self) -> None:
+        compiler = pathlib.Path(shutil.which("c++") or "")
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = pathlib.Path(temporary) / "prefix"
+            occurrence = prefix / "share/cxxlens/materialization/clang22"
+            occurrence.mkdir(parents=True)
+            (prefix / "artifact.txt").write_text("accepted\n", encoding="utf-8")
+            (occurrence / "occurrence-v1.json").write_text(
+                '{"source_revision":"' + "0" * 40 + '","source_tree":"' + "0" * 40 + '"}\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                InstallArtifactError,
+                "occurrence source provenance mismatch.*refusing to create",
+            ):
+                build_manifest(ROOT, prefix, compiler, "static-test")
+
+    def test_install_artifact_accepts_configured_source_provenance(self) -> None:
+        compiler = pathlib.Path(shutil.which("c++") or "")
+        revision = "a" * 40
+        tree = "b" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = pathlib.Path(temporary) / "prefix"
+            occurrence = prefix / "share/cxxlens/materialization/clang22"
+            occurrence.mkdir(parents=True)
+            (prefix / "artifact.txt").write_text("accepted\n", encoding="utf-8")
+            (occurrence / "occurrence-v1.json").write_text(
+                '{"source_revision":"' + revision + '","source_tree":"' + tree + '"}\n',
+                encoding="utf-8",
+            )
+            manifest = build_manifest(
+                ROOT,
+                prefix,
+                compiler,
+                "static-test",
+                source_revision=revision,
+                source_tree=tree,
+            )
+            self.assertEqual(manifest["source"], {"revision": revision, "tree": tree})
+            verify_manifest(
+                ROOT,
+                prefix,
+                compiler,
+                "static-test",
+                manifest,
+                source_revision=revision,
+                source_tree=tree,
+            )
+
+    def test_install_test_passes_configured_source_identity(self) -> None:
+        install_script = (ROOT / "tests/install/run_install_test.cmake.in").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('--source-revision "@CXXLENS_SOURCE_REVISION@"', install_script)
+        self.assertIn('--source-tree "@CXXLENS_SOURCE_TREE@"', install_script)
 
 
 if __name__ == "__main__":

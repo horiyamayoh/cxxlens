@@ -94,6 +94,21 @@ namespace cxxlens::sdk
 		operator==(const sqlite_shm_reader_attachment_target_identity&) const = default;
 	};
 
+	/**
+	 * Source observation completed before the process-wide registry lock is reacquired.
+	 *
+	 * This is evidence for the short native-OK projection publication transition, not an
+	 * authority by itself.  In particular, a missing retained field or failed filesystem
+	 * observation never constructs this value; the caller must preserve lifecycle ambiguity.
+	 */
+	struct sqlite_shm_reader_native_ok_projection_source_observation
+	{
+		sqlite_shm_reader_attachment_target_identity target;
+
+		[[nodiscard]] bool operator==(
+			const sqlite_shm_reader_native_ok_projection_source_observation&) const = default;
+	};
+
 	class sqlite_shm_writer_member_authority;
 	class sqlite_shm_reader_attachment_authority;
 	class sqlite_shm_reader_candidate_authority_minter;
@@ -3176,10 +3191,16 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
 		mint_reader_native_ok_projection(
 			sqlite_shm_reader_native_ok_projection_reservation& reservation);
+		[[nodiscard]] sqlite_shm_lease_result<
+			sqlite_shm_reader_native_ok_projection_source_observation>
+		observe_reader_native_ok_projection_source(
+			const sqlite_shm_reader_native_ok_projection_reservation& reservation,
+			const sqlite_source_shm_target_namespace_epoch_reader_borrow& borrow);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
 		attach_reader_native_ok_projection(
 			sqlite_shm_reader_native_ok_projection_reservation& reservation,
-			sqlite_source_shm_target_namespace_epoch_reader_borrow borrow);
+			sqlite_source_shm_target_namespace_epoch_reader_borrow borrow,
+			sqlite_shm_reader_native_ok_projection_source_observation source_observation);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_native_ok_projection_permit>
 		reserve_reader_native_ok_projection(
 			sqlite_shm_registry_family_pin& family,

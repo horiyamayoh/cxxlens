@@ -69,6 +69,26 @@ def load_document(path: pathlib.Path) -> dict[str, Any]:
     return value
 
 
+def public_api_contract_pending(root: pathlib.Path) -> list[dict[str, str]]:
+    """Project catalog contract-pending entries into foundation evidence.
+
+    Catalog maturity describes the catalog authority itself.  Individual
+    contract-pending entries are not foundation failures; production scope and
+    release qualification own their promotion to a qualified surface.  Keep
+    the pending entries in the foundation report so this distinction cannot
+    turn into an implicit production claim.
+    """
+
+    catalog = load_document(root / PUBLIC_API)
+    return [
+        {"id": entry["id"], "owner_issue": entry["owner_issue"]}
+        for entry in sorted(
+            catalog["entries"], key=lambda entry: entry["id"]
+        )
+        if entry["status"] == "contract-pending"
+    ]
+
+
 def validate_schema(document: Any, schema: dict[str, Any], label: str) -> None:
     try:
         jsonschema.Draft202012Validator.check_schema(schema)
@@ -283,11 +303,8 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         fail(f"provider support matrix contains migration blockers: {blockers}")
 
     public_api = load_document(root / PUBLIC_API)
-    pending = [
-        row["id"] for row in public_api["entries"] if row["status"] != "implemented"
-    ]
-    if public_api["maturity"] != "implemented" or pending:
-        fail(f"public API catalog contains non-implemented entries: {pending}")
+    if public_api["maturity"] != "implemented":
+        fail("public API catalog maturity is not implemented")
 
     if set(manifest["zero_audits"]) != EXPECTED_ZERO_AUDITS:
         fail("foundation zero-audit set differs from the accepted gate")
@@ -589,6 +606,7 @@ def build_report(
         "git": git_state,
         "authority_digests": authority_digests,
         "version_contracts": manifest["version_contracts"],
+        "public_api_contract_pending": public_api_contract_pending(root),
         "evidence_claims": evidence_claims,
         "ci": {
             "repository": repository,

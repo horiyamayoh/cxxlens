@@ -1,5 +1,5 @@
 {
-  "asset_count": 680,
+  "asset_count": 681,
   "assets": [
     {
       "authority": "active",
@@ -3818,6 +3818,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/install/clang22_materializer_installation_binding_test.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/install/clang22_materializer_negative_test.py",
       "removal_issue": null,
       "replacement": null,
@@ -4763,7 +4770,7 @@
     }
   ],
   "classifications": {
-    "active": 644,
+    "active": 645,
     "archived": 35,
     "generated": 1
   },

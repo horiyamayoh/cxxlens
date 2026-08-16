@@ -263,7 +263,7 @@ entries:
     implementation_evidence: [src/sdk/store.cpp, examples/sdk/snapshot_store.cpp, tests/unit/sdk/store_test.cpp, tests/unit/sdk/query_runtime_test.cpp, schemas/cxxlens_ng_snapshot_manifest.schema.yaml, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_snapshot_store_contract.yaml, docs/design/adr/0013-ng-sqlite-physical-store.md, docs/design/adr/0021-query-closure-applicability.md, docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0034-complete-partition-closure-subject.md, docs/design/adr/0035-derived-basis-partition-membership.md, docs/design/adr/0037-lossless-claim-evidence-occurrences.md, docs/design/adr/0077-persisted-publication-identity-binding.md, docs/design/adr/0078-snapshot-version-wire-u32-canonicality.md, docs/design/adr/0079-checked-publication-counters.md]
 
   - id: public.snapshot-store-sqlite-v3
-    status: implemented
+    status: contract-pending
     owner_issue: '#181'
     profile: NG0
     target: cxxlens::provider_sdk
