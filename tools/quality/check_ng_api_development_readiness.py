@@ -23,6 +23,8 @@ from typing import Any
 
 import yaml
 
+import check_ng_agent_context as agent_context
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASELINE_PATH = pathlib.Path(
@@ -34,8 +36,8 @@ QUALITY_PATH = pathlib.Path(".github/workflows/quality.yml")
 NIGHTLY_PATH = pathlib.Path(".github/workflows/nightly.yml")
 BUILD_TEST_GUIDE_PATH = pathlib.Path("docs/development/build-and-test.md")
 AGENT_GOAL_PATH = pathlib.Path("docs/development/agent-api-development-goal.md")
-PACKET_JSON_NAME = "cxxlens-ng-agent-context-issue-261.json"
-PACKET_MARKDOWN_NAME = "cxxlens-ng-agent-context-issue-261.md"
+PACKET_JSON_NAME = "cxxlens-ng-agent-context-issue-277.json"
+PACKET_MARKDOWN_NAME = "cxxlens-ng-agent-context-issue-277.md"
 USE_CASE_ID = "repository-semantic-query.explain-translation-unit.v1"
 ISSUE_ID = "#261"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -169,6 +171,28 @@ def _product_contract(manifest: dict[str, Any]) -> tuple[dict[str, Any], dict[st
     packet = agent.get("first_packet")
     if not isinstance(packet, dict):
         _fail("the first #261 agent packet template is missing")
+    if agent.get("generator") != "tools/quality/check_ng_agent_context.py":
+        _fail("#277 exact projection generator is not the authority")
+    if agent.get("artifact") != "cxxlens-ng-agent-context-277-${revision}":
+        _fail("#277 exact projection artifact is not the authority")
+    expected_projection = {
+        "contract": "cxxlens.ng-agent-context.v1",
+        "issue": "#277",
+        "packet_issue": "#261",
+        "use_case_id": USE_CASE_ID,
+        "demand_closure_issue": "#275",
+        "constructibility_issue": "#276",
+        "design_feedback_record": "DF-0261",
+        "output": {
+            "json": PACKET_JSON_NAME,
+            "markdown": PACKET_MARKDOWN_NAME,
+        },
+        "authority_scope": "exact-template-and-machine-projections",
+        "clean_source_required": True,
+        "stale_policy": "reject",
+    }
+    if agent.get("projection") != expected_projection:
+        _fail("#277 exact projection authority differs")
     return matches[0], packet
 
 
@@ -487,10 +511,12 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         _fail("stress tier must be an exact-SHA reusable workflow dependency")
 
     agent_job = _job(quality, "agent-context")
-    plan_step = _step(agent_job, "Generate exact-SHA #261 agent context")
+    plan_step = _step(agent_job, "Generate exact-SHA #277 agent context")
     run = plan_step.get("run")
     for marker in (
-        "check_ng_api_development_readiness.py plan",
+        "check_ng_agent_context.py plan",
+        "check_ng_agent_context.py check",
+        "--use-case repository-semantic-query.explain-translation-unit.v1",
         "--issue 261",
         '--expected-revision "${GITHUB_SHA}"',
         '--expected-tree "${SOURCE_TREE}"',
@@ -498,7 +524,7 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         PACKET_MARKDOWN_NAME,
     ):
         if not isinstance(run, str) or marker not in run:
-            _fail(f"#261 agent-context generation marker is missing: {marker}")
+            _fail(f"#277 agent-context generation marker is missing: {marker}")
 
     evaluation = _job(quality, "release-evaluation")
     if evaluation.get("needs") != [
@@ -620,39 +646,18 @@ def build_agent_context_packet(
     revision: str,
     tree: str,
 ) -> dict[str, Any]:
-    if HEX40.fullmatch(revision) is None or HEX40.fullmatch(tree) is None:
-        _fail("agent context requires exact 40-hex revision and tree")
-    use_case, template = _product_contract(manifest)
-    packet = {
-        "schema": "cxxlens.agent-context.v1",
-        "packet_id": template["packet_id"],
-        "issue": template["issue"],
-        "use_case_id": template["use_case_id"],
-        "consumer": use_case["consumer"],
-        "goal": template["goal"],
-        "expected_result_states": use_case["expected_result_states"],
-        "capability_path": use_case["capability_path"],
-        "exact_contract_ids": template["exact_contract_ids"],
-        "authority_reading_set": template["authority_reading_set"],
-        "allowed_write_paths": template["allowed_write_paths"],
-        "required_evidence": template["required_evidence"],
-        "known_design_feedback": template["known_design_feedback"],
-        "constructibility": template["constructibility"],
-        "forbidden_shortcuts": template["forbidden_shortcuts"],
-        "completion_commands": template["completion_commands"],
-        "blocked_reason": use_case["tracked_gap"]["reason_code"],
-        "completion_plan": template["completion_plan"],
-        "binding": {
-            "revision": revision,
-            "tree": tree,
-            "manifest_path": MANIFEST_PATH.as_posix(),
-            "manifest_file_digest": _file_digest(root / MANIFEST_PATH),
-            "authority_projection_digest": _semantic_digest(authority_projection(manifest)),
-            "stale_policy": "reject",
-        },
-    }
-    packet["canonical_digest"] = _semantic_digest(packet)
-    return packet
+    """Compatibility adapter; #277's generator owns packet construction."""
+    del manifest
+    try:
+        return agent_context.build_context(
+            root,
+            use_case_id=USE_CASE_ID,
+            issue=ISSUE_ID,
+            revision=revision,
+            tree=tree,
+        )
+    except agent_context.AgentContextError as error:
+        _fail(str(error))
 
 
 def validate_agent_context_packet(
@@ -662,75 +667,22 @@ def validate_agent_context_packet(
     revision: str,
     tree: str,
 ) -> None:
-    expected = build_agent_context_packet(root, manifest, revision, tree)
-    if packet != expected:
-        _fail("agent-context packet is stale, malformed, or not machine-derived")
+    del manifest
+    try:
+        agent_context.validate_context(
+            root,
+            packet,
+            use_case_id=USE_CASE_ID,
+            issue=ISSUE_ID,
+            revision=revision,
+            tree=tree,
+        )
+    except agent_context.AgentContextError as error:
+        _fail(str(error))
 
 
 def render_agent_context_markdown(packet: dict[str, Any]) -> str:
-    path = " -> ".join(row["id"] for row in packet["capability_path"])
-    evidence = "\n".join(f"- {value}" for value in packet["required_evidence"])
-    plan = "\n".join(
-        f"{index}. {value}" for index, value in enumerate(packet["completion_plan"], 1)
-    )
-    reads = "\n".join(f"- `{value}`" for value in packet["authority_reading_set"])
-    writes = "\n".join(f"- `{value}`" for value in packet["allowed_write_paths"])
-    contracts = "\n".join(f"- `{value}`" for value in packet["exact_contract_ids"])
-    feedback = "\n".join(f"- `{value}`" for value in packet["known_design_feedback"])
-    shortcuts = "\n".join(f"- `{value}`" for value in packet["forbidden_shortcuts"])
-    commands = "\n".join(f"- `{value}`" for value in packet["completion_commands"])
-    expected_states = ", ".join(f"`{value}`" for value in packet["expected_result_states"])
-    constructibility = json.dumps(
-        packet["constructibility"], ensure_ascii=False, sort_keys=True, indent=2
-    )
-    binding = json.dumps(packet["binding"], ensure_ascii=False, sort_keys=True, indent=2)
-    complete_packet = json.dumps(packet, ensure_ascii=False, sort_keys=True, indent=2)
-    return (
-        "# cxxlens issue #261 agent context\n\n"
-        f"- Schema: `{packet['schema']}`\n"
-        f"- Packet: `{packet['packet_id']}`\n"
-        f"- Issue: `{packet['issue']}`\n"
-        f"- Use case: `{packet['use_case_id']}`\n"
-        f"- Consumer: `{packet['consumer']}`\n"
-        f"- Goal: `{packet['goal']}`\n"
-        f"- Expected result states: {expected_states}\n"
-        f"- Revision: `{packet['binding']['revision']}`\n"
-        f"- Tree: `{packet['binding']['tree']}`\n"
-        f"- Authority digest: `{packet['binding']['authority_projection_digest']}`\n"
-        f"- Packet digest: `{packet['canonical_digest']}`\n"
-        f"- Blocked reason: `{packet['blocked_reason']}`\n\n"
-        "## Capability path\n\n"
-        f"`{path}`\n\n"
-        "## Exact contract IDs\n\n"
-        f"{contracts}\n\n"
-        "## Minimum authority reading set\n\n"
-        f"{reads}\n\n"
-        "## Allowed write paths\n\n"
-        f"{writes}\n\n"
-        "## Required evidence\n\n"
-        f"{evidence}\n\n"
-        "## Known design feedback\n\n"
-        f"{feedback}\n\n"
-        "## Constructibility\n\n"
-        "```json\n"
-        f"{constructibility}\n"
-        "```\n\n"
-        "## Forbidden shortcuts\n\n"
-        f"{shortcuts}\n\n"
-        "## Completion plan\n\n"
-        f"{plan}\n\n"
-        "## Completion commands\n\n"
-        f"{commands}\n\n"
-        "## Exact binding\n\n"
-        "```json\n"
-        f"{binding}\n"
-        "```\n\n"
-        "## Complete packet fields\n\n"
-        "The following canonical JSON block mirrors every field in the paired packet.\n\n"
-        "```json\n"
-        f"{complete_packet}\n"
-        "```\n"
-    )
+    return agent_context.render_markdown(packet)
 
 
 def _packet_paths(evidence_dir: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
@@ -796,31 +748,28 @@ def _plan(arguments: list[str]) -> int:
     parser.add_argument("--output-markdown", type=pathlib.Path, required=True)
     parsed = parser.parse_args(arguments)
     root = parsed.root.resolve()
-    try:
-        if parsed.issue != 261:
-            _fail(f"unknown agent-context issue: {parsed.issue}")
-        manifest = validate_documents(root)
-        actual_revision = _baseline.git_output(root, "rev-parse", "HEAD")
-        actual_tree = _baseline.git_output(root, "rev-parse", "HEAD^{tree}")
-        if (parsed.expected_revision, parsed.expected_tree) != (actual_revision, actual_tree):
-            _fail("agent-context revision/tree binding is stale")
-        packet = build_agent_context_packet(
-            root, manifest, parsed.expected_revision, parsed.expected_tree
-        )
-        parsed.output_json.parent.mkdir(parents=True, exist_ok=True)
-        parsed.output_markdown.parent.mkdir(parents=True, exist_ok=True)
-        parsed.output_json.write_text(
-            json.dumps(packet, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        parsed.output_markdown.write_text(
-            render_agent_context_markdown(packet), encoding="utf-8"
-        )
-        print(f"wrote exact #261 agent context to {parsed.output_json}")
-        return 0
-    except (ReadinessError, OSError, json.JSONDecodeError, yaml.YAMLError) as error:
-        print(f"agent-context generation failed: {error}", file=sys.stderr)
+    if parsed.issue != 261:
+        print(f"unknown agent-context packet issue: {parsed.issue}", file=sys.stderr)
         return 1
+    return agent_context.main(
+        [
+            "plan",
+            "--root",
+            str(root),
+            "--use-case",
+            USE_CASE_ID,
+            "--issue",
+            str(parsed.issue),
+            "--expected-revision",
+            parsed.expected_revision,
+            "--expected-tree",
+            parsed.expected_tree,
+            "--output-json",
+            str(parsed.output_json),
+            "--output-markdown",
+            str(parsed.output_markdown),
+        ]
+    )
 
 
 # Make the frozen baseline's internal global lookups use the composed contracts.

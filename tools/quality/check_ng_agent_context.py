@@ -22,6 +22,7 @@ import jsonschema
 import yaml
 
 import check_ng_use_case_capability_catalog as catalog
+import check_ng_design_feedback as design_feedback
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -30,7 +31,14 @@ READINESS_SCHEMA_PATH = pathlib.Path(
     "schemas/cxxlens_ng_api_development_readiness.schema.yaml"
 )
 CONTEXT_SCHEMA_PATH = pathlib.Path("schemas/cxxlens_ng_agent_context.schema.yaml")
+DESIGN_FEEDBACK_SCHEMA_PATH = pathlib.Path(
+    "schemas/cxxlens_ng_design_feedback_record.schema.yaml"
+)
+DF_0261_RECORD_PATH = pathlib.Path(
+    "docs/development/implementation-learning/records/df-0261-source-closure-vfs.md"
+)
 PACKET_TEMPLATE_KEY = "first_packet"
+GENERATOR_PATH = pathlib.Path("tools/quality/check_ng_agent_context.py")
 CANONICAL_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\.v[0-9]+(?:_[0-9]+)?$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 ISSUE = re.compile(r"^#[0-9]+$")
@@ -96,6 +104,36 @@ def git_value(root: pathlib.Path, expression: str) -> str:
     if not HEX40.fullmatch(value):
         raise AgentContextError(f"git returned a non-canonical {expression}")
     return value
+
+
+def worktree_status(root: pathlib.Path) -> list[str]:
+    """Return every tracked or untracked worktree entry before source binding."""
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise AgentContextError("agent-context.worktree-status-unavailable") from error
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def require_clean_worktree(root: pathlib.Path) -> None:
+    changes = worktree_status(root)
+    if changes:
+        fail(
+            "agent-context.worktree-dirty: exact-bound context requires a clean "
+            f"tracked/untracked worktree ({len(changes)} entries)"
+        )
 
 
 def canonical_repository_path(value: Any) -> bool:
@@ -196,6 +234,27 @@ def select_source(
         fail("agent-context.contract-authority-mismatch")
     if agent_context.get("tracking_issue") != "#277":
         fail("agent-context.tracking-issue-authority-mismatch")
+    projection = agent_context.get("projection")
+    expected_projection = {
+        "contract": "cxxlens.ng-agent-context.v1",
+        "issue": "#277",
+        "packet_issue": "#261",
+        "use_case_id": use_case_id,
+        "demand_closure_issue": "#275",
+        "constructibility_issue": "#276",
+        "design_feedback_record": "DF-0261",
+        "output": {
+            "json": "cxxlens-ng-agent-context-issue-277.json",
+            "markdown": "cxxlens-ng-agent-context-issue-277.md",
+        },
+        "authority_scope": "exact-template-and-machine-projections",
+        "clean_source_required": True,
+        "stale_policy": "reject",
+    }
+    if projection != expected_projection:
+        fail("agent-context.projection-authority-mismatch")
+    if agent_context.get("generator") != GENERATOR_PATH.as_posix():
+        fail("agent-context.generator-authority-mismatch")
     return family, template, report
 
 
@@ -242,6 +301,89 @@ def validate_capability_path(family: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def authority_contract_ids(
+    product: dict[str, Any],
+    family: dict[str, Any],
+    capability_path: list[dict[str, Any]],
+    agent_context: dict[str, Any],
+    gate: dict[str, Any],
+) -> list[str]:
+    expected = [
+        product.get("contract"),
+        family.get("use_case_id"),
+        *(row["id"] for row in capability_path),
+        agent_context.get("contract"),
+        gate.get("contract"),
+    ]
+    if any(
+        not isinstance(identifier, str) or CANONICAL_ID.fullmatch(identifier) is None
+        for identifier in expected
+    ):
+        fail("agent-context.machine-contract-authority-invalid")
+    return expected
+
+
+def bind_authority_reading(
+    root: pathlib.Path, paths: Any
+) -> list[dict[str, str]]:
+    validate_path_set(paths, "authority-reading-set", reject_overlap=False)
+    root = root.resolve()
+    bindings: list[dict[str, str]] = []
+    for relative in paths:
+        candidate = (root / relative).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            fail(f"agent-context.authority-reading-path-escapes-root:{relative}")
+        if not candidate.is_file():
+            fail(f"agent-context.authority-reading-path-missing:{relative}")
+        bindings.append({"path": relative, "digest": file_digest(candidate)})
+    return bindings
+
+
+def validate_design_feedback_metadata(metadata: dict[str, Any]) -> None:
+    if metadata.get("id") != "DF-0261":
+        fail("agent-context.design-feedback-record-id-mismatch")
+    if metadata.get("status") != "proposed":
+        fail("agent-context.design-feedback-status-mismatch")
+    if metadata.get("implementation_disposition") != "blocked":
+        fail("agent-context.design-feedback-disposition-mismatch")
+    review = metadata.get("review")
+    if not isinstance(review, dict) or review.get("status") != "pending":
+        fail("agent-context.design-feedback-review-status-mismatch")
+    if metadata.get("resolution_refs") != []:
+        fail("agent-context.design-feedback-resolution-refs-mismatch")
+
+
+def bind_design_feedback(root: pathlib.Path) -> list[dict[str, Any]]:
+    path = root / DF_0261_RECORD_PATH
+    if not path.is_file():
+        fail(f"agent-context.design-feedback-record-missing:{DF_0261_RECORD_PATH}")
+    try:
+        schema = design_feedback.load_mapping(root / DESIGN_FEEDBACK_SCHEMA_PATH)
+        record = design_feedback.validate_record(root, path, schema)
+    except (
+        design_feedback.DesignFeedbackError,
+        OSError,
+        UnicodeError,
+        yaml.YAMLError,
+    ) as error:
+        fail(f"agent-context.design-feedback-record-invalid:{error}")
+    metadata = record.metadata
+    validate_design_feedback_metadata(metadata)
+    return [
+        {
+            "id": metadata["id"],
+            "path": DF_0261_RECORD_PATH.as_posix(),
+            "digest": file_digest(path),
+            "status": metadata["status"],
+            "implementation_disposition": metadata["implementation_disposition"],
+            "review_status": review["status"],
+            "resolution_refs": list(metadata["resolution_refs"]),
+        }
+    ]
+
+
 def build_context(
     root: pathlib.Path,
     *,
@@ -250,6 +392,7 @@ def build_context(
     revision: str,
     tree: str,
 ) -> dict[str, Any]:
+    require_clean_worktree(root)
     if not HEX40.fullmatch(revision) or not HEX40.fullmatch(tree):
         fail("agent-context.exact-sha-invalid")
     if (git_value(root, "HEAD"), git_value(root, "HEAD^{tree}")) != (revision, tree):
@@ -262,13 +405,16 @@ def build_context(
         fail(f"agent-context.use-case-owner-mismatch:{issue}:{family.get('tracking_issue')}")
     product = readiness["product_direction"]
     result_contract = product["result_contract"]
+    agent_context = product["agent_context"]
     if family.get("expected_result_states") != result_contract["states"]:
         fail("agent-context.result-state-algebra-drift")
     capability_path = validate_capability_path(family)
     template_capability_path = template.get("capability_path")
     if template_capability_path != [row["id"] for row in capability_path]:
         fail("agent-context.template-capability-path-drift")
-    validate_path_set(template.get("authority_reading_set"), "authority-reading-set", reject_overlap=False)
+    authority_reading_bindings = bind_authority_reading(
+        root, template.get("authority_reading_set")
+    )
     validate_path_set(template.get("allowed_write_paths"), "write-path", reject_overlap=True)
     feedback = template.get("known_design_feedback")
     issue_feedback = f"issue-{issue.removeprefix('#')}"
@@ -278,6 +424,7 @@ def build_context(
         or issue_feedback not in feedback
     ):
         fail("agent-context.design-feedback-binding-missing")
+    design_feedback_records = bind_design_feedback(root)
     constructibility = template.get("constructibility")
     gate = product.get("constructibility_gate")
     if not isinstance(constructibility, dict) or not isinstance(gate, dict):
@@ -286,6 +433,21 @@ def build_context(
         fail("agent-context.constructibility-gate-binding-mismatch")
     if constructibility.get("disposition") != "blocked":
         fail("agent-context.constructibility-promotion-forbidden")
+    if constructibility.get("gate_issue") != "#276":
+        fail("agent-context.constructibility-gate-issue-mismatch")
+    if gate.get("contract") != "development.constructibility-gate.v1":
+        fail("agent-context.constructibility-contract-mismatch")
+    constructibility_projection = {
+        "contract": gate["contract"],
+        "tracking_issue": gate["tracking_issue"],
+        "applies_to": list(gate["applies_to"]),
+        "required_witnesses": list(gate["required_witnesses"]),
+        "acceptance_rule": gate["acceptance_rule"],
+        "disposition": constructibility["disposition"],
+        "reason": constructibility["reason"],
+        "gate_issue": constructibility["gate_issue"],
+        "authority_digest": digest(gate),
+    }
     gap = family.get("tracked_gap")
     if not isinstance(gap, dict):
         fail("agent-context.capability-gap-missing")
@@ -295,6 +457,11 @@ def build_context(
         fail("agent-context.completion-plan-drift")
     if family.get("preserved_semantics") != result_contract["preserved_semantics"]:
         fail("agent-context.preserved-semantics-drift")
+    exact_contract_ids = authority_contract_ids(
+        product, family, capability_path, agent_context, gate
+    )
+    if template.get("exact_contract_ids") != exact_contract_ids:
+        fail("agent-context.contract-id-authority-mismatch")
     demand_source = {
         "schema": report["schema"],
         "document_version": report["document_version"],
@@ -312,6 +479,17 @@ def build_context(
     }
     if (demand_source["revision"], demand_source["tree"]) != (revision, tree):
         fail("agent-context.demand-source-stale")
+    authority_projection = {
+        "product_contract": product["contract"],
+        "result_contract": result_contract,
+        "use_case": family,
+        "packet_template": template,
+        "constructibility_gate": gate,
+        "constructibility_projection": constructibility_projection,
+        "demand_source": demand_source,
+        "authority_reading_bindings": authority_reading_bindings,
+        "design_feedback_records": design_feedback_records,
+    }
     binding = {
         "revision": revision,
         "tree": tree,
@@ -321,16 +499,12 @@ def build_context(
         "demand_catalog_schema": catalog.CATALOG_SCHEMA_PATH.as_posix(),
         "demand_catalog_digest": file_digest(root / catalog.CATALOG_SCHEMA_PATH),
         "context_schema_digest": file_digest(root / CONTEXT_SCHEMA_PATH),
-        "authority_projection_digest": digest(
-            {
-                "product_contract": product["contract"],
-                "result_contract": result_contract,
-                "use_case": family,
-                "packet_template": template,
-                "constructibility_gate": gate,
-                "demand_source": demand_source,
-            }
-        ),
+        "authority_projection_digest": digest(authority_projection),
+        "generator": GENERATOR_PATH.as_posix(),
+        "worktree": "clean",
+        "authority_reading_digest": digest(authority_reading_bindings),
+        "design_feedback_records_digest": digest(design_feedback_records),
+        "constructibility_authority_digest": digest(gate),
         "stale_policy": "reject",
     }
     packet = {
@@ -351,12 +525,14 @@ def build_context(
             "completion_plan": gap["completion_plan"],
             "reevaluation_trigger": gap["reevaluation_trigger"],
         },
-        "exact_contract_ids": template["exact_contract_ids"],
+        "exact_contract_ids": exact_contract_ids,
         "authority_reading_set": template["authority_reading_set"],
+        "authority_reading_bindings": authority_reading_bindings,
         "allowed_write_paths": template["allowed_write_paths"],
         "required_evidence": template["required_evidence"],
         "known_design_feedback": feedback,
-        "constructibility": constructibility,
+        "design_feedback_records": design_feedback_records,
+        "constructibility": constructibility_projection,
         "forbidden_shortcuts": template["forbidden_shortcuts"],
         "completion_commands": template["completion_commands"],
         "blocked_reason": family["tracked_gap"]["reason_code"],
@@ -405,6 +581,18 @@ def render_markdown(packet: dict[str, Any]) -> str:
     demand_source = json.dumps(
         packet["demand_source"], ensure_ascii=False, sort_keys=True, indent=2
     )
+    authority_reading = json.dumps(
+        packet["authority_reading_bindings"],
+        ensure_ascii=False,
+        sort_keys=True,
+        indent=2,
+    )
+    design_feedback = json.dumps(
+        packet["design_feedback_records"],
+        ensure_ascii=False,
+        sort_keys=True,
+        indent=2,
+    )
     return (
         f"# cxxlens agent context: {packet['use_case_id']}\n\n"
         f"- Schema: `{packet['schema']}`\n"
@@ -426,12 +614,16 @@ def render_markdown(packet: dict[str, Any]) -> str:
         f"{bullets(packet['exact_contract_ids'])}\n\n"
         "## Minimum authority reading set\n\n"
         f"{bullets([f'`{value}`' for value in packet['authority_reading_set']])}\n\n"
+        "## Individually bound authority reading files\n\n"
+        f"```json\n{authority_reading}\n```\n\n"
         "## Allowed write paths\n\n"
         f"{bullets([f'`{value}`' for value in packet['allowed_write_paths']])}\n\n"
         "## Required evidence\n\n"
         f"{bullets(packet['required_evidence'])}\n\n"
         "## Known design feedback\n\n"
         f"{bullets(packet['known_design_feedback'])}\n\n"
+        "## Bound design feedback records\n\n"
+        f"```json\n{design_feedback}\n```\n\n"
         "## Constructibility\n\n"
         f"```json\n{constructibility}\n```\n\n"
         "## Forbidden shortcuts\n\n"

@@ -166,10 +166,12 @@ blocked reason として返します。
 
 ### Bounded #277 context slice
 
-Issue #277 の最初の disjoint slice は、既存の #261 `first_packet` template を入力として、#275 の
-`cxxlens.ng-use-case-capability-catalog.v1` declaration projection と #276 の constructibility projection を
-同じ exact revision/tree に bind する、schema-first の context/completion-plan generator です。実装は
-`schemas/cxxlens_ng_agent_context.schema.yaml` と `tools/quality/check_ng_agent_context.py` にあります。
+Issue #277 の最初の disjoint slice は、readiness authority に正式登録された generator が、既存の #261
+`first_packet` template を入力として、#275 の `cxxlens.ng-use-case-capability-catalog.v1` declaration projection、
+#276 の constructibility projection、DF-0261 の blocked record を同じ exact revision/tree に bind する、schema-first の
+context/completion-plan projection です。generator と schema は `tools/quality/check_ng_agent_context.py` と
+`schemas/cxxlens_ng_agent_context.schema.yaml` にあります。CI の `agent-context` job はこの generator の JSON/Markdown を
+`cxxlens-ng-agent-context-277-${revision}` として保存し、同じ packet を直ちに再検証します。
 
 ```sh
 REV=$(git rev-parse HEAD)
@@ -177,24 +179,27 @@ TREE=$(git rev-parse HEAD^{tree})
 python tools/quality/check_ng_agent_context.py plan \
   --use-case repository-semantic-query.explain-translation-unit.v1 \
   --issue 261 --expected-revision "$REV" --expected-tree "$TREE" \
-  --output-json /tmp/cxxlens-agent-context.json \
-  --output-markdown /tmp/cxxlens-agent-context.md
+  --output-json /tmp/cxxlens-ng-agent-context-issue-277.json \
+  --output-markdown /tmp/cxxlens-ng-agent-context-issue-277.md
 python tools/quality/check_ng_agent_context.py check \
   --use-case repository-semantic-query.explain-translation-unit.v1 \
   --issue 261 --expected-revision "$REV" --expected-tree "$TREE" \
-  --input-json /tmp/cxxlens-agent-context.json
+  --input-json /tmp/cxxlens-ng-agent-context-issue-277.json
 ```
 
 出力は dependency-ordered capability path、preserved semantics、tracked gap の reason/owner/reevaluation
-trigger、completion plan、許可された write path、required evidence、known feedback、#275/#276 の状態、authority
-digest、canonical digest を保持します。未知の use case、未登録または forward dependency、path overlap、stale digest、
-constructibility の promotion は fail closed です。現在、完全な template が authority にあるのは #261 だけであり、
-他の admitted family を推測して packet 化しません。
+trigger、completion plan、許可された write path、required evidence、known feedback、実在する authority reading file の
+digest、DF-0261 の path/digest/status/disposition/review/resolution refs、#275/#276 の状態、authority digest、canonical
+digest を保持します。未知の use case、未登録または forward dependency、path overlap、dirty worktree、stale digest、
+constructibility の promotion、machine authority と異なる contract ID は fail closed です。現在、完全な template が
+authority にあるのは #261 だけであり、他の admitted family を推測して packet 化しません。
 
-これは既存の Wave 0 #261 readiness artifact を置き換える public CLI ではなく、#277 の bounded projection です。
+`check_ng_agent_context.py` が #277 projection の唯一の producer です。`check_ng_api_development_readiness.py` は readiness
+document と workflow を検証し、Wave 0 report が同じ #277 artifact を消費するための adapter/consumer であり、別の packet
+semantics を生成しません。出力は #261 の source-closure implementation や #276 の constructibility acceptance を進めるものではなく、
 source-closure/VFS、provider qualification、real-project evidence、golden path 評価、`agent-autonomous-completion-rate`
-の測定、CI/Nightly の release authority への統合は別の accepted slice が必要です。この generator の出力だけで
-constructible、qualified、production-ready を主張してはいけません。
+の測定、Nightly の release qualification は別の accepted slice が必要です。この generator の出力だけで constructible、
+qualified、production-ready を主張してはいけません。
 
 ## Completion checklist
 

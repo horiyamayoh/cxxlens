@@ -30,29 +30,46 @@ def git_value(expression: str) -> str:
 
 class AgentContextTests(unittest.TestCase):
     def packet(self) -> dict:
-        return agent.build_context(
-            ROOT,
-            use_case_id=USE_CASE_ID,
-            issue="#261",
-            revision=git_value("HEAD"),
-            tree=git_value("HEAD^{tree}"),
-        )
+        with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
+            agent.catalog, "reject_dirty_source_files"
+        ):
+            return agent.build_context(
+                ROOT,
+                use_case_id=USE_CASE_ID,
+                issue="#261",
+                revision=git_value("HEAD"),
+                tree=git_value("HEAD^{tree}"),
+            )
 
     def test_main_packet_is_schema_valid_and_machine_bound(self) -> None:
         packet = self.packet()
         schema = agent.load_yaml(ROOT / agent.CONTEXT_SCHEMA_PATH)
         agent.validate_schema(packet, schema, "test agent-context")
-        agent.validate_context(
-            ROOT,
-            packet,
-            use_case_id=USE_CASE_ID,
-            issue="#261",
-            revision=packet["binding"]["revision"],
-            tree=packet["binding"]["tree"],
-        )
+        with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
+            agent.catalog, "reject_dirty_source_files"
+        ):
+            agent.validate_context(
+                ROOT,
+                packet,
+                use_case_id=USE_CASE_ID,
+                issue="#261",
+                revision=packet["binding"]["revision"],
+                tree=packet["binding"]["tree"],
+            )
         self.assertEqual(packet["schema"], "cxxlens.ng-agent-context.v1")
         self.assertEqual(packet["demand_source"]["tracking_issue"], "#275")
         self.assertEqual(packet["constructibility"]["gate_issue"], "#276")
+        self.assertEqual(packet["binding"]["worktree"], "clean")
+        self.assertEqual(packet["binding"]["generator"], agent.GENERATOR_PATH.as_posix())
+        self.assertEqual(packet["design_feedback_records"][0]["path"], agent.DF_0261_RECORD_PATH.as_posix())
+        self.assertEqual(packet["design_feedback_records"][0]["status"], "proposed")
+        self.assertEqual(packet["design_feedback_records"][0]["implementation_disposition"], "blocked")
+        self.assertEqual(packet["design_feedback_records"][0]["review_status"], "pending")
+        self.assertEqual(packet["design_feedback_records"][0]["resolution_refs"], [])
+        self.assertEqual(
+            packet["binding"]["constructibility_authority_digest"],
+            packet["constructibility"]["authority_digest"],
+        )
         self.assertEqual(
             [row["id"] for row in packet["capability_path"]],
             [
@@ -70,13 +87,16 @@ class AgentContextTests(unittest.TestCase):
             agent.AgentContextError,
             r"agent-context\.use-case-not-admitted:semantic-graph-navigation\.v1",
         ):
-            agent.build_context(
-                ROOT,
-                use_case_id="semantic-graph-navigation.v1",
-                issue="#278",
-                revision=git_value("HEAD"),
-                tree=git_value("HEAD^{tree}"),
-            )
+            with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
+                agent.catalog, "reject_dirty_source_files"
+            ):
+                agent.build_context(
+                    ROOT,
+                    use_case_id="semantic-graph-navigation.v1",
+                    issue="#278",
+                    revision=git_value("HEAD"),
+                    tree=git_value("HEAD^{tree}"),
+                )
 
     def test_unknown_or_forward_capability_dependency_fails_closed(self) -> None:
         readiness = agent.load_yaml(ROOT / agent.READINESS_PATH)
@@ -140,7 +160,8 @@ class AgentContextTests(unittest.TestCase):
             )
 
     def test_demand_projection_drift_is_rejected(self) -> None:
-        report = copy.deepcopy(agent.catalog.build_report(ROOT))
+        with mock.patch.object(agent.catalog, "reject_dirty_source_files"):
+            report = copy.deepcopy(agent.catalog.build_report(ROOT))
         next(
             entry
             for entry in report["use_cases"]
@@ -160,7 +181,8 @@ class AgentContextTests(unittest.TestCase):
         )
         template = copy.deepcopy(readiness["product_direction"]["agent_context"]["first_packet"])
         template["constructibility"]["disposition"] = "constructible"
-        report = agent.catalog.build_report(ROOT)
+        with mock.patch.object(agent.catalog, "reject_dirty_source_files"):
+            report = agent.catalog.build_report(ROOT)
         with mock.patch.object(
             agent,
             "select_source",
@@ -179,7 +201,8 @@ class AgentContextTests(unittest.TestCase):
         )
         template = copy.deepcopy(readiness["product_direction"]["agent_context"]["first_packet"])
         template["known_design_feedback"].remove("DF-0261")
-        report = agent.catalog.build_report(ROOT)
+        with mock.patch.object(agent.catalog, "reject_dirty_source_files"):
+            report = agent.catalog.build_report(ROOT)
         with mock.patch.object(
             agent,
             "select_source",

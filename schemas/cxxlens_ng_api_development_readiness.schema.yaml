@@ -280,8 +280,8 @@ properties:
         contract: agent.minimal-context.v1
         tracking_issue: '#277'
         source: machine-readable-authorities
-        generator: tools/quality/check_ng_api_development_readiness.py
-        artifact: cxxlens-ng-agent-context-261-${revision}
+        generator: tools/quality/check_ng_agent_context.py
+        artifact: cxxlens-ng-agent-context-277-${revision}
         required_fields:
         - goal-use-case
         - capability-gap
@@ -293,6 +293,20 @@ properties:
         - forbidden-shortcuts
         - completion-commands
         handwritten_shadow_authority: forbidden
+        projection:
+          contract: cxxlens.ng-agent-context.v1
+          issue: '#277'
+          packet_issue: '#261'
+          use_case_id: repository-semantic-query.explain-translation-unit.v1
+          demand_closure_issue: '#275'
+          constructibility_issue: '#276'
+          design_feedback_record: DF-0261
+          output:
+            json: cxxlens-ng-agent-context-issue-277.json
+            markdown: cxxlens-ng-agent-context-issue-277.md
+          authority_scope: exact-template-and-machine-projections
+          clean_source_required: true
+          stale_policy: reject
         first_packet:
           packet_id: agent-context.issue-261.explain-translation-unit.v1
           issue: '#261'
