@@ -570,6 +570,7 @@ def assert_raw_failure(
     payload: bytes,
     case_name: str,
     expected_phase: str,
+    expected_code: str,
     evidence_dir: pathlib.Path | None,
 ) -> dict[str, Any]:
     report = assert_compact_response(root, oracle, completed, payload, None)
@@ -577,7 +578,7 @@ def assert_raw_failure(
     if (
         binding_state != "raw-input-only"
         or report["error"]["phase"] != expected_phase
-        or report["error"]["code"] != "materialization.request-invalid"
+        or report["error"]["code"] != expected_code
         or report["effects"]["store_draft_state"] != "not-created"
         or report["effects"]["head_observation"] != "not-observed"
         or report["effects"]["publication_attempted"]
@@ -848,20 +849,54 @@ def main() -> int:
             "raw-request-schema",
             b'{"schema":"cxxlens.clang22-materialization-request.v2","request_version":"2.1.0"}',
             "request-schema",
+            "materialization.request-invalid",
         ),
-        ("raw-invalid-utf8", b'{"schema":\xff}', "json-decode"),
-        ("raw-bom", b"\xef\xbb\xbf{}", "json-decode"),
+        (
+            "raw-request-envelope",
+            b"{}",
+            "request-envelope",
+            "materialization.request-invalid",
+        ),
+        (
+            "raw-request-version",
+            b'{"schema":"cxxlens.clang22-materialization-request.v2","request_version":"9.9.9"}',
+            "request-version",
+            "materialization.version-unsupported",
+        ),
+        (
+            "raw-invalid-utf8",
+            b'{"schema":\xff}',
+            "json-decode",
+            "materialization.request-invalid",
+        ),
+        (
+            "raw-bom",
+            b"\xef\xbb\xbf{}",
+            "json-decode",
+            "materialization.request-invalid",
+        ),
         (
             "raw-duplicate-member",
             b'{"schema":"x","schema":"y"}',
             "json-decode",
+            "materialization.request-invalid",
         ),
-        ("raw-non-object", b"[]", "json-decode"),
-        ("raw-trailing-value", b"{} {}", "json-decode"),
+        (
+            "raw-non-object",
+            b"[]",
+            "json-decode",
+            "materialization.request-invalid",
+        ),
+        (
+            "raw-trailing-value",
+            b"{} {}",
+            "json-decode",
+            "materialization.request-invalid",
+        ),
     )
     with tempfile.TemporaryDirectory(prefix="clang22-materializer-negative-") as directory:
         work = pathlib.Path(directory)
-        for case_name, raw_payload, expected_phase in raw_cases:
+        for case_name, raw_payload, expected_phase, expected_code in raw_cases:
             raw_completed = run_materializer(materializer, raw_payload, work)
             assert_raw_failure(
                 root,
@@ -870,6 +905,7 @@ def main() -> int:
                 raw_payload,
                 case_name,
                 expected_phase,
+                expected_code,
                 negative_evidence_dir,
             )
 
