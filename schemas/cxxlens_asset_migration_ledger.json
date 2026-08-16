@@ -1,5 +1,5 @@
 {
-  "asset_count": 673,
+  "asset_count": 677,
   "assets": [
     {
       "authority": "active",
@@ -3069,6 +3069,27 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/provider_ng1_live_driver.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/provider_ng1_live_driver_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/provider_ng1_process_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/provider_ng1_recovery.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4161,6 +4182,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/unit/sdk/provider_ng1_live_driver_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/unit/sdk/provider_ng1_recovery_adapter_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4714,7 +4742,7 @@
     }
   ],
   "classifications": {
-    "active": 637,
+    "active": 641,
     "archived": 35,
     "generated": 1
   },

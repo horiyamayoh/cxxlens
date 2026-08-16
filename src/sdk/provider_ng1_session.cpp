@@ -201,6 +201,7 @@ namespace cxxlens::sdk::provider::detail
 		  last_host_receipt_time_ns_{std::move(other.last_host_receipt_time_ns_)},
 		  replay_output_digest_{std::move(other.replay_output_digest_)},
 		  replay_frame_transcript_digest_{std::move(other.replay_frame_transcript_digest_)},
+		  task_accepted_{std::exchange(other.task_accepted_, true)},
 		  progress_terminal_{std::exchange(other.progress_terminal_, true)},
 		  poisoned_{std::exchange(other.poisoned_, true)},
 		  cleaned_{std::exchange(other.cleaned_, true)},
@@ -233,6 +234,27 @@ namespace cxxlens::sdk::provider::detail
 	{
 		poisoned_ = true;
 		return unexpected(std::move(original_error));
+	}
+
+	result<void>
+	ng1_session_coordinator::observe_task_accepted(const task_accepted_metadata& metadata,
+												   const std::uint64_t host_receipt_time_ns)
+	{
+		if (auto open = ensure_open("task-accepted"); !open)
+			return open;
+		if (task_accepted_)
+			return poison(session_error("task_accepted", "duplicate"));
+		if (metadata.provider_id != resume_binding_.provider_id ||
+			metadata.provider_version != resume_binding_.provider_version.string() ||
+			metadata.task_id != task_id_)
+			return poison(error{"provider.task-binding-mismatch", "task_accepted", "identity"});
+		if (auto monotonic = admit_host_receipt(host_receipt_time_ns); !monotonic)
+			return poison(std::move(monotonic.error()));
+		heartbeat_.rebase_start(host_receipt_time_ns);
+		progress_.rebase_start(host_receipt_time_ns);
+		last_host_receipt_time_ns_ = host_receipt_time_ns;
+		task_accepted_ = true;
+		return {};
 	}
 
 	result<void> ng1_session_coordinator::reject_heartbeat(error original_error)
@@ -618,13 +640,26 @@ namespace cxxlens::sdk::provider::detail
 													 const std::string_view host_staged_digest,
 													 const bool terminal_progress_sample)
 	{
-		if (!is_ng1_heartbeat_message(value.type) && value.type != message_type::progress)
+		if (!is_ng1_heartbeat_message(value.type) && value.type != message_type::progress &&
+			value.type != message_type::task_accepted)
 			return false;
 		if (auto valid = validate_frame_header(value); !valid)
 		{
+			if (value.type == message_type::task_accepted)
+				return unexpected(std::move(session_->poison(std::move(valid.error())).error()));
 			if (value.type == message_type::progress)
 				return unexpected(std::move(reject_progress(std::move(valid.error())).error()));
 			return unexpected(std::move(reject_heartbeat(std::move(valid.error())).error()));
+		}
+		if (value.type == message_type::task_accepted)
+		{
+			auto metadata = decode_task_accepted_metadata(value.control);
+			if (!metadata)
+				return unexpected(std::move(session_->poison(std::move(metadata.error())).error()));
+			if (auto observed = session_->observe_task_accepted(*metadata, host_receipt_time_ns);
+				!observed)
+				return unexpected(std::move(observed.error()));
+			return true;
 		}
 		if (is_ng1_heartbeat_message(value.type))
 		{
