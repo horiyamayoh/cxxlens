@@ -76,6 +76,116 @@ namespace
 		};
 	}
 
+	struct occurrence_binding_fixture
+	{
+		materialization_v2_1_tool_authority tool;
+		materialization_v2_1_worker_authority worker;
+		materialization_occurrence_manifest manifest;
+		materialization_occurrence_receipt receipt;
+	};
+
+	[[nodiscard]] occurrence_binding_fixture valid_occurrence_binding_fixture()
+	{
+		occurrence_binding_fixture fixture;
+		fixture.tool.source_revision = "revision:source";
+		fixture.tool.source_tree = "tree:source";
+		fixture.tool.package_configuration = "static";
+		fixture.tool.occurrence_manifest_digest = "sha256:" + std::string(64U, 'c');
+		fixture.tool.installed_executable_digest = "sha256:" + std::string(64U, 'a');
+		fixture.worker.installed_binary_digest = "sha256:" + std::string(64U, 'b');
+		fixture.manifest.source_revision = fixture.tool.source_revision;
+		fixture.manifest.source_tree = fixture.tool.source_tree;
+		fixture.manifest.package_configuration = fixture.tool.package_configuration;
+		fixture.manifest.occurrence_payload_digest = "sha256:" + std::string(64U, 'd');
+		fixture.manifest.inventory_digest = "sha256:" + std::string(64U, 'e');
+		fixture.manifest.files = {
+			{"materializer-executable",
+			 "bin/cxxlens-clang22-materialize",
+			 fixture.tool.installed_executable_digest},
+			{"worker-executable",
+			 "bin/cxxlens-clang-worker-22",
+			 fixture.worker.installed_binary_digest},
+		};
+		fixture.receipt.schema = "rooted-occurrence-v1";
+		fixture.receipt.manifest_file_digest = fixture.tool.occurrence_manifest_digest;
+		fixture.receipt.occurrence_payload_digest = fixture.manifest.occurrence_payload_digest;
+		fixture.receipt.inventory_digest = fixture.manifest.inventory_digest;
+		fixture.receipt.prefix_device_inode_observation_digest = "sha256:" + std::string(64U, 'f');
+		fixture.receipt.files = {{fixture.manifest.files[0], {}}, {fixture.manifest.files[1], {}}};
+		return fixture;
+	}
+
+	void public_report_occurrence_binding_rejects_forged_combinations()
+	{
+		const auto valid = valid_occurrence_binding_fixture();
+		auto accepted = validate_materialization_public_report_occurrence_binding(
+			valid.tool, valid.worker, valid.manifest, valid.receipt);
+		require(accepted.has_value(), "valid request/occurrence binding was rejected");
+
+		const auto reject = [&](const auto& forge, const std::string_view expected_field)
+		{
+			auto forged = valid;
+			forge(forged);
+			auto result = validate_materialization_public_report_occurrence_binding(
+				forged.tool, forged.worker, forged.manifest, forged.receipt);
+			require(!result && result.error().code == "materialization.report-invalid" &&
+						result.error().field == expected_field,
+					"forged request/occurrence combination was accepted for " +
+						std::string{expected_field} +
+						(result ? ": success"
+								: ": " + result.error().field + "/" + result.error().detail));
+		};
+
+		reject(
+			[](auto& value)
+			{
+				value.tool.source_revision = "revision:forged";
+			},
+			"installation.source_revision");
+		reject(
+			[](auto& value)
+			{
+				value.tool.source_tree = "tree:forged";
+			},
+			"installation.source_tree");
+		reject(
+			[](auto& value)
+			{
+				value.tool.package_configuration = "shared";
+			},
+			"installation.configuration");
+		reject(
+			[](auto& value)
+			{
+				value.tool.occurrence_manifest_digest = "sha256:" + std::string(64U, '1');
+			},
+			"installation.occurrence_manifest_digest");
+		reject(
+			[](auto& value)
+			{
+				value.tool.installed_executable_digest = "sha256:" + std::string(64U, '1');
+			},
+			"installation.materializer");
+		reject(
+			[](auto& value)
+			{
+				value.worker.installed_binary_digest = "sha256:" + std::string(64U, '1');
+			},
+			"installation.worker");
+		reject(
+			[](auto& value)
+			{
+				value.manifest.files[0].digest = "sha256:" + std::string(64U, '1');
+			},
+			"installation.measured.files");
+		reject(
+			[](auto& value)
+			{
+				value.receipt.files[1].authority.digest = "sha256:" + std::string(64U, '1');
+			},
+			"installation.measured.files");
+	}
+
 	[[nodiscard]] std::string provider_execution_id_fixture(const std::string_view task_id)
 	{
 		return "provider-execution:" +
@@ -1749,6 +1859,7 @@ int main(const int argument_count, const char* const* arguments)
 	sqlite_prior_artifact_loads_after_store_close();
 	prior_artifact_rehydration_reproves_raw_semantics();
 	detailed_report_capacity_reservation_is_compositional_and_closed();
+	public_report_occurrence_binding_rejects_forged_combinations();
 	public_success_report_requires_all_authority_inputs();
 	final_response_spool_is_sealed_before_transport();
 
