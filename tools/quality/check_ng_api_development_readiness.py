@@ -23,7 +23,10 @@ from typing import Any
 
 import yaml
 
-import check_ng_agent_context as agent_context
+try:
+    import check_ng_agent_context as agent_context
+except ModuleNotFoundError:  # The document-only checker remains standalone.
+    agent_context = None  # type: ignore[assignment]
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -647,6 +650,8 @@ def build_agent_context_packet(
     tree: str,
 ) -> dict[str, Any]:
     """Compatibility adapter; #277's generator owns packet construction."""
+    if agent_context is None:
+        _fail("#277 exact projection generator is unavailable")
     del manifest
     try:
         return agent_context.build_context(
@@ -667,6 +672,8 @@ def validate_agent_context_packet(
     revision: str,
     tree: str,
 ) -> None:
+    if agent_context is None:
+        _fail("#277 exact projection generator is unavailable")
     del manifest
     try:
         agent_context.validate_context(
@@ -738,6 +745,9 @@ def build_report(
 
 
 def _plan(arguments: list[str]) -> int:
+    if agent_context is None:
+        print("#277 exact projection generator is unavailable", file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser()
     parser.add_argument("plan")
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)

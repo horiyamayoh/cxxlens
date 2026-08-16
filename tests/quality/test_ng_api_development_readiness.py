@@ -12,6 +12,8 @@ import subprocess
 import sys
 import types
 import unittest
+from contextlib import contextmanager
+from unittest import mock
 
 import yaml
 
@@ -51,16 +53,31 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         shutil.copy2(ROOT / readiness.BUILD_TEST_GUIDE_PATH, destination)
         return root
 
+    @contextmanager
+    def exact_source(self, revision: str, tree: str):
+        def bound_git_value(_root: pathlib.Path, expression: str) -> str:
+            return revision if expression == "HEAD" else tree
+
+        with mock.patch.object(readiness.agent_context, "worktree_status", return_value=[]), mock.patch.object(
+            readiness.agent_context.catalog, "reject_dirty_source_files"
+        ), mock.patch.object(
+            readiness.agent_context, "git_value", side_effect=bound_git_value
+        ), mock.patch.object(
+            readiness.agent_context.catalog, "git_value", side_effect=bound_git_value
+        ):
+            yield
+
     def complete_evidence(
         self, evidence_dir: pathlib.Path, git_state: dict[str, object]
     ) -> pathlib.Path:
         result = super().complete_evidence(evidence_dir, git_state)
-        packet = readiness.build_agent_context_packet(
-            ROOT,
-            self.manifest,
-            str(git_state["revision"]),
-            str(git_state["tree"]),
-        )
+        with self.exact_source(str(git_state["revision"]), str(git_state["tree"])):
+            packet = readiness.build_agent_context_packet(
+                ROOT,
+                self.manifest,
+                str(git_state["revision"]),
+                str(git_state["tree"]),
+            )
         self.write_json(evidence_dir / readiness.PACKET_JSON_NAME, packet)
         (evidence_dir / readiness.PACKET_MARKDOWN_NAME).write_text(
             readiness.render_agent_context_markdown(packet), encoding="utf-8"
@@ -184,12 +201,13 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             readiness.validate_demand_closure(ROOT, manifest)
 
     def test_agent_packet_is_exact_bound_and_digested(self) -> None:
-        packet = readiness.build_agent_context_packet(
-            ROOT, self.manifest, "1" * 40, "2" * 40
-        )
-        readiness.validate_agent_context_packet(
-            ROOT, self.manifest, packet, "1" * 40, "2" * 40
-        )
+        with self.exact_source("1" * 40, "2" * 40):
+            packet = readiness.build_agent_context_packet(
+                ROOT, self.manifest, "1" * 40, "2" * 40
+            )
+            readiness.validate_agent_context_packet(
+                ROOT, self.manifest, packet, "1" * 40, "2" * 40
+            )
         self.assertEqual(packet["binding"]["revision"], "1" * 40)
         self.assertTrue(packet["canonical_digest"].startswith("sha256:"))
         markdown = readiness.render_agent_context_markdown(packet)
@@ -213,8 +231,9 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         ):
             for value in packet[field]:
                 self.assertIn(value, markdown)
-        for value in packet["constructibility"].values():
-            self.assertIn(str(value), markdown)
+        self.assertIn(packet["constructibility"]["authority_digest"], markdown)
+        for witness in packet["constructibility"]["required_witnesses"]:
+            self.assertIn(witness, markdown)
         for value in packet["binding"].values():
             self.assertIn(str(value), markdown)
 
@@ -310,16 +329,18 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_stale_agent_packet_is_rejected(self) -> None:
-        packet = readiness.build_agent_context_packet(
-            ROOT, self.manifest, "1" * 40, "2" * 40
-        )
+        with self.exact_source("1" * 40, "2" * 40):
+            packet = readiness.build_agent_context_packet(
+                ROOT, self.manifest, "1" * 40, "2" * 40
+            )
         packet["binding"]["revision"] = "3" * 40
         with self.assertRaisesRegex(
-            readiness.ReadinessError, "stale, malformed, or not machine-derived"
+            readiness.ReadinessError, r"agent-context\.stale-or-not-machine-derived"
         ):
-            readiness.validate_agent_context_packet(
-                ROOT, self.manifest, packet, "1" * 40, "2" * 40
-            )
+            with self.exact_source("1" * 40, "2" * 40):
+                readiness.validate_agent_context_packet(
+                    ROOT, self.manifest, packet, "1" * 40, "2" * 40
+                )
 
     def test_release_polling_tokens_are_forbidden(self) -> None:
         import tempfile

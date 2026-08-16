@@ -150,14 +150,17 @@ class AgentContextTests(unittest.TestCase):
             agent.AgentContextError,
             r"agent-context\.stale-or-not-machine-derived",
         ):
-            agent.validate_context(
-                ROOT,
-                packet,
-                use_case_id=USE_CASE_ID,
-                issue="#261",
-                revision=packet["binding"]["revision"],
-                tree=git_value("HEAD^{tree}"),
-            )
+            with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
+                agent.catalog, "reject_dirty_source_files"
+            ):
+                agent.validate_context(
+                    ROOT,
+                    packet,
+                    use_case_id=USE_CASE_ID,
+                    issue="#261",
+                    revision=packet["binding"]["revision"],
+                    tree=git_value("HEAD^{tree}"),
+                )
 
     def test_demand_projection_drift_is_rejected(self) -> None:
         with mock.patch.object(agent.catalog, "reject_dirty_source_files"):
@@ -213,6 +216,104 @@ class AgentContextTests(unittest.TestCase):
                 r"agent-context\.design-feedback-binding-missing",
             ):
                 self.packet()
+
+    def test_tracked_and_untracked_worktree_fail_closed(self) -> None:
+        revision = git_value("HEAD")
+        tree = git_value("HEAD^{tree}")
+        for marker in (" M tracked.py", "?? untracked.py"):
+            with self.subTest(marker=marker), mock.patch.object(
+                agent, "worktree_status", return_value=[marker]
+            ), self.assertRaisesRegex(
+                agent.AgentContextError, r"agent-context\.worktree-dirty"
+            ):
+                agent.build_context(
+                    ROOT,
+                    use_case_id=USE_CASE_ID,
+                    issue="#261",
+                    revision=revision,
+                    tree=tree,
+                )
+
+    def test_authority_reading_paths_are_individually_bound(self) -> None:
+        packet = self.packet()
+        self.assertEqual(
+            [row["path"] for row in packet["authority_reading_bindings"]],
+            packet["authority_reading_set"],
+        )
+        for row in packet["authority_reading_bindings"]:
+            self.assertTrue((ROOT / row["path"]).is_file())
+            self.assertEqual(row["digest"], agent.file_digest(ROOT / row["path"]))
+        with self.assertRaisesRegex(
+            agent.AgentContextError,
+            r"agent-context\.authority-reading-path-missing",
+        ):
+            agent.bind_authority_reading(ROOT, ["AGENTS.md", "missing-authority.md"])
+
+    def test_design_feedback_metadata_is_exactly_blocked_pending(self) -> None:
+        metadata, _ = agent.design_feedback.split_front_matter(
+            ROOT / agent.DF_0261_RECORD_PATH
+        )
+        for field, value in (
+            ("status", "accepted"),
+            ("implementation_disposition", "may-proceed"),
+        ):
+            mutated = copy.deepcopy(metadata)
+            mutated[field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(
+                agent.AgentContextError, r"agent-context\.design-feedback-"
+            ):
+                agent.validate_design_feedback_metadata(mutated)
+
+        mutated = copy.deepcopy(metadata)
+        mutated["review"]["status"] = "complete"
+        with self.assertRaisesRegex(
+            agent.AgentContextError,
+            r"agent-context\.design-feedback-review-status-mismatch",
+        ):
+            agent.validate_design_feedback_metadata(mutated)
+
+        mutated = copy.deepcopy(metadata)
+        mutated["resolution_refs"] = ["docs/design/README.md"]
+        with self.assertRaisesRegex(
+            agent.AgentContextError,
+            r"agent-context\.design-feedback-resolution-refs-mismatch",
+        ):
+            agent.validate_design_feedback_metadata(mutated)
+
+    def test_machine_contract_and_witness_digest_drift_fail_closed(self) -> None:
+        readiness = agent.load_yaml(ROOT / agent.READINESS_PATH)
+        product = readiness["product_direction"]
+        family = product["roadmap"]["use_case_families"][0]
+        path = agent.validate_capability_path(family)
+        gate = product["constructibility_gate"]
+        context_authority = product["agent_context"]
+        with self.assertRaisesRegex(
+            agent.AgentContextError,
+            r"agent-context\.machine-contract-authority-invalid",
+        ):
+            agent.authority_contract_ids(
+                product,
+                family,
+                path,
+                context_authority,
+                {**gate, "contract": "not-a-contract"},
+            )
+
+        packet = self.packet()
+        packet["constructibility"]["required_witnesses"].append("synthetic-witness")
+        with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
+            agent.catalog, "reject_dirty_source_files"
+        ), self.assertRaisesRegex(
+            agent.AgentContextError, r"agent-context\.stale-or-not-machine-derived"
+        ):
+            agent.validate_context(
+                ROOT,
+                packet,
+                use_case_id=USE_CASE_ID,
+                issue="#261",
+                revision=packet["binding"]["revision"],
+                tree=packet["binding"]["tree"],
+            )
 
 
 if __name__ == "__main__":

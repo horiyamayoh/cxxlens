@@ -371,6 +371,7 @@ def bind_design_feedback(root: pathlib.Path) -> list[dict[str, Any]]:
         fail(f"agent-context.design-feedback-record-invalid:{error}")
     metadata = record.metadata
     validate_design_feedback_metadata(metadata)
+    review = metadata["review"]
     return [
         {
             "id": metadata["id"],
