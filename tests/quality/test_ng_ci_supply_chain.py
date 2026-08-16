@@ -120,7 +120,10 @@ class NgCiSupplyChainTest(unittest.TestCase):
         self.assertEqual(len(self.lock["documentation"]["sha256"]), 64)
 
     def test_documentation_checksum_rejects_before_root_effect(self) -> None:
-        with mock.patch(
+        with tempfile.TemporaryDirectory() as temporary, mock.patch(
+            "bootstrap_supply_chain.package_cache_directory",
+            return_value=pathlib.Path(temporary),
+        ), mock.patch(
             "bootstrap_supply_chain.download", return_value=b"substituted"
         ), mock.patch("bootstrap_supply_chain.run") as run:
             with self.assertRaisesRegex(SupplyChainError, "checksum mismatch"):
