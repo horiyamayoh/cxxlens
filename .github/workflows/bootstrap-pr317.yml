@@ -1,0 +1,122 @@
+name: Bootstrap exact PR 317 overlay
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.event.head_commit.message == 'Bootstrap exact PR 317 overlay'
+    runs-on: ubuntu-24.04
+    env:
+      HEAD_REF: issue-316-ci-setup-integration
+      EXPECTED_HEAD_SHA: c24427e6e66af7a75dcc2934bc20ee8cf2f27c37
+      REVIEWED_SOURCE_COMMIT: e578ed4a9b2885f796803ff5fafe5af8bbc5b0cb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Merge current main and apply the reviewed exact overlay
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin "${HEAD_REF}" main
+          test "$(git rev-parse "origin/${HEAD_REF}")" = "${EXPECTED_HEAD_SHA}"
+          git checkout -B "${HEAD_REF}" "origin/${HEAD_REF}"
+
+          if ! git merge --no-ff --no-commit origin/main; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            while IFS= read -r path; do
+              [[ -z "${path}" ]] && continue
+              case "${path}" in
+                docs/design/SHA256SUMS|schemas/cxxlens_asset_migration_ledger.json)
+                  git checkout --theirs -- "${path}"
+                  git add "${path}"
+                  ;;
+                *)
+                  echo "unexpected merge conflict: ${path}" >&2
+                  exit 1
+                  ;;
+              esac
+            done <<<"${conflicts}"
+          fi
+
+          main_checker="${RUNNER_TEMP}/main-readiness.py"
+          cp tools/quality/check_ng_api_development_readiness.py "${main_checker}"
+          git show "${REVIEWED_SOURCE_COMMIT}:.github/workflows/quality.yml" > .github/workflows/quality.yml
+          git show "${REVIEWED_SOURCE_COMMIT}:tools/quality/check_ng_api_development_readiness.py" > tools/quality/check_ng_api_development_readiness.py
+
+          python3 - "${main_checker}" <<'PY'
+          from __future__ import annotations
+          import pathlib
+          import sys
+
+          quality_path = pathlib.Path('.github/workflows/quality.yml')
+          quality = quality_path.read_text(encoding='utf-8')
+          section_start = quality.index('  quality-contracts:\n')
+          section_end = quality.index('\n  agent-context:\n', section_start)
+          section = quality[section_start:section_end]
+          if '          fetch-depth: 0\n' in section:
+              section = section.replace('          fetch-depth: 0\n', '          fetch-depth: 2\n', 1)
+          elif '          fetch-depth: 2\n' not in section:
+              raise SystemExit('quality-contracts checkout depth is unavailable')
+          quality_path.write_text(quality[:section_start] + section + quality[section_end:], encoding='utf-8')
+
+          checker_path = pathlib.Path('tools/quality/check_ng_api_development_readiness.py')
+          checker = checker_path.read_text(encoding='utf-8')
+          main_checker = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+          block_start = main_checker.index('    quality_contracts = _job(quality, "quality-contracts")\n')
+          block_end = main_checker.index('    check = _job(quality, "check-tier")\n', block_start)
+          block = main_checker[block_start:block_end]
+          if block not in checker:
+              anchor = '    check = _job(quality, "check-tier")\n'
+              if checker.count(anchor) != 1:
+                  raise SystemExit('readiness checker insertion anchor differs')
+              checker = checker.replace(anchor, block + anchor, 1)
+          checker_path.write_text(checker, encoding='utf-8')
+          PY
+
+          rm -f \
+            .github/workflows/apply-pr317-overlay.yml \
+            .github/workflows/export-pr317-overlay.yml \
+            .github/workflows/sync-pr317.yml \
+            .github/workflows/bootstrap-pr317.yml
+
+          python3 tools/quality/check_documentation_consistency.py generate --root .
+          python3 - <<'PY'
+          from __future__ import annotations
+          import hashlib
+          import pathlib
+          import re
+
+          ledger = pathlib.Path('schemas/cxxlens_asset_migration_ledger.json')
+          sums = pathlib.Path('docs/design/SHA256SUMS')
+          digest = hashlib.sha256(ledger.read_bytes()).hexdigest()
+          text = sums.read_text(encoding='utf-8')
+          pattern = r'(?m)^[0-9a-f]{64}  ../../schemas/cxxlens_asset_migration_ledger\.json$'
+          replacement = f'{digest}  ../../schemas/cxxlens_asset_migration_ledger.json'
+          updated, count = re.subn(pattern, replacement, text)
+          if count != 1:
+              raise SystemExit('asset ledger checksum row differs')
+          sums.write_text(updated, encoding='utf-8')
+          PY
+
+          python3 -m pip install --require-hashes --only-binary=:all: \
+            --requirement tools/quality/requirements.lock
+          python3 -m py_compile \
+            tools/ci/bootstrap_supply_chain.py \
+            tools/quality/check_ci_supply_chain.py \
+            tools/quality/check_ng_api_development_readiness.py \
+            tools/quality/collect_toolchain_provenance.py
+          python3 tools/quality/check_ci_supply_chain.py check --root .
+          python3 tools/quality/check_ng_api_development_readiness.py check --root .
+          python3 tools/quality/check_documentation_consistency.py check --root .
+          git add -A
+          git diff --cached --check
+          git commit -m 'Merge current main into CI setup commonization'
+          git push --force-with-lease="refs/heads/${HEAD_REF}:${EXPECTED_HEAD_SHA}" \
+            origin "HEAD:refs/heads/${HEAD_REF}"
