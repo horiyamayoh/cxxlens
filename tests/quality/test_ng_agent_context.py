@@ -285,22 +285,57 @@ class AgentContextTests(unittest.TestCase):
             agent.bind_authority_reading(ROOT, ["AGENTS.md"])
 
     def test_head_blob_content_drift_is_rejected_even_when_status_is_clean(self) -> None:
+        relative = agent.READINESS_SCHEMA_PATH.as_posix()
         path = ROOT / agent.READINESS_SCHEMA_PATH
         original = path.read_bytes()
-        path.write_bytes(original + b"\n# hidden tracked authority mutation\n")
-        self.addCleanup(lambda: path.write_bytes(original))
-        with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
-            agent.catalog, "reject_dirty_source_files"
-        ), self.assertRaisesRegex(
-            agent.AgentContextError,
-            r"agent-context\.authority-source-.*path-content-mismatch",
-        ):
-            agent.build_context(
-                ROOT,
-                use_case_id=USE_CASE_ID,
-                issue="#261",
-                revision=git_value("HEAD"),
-                tree=git_value("HEAD^{tree}"),
+        try:
+            path.write_bytes(original + b"\n# hidden tracked authority mutation\n")
+            subprocess.run(
+                ["git", "-C", str(ROOT), "update-index", "--assume-unchanged", "--", relative],
+                check=True,
+            )
+            self.assertEqual(
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(ROOT),
+                        "status",
+                        "--porcelain=v1",
+                        "--untracked-files=all",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout,
+                "",
+            )
+            with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
+                agent.catalog, "reject_dirty_source_files"
+            ), self.assertRaisesRegex(
+                agent.AgentContextError,
+                r"agent-context\.authority-source-.*path-content-mismatch",
+            ):
+                agent.build_context(
+                    ROOT,
+                    use_case_id=USE_CASE_ID,
+                    issue="#261",
+                    revision=git_value("HEAD"),
+                    tree=git_value("HEAD^{tree}"),
+                )
+        finally:
+            path.write_bytes(original)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(ROOT),
+                    "update-index",
+                    "--no-assume-unchanged",
+                    "--",
+                    relative,
+                ],
+                check=True,
             )
 
     def test_index_authority_flags_are_rejected(self) -> None:
