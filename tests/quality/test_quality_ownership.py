@@ -307,5 +307,27 @@ class ConstructibilityGateProjectionTest(unittest.TestCase):
                     with self.assertRaises(QualityOwnershipError):
                         validate_constructibility_projection(root)
 
+    def test_paired_authority_mutation_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_authority_root(temporary)
+            manifest = load_yaml(root / CONSTRUCTIBILITY_MANIFEST)
+            schema = load_yaml(root / CONSTRUCTIBILITY_SCHEMA)
+            manifest["product_direction"]["constructibility_gate"][
+                "required_witnesses"
+            ].remove("bounded-resource-witness")
+            schema["properties"]["product_direction"]["const"][
+                "constructibility_gate"
+            ]["required_witnesses"].remove("bounded-resource-witness")
+            self.write_manifest(root, manifest)
+            (root / CONSTRUCTIBILITY_SCHEMA).write_text(
+                yaml.safe_dump(schema, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                QualityOwnershipError,
+                "pinned v1 contract",
+            ):
+                validate_constructibility_projection(root)
+
 if __name__ == "__main__":
     unittest.main()
