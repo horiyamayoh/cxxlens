@@ -17,16 +17,13 @@ jobs:
     env:
       EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
-      QUALITY_BLOB: d8a3bbaaca0841041b0791cec3932a202fabb9ec
-      READINESS_BLOB: b851c9c0809c5c666b132e584aaf05b99b5c53e6
+      REVIEWED_SOURCE_COMMIT: e578ed4a9b2885f796803ff5fafe5af8bbc5b0cb
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
       - name: Apply the reviewed CI overlay and retain current-main contracts
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD_SHA}"
@@ -35,16 +32,10 @@ jobs:
 
           main_checker="${RUNNER_TEMP}/main-readiness.py"
           cp tools/quality/check_ng_api_development_readiness.py "${main_checker}"
-
-          fetch_blob() {
-            local blob="$1"
-            local output="$2"
-            gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${blob}" --jq '.content' \
-              | tr -d '\n' | base64 --decode > "${output}"
-          }
-
-          fetch_blob "${QUALITY_BLOB}" .github/workflows/quality.yml
-          fetch_blob "${READINESS_BLOB}" tools/quality/check_ng_api_development_readiness.py
+          git show "${REVIEWED_SOURCE_COMMIT}:.github/workflows/quality.yml" \
+            > .github/workflows/quality.yml
+          git show "${REVIEWED_SOURCE_COMMIT}:tools/quality/check_ng_api_development_readiness.py" \
+            > tools/quality/check_ng_api_development_readiness.py
 
           python3 - "${main_checker}" <<'PY'
           from __future__ import annotations
