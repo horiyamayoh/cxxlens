@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   bootstrap:
-    if: github.event.head_commit.message == 'Stage exact PR 317 overlay'
+    if: github.event.head_commit.message == 'Finalize exact PR 317 overlay'
     runs-on: ubuntu-24.04
     env:
       HEAD_REF: issue-316-ci-setup-integration
@@ -48,10 +48,8 @@ jobs:
 
           main_checker="${RUNNER_TEMP}/main-readiness.py"
           cp tools/quality/check_ng_api_development_readiness.py "${main_checker}"
-          git show "${REVIEWED_SOURCE_COMMIT}:.github/workflows/quality.yml" \
-            > "${RUNNER_TEMP}/quality.yml"
-          git show "${REVIEWED_SOURCE_COMMIT}:tools/quality/check_ng_api_development_readiness.py" \
-            > tools/quality/check_ng_api_development_readiness.py
+          git show "${REVIEWED_SOURCE_COMMIT}:.github/workflows/quality.yml" > "${RUNNER_TEMP}/quality.yml"
+          git show "${REVIEWED_SOURCE_COMMIT}:tools/quality/check_ng_api_development_readiness.py" > tools/quality/check_ng_api_development_readiness.py
 
           python3 - "${main_checker}" "${RUNNER_TEMP}/quality.yml" <<'PY'
           from __future__ import annotations
@@ -83,12 +81,8 @@ jobs:
           checker_path.write_text(checker, encoding='utf-8')
           PY
 
-          # The workflow token may not update workflow paths. Keep the branch's
-          # current workflows unchanged in this transport commit.
           git rm -rf --ignore-unmatch .github/workflows
           git checkout "${branch_head}" -- .github/workflows
-
-          # Generate final inventory as if the three temporary workflows were absent.
           git rm -f --ignore-unmatch \
             .github/workflows/apply-pr317-overlay.yml \
             .github/workflows/export-pr317-overlay.yml \
@@ -120,7 +114,8 @@ jobs:
           rm -f \
             .github/workflows/apply-pr317-overlay.yml \
             .github/workflows/export-pr317-overlay.yml \
-            .github/workflows/sync-pr317.yml
+            .github/workflows/sync-pr317.yml \
+            tools/ci/staged-quality.yml
           python3 -m py_compile \
             tools/ci/bootstrap_supply_chain.py \
             tools/quality/check_ci_supply_chain.py \
@@ -129,9 +124,10 @@ jobs:
           python3 tools/quality/check_ci_supply_chain.py check --root .
           python3 tools/quality/check_ng_api_development_readiness.py check --root .
           python3 tools/quality/check_documentation_consistency.py check --root .
+
+          cp "${RUNNER_TEMP}/quality.yml" tools/ci/staged-quality.yml
           git rm -rf --ignore-unmatch .github/workflows
           git checkout "${branch_head}" -- .github/workflows
-
           git add -A
           if git diff --cached --name-only -- .github/workflows | grep -q .; then
             echo 'transport commit unexpectedly changes workflow paths' >&2
