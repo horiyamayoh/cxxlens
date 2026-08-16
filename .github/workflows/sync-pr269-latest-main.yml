@@ -1,0 +1,154 @@
+name: Sync PR 269 with latest main
+
+on:
+  push:
+    branches:
+      - issue-183-ng1-session-driver
+    paths:
+      - .github/workflows/sync-pr269-latest-main.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-pr269-latest-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: issue-183-ng1-session-driver
+          fetch-depth: 0
+
+      - name: Install exact developer toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+
+      - name: Merge current main and resolve generated authority files
+        env:
+          CXX: clang++-22
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git merge --no-ff --no-commit origin/main || true
+          git rev-parse -q --verify MERGE_HEAD >/dev/null
+
+          mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+          for path in "${conflicts[@]}"; do
+            case "${path}" in
+              AGENTS.md|docs/design/SHA256SUMS|schemas/cxxlens_asset_migration_ledger.json)
+                ;;
+              *)
+                echo "unexpected merge conflict: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          if printf '%s\n' "${conflicts[@]}" | grep -Fxq AGENTS.md; then
+            # Repository-wide agent policy from the newer main is authoritative.
+            git checkout --theirs -- AGENTS.md
+          fi
+
+          # Start generated authority files from the newer main, then add only the two
+          # source-private runtime-service assets owned by PR #269.
+          git show origin/main:schemas/cxxlens_asset_migration_ledger.json \
+            > schemas/cxxlens_asset_migration_ledger.json
+          git show origin/main:docs/design/SHA256SUMS > docs/design/SHA256SUMS
+
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          ledger_path = Path("schemas/cxxlens_asset_migration_ledger.json")
+          ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+          additions = [
+              "src/sdk/provider_runtime_service.cpp",
+              "src/sdk/provider_runtime_service_internal.hpp",
+          ]
+          expected = {
+              "authority": "active",
+              "removal_issue": None,
+              "replacement": None,
+              "status": "active",
+          }
+          by_path = {entry["path"]: entry for entry in ledger["assets"]}
+          for path in additions:
+              if path in by_path:
+                  actual = {key: by_path[path].get(key) for key in expected}
+                  if actual != expected:
+                      raise SystemExit(
+                          f"existing ledger entry for {path} has unexpected authority: {actual}"
+                      )
+                  continue
+              ledger["assets"].append({"path": path, **expected})
+
+          ledger["assets"].sort(key=lambda entry: entry["path"])
+          ledger["asset_count"] = len(ledger["assets"])
+          counts = Counter(entry["status"] for entry in ledger["assets"])
+          existing_order = list(ledger["classifications"])
+          ledger["classifications"] = {
+              key: counts.pop(key, 0) for key in existing_order
+          }
+          for key in sorted(counts):
+              ledger["classifications"][key] = counts[key]
+          ledger_path.write_text(
+              json.dumps(ledger, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8",
+          )
+
+          checksum_path = Path("docs/design/SHA256SUMS")
+          target = "../../schemas/cxxlens_asset_migration_ledger.json"
+          digest = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+          lines = checksum_path.read_text(encoding="utf-8").splitlines()
+          matches = 0
+          for index, line in enumerate(lines):
+              fields = line.split(maxsplit=1)
+              if len(fields) == 2 and fields[1] == target:
+                  lines[index] = f"{digest}  {target}"
+                  matches += 1
+          if matches != 1:
+              raise SystemExit(f"expected one SHA256SUMS entry for {target}, found {matches}")
+          checksum_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+          rm -f .github/workflows/sync-pr269-latest-main.yml
+          git add -A
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo 'merge still has unresolved paths' >&2
+            git diff --name-only --diff-filter=U >&2
+            exit 1
+          fi
+          git diff --cached --check
+
+          cmake -S . -B build/pr269-main-sync -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCXXLENS_CLANG_ADAPTER=OFF \
+            -DCXXLENS_WARNINGS_AS_ERRORS=ON \
+            -DBUILD_TESTING=ON \
+            -DCXXLENS_BUILD_QUALITY_TOOLS=OFF
+          cmake --build build/pr269-main-sync --target \
+            cxxlens-unit-sdk-provider-runtime-service
+          ctest --test-dir build/pr269-main-sync \
+            --tests-regex '^unit.sdk-provider-runtime-service$' \
+            --output-on-failure
+          cmake --build build/pr269-main-sync --target cxxlens-quality
+
+      - name: Commit and publish synchronized branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Merge latest main into NG1 session driver"
+          git push origin HEAD:issue-183-ng1-session-driver
