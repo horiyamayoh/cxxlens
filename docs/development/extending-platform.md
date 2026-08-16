@@ -9,7 +9,8 @@ Logical Query IR、coverage、unresolved、guarantee、provenance を共有し�
 Issue #276 の既存 authority は、`schemas/cxxlens_ng_api_development_readiness.yaml` とその versioned schema にある
 `development.constructibility-gate.v1` の witness inventory です。現在の bounded checker
 `tools/quality/check_quality_ownership.py constructibility` は、この既存 schema を検証し、#261 の agent context が同じ gate に
-bound された `blocked` disposition のままであることと、manifest/schema の SHA-256 provenance を確認します。
+bound された `blocked` disposition のままであること、v1 の contract/applicability/witness/acceptance projection が pin と一致すること、
+および manifest/schema の SHA-256 provenance を確認します。ファイル digest は provenance であり、v1 projection の trust anchor ではありません。
 
 これは witness inventory の disposition projection に限った preflight です。phase graph、phase ごとの field availability、
 phase-authentic outcome union、resource/crash/recovery witness の実装や、high-risk contract の acceptance は追加しません。
