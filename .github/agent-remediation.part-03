@@ -1,0 +1,327 @@
+-				while (std::chrono::steady_clock::now() < signal_deadline)
++				if (!group_terminated_)
+ 				{
+-					(void)::kill(-child_, SIGKILL);
+-					std::this_thread::sleep_for(std::chrono::milliseconds{1});
++					const auto signal_deadline =
++						std::chrono::steady_clock::now() + std::chrono::milliseconds{100};
++					while (std::chrono::steady_clock::now() < signal_deadline)
++					{
++						if (::kill(-child_, SIGKILL) != 0 && errno == ESRCH)
++							break;
++						std::this_thread::sleep_for(std::chrono::milliseconds{1});
++					}
++					group_terminated_ = true;
+ 				}
+-				while (::waitpid(child_, &wait_status_, 0) < 0 && errno == EINTR)
++				if (!reaped_)
+ 				{
++					for (;;)
++					{
++						const auto waited = ::waitpid(child_, &wait_status_, 0);
++						if (waited == child_ || (waited < 0 && errno == ECHILD))
++						{
++							reaped_ = true;
++							break;
++						}
++						if (waited < 0 && errno == EINTR)
++							continue;
++						break;
++					}
+ 				}
+-				reaped_ = true;
+ 			}
+ 
+ 			descriptor input_;
+@@ -885,6 +993,7 @@ namespace cxxlens::sdk::provider
+ 			bool stdout_ended_{};
+ 			bool stderr_ended_{};
+ 			bool reaped_{};
++			bool group_terminated_{};
+ 			bool finished_{};
+ 		};
+ 
+diff --git a/tests/fixtures/provider_process_fixture.cpp b/tests/fixtures/provider_process_fixture.cpp
+index 34ecdb5..b6cb8c8 100644
+--- a/tests/fixtures/provider_process_fixture.cpp
++++ b/tests/fixtures/provider_process_fixture.cpp
+@@ -131,7 +131,63 @@ int main(const int argument_count, const char* const* arguments)
+ 	if (argument_count != 2)
+ 		return EXIT_FAILURE;
+ 	const std::string_view mode{arguments[1]};
++#if defined(__linux__) && defined(__GLIBC__)
++	if (mode == "ng1-output-before-input")
++	{
++		const std::string output(4U * 1024U * 1024U, 'x');
++		std::cout.write(output.data(), static_cast<std::streamsize>(output.size()));
++		std::cout.flush();
++		if (!std::cout.good())
++			return EXIT_FAILURE;
++		const std::string ignored{std::istreambuf_iterator<char>{std::cin},
++								  std::istreambuf_iterator<char>{}};
++		return std::cin.bad() ? EXIT_FAILURE : EXIT_SUCCESS;
++	}
++
++	constexpr std::string_view close_input_prefix = "ng1-close-input:";
++	if (mode.starts_with(close_input_prefix))
++	{
++		const auto marker_path = mode.substr(close_input_prefix.size());
++		if (marker_path.empty() || ::close(STDIN_FILENO) != 0)
++			return EXIT_FAILURE;
++		std::ofstream marker{std::string{marker_path}, std::ios::trunc};
++		marker << "ready\n";
++		marker.close();
++		if (!marker)
++			return EXIT_FAILURE;
++		std::this_thread::sleep_for(std::chrono::seconds{5});
++		return EXIT_SUCCESS;
++	}
++
++	constexpr std::string_view exited_leader_prefix = "ng1-exited-leader-descendant:";
++	if (mode.starts_with(exited_leader_prefix))
++	{
++		const auto marker_path = mode.substr(exited_leader_prefix.size());
++		if (marker_path.empty())
++			return EXIT_FAILURE;
++		const auto descendant = ::fork();
++		if (descendant < 0)
++			return EXIT_FAILURE;
++		if (descendant == 0)
++		{
++			(void)::close(STDIN_FILENO);
++			const auto start_time = process_start_time();
++			if (!start_time)
++				::_exit(EXIT_FAILURE);
++			std::ofstream marker{std::string{marker_path}, std::ios::trunc};
++			marker << ::getpid() << ' ' << *start_time << '\n';
++			marker.close();
++			if (!marker)
++				::_exit(EXIT_FAILURE);
++			std::this_thread::sleep_for(std::chrono::seconds{5});
++			::_exit(EXIT_SUCCESS);
++		}
++		return EXIT_SUCCESS;
++	}
++#endif
+ 	std::string input{std::istreambuf_iterator<char>{std::cin}, std::istreambuf_iterator<char>{}};
++	if (mode == "ng1-drain-input")
++		return std::cin.bad() ? EXIT_FAILURE : EXIT_SUCCESS;
+ 	std::vector<std::byte> bytes;
+ 	bytes.reserve(input.size());
+ 	for (const auto byte : input)
+diff --git a/tests/unit/sdk/provider_runtime_test.cpp b/tests/unit/sdk/provider_runtime_test.cpp
+index c8e972b..7c2dfd4 100644
+--- a/tests/unit/sdk/provider_runtime_test.cpp
++++ b/tests/unit/sdk/provider_runtime_test.cpp
+@@ -2424,33 +2424,35 @@ namespace
+ 				"failed worker destroyed or replaced the prior snapshot");
+ 	}
+ 
+-	void check_ng1_live_duplex_process()
++	void check_ng1_live_duplex_process(const std::string& executable)
+ 	{
+ #if defined(__linux__) && defined(__GLIBC__)
++		namespace fs = std::filesystem;
+ 		const auto policy = baseline_policy();
+-		process_invocation invocation;
+-		invocation.argv = {"/bin/cat"};
+-		invocation.budget.wall_ms = 3000U;
+-		invocation.budget.cpu_ms = 3000U;
+-		invocation.budget.address_space_bytes = provider_address_space_budget;
+-		invocation.budget.transport_bytes = 1024U * 1024U;
+-		invocation.budget.output_bytes = 1024U * 1024U;
+-		invocation.budget.open_files = 64U;
+-		invocation.budget.subprocesses = provider_subprocess_budget;
+-		invocation.sandbox = {sandbox_assurance::enforced, policy.policy_digest()};
+-		invocation.expected_binary_digest = executable_digest("/bin/cat");
++		const auto make_invocation = [&](std::vector<std::string> arguments)
++		{
++			process_invocation invocation;
++			invocation.argv = std::move(arguments);
++			invocation.budget.wall_ms = 3000U;
++			invocation.budget.cpu_ms = 3000U;
++			invocation.budget.address_space_bytes = provider_address_space_budget;
++			invocation.budget.transport_bytes = 1024U * 1024U;
++			invocation.budget.output_bytes = 1024U * 1024U;
++			invocation.budget.open_files = 64U;
++			invocation.budget.subprocesses = provider_subprocess_budget;
++			invocation.sandbox = {sandbox_assurance::enforced, policy.policy_digest()};
++			invocation.expected_binary_digest = executable_digest(invocation.argv.front());
++			return invocation;
++		};
+ 
+ 		protocol_limits limits;
+ 		limits.minimum_minor = 1U;
+ 		limits.maximum_minor = 1U;
+ 		auto port = detail::make_system_ng1_duplex_process_port();
+ 		require(port != nullptr, "NG1 live process port was not created");
+-		auto process = port->start(invocation, limits, {});
+-		if (!process)
+-			require(false, "NG1 live process launch failed: " + process.error().code);
++
+ 		auto staged_digest = semantic_digest("test.ng1.live", "staged");
+ 		require(staged_digest.has_value(), "NG1 live staged digest construction failed");
+-
+ 		detail::ng1_heartbeat_control control{"cxxlens.provider-control.heartbeat.v1",
+ 											  detail::ng1_heartbeat_kind::ack,
+ 											  "provider:test",
+@@ -2471,6 +2473,11 @@ namespace
+ 		wire.control = *encoded_control;
+ 		wire.protocol_major = 1U;
+ 		wire.protocol_minor = 1U;
++
++		auto invocation = make_invocation({"/bin/cat"});
++		auto process = port->start(invocation, limits, {});
++		if (!process)
++			require(false, "NG1 live process launch failed: " + process.error().code);
+ 		auto sent = (*process)->send_frame(wire);
+ 		require(sent.has_value(), "NG1 live frame send failed");
+ 		auto received = (*process)->receive_frame({});
+@@ -2509,14 +2516,154 @@ namespace
+ 		if (!rejected_process)
+ 			require(false,
+ 					"NG1 live negative process launch failed: " + rejected_process.error().code);
+-		wire.flags = static_cast<std::uint16_t>(frame_flag::optional_extension);
+-		auto rejected = (*rejected_process)->send_frame(wire);
++		auto rejected_wire = wire;
++		rejected_wire.flags = static_cast<std::uint16_t>(frame_flag::optional_extension);
++		auto rejected = (*rejected_process)->send_frame(rejected_wire);
+ 		require(!rejected && rejected.error().code == "provider.protocol-state-invalid",
+ 				"NG1 live channel accepted optional flags on the reserved heartbeat");
+ 		auto terminated = (*rejected_process)->terminate(process_status::cancelled);
+ 		require(terminated.has_value() && terminated->status == process_status::cancelled,
+ 				"NG1 live channel did not preserve explicit cancellation evidence");
++
++		// Host input has its own negotiated profile.  A one-byte stdout/stderr budget must not
++		// reject a valid host frame when the provider emits no output.
++		auto input_budget_invocation = make_invocation({executable, "ng1-drain-input"});
++		input_budget_invocation.budget.transport_bytes = 1U;
++		input_budget_invocation.budget.output_bytes = 1U;
++		auto input_budget_process = port->start(input_budget_invocation, limits, {});
++		if (!input_budget_process)
++			require(false,
++					"NG1 input-budget process launch failed: " + input_budget_process.error().code);
++		auto input_budget_sent = (*input_budget_process)->send_frame(wire);
++		auto input_budget_finished = (*input_budget_process)->finish({});
++		require(input_budget_sent.has_value(),
++				"NG1 host frame was incorrectly charged to the stdout/stderr budget");
++		require(input_budget_finished &&
++					input_budget_finished->status == process_status::exited &&
++					input_budget_finished->exit_code == 0 &&
++					input_budget_finished->standard_output.empty() &&
++					input_budget_finished->standard_error.empty(),
++				"NG1 input-only provider did not finish within its independent transport budget");
++
++		// Closing provider stdin must become a typed EPIPE outcome; SIGPIPE must never escape and
++		// terminate the host process.
++		const auto closed_input_marker = fs::temp_directory_path() /
++			("cxxlens-ng1-closed-input-" + std::to_string(::getpid()) + ".ready");
++		std::error_code marker_error;
++		fs::remove(closed_input_marker, marker_error);
++		require(!marker_error, "could not remove stale NG1 closed-input marker");
++		auto closed_input_invocation =
++			make_invocation({executable, "ng1-close-input:" + closed_input_marker.string()});
++		auto closed_input_process = port->start(closed_input_invocation, limits, {});
++		if (!closed_input_process)
++			require(false,
++					"NG1 closed-input process launch failed: " + closed_input_process.error().code);
++		const auto closed_input_deadline =
++			std::chrono::steady_clock::now() + std::chrono::seconds{2};
++		while (!fs::exists(closed_input_marker) &&
++			   std::chrono::steady_clock::now() < closed_input_deadline)
++			std::this_thread::sleep_for(std::chrono::milliseconds{1});
++		const bool closed_input_ready = fs::exists(closed_input_marker);
++		auto closed_input_sent = (*closed_input_process)->send_frame(wire);
++		auto closed_input_terminated =
++			(*closed_input_process)->terminate(process_status::cancelled);
++		fs::remove(closed_input_marker, marker_error);
++		require(closed_input_ready, "NG1 closed-input fixture did not become ready");
++		require(!closed_input_sent && closed_input_sent.error().code == "provider.worker-exit" &&
++					closed_input_sent.error().field == "ng1-live-write" &&
++					closed_input_sent.error().detail == "stdin-closed",
++				"NG1 closed stdin did not return the typed worker-exit failure");
++		require(closed_input_terminated &&
++					closed_input_terminated->status == process_status::cancelled,
++				"NG1 closed-input cleanup lost cancellation evidence");
++		require(!marker_error, "could not remove NG1 closed-input marker");
++
++		// The provider deliberately fills stdout before reading stdin.  Sending a large frame must
++		// drain stdout concurrently instead of deadlocking on two full pipe buffers.
++		auto duplex_invocation = make_invocation({executable, "ng1-output-before-input"});
++		duplex_invocation.budget.wall_ms = 2000U;
++		duplex_invocation.budget.cpu_ms = 2000U;
++		duplex_invocation.budget.transport_bytes = 8U * 1024U * 1024U;
++		duplex_invocation.budget.output_bytes = 8U * 1024U * 1024U;
++		auto duplex_process = port->start(duplex_invocation, limits, {});
++		if (!duplex_process)
++			require(false, "NG1 duplex process launch failed: " + duplex_process.error().code);
++		frame large_host_frame;
++		large_host_frame.type = message_type::open_task;
++		large_host_frame.stream_id = 9U;
++		large_host_frame.sequence = 1U;
++		large_host_frame.payload.assign(4U * 1024U * 1024U, std::byte{0x5a});
++		large_host_frame.protocol_major = 1U;
++		large_host_frame.protocol_minor = 1U;
++		const auto duplex_started = std::chrono::steady_clock::now();
++		auto duplex_sent = (*duplex_process)->send_frame(large_host_frame);
++		const auto duplex_elapsed = std::chrono::steady_clock::now() - duplex_started;
++		auto duplex_terminated = (*duplex_process)->terminate(process_status::cancelled);
++		require(duplex_sent.has_value(),
++				"NG1 duplex send did not drain provider output while waiting for writable stdin");
++		require(duplex_elapsed < std::chrono::seconds{2},
++				"NG1 duplex send reached the wall deadline instead of making bidirectional progress");
++		require(duplex_terminated && duplex_terminated->status == process_status::cancelled &&
++					duplex_terminated->standard_output.size() == 4U * 1024U * 1024U,
++				"NG1 duplex cleanup lost the concurrently drained provider output");
++
++#if defined(SYS_pidfd_open) && defined(SYS_pidfd_send_signal)
++		if (pidfd_runtime_available())
++		{
++			const auto subprocess_budget = descendant_fixture_subprocess_budget();
++			if (subprocess_budget)
++			{
++				const auto descendant_marker = fs:temp_directory_path() /
++					("cxxlens-ng1-exited-leader-" + std::to_string(::getpid()) + ".pid");
++				fs::remove(descendant_marker, marker_error);
++				require(!marker_error, "could not remove stale NG1 descendant marker");
++				auto descendant_invocation = make_invocation(
++					{executable,
++					  "ng1-exited-leader-descendant:" + descendant_marker.string()});
++				descendant_invocation.budget.wall_ms = 1000U;
++				descendant_invocation.budget.subprocesses = *subprocess_budget;
++				auto descendant_process = port->start(descendant_invocation, limits, {});
++				if (!descendant_process)
++					require(false,
++							"NG1 descendant process launch failed: " +
++								descendant_process.error().code);
++				std::optional<holder_observation> descendant;
++				const auto marker_deadline =
++					std::chrono::steady_clock::now() + std::chrono::milliseconds{750};
++				while (!descendant && std::chrono::steady_clock::now() < marker_deadline)
++				{
++					descendant = observe_descendant(descendant_marker);
++					if (!descendant)
++						std::this_thread::sleep_for(std::chrono::milliseconds{1});
++				}
++				auto descendant_finished = (*descendant_process)->finish({});
++				const bool descendant_exited_before_cleanup =
++					descendant && wait_pidfd_exit(descendant->pidfd, std::chrono::milliseconds{500});
++				bool descendant_exited_after_cleanup = descendant_exited_before_cleanup;
++				if (descendant && !descendant_exited_after_cleanup)
++				{
++					(void)kill_pidfd(descendant->pidfd);
++					descendant_exited_after_cleanup =
++						wait_pidfd_exit(descendant->pidfd, std::chrono::seconds{2});
++				}
++				if (descendant)
++					(void)::close(descendant->pidfd);
++				fs::remove(descendant_marker, marker_error);
++				require(descendant.has_value(),
++						"NG1 pipe-holding descendant identity could not be observed");
++				require(descendant_finished &&
++							descendant_finished->status == process_status::timed_out,
++						"NG1 exited group leader erased the required timeout outcome");
++				require(descendant_exited_before_cleanup,
++						"NG1 timeout did not kill a pipe-holding descendant after its leader exited");
++				require(descendant_exited_after_cleanup,
++						"NG1 pipe-holding descendant cleanup failed");

@@ -1,0 +1,354 @@
++            --evidence-dir build/release-qualification-input \
++            --nightly-evidence-dir build/release-qualification-input \
++            --security-report "build/release-qualification-input/cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/cxxlens-ng-security-conformance-report.json" \
++            --evaluation "build/release-qualification-input/cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/cxxlens-ng-release-qualification-evaluation-report.json" \
++            --output "${RUNNER_TEMP}/cxxlens-ng-release-qualification-report.json" \
++            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
++            --expected-revision "${GITHUB_SHA}"
++      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
++        with:
++          name: cxxlens-ng-release-qualification-${{ github.sha }}
++          path: ${{ runner.temp }}/cxxlens-ng-release-qualification-report.json
++          if-no-files-found: error
++          retention-days: 365
++
++  production-scope-closure:
++    if: >-
++      always() &&
++      github.event_name == 'push' &&
++      github.ref == 'refs/heads/main'
++    needs: [release-evaluation, release-qualification]
++    runs-on: ubuntu-24.04
++    steps:
++      - name: Validate qualification dependency results
++        env:
++          EVALUATION_RESULT: ${{ needs.release-evaluation.result }}
++          QUALIFICATION: ${{ needs.release-evaluation.outputs.qualification }}
++          STRICT_RESULT: ${{ needs.release-qualification.result }}
++        run: |
++          if [[ "${EVALUATION_RESULT}" == "success" && "${QUALIFICATION}" == "not-qualified" && "${STRICT_RESULT}" == "skipped" ]]; then
++            exit 0
++          fi
++          if [[ "${EVALUATION_RESULT}" == "success" && "${QUALIFICATION}" == "qualified" && "${STRICT_RESULT}" == "success" ]]; then
++            exit 0
++          fi
++          echo "invalid qualification dependency matrix: evaluation=${EVALUATION_RESULT}, qualification=${QUALIFICATION}, strict=${STRICT_RESULT}" >&2
++          exit 1
++      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
++      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
++        with:
++          python-version: "3.12.11"
++      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
++      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
++        with:
++          name: cxxlens-ng-release-qualification-evaluation-${{ github.sha }}
++          path: build/production-scope-input/evaluation
++      - if: needs.release-evaluation.outputs.qualification == 'qualified'
++        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
++        with:
++          name: cxxlens-ng-release-qualification-${{ github.sha }}
++          path: build/production-scope-input/gr
++      - name: Generate classified production-scope report
++        if: needs.release-evaluation.outputs.qualification == 'not-qualified'
++        run: |
++          python tools/quality/check_ng_production_scope_closure.py --root . report \
++            --mode normal \
++            --evaluation build/production-scope-input/evaluation/cxxlens-ng-release-qualification-evaluation-report.json \
++            --output "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json" \
++            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
++            --expected-revision "${GITHUB_SHA}"
++      - name: Generate final production-scope report
++        if: needs.release-evaluation.outputs.qualification == 'qualified'
++        run: |
++          python tools/quality/check_ng_release_qualification.py verify-evaluation-binding \
++            --root . \
++            --evaluation build/production-scope-input/evaluation/cxxlens-ng-release-qualification-evaluation-report.json \
++            --gr build/production-scope-input/gr/cxxlens-ng-release-qualification-report.json
++          python tools/quality/check_ng_production_scope_closure.py --root . report \
++            --mode final \
++            --evaluation build/production-scope-input/evaluation/cxxlens-ng-release-qualification-evaluation-report.json \
++            --gr build/production-scope-input/gr/cxxlens-ng-release-qualification-report.json \
++            --output "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json" \
++            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
++            --expected-revision "${GITHUB_SHA}"
+       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+         with:
+-          name: cxxlens-agent-source-${{ github.sha }}
+-          path: ${{ runner.temp }}/cxxlens-source-${{ github.sha }}.tar.gz
++          name: cxxlens-ng-production-scope-closure-${{ github.sha }}
++          path: ${{ runner.temp }}/cxxlens-ng-production-scope-closure-report.json
+           if-no-files-found: error
+-          retention-days: 1
++          retention-days: 365
+diff --git a/src/runtime/provider_process_adapter.cpp b/src/runtime/provider_process_adapter.cpp
+index fb0665d..40d8afc 100644
+--- a/src/runtime/provider_process_adapter.cpp
++++ b/src/runtime/provider_process_adapter.cpp
+@@ -22,6 +22,7 @@
+ #include <linux/filter.h>
+ #include <linux/seccomp.h>
+ #include <poll.h>
++#include <pthread.h>
+ #include <sys/mman.h>
+ #include <sys/prctl.h>
+ #include <sys/resource.h>
+@@ -490,6 +491,61 @@ namespace cxxlens::sdk::provider
+ 			}
+ 		}
+ 
++		struct pipe_write_result
++		{
++			ssize_t count{-1};
++			int error{};
++		};
++
++		/**
++		 * A pipe write generates SIGPIPE for the calling thread before returning EPIPE.  Block it
++		 * only around the write, consume only a signal generated by this write, and restore the
++		 * caller's mask so the provider boundary cannot change process-wide signal semantics.
++		 */
++		[[nodiscard]] pipe_write_result write_without_sigpipe(const int destination,
++													 const void* const bytes,
++													 const std::size_t size) noexcept
++		{
++			sigset_t blocked{};
++			if (::sigemptyset(&blocked) != 0 || ::sigaddset(&blocked, SIGPIPE) != 0)
++				return {-1, errno};
++			sigset_t previous{};
++			const auto block_error = ::pthread_sigmask(SIG_BLOCK, &blocked, &previous);
++			if (block_error != 0)
++				return {-1, block_error};
++
++			sigset_t pending{};
++			if (::sigpending(&pending) != 0)
++			{
++				const auto pending_error = errno;
++				(void)::pthread_sigmask(SIG_SETMASK, &previous, nullptr);
++				return {-1, pending_error};
++			}
++			const auto already_pending = ::sigismember(&pending, SIGPIPE);
++			if (already_pending < 0)
++			{
++				const auto pending_error = errno;
++				(void)::pthread_sigmask(SIG_SETMASK, &previous, nullptr);
++				return {-1, pending_error};
++			}
++
++			const auto count = ::write(destination, bytes, size);
++			const auto write_error = count < 0 ? errno : 0;
++			if (count < 0 && write_error == EPIPE && already_pending == 0)
++			{
++				sigset_t generated{};
++				if (::sigpending(&generated) == 0 && ::sigismember(&generated, SIGPIPE) == 1)
++				{
++					const timespec no_wait{};
++					while (::sigtimedwait(&blocked, nullptr, &no_wait) < 0 && errno == EINTR)
++					{
++					}
++				}
++			}
++			(void)::pthread_sigmask(SIG_SETMASK, &previous, nullptr);
++			return {count, write_error};
++		}
++
+ 		/**
+ 		 * Live Linux process channel used by the source-private NG1 seam.  The existing
+ 		 * linux_process_port below intentionally remains the completed-process NG0 path; this
+@@ -519,7 +575,7 @@ namespace cxxlens::sdk::provider
+ 			{
+ 				if (!finished_)
+ 				{
+-					forced_status_ = process_status::cancelled;
++					force_status(process_status::cancelled);
+ 					kill_process_group();
+ 				}
+ 			}
+@@ -530,31 +586,46 @@ namespace cxxlens::sdk::provider
+ 					return cxxlens::sdk::unexpected(process_error(
+ 						"provider.protocol-state-invalid", "ng1-live", "input-closed"));
+ 				if (auto deadline = check_deadline(); !deadline)
++				{
++					force_status(process_status::timed_out);
++					kill_process_group();
+ 					return deadline;
++				}
+ 				auto encoded = encode_frame(value, limits_);
+ 				if (!encoded)
+ 					return cxxlens::sdk::unexpected(std::move(encoded.error()));
+-				if (encoded->size() > budget_.transport_bytes -
+-						std::min<std::uint64_t>(budget_.transport_bytes, transport_bytes_))
+-					return cxxlens::sdk::unexpected(
+-						process_error("provider.output-limit", "ng1-live", "transport-bytes"));
+ 
+ 				std::size_t offset{};
+ 				while (offset < encoded->size())
+ 				{
+-					const auto written =
+-						::write(input_.get(), encoded->data() + offset, encoded->size() - offset);
+-					if (written > 0)
++					const auto written = write_without_sigpipe(
++						input_.get(), encoded->data() + offset, encoded->size() - offset);
++					if (written.count > 0)
+ 					{
+-						offset += static_cast<std::size_t>(written);
++						offset += static_cast<std::size_t>(written.count);
+ 						continue;
+ 					}
+-					if (written < 0 && errno == EINTR)
++					if (written.count < 0 && written.error == EINTR)
+ 						continue;
+-					if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
++					if (written.count < 0 && written.error == EPIPE)
++					{
++						input_.reset();
++						return cxxlens::sdk::unexpected(process_error(
++							"provider.worker-exit", "ng1-live-write", "stdin-closed"));
++					}
++					if (written.count < 0 &&
++						(written.error == EAGAIN || written.error == EWOULDBLOCK))
+ 					{
+-						pollfd descriptor{input_.get(), POLLOUT | POLLHUP | POLLERR, 0};
+-						const auto polled = ::poll(&descriptor, 1U, 10);
++						std::array<pollfd, 3U> descriptors{
++							pollfd{input_.get(), POLLOUT | POLLHUP | POLLERR, 0},
++							pollfd{stdout_ended_ ? -1 : output_.get(),
++								   POLLIN | POLLHUP | POLLERR,
++								   0},
++							pollfd{stderr_ended_ ? -1 : error_.get(),
++								   POLLIN | POLLHUP | POLLERR,
++								   0},
++						};
++						const auto polled = ::poll(descriptors.data(), descriptors.size(), 10);
+ 						if (polled < 0 && errno == EINTR)
+ 							continue;
+ 						if (polled < 0)
+@@ -562,17 +633,32 @@ namespace cxxlens::sdk::provider
+ 								process_error("provider.process-launch-failed",
+ 											  "ng1-live-write",
+ 											  std::to_string(errno)));
+-						if ((descriptor.revents & (POLLHUP | POLLERR | POLLNVAL)) != 0)
++						if ((!stdout_ended_ && !drain_stdout()) ||
++							(!stderr_ended_ && !drain_stderr()))
++						{
++							force_status(process_status::output_limit);
++							kill_process_group();
++							return cxxlens::sdk::unexpected(process_error(
++								"provider.output-limit", "ng1-live", "transport-bytes"));
++						}
++						if ((descriptors[0U].revents & (POLLHUP | POLLERR | POLLNVAL)) != 0)
++						{
++							input_.reset();
+ 							return cxxlens::sdk::unexpected(process_error(
+ 								"provider.worker-exit", "ng1-live-write", "stdin-closed"));
++						}
+ 						if (auto deadline = check_deadline(); !deadline)
++						{
++							force_status(process_status::timed_out);
++							kill_process_group();
+ 							return deadline;
++						}
+ 						continue;
+ 					}
+-					return cxxlens::sdk::unexpected(process_error(
+-						"provider.process-launch-failed", "ng1-live-write", std::to_string(errno)));
++					return cxxlens::sdk::unexpected(process_error("provider.process-launch-failed",
++															  "ng1-live-write",
++															  std::to_string(written.error)));
+ 				}
+-				transport_bytes_ += encoded->size();
+ 				return {};
+ 			}
+ 
+@@ -636,20 +722,17 @@ namespace cxxlens::sdk::provider
+ 				input_.reset();
+ 				for (;;)
+ 				{
+-					reap_nonblocking();
+-					if (cancellation.stop_requested() && !reaped_)
+-						forced_status_ = process_status::cancelled;
+-					if (!reaped_ && forced_status_ != process_status::launch_failed)
++					if (cancellation.stop_requested())
++						force_status(process_status::cancelled);
++					if (forced_status_ != process_status::launch_failed)
+ 						kill_process_group();
++					reap_nonblocking();
+ 					if (reaped_ && stdout_ended_ && stderr_ended_)
+ 						break;
+ 					if (std::chrono::steady_clock::now() >= deadline_)
+ 					{
+-						if (!reaped_)
+-						{
+-							forced_status_ = process_status::timed_out;
+-							kill_process_group();
+-						}
++						force_status(process_status::timed_out);
++						kill_process_group();
+ 						output_.reset();
+ 						error_.reset();
+ 						stdout_ended_ = true;
+@@ -657,8 +740,8 @@ namespace cxxlens::sdk::provider
+ 						break;
+ 					}
+ 					std::array<pollfd, 2U> descriptors{
+-						pollfd{output_.get(), POLLIN | POLLHUP | POLLERR, 0},
+-						pollfd{error_.get(), POLLIN | POLLHUP | POLLERR, 0},
++						pollfd{stdout_ended_ ? -1 : output_.get(), POLLIN | POLLHUP | POLLERR, 0},
++						pollfd{stderr_ended_ ? -1 : error_.get(), POLLIN | POLLHUP | POLLERR, 0},
+ 					};
+ 					const auto polled = ::poll(descriptors.data(), descriptors.size(), 10);
+ 					if (polled < 0 && errno == EINTR)
+@@ -668,9 +751,10 @@ namespace cxxlens::sdk::provider
+ 							process_error("provider.process-launch-failed",
+ 										  "ng1-live-finish",
+ 										  std::to_string(errno)));
+-					if (!drain_stdout() || !drain_stderr())
++					if ((!stdout_ended_ && !drain_stdout()) ||
++						(!stderr_ended_ && !drain_stderr()))
+ 					{
+-						forced_status_ = process_status::output_limit;
++						force_status(process_status::output_limit);
+ 						kill_process_group();
+ 					}
+ 				}
+@@ -713,7 +797,7 @@ namespace cxxlens::sdk::provider
+ 				if (finished_)
+ 					return cxxlens::sdk::unexpected(
+ 						process_error("provider.protocol-state-invalid", "ng1-live", "finished"));
+-				forced_status_ = status;
++				force_status(status);
+ 				kill_process_group();
+ 				return finish({});
+ 			}
+@@ -740,6 +824,12 @@ namespace cxxlens::sdk::provider
+ 				return {};
+ 			}
+ 
++			void force_status(const process_status status) noexcept
++			{
++				if (forced_status_ == process_status::launch_failed)
++					forced_status_ = status;
++			}
++
+ 			[[nodiscard]] result<std::optional<frame>> take_frame()
+ 			{
+ 				if (pending_.size() < wire_header_bytes)
+@@ -841,7 +931,9 @@ namespace cxxlens::sdk::provider
+ 
+ 			void reap_nonblocking() noexcept
+ 			{
+-				if (reaped_ || child_ <= 0)
++				// Keep the group leader waitable while a descendant may retain either output pipe.
++				// The stable leader/PGID identity is required for bounded timeout cleanup.
++				if (reaped_ || child_ <= 0 || !stdout_ended_ || !stderr_ended_)
+ 					return;
+ 				const auto waited = ::waitpid(child_, &wait_status_, WNOHANG);
+ 				if (waited == child_ || (waited < 0 && errno == ECHILD))
+@@ -850,19 +942,35 @@ namespace cxxlens::sdk::provider
+ 
+ 			void kill_process_group() noexcept
+ 			{
+-				if (child_ <= 0 || reaped_)
++				if (child_ <= 0)
+ 					return;
+-				const auto signal_deadline =
+-					std::chrono::steady_clock::now() + std::chrono::milliseconds{100};
