@@ -163,8 +163,9 @@ jobs:
           python tools/quality/check_documentation_consistency.py check --root .
           python tools/quality/verify_checksums.py check --root .
 
-      - name: Commit and export the exact generated result
+      - name: Commit and publish the exact generated Git objects
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           EXPORT_PATH: ${{ runner.temp }}/issue-316-generated-tree.json
         run: |
           set -euo pipefail
@@ -180,9 +181,26 @@ jobs:
           import os
           import pathlib
           import subprocess
+          import urllib.request
 
           def output(*arguments: str) -> str:
               return subprocess.check_output(["git", *arguments], text=True).strip()
+
+          def api(path: str, *, method: str = "GET", payload=None):
+              repository = os.environ["GITHUB_REPOSITORY"]
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{repository}/{path}",
+                  method=method,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "User-Agent": "cxxlens-issue-316-bootstrap",
+                  },
+                  data=(json.dumps(payload).encode("utf-8") if payload is not None else None),
+              )
+              with urllib.request.urlopen(request, timeout=120) as response:
+                  return json.loads(response.read().decode("utf-8"))
 
           revision = output("rev-parse", "HEAD")
           parents = output("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
@@ -194,29 +212,76 @@ jobs:
               ["git", "diff", "--no-renames", "--name-status", "-z", first_parent, "HEAD"]
           ).split(b"\0")
           entries = []
+          tree_entries = []
           index = 0
           while index < len(changed) and changed[index]:
               status = changed[index].decode("utf-8")
               path = changed[index + 1].decode("utf-8")
               index += 2
+              if path.startswith("/") or ".." in pathlib.PurePosixPath(path).parts:
+                  raise SystemExit(f"noncanonical generated path: {path}")
               row = {"path": path, "status": status[0]}
-              if status[0] != "D":
+              if status[0] == "D":
+                  tree_entries.append({
+                      "path": path,
+                      "mode": "100644",
+                      "type": "blob",
+                      "sha": None,
+                  })
+              else:
                   tree_row = subprocess.check_output(
                       ["git", "ls-tree", "HEAD", "--", path], text=True
                   ).strip()
                   if not tree_row:
                       raise SystemExit(f"tree entry missing for {path}")
-                  row["mode"] = tree_row.split()[0]
-                  row["content_base64"] = base64.b64encode(
-                      pathlib.Path(path).read_bytes()
-                  ).decode("ascii")
+                  mode = tree_row.split()[0]
+                  content = pathlib.Path(path).read_bytes()
+                  blob = api(
+                      "git/blobs",
+                      method="POST",
+                      payload={
+                          "content": base64.b64encode(content).decode("ascii"),
+                          "encoding": "base64",
+                      },
+                  )
+                  row["mode"] = mode
+                  row["content_base64"] = base64.b64encode(content).decode("ascii")
+                  row["blob_sha"] = blob["sha"]
+                  tree_entries.append({
+                      "path": path,
+                      "mode": mode,
+                      "type": "blob",
+                      "sha": blob["sha"],
+                  })
               entries.append(row)
+
+          first_commit = api(f"git/commits/{first_parent}")
+          remote_tree = api(
+              "git/trees",
+              method="POST",
+              payload={"base_tree": first_commit["tree"]["sha"], "tree": tree_entries},
+          )
+          if remote_tree["sha"] != expected_tree:
+              raise SystemExit(
+                  f"remote tree differs: expected {expected_tree}, received {remote_tree['sha']}"
+              )
+          remote_commit = api(
+              "git/commits",
+              method="POST",
+              payload={
+                  "message": "Commonize CI setup and automate PR integration (#316)",
+                  "tree": remote_tree["sha"],
+                  "parents": [first_parent, main_parent],
+              },
+          )
           document = {
               "schema": "cxxlens.issue-316-generated-tree.v1",
               "first_parent": first_parent,
               "main_parent": main_parent,
               "generated_revision": revision,
               "expected_tree": expected_tree,
+              "remote_tree": remote_tree["sha"],
+              "remote_commit": remote_commit["sha"],
               "entries": entries,
           }
           pathlib.Path(os.environ["EXPORT_PATH"]).write_text(
@@ -227,6 +292,7 @@ jobs:
               "first_parent": first_parent,
               "main_parent": main_parent,
               "expected_tree": expected_tree,
+              "remote_commit": remote_commit["sha"],
               "entry_count": len(entries),
           }, sort_keys=True))
           PY
