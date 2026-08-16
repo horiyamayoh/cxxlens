@@ -1,0 +1,100 @@
+name: Apply PR 317 overlay to current main
+
+on:
+  pull_request:
+    types: [synchronize, ready_for_review]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-overlay:
+    if: >-
+      github.event.pull_request.number == 317 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'issue-316-ci-setup-integration'
+    runs-on: ubuntu-24.04
+    env:
+      EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      QUALITY_BLOB: d8a3bbaaca0841041b0791cec3932a202fabb9ec
+      READINESS_BLOB: b851c9c0809c5c666b132e584aaf05b99b5c53e6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply the reviewed CI overlay and retain current-main contracts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD_SHA}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          main_checker="${RUNNER_TEMP}/main-readiness.py"
+          cp tools/quality/check_ng_api_development_readiness.py "${main_checker}"
+
+          fetch_blob() {
+            local blob="$1"
+            local output="$2"
+            gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${blob}" --jq '.content' \
+              | tr -d '\n' | base64 --decode > "${output}"
+          }
+
+          fetch_blob "${QUALITY_BLOB}" .github/workflows/quality.yml
+          fetch_blob "${READINESS_BLOB}" tools/quality/check_ng_api_development_readiness.py
+
+          python3 - "${main_checker}" <<'PY'
+          from __future__ import annotations
+
+          import pathlib
+          import sys
+
+          quality_path = pathlib.Path(".github/workflows/quality.yml")
+          quality = quality_path.read_text(encoding="utf-8")
+          section_start = quality.index("  quality-contracts:\n")
+          section_end = quality.index("\n  agent-context:\n", section_start)
+          section = quality[section_start:section_end]
+          if "          fetch-depth: 0\n" in section:
+              section = section.replace(
+                  "          fetch-depth: 0\n", "          fetch-depth: 2\n", 1
+              )
+          elif "          fetch-depth: 2\n" not in section:
+              raise SystemExit("quality-contracts checkout depth is unavailable")
+          quality_path.write_text(
+              quality[:section_start] + section + quality[section_end:],
+              encoding="utf-8",
+          )
+
+          checker_path = pathlib.Path(
+              "tools/quality/check_ng_api_development_readiness.py"
+          )
+          checker = checker_path.read_text(encoding="utf-8")
+          main_checker = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+          block_start = main_checker.index(
+              '    quality_contracts = _job(quality, "quality-contracts")\n'
+          )
+          block_end = main_checker.index(
+              '    check = _job(quality, "check-tier")\n', block_start
+          )
+          parent_history_block = main_checker[block_start:block_end]
+          if parent_history_block not in checker:
+              anchor = '    check = _job(quality, "check-tier")\n'
+              if checker.count(anchor) != 1:
+                  raise SystemExit("readiness checker insertion anchor differs")
+              checker = checker.replace(anchor, parent_history_block + anchor, 1)
+          checker_path.write_text(checker, encoding="utf-8")
+          PY
+
+          rm .github/workflows/apply-pr317-overlay.yml
+          git add -A
+          python3 -m py_compile \
+            tools/quality/check_ng_api_development_readiness.py \
+            tools/quality/check_ci_supply_chain.py \
+            tools/quality/collect_toolchain_provenance.py \
+            tools/ci/bootstrap_supply_chain.py
+          git diff --cached --check
+          git commit -m "Merge current main contracts into CI acceleration"
+          git push origin "HEAD:${HEAD_REF}"
