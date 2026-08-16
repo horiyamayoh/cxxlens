@@ -430,6 +430,9 @@ namespace cxxlens::detail::sqlite_qualification
 			sqlite_disposable_cleanup_policy::retain_private_root};
 		void (*pre_remove_signal)(void*) noexcept {};
 		void* pre_remove_signal_context{};
+		// Once a normalization boundary is entered, the capability is terminal for every
+		// subsequent normalization or handoff attempt, including an opaque syscall failure.
+		bool normalization_attempted{};
 		bool active{true};
 	};
 
@@ -1254,6 +1257,109 @@ namespace cxxlens::detail::sqlite_qualification
 		const sqlite_disposable_qualification_request& request)
 	{
 		return sqlite_disposable_raw_family_observer::observe(capability, request);
+	}
+
+	cxxlens::sdk::result<sqlite_disposable_fz_post_cleanup_result>
+	cleanup_sqlite_disposable_fz_post_wal_for_testing(
+		sqlite_disposable_qualification_capability& capability,
+		const sqlite_disposable_qualification_request& request) noexcept
+	{
+#if defined(__linux__) && defined(STATX_MNT_ID)
+		try
+		{
+			auto* const state = capability.state_.get();
+			if (state == nullptr || !state->active)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-capability-revoked"));
+			if (state->normalization_attempted)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-capability-consumed"));
+			if (request.requested_effect != sqlite_disposable_requested_effect::normalize_source)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-effect-not-authorized"));
+			if (!raw_request_matches(*state, request))
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-capability-binding"));
+
+			auto classify_request = request;
+			classify_request.requested_effect = sqlite_disposable_requested_effect::classify_source;
+			auto before =
+				sqlite_disposable_raw_family_observer::observe(capability, classify_request);
+			if (!before)
+				return cxxlens::sdk::unexpected(std::move(before.error()));
+			if (before->family.family !=
+					sqlite_disposable_empty_family::exact_pre_or_post_zero_wal ||
+				before->family.phase != sqlite_disposable_family_phase::post || !before->wal ||
+				before->wal->byte_count != 0U)
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-fz-post-required"));
+
+			auto plan = plan_sqlite_disposable_empty_normalization(before->observation);
+			if (!plan)
+				return cxxlens::sdk::unexpected(std::move(plan.error()));
+			if (plan->family != before->family ||
+				plan->route !=
+					sqlite_disposable_normalization_route::establish_rollback_empty_anchor ||
+				plan->uses_existing_zero_byte_wal ||
+				plan->may_handoff_to_ordinary_fresh_initialization)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-route-not-authorized"));
+
+			if (!revalidate_live_root_objects(*state))
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-anchor-drift"));
+
+			// The test signal models an actor that races between the initial census and the
+			// mutation boundary. Re-read both source leaves after that point and reject any
+			// identity, size, metadata, or byte drift before unlinking either object.
+			state->normalization_attempted = true;
+			const auto signal = std::exchange(state->pre_remove_signal, nullptr);
+			auto* const signal_context = std::exchange(state->pre_remove_signal_context, nullptr);
+			if (signal != nullptr)
+				signal(signal_context);
+			auto current_main = read_raw_regular_file(state->root.get(), "main");
+			if (!current_main || current_main->observation != before->main)
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-main-drift"));
+			auto current_wal = read_raw_regular_file(state->root.get(), "main-wal");
+			if (!current_wal || current_wal->observation.byte_count != 0U ||
+				current_wal->observation != *before->wal)
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-wal-drift"));
+			if (!revalidate_live_root_objects(*state))
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-anchor-drift"));
+
+			// This is the only mutation boundary. The terminal state above is deliberately
+			// recorded before either unlink, so a failure below cannot be retried.
+			if (::unlinkat(state->root.get(), "main-wal", 0) != 0)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-wal-unlink-uncertain"));
+			if (!fsync_exact(state->root.get()))
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-parent-sync-uncertain"));
+
+			auto after =
+				sqlite_disposable_raw_family_observer::observe(capability, classify_request);
+			if (!after)
+				return cxxlens::sdk::unexpected(std::move(after.error()));
+			if (after->family.family !=
+					sqlite_disposable_empty_family::complete_rollback_empty_no_sidecar ||
+				after->family.phase != sqlite_disposable_family_phase::post || after->wal ||
+				after->main != before->main)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-anchor-not-established"));
+
+			return sqlite_disposable_fz_post_cleanup_result{std::move(*before), std::move(*after)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return cxxlens::sdk::unexpected(raw_family_error("normalization-allocation"));
+		}
+		catch (...)
+		{
+			return cxxlens::sdk::unexpected(raw_family_error("normalization-exception"));
+		}
+#else
+		(void)capability;
+		(void)request;
+		return cxxlens::sdk::unexpected(raw_family_error("normalization-unsupported-platform"));
+#endif
 	}
 
 	cxxlens::sdk::result<void> write_sqlite_disposable_fixture_file_for_testing(
