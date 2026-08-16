@@ -2445,6 +2445,21 @@ namespace
 		limits.maximum_minor = 1U;
 		auto port = detail::make_system_ng1_duplex_process_port();
 		require(port != nullptr, "NG1 live process port was not created");
+		auto make_invocation = [&](std::vector<std::string> arguments)
+		{
+			auto value = invocation;
+			value.argv = std::move(arguments);
+			value.expected_binary_digest = executable_digest(value.argv.front());
+			return value;
+		};
+		auto start_process = [&](const process_invocation& request)
+		{
+			auto started = port->start(request, limits, {});
+			if (!started)
+				require(false,
+						"NG1 live regression process launch failed: " + started.error().code);
+			return std::move(*started);
+		};
 		auto process = port->start(invocation, limits, {});
 		if (!process)
 			require(false, "NG1 live process launch failed: " + process.error().code);
@@ -2516,6 +2531,119 @@ namespace
 		auto terminated = (*rejected_process)->terminate(process_status::cancelled);
 		require(terminated.has_value() && terminated->status == process_status::cancelled,
 				"NG1 live channel did not preserve explicit cancellation evidence");
+
+		auto make_wire = [&](std::vector<std::byte> payload = {})
+		{
+			auto value = wire;
+			value.type = message_type::input_chunk;
+			value.flags = {};
+			value.payload = std::move(payload);
+			return value;
+		};
+
+		// Host input is not provider stdout/stderr transport.  A one-byte output budget must
+		// not reject a larger frame that is consumed by the provider without producing output.
+		auto input_only = make_invocation({"/bin/sh", "-c", "while IFS= read -r line; do :; done"});
+		input_only.budget.transport_bytes = 1U;
+		input_only.budget.wall_ms = 5000U;
+		auto input_only_process = start_process(input_only);
+		auto input_only_wire = make_wire(std::vector<std::byte>(4096U, std::byte{0x41}));
+		auto input_only_sent = input_only_process->send_frame(input_only_wire);
+		if (!input_only_sent)
+			require(false,
+					"NG1 live host input was incorrectly charged to the output transport budget: " +
+						input_only_sent.error().code + ":" + input_only_sent.error().field + ":" +
+						input_only_sent.error().detail);
+		auto input_only_finished = input_only_process->finish({});
+		require(input_only_finished.has_value() &&
+					input_only_finished->status == process_status::exited &&
+					input_only_finished->exit_code == 0,
+				"NG1 live input-only process did not finish cleanly");
+
+		// A provider that closes stdin must produce a typed write failure, not terminate the
+		// host through the default SIGPIPE disposition.
+		auto closed_input = make_invocation({"/bin/sh", "-c", "exec 0<&-; exit 0"});
+		closed_input.budget.wall_ms = 5000U;
+		auto closed_input_process = start_process(closed_input);
+		auto closed_input_eof = closed_input_process->receive_frame({});
+		require(closed_input_eof.has_value() && !closed_input_eof->has_value(),
+				"NG1 live closed-input provider did not reach stdout EOF");
+		auto closed_input_send = closed_input_process->send_frame(make_wire());
+		require(!closed_input_send,
+				"NG1 live write to a closed provider stdin unexpectedly succeeded");
+		auto closed_input_finished = closed_input_process->finish({});
+		require(closed_input_finished.has_value(),
+				"NG1 live closed-input provider could not finish after typed write failure");
+
+		// The leader can exit while a descendant retains the output pipe.  Forced cleanup must
+		// still address the original process group after leader reap, rather than waiting for the
+		// wall deadline and leaking the descendant.
+		namespace fs = std::filesystem;
+		const auto descendant_marker = fs::temp_directory_path() /
+			("cxxlens-ng1-live-descendant-" + std::to_string(::getpid()) + ".pid");
+		std::error_code marker_error;
+		fs::remove(descendant_marker, marker_error);
+		require(!marker_error, "could not remove stale NG1 live descendant marker");
+		const auto descendant_budget = descendant_fixture_subprocess_budget();
+		require(descendant_budget.has_value(),
+				"could not derive a process budget for the NG1 live descendant test");
+		const auto descendant_command =
+			"/usr/bin/sleep 5 & child=$!; start=$(/usr/bin/awk '{print $22}' /proc/$child/stat); "
+			"printf '%s %s\\n' \"$child\" \"$start\" > " +
+			descendant_marker.string() + "; exit 0";
+		auto descendant = make_invocation({"/bin/sh", "-c", descendant_command});
+		descendant.budget.subprocesses = *descendant_budget;
+		descendant.budget.wall_ms = 2000U;
+		auto descendant_process = start_process(descendant);
+		std::optional<holder_observation> observed_descendant;
+		const auto marker_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+		while (std::chrono::steady_clock::now() < marker_deadline && !observed_descendant)
+		{
+			observed_descendant = observe_descendant(descendant_marker);
+			if (!observed_descendant)
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+		require(observed_descendant.has_value(),
+				"NG1 live descendant identity could not be observed before cleanup");
+		std::this_thread::sleep_for(std::chrono::milliseconds{50});
+		const auto descendant_finished = descendant_process->finish({});
+		const bool descendant_exited_before_cleanup =
+			wait_pidfd_exit(observed_descendant->pidfd, std::chrono::milliseconds{500});
+		if (!descendant_exited_before_cleanup)
+		{
+			(void)kill_pidfd(observed_descendant->pidfd);
+			(void)wait_pidfd_exit(observed_descendant->pidfd, std::chrono::seconds{2});
+		}
+		const bool descendant_exited = pidfd_exited(observed_descendant->pidfd);
+		(void)::close(observed_descendant->pidfd);
+		fs::remove(descendant_marker, marker_error);
+		require(descendant_finished.has_value() && descendant_exited_before_cleanup &&
+					descendant_exited && !marker_error,
+				"NG1 live process-group cleanup leaked a post-reap descendant");
+
+		// While the provider is writing a large stderr burst, the host must continue draining it
+		// while its nonblocking stdin is backpressured.  Polling stdin alone deadlocks this case.
+		auto backpressured = make_invocation(
+			{"/bin/sh",
+			 "-c",
+			 "/usr/bin/dd if=/dev/zero bs=4096 count=256 >&2; /bin/cat >/dev/null"});
+		backpressured.budget.wall_ms = 5000U;
+		backpressured.budget.subprocesses = *descendant_budget;
+		backpressured.budget.transport_bytes = 2U * 1024U * 1024U;
+		auto backpressured_process = start_process(backpressured);
+		auto backpressure_payload = std::vector<std::byte>(1024U * 1024U, std::byte{0x42});
+		auto backpressure_sent =
+			backpressured_process->send_frame(make_wire(std::move(backpressure_payload)));
+		if (!backpressure_sent)
+			require(false,
+					"NG1 live duplex write deadlocked instead of draining provider stderr: " +
+						backpressure_sent.error().code + ":" + backpressure_sent.error().field +
+						":" + backpressure_sent.error().detail);
+		auto backpressured_finished = backpressured_process->finish({});
+		require(backpressured_finished.has_value() &&
+					backpressured_finished->status == process_status::exited &&
+					backpressured_finished->exit_code == 0,
+				"NG1 live backpressure process did not finish cleanly");
 #else
 		// The unavailable implementation is intentionally fail-closed on non-Linux platforms.
 #endif

@@ -490,6 +490,43 @@ namespace cxxlens::sdk::provider
 			}
 		}
 
+		/** Write to a provider pipe without allowing a closed reader to terminate the host. */
+		[[nodiscard]] ssize_t write_without_sigpipe(const int destination,
+													const std::byte* bytes,
+													const std::size_t size) noexcept
+		{
+			sigset_t blocked{};
+			sigset_t previous{};
+			if (sigemptyset(&blocked) != 0 || sigaddset(&blocked, SIGPIPE) != 0 ||
+				sigprocmask(SIG_BLOCK, &blocked, &previous) != 0)
+			{
+				errno = EPERM;
+				return -1;
+			}
+
+			sigset_t pending_before{};
+			const bool was_pending =
+				sigpending(&pending_before) == 0 && sigismember(&pending_before, SIGPIPE) == 1;
+			const auto written = ::write(destination, bytes, size);
+			const auto write_errno = errno;
+			sigset_t pending_after{};
+			if (!was_pending && sigpending(&pending_after) == 0 &&
+				sigismember(&pending_after, SIGPIPE) == 1)
+			{
+				timespec timeout{};
+				(void)sigtimedwait(&blocked, nullptr, &timeout);
+			}
+			const auto restore_status = sigprocmask(SIG_SETMASK, &previous, nullptr);
+			if (written < 0)
+				errno = write_errno;
+			else if (restore_status != 0)
+			{
+				errno = restore_status;
+				return -1;
+			}
+			return written;
+		}
+
 		/**
 		 * Live Linux process channel used by the source-private NG1 seam.  The existing
 		 * linux_process_port below intentionally remains the completed-process NG0 path; this
@@ -534,16 +571,11 @@ namespace cxxlens::sdk::provider
 				auto encoded = encode_frame(value, limits_);
 				if (!encoded)
 					return cxxlens::sdk::unexpected(std::move(encoded.error()));
-				if (encoded->size() > budget_.transport_bytes -
-						std::min<std::uint64_t>(budget_.transport_bytes, transport_bytes_))
-					return cxxlens::sdk::unexpected(
-						process_error("provider.output-limit", "ng1-live", "transport-bytes"));
-
 				std::size_t offset{};
 				while (offset < encoded->size())
 				{
-					const auto written =
-						::write(input_.get(), encoded->data() + offset, encoded->size() - offset);
+					const auto written = write_without_sigpipe(
+						input_.get(), encoded->data() + offset, encoded->size() - offset);
 					if (written > 0)
 					{
 						offset += static_cast<std::size_t>(written);
@@ -553,8 +585,12 @@ namespace cxxlens::sdk::provider
 						continue;
 					if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 					{
-						pollfd descriptor{input_.get(), POLLOUT | POLLHUP | POLLERR, 0};
-						const auto polled = ::poll(&descriptor, 1U, 10);
+						std::array<pollfd, 3U> descriptors{
+							pollfd{input_.get(), POLLOUT | POLLHUP | POLLERR, 0},
+							pollfd{output_.get(), POLLIN | POLLHUP | POLLERR, 0},
+							pollfd{error_.get(), POLLIN | POLLHUP | POLLERR, 0},
+						};
+						const auto polled = ::poll(descriptors.data(), descriptors.size(), 10);
 						if (polled < 0 && errno == EINTR)
 							continue;
 						if (polled < 0)
@@ -562,7 +598,25 @@ namespace cxxlens::sdk::provider
 								process_error("provider.process-launch-failed",
 											  "ng1-live-write",
 											  std::to_string(errno)));
-						if ((descriptor.revents & (POLLHUP | POLLERR | POLLNVAL)) != 0)
+						if ((descriptors[1].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) !=
+								0 &&
+							!drain_stdout())
+						{
+							forced_status_ = process_status::output_limit;
+							kill_process_group();
+							return cxxlens::sdk::unexpected(process_error(
+								"provider.output-limit", "ng1-live", "transport-bytes"));
+						}
+						if ((descriptors[2].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) !=
+								0 &&
+							!drain_stderr())
+						{
+							forced_status_ = process_status::output_limit;
+							kill_process_group();
+							return cxxlens::sdk::unexpected(process_error(
+								"provider.output-limit", "ng1-live", "transport-bytes"));
+						}
+						if ((descriptors[0].revents & (POLLHUP | POLLERR | POLLNVAL)) != 0)
 							return cxxlens::sdk::unexpected(process_error(
 								"provider.worker-exit", "ng1-live-write", "stdin-closed"));
 						if (auto deadline = check_deadline(); !deadline)
@@ -572,7 +626,6 @@ namespace cxxlens::sdk::provider
 					return cxxlens::sdk::unexpected(process_error(
 						"provider.process-launch-failed", "ng1-live-write", std::to_string(errno)));
 				}
-				transport_bytes_ += encoded->size();
 				return {};
 			}
 
@@ -637,19 +690,17 @@ namespace cxxlens::sdk::provider
 				for (;;)
 				{
 					reap_nonblocking();
-					if (cancellation.stop_requested() && !reaped_)
+					if (cancellation.stop_requested())
 						forced_status_ = process_status::cancelled;
-					if (!reaped_ && forced_status_ != process_status::launch_failed)
+					if (forced_status_ != process_status::launch_failed &&
+						(!reaped_ || !stdout_ended_ || !stderr_ended_))
 						kill_process_group();
 					if (reaped_ && stdout_ended_ && stderr_ended_)
 						break;
 					if (std::chrono::steady_clock::now() >= deadline_)
 					{
-						if (!reaped_)
-						{
-							forced_status_ = process_status::timed_out;
-							kill_process_group();
-						}
+						forced_status_ = process_status::timed_out;
+						kill_process_group();
 						output_.reset();
 						error_.reset();
 						stdout_ended_ = true;
@@ -850,7 +901,7 @@ namespace cxxlens::sdk::provider
 
 			void kill_process_group() noexcept
 			{
-				if (child_ <= 0 || reaped_)
+				if (child_ <= 0 || process_group_killed_)
 					return;
 				const auto signal_deadline =
 					std::chrono::steady_clock::now() + std::chrono::milliseconds{100};
@@ -859,10 +910,14 @@ namespace cxxlens::sdk::provider
 					(void)::kill(-child_, SIGKILL);
 					std::this_thread::sleep_for(std::chrono::milliseconds{1});
 				}
-				while (::waitpid(child_, &wait_status_, 0) < 0 && errno == EINTR)
+				if (!reaped_)
 				{
+					while (::waitpid(child_, &wait_status_, 0) < 0 && errno == EINTR)
+					{
+					}
+					reaped_ = true;
 				}
-				reaped_ = true;
+				process_group_killed_ = true;
 			}
 
 			descriptor input_;
@@ -885,6 +940,7 @@ namespace cxxlens::sdk::provider
 			bool stdout_ended_{};
 			bool stderr_ended_{};
 			bool reaped_{};
+			bool process_group_killed_{};
 			bool finished_{};
 		};
 
