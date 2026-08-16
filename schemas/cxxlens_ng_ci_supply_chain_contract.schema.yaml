@@ -83,6 +83,7 @@ properties:
       actions: {const: names-and-full-commit-shas}
       tools: {const: version-path-and-binary-digest}
       packages: {const: exact-dpkg-versions}
+      package_cache: {const: verified-cache-or-locked-download-with-authority-digest}
       python_distributions: {const: versions-and-record-digests}
       lock_digest: {const: sha256}
       requirements_digest: {const: sha256}

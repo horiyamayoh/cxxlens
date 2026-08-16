@@ -19,15 +19,24 @@ sys.path.insert(0, str(ROOT / "tools/ci"))
 
 from bootstrap_supply_chain import (  # noqa: E402
     SupplyChainError,
+    build_package_cache_provenance,
+    cache_provenance_digest,
     install_documentation,
     load_lock,
+    package_authority,
+    resolve_cached_archives,
+    sha256_bytes,
     verify_bytes,
+    write_package_cache_provenance,
 )
 from check_ci_supply_chain import (  # noqa: E402
     CiSupplyChainError,
     parse_hash_lock,
     validate_repository,
     validate_workflow,
+)
+from collect_toolchain_provenance import (  # noqa: E402
+    load_package_cache_provenance,
 )
 
 
@@ -196,6 +205,119 @@ class NgCiSupplyChainTest(unittest.TestCase):
             lock_path.write_text(json.dumps(changed), encoding="utf-8")
             with self.assertRaisesRegex(SupplyChainError, "unlocked packages"):
                 load_lock(root)
+
+    def test_valid_cached_package_requires_exact_identity_and_digest(self) -> None:
+        expected = package_authority(self.lock, "compiler")["clang-22"].copy()
+        expected["sha256"] = sha256_bytes(b"locked archive")
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = pathlib.Path(temporary)
+            archive = cache / "restored.deb"
+            archive.write_bytes(b"locked archive")
+            with mock.patch(
+                "bootstrap_supply_chain.package_fields",
+                return_value={
+                    "Package": "clang-22",
+                    "Version": expected["version"],
+                    "Architecture": expected["architecture"],
+                },
+            ):
+                archives, status, reason = resolve_cached_archives(
+                    cache, {"clang-22": expected}
+                )
+            self.assertEqual(status, "hit")
+            self.assertIsNone(reason)
+            self.assertEqual(archives, {"clang-22": archive})
+
+    def test_corrupted_cached_package_is_not_selected(self) -> None:
+        expected = package_authority(self.lock, "compiler")["clang-22"].copy()
+        expected["sha256"] = sha256_bytes(b"locked archive")
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = pathlib.Path(temporary)
+            (cache / "restored.deb").write_bytes(b"corrupted archive")
+            with mock.patch(
+                "bootstrap_supply_chain.package_fields",
+                return_value={
+                    "Package": "clang-22",
+                    "Version": expected["version"],
+                    "Architecture": expected["architecture"],
+                },
+            ):
+                archives, status, reason = resolve_cached_archives(
+                    cache, {"clang-22": expected}
+                )
+            self.assertIsNone(archives)
+            self.assertEqual(status, "invalid")
+            self.assertIn("checksum mismatch", reason or "")
+
+    def test_wrong_version_or_architecture_is_not_selected(self) -> None:
+        expected = package_authority(self.lock, "compiler")["clang-22"].copy()
+        expected["sha256"] = sha256_bytes(b"locked archive")
+        for field, received in (
+            ("Version", "1:22.1.7-1"),
+            ("Architecture", "arm64"),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temporary:
+                cache = pathlib.Path(temporary)
+                (cache / "restored.deb").write_bytes(b"locked archive")
+                metadata = {
+                    "Package": "clang-22",
+                    "Version": expected["version"],
+                    "Architecture": expected["architecture"],
+                }
+                metadata[field] = received
+                with mock.patch(
+                    "bootstrap_supply_chain.package_fields", return_value=metadata
+                ):
+                    archives, status, reason = resolve_cached_archives(
+                        cache, {"clang-22": expected}
+                    )
+                self.assertIsNone(archives)
+                self.assertEqual(status, "invalid")
+                self.assertIn("metadata mismatch", reason or "")
+
+    def test_cache_miss_is_explicit_and_does_not_select_an_archive(self) -> None:
+        expected = package_authority(self.lock, "compiler")["clang-22"]
+        with tempfile.TemporaryDirectory() as temporary:
+            archives, status, reason = resolve_cached_archives(
+                pathlib.Path(temporary), {"clang-22": expected}
+            )
+        self.assertIsNone(archives)
+        self.assertEqual(status, "miss")
+        self.assertIsNone(reason)
+
+    def test_package_cache_provenance_binds_lock_key_and_source(self) -> None:
+        lock_digest = "sha256:" + sha256_bytes(
+            (ROOT / "tools/ci/llvm22-noble.lock.json").read_bytes()
+        )
+        with self.assertRaisesRegex(SupplyChainError, "status/source mismatch"):
+            build_package_cache_provenance(
+                self.lock,
+                "compiler",
+                lock_digest,
+                "hit",
+                "verified-download",
+            )
+        record = build_package_cache_provenance(
+            self.lock, "compiler", lock_digest, "hit", "verified-cache"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "package-cache.json"
+            write_package_cache_provenance(path, record)
+            self.assertEqual(load_package_cache_provenance(path, ROOT), record)
+
+            changed = copy.deepcopy(record)
+            changed["cache_key_authority_digest"] = "sha256:" + "0" * 64
+            changed["digest"] = cache_provenance_digest(changed)
+            write_package_cache_provenance(path, changed)
+            with self.assertRaisesRegex(ValueError, "authority digest mismatch"):
+                load_package_cache_provenance(path, ROOT)
+
+            changed = copy.deepcopy(record)
+            changed["packages"][0]["sha256"] = "sha256:" + "0" * 64
+            changed["digest"] = cache_provenance_digest(changed)
+            write_package_cache_provenance(path, changed)
+            with self.assertRaisesRegex(ValueError, "differs from lock"):
+                load_package_cache_provenance(path, ROOT)
 
 
 if __name__ == "__main__":
