@@ -302,6 +302,56 @@ _NIGHTLY_CONCURRENCY = """concurrency:\n  group: nightly-quality-${{ github.sha 
 _LEGACY_NIGHTLY_CONCURRENCY = """concurrency:\n  group: nightly-quality-${{ github.event_name == 'schedule' && 'scheduled' || 'rolling-main' }}\n  cancel-in-progress: ${{ github.event_name != 'schedule' }}\n"""
 _NEW_RELEASE_NEEDS = "needs: [nightly-quality, g5-qualification, sqlite-store-v3-qualification]"
 _LEGACY_RELEASE_NEEDS = "needs: [g5-qualification, sqlite-store-v3-qualification]"
+
+_SETUP_DEVELOPER = """      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+"""
+_SETUP_STATIC_ANALYSIS = """      - uses: ./.github/actions/setup-ci
+        with:
+          profile: static-analysis
+"""
+_SETUP_NONE = """      - uses: ./.github/actions/setup-ci
+        with:
+          profile: none
+"""
+_SETUP_DEVELOPER_DOCUMENTATION_ONLY = """      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+          documentation: "true"
+          python-dependencies: "false"
+"""
+_LEGACY_PYTHON_SETUP = """      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12.11"
+      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+"""
+_LEGACY_DEVELOPER_SETUP = """      - name: Install exact Clang 22 toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+""" + _LEGACY_PYTHON_SETUP
+_LEGACY_STATIC_ANALYSIS_SETUP = """      - name: Install Clang tools
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile static-analysis
+""" + _LEGACY_PYTHON_SETUP
+_LEGACY_DEVELOPER_DOCUMENTATION_ONLY = """      - name: Install exact Clang 22 toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+      - name: Install exact Doxygen toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile documentation
+"""
+
+
+def _project_legacy_setup(text: str) -> str:
+    replacements = (
+        (_SETUP_DEVELOPER_DOCUMENTATION_ONLY, _LEGACY_DEVELOPER_DOCUMENTATION_ONLY),
+        (_SETUP_STATIC_ANALYSIS, _LEGACY_STATIC_ANALYSIS_SETUP),
+        (_SETUP_DEVELOPER, _LEGACY_DEVELOPER_SETUP),
+        (_SETUP_NONE, _LEGACY_PYTHON_SETUP),
+    )
+    for current, legacy in replacements:
+        text = text.replace(current, legacy)
+    if "./.github/actions/setup-ci" in text:
+        _fail("legacy setup projection left a common setup action reference")
+    return text
+
 _DIRECT_NIGHTLY_DOWNLOAD = """      - name: Download exact-main Nightly evidence\n        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8\n        with:\n          name: cxxlens-nightly-evidence-${{ github.sha }}\n          path: build/release-evaluation-nightly\n"""
 _LEGACY_NIGHTLY_LOOKUP_AND_DOWNLOAD = """      - name: Locate the exact-main Nightly evidence run\n        id: nightly-run\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: |\n          set -euo pipefail\n          run_id=\"\"\n          for attempt in $(seq 1 180); do\n            latest=\"$({\n              gh api --method GET \\\n                \"repos/${GITHUB_REPOSITORY}/actions/workflows/nightly.yml/runs\" \\\n                -f branch=main \\\n                -f head_sha=\"${GITHUB_SHA}\" \\\n                -f per_page=100 \\\n                --jq '([.workflow_runs[] | select((.event == \"push\" or .event == \"schedule\" or .event == \"workflow_dispatch\") and .head_branch == \"main\")] | sort_by(.created_at, .id) | reverse | .[0] | select(.) | [.id, .status, (.conclusion // \"\")] | @tsv) // empty'\n            })\"\n            if [[ -z \"${latest}\" ]]; then\n              sleep 30\n              continue\n            fi\n            IFS=$'\\t' read -r candidate status conclusion <<< \"${latest}\"\n            if [[ \"${status}\" != \"completed\" ]]; then\n              sleep 30\n              continue\n            fi\n            if [[ \"${conclusion}\" != \"success\" ]]; then\n              echo \"exact-main Nightly run ${candidate} completed with ${conclusion}\" >&2\n              exit 1\n            fi\n            run_id=\"${candidate}\"\n            break\n          done\n          if [[ -z \"${run_id}\" ]]; then\n            echo \"no successful exact-main Nightly run became available for ${GITHUB_SHA}\" >&2\n            exit 1\n          fi\n          echo \"run-id=${run_id}\" >> \"${GITHUB_OUTPUT}\"\n      - name: Download exact-main Nightly evidence\n        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8\n        with:\n          name: cxxlens-nightly-evidence-${{ github.sha }}\n          github-token: ${{ github.token }}\n          repository: ${{ github.repository }}\n          run-id: ${{ steps.nightly-run.outputs.run-id }}\n          path: build/release-evaluation-nightly\n"""
 
@@ -481,8 +531,12 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
 
 
 def _legacy_projection(root: pathlib.Path, manifest: dict[str, Any]) -> None:
-    quality = (root / QUALITY_PATH).read_text(encoding="utf-8")
-    nightly = (root / NIGHTLY_PATH).read_text(encoding="utf-8")
+    quality = _project_legacy_setup(
+        (root / QUALITY_PATH).read_text(encoding="utf-8")
+    )
+    nightly = _project_legacy_setup(
+        (root / NIGHTLY_PATH).read_text(encoding="utf-8")
+    )
     if _QUALITY_TRIGGER not in quality or _NIGHTLY_TRIGGER not in nightly:
         _fail("accelerated workflow trigger projection is unavailable")
     quality = quality.replace(_QUALITY_TRIGGER, _LEGACY_QUALITY_TRIGGER, 1)
