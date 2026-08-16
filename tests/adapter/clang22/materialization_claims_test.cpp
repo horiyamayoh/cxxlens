@@ -3570,6 +3570,42 @@ namespace
 					duplicate_result.error().detail == "noncanonical-order" &&
 					duplicate_source->partition_count() == 0U,
 				"bounded adoption accepted a duplicate partition window");
+
+		auto out_of_order_source = materialization_bounded_claim_source::begin(request);
+		require(out_of_order_source.has_value(), "out-of-order source begin failed");
+		auto out_of_order = out_of_order_source->consume_task(make_task(1U));
+		require(!out_of_order && out_of_order.error().field == "task-order" &&
+					out_of_order.error().detail == "canonical-next" &&
+					out_of_order_source->partition_count() == 0U,
+				"bounded adoption staged an out-of-order task window");
+
+		auto duplicate_task_source = materialization_bounded_claim_source::begin(request);
+		require(duplicate_task_source.has_value(), "duplicate task source begin failed");
+		require(duplicate_task_source->consume_task(make_task(0U)).has_value(),
+				"duplicate task source first window adoption failed");
+		const auto partition_count_before_duplicate = duplicate_task_source->partition_count();
+		auto relabeled_task = make_task(0U);
+		relabeled_task.canonical_task_index = 1U;
+		auto relabeled_result = duplicate_task_source->consume_task(std::move(relabeled_task));
+		require(!relabeled_result && relabeled_result.error().field == "task-binding" &&
+					relabeled_result.error().detail == "sealed-index" &&
+					duplicate_task_source->partition_count() == partition_count_before_duplicate,
+				"bounded adoption accepted a relabeled duplicate task window");
+
+		auto duplicate_task_source_after_relabel =
+			materialization_bounded_claim_source::begin(request);
+		require(duplicate_task_source_after_relabel.has_value(),
+				"duplicate task source after relabel begin failed");
+		require(duplicate_task_source_after_relabel->consume_task(make_task(0U)).has_value(),
+				"duplicate task source after relabel first window adoption failed");
+		const auto partition_count_before_duplicate_after_relabel =
+			duplicate_task_source_after_relabel->partition_count();
+		auto duplicate_task = duplicate_task_source_after_relabel->consume_task(make_task(0U));
+		require(!duplicate_task && duplicate_task.error().field == "task-order" &&
+					duplicate_task.error().detail == "canonical-next" &&
+					duplicate_task_source_after_relabel->partition_count() ==
+						partition_count_before_duplicate_after_relabel,
+				"bounded adoption staged a duplicate task window");
 	}
 } // namespace
 
