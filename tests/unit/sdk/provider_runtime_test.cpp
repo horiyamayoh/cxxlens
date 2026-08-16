@@ -2647,12 +2647,15 @@ namespace
 		auto descendant = make_invocation({"/bin/sh", "-c", descendant_command});
 		descendant.budget.subprocesses = *descendant_budget;
 		descendant.budget.wall_ms = 2000U;
+		const auto descendant_deadline_origin = std::chrono::steady_clock::now();
 		auto descendant_process = start_process(descendant);
 		std::optional<holder_observation> observed_descendant;
 		// Use shell builtins for the /proc read so marker readiness stays inside the live
-		// operation deadline without spawning a helper process after the descendant fork.
+		// operation deadline without spawning a helper process after the descendant fork.  The
+		// origin is captured before start_process(), whose internal deadline starts during the
+		// call, so descheduling after startup cannot extend this readiness window.
 		const auto marker_deadline =
-			std::chrono::steady_clock::now() + std::chrono::milliseconds{descendant.budget.wall_ms};
+			descendant_deadline_origin + std::chrono::milliseconds{descendant.budget.wall_ms};
 		while (std::chrono::steady_clock::now() < marker_deadline && !observed_descendant)
 		{
 			observed_descendant = observe_descendant(descendant_marker);
