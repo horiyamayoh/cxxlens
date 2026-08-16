@@ -120,10 +120,12 @@ class NgCiSupplyChainTest(unittest.TestCase):
         runner_arch: str = "X64",
         cache_hit: str = "true",
         key: str | None = None,
+        lock_path: pathlib.Path | None = None,
         include: set[str] | None = None,
     ) -> dict[str, str]:
         config = self.lock["package_cache"]
-        lock_digest = hash_files_digest(ROOT / "tools/ci/llvm22-noble.lock.json")
+        effective_lock_path = lock_path or ROOT / "tools/ci/llvm22-noble.lock.json"
+        lock_digest = hash_files_digest(effective_lock_path)
         expected_key = config["key_template"]
         for token, value in {
             "${runner.os}": runner_os,
@@ -411,6 +413,52 @@ class NgCiSupplyChainTest(unittest.TestCase):
             with mock.patch.dict(os.environ, environment, clear=True):
                 with self.assertRaisesRegex(ValueError, "key differs"):
                     package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_binds_selected_root_lock_path(self) -> None:
+        lock_path = ROOT / "tools/ci/llvm22-noble.lock.json"
+        with tempfile.TemporaryDirectory() as temporary:
+            alternate_lock = pathlib.Path(temporary) / "llvm22-noble.lock.json"
+            alternate_lock.write_bytes(lock_path.read_bytes() + b"\n")
+            self.assertNotEqual(
+                hash_files_digest(alternate_lock), hash_files_digest(lock_path)
+            )
+
+            receipt = pathlib.Path(temporary) / "selected-root.json"
+            environment = self.cache_environment(
+                receipt, lock_path=alternate_lock
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                evidence = package_cache_provenance(
+                    self.lock,
+                    lock_path=alternate_lock,
+                    lock_digest=file_digest(alternate_lock),
+                )
+            self.assertEqual(evidence["status"], "verified")
+            self.assertEqual(evidence["lock_digest"], file_digest(alternate_lock))
+
+            wrong_receipt = pathlib.Path(temporary) / "module-root.json"
+            wrong_environment = self.cache_environment(wrong_receipt)
+            wrong_key = wrong_environment[
+                self.lock["package_cache"]["key_environment"]
+            ]
+            self.write_receipt(
+                wrong_receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key=wrong_key,
+            )
+            with mock.patch.dict(os.environ, wrong_environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "key differs"):
+                    package_cache_provenance(
+                        self.lock,
+                        lock_path=alternate_lock,
+                        lock_digest=file_digest(alternate_lock),
+                    )
 
     def test_hash_files_uses_raw_digest_bytes_not_hex_text(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

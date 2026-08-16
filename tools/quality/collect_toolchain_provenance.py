@@ -227,11 +227,15 @@ def validate_package_cache_profiles(
 
 
 def package_cache_provenance(
-    lock: dict[str, Any], *, lock_digest: str | None = None
+    lock: dict[str, Any],
+    *,
+    lock_path: pathlib.Path | None = None,
+    lock_digest: str | None = None,
 ) -> dict[str, Any]:
     config = package_cache_config(lock)
     authority_digest = package_cache_authority_digest(lock)
-    effective_lock_digest = lock_digest or file_digest(ROOT / SUPPLY_CHAIN_LOCK)
+    effective_lock_path = (lock_path or (ROOT / SUPPLY_CHAIN_LOCK)).resolve()
+    effective_lock_digest = lock_digest or file_digest(effective_lock_path)
     lock_digest_hex = effective_lock_digest.removeprefix("sha256:")
     if len(lock_digest_hex) != 64 or any(
         character not in "0123456789abcdef" for character in lock_digest_hex
@@ -315,7 +319,7 @@ def package_cache_provenance(
         "${runner.arch}": required_environment["runner_arch_environment"],
         "${profile}": requested_profile,
         "${documentation}": documentation,
-        "${lock_hash_files_digest}": hash_files_digest(ROOT / SUPPLY_CHAIN_LOCK),
+        "${lock_hash_files_digest}": hash_files_digest(effective_lock_path),
     }
     for token, value in replacements.items():
         expected_key = expected_key.replace(token, value)
@@ -568,7 +572,9 @@ def main() -> int:
         },
         "supply_chain": supply_chain_binding,
         "package_cache": package_cache_provenance(
-            lock, lock_digest=supply_chain_binding["lock_digest"]
+            lock,
+            lock_path=root / SUPPLY_CHAIN_LOCK,
+            lock_digest=supply_chain_binding["lock_digest"],
         ),
     }
     document["digest"] = provenance_digest(document)
