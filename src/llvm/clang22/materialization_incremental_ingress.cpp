@@ -861,6 +861,8 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 			if (request.tasks.empty() || expected_partition_ids.size() != request.tasks.size())
 				return sdk::unexpected(ingress_error("tasks", "exact-census"));
 			auto request_binding = make_materialization_claim_request_binding(request);
@@ -897,6 +899,8 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 			if (request.tasks.empty() || expected_partition_ids.size() != request.tasks.size())
 				return sdk::unexpected(ingress_error("tasks", "exact-census"));
 			auto request_binding = make_materialization_claim_request_binding(request);
@@ -934,6 +938,8 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 			if (request.tasks.empty())
 				return sdk::unexpected(ingress_error("tasks", "exact-census"));
 			auto request_binding = make_materialization_claim_request_binding(request);
@@ -992,6 +998,8 @@ namespace cxxlens::detail::clang22::materialization
 			const auto request_task_index = next_task_index_;
 			if (request_ == nullptr || request_task_index >= request_->tasks.size())
 				return sdk::unexpected(ingress_error("tasks", "not-next-or-missing"));
+			if (auto valid = validate_materialization_legacy_request_binding(*request_); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 			if (auto valid = validate_materialization_incremental_task_receipt(
 					*request_, request_task_index, task.receipt);
 				!valid)
@@ -1110,6 +1118,11 @@ namespace cxxlens::detail::clang22::materialization
 				next_task_index_ != expected_task_count ||
 				claim_stream_tasks_.size() != expected_task_count)
 				return sdk::unexpected(ingress_error("tasks", "incomplete"));
+			if (request_ != nullptr)
+			{
+				if (auto valid = validate_materialization_legacy_request_binding(*request_); !valid)
+					return sdk::unexpected(std::move(valid.error()));
+			}
 			auto journal = seal_materialization_incremental_execution_journal(
 				request_binding_,
 				expected_task_count,

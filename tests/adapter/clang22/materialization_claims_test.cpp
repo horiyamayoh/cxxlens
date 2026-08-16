@@ -564,6 +564,20 @@ namespace
 		require(count != 0U, "v2.1 fixture replacement set was empty");
 	}
 
+	[[nodiscard]] validated_materialization_request
+	request_with_mutated_document(const validated_materialization_request& request)
+	{
+		auto output = request;
+		auto raw = output.document.raw_bytes();
+		replace_once(raw,
+					 "\"channel_id\":\"channel:clang22-production\"",
+					 "\"channel_id\":\"channel:mutated\"");
+		auto document = parse_json_object(std::move(raw));
+		require(document.has_value(), "mutated request document parse failed");
+		output.document = std::move(*document);
+		return output;
+	}
+
 	[[nodiscard]] const std::string& member_string(const json_value& value,
 												   const std::string_view name)
 	{
@@ -1728,7 +1742,7 @@ namespace
 				"incremental journal accepted reordered task receipts");
 	}
 
-	void check_incremental_ingress(const validated_materialization_request& request)
+	void check_incremental_ingress(validated_materialization_request request)
 	{
 		auto request_id = materialization_incremental_request_id(request);
 		require(request_id.has_value(), "ingress fixture request identity failed");
@@ -1762,6 +1776,36 @@ namespace
 		require(journal && journal->exact_task_count == request.tasks.size() &&
 					journal->ordered_task_receipt_seal_digests.size() == request.tasks.size(),
 				"incremental ingress journal finalization failed");
+
+		auto mutating_request = request;
+		auto mutating_ingress =
+			materialization_incremental_ingress::begin(mutating_request, expected_partitions);
+		require(mutating_ingress.has_value(), "incremental ingress mutation setup failed");
+		for (std::size_t index{}; index < expected_partitions.size(); ++index)
+		{
+			std::vector<materialization_incremental_partition_binding> partition_bindings;
+			for (const auto& partition_id : expected_partitions[index])
+				partition_bindings.emplace_back(partition_id);
+			const auto binding = materialization_incremental_task_binding{
+				incremental_identity(mutating_request, index), std::move(partition_bindings)};
+			auto result = seal_task(mutating_request, index);
+			require(result.has_value(), "incremental ingress mutation task seal failed");
+			auto receipt = fixture_completeness_receipt(mutating_request, index, binding, *result);
+			require(receipt.has_value(), "incremental ingress mutation receipt failed");
+			auto spools = fixture_partition_spools(mutating_request, index, binding, *result);
+			materialization_incremental_task_ingress input{
+				std::move(*result), std::move(*receipt), std::move(spools)};
+			auto consumed = std::move(*mutating_ingress).consume_task(std::move(input));
+			require(consumed.has_value(), "incremental ingress mutation task consumption failed");
+		}
+		auto mutated_document_request = request_with_mutated_document(mutating_request);
+		mutating_request.document = std::move(mutated_document_request.document);
+		auto sealed_after_mutation = std::move(*mutating_ingress).finalize();
+		require(
+			!sealed_after_mutation &&
+				failure(sealed_after_mutation.error()) ==
+					"materialization.task-binding-mismatch/request/request-identity-or-task-census",
+			"incremental ingress sealed a journal after request mutation");
 
 		auto tampered = materialization_incremental_ingress::begin(
 			request, std::vector<std::vector<std::string>>{{"partition:a"}, {"partition:b"}});
@@ -2951,6 +2995,24 @@ namespace
 		require(make_warm_plan && make_warm_plan->warm_zero,
 				"incremental fixture did not produce warm-zero plan");
 
+		auto mutated_request = request_with_mutated_document(request);
+		std::vector<materialization_incremental_task_binding> mutated_bindings;
+		mutated_bindings.emplace_back(
+			incremental_binding(mutated_request, "partition:b", 1U, second, second));
+		mutated_bindings.emplace_back(
+			incremental_binding(mutated_request, "partition:a", 0U, first, first));
+		fixture_incremental_executor mutated_executor{mutated_request, producer, guarantee};
+		auto mutated_outcome =
+			run_materialization_incremental_coordinator(mutated_request,
+														*make_warm_plan,
+														std::move(mutated_bindings),
+														mutated_executor,
+														producer,
+														guarantee);
+		require(!mutated_outcome && mutated_outcome.error().field == "request" &&
+					mutated_outcome.error().detail == "binding" && mutated_executor.calls == 0U,
+				"mutated legacy request crossed provider dispatch or journal creation");
+
 		auto prior = seal_all(request);
 		std::vector<materialization_incremental_task_binding> warm_bindings;
 		warm_bindings.emplace_back(
@@ -3892,6 +3954,13 @@ namespace
 		auto mutated_publication = request;
 		mutated_publication.publication.selector.channel_id = "channel:mutated";
 		require_request_binding_rejection(std::move(mutated_publication), "publication");
+		auto mutated_document_request = request_with_mutated_document(request);
+		auto mutated_source = materialization_bounded_claim_source::begin(mutated_document_request);
+		require(
+			!mutated_source &&
+				failure(mutated_source.error()) ==
+					"materialization.task-binding-mismatch/request/request-identity-or-task-census",
+			"bounded source admitted a request whose document was mutated");
 
 		auto over_adoption_source = materialization_bounded_claim_source::begin(request);
 		require(over_adoption_source.has_value(), "over-adoption bounded source begin failed");

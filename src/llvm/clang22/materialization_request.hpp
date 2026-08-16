@@ -54,4 +54,8 @@ namespace cxxlens::detail::clang22::materialization
 	/** Validate exact v2 shape and recompute all pre-effect identities bottom-up. */
 	[[nodiscard]] sdk::result<validated_materialization_request>
 	validate_materialization_request(json_document document);
+
+	/** Rebind every legacy projection to the retained request document before dispatch. */
+	[[nodiscard]] sdk::result<void> validate_materialization_legacy_request_binding(
+		const validated_materialization_request& request);
 } // namespace cxxlens::detail::clang22::materialization

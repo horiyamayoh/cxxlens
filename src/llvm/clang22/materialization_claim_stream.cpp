@@ -711,6 +711,8 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 			auto request_binding = make_materialization_claim_request_binding(request);
 			if (!request_binding)
 				return sdk::unexpected(std::move(request_binding.error()));
@@ -768,6 +770,8 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 			auto request_binding = make_materialization_claim_request_binding(request);
 			if (!request_binding)
 				return sdk::unexpected(std::move(request_binding.error()));

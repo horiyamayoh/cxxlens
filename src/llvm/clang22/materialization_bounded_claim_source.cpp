@@ -469,12 +469,15 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<materialization_bounded_claim_source>
 	materialization_bounded_claim_source::begin(const validated_materialization_request& request)
 	{
+		if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+			return sdk::unexpected(std::move(valid.error()));
 		if (request.tasks.empty())
 			return sdk::unexpected(source_error("request", "empty-task-set"));
 		auto request_binding = make_materialization_claim_request_binding(request);
 		if (!request_binding)
 			return sdk::unexpected(source_error("request", "binding"));
 		return materialization_bounded_claim_source{
+			&request,
 			std::move(*request_binding),
 			request.engine,
 			static_cast<std::uint64_t>(request.tasks.size()),
@@ -494,6 +497,7 @@ namespace cxxlens::detail::clang22::materialization
 		if (!request_binding)
 			return sdk::unexpected(source_error("request", "binding"));
 		return materialization_bounded_claim_source{
+			nullptr,
 			std::move(*request_binding),
 			*authority.engine(),
 			authority.task_count(),
@@ -515,6 +519,14 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (sealed_ || failed_ || engine_ == nullptr)
 			return sdk::unexpected(source_error("lifecycle", "sealed-or-empty"));
+		if (request_ != nullptr)
+		{
+			if (auto valid = validate_materialization_legacy_request_binding(*request_); !valid)
+			{
+				failed_ = true;
+				return sdk::unexpected(std::move(valid.error()));
+			}
+		}
 		if (consumed_task_count_ >= expected_task_count_)
 		{
 			failed_ = true;
@@ -723,6 +735,14 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (sealed_ || failed_ || partitions_.empty())
 			return sdk::unexpected(source_error("lifecycle", "empty-or-already-sealed"));
+		if (request_ != nullptr)
+		{
+			if (auto valid = validate_materialization_legacy_request_binding(*request_); !valid)
+			{
+				failed_ = true;
+				return sdk::unexpected(std::move(valid.error()));
+			}
+		}
 		if (consumed_task_count_ != expected_task_count_)
 		{
 			failed_ = true;
