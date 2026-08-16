@@ -39,6 +39,18 @@ jobs:
             .github/bootstrap/fix_issue_316_package_cache.py
           cp .github/bootstrap/apply_issue_316_package_cache.py \
             "${RUNNER_TEMP}/apply_issue_316_package_cache.py"
+          python3 - <<'PY'
+          import os
+          import pathlib
+
+          path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "apply_issue_316_package_cache.py"
+          text = path.read_text(encoding="utf-8")
+          old = "ROOT = pathlib.Path(__file__).resolve().parents[2]\n"
+          new = 'ROOT = pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()\n'
+          if text.count(old) != 1:
+              raise SystemExit("export driver root binding differs")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
           python3 .github/bootstrap/apply_issue_316_package_cache.py apply
           python3 .github/bootstrap/fix_issue_316_package_cache.py
           rm -f .github/bootstrap/apply_issue_316_package_cache.py
