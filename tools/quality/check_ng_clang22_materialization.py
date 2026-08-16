@@ -17784,6 +17784,10 @@ def validate_occurrence_build_provenance(
             'set(CXXLENS_PROVENANCE_EXPECTED_REVISION "@CXXLENS_SOURCE_REVISION@")',
             'set(CXXLENS_PROVENANCE_EXPECTED_TREE "@CXXLENS_SOURCE_TREE@")',
             'include("@CMAKE_CURRENT_BINARY_DIR@/VerifyClang22SourceProvenance.cmake")',
+            'set(_cxxlens_occurrence_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")',
+            "function(_cxxlens_occurrence_resolve_path role relative_path resolved_path)",
+            'string(APPEND _resolved "${_cxxlens_occurrence_executable_suffix}")',
+            'set(_absolute "${_cxxlens_occurrence_prefix}/${_resolved_relative_path}")',
             "libcxxlens_base.so.@PROJECT_VERSION@",
             "libcxxlens_kernel.so.@PROJECT_VERSION@",
             "libcxxlens_query.so.@PROJECT_VERSION@",
@@ -17881,10 +17885,15 @@ def validate_baseline_recovery_source_bindings(
     required_artifacts = re.search(
         r"(?ms)  foreach\(\s*required IN.*?  endforeach\(\)", install_test
     )
-    materializer_path = '"${install_prefix}/bin/cxxlens-clang22-materialize"'
+    materializer_paths = (
+        '"${install_prefix}/bin/cxxlens-clang22-materialize"',
+        '"${install_prefix}/bin/cxxlens-clang22-materialize${install_executable_suffix}"',
+    )
     if (
         required_artifacts is None
-        or materializer_path not in required_artifacts.group(0)
+        or not any(
+            path in required_artifacts.group(0) for path in materializer_paths
+        )
     ):
         fail(
             "materialization.installed-surface-invalid",

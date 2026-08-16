@@ -251,6 +251,98 @@ class QualityOwnershipTest(unittest.TestCase):
         self.assertIn('--source-revision "@CXXLENS_SOURCE_REVISION@"', install_script)
         self.assertIn('--source-tree "@CXXLENS_SOURCE_TREE@"', install_script)
 
+    def test_install_test_uses_configured_executable_suffix(self) -> None:
+        install_script = (ROOT / "tests/install/run_install_test.cmake.in").read_text(
+            encoding="utf-8"
+        )
+        occurrence_generator = (
+            ROOT / "cmake/GenerateClang22OccurrenceManifest.cmake.in"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")',
+            install_script,
+        )
+        self.assertIn(
+            "function(resolve_install_artifact_path canonical_path resolved_path)",
+            install_script,
+        )
+        self.assertIn(
+            'string(APPEND resolved "${install_executable_suffix}")',
+            install_script,
+        )
+        for executable in (
+            "cxxlens-provider-scaffold",
+            "cxxlens-sdk-doctor",
+            "cxxlens-clang-worker-22",
+            "cxxlens-clang22-materialize",
+        ):
+            with self.subTest(executable=executable):
+                self.assertIn(
+                    f'"${{install_prefix}}/bin/{executable}"',
+                    install_script,
+                )
+        for executable in (
+            "cxxlens-provider-scaffold",
+            "cxxlens-sdk-doctor",
+            "cxxlens-clang-worker-22",
+        ):
+            with self.subTest(runtime_executable=executable):
+                self.assertIn(
+                    f"${{install_prefix}}/bin/{executable}${{install_executable_suffix}}",
+                    install_script,
+                )
+        self.assertIn(
+            'resolve_install_artifact_path("${required}" resolved_required)',
+            install_script,
+        )
+        self.assertIn(
+            "${build_dir}/cxxlens-${consumer_executable}${install_executable_suffix}",
+            install_script,
+        )
+        self.assertIn(
+            "${example_build_dir}/cxxlens-installed-${example}${install_executable_suffix}",
+            install_script,
+        )
+        self.assertIn(
+            'set(_cxxlens_occurrence_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")',
+            occurrence_generator,
+        )
+        self.assertIn(
+            "function(_cxxlens_occurrence_resolve_path role relative_path resolved_path)",
+            occurrence_generator,
+        )
+        self.assertIn(
+            'string(APPEND _resolved "${_cxxlens_occurrence_executable_suffix}")',
+            occurrence_generator,
+        )
+        self.assertIn(
+            'set(_absolute "${_cxxlens_occurrence_prefix}/${_resolved_relative_path}")',
+            occurrence_generator,
+        )
+        self.assertIn(
+            '\\"path\\":\\"${relative_path}\\"',
+            occurrence_generator,
+            "occurrence manifest paths must remain canonical after filesystem resolution",
+        )
+        for harness in (
+            "tests/install/clang22_materializer_success_test.py",
+            "tests/install/clang22_materializer_negative_test.py",
+            "tests/install/clang22_materializer_installation_binding_test.py",
+        ):
+            with self.subTest(harness=harness):
+                source = (ROOT / harness).read_text(encoding="utf-8")
+                self.assertIn('"--executable-suffix"', source)
+                self.assertIn(
+                    "resolve_installed_executable(",
+                    source,
+                )
+        self.assertEqual(
+            install_script.count(
+                '--executable-suffix "${install_executable_suffix}"'
+            ),
+            4,
+        )
+
 
 class ConstructibilityGateProjectionTest(unittest.TestCase):
     @staticmethod
