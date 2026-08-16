@@ -1904,12 +1904,54 @@ namespace
 			"public success report did not admit an explicit unavailable prior-artifact status");
 	}
 
+	void prepublication_capacity_reservation_is_exact_and_single_use()
+	{
+		constexpr std::size_t limit = 17U;
+		const auto projection = [](const std::size_t reserved_bytes)
+		{
+			return public_materialization_prepublication_projection{
+				"binding", "request", "semantic", "occurrence", 1U, reserved_bytes, false};
+		};
+
+		for (const auto attempt : std::array<std::size_t, 4>{0U, limit - 1U, limit, limit + 1U})
+		{
+			auto candidate = projection(limit);
+			auto consumed = candidate.consume_reserved_capacity(attempt);
+			const bool expected = attempt == limit;
+			require(static_cast<bool>(consumed) == expected,
+					"prepublication capacity accepted the wrong boundary: attempt=" +
+						std::to_string(attempt));
+			require(candidate.reservation_consumed() == expected,
+					"prepublication capacity changed lifecycle state on a rejected boundary");
+			if (expected)
+			{
+				auto repeated = candidate.consume_reserved_capacity(limit);
+				require(!repeated && repeated.error().detail == "already-consumed",
+						"prepublication capacity reservation was consumable twice");
+				auto unconsumed = projection(limit);
+				require(candidate == unconsumed,
+						"capacity consumption changed publication-independent authority");
+			}
+		}
+
+		auto zero = projection(0U);
+		auto rejected_zero = zero.consume_reserved_capacity(0U);
+		require(!rejected_zero && rejected_zero.error().detail == "zero-reservation",
+				"zero prepublication capacity reservation was accepted");
+	}
+
 	void final_response_spool_is_sealed_before_transport()
 	{
 		const std::string response{
 			R"({"error":null,"process_exit_status":0,"report_version":"2.1.0",)"
 			R"("response_kind":"detailed","result":"passed",)"
 			R"("schema":"cxxlens.clang22-materialization-report.v2"})"};
+		auto zero_limit = stage_public_materialization_final_response(response, 0U);
+		require(!zero_limit &&
+					zero_limit.error() ==
+						sdk::error{
+							"materialization.report-invalid", "report", "final-response-boundary"},
+				"final response spool accepted a zero-byte response limit");
 		auto too_small =
 			stage_public_materialization_final_response(response, response.size() - 1U);
 		require(!too_small &&
@@ -1936,6 +1978,28 @@ namespace
 		auto appended = (*staged)->append(extra);
 		require(!appended && (*staged)->sealed(),
 				"final response spool accepted mutation after seal");
+
+		auto limit_plus_one =
+			stage_public_materialization_final_response(response, response.size() + 1U);
+		require(limit_plus_one && (*limit_plus_one)->sealed(),
+				"final response spool rejected the exact limit-plus-one boundary");
+		for (const auto fragment : std::array<std::size_t, 3>{1U, 3U, 7U})
+		{
+			std::vector<std::byte> fragmented(expected.size());
+			std::size_t offset{};
+			while (offset < fragmented.size())
+			{
+				const auto remaining = fragmented.size() - offset;
+				const auto count = fragment < remaining ? fragment : remaining;
+				auto target = std::span{fragmented}.subspan(offset, count);
+				auto fragmented_read = (*staged)->read_at(offset, target);
+				require(fragmented_read && *fragmented_read == count,
+						"fragmented final-response replay returned a short read");
+				offset += count;
+			}
+			require(fragmented == expected,
+					"fragmented final-response replay changed authoritative bytes");
+		}
 	}
 } // namespace
 
@@ -2009,6 +2073,7 @@ int main(const int argument_count, const char* const* arguments)
 	detailed_report_capacity_reservation_is_compositional_and_closed();
 	public_report_occurrence_binding_rejects_forged_combinations();
 	public_success_report_requires_all_authority_inputs();
+	prepublication_capacity_reservation_is_exact_and_single_use();
 	final_response_spool_is_sealed_before_transport();
 
 	return 0;
