@@ -4,6 +4,7 @@
 #include <deque>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -231,6 +232,16 @@ namespace
 		{
 			return unexpected(
 				error{"provider.process-request-invalid", "ng1-live", "injected-launch-failure"});
+		}
+	};
+
+	class throwing_process_port final : public ng1_duplex_process_port
+	{
+	  public:
+		result<std::unique_ptr<ng1_duplex_process>>
+		start(const process_invocation&, protocol_limits, const std::stop_token) const override
+		{
+			throw std::bad_alloc{};
 		}
 	};
 
@@ -468,6 +479,25 @@ namespace
 			"live-driver destroyed an unstarted session without cleaning its private spill port");
 	}
 
+	void test_live_driver_cleans_session_when_process_start_throws()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		auto spill = std::make_shared<spill_state>();
+		auto configuration = values.configuration(clock, observation, process, 3U, spill);
+		configuration.processes = std::make_unique<throwing_process_port>();
+
+		auto rejected = ng1_live_session_driver::start(std::move(configuration), {});
+		require(!rejected && rejected.error().code == "provider.process-launch-failed" &&
+					rejected.error().field == "ng1-live" &&
+					rejected.error().detail == "process-port-allocation-failed",
+				"live-driver did not convert the process-port exception into a structured failure");
+		require(spill->cleaned,
+				"live-driver did not clean the spill port after a process-port exception");
+	}
+
 	void test_live_driver_rebases_task_timers_at_acceptance()
 	{
 		fixture values;
@@ -657,6 +687,7 @@ int main()
 	test_live_driver_rejects_retention_overflow();
 	test_live_driver_rejects_host_resume_without_receipt();
 	test_live_driver_cleans_session_when_process_start_fails();
+	test_live_driver_cleans_session_when_process_start_throws();
 	test_live_driver_rebases_task_timers_at_acceptance();
 	test_shared_validator_accepts_explicit_ng1_controls();
 	return 0;
