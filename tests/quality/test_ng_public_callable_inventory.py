@@ -953,6 +953,16 @@ void issue_attribute_words();
             "CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)", tests_cmake
         )
 
+    def test_ng1_descendant_fixture_separates_pid_capture_from_proc_read(self) -> None:
+        runtime_test = (ROOT / "tests/unit/sdk/provider_runtime_test.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            '"/usr/bin/sleep 30 & child=$!; read -r pid comm state ppid pgrp session '
+            'tty_nr tpgid "',
+            runtime_test,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
