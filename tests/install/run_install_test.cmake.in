@@ -287,10 +287,9 @@ if(PHASE STREQUAL "clang22-materializer-success")
         "@Python3_EXECUTABLE@"
         "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_success_test.py"
         --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
-        --executable-suffix "${install_executable_suffix}"
-        --backend "${materialization_backend}" --translation-unit-count 2
-        --evidence-dir "${materialization_evidence_dir}" COMMAND_ERROR_IS_FATAL
-        ANY)
+        --executable-suffix "${install_executable_suffix}" --backend
+        "${materialization_backend}" --translation-unit-count 2 --evidence-dir
+        "${materialization_evidence_dir}" COMMAND_ERROR_IS_FATAL ANY)
   endforeach()
   execute_process(
     COMMAND
@@ -312,8 +311,8 @@ if(PHASE STREQUAL "clang22-materializer-base64")
         "@Python3_EXECUTABLE@"
         "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_success_test.py"
         --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
-        --executable-suffix "${install_executable_suffix}"
-        --backend "${materialization_backend}" --translation-unit-count 2
+        --executable-suffix "${install_executable_suffix}" --backend
+        "${materialization_backend}" --translation-unit-count 2
         --canonical-base64-vectors COMMAND_ERROR_IS_FATAL ANY)
   endforeach()
   return()
@@ -328,9 +327,8 @@ if(PHASE STREQUAL "clang22-materializer-negative")
       "@Python3_EXECUTABLE@"
       "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_negative_test.py"
       --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
-      --executable-suffix "${install_executable_suffix}"
-      --evidence-dir "${materialization_negative_evidence_dir}"
-      COMMAND_ERROR_IS_FATAL ANY)
+      --executable-suffix "${install_executable_suffix}" --evidence-dir
+      "${materialization_negative_evidence_dir}" COMMAND_ERROR_IS_FATAL ANY)
   message(
     STATUS
       "installed Clang 22 negative evidence: ${materialization_negative_evidence_dir}"

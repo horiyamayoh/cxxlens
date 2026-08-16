@@ -15,16 +15,18 @@ set(_cxxlens_occurrence_separator "")
 
 function(_cxxlens_occurrence_resolve_path role relative_path resolved_path)
   set(_resolved "${relative_path}")
-  if("${role}" STREQUAL "materializer-executable"
-     OR "${role}" STREQUAL "worker-executable")
+  if("${role}" STREQUAL "materializer-executable" OR "${role}" STREQUAL
+                                                     "worker-executable")
     string(APPEND _resolved "${_cxxlens_occurrence_executable_suffix}")
   endif()
-  set(${resolved_path} "${_resolved}" PARENT_SCOPE)
+  set(${resolved_path}
+      "${_resolved}"
+      PARENT_SCOPE)
 endfunction()
 
 function(_cxxlens_occurrence_append role relative_path)
-  _cxxlens_occurrence_resolve_path(
-    "${role}" "${relative_path}" _resolved_relative_path)
+  _cxxlens_occurrence_resolve_path("${role}" "${relative_path}"
+                                   _resolved_relative_path)
   set(_absolute "${_cxxlens_occurrence_prefix}/${_resolved_relative_path}")
   if(NOT EXISTS "${_absolute}")
     message(
