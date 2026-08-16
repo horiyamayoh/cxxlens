@@ -834,9 +834,9 @@ namespace cxxlens::detail::clang22::materialization
 		const std::size_t v2_task_count)
 		: request_{&request}, request_id_{std::move(request_id)},
 		  expected_partition_ids_{std::move(expected_partition_ids)},
-		  task_receipts_(request.tasks.size()), producer_authority_{producer_authority},
-		  guarantee_authority_{guarantee_authority}, dynamic_partition_ids_{dynamic_partition_ids},
-		  v2_request_{v2_request}, claim_authority_{claim_authority}, v2_task_count_{v2_task_count}
+		  producer_authority_{producer_authority}, guarantee_authority_{guarantee_authority},
+		  dynamic_partition_ids_{dynamic_partition_ids}, v2_request_{v2_request},
+		  claim_authority_{claim_authority}, v2_task_count_{v2_task_count}
 	{
 	}
 
@@ -847,9 +847,9 @@ namespace cxxlens::detail::clang22::materialization
 		const materialization_v2_1_claim_authority& claim_authority,
 		const materialization_incremental_selected_request_binding_set& binding_set)
 		: request_{}, request_id_{std::move(request_id)}, expected_partition_ids_(task_count),
-		  task_receipts_(task_count), producer_authority_{}, guarantee_authority_{},
-		  dynamic_partition_ids_{true}, v2_request_{&request}, claim_authority_{&claim_authority},
-		  binding_set_{&binding_set}, v2_task_count_{task_count}
+		  producer_authority_{}, guarantee_authority_{}, dynamic_partition_ids_{true},
+		  v2_request_{&request}, claim_authority_{&claim_authority}, binding_set_{&binding_set},
+		  v2_task_count_{task_count}
 	{
 	}
 
@@ -1017,7 +1017,6 @@ namespace cxxlens::detail::clang22::materialization
 					&discovered_partition_ids);
 				!valid)
 				return sdk::unexpected(std::move(valid.error()));
-			task_receipts_[request_task_index] = task.receipt;
 			claim_stream_tasks_.emplace_back(std::move(task.receipt),
 											 std::move(task.partition_spools));
 			++next_task_index_;
@@ -1074,7 +1073,6 @@ namespace cxxlens::detail::clang22::materialization
 				!valid)
 				return sdk::unexpected(std::move(valid.error()));
 			expected_partition_ids_[request_task_index] = std::move(discovered_partition_ids);
-			task_receipts_[request_task_index] = task.receipt;
 			claim_stream_tasks_.emplace_back(std::move(task.receipt),
 											 std::move(task.partition_spools));
 			++next_task_index_;
@@ -1108,22 +1106,18 @@ namespace cxxlens::detail::clang22::materialization
 				request_ != nullptr ? request_->tasks.size() : v2_task_count_;
 			if ((request_ == nullptr && v2_request_ == nullptr) ||
 				next_task_index_ != expected_task_count ||
-				task_receipts_.size() != expected_task_count)
+				claim_stream_tasks_.size() != expected_task_count)
 				return sdk::unexpected(ingress_error("tasks", "incomplete"));
-			std::vector<materialization_incremental_task_receipt> receipts;
-			receipts.reserve(task_receipts_.size());
-			for (auto& receipt : task_receipts_)
-			{
-				if (!receipt)
-					return sdk::unexpected(ingress_error("tasks", "missing-receipt"));
-				receipts.push_back(std::move(*receipt));
-			}
 			auto journal = seal_materialization_incremental_execution_journal(
-				request_id_, std::span<const materialization_incremental_task_receipt>{receipts});
+				request_id_,
+				expected_task_count,
+				[&](const std::size_t index)
+				{
+					return index < claim_stream_tasks_.size() ? &claim_stream_tasks_[index].receipt
+															  : nullptr;
+				});
 			if (!journal)
 				return sdk::unexpected(std::move(journal.error()));
-			if (claim_stream_tasks_.size() != receipts.size())
-				return sdk::unexpected(ingress_error("tasks", "stream-census"));
 			return materialization_incremental_ingress_result{std::move(*journal),
 															  std::move(claim_stream_tasks_)};
 		}
