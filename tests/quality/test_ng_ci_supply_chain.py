@@ -360,6 +360,10 @@ class NgCiSupplyChainTest(unittest.TestCase):
             action,
         )
         self.assertIn("CXXLENS_PACKAGE_CACHE_RECEIPT", action)
+        self.assertIn(
+            "CXXLENS_PACKAGE_CACHE_HIT=${{ steps.package-cache.outputs.cache-hit || 'false' }}",
+            action,
+        )
         self.assertIn("${{ inputs.profile }}-${{ inputs.documentation }}-", action)
         self.assertIn("hashFiles('tools/ci/llvm22-noble.lock.json')", action)
         self.assertNotIn("restore-keys:", action)
@@ -372,11 +376,11 @@ class NgCiSupplyChainTest(unittest.TestCase):
         lock_path = ROOT / "tools/ci/llvm22-noble.lock.json"
         self.assertEqual(
             file_digest(lock_path),
-            "sha256:4faa12d829068236cfcec742043aacc5d8a908fbcda56a8e25c23d8d7e50ea68",
+            "sha256:c9dcffa308fd36dfa26c5c0714cf2336abfc8f6eca650fcbb308f0e4e96f9e30",
         )
         self.assertEqual(
             hash_files_digest(lock_path),
-            "596a855e4995898c6deb0943b385ca7f5657d52da3e6c61423a24c8ed5a4d5f2",
+            "742eb09c68a2fc01cb6efa21741e1ae1790cd30e46ee743358d3219221aac8be",
         )
         self.assertEqual(
             hash_files_digest(lock_path), github_hash_files_simulation(lock_path)
@@ -621,6 +625,25 @@ class NgCiSupplyChainTest(unittest.TestCase):
                 "verified-cache",
             )
 
+    def test_package_cache_provenance_accepts_cache_miss_as_download_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "cache-miss.json"
+            environment = self.cache_environment(receipt, cache_hit="false")
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-download")},
+                cache_hit="miss",
+                key=environment[self.lock["package_cache"]["key_environment"]],
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                evidence = package_cache_provenance(self.lock)
+            self.assertEqual(evidence["status"], "verified")
+            self.assertEqual(evidence["cache_hit"], "miss")
+            self.assertEqual(
+                evidence["profiles"]["developer"][0]["source"],
+                "verified-download",
+            )
+
     def test_package_cache_provenance_rejects_non_authoritative_package_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             receipt = pathlib.Path(temporary) / "receipt.json"
@@ -662,12 +685,14 @@ class NgCiSupplyChainTest(unittest.TestCase):
                     ]
                 },
             )
-            environment = self.cache_environment(
-                receipt, cache_hit="not-a-boolean"
-            )
-            with mock.patch.dict(os.environ, environment, clear=True):
-                with self.assertRaisesRegex(ValueError, "environment binding"):
-                    package_cache_provenance(self.lock)
+            for malformed in ("", "not-a-boolean", "false "):
+                with self.subTest(malformed=malformed):
+                    environment = self.cache_environment(
+                        receipt, cache_hit=malformed
+                    )
+                    with mock.patch.dict(os.environ, environment, clear=True):
+                        with self.assertRaises(ValueError):
+                            package_cache_provenance(self.lock)
 
             environment[self.lock["package_cache"]["hit_environment"]] = "true"
             with mock.patch.dict(os.environ, environment, clear=True):
