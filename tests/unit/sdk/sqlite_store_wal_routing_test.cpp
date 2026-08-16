@@ -29,6 +29,7 @@ namespace cxxlens::sdk
 															std::uint32_t read_lock_index);
 	[[nodiscard]] bool sqlite_source_shm_authentic_heap_trigger_valid_for_testing(
 		bool mapped_event_precedes_cantinit, int cantinit_page, bool repeat_cantinit);
+	[[nodiscard]] bool sqlite_source_shm_cantinit_after_mapped_route_rejected_for_testing();
 	[[nodiscard]] bool
 	sqlite_source_shm_callback_epoch_binding_valid_for_testing(bool same_epoch_identity);
 	[[nodiscard]] bool
@@ -430,6 +431,8 @@ namespace
 				"non-page-zero CANTINIT/null was accepted as a heap trigger");
 		require(!sdk::sqlite_source_shm_authentic_heap_trigger_valid_for_testing(true, 0, false),
 				"CANTINIT/null after a mapped event was accepted as a heap trigger");
+		require(sdk::sqlite_source_shm_cantinit_after_mapped_route_rejected_for_testing(),
+				"CANTINIT/null after a mapped route was not rejected fail-closed");
 	}
 
 	struct epoch_test_state
