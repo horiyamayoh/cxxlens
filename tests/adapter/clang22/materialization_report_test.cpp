@@ -60,6 +60,9 @@ namespace
 	static_assert(!std::copy_constructible<compact_failure_authority>);
 	static_assert(!std::is_copy_assignable_v<compact_failure_authority>);
 	static_assert(std::move_constructible<compact_failure_authority>);
+	static_assert(!std::default_initializable<materialization_postpublication_failure_authority>);
+	static_assert(!std::copy_constructible<materialization_postpublication_failure_authority>);
+	static_assert(std::move_constructible<materialization_postpublication_failure_authority>);
 	static_assert(compact_failure_capable<materialization_execution_journal>);
 	static_assert(!compact_failure_capable<materialization_postpublication_journal>);
 	static_assert(!std::copy_constructible<detailed_task_report_replayable_spool>);
@@ -833,6 +836,70 @@ namespace
 					postpublication->store_observation().publish_call_count == 1U &&
 					postpublication->store_observation().publish_returned_record,
 				"journal did not cross exactly one irreversible publication boundary");
+	}
+
+	void postpublication_failure_is_recovery_only_and_never_compact()
+	{
+		const auto value = engine();
+		const auto publication = publication_request(selector(value));
+		auto prepared =
+			prepare_materialization_store(value, publication, store_plan(value, publication));
+		require(prepared.ready_for_publish(),
+				"postpublication failure fixture was not publishable");
+		auto journal = bound_journal(1U);
+		complete_worker_census(journal, 1U);
+		require(journal.complete_transcript_validation().has_value() &&
+					journal.complete_materialization_validation().has_value() &&
+					journal.record_store_preparation(std::move(prepared)).has_value() &&
+					journal.complete_store_preparation().has_value(),
+				"postpublication failure journal did not reach the boundary");
+		auto postpublication = std::move(journal).begin_publication();
+		require(postpublication && postpublication->store_observation().publication_attempted &&
+					postpublication->store_observation().publish_call_count == 1U,
+				"postpublication failure fixture did not attempt exactly one publish");
+
+		auto invalid_phase =
+			std::move(*postpublication)
+				.issue_no_response_failure(
+					static_cast<materialization_postpublication_failure_phase>(255U),
+					{"materialization.report-invalid", "report", "invalid-phase"});
+		require(!invalid_phase &&
+					invalid_phase.error().code == "materialization.execution-journal-invalid",
+				"postpublication failure accepted an unknown phase");
+
+		auto invalid = std::move(*postpublication)
+						   .issue_no_response_failure(
+							   materialization_postpublication_failure_phase::report_validation,
+							   {"", "report", "invalid-code"});
+		require(!invalid && invalid.error().code == "materialization.execution-journal-invalid",
+				"postpublication failure accepted an untyped error");
+
+		auto failure = std::move(*postpublication)
+						   .issue_no_response_failure(
+							   materialization_postpublication_failure_phase::report_validation,
+							   {"materialization.report-invalid", "report", "schema-validation"});
+		require(
+			failure && failure->valid() &&
+				failure->phase() ==
+					materialization_postpublication_failure_phase::report_validation &&
+				failure->error() ==
+					sdk::error{"materialization.report-invalid", "report", "schema-validation"} &&
+				failure->store_observation().publication_attempted &&
+				failure->store_observation().publish_call_count == 1U &&
+				failure->store_observation().publish_returned_record &&
+				failure->recovery_authority() ==
+					materialization_postpublication_recovery_authority::committed_record_only &&
+				failure->process_exit_status() == 2 && !failure->response_authoritative() &&
+				!failure->compact_downgrade_allowed(),
+			"postpublication failure lost the committed-record-only/no-response contract");
+
+		auto repeated = std::move(*postpublication)
+							.issue_no_response_failure(
+								materialization_postpublication_failure_phase::stdout_transport,
+								{"materialization.report-invalid", "stdout", "repeated"});
+		require(!repeated && repeated.error().code == "materialization.execution-journal-invalid" &&
+					repeated.error().detail == "consumed-journal",
+				"postpublication journal issued a second recovery authority");
 	}
 
 	void bounded_detailed_projection_never_promotes_unverified_store()
@@ -1931,6 +1998,7 @@ int main(const int argument_count, const char* const* arguments)
 	static_cast<void>(typed_store_cause_preserves_exact_detail());
 	static_cast<void>(failed_head_observation_is_four_state_and_path_bound());
 	store_stage_and_publication_boundary_are_closed();
+	postpublication_failure_is_recovery_only_and_never_compact();
 	bounded_detailed_projection_never_promotes_unverified_store();
 	sealed_provider_transcript_report_leaf_binding_is_fail_closed();
 	report_capture_spool_replays_one_task_at_a_time();

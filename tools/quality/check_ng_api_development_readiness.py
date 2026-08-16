@@ -33,12 +33,34 @@ BASELINE_PATH = "tools/quality/check_ng_api_development_readiness.py"
 MANIFEST_PATH = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
 QUALITY_PATH = pathlib.Path(".github/workflows/quality.yml")
 NIGHTLY_PATH = pathlib.Path(".github/workflows/nightly.yml")
+AGENT_GOAL_PATH = pathlib.Path("docs/development/agent-api-development-goal.md")
 PACKET_JSON_NAME = "cxxlens-ng-agent-context-issue-261.json"
 PACKET_MARKDOWN_NAME = "cxxlens-ng-agent-context-issue-261.md"
 USE_CASE_ID = "repository-semantic-query.explain-translation-unit.v1"
 ISSUE_ID = "#261"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 CANONICAL_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\.v[0-9]+(?:_[0-9]+)?$")
+BOUNDED_COMPLETION_GOAL_MARKERS = (
+    "completion-class: bounded-implementation",
+    "production-qualification: not-claimed-by-default",
+    "issue-close-owner: bounded-issue-or-explicit-qualification-gate",
+    "aggregate-qualification-owner: exact-merged-main-integration-readiness-release",
+    "reopen-condition: bounded-acceptance-or-scope-regression-only",
+)
+BOUNDED_COMPLETION_GOAL_TEXT = (
+    "通常の implementation issue の既定完了クラスは **bounded implementation completion**",
+    "issue を閉じるために distribution 全体の production qualification を再実行・再証明してはなりません。",
+    "`production qualification: not claimed`",
+    "Foundation、Wave 0、G5、`release-evaluation`、normal/final",
+    "exact merged-main SHA の required checks と fail-closed evidence",
+    "全 tracked gap の解消後は `release-evaluation: qualified`",
+    "final-mode production-scope report を同じ exact",
+    "過去 SHA の成功を最終 SHA の evidence として流用しません。",
+)
+LEGACY_GOAL_ISSUE_CLOSE_PATTERNS = (
+    re.compile(r"merged-main qualification と learning checkpoint 後の active issue close"),
+    re.compile(r"production scope に tracked gap がある intermediate unit の merge 後"),
+)
 
 
 class AccelerationError(ValueError):
@@ -107,6 +129,21 @@ def _file_digest(path: pathlib.Path) -> str:
 
 def _normalized_condition(value: Any) -> str:
     return " ".join(value.split()) if isinstance(value, str) else ""
+
+
+def validate_bounded_completion_contract(root: pathlib.Path) -> None:
+    """Keep the activated /goal contract aligned with completion-policy #291."""
+    goal = (root / AGENT_GOAL_PATH).read_text(encoding="utf-8")
+    for marker in BOUNDED_COMPLETION_GOAL_MARKERS:
+        if goal.count(f"`{marker}`") != 1:
+            _fail(f"bounded completion marker is missing or duplicated in goal: {marker}")
+    normalized_goal = re.sub(r"\s+", " ", goal)
+    for phrase in BOUNDED_COMPLETION_GOAL_TEXT:
+        if re.sub(r"\s+", " ", phrase) not in normalized_goal:
+            _fail(f"bounded completion contract text is missing from goal: {phrase}")
+    for pattern in LEGACY_GOAL_ISSUE_CLOSE_PATTERNS:
+        if pattern.search(goal):
+            _fail("legacy issue-close requirement remains in the activated goal contract")
 
 
 def _canonical_repo_path(value: str) -> bool:
@@ -459,6 +496,7 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
 
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     manifest = _baseline_validate_documents(root)
+    validate_bounded_completion_contract(root)
     validate_demand_closure(root, manifest)
     return manifest
 
@@ -582,15 +620,20 @@ def build_report(
     generated_at: str,
     expected_revision: str,
 ) -> dict[str, Any]:
-    report = _baseline_build_report(
-        root,
-        manifest,
-        evidence_dir,
-        run_url,
-        ci_jobs,
-        generated_at,
-        expected_revision,
-    )
+    baseline_current_git_state = _baseline.current_git_state
+    _baseline.current_git_state = current_git_state
+    try:
+        report = _baseline_build_report(
+            root,
+            manifest,
+            evidence_dir,
+            run_url,
+            ci_jobs,
+            generated_at,
+            expected_revision,
+        )
+    finally:
+        _baseline.current_git_state = baseline_current_git_state
     json_path, markdown_path = _packet_paths(evidence_dir)
     packet = json.loads(json_path.read_text(encoding="utf-8"))
     git = report["git"]

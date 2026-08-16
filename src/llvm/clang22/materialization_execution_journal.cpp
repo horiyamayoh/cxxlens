@@ -112,6 +112,21 @@ namespace cxxlens::detail::clang22::materialization
 			return false;
 		}
 
+		[[nodiscard]] bool postpublication_phase_valid(
+			const materialization_postpublication_failure_phase phase) noexcept
+		{
+			switch (phase)
+			{
+				case materialization_postpublication_failure_phase::store_persistence:
+				case materialization_postpublication_failure_phase::report_construction:
+				case materialization_postpublication_failure_phase::report_validation:
+				case materialization_postpublication_failure_phase::response_spool:
+				case materialization_postpublication_failure_phase::stdout_transport:
+					return true;
+			}
+			return false;
+		}
+
 		[[nodiscard]] bool
 		is_prepublication_stage_operation(const materialization_store_operation operation) noexcept
 		{
@@ -160,6 +175,14 @@ namespace cxxlens::detail::clang22::materialization
 		compact_head_observation head_observation{compact_head_observation::not_observed};
 		std::optional<std::string> observed_head_publication;
 		std::optional<compact_store_failure_observation> store_failure_cause;
+	};
+
+	struct materialization_postpublication_failure_authority::state
+	{
+		materialization_postpublication_failure_phase phase{};
+		sdk::error error;
+		materialization_store_observation observation;
+		materialization_postpublication_recovery_authority recovery{};
 	};
 
 	struct materialization_execution_journal::state
@@ -289,6 +312,77 @@ namespace cxxlens::detail::clang22::materialization
 	materialization_postpublication_journal::store_observation() const noexcept
 	{
 		return observation_;
+	}
+
+	materialization_postpublication_failure_authority::
+		materialization_postpublication_failure_authority(std::unique_ptr<state> state) noexcept
+		: state_{std::move(state)}
+	{
+	}
+
+	materialization_postpublication_failure_authority::
+		materialization_postpublication_failure_authority(
+			materialization_postpublication_failure_authority&&) noexcept = default;
+	materialization_postpublication_failure_authority&
+	materialization_postpublication_failure_authority::operator=(
+		materialization_postpublication_failure_authority&&) noexcept = default;
+	materialization_postpublication_failure_authority::
+		~materialization_postpublication_failure_authority() = default;
+
+	bool materialization_postpublication_failure_authority::valid() const noexcept
+	{
+		return static_cast<bool>(state_);
+	}
+
+	materialization_postpublication_failure_phase
+	materialization_postpublication_failure_authority::phase() const noexcept
+	{
+		return state_->phase;
+	}
+
+	const sdk::error& materialization_postpublication_failure_authority::error() const noexcept
+	{
+		return state_->error;
+	}
+
+	const materialization_store_observation&
+	materialization_postpublication_failure_authority::store_observation() const noexcept
+	{
+		return state_->observation;
+	}
+
+	materialization_postpublication_recovery_authority
+	materialization_postpublication_failure_authority::recovery_authority() const noexcept
+	{
+		return state_->recovery;
+	}
+
+	sdk::result<materialization_postpublication_failure_authority>
+	materialization_postpublication_journal::issue_no_response_failure(
+		const materialization_postpublication_failure_phase phase, sdk::error error) &&
+	{
+		if (consumed_)
+			return sdk::unexpected(journal_error("postpublication-failure", "consumed-journal"));
+		if (!postpublication_phase_valid(phase) || !observation_.publication_attempted ||
+			observation_.publish_call_count != 1U || !sdk::validate_utf8_text(error.code) ||
+			!sdk::validate_utf8_text(error.field) || !sdk::validate_utf8_text(error.detail) ||
+			error.code.empty() || error.field.empty() || error.code.size() > 256U ||
+			error.field.size() > 256U || error.detail.size() > 4096U || error.code.contains('\0') ||
+			error.field.contains('\0') || error.detail.contains('\0'))
+			return sdk::unexpected(journal_error("postpublication-failure", "invalid-observation"));
+
+		auto failure = std::make_unique<materialization_postpublication_failure_authority::state>();
+		failure->phase = phase;
+		failure->error = std::move(error);
+		const bool committed_record = observation_.publish_returned_record &&
+			observation_.publish_returned_record->state == sdk::publication_state::committed &&
+			!observation_.publish_returned_record->corrupt;
+		failure->recovery = committed_record
+			? materialization_postpublication_recovery_authority::committed_record_only
+			: materialization_postpublication_recovery_authority::read_only_recovery_required;
+		failure->observation = std::move(observation_);
+		consumed_ = true;
+		return materialization_postpublication_failure_authority{std::move(failure)};
 	}
 
 	materialization_execution_journal::materialization_execution_journal(
