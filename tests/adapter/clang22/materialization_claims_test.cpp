@@ -2519,6 +2519,15 @@ namespace
 						outcome->bounded_claim_source().sealed() &&
 						outcome->claim_stream() != nullptr,
 					"v2.1 coordinator lost reuse/recompute census or finalization evidence");
+			auto streaming_transaction = make_materialization_streaming_store_transaction(
+				*authority, outcome->bounded_claim_source());
+			require(streaming_transaction &&
+						streaming_transaction->draft.catalog_semantic_digest ==
+							authority->catalog()->catalog_digest &&
+						outcome->bounded_claim_source().task_count() == authority->task_count(),
+					"v2.1 bounded source did not bind the production Store metadata to the exact "
+					"request "
+					"census");
 		}
 
 		{
@@ -3688,6 +3697,22 @@ namespace
 		auto exact_finalized = std::move(*exact_source).finalize();
 		require(exact_finalized && exact_finalized->sealed(),
 				"bounded source rejected the exact declared task census");
+		auto exact_streaming_transaction =
+			make_materialization_streaming_store_transaction(request, *exact_finalized);
+		require(exact_streaming_transaction &&
+					exact_finalized->task_count() == request.tasks.size(),
+				"bounded Store metadata rejected the exact request/source binding");
+		auto mismatched_request = request;
+		mismatched_request.tasks.pop_back();
+		auto mismatched_streaming_transaction =
+			make_materialization_streaming_store_transaction(mismatched_request, *exact_finalized);
+		require(!mismatched_streaming_transaction &&
+					mismatched_streaming_transaction.error().code ==
+						"materialization.task-binding-mismatch" &&
+					mismatched_streaming_transaction.error().field == "store.source" &&
+					mismatched_streaming_transaction.error().detail ==
+						"request-identity-or-task-census",
+				"bounded Store metadata accepted a source with a mismatched request task census");
 
 		auto over_adoption_source = materialization_bounded_claim_source::begin(request);
 		require(over_adoption_source.has_value(), "over-adoption bounded source begin failed");
