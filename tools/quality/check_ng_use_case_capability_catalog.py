@@ -30,6 +30,11 @@ READINESS_SCHEMA_PATH = pathlib.Path(
 CATALOG_SCHEMA_PATH = pathlib.Path(
     "schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml"
 )
+CATALOG_SOURCE_PATHS = (
+    READINESS_PATH,
+    READINESS_SCHEMA_PATH,
+    CATALOG_SCHEMA_PATH,
+)
 
 
 class CatalogError(ValueError):
@@ -68,6 +73,32 @@ def git_value(root: pathlib.Path, expression: str) -> str:
     if len(value) != 40 or any(character not in "0123456789abcdef" for character in value):
         raise CatalogError(f"git returned a non-canonical revision for {expression}")
     return value
+
+
+def reject_dirty_source_files(root: pathlib.Path) -> None:
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "--",
+                *(path.as_posix() for path in CATALOG_SOURCE_PATHS),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise CatalogError("cannot verify relevant catalog source cleanliness") from error
+    if result.stdout.strip():
+        raise CatalogError(
+            "relevant catalog source files are dirty; commit or discard them before "
+            "binding the report revision/tree"
+        )
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -144,6 +175,7 @@ def project_use_cases(readiness: dict[str, Any]) -> tuple[list[dict[str, Any]], 
 
 def build_report(root: pathlib.Path) -> dict[str, Any]:
     root = root.resolve()
+    reject_dirty_source_files(root)
     readiness_path = root / READINESS_PATH
     readiness = load_yaml(readiness_path)
     readiness_schema = load_yaml(root / READINESS_SCHEMA_PATH)
@@ -189,6 +221,42 @@ def validate_report(report: dict[str, Any], root: pathlib.Path = ROOT) -> None:
     if not isinstance(schema, dict):
         raise CatalogError("catalog schema must be a mapping")
     validate(report, schema, "catalog report")
+
+    use_case_ids = [entry["id"] for entry in report["use_cases"]]
+    if len(use_case_ids) != len(set(use_case_ids)):
+        raise CatalogError("catalog report contains duplicate use-case IDs")
+
+    capability_ids = [entry["id"] for entry in report["capability_registry"]]
+    if len(capability_ids) != len(set(capability_ids)):
+        raise CatalogError("catalog report contains duplicate capability IDs")
+
+    expected_demanded_by: dict[str, list[str]] = {}
+    for use_case in report["use_cases"]:
+        for capability in use_case["capabilities"]:
+            expected_demanded_by.setdefault(capability, []).append(use_case["id"])
+
+    actual_demanded_by = {
+        entry["id"]: entry["demanded_by"]
+        for entry in report["capability_registry"]
+    }
+    expected_capabilities = set(expected_demanded_by)
+    actual_capabilities = set(actual_demanded_by)
+    if actual_capabilities != expected_capabilities:
+        missing = sorted(expected_capabilities - actual_capabilities)
+        extra = sorted(actual_capabilities - expected_capabilities)
+        raise CatalogError(
+            "capability registry IDs do not exactly match use-case capability references "
+            f"(missing={missing}, extra={extra})"
+        )
+
+    for capability, demanded_by in expected_demanded_by.items():
+        expected = sorted(demanded_by)
+        actual = actual_demanded_by[capability]
+        if actual != expected:
+            raise CatalogError(
+                f"capability demanded_by mapping is not exact for {capability!r}: "
+                f"expected {expected}, got {actual}"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
