@@ -61,6 +61,22 @@ namespace
 		return std::string{"sha256:"} + std::string(64U, fill);
 	}
 
+	[[nodiscard]] process_output clean_process_output()
+	{
+		return {process_status::exited,
+				0,
+				0,
+				{},
+				{},
+				{"test-platform",
+				 {"test-process-group"},
+				 sandbox_assurance::enforced,
+				 manifest_digest('c'),
+				 manifest_digest('d')},
+				{},
+				manifest_digest('e')};
+	}
+
 	struct spill_state
 	{
 		bool cleaned{};
@@ -171,6 +187,8 @@ namespace
 		std::vector<frame> sent;
 		std::optional<error> finish_failure;
 		std::optional<error> terminate_failure;
+		std::optional<process_output> finish_output;
+		std::optional<process_output> terminate_output;
 	};
 
 	class fake_process final : public ng1_duplex_process
@@ -199,13 +217,17 @@ namespace
 		{
 			if (state_->finish_failure)
 				return unexpected(*state_->finish_failure);
-			return process_output{process_status::exited, 0, 0, {}, {}, {}, {}, {}};
+			if (state_->finish_output)
+				return *state_->finish_output;
+			return clean_process_output();
 		}
 
 		result<process_output> terminate(const process_status status) override
 		{
 			if (state_->terminate_failure)
 				return unexpected(*state_->terminate_failure);
+			if (state_->terminate_output)
+				return *state_->terminate_output;
 			return process_output{status, 0, 0, {}, {}, {}, {}, {}};
 		}
 
@@ -355,6 +377,183 @@ namespace
 					0U};
 		}
 	};
+
+	[[nodiscard]] std::vector<frame> clean_transcript_frames(const fixture& values)
+	{
+		const auto accepted_control = encode_task_accepted_metadata(task_accepted_metadata{
+			"provider:test", values.heartbeat.provider_version.string(), "task:test"});
+		require(accepted_control, "NG1 clean transcript accepted encoding failed");
+		const auto coverage_control = encode_coverage_metadata(
+			std::vector<coverage_unit>{{"task", "task:test", "covered", {}}});
+		require(coverage_control, "NG1 clean transcript coverage encoding failed");
+		const auto unresolved_control = encode_unresolved_metadata(std::vector<unresolved_item>{});
+		require(unresolved_control, "NG1 clean transcript unresolved encoding failed");
+		const auto complete_control =
+			encode_task_complete_metadata(task_complete_metadata{"task:test"});
+		require(complete_control, "NG1 clean transcript completion encoding failed");
+		const auto progress_control =
+			encode_ng1_progress_control(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+															 "task:test",
+															 "dependency:test",
+															 0U,
+															 1'000U,
+															 1U,
+															 2U});
+		require(progress_control, "NG1 clean transcript progress encoding failed");
+		const auto terminal_progress_control =
+			encode_ng1_progress_control(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+															 "task:test",
+															 "dependency:test",
+															 1U,
+															 1'100U,
+															 2U,
+															 2U});
+		require(terminal_progress_control,
+				"NG1 clean transcript terminal progress encoding failed");
+		auto heartbeat = values.heartbeat_frame(ng1_heartbeat_kind::ack, 0U, 1'000U);
+		heartbeat.sequence = 1U;
+
+		return {frame{message_type::task_accepted, 7U, 0U, *accepted_control, {}, 1U, 1U, 0U},
+				std::move(heartbeat),
+				frame{message_type::progress, 7U, 2U, *progress_control, {}, 1U, 1U, 0U},
+				frame{message_type::progress, 7U, 3U, *terminal_progress_control, {}, 1U, 1U, 0U},
+				frame{message_type::coverage_chunk, 7U, 4U, *coverage_control, {}, 1U, 1U, 0U},
+				frame{message_type::unresolved_chunk, 7U, 5U, *unresolved_control, {}, 1U, 1U, 0U},
+				frame{message_type::task_complete, 7U, 6U, *complete_control, {}, 1U, 1U, 0U}};
+	}
+
+	[[nodiscard]] result<ng1_output_validation_receipt>
+	validated_clean_output(const fixture& values, const std::span<const frame> frames)
+	{
+		protocol_limits limits;
+		limits.minimum_minor = 1U;
+		limits.maximum_minor = 1U;
+		execution_budget budget;
+		const transcript_validation_request request{"task:test",
+													"provider:test",
+													values.heartbeat.provider_version,
+													nullptr,
+													{},
+													{1024U * 1024U, 8U},
+													&budget,
+													false,
+													nullptr,
+													7U,
+													true,
+													&values.heartbeat};
+		auto validated = validate_provider_transcript(request, frames, limits);
+		if (!validated)
+			return unexpected(std::move(validated.error()));
+		if (validated->kind != transcript_terminal_kind::complete || !validated->sealed())
+			return unexpected(error{"provider.protocol-state-invalid", "output", "not-sealed"});
+		return make_ng1_output_validation_receipt("task:test", *validated->sealed());
+	}
+
+	void receive_all(const std::shared_ptr<process_state>& process,
+					 const std::shared_ptr<clock_state>& clock,
+					 ng1_live_session_driver& driver,
+					 const std::size_t expected_count)
+	{
+		for (std::size_t index{}; index < expected_count; ++index)
+		{
+			clock->now_ns += 100U;
+			auto received = driver.receive_provider_frame({});
+			require(received, "NG1 clean transcript receive failed");
+			require(received->has_value(), "NG1 clean transcript ended before completion");
+		}
+		require(process->incoming.empty(), "NG1 clean transcript was not fully received");
+	}
+
+	void test_live_driver_clean_finish_remains_sealable()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		const auto frames = clean_transcript_frames(values);
+		for (const auto& frame : frames)
+			process->incoming.push_back(frame);
+
+		auto driver = ng1_live_session_driver::start(
+			values.configuration(clock, observation, process, frames.size()), {});
+		require(driver, "NG1 clean-seal fixture start failed");
+		receive_all(process, clock, *driver, frames.size());
+
+		auto output = driver->finish({});
+		require(output && output->status == process_status::exited && output->exit_code == 0,
+				"clean process finish did not preserve the successful process outcome");
+		require(driver->session().state() == ng1_recovery_state::running,
+				"clean process finish fabricated a worker-exit transition");
+		auto receipt = validated_clean_output(values, driver->provider_frames());
+		require(receipt, "clean transcript did not produce a shared validation receipt");
+		require(driver->session().seal_output(*receipt),
+				"clean transcript could not consume the existing output-sealed transition");
+		require(driver->session().state() == ng1_recovery_state::completed,
+				"clean transcript did not reach the completed recovery state");
+		require(driver->cleanup(), "clean-seal fixture cleanup failed");
+	}
+
+	void test_live_driver_non_clean_finish_remains_fail_closed()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		process->finish_output = process_output{process_status::exited,
+												17,
+												0,
+												{},
+												{},
+												clean_process_output().sandbox,
+												"provider.crash",
+												manifest_digest('e')};
+
+		auto driver = ng1_live_session_driver::start(
+			values.configuration(clock, observation, process, 8U), {});
+		require(driver, "NG1 non-clean fixture start failed");
+		auto output = driver->finish({});
+		require(output && output->status == process_status::exited && output->exit_code == 17,
+				"non-clean process finish did not preserve the exact process outcome");
+		require(driver->session().state() == ng1_recovery_state::worker_killed,
+				"non-clean process finish was treated as sealable clean completion");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->session().state() == ng1_recovery_state::failed,
+				"non-clean process finish did not remain fail-closed for cleanup");
+		require(driver->cleanup(), "non-clean fixture cleanup failed");
+	}
+
+	void test_live_driver_timeout_remains_unsealable()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		const auto frames = clean_transcript_frames(values);
+		for (const auto& frame : frames)
+			process->incoming.push_back(frame);
+
+		auto driver = ng1_live_session_driver::start(
+			values.configuration(clock, observation, process, frames.size()), {});
+		require(driver, "NG1 timeout fixture start failed");
+		receive_all(process, clock, *driver, frames.size());
+		clock->now_ns = 5'000'003'000ULL;
+		auto timeout = driver->check_liveness();
+		require(!timeout && timeout.error().code == "provider.heartbeat-timeout",
+				"NG1 timeout fixture did not enter the heartbeat-timeout state");
+		auto output = driver->finish({});
+		require(output, "NG1 timeout fixture did not finish and reap the process");
+		require(driver->session().state() == ng1_recovery_state::worker_killed,
+				"timeout cleanup did not remain a fail-closed kill transition");
+		auto receipt = validated_clean_output(values, driver->provider_frames());
+		require(receipt, "NG1 timeout transcript validation fixture failed");
+		auto sealed = driver->session().seal_output(*receipt);
+		require(!sealed && driver->session().state() == ng1_recovery_state::worker_killed,
+				"timeout recovery state incorrectly accepted a clean seal");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->session().state() == ng1_recovery_state::failed,
+				"NG1 timeout fixture could not enter explicit failed cleanup");
+		require(driver->cleanup(), "NG1 timeout fixture cleanup failed");
+	}
 
 	void test_live_control_bridge_and_bounded_retention()
 	{
@@ -527,11 +726,11 @@ namespace
 		auto output = driver->finish({});
 		require(output && output->status == process_status::exited,
 				"task-acceptance timer fixture did not preserve process outcome");
-		require(driver->session().state() == ng1_recovery_state::worker_killed,
-				"task-acceptance timer finish did not synchronize worker exit");
-		auto rejected_resume = driver->session().accept_durable_resume(
-			ng1_resume_control{}, ng1_spill_fsync_receipt{}, false, false, 0U);
-		require(!rejected_resume, "task-acceptance timer fixture accepted an unreceipted resume");
+		require(driver->session().state() == ng1_recovery_state::running,
+				"clean process finish fabricated a worker exit before output validation");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->session().state() == ng1_recovery_state::failed,
+				"incomplete clean output did not remain fail-closed");
 		auto cleanup = driver->cleanup();
 		if (!cleanup)
 			require(false,
@@ -575,49 +774,7 @@ namespace
 	void test_shared_validator_accepts_explicit_ng1_controls()
 	{
 		fixture values;
-		const auto accepted_control = encode_task_accepted_metadata(task_accepted_metadata{
-			"provider:test", values.heartbeat.provider_version.string(), "task:test"});
-		require(accepted_control, "NG1 shared-validator accepted encoding failed");
-		const auto coverage_control = encode_coverage_metadata(
-			std::vector<coverage_unit>{{"task", "task:test", "covered", {}}});
-		require(coverage_control, "NG1 shared-validator coverage encoding failed");
-		const auto unresolved_control = encode_unresolved_metadata(std::vector<unresolved_item>{});
-		require(unresolved_control, "NG1 shared-validator unresolved encoding failed");
-		const auto complete_control =
-			encode_task_complete_metadata(task_complete_metadata{"task:test"});
-		require(complete_control, "NG1 shared-validator completion encoding failed");
-		const auto progress_control =
-			encode_ng1_progress_control(ng1_progress_control{"cxxlens.provider-control.progress.v2",
-															 "task:test",
-															 "dependency:test",
-															 0U,
-															 1'000U,
-															 1U,
-															 2U});
-		require(progress_control, "NG1 shared-validator progress encoding failed");
-		const auto next_progress_control =
-			encode_ng1_progress_control(ng1_progress_control{"cxxlens.provider-control.progress.v2",
-															 "task:test",
-															 "dependency:test",
-															 1U,
-															 1'100U,
-															 2U,
-															 2U});
-		require(next_progress_control, "NG1 shared-validator second progress encoding failed");
-
-		std::vector<frame> frames;
-		frames.push_back(
-			frame{message_type::task_accepted, 7U, 0U, *accepted_control, {}, 1U, 1U, 0U});
-		frames.push_back(values.heartbeat_frame(ng1_heartbeat_kind::ack, 1U, 1'000U));
-		frames.push_back(frame{message_type::progress, 7U, 2U, *progress_control, {}, 1U, 1U, 0U});
-		frames.push_back(
-			frame{message_type::progress, 7U, 3U, *next_progress_control, {}, 1U, 1U, 0U});
-		frames.push_back(
-			frame{message_type::coverage_chunk, 7U, 4U, *coverage_control, {}, 1U, 1U, 0U});
-		frames.push_back(
-			frame{message_type::unresolved_chunk, 7U, 5U, *unresolved_control, {}, 1U, 1U, 0U});
-		frames.push_back(
-			frame{message_type::task_complete, 7U, 6U, *complete_control, {}, 1U, 1U, 0U});
+		auto frames = clean_transcript_frames(values);
 
 		protocol_limits limits;
 		limits.minimum_minor = 1U;
@@ -643,7 +800,7 @@ namespace
 		auto validate_heartbeat_mutation = [&](const auto& mutate, const std::string_view detail)
 		{
 			auto candidate = frames;
-			auto heartbeat = values.heartbeat_control(ng1_heartbeat_kind::ack, 1U, 1'000U);
+			auto heartbeat = values.heartbeat_control(ng1_heartbeat_kind::ack, 0U, 1'000U);
 			mutate(heartbeat);
 			auto encoded = encode_ng1_heartbeat_control(heartbeat);
 			require(encoded, "NG1 heartbeat negative-vector encoding failed");
@@ -721,6 +878,9 @@ namespace
 
 int main()
 {
+	test_live_driver_clean_finish_remains_sealable();
+	test_live_driver_non_clean_finish_remains_fail_closed();
+	test_live_driver_timeout_remains_unsealable();
 	test_live_control_bridge_and_bounded_retention();
 	test_live_driver_rejects_retention_overflow();
 	test_live_driver_rejects_host_resume_without_receipt();
