@@ -70,13 +70,196 @@ jobs:
           new = '\n'.join(line[12:] if line.startswith('            ') else line for line in new.splitlines()) + '\n'
           if text.count(old) != 1:
               raise RuntimeError('reviewed replace_exact function shape changed')
-          path.write_text(text.replace(old, new), encoding='utf-8')
+          text = text.replace(old, new)
+
+          # #295 already owns production begin() and its request-entry resolver. Remove the
+          # obsolete constructor rewrite; a resolver-preserving test factory is added after the
+          # issue #272 patch has been applied.
+          begin_start = text.index(
+              "replace_exact(\n    bounded_path,\n    r'''\\t\\treturn materialization_bounded_claim_source{",
+              text.index('bounded_path = '),
+          )
+          finalize_marker = text.index(
+              '# Replace finalize with request-wide residual reconciliation', begin_start
+          )
+          text = text[:begin_start] + text[finalize_marker:]
+          path.write_text(text, encoding='utf-8')
           PY
           python3 -m py_compile /tmp/agent_fix_272.py
 
       - name: Apply the implementation to current main
         run: |
           python3 /tmp/agent_fix_272.py
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise RuntimeError(f'{path}: expected one adaptation marker, found {text.count(old)}')
+              file.write_text(text.replace(old, new), encoding='utf-8')
+
+          header = 'src/llvm/clang22/materialization_bounded_claim_source.hpp'
+          replace_once(
+              header,
+              '''\t\t/** Begin from already validated exact request identity and task census. */
+          \t\t[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
+          \t\tbegin(std::string materialization_request_id,
+          \t\t\t  const sdk::relation_engine& engine,
+          \t\t\t  std::uint64_t expected_task_count);
+          ''',
+              '''\t\t/** Begin from validated identity and exact ordered task-entry bindings. */
+          \t\t[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
+          \t\tbegin(std::string materialization_request_id,
+          \t\t\t  const sdk::relation_engine& engine,
+          \t\t\t  std::vector<std::string> selected_request_entry_bindings);
+          ''',
+          )
+
+          source = 'src/llvm/clang22/materialization_bounded_claim_source.cpp'
+          source_file = Path(source)
+          source_text = source_file.read_text(encoding='utf-8')
+          marker = '''\n\tsdk::result<materialization_bounded_claim_source> materialization_bounded_claim_source::begin(
+          \t\tconst materialization_v2_1_claim_authority& authority)
+          '''
+          if source_text.count(marker) != 1:
+              raise RuntimeError('bounded source authority begin marker changed')
+          overload = r'''
+          	sdk::result<materialization_bounded_claim_source>
+          	materialization_bounded_claim_source::begin(
+          		std::string materialization_request_id,
+          		const sdk::relation_engine& engine,
+          		std::vector<std::string> selected_request_entry_bindings)
+          	{
+          		if (materialization_request_id.empty() || selected_request_entry_bindings.empty() ||
+          			selected_request_entry_bindings.size() >
+          				std::numeric_limits<std::uint64_t>::max())
+          			return sdk::unexpected(source_error("request", "empty-or-unbound"));
+          		for (const auto& binding : selected_request_entry_bindings)
+          			if (auto valid = sdk::validate_strong_id(binding); !valid)
+          				return sdk::unexpected(source_error("task-binding", "strong-id"));
+          		const auto task_count =
+          			static_cast<std::uint64_t>(selected_request_entry_bindings.size());
+          		return materialization_bounded_claim_source{
+          			std::move(materialization_request_id),
+          			engine,
+          			task_count,
+          			[bindings = std::move(selected_request_entry_bindings)](
+          				const std::size_t task_index) -> sdk::result<std::string>
+          			{
+          				if (task_index >= bindings.size())
+          					return sdk::unexpected(source_error("task-binding", "index"));
+          				return bindings[task_index];
+          			}};
+          	}
+          
+          '''
+          overload = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in overload.splitlines()
+          )
+          source_file.write_text(source_text.replace(marker, '\n' + overload + marker.lstrip('\n')), encoding='utf-8')
+
+          test = 'tests/adapter/clang22/materialization_store_test.cpp'
+          test_file = Path(test)
+          test_text = test_file.read_text(encoding='utf-8')
+          task_marker = '''\t[[nodiscard]] materialization_bounded_task_claims
+          \tsoft_bounded_task(const sdk::relation_engine& value,
+          '''
+          helper = r'''
+          	[[nodiscard]] std::string soft_request_entry_binding(const std::uint64_t task_index)
+          	{
+          		const auto digit = static_cast<char>('0' + (task_index % 10U));
+          		return "sha256:" + std::string(64U, digit);
+          	}
+          
+          '''
+          helper = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in helper.splitlines()
+          )
+          if test_text.count(task_marker) != 1:
+              raise RuntimeError('soft bounded task marker changed')
+          test_text = test_text.replace(task_marker, helper + task_marker)
+          old_signature = '''\tsoft_bounded_task(const sdk::relation_engine& value,
+          \t\t\t\t\t  sdk::claim claim,
+          \t\t\t\t\t  std::vector<sdk::unresolved_reference> unresolved,
+          \t\t\t\t\t  const std::string& suffix)
+          '''
+          new_signature = '''\tsoft_bounded_task(const sdk::relation_engine& value,
+          \t\t\t\t\t  sdk::claim claim,
+          \t\t\t\t\t  std::vector<sdk::unresolved_reference> unresolved,
+          \t\t\t\t\t  const std::string& suffix,
+          \t\t\t\t\t  const std::uint64_t task_index)
+          '''
+          if test_text.count(old_signature) != 1:
+              raise RuntimeError('soft bounded task signature changed')
+          test_text = test_text.replace(old_signature, new_signature)
+          return_marker = '''\t\treturn {
+          \t\t\t"sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          '''
+          return_replacement = '''\t\treturn {
+          \t\t\ttask_index,
+          \t\t\tsoft_request_entry_binding(task_index),
+          \t\t\t"sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          '''
+          if test_text.count(return_marker) != 1:
+              raise RuntimeError('soft bounded task return marker changed')
+          test_text = test_text.replace(return_marker, return_replacement)
+          old_begin = '''\t[[nodiscard]] materialization_bounded_claim_source
+          \tbegin_soft_source(const sdk::relation_engine& value, const std::uint64_t task_count)
+          \t{
+          \t\tauto source = materialization_bounded_claim_source::begin(
+          \t\t\t"materialization-request:soft-unresolved", value, task_count);
+          \t\trequire(source.has_value(), "soft-reference bounded source begin failed");
+          \t\treturn std::move(*source);
+          \t}
+          '''
+          new_begin = '''\t[[nodiscard]] materialization_bounded_claim_source
+          \tbegin_soft_source(const sdk::relation_engine& value, const std::uint64_t task_count)
+          \t{
+          \t\tstd::vector<std::string> bindings;
+          \t\tbindings.reserve(static_cast<std::size_t>(task_count));
+          \t\tfor (std::uint64_t task_index{}; task_index < task_count; ++task_index)
+          \t\t\tbindings.push_back(soft_request_entry_binding(task_index));
+          \t\tauto source = materialization_bounded_claim_source::begin(
+          \t\t\t"materialization-request:soft-unresolved", value, std::move(bindings));
+          \t\trequire(source.has_value(), "soft-reference bounded source begin failed");
+          \t\treturn std::move(*source);
+          \t}
+          '''
+          if test_text.count(old_begin) != 1:
+              raise RuntimeError('soft bounded source helper changed')
+          test_text = test_text.replace(old_begin, new_begin)
+          test_text = test_text.replace(
+              '''soft_bounded_task(
+          \t\t\t\t\t\tvalue, source_claim, unresolved, "source-only")''',
+              '''soft_bounded_task(
+          \t\t\t\t\t\tvalue, source_claim, unresolved, "source-only", 0U)''',
+          )
+          old_cross = '''\t\tauto source = begin_soft_source(value, 2U);
+          \t\tauto source_task = soft_bounded_task(
+          \t\t\tvalue, source_claim, soft_unresolved_for(value, source_claim), "source");
+          \t\tauto target_task =
+          \t\t\tsoft_bounded_task(value, target_claim, {}, "target");
+          '''
+          new_cross = '''\t\tauto source = begin_soft_source(value, 2U);
+          \t\tconst auto source_index = reverse ? 1U : 0U;
+          \t\tconst auto target_index = reverse ? 0U : 1U;
+          \t\tauto source_task = soft_bounded_task(value,
+          \t\t\t			\t\t\t\t\t\t source_claim,
+          \t\t\t		\t\t\t\t\t\t soft_unresolved_for(value, source_claim),
+          \t\t\t		\t\t\t\t\t\t "source",
+          \t\t\t		\t\t\t\t\t\t source_index);
+          \t\tauto target_task =
+          \t\t\tsoft_bounded_task(value, target_claim, {}, "target", target_index);
+          '''
+          if test_text.count(old_cross) != 1:
+              raise RuntimeError('cross-task soft fixture changed')
+          test_text = test_text.replace(old_cross, new_cross)
+          test_file.write_text(test_text, encoding='utf-8')
+          PY
           git diff --check
           printf '%s\n' \
             src/llvm/clang22/materialization_bounded_claim_source.cpp \
