@@ -17881,10 +17881,15 @@ def validate_baseline_recovery_source_bindings(
     required_artifacts = re.search(
         r"(?ms)  foreach\(\s*required IN.*?  endforeach\(\)", install_test
     )
-    materializer_path = '"${install_prefix}/bin/cxxlens-clang22-materialize"'
+    materializer_paths = (
+        '"${install_prefix}/bin/cxxlens-clang22-materialize"',
+        '"${install_prefix}/bin/cxxlens-clang22-materialize${install_executable_suffix}"',
+    )
     if (
         required_artifacts is None
-        or materializer_path not in required_artifacts.group(0)
+        or not any(
+            path in required_artifacts.group(0) for path in materializer_paths
+        )
     ):
         fail(
             "materialization.installed-surface-invalid",

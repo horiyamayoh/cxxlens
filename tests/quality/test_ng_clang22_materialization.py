@@ -114,6 +114,32 @@ class NgClang22MaterializationTests(unittest.TestCase):
             ).read_text(encoding="utf-8"),
         }
         materialization.validate_baseline_recovery_source_bindings(**documents)
+        canonical_materializer_path = (
+            '"${install_prefix}/bin/cxxlens-clang22-materialize"'
+        )
+        suffix_aware_materializer_path = (
+            '"${install_prefix}/bin/cxxlens-clang22-materialize'
+            '${install_executable_suffix}"'
+        )
+        suffix_aware_documents = copy.deepcopy(documents)
+        suffix_aware_documents["install_test"] = suffix_aware_documents[
+            "install_test"
+        ].replace(canonical_materializer_path, suffix_aware_materializer_path, 1)
+        materialization.validate_baseline_recovery_source_bindings(
+            **suffix_aware_documents
+        )
+        suffix_aware_documents["install_test"] = suffix_aware_documents[
+            "install_test"
+        ].replace(
+            suffix_aware_materializer_path,
+            '"${install_prefix}/bin/cxxlens-clang22-materialize-removed'
+            '${install_executable_suffix}"',
+            1,
+        )
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_baseline_recovery_source_bindings(
+                **suffix_aware_documents
+            )
         mutations = (
             (
                 "root_cmake",
@@ -134,7 +160,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             ),
             (
                 "install_test",
-                '"${install_prefix}/bin/cxxlens-clang22-materialize"',
+                canonical_materializer_path,
                 '"${install_prefix}/bin/cxxlens-clang22-materialize-removed"',
             ),
             (
