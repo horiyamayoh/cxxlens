@@ -245,12 +245,62 @@ class AgentContextTests(unittest.TestCase):
         )
         for row in packet["authority_reading_bindings"]:
             self.assertTrue((ROOT / row["path"]).is_file())
-            self.assertEqual(row["digest"], agent.file_digest(ROOT / row["path"]))
+            blob, content = agent.git_authority.bind_head_blob(ROOT, row["path"])
+            self.assertEqual(row["blob"], blob)
+            self.assertEqual(row["digest"], agent.git_authority.sha256_digest(content))
         with self.assertRaisesRegex(
             agent.AgentContextError,
             r"agent-context\.authority-reading-path-missing",
         ):
             agent.bind_authority_reading(ROOT, ["AGENTS.md", "missing-authority.md"])
+
+    def test_ambient_untracked_authority_is_rejected(self) -> None:
+        ambient = ROOT / "agent-context-ambient-authority.md"
+        ambient.write_text("ambient authority\n", encoding="utf-8")
+        self.addCleanup(lambda: ambient.unlink(missing_ok=True))
+        with self.assertRaisesRegex(
+            agent.AgentContextError,
+            r"agent-context\.authority-reading-path-not-tracked",
+        ):
+            agent.bind_authority_reading(ROOT, [ambient.relative_to(ROOT).as_posix()])
+
+    def test_git_metadata_and_non_blob_authority_are_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            agent.AgentContextError,
+            r"agent-context\.authority-reading-set-noncanonical",
+        ):
+            agent.bind_authority_reading(ROOT, [".git/HEAD"])
+        with self.assertRaisesRegex(
+            agent.AgentContextError,
+            r"agent-context\.authority-reading-path-not-blob",
+        ):
+            agent.bind_authority_reading(ROOT, ["docs"])
+
+    def test_symlink_authority_is_rejected(self) -> None:
+        with mock.patch.object(pathlib.Path, "is_symlink", return_value=True), self.assertRaisesRegex(
+            agent.AgentContextError,
+            r"agent-context\.authority-reading-path-symlink",
+        ):
+            agent.bind_authority_reading(ROOT, ["AGENTS.md"])
+
+    def test_head_blob_content_drift_is_rejected_even_when_status_is_clean(self) -> None:
+        path = ROOT / agent.READINESS_SCHEMA_PATH
+        original = path.read_bytes()
+        path.write_bytes(original + b"\n# hidden tracked authority mutation\n")
+        self.addCleanup(lambda: path.write_bytes(original))
+        with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
+            agent.catalog, "reject_dirty_source_files"
+        ), self.assertRaisesRegex(
+            agent.AgentContextError,
+            r"agent-context\.authority-source-.*path-content-mismatch",
+        ):
+            agent.build_context(
+                ROOT,
+                use_case_id=USE_CASE_ID,
+                issue="#261",
+                revision=git_value("HEAD"),
+                tree=git_value("HEAD^{tree}"),
+            )
 
     def test_design_feedback_metadata_is_exactly_blocked_pending(self) -> None:
         metadata, _ = agent.design_feedback.split_front_matter(

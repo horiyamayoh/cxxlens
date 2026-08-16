@@ -192,6 +192,57 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         ):
             readiness._product_contract(mutated)
 
+    def test_head_authority_rejects_assume_unchanged_manifest_mutation(self) -> None:
+        relative = readiness.MANIFEST.as_posix()
+        path = ROOT / readiness.MANIFEST
+        original = path.read_bytes()
+        prior_flag = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "-v", "--", relative],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.startswith("h")
+        try:
+            path.write_bytes(original + b"\n# hidden tracked authority mutation\n")
+            subprocess.run(
+                ["git", "-C", str(ROOT), "update-index", "--assume-unchanged", "--", relative],
+                check=True,
+            )
+            self.assertEqual(
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(ROOT),
+                        "status",
+                        "--porcelain=v1",
+                        "--untracked-files=all",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout,
+                "",
+            )
+            with self.assertRaisesRegex(
+                readiness.ReadinessError, "path-content-mismatch"
+            ):
+                readiness.validate_documents(ROOT)
+        finally:
+            path.write_bytes(original)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(ROOT),
+                    "update-index",
+                    "--assume-unchanged" if prior_flag else "--no-assume-unchanged",
+                    "--",
+                    relative,
+                ],
+                check=True,
+            )
+
     def test_unknown_demand_capability_is_rejected(self) -> None:
         manifest = copy.deepcopy(self.manifest)
         use_case, _ = readiness._product_contract(manifest)
@@ -322,6 +373,10 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             shutil.copy2(
                 ROOT / readiness.BASELINE_PATH,
                 root / readiness.BASELINE_PATH,
+            )
+            shutil.copy2(
+                ROOT / "tools/quality/check_ng_git_authority.py",
+                root / "tools/quality/check_ng_git_authority.py",
             )
             self.assertFalse((root / ".git").exists())
             completed = subprocess.run(

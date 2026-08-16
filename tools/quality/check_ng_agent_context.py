@@ -23,6 +23,7 @@ import yaml
 
 import check_ng_use_case_capability_catalog as catalog
 import check_ng_design_feedback as design_feedback
+import check_ng_git_authority as git_authority
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -145,7 +146,7 @@ def canonical_repository_path(value: Any) -> bool:
     if value.startswith(("/", "\\")) or "\\" in value or "\x00" in value:
         return False
     parts = value.split("/")
-    return all(part not in {"", ".", ".."} for part in parts)
+    return all(part not in {"", ".", "..", ".git"} for part in parts)
 
 
 def path_conflicts(left: str, right: str) -> bool:
@@ -343,14 +344,20 @@ def bind_authority_reading(
     root = root.resolve()
     bindings: list[dict[str, str]] = []
     for relative in paths:
-        candidate = (root / relative).resolve()
         try:
-            candidate.relative_to(root)
-        except ValueError:
-            fail(f"agent-context.authority-reading-path-escapes-root:{relative}")
-        if not candidate.is_file():
-            fail(f"agent-context.authority-reading-path-missing:{relative}")
-        bindings.append({"path": relative, "digest": file_digest(candidate)})
+            blob, content = git_authority.bind_head_blob(root, relative)
+        except git_authority.GitAuthorityError as error:
+            code = str(error).removeprefix("git-authority.")
+            if code.startswith("path-missing:"):
+                fail(f"agent-context.authority-reading-path-missing:{relative}")
+            fail(f"agent-context.authority-reading-{code}")
+        bindings.append(
+            {
+                "path": relative,
+                "blob": blob,
+                "digest": git_authority.sha256_digest(content),
+            }
+        )
     return bindings
 
 
@@ -411,6 +418,23 @@ def build_context(
         fail("agent-context.exact-sha-invalid")
     if (git_value(root, "HEAD"), git_value(root, "HEAD^{tree}")) != (revision, tree):
         fail("agent-context.source-revision-or-tree-mismatch")
+    try:
+        git_authority.require_head_bound_paths(
+            root,
+            (
+                READINESS_PATH.as_posix(),
+                READINESS_SCHEMA_PATH.as_posix(),
+                CONTEXT_SCHEMA_PATH.as_posix(),
+                catalog.CATALOG_SCHEMA_PATH.as_posix(),
+                DESIGN_FEEDBACK_SCHEMA_PATH.as_posix(),
+                DF_0261_RECORD_PATH.as_posix(),
+                GENERATOR_PATH.as_posix(),
+                pathlib.Path(catalog.__file__).resolve().relative_to(root).as_posix(),
+                pathlib.Path(design_feedback.__file__).resolve().relative_to(root).as_posix(),
+            ),
+        )
+    except (git_authority.GitAuthorityError, ValueError) as error:
+        fail(f"agent-context.authority-source-{error}")
     readiness, _readiness_schema, context_schema = load_authorities(root)
     family, template, report = select_source(root, readiness, use_case_id)
     if template.get("issue") != issue:
@@ -581,59 +605,6 @@ def validate_context(
         tree=tree,
     )
     if packet != expected:
-        fail("agent-context.stale-or-not-machine-derived")
-    without_digest = copy.deepcopy(packet)
-    actual = without_digest.pop("canonical_digest", None)
-    if actual != digest(without_digest):
-        fail("agent-context.canonical-digest-mismatch")
-
-
-def validate_context_integrity(
-    root: pathlib.Path,
-    packet: dict[str, Any],
-    *,
-    revision: str,
-    tree: str,
-) -> None:
-    """Validate an already-produced packet without acting as its generator.
-
-    The readiness report consumer uses this path so it can validate an artifact's
-    exact provenance and local authority digests without reconstructing a second
-    packet generator.  The public plan/check CLI continues to use ``build_context``
-    and therefore requires a clean source worktree before generation or checking.
-    """
-    _readiness, _readiness_schema, context_schema = load_authorities(root)
-    validate_schema(packet, context_schema, "agent-context")
-    binding = packet.get("binding")
-    if not isinstance(binding, dict) or (
-        binding.get("revision"), binding.get("tree")
-    ) != (revision, tree):
-        fail("agent-context.stale-or-not-machine-derived")
-    if (
-        packet.get("authority_scope") != PROJECTION_AUTHORITY
-        or packet.get("release_authority") != PROJECTION_RELEASE_AUTHORITY
-        or binding.get("worktree") != "clean"
-        or binding.get("generator") != GENERATOR_PATH.as_posix()
-        or binding.get("authority_scope") != PROJECTION_AUTHORITY
-        or binding.get("release_authority") != PROJECTION_RELEASE_AUTHORITY
-    ):
-        fail("agent-context.stale-or-not-machine-derived")
-    readings = bind_authority_reading(root, packet["authority_reading_set"])
-    if readings != packet["authority_reading_bindings"]:
-        fail("agent-context.stale-or-not-machine-derived")
-    if binding.get("authority_reading_digest") != digest(readings):
-        fail("agent-context.stale-or-not-machine-derived")
-    records = bind_design_feedback(root)
-    if records != packet["design_feedback_records"]:
-        fail("agent-context.stale-or-not-machine-derived")
-    if binding.get("design_feedback_records_digest") != digest(records):
-        fail("agent-context.stale-or-not-machine-derived")
-    gate = _readiness["product_direction"]["constructibility_gate"]
-    gate_digest = digest(gate)
-    if (
-        binding.get("constructibility_authority_digest") != gate_digest
-        or packet["constructibility"].get("authority_digest") != gate_digest
-    ):
         fail("agent-context.stale-or-not-machine-derived")
     without_digest = copy.deepcopy(packet)
     actual = without_digest.pop("canonical_digest", None)

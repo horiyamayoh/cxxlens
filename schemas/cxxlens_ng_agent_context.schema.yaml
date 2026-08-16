@@ -284,9 +284,10 @@ $defs:
   authority_reading_binding:
     type: object
     additionalProperties: false
-    required: [path, digest]
+    required: [path, blob, digest]
     properties:
       path: {$ref: '#/$defs/repository_path'}
+      blob: {$ref: '#/$defs/hex40'}
       digest: {$ref: '#/$defs/digest'}
   design_feedback_record:
     type: object

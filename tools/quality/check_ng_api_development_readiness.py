@@ -23,6 +23,8 @@ from typing import Any
 
 import yaml
 
+import check_ng_git_authority as git_authority
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASELINE_PATH = pathlib.Path(
@@ -660,7 +662,69 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     _legacy_projection(root, manifest)
 
 
+def _require_head_bound_authorities(root: pathlib.Path) -> None:
+    fixed_paths = [
+        BASELINE_PATH,
+        MANIFEST,
+        MANIFEST_SCHEMA,
+        REPORT_SCHEMA,
+        QUALITY_PATH,
+        NIGHTLY_PATH,
+        BUILD_TEST_GUIDE_PATH,
+        AGENT_GOAL_PATH,
+        RELEASE_BUNDLE,
+        PUBLIC_API,
+        RELATION_REGISTRY,
+        ACCEPTANCE,
+        PUBLIC_CALLABLE_INVENTORY,
+        PUBLIC_CALLABLE_INVENTORY_SCHEMA,
+        PUBLIC_CALLABLE_REPORT_SCHEMA,
+        PUBLIC_CALLABLE_CHECKER,
+        PRODUCTION_SCOPE_MANIFEST,
+        PRODUCTION_SCOPE_MANIFEST_SCHEMA,
+        PRODUCTION_SCOPE_REPORT_SCHEMA,
+        PRODUCTION_SCOPE_CHECKER,
+        PRODUCTION_SCOPE_DECISION_ADR,
+        IMPLEMENTATION_LEARNING_HANDBOOK,
+        DESIGN_FEEDBACK_SCHEMA,
+        DESIGN_FEEDBACK_CHECKER,
+        DESIGN_FEEDBACK_ISSUE_TEMPLATE,
+        AGENT_CONTRACT,
+        AUTHORIZATION_DECISION_ADR,
+        pathlib.Path(__file__).resolve().relative_to(root),
+        pathlib.Path(git_authority.__file__).resolve().relative_to(root),
+    ]
+    try:
+        _manifest_blob, manifest_bytes = git_authority.bind_head_blob(
+            root, MANIFEST.as_posix()
+        )
+        manifest = yaml.safe_load(manifest_bytes.decode("utf-8"))
+        if not isinstance(manifest, dict):
+            _fail("HEAD readiness manifest is not a mapping")
+        packet = (
+            manifest.get("product_direction", {})
+            .get("agent_context", {})
+            .get("first_packet", {})
+        )
+        authority_paths = packet.get("authority_reading_set")
+        if not isinstance(authority_paths, list) or not all(
+            isinstance(path, str) for path in authority_paths
+        ):
+            _fail("HEAD #261 authority reading set is missing")
+        fixed_paths.extend(pathlib.Path(path) for path in authority_paths)
+        git_authority.require_head_bound_paths(
+            root,
+            tuple(path.as_posix() for path in fixed_paths),
+        )
+    except git_authority.GitAuthorityError as error:
+        _fail(f"agent-context.authority-source-{error}")
+    except (UnicodeDecodeError, yaml.YAMLError) as error:
+        _fail(f"agent-context.authority-manifest-invalid:{error}")
+
+
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
+    if (root / ".git").exists():
+        _require_head_bound_authorities(root)
     manifest = _baseline_validate_documents(root)
     validate_bounded_completion_contract(root)
     validate_demand_closure(root, manifest)
