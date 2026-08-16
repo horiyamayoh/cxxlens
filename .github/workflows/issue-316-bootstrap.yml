@@ -17,7 +17,7 @@ jobs:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'issue-316-ci-setup-integration'
-    runs-on: ubuntu-22.04
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -81,14 +81,14 @@ jobs:
           rm -f .github/workflows/issue-316-bootstrap.yml
           rmdir .github/bootstrap 2>/dev/null || true
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: "3.12.11"
-
-      - name: Install exact checker dependencies
-        run: >-
-          python -m pip install --require-hashes --only-binary=:all:
-          --requirement tools/quality/requirements.lock
+      - name: Create isolated checker environment
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/issue-316-venv"
+          "${RUNNER_TEMP}/issue-316-venv/bin/python" -m pip install \
+            --disable-pip-version-check \
+            --requirement tools/quality/requirements.txt
+          echo "${RUNNER_TEMP}/issue-316-venv/bin" >> "${GITHUB_PATH}"
 
       - name: Regenerate tracked inventories
         run: |
