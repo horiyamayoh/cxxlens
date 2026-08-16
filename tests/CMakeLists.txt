@@ -1177,3 +1177,11 @@ add_dependencies(
   cxxlens-sdk-negative-invalid_recipe
   cxxlens-sdk-negative-provider_no_credit
   cxxlens-g5-runtime)
+
+if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)
+  add_dependencies(cxxlens-ng-test-binaries cxxlens-sanitizer-canary)
+endif()
+if(CXXLENS_ENABLE_TSAN)
+  add_dependencies(cxxlens-ng-test-binaries cxxlens-tsan-test-canary
+                   cxxlens-tsan-provider-canary)
+endif()
