@@ -1369,6 +1369,7 @@ namespace cxxlens::detail::clang22::materialization
 	}
 
 	sealed_materialization_claims::sealed_materialization_claims(
+		materialization_claim_request_binding request_binding,
 		std::string materializer_semantics_digest,
 		std::string direct_basis_digest,
 		std::string canonical_adoption_transform_digest,
@@ -1379,7 +1380,8 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<materialization_canonicalization_edge> canonicalization_edges,
 		std::vector<materialization_origin_association> origin_associations,
 		std::vector<materialization_claim_partition> partitions)
-		: materializer_semantics_digest_{std::move(materializer_semantics_digest)},
+		: request_binding_{std::move(request_binding)},
+		  materializer_semantics_digest_{std::move(materializer_semantics_digest)},
 		  direct_basis_digest_{std::move(direct_basis_digest)},
 		  canonical_adoption_transform_digest_{std::move(canonical_adoption_transform_digest)},
 		  base_ingestion_transform_digest_{std::move(base_ingestion_transform_digest)},
@@ -1446,6 +1448,37 @@ namespace cxxlens::detail::clang22::materialization
 		return partitions_;
 	}
 
+	sdk::result<materialization_claim_request_binding>
+	make_materialization_claim_request_binding(const validated_materialization_request& request)
+	{
+		if (request.tasks.size() > std::numeric_limits<std::uint64_t>::max())
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "request",
+											   "request-identity-or-task-census"));
+		auto request_id = materialization_incremental_request_id(request);
+		if (!request_id)
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "request",
+											   "request-identity-or-task-census"));
+		return materialization_claim_request_binding{
+			std::move(*request_id),
+			request.catalog.catalog_id,
+			request.catalog.catalog_digest,
+			static_cast<std::uint64_t>(request.tasks.size())};
+	}
+
+	sdk::result<void>
+	validate_materialization_claim_request_binding(const validated_materialization_request& request,
+												   const sealed_materialization_claims& claims)
+	{
+		auto expected = make_materialization_claim_request_binding(request);
+		if (!expected || claims.request_binding_ != *expected)
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "request",
+											   "request-identity-or-task-census"));
+		return {};
+	}
+
 	sdk::result<sealed_materialization_claims> construct_materialization_claims_from_loader(
 		const validated_materialization_request& request,
 		const materialization_task_result_loader& load,
@@ -1458,6 +1491,9 @@ namespace cxxlens::detail::clang22::materialization
 		if (auto valid = request.catalog.validate(); !valid)
 			return sdk::unexpected(claim_error(
 				"materialization.claim-invalid", "project-catalog", nested_error(valid.error())));
+		auto request_binding = make_materialization_claim_request_binding(request);
+		if (!request_binding)
+			return sdk::unexpected(std::move(request_binding.error()));
 
 		std::vector<materialization_semantic_task_context> contexts;
 		contexts.reserve(request.tasks.size());
@@ -2083,7 +2119,8 @@ namespace cxxlens::detail::clang22::materialization
 			association_values.push_back(std::move(association));
 		}
 
-		return sealed_materialization_claims{basis->materializer_semantics,
+		return sealed_materialization_claims{std::move(*request_binding),
+											 basis->materializer_semantics,
 											 basis->direct_basis,
 											 basis->canonical_transform,
 											 basis->base_transform,

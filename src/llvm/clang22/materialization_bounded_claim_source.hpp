@@ -124,6 +124,12 @@ namespace cxxlens::detail::clang22::materialization
 			return materialization_request_id_;
 		}
 
+		/** Return the complete source-private request binding sealed at source admission. */
+		[[nodiscard]] const materialization_claim_request_binding& request_binding() const noexcept
+		{
+			return request_binding_;
+		}
+
 		/** Return the exact task census sealed into this source's request authority. */
 		[[nodiscard]] std::uint64_t task_count() const noexcept
 		{
@@ -154,18 +160,20 @@ namespace cxxlens::detail::clang22::materialization
 			std::uint64_t appended_claim_count{};
 		};
 
-		materialization_bounded_claim_source(std::string materialization_request_id,
+		materialization_bounded_claim_source(materialization_claim_request_binding request_binding,
 											 const sdk::relation_engine& engine,
 											 std::uint64_t expected_task_count,
 											 std::function<sdk::result<std::string>(std::size_t)>
 												 selected_request_entry_binding_resolver)
-			: materialization_request_id_{std::move(materialization_request_id)}, engine_{&engine},
-			  expected_task_count_{expected_task_count},
+			: request_binding_{std::move(request_binding)},
+			  materialization_request_id_{request_binding_.materialization_request_id},
+			  engine_{&engine}, expected_task_count_{expected_task_count},
 			  selected_request_entry_binding_resolver_{
 				  std::move(selected_request_entry_binding_resolver)}
 		{
 		}
 
+		materialization_claim_request_binding request_binding_;
 		std::string materialization_request_id_;
 		const sdk::relation_engine* engine_{};
 		std::uint64_t expected_task_count_{};
