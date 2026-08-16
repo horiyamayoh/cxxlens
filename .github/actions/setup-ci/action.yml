@@ -1,0 +1,68 @@
+name: Exact cxxlens CI setup
+description: Install the exact locked CI environment through one reviewed action.
+inputs:
+  profile:
+    description: LLVM profile to install (none, compiler, developer, or static-analysis).
+    required: false
+    default: none
+  documentation:
+    description: Install the exact locked Doxygen package.
+    required: false
+    default: "false"
+  python-dependencies:
+    description: Install exact Python and the hash-locked quality dependencies.
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Validate setup inputs
+      shell: bash
+      run: |
+        case "${{ inputs.profile }}" in
+          none|compiler|developer|static-analysis) ;;
+          *)
+            echo "unsupported cxxlens CI profile: ${{ inputs.profile }}" >&2
+            exit 2
+            ;;
+        esac
+        case "${{ inputs.documentation }}" in
+          true|false) ;;
+          *)
+            echo "documentation must be true or false" >&2
+            exit 2
+            ;;
+        esac
+        case "${{ inputs.python-dependencies }}" in
+          true|false) ;;
+          *)
+            echo "python-dependencies must be true or false" >&2
+            exit 2
+            ;;
+        esac
+
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      if: ${{ inputs.python-dependencies == 'true' }}
+      with:
+        python-version: "3.12.11"
+        cache: pip
+        cache-dependency-path: tools/quality/requirements.lock
+
+    - name: Install exact locked LLVM profile
+      if: ${{ inputs.profile != 'none' }}
+      shell: bash
+      run: >-
+        python3 tools/ci/bootstrap_supply_chain.py install
+        --profile "${{ inputs.profile }}"
+
+    - name: Install exact locked documentation package
+      if: ${{ inputs.documentation == 'true' }}
+      shell: bash
+      run: >-
+        python3 tools/ci/bootstrap_supply_chain.py install
+        --profile documentation
+
+    - name: Install exact Python quality dependencies
+      if: ${{ inputs.python-dependencies == 'true' }}
+      shell: bash
+      run: python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock

@@ -31,15 +31,28 @@ def file_digest(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def local_workflow_lock(root: pathlib.Path) -> dict[str, str]:
+def local_reference_lock(
+    root: pathlib.Path, reference: pathlib.PurePosixPath, kind: str
+) -> tuple[pathlib.Path, str]:
     try:
         lock = json.loads((root / SUPPLY_CHAIN_LOCK).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"could not read local workflow lock: {error}") from error
-    workflows = lock.get("local_workflows")
-    if not isinstance(workflows, dict):
-        raise ValueError("local workflow lock is missing")
-    return workflows
+        raise ValueError(f"could not read local reference lock: {error}") from error
+    if kind == "workflow":
+        section = lock.get("local_workflows")
+        local_path = root / reference
+    elif kind == "action":
+        section = lock.get("local_actions")
+        reference = pathlib.PurePosixPath(reference.as_posix() + "/action.yml")
+        local_path = root / reference
+    else:
+        raise ValueError(f"unknown local reference kind: {kind}")
+    if not isinstance(section, dict):
+        raise ValueError(f"local {kind} lock is missing")
+    expected = section.get(reference.as_posix())
+    if not isinstance(expected, str):
+        raise ValueError(f"local {kind} is absent from supply-chain lock: {reference}")
+    return local_path, expected
 
 
 def provenance_digest(document: dict[str, Any]) -> str:
@@ -144,32 +157,36 @@ def pinned_actions(root: pathlib.Path) -> list[dict[str, str]]:
             if reference.startswith("./"):
                 local_reference = pathlib.PurePosixPath(reference[2:])
                 if (
-                    not reference.startswith("./.github/workflows/")
-                    or local_reference.is_absolute()
+                    local_reference.is_absolute()
                     or ".." in local_reference.parts
                     or local_reference.as_posix() != reference[2:]
                 ):
                     raise ValueError(
-                        f"local workflow reference is not a tracked workflow: {workflow}: {reference}"
+                        f"local reference is not repository-scoped: {workflow}: {reference}"
                     )
-                local_path = root / local_reference
-                if not local_path.is_file():
+                if reference.startswith("./.github/workflows/"):
+                    kind = "workflow"
+                elif reference.startswith("./.github/actions/"):
+                    kind = "action"
+                else:
                     raise ValueError(
-                        f"local workflow reference is unavailable: {workflow}: {reference}"
+                        f"unsupported local reference: {workflow}: {reference}"
                     )
-                expected_digest = local_workflow_lock(root).get(local_reference.as_posix())
+                local_path, expected_digest = local_reference_lock(
+                    root, local_reference, kind
+                )
                 if (
-                    not isinstance(expected_digest, str)
+                    not local_path.is_file()
                     or len(expected_digest) != 64
                     or any(character not in "0123456789abcdef" for character in expected_digest)
                 ):
                     raise ValueError(
-                        f"local workflow is absent from supply-chain lock: {workflow}: {reference}"
+                        f"local {kind} lock binding is invalid: {workflow}: {reference}"
                     )
                 actual_digest = file_digest(local_path).removeprefix("sha256:")
                 if actual_digest != expected_digest:
                     raise ValueError(
-                        f"local workflow differs from supply-chain lock: {workflow}: {reference}"
+                        f"local {kind} differs from supply-chain lock: {workflow}: {reference}"
                     )
                 continue
             name, separator, revision = reference.partition("@")

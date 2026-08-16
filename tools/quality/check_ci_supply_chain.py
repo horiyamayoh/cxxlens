@@ -23,9 +23,11 @@ CONTRACT_SCHEMA = pathlib.Path(
 LOCK = pathlib.Path("tools/ci/llvm22-noble.lock.json")
 REQUIREMENTS = pathlib.Path("tools/quality/requirements.txt")
 REQUIREMENTS_LOCK = pathlib.Path("tools/quality/requirements.lock")
+SETUP_ACTION = pathlib.Path(".github/actions/setup-ci/action.yml")
 WORKFLOWS = (
     pathlib.Path(".github/workflows/quality.yml"),
     pathlib.Path(".github/workflows/nightly.yml"),
+    pathlib.Path(".github/workflows/pr-integration.yml"),
 )
 REQUIREMENT = re.compile(
     r"^([A-Za-z0-9_.-]+)==([^\s]+)\s+--hash=sha256:([0-9a-f]{64})$"
@@ -116,38 +118,50 @@ def validate_workflow(path: pathlib.Path, lock: dict[str, Any]) -> None:
             if reference.startswith("./"):
                 local_reference = pathlib.PurePosixPath(reference[2:])
                 if (
-                    not reference.startswith("./.github/workflows/")
-                    or local_reference.is_absolute()
+                    local_reference.is_absolute()
                     or ".." in local_reference.parts
                     or local_reference.as_posix() != reference[2:]
                 ):
                     raise CiSupplyChainError(
-                        f"local workflow reference is not repository-scoped: {path}: {reference}"
+                        f"local reference is not repository-scoped: {path}: {reference}"
                     )
                 repository_root = path.parents[2]
-                local_path = repository_root / local_reference
+                if reference.startswith("./.github/workflows/"):
+                    local_path = repository_root / local_reference
+                    lock_section = lock.get("local_workflows")
+                    label = "workflow"
+                elif reference.startswith("./.github/actions/"):
+                    local_path = repository_root / local_reference / "action.yml"
+                    local_reference = pathlib.PurePosixPath(
+                        local_reference.as_posix() + "/action.yml"
+                    )
+                    lock_section = lock.get("local_actions")
+                    label = "action"
+                else:
+                    raise CiSupplyChainError(
+                        f"unsupported local reference: {path}: {reference}"
+                    )
                 if not local_path.is_file():
                     raise CiSupplyChainError(
-                        f"local workflow reference is unavailable: {path}: {reference}"
+                        f"local {label} reference is unavailable: {path}: {reference}"
                     )
-                local_workflows = lock.get("local_workflows")
-                if not isinstance(local_workflows, dict):
+                if not isinstance(lock_section, dict):
                     raise CiSupplyChainError(
-                        f"local workflow lock is missing: {path}: {reference}"
+                        f"local {label} lock is missing: {path}: {reference}"
                     )
-                expected_digest = local_workflows.get(local_reference.as_posix())
+                expected_digest = lock_section.get(local_reference.as_posix())
                 if (
                     not isinstance(expected_digest, str)
                     or len(expected_digest) != 64
                     or any(character not in "0123456789abcdef" for character in expected_digest)
                 ):
                     raise CiSupplyChainError(
-                        f"local workflow is absent from supply-chain lock: {path}: {reference}"
+                        f"local {label} is absent from supply-chain lock: {path}: {reference}"
                     )
                 actual_digest = local_workflow_digest(local_path)
                 if actual_digest != expected_digest:
                     raise CiSupplyChainError(
-                        f"local workflow differs from supply-chain lock: {path}: {reference}"
+                        f"local {label} differs from supply-chain lock: {path}: {reference}"
                     )
                 continue
             name, separator, revision = reference.partition("@")
@@ -202,19 +216,31 @@ def validate_repository(root: pathlib.Path) -> None:
             raise CiSupplyChainError(f"direct requirement differs from hash lock: {name}")
     for workflow in WORKFLOWS:
         validate_workflow(root / workflow, lock)
+    validate_workflow(root / SETUP_ACTION, lock)
     workflow_text = "\n".join(
         (root / workflow).read_text(encoding="utf-8") for workflow in WORKFLOWS
     )
-    expected_profiles = {
-        "--profile developer": 10,
-        "--profile compiler": 0,
-        "--profile static-analysis": 1,
-        "--profile documentation": 1,
-    }
-    for marker, expected in expected_profiles.items():
-        if workflow_text.count(marker) != expected:
+    for marker in (
+        "bootstrap_supply_chain.py install --profile",
+        "actions/setup-python@",
+        "python -m pip install --require-hashes",
+    ):
+        if marker in workflow_text:
             raise CiSupplyChainError(
-                f"workflow bootstrap profile count differs: {marker}: expected {expected}"
+                f"workflow duplicates setup owned by the composite action: {marker}"
+            )
+    if workflow_text.count("./.github/actions/setup-ci") < 10:
+        raise CiSupplyChainError("too few CI jobs use the common setup action")
+    setup_text = (root / SETUP_ACTION).read_text(encoding="utf-8")
+    for marker in (
+        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+        "cache: pip",
+        "bootstrap_supply_chain.py install",
+        "tools/quality/requirements.lock",
+    ):
+        if marker not in setup_text:
+            raise CiSupplyChainError(
+                f"common CI setup action lacks required binding: {marker}"
             )
     if workflow_text.count("collect_toolchain_provenance.py") < 8:
         raise CiSupplyChainError("toolchain provenance is not collected by all evidence jobs")

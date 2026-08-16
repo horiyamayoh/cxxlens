@@ -65,6 +65,7 @@ class NgCiSupplyChainTest(unittest.TestCase):
             root = pathlib.Path(temporary)
             workflows = root / ".github/workflows"
             workflows.mkdir(parents=True)
+            shutil.copytree(ROOT / ".github/actions", root / ".github/actions")
             shutil.copy2(ROOT / ".github/workflows/quality.yml", workflows / "quality.yml")
             shutil.copy2(ROOT / ".github/workflows/nightly.yml", workflows / "nightly.yml")
             (workflows / "nightly.yml").write_text(
@@ -196,6 +197,38 @@ class NgCiSupplyChainTest(unittest.TestCase):
             lock_path.write_text(json.dumps(changed), encoding="utf-8")
             with self.assertRaisesRegex(SupplyChainError, "unlocked packages"):
                 load_lock(root)
+
+    def test_common_setup_action_is_locked_and_used(self) -> None:
+        action = ROOT / ".github/actions/setup-ci/action.yml"
+        self.assertTrue(action.is_file())
+        self.assertEqual(
+            self.lock["local_actions"][".github/actions/setup-ci/action.yml"],
+            __import__("hashlib").sha256(action.read_bytes()).hexdigest(),
+        )
+        workflow_text = "\n".join(
+            (ROOT / path).read_text(encoding="utf-8")
+            for path in (
+                ".github/workflows/quality.yml",
+                ".github/workflows/nightly.yml",
+            )
+        )
+        self.assertGreaterEqual(workflow_text.count("./.github/actions/setup-ci"), 10)
+        self.assertNotIn("actions/setup-python@", workflow_text)
+        self.assertNotIn("bootstrap_supply_chain.py install --profile", workflow_text)
+
+    def test_mutated_local_setup_action_is_rejected(self) -> None:
+        import shutil
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            shutil.copytree(ROOT / ".github", root / ".github")
+            shutil.copytree(ROOT / "schemas", root / "schemas")
+            shutil.copytree(ROOT / "tools", root / "tools")
+            action = root / ".github/actions/setup-ci/action.yml"
+            action.write_text(action.read_text(encoding="utf-8") + "# mutation\n", encoding="utf-8")
+            with self.assertRaisesRegex(CiSupplyChainError, "local action differs"):
+                validate_repository(root)
+
 
 
 if __name__ == "__main__":
