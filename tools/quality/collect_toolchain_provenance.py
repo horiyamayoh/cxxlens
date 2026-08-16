@@ -63,6 +63,128 @@ def package_cache_authority_digest(lock: dict[str, Any]) -> str:
     ).hexdigest()
 
 
+def locked_package_profiles(lock: dict[str, Any]) -> dict[str, dict[str, dict[str, str]]]:
+    llvm = lock.get("llvm")
+    documentation = lock.get("documentation")
+    if not isinstance(llvm, dict) or not isinstance(documentation, dict):
+        raise ValueError("package-cache package authority is missing")
+    profiles = llvm.get("profiles")
+    packages = llvm.get("packages")
+    package_digests = llvm.get("package_sha256")
+    architecture = llvm.get("architecture")
+    if (
+        not isinstance(profiles, dict)
+        or not isinstance(packages, dict)
+        or not isinstance(package_digests, dict)
+        or not isinstance(architecture, str)
+    ):
+        raise ValueError("package-cache package authority is invalid")
+
+    result: dict[str, dict[str, dict[str, str]]] = {}
+    for profile, names in profiles.items():
+        if not isinstance(profile, str) or not isinstance(names, list) or not names:
+            raise ValueError("package-cache profile authority is invalid")
+        expected: dict[str, dict[str, str]] = {}
+        for name in names:
+            if not isinstance(name, str) or name in expected:
+                raise ValueError("package-cache package authority is invalid")
+            version = packages.get(name)
+            digest = package_digests.get(name)
+            if (
+                not isinstance(version, str)
+                or not isinstance(digest, str)
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+            ):
+                raise ValueError("package-cache package authority is invalid")
+            expected[name] = {
+                "package": name,
+                "version": version,
+                "architecture": architecture,
+                "package_digest": "sha256:" + digest,
+            }
+        result[profile] = expected
+
+    documentation_package = documentation.get("package")
+    documentation_version = documentation.get("version")
+    documentation_architecture = documentation.get("architecture")
+    documentation_digest = documentation.get("sha256")
+    if not all(
+        isinstance(value, str)
+        for value in (
+            documentation_package,
+            documentation_version,
+            documentation_architecture,
+            documentation_digest,
+        )
+    ) or len(documentation_digest) != 64:
+        raise ValueError("package-cache documentation authority is invalid")
+    result["documentation"] = {
+        documentation_package: {
+            "package": documentation_package,
+            "version": documentation_version,
+            "architecture": documentation_architecture,
+            "package_digest": "sha256:" + documentation_digest,
+        }
+    }
+    return result
+
+
+def validate_package_cache_profiles(
+    lock: dict[str, Any],
+    profiles: Any,
+    cache_hit: str,
+) -> dict[str, list[dict[str, str]]]:
+    if not isinstance(profiles, dict) or not profiles:
+        raise ValueError("package-cache provenance profiles are invalid")
+    expected_profiles = locked_package_profiles(lock)
+    allowed_sources = {"verified-cache", "verified-download"}
+    validated: dict[str, list[dict[str, str]]] = {}
+    required_fields = {
+        "package",
+        "version",
+        "architecture",
+        "package_digest",
+        "source",
+    }
+    for profile, rows in profiles.items():
+        expected = expected_profiles.get(profile)
+        if expected is None or not isinstance(rows, list):
+            raise ValueError("package-cache provenance profile is invalid")
+        if len(rows) != len(expected):
+            raise ValueError(f"package-cache provenance package set differs: {profile}")
+        canonical_rows: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for row in rows:
+            if not isinstance(row, dict) or set(row) != required_fields:
+                raise ValueError("package-cache provenance package record is invalid")
+            package = row.get("package")
+            if not isinstance(package, str):
+                raise ValueError(
+                    f"package-cache provenance package identity differs: {profile}"
+                )
+            expected_record = expected.get(package)
+            if expected_record is None or package in seen:
+                raise ValueError(
+                    f"package-cache provenance package identity differs: {profile}"
+                )
+            if any(row[field] != value for field, value in expected_record.items()):
+                raise ValueError(
+                    f"package-cache provenance package authority differs: {profile}"
+                )
+            source = row.get("source")
+            if source not in allowed_sources:
+                raise ValueError("package-cache provenance package source is invalid")
+            if cache_hit == "hit" and source != "verified-cache":
+                raise ValueError("package-cache provenance cache-hit source differs")
+            seen.add(package)
+            canonical_rows.append(dict(row))
+        if seen != set(expected):
+            raise ValueError(f"package-cache provenance package set differs: {profile}")
+        validated[profile] = sorted(canonical_rows, key=lambda row: row["package"])
+    return validated
+
+
 def package_cache_provenance(lock: dict[str, Any]) -> dict[str, Any]:
     config = lock.get("package_cache")
     if not isinstance(config, dict):
@@ -81,40 +203,38 @@ def package_cache_provenance(lock: dict[str, Any]) -> dict[str, Any]:
     if not path.is_absolute() or not path.is_file():
         raise ValueError("package-cache provenance receipt is unavailable")
     document = json.loads(path.read_text(encoding="utf-8"))
-    expected_key = os.environ.get(config["key_environment"], "unavailable")
-    expected_hit = (
-        "hit"
-        if os.environ.get(config["hit_environment"], "").lower() == "true"
-        else "miss"
-    )
+    expected_key = os.environ.get(config["key_environment"])
+    raw_hit = os.environ.get(config["hit_environment"])
+    if not expected_key or raw_hit not in {"true", "false"}:
+        raise ValueError("package-cache provenance environment binding is invalid")
+    expected_hit = "hit" if raw_hit == "true" else "miss"
     if (
-        document.get("schema") != "cxxlens.ci-package-cache-receipt.v1"
+        not isinstance(document, dict)
+        or document.get("schema") != "cxxlens.ci-package-cache-receipt.v1"
         or document.get("authority_digest") != authority_digest
         or document.get("key") != expected_key
         or document.get("cache_hit") != expected_hit
-        or not isinstance(document.get("profiles"), dict)
+        or set(document) != {
+            "schema",
+            "authority_digest",
+            "key",
+            "cache_hit",
+            "profiles",
+        }
     ):
         raise ValueError("package-cache provenance receipt binding differs")
-    allowed_sources = {"verified-cache", "verified-download"}
-    for profile, rows in document["profiles"].items():
-        if not isinstance(profile, str) or not isinstance(rows, list) or not rows:
-            raise ValueError("package-cache provenance profile is invalid")
-        for row in rows:
-            if (
-                not isinstance(row, dict)
-                or row.get("source") not in allowed_sources
-                or not isinstance(row.get("package_digest"), str)
-                or not row["package_digest"].startswith("sha256:")
-            ):
-                raise ValueError("package-cache provenance package record is invalid")
+    validated_profiles = validate_package_cache_profiles(
+        lock, document["profiles"], expected_hit
+    )
     return {
         "status": "verified",
         "authority_digest": authority_digest,
         "key": expected_key,
         "cache_hit": expected_hit,
-        "profiles": document["profiles"],
+        "profiles": validated_profiles,
         "receipt_digest": file_digest(path),
     }
+
 
 def provenance_digest(document: dict[str, Any]) -> str:
     projection = {key: value for key, value in document.items() if key != "digest"}

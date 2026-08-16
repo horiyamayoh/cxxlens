@@ -382,6 +382,7 @@ class NgCiSupplyChainTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             receipt = pathlib.Path(temporary) / "receipt.json"
             authority_digest = package_cache_authority_digest(self.lock)
+            packages = self.lock["llvm"]["profiles"]["developer"]
             receipt.write_text(
                 json.dumps(
                     {
@@ -392,13 +393,14 @@ class NgCiSupplyChainTest(unittest.TestCase):
                         "profiles": {
                             "developer": [
                                 {
-                                    "package": "clang-22",
-                                    "version": self.lock["llvm"]["packages"]["clang-22"],
-                                    "architecture": "amd64",
+                                    "package": package,
+                                    "version": self.lock["llvm"]["packages"][package],
+                                    "architecture": self.lock["llvm"]["architecture"],
                                     "package_digest": "sha256:"
-                                    + self.lock["llvm"]["package_sha256"]["clang-22"],
+                                    + self.lock["llvm"]["package_sha256"][package],
                                     "source": "verified-cache",
                                 }
+                                for package in packages
                             ]
                         },
                     },
@@ -419,6 +421,100 @@ class NgCiSupplyChainTest(unittest.TestCase):
                 evidence["profiles"]["developer"][0]["source"],
                 "verified-cache",
             )
+
+    def test_package_cache_provenance_rejects_non_authoritative_package_rows(self) -> None:
+        packages = self.lock["llvm"]["profiles"]["developer"]
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "receipt.json"
+
+            def write_receipt(row_overrides: dict[str, str]) -> None:
+                rows = [
+                    {
+                        "package": package,
+                        "version": self.lock["llvm"]["packages"][package],
+                        "architecture": self.lock["llvm"]["architecture"],
+                        "package_digest": "sha256:"
+                        + self.lock["llvm"]["package_sha256"][package],
+                        "source": "verified-cache",
+                    }
+                    for package in packages
+                ]
+                rows[0].update(row_overrides)
+                receipt.write_text(
+                    json.dumps(
+                        {
+                            "schema": "cxxlens.ci-package-cache-receipt.v1",
+                            "authority_digest": package_cache_authority_digest(self.lock),
+                            "key": "fixture-key",
+                            "cache_hit": "hit",
+                            "profiles": {"developer": rows},
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+            environment = {
+                "CXXLENS_PACKAGE_CACHE_RECEIPT": str(receipt),
+                "CXXLENS_PACKAGE_CACHE_KEY": "fixture-key",
+                "CXXLENS_PACKAGE_CACHE_HIT": "true",
+            }
+            for field, value in (
+                ("package", "not-locked"),
+                ("version", "1:22.1.7-1"),
+                ("architecture", "arm64"),
+                ("package_digest", "sha256:" + "0" * 64),
+            ):
+                with self.subTest(field=field):
+                    write_receipt({field: value})
+                    with mock.patch.dict(os.environ, environment, clear=False):
+                        with self.assertRaisesRegex(ValueError, "package"):
+                            package_cache_provenance(self.lock)
+
+            write_receipt({"source": "verified-download"})
+            with mock.patch.dict(os.environ, environment, clear=False):
+                with self.assertRaisesRegex(ValueError, "cache-hit source"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_rejects_incomplete_hit_and_invalid_binding(self) -> None:
+        packages = self.lock["llvm"]["profiles"]["developer"]
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "receipt.json"
+            receipt.write_text(
+                json.dumps(
+                    {
+                        "schema": "cxxlens.ci-package-cache-receipt.v1",
+                        "authority_digest": package_cache_authority_digest(self.lock),
+                        "key": "fixture-key",
+                        "cache_hit": "hit",
+                        "profiles": {
+                            "developer": [
+                                {
+                                    "package": packages[0],
+                                    "version": self.lock["llvm"]["packages"][packages[0]],
+                                    "architecture": self.lock["llvm"]["architecture"],
+                                    "package_digest": "sha256:"
+                                    + self.lock["llvm"]["package_sha256"][packages[0]],
+                                    "source": "verified-cache",
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            environment = {
+                "CXXLENS_PACKAGE_CACHE_RECEIPT": str(receipt),
+                "CXXLENS_PACKAGE_CACHE_KEY": "fixture-key",
+                "CXXLENS_PACKAGE_CACHE_HIT": "not-a-boolean",
+            }
+            with mock.patch.dict(os.environ, environment, clear=False):
+                with self.assertRaisesRegex(ValueError, "environment binding"):
+                    package_cache_provenance(self.lock)
+
+            environment["CXXLENS_PACKAGE_CACHE_HIT"] = "true"
+            with mock.patch.dict(os.environ, environment, clear=False):
+                with self.assertRaisesRegex(ValueError, "package set differs"):
+                    package_cache_provenance(self.lock)
 
     def test_stale_package_cache_provenance_authority_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

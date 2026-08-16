@@ -74,6 +74,7 @@ properties:
       - actions
       - tools
       - packages
+      - package_cache
       - python_distributions
       - lock_digest
       - requirements_digest
