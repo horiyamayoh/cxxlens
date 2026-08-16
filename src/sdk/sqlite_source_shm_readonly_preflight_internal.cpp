@@ -2833,6 +2833,7 @@ namespace cxxlens::sdk
 			return false;
 		std::optional<std::size_t> first_page_zero;
 		std::size_t mapped_events{};
+		bool mapped_route_seen{};
 		for (std::size_t index{}; index < events.size(); ++index)
 		{
 			const auto& event = events[index];
@@ -2867,12 +2868,15 @@ namespace cxxlens::sdk
 				event.returned_mapping_nonnull;
 			if (!cantinit && !normalized_readonly_null && !mapped)
 				return false;
-			if ((cantinit || normalized_readonly_null) && event.page != 0)
+			if ((cantinit || normalized_readonly_null) && (mapped_route_seen || event.page != 0))
 				return false;
 			if (event.page == 0 && !first_page_zero)
 				first_page_zero = index;
 			if (mapped)
+			{
 				++mapped_events;
+				mapped_route_seen = true;
+			}
 		}
 		if (!first_page_zero || (cold_route && *first_page_zero != 0U))
 			return false;
