@@ -163,7 +163,9 @@ jobs:
           python tools/quality/check_documentation_consistency.py check --root .
           python tools/quality/verify_checksums.py check --root .
 
-      - name: Commit the exact generated result
+      - name: Commit and export the exact generated result
+        env:
+          EXPORT_PATH: ${{ runner.temp }}/issue-316-generated-tree.json
         run: |
           set -euo pipefail
           git add -A
@@ -172,4 +174,67 @@ jobs:
             exit 1
           fi
           git commit -m "Commonize CI setup and automate PR integration (#316)"
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          def output(*arguments: str) -> str:
+              return subprocess.check_output(["git", *arguments], text=True).strip()
+
+          revision = output("rev-parse", "HEAD")
+          parents = output("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
+          if len(parents) != 2:
+              raise SystemExit(f"expected two parents after main integration, received {parents}")
+          first_parent, main_parent = parents
+          expected_tree = output("rev-parse", "HEAD^{tree}")
+          changed = subprocess.check_output(
+              ["git", "diff", "--no-renames", "--name-status", "-z", first_parent, "HEAD"]
+          ).split(b"\0")
+          entries = []
+          index = 0
+          while index < len(changed) and changed[index]:
+              status = changed[index].decode("utf-8")
+              path = changed[index + 1].decode("utf-8")
+              index += 2
+              row = {"path": path, "status": status[0]}
+              if status[0] != "D":
+                  tree_row = subprocess.check_output(
+                      ["git", "ls-tree", "HEAD", "--", path], text=True
+                  ).strip()
+                  if not tree_row:
+                      raise SystemExit(f"tree entry missing for {path}")
+                  row["mode"] = tree_row.split()[0]
+                  row["content_base64"] = base64.b64encode(
+                      pathlib.Path(path).read_bytes()
+                  ).decode("ascii")
+              entries.append(row)
+          document = {
+              "schema": "cxxlens.issue-316-generated-tree.v1",
+              "first_parent": first_parent,
+              "main_parent": main_parent,
+              "generated_revision": revision,
+              "expected_tree": expected_tree,
+              "entries": entries,
+          }
+          pathlib.Path(os.environ["EXPORT_PATH"]).write_text(
+              json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps({
+              "first_parent": first_parent,
+              "main_parent": main_parent,
+              "expected_tree": expected_tree,
+              "entry_count": len(entries),
+          }, sort_keys=True))
+          PY
+
+      - name: Preserve the validated generated tree
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: issue-316-generated-tree-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/issue-316-generated-tree.json
+          if-no-files-found: error
+          retention-days: 7
