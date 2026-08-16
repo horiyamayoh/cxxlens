@@ -124,6 +124,7 @@ MATERIALIZATION_ASSIGNMENT_FEEDBACK = (
     "DF-0206",
     "DF-0207",
     "DF-0208",
+    "DF-0261",
 )
 MATERIALIZATION_ASSIGNMENT_SURFACES = (
     ("distribution.consumer-configuration", "shared/real-project"),
@@ -522,7 +523,9 @@ def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
                 "gap": {
                     "finding": "scope.tracked-gap.clang22-installed-adoption",
                     "remediation": (
-                        "Implement the accepted DF-0195 through DF-0199 sealed-evidence, "
+                        "Resolve the proposed DF-0261 source-closure identity and compiler "
+                        "VFS authority before qualifying real-project consumers; implement "
+                        "the accepted DF-0195 through DF-0199 sealed-evidence, "
                         "measured-occurrence, authenticated-streaming, head-observation, "
                         "and canonical-Base64 authority; implement the accepted DF-0200 bounded "
                         "claim/Store staging, the accepted DF-0205/DF-0206 same-process "
