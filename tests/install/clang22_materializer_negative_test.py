@@ -42,8 +42,10 @@ EXECUTION_RECEIPT_SCHEMA = pathlib.Path(
 )
 NEGATIVE_REPORT_FILENAME = "report.json"
 NEGATIVE_RECEIPT_FILENAME = "execution-receipt.json"
+NEGATIVE_MANIFEST_FILENAME = "evidence-manifest.json"
 NEGATIVE_INPUT_FILENAME = "stdin.bin"
 NEGATIVE_STDERR_FILENAME = "stderr.bin"
+NEGATIVE_EVIDENCE_SCHEMA = "cxxlens.clang22-installed-negative-evidence.v1"
 
 
 def fail(message: str) -> None:
@@ -72,6 +74,10 @@ def installed_request(
         fail(f"installed occurrence manifest is missing: {occurrence_path}")
     occurrence_bytes = occurrence_path.read_bytes()
     occurrence = json.loads(occurrence_bytes)
+    try:
+        oracle.validate_occurrence_manifest(root, occurrence)
+    except oracle.MaterializationError as error:
+        fail(f"installed occurrence manifest failed independent validation: {error}")
     files = occurrence["files"]
     tool = next(file for file in files if file["role"] == "materializer-executable")
     worker = next(file for file in files if file["role"] == "worker-executable")
@@ -200,19 +206,233 @@ def make_execution_receipt(
     return oracle.canonical_json(receipt)
 
 
+def negative_source_identity(request: dict[str, Any]) -> dict[str, Any]:
+    """Project the installed identity without adding a public report field."""
+
+    return {
+        "revision": request["tool"]["source_revision"],
+        "tree": request["tool"]["source_tree"],
+        "package_configuration": request["tool"]["package_configuration"],
+        "occurrence_manifest_digest": request["tool"][
+            "occurrence_manifest_digest"
+        ],
+        "materializer_digest": request["tool"]["installed_executable_digest"],
+        "worker_digest": request["worker"]["installed_binary_digest"],
+    }
+
+
+def evidence_artifact(
+    oracle: Any,
+    relative_path: str,
+    value: bytes,
+) -> dict[str, Any]:
+    return {
+        "path": relative_path,
+        "byte_count": len(value),
+        "sha256": oracle.content_digest(value),
+    }
+
+
+def build_negative_evidence_manifest(
+    oracle: Any,
+    request: dict[str, Any] | None,
+    report: dict[str, Any],
+    payload: bytes,
+    completed: subprocess.CompletedProcess[bytes],
+    receipt_bytes: bytes,
+) -> bytes:
+    """Build a test-only envelope joining report/receipt bytes to installed identity."""
+
+    try:
+        receipt: dict[str, Any] = json.loads(receipt_bytes)
+    except json.JSONDecodeError as error:
+        fail(f"negative execution receipt is not JSON: {error}")
+    if request is None:
+        if report["binding"]["state"] != "raw-input-only":
+            fail("raw negative evidence has a bound report without a request")
+        source = None
+        request_binding = None
+    else:
+        expected_binding = {
+            "materialization_request_id": request["materialization_request_id"],
+            "request_digest": request["request_digest"],
+            "semantic_request_digest": request["semantic_request_digest"],
+        }
+        if report["binding"]["state"] != "request-bound":
+            fail("request-bound negative evidence lost its binding state")
+        if report["binding"]["request"] != expected_binding:
+            fail("negative report request binding differs from the input request")
+        source = negative_source_identity(request)
+        request_binding = expected_binding
+
+    if receipt["actual_exit_status"] != completed.returncode:
+        fail("negative evidence receipt exit status differs from the process")
+    if receipt["exact_stdout_byte_count"] != len(completed.stdout):
+        fail("negative evidence receipt stdout byte count differs")
+    if receipt["stdout_sha256"] != oracle.content_digest(completed.stdout):
+        fail("negative evidence receipt stdout digest differs")
+    if receipt["stderr_sha256"] != oracle.content_digest(completed.stderr):
+        fail("negative evidence receipt stderr digest differs")
+    if receipt["parsed_response_count"] != 1:
+        fail("negative evidence receipt must contain one parsed response")
+
+    manifest = {
+        "schema": NEGATIVE_EVIDENCE_SCHEMA,
+        "binding_state": report["binding"]["state"],
+        "source": source,
+        "request": request_binding,
+        "report": {
+            "path": NEGATIVE_REPORT_FILENAME,
+            "sha256": oracle.content_digest(completed.stdout),
+            "response_kind": report["response_kind"],
+            "result": report["result"],
+            "error": report["error"],
+            "head_observation": report["effects"]["head_observation"],
+            "store_failure_cause": report["effects"]["store_failure_cause"],
+        },
+        "execution_receipt": {
+            "path": NEGATIVE_RECEIPT_FILENAME,
+            "sha256": oracle.content_digest(receipt_bytes),
+            "receipt": receipt,
+        },
+        "artifacts": {
+            "input": evidence_artifact(oracle, NEGATIVE_INPUT_FILENAME, payload),
+            "stderr": evidence_artifact(
+                oracle, NEGATIVE_STDERR_FILENAME, completed.stderr
+            ),
+        },
+        "qualification": {
+            "negative_evidence_only": True,
+            "native_positive_qualification": False,
+            "release_qualification": False,
+        },
+    }
+    return oracle.canonical_json(manifest)
+
+
+def validate_negative_evidence_manifest(
+    oracle: Any,
+    request: dict[str, Any] | None,
+    report: dict[str, Any],
+    payload: bytes,
+    completed: subprocess.CompletedProcess[bytes],
+    receipt_bytes: bytes,
+    manifest_bytes: bytes,
+) -> None:
+    """Reject any evidence envelope that can drift from its exact artifacts."""
+
+    try:
+        manifest = json.loads(manifest_bytes)
+        receipt = json.loads(receipt_bytes)
+    except json.JSONDecodeError as error:
+        fail(f"negative evidence manifest is not JSON: {error}")
+    if manifest["schema"] != NEGATIVE_EVIDENCE_SCHEMA:
+        fail("negative evidence manifest schema differs")
+    if manifest["binding_state"] != report["binding"]["state"]:
+        fail("negative evidence binding state differs from report")
+    expected_source = None if request is None else negative_source_identity(request)
+    if manifest["source"] != expected_source:
+        fail("negative evidence source identity differs from the request")
+    expected_request = (
+        None
+        if request is None
+        else {
+            "materialization_request_id": request["materialization_request_id"],
+            "request_digest": request["request_digest"],
+            "semantic_request_digest": request["semantic_request_digest"],
+        }
+    )
+    if manifest["request"] != expected_request:
+        fail("negative evidence request binding differs")
+    if manifest["report"]["sha256"] != oracle.content_digest(completed.stdout):
+        fail("negative evidence report digest differs")
+    if manifest["report"]["response_kind"] != report["response_kind"]:
+        fail("negative evidence response kind differs")
+    if manifest["report"]["result"] != report["result"]:
+        fail("negative evidence result differs")
+    if manifest["report"]["error"] != report["error"]:
+        fail("negative evidence error projection differs")
+    if (
+        manifest["report"]["head_observation"]
+        != report["effects"]["head_observation"]
+        or manifest["report"]["store_failure_cause"]
+        != report["effects"]["store_failure_cause"]
+    ):
+        fail("negative evidence Store outcome projection differs")
+    if manifest["execution_receipt"]["sha256"] != oracle.content_digest(
+        receipt_bytes
+    ):
+        fail("negative evidence execution receipt digest differs")
+    if manifest["execution_receipt"]["receipt"] != receipt:
+        fail("negative evidence execution receipt projection differs")
+    if manifest["artifacts"]["input"] != evidence_artifact(
+        oracle, NEGATIVE_INPUT_FILENAME, payload
+    ):
+        fail("negative evidence input artifact differs")
+    if manifest["artifacts"]["stderr"] != evidence_artifact(
+        oracle, NEGATIVE_STDERR_FILENAME, completed.stderr
+    ):
+        fail("negative evidence stderr artifact differs")
+    if manifest["qualification"] != {
+        "negative_evidence_only": True,
+        "native_positive_qualification": False,
+        "release_qualification": False,
+    }:
+        fail("negative evidence manifest must remain non-qualifying")
+
+
 def write_negative_evidence(
+    oracle: Any,
     evidence_dir: pathlib.Path,
     case_name: str,
     payload: bytes,
     completed: subprocess.CompletedProcess[bytes],
     receipt_bytes: bytes,
+    request: dict[str, Any] | None,
+    report: dict[str, Any],
 ) -> None:
     destination = (evidence_dir / case_name).resolve()
     destination.mkdir(parents=True, exist_ok=True)
-    (destination / NEGATIVE_INPUT_FILENAME).write_bytes(payload)
-    (destination / NEGATIVE_REPORT_FILENAME).write_bytes(completed.stdout)
-    (destination / NEGATIVE_STDERR_FILENAME).write_bytes(completed.stderr)
-    (destination / NEGATIVE_RECEIPT_FILENAME).write_bytes(receipt_bytes)
+    files = {
+        NEGATIVE_INPUT_FILENAME: payload,
+        NEGATIVE_REPORT_FILENAME: completed.stdout,
+        NEGATIVE_STDERR_FILENAME: completed.stderr,
+        NEGATIVE_RECEIPT_FILENAME: receipt_bytes,
+    }
+    for filename, value in files.items():
+        path = destination / filename
+        path.write_bytes(value)
+        if path.read_bytes() != value:
+            fail(f"negative evidence artifact was not written exactly: {filename}")
+    manifest_bytes = build_negative_evidence_manifest(
+        oracle,
+        request,
+        report,
+        payload,
+        completed,
+        receipt_bytes,
+    )
+    validate_negative_evidence_manifest(
+        oracle,
+        request,
+        report,
+        payload,
+        completed,
+        receipt_bytes,
+        manifest_bytes,
+    )
+    manifest_path = destination / NEGATIVE_MANIFEST_FILENAME
+    manifest_path.write_bytes(manifest_bytes)
+    stored_manifest_bytes = manifest_path.read_bytes()
+    validate_negative_evidence_manifest(
+        oracle,
+        request,
+        report,
+        payload,
+        completed,
+        receipt_bytes,
+        stored_manifest_bytes,
+    )
 
 
 def assert_raw_failure(
@@ -241,7 +461,16 @@ def assert_raw_failure(
         fail(f"{case_name} crossed the raw binding or publication boundary")
     receipt_bytes = make_execution_receipt(root, oracle, completed, case_name)
     if evidence_dir is not None:
-        write_negative_evidence(evidence_dir, case_name, payload, completed, receipt_bytes)
+        write_negative_evidence(
+            oracle,
+            evidence_dir,
+            case_name,
+            payload,
+            completed,
+            receipt_bytes,
+            None,
+            report,
+        )
     return report
 
 
@@ -311,11 +540,14 @@ def prepare_sqlite_baseline(
             root, oracle, completed, "store-head-corruption-baseline"
         )
         write_negative_evidence(
+            oracle,
             evidence_dir,
             "store-head-corruption-baseline",
             request_payload,
             completed,
             receipt_bytes,
+            request,
+            report,
         )
     return database, request, report
 
@@ -456,11 +688,14 @@ def assert_corrupt_head_failure(
     receipt_bytes = make_execution_receipt(root, oracle, completed, case_name)
     if evidence_dir is not None:
         write_negative_evidence(
+            oracle,
             evidence_dir,
             case_name,
             request_payload,
             completed,
             receipt_bytes,
+            request,
+            report,
         )
 
 
@@ -540,11 +775,14 @@ def main() -> int:
     receipt_bytes = make_execution_receipt(root, oracle, completed, "store-head-absent")
     if negative_evidence_dir is not None:
         write_negative_evidence(
+            oracle,
             negative_evidence_dir,
             "store-head-absent",
             request_payload,
             completed,
             receipt_bytes,
+            request,
+            report,
         )
     cause = report["effects"]["store_failure_cause"]
     if (
