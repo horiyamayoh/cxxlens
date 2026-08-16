@@ -24,6 +24,36 @@
 #include "llvm/clang22/materialization_rooted_vfs.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 
+namespace cxxlens::detail::clang22::materialization
+{
+	class public_materialization_prepublication_projection_test_peer final
+	{
+	  public:
+		[[nodiscard]] static public_materialization_prepublication_projection
+		make(std::string binding_digest,
+			 std::string request_digest,
+			 std::string semantic_request_digest,
+			 std::string occurrence_inventory_digest,
+			 const std::uint64_t task_count,
+			 const std::size_t reserved_bytes,
+			 std::string capacity_proof_digest,
+			 const bool issue_capability)
+		{
+			public_materialization_prepublication_projection projection{
+				std::move(binding_digest),
+				std::move(request_digest),
+				std::move(semantic_request_digest),
+				std::move(occurrence_inventory_digest),
+				task_count,
+				reserved_bytes,
+				std::move(capacity_proof_digest)};
+			if (issue_capability)
+				projection.issue_capability();
+			return projection;
+		}
+	};
+} // namespace cxxlens::detail::clang22::materialization
+
 namespace
 {
 	using namespace cxxlens::detail::clang22::materialization;
@@ -72,6 +102,14 @@ namespace
 	static_assert(std::move_constructible<public_materialization_capacity_reservation>);
 	static_assert(!std::copy_constructible<public_materialization_prepublication_projection>);
 	static_assert(std::move_constructible<public_materialization_prepublication_projection>);
+	static_assert(!std::constructible_from<public_materialization_prepublication_projection,
+										   std::string,
+										   std::string,
+										   std::string,
+										   std::string,
+										   std::uint64_t,
+										   std::size_t,
+										   std::string>);
 
 	[[nodiscard]] raw_input_observation complete_input()
 	{
@@ -1924,14 +1962,27 @@ namespace
 									const std::string& occurrence,
 									const std::uint64_t task_count,
 									const std::size_t reserved_bytes,
-									const std::string& capacity_proof)
+									const std::string& capacity_proof,
+									const bool issue_capability = false)
 		{
-			return public_materialization_prepublication_projection{
-				binding, request, semantic, occurrence, task_count, reserved_bytes, capacity_proof};
+			return public_materialization_prepublication_projection_test_peer::make(
+				binding,
+				request,
+				semantic,
+				occurrence,
+				task_count,
+				reserved_bytes,
+				capacity_proof,
+				issue_capability);
 		};
 		const auto baseline = [&]
 		{
 			return projection("binding", "request", "semantic", "occurrence", 1U, limit, proof);
+		};
+		const auto issued_baseline = [&]
+		{
+			return projection(
+				"binding", "request", "semantic", "occurrence", 1U, limit, proof, true);
 		};
 		const auto require_equality_mutation = [&](auto&& mutated, const std::string_view field)
 		{
@@ -1961,19 +2012,77 @@ namespace
 			projection("binding", "request", "semantic", "occurrence", 1U, limit, "proof-drift"),
 			"capacity_proof_digest");
 
-		auto unconsumed = baseline();
+		auto forged = baseline();
+		auto forged_consumed = forged.consume_reserved_capacity(capacity);
+		require(!forged_consumed &&
+					forged_consumed.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "unissued-capability"},
+				"matching forged authority fields crossed the private capability boundary");
+
+		auto unconsumed = issued_baseline();
 		auto unconsumed_state = unconsumed.validate_reserved_capacity(capacity, limit);
 		require(!unconsumed_state &&
 					unconsumed_state.error() ==
 						sdk::error{"materialization.report-invalid",
 								   "report.capacity",
 								   "reservation-not-consumed"},
-				"an unconsumed prepublication projection was not rejected by the report guard");
+				"the report builder did not reject an unconsumed prepublication projection");
+
+		auto empty_proof =
+			projection("binding", "request", "semantic", "occurrence", 1U, limit, {}, true);
+		auto empty_proof_consumed = empty_proof.consume_reserved_capacity(capacity);
+		require(
+			!empty_proof_consumed &&
+				empty_proof_consumed.error() ==
+					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
+			"capacity consumption accepted an empty projection proof");
+		auto empty_proof_state = empty_proof.validate_reserved_capacity(capacity, limit);
+		require(
+			!empty_proof_state &&
+				empty_proof_state.error() ==
+					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
+			"capacity validation accepted an empty projection proof");
+
+		auto moved_from_capacity_result = check_public_materialization_capacity_reservation(limits);
+		require(moved_from_capacity_result.has_value(),
+				"second capacity proof could not be minted for the moved-from regression");
+		auto moved_to_capacity = std::move(*moved_from_capacity_result);
+		require(moved_to_capacity.reserved_bytes() == limit &&
+					!moved_to_capacity.proof_digest().empty(),
+				"moving a capacity reservation lost its proof");
+		require(moved_from_capacity_result->proof_digest().empty(),
+				"moved-from capacity reservation retained its proof digest");
+		auto moved_from_consumed =
+			issued_baseline().consume_reserved_capacity(*moved_from_capacity_result);
+		require(
+			!moved_from_consumed &&
+				moved_from_consumed.error() ==
+					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
+			"capacity consumption accepted a moved-from reservation");
+		auto moved_from_state =
+			issued_baseline().validate_reserved_capacity(*moved_from_capacity_result, limit);
+		require(
+			!moved_from_state &&
+				moved_from_state.error() ==
+					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
+			"capacity validation accepted a moved-from reservation");
+
+		auto proof_mismatch = projection(
+			"binding", "request", "semantic", "occurrence", 1U, limit, "proof-drift", true);
+		auto proof_mismatch_consumed = proof_mismatch.consume_reserved_capacity(capacity);
+		require(!proof_mismatch_consumed &&
+					proof_mismatch_consumed.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "reservation-mismatch"},
+				"capacity consumption accepted a mismatched proof");
 
 		for (const auto attempt : std::array<std::size_t, 4>{0U, limit - 1U, limit, limit + 1U})
 		{
-			auto candidate =
-				projection("binding", "request", "semantic", "occurrence", 1U, attempt, proof);
+			auto candidate = projection(
+				"binding", "request", "semantic", "occurrence", 1U, attempt, proof, true);
 			auto consumed = candidate.consume_reserved_capacity(capacity);
 			const bool expected = attempt == limit;
 			require(static_cast<bool>(consumed) == expected,
@@ -2002,7 +2111,7 @@ namespace
 										   "report.capacity",
 										   "already-consumed"},
 						"prepublication capacity reservation was consumable twice");
-				require(candidate == baseline(),
+				require(candidate == issued_baseline(),
 						"capacity consumption changed publication-independent authority");
 			}
 		}

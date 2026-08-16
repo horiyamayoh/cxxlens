@@ -4880,6 +4880,11 @@ namespace cxxlens::detail::clang22::materialization
 	{
 	}
 
+	void public_materialization_prepublication_projection::issue_capability()
+	{
+		issued_capability_ = std::make_unique<issued_capability>();
+	}
+
 	sdk::result<public_materialization_capacity_reservation>
 	check_public_materialization_capacity_reservation(const detailed_report_limits& limits)
 	{
@@ -4921,6 +4926,9 @@ namespace cxxlens::detail::clang22::materialization
 		if (state_ == lifecycle_state::consumed)
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report.capacity", "already-consumed"});
+		if (capacity_proof_digest_.empty() || capacity.proof_digest().empty())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "proof-empty"});
 		if (reserved_bytes_ == 0U || capacity.reserved_bytes() == 0U)
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report.capacity", "zero-reservation"});
@@ -4928,6 +4936,9 @@ namespace cxxlens::detail::clang22::materialization
 			capacity_proof_digest_ != capacity.proof_digest())
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report.capacity", "reservation-mismatch"});
+		if (!issued_capability_)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "unissued-capability"});
 		state_ = lifecycle_state::consumed;
 		return {};
 	}
@@ -4939,6 +4950,9 @@ namespace cxxlens::detail::clang22::materialization
 		if (maximum_report_bytes == 0U || reserved_bytes_ == 0U || capacity.reserved_bytes() == 0U)
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report.capacity", "zero-reservation"});
+		if (capacity_proof_digest_.empty() || capacity.proof_digest().empty())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "proof-empty"});
 		if (maximum_report_bytes != capacity.reserved_bytes() ||
 			reserved_bytes_ != capacity.reserved_bytes() ||
 			capacity_proof_digest_ != capacity.proof_digest())
@@ -4947,6 +4961,9 @@ namespace cxxlens::detail::clang22::materialization
 		if (state_ != lifecycle_state::consumed)
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report.capacity", "reservation-not-consumed"});
+		if (!issued_capability_)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "unissued-capability"});
 		return {};
 	}
 
@@ -4998,7 +5015,7 @@ namespace cxxlens::detail::clang22::materialization
 				"cxxlens.clang22.prepublication-report.v1", binding_fields);
 			if (!binding)
 				return sdk::unexpected(std::move(binding.error()));
-			return public_materialization_prepublication_projection{
+			auto projection = public_materialization_prepublication_projection{
 				std::move(*binding),
 				identity.request_digest,
 				identity.semantic_request_digest,
@@ -5006,6 +5023,8 @@ namespace cxxlens::detail::clang22::materialization
 				task_count,
 				capacity.reserved_bytes(),
 				std::string{capacity.proof_digest()}};
+			projection.issue_capability();
+			return projection;
 		}
 		catch (const std::bad_alloc&)
 		{

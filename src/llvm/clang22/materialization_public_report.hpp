@@ -107,23 +107,22 @@ namespace cxxlens::detail::clang22::materialization
 	[[nodiscard]] sdk::result<public_materialization_capacity_reservation>
 	check_public_materialization_capacity_reservation(const detailed_report_limits& limits);
 
+	class public_materialization_prepublication_projection_test_peer;
+
 	/**
 	 * Publication-independent report authority reserved before the Store publish call.
 	 *
 	 * This projection deliberately contains no claim, publication, or query value.  It binds the
 	 * authenticated request/input/installation census and reserves the complete report byte budget;
-	 * the post-publication builder must recompute and match it before emitting success.
+	 * the post-publication builder must recompute and match it before emitting success.  The value
+	 * constructor below creates an unissued projection only.  The source-private move-only
+	 * capability is installed exclusively by
+	 * `prepare_public_materialization_prepublication_projection`, so matching authority strings
+	 * cannot forge a consumable phase transition.
 	 */
 	class public_materialization_prepublication_projection final
 	{
 	  public:
-		public_materialization_prepublication_projection(std::string binding_digest,
-														 std::string request_digest,
-														 std::string semantic_request_digest,
-														 std::string occurrence_inventory_digest,
-														 std::uint64_t task_count,
-														 std::size_t reserved_bytes,
-														 std::string capacity_proof_digest);
 		public_materialization_prepublication_projection(
 			const public_materialization_prepublication_projection&) = delete;
 		public_materialization_prepublication_projection&
@@ -161,6 +160,14 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 	  private:
+		public_materialization_prepublication_projection(std::string binding_digest,
+														 std::string request_digest,
+														 std::string semantic_request_digest,
+														 std::string occurrence_inventory_digest,
+														 std::uint64_t task_count,
+														 std::size_t reserved_bytes,
+														 std::string capacity_proof_digest);
+
 		enum class lifecycle_state : std::uint8_t
 		{
 			reserved,
@@ -175,6 +182,22 @@ namespace cxxlens::detail::clang22::materialization
 		std::size_t reserved_bytes_{};
 		std::string capacity_proof_digest_;
 		lifecycle_state state_{lifecycle_state::reserved};
+
+		struct issued_capability
+		{
+		};
+		std::unique_ptr<issued_capability> issued_capability_;
+
+		void issue_capability();
+
+		friend sdk::result<public_materialization_prepublication_projection>
+		prepare_public_materialization_prepublication_projection(
+			const validated_materialization_request_v2_1& request,
+			const raw_input_observation& raw_input,
+			const materialization_occurrence_manifest& occurrence_manifest,
+			const materialization_occurrence_receipt& occurrence_receipt,
+			const public_materialization_capacity_reservation& capacity);
+		friend class public_materialization_prepublication_projection_test_peer;
 	};
 
 	/** Observable result of the source-private prior-artifact write after Store commit. */
