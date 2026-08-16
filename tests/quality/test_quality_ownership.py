@@ -259,6 +259,14 @@ class QualityOwnershipTest(unittest.TestCase):
             'set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")',
             install_script,
         )
+        self.assertIn(
+            "function(resolve_install_artifact_path canonical_path resolved_path)",
+            install_script,
+        )
+        self.assertIn(
+            'string(APPEND resolved "${install_executable_suffix}")',
+            install_script,
+        )
         for executable in (
             "cxxlens-provider-scaffold",
             "cxxlens-sdk-doctor",
@@ -267,9 +275,23 @@ class QualityOwnershipTest(unittest.TestCase):
         ):
             with self.subTest(executable=executable):
                 self.assertIn(
+                    f'"${{install_prefix}}/bin/{executable}"',
+                    install_script,
+                )
+        for executable in (
+            "cxxlens-provider-scaffold",
+            "cxxlens-sdk-doctor",
+            "cxxlens-clang-worker-22",
+        ):
+            with self.subTest(runtime_executable=executable):
+                self.assertIn(
                     f"${{install_prefix}}/bin/{executable}${{install_executable_suffix}}",
                     install_script,
                 )
+        self.assertIn(
+            'resolve_install_artifact_path("${required}" resolved_required)',
+            install_script,
+        )
         self.assertIn(
             "${build_dir}/cxxlens-${consumer_executable}${install_executable_suffix}",
             install_script,

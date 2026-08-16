@@ -14,6 +14,11 @@ set(cxxlens_clang22_available "@CXXLENS_CLANG22_AVAILABLE@")
 set(cxxlens_clang22_adapter "@CXXLENS_CLANG_ADAPTER@")
 set(cxxlens_clang22_unavailable_reason "@CXXLENS_CLANG22_UNAVAILABLE_REASON@")
 set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")
+set(install_executable_names
+    cxxlens-provider-scaffold
+    cxxlens-sdk-doctor
+    cxxlens-clang-worker-22
+    cxxlens-clang22-materialize)
 set(artifact_source_arguments --source-revision "@CXXLENS_SOURCE_REVISION@"
                               --source-tree "@CXXLENS_SOURCE_TREE@")
 
@@ -42,6 +47,17 @@ function(run_clean expected_result)
         "installed command failed (${actual_result}, expected ${expected_result}): ${ARGN}\nstdout: ${command_output}\nstderr: ${command_error}"
     )
   endif()
+endfunction()
+
+function(resolve_install_artifact_path canonical_path resolved_path)
+  set(resolved "${canonical_path}")
+  foreach(executable IN LISTS install_executable_names)
+    if("${canonical_path}" STREQUAL "${install_prefix}/bin/${executable}")
+      string(APPEND resolved "${install_executable_suffix}")
+      break()
+    endif()
+  endforeach()
+  set(${resolved_path} "${resolved}" PARENT_SCOPE)
 endfunction()
 
 function(run_installed_tools label)
@@ -73,6 +89,9 @@ if(PHASE STREQUAL "prepare")
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
 
+  # Keep canonical artifact paths literal for the installed-surface census.
+  # Only the filesystem path used by the existence check receives the
+  # platform executable suffix.
   foreach(
     required IN
     ITEMS
@@ -99,13 +118,15 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml"
       "${install_prefix}/share/doc/cxxlens/LICENSE"
       "${install_prefix}/share/doc/cxxlens/NOTICE"
-      "${install_prefix}/bin/cxxlens-provider-scaffold${install_executable_suffix}"
-      "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
-      "${install_prefix}/bin/cxxlens-clang-worker-22${install_executable_suffix}"
-      "${install_prefix}/bin/cxxlens-clang22-materialize${install_executable_suffix}")
-    if(NOT EXISTS "${required}")
+      "${install_prefix}/bin/cxxlens-provider-scaffold"
+      "${install_prefix}/bin/cxxlens-sdk-doctor"
+      "${install_prefix}/bin/cxxlens-clang-worker-22"
+      "${install_prefix}/bin/cxxlens-clang22-materialize")
+    resolve_install_artifact_path("${required}" resolved_required)
+    if(NOT EXISTS "${resolved_required}")
       message(
-        FATAL_ERROR "installed next-generation artifact is missing: ${required}"
+        FATAL_ERROR
+          "installed next-generation artifact is missing: ${resolved_required}"
       )
     endif()
   endforeach()
