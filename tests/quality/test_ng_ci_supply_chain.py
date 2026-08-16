@@ -21,7 +21,9 @@ from bootstrap_supply_chain import (  # noqa: E402
     SupplyChainError,
     build_package_cache_provenance,
     cache_provenance_digest,
+    configure_llvm_repository,
     install_documentation,
+    install_llvm,
     load_lock,
     package_authority,
     resolve_cached_archives,
@@ -285,6 +287,83 @@ class NgCiSupplyChainTest(unittest.TestCase):
         self.assertEqual(status, "miss")
         self.assertIsNone(reason)
 
+    def test_locked_llvm_repository_is_configured_and_refreshed(self) -> None:
+        commands: list[list[str]] = []
+
+        def record_run(
+            command: list[str], *, capture: bool = False, cwd: pathlib.Path | None = None
+        ) -> str:
+            del capture, cwd
+            commands.append(command)
+            return ""
+
+        key_content = b"verified signing key"
+        with mock.patch(
+            "bootstrap_supply_chain.download", return_value=key_content
+        ) as download, mock.patch(
+            "bootstrap_supply_chain.verify_bytes"
+        ) as verify_bytes, mock.patch(
+            "bootstrap_supply_chain.verify_key",
+            return_value=pathlib.Path("/tmp/verified-llvm-keyring"),
+        ) as verify_key, mock.patch(
+            "bootstrap_supply_chain.run", side_effect=record_run
+        ):
+            configure_llvm_repository(self.lock["llvm"])
+
+        signing_key = self.lock["llvm"]["signing_key"]
+        download.assert_called_once_with(signing_key["url"])
+        verify_bytes.assert_called_once_with(
+            key_content, signing_key["sha256"], "LLVM signing key"
+        )
+        verify_key.assert_called_once_with(
+            key_content, signing_key["primary_fingerprint"], mock.ANY
+        )
+        self.assertEqual(len(commands), 3)
+        self.assertEqual(commands[0][:5], ["sudo", "install", "-D", "-m", "0644"])
+        self.assertEqual(commands[1][:5], ["sudo", "install", "-D", "-m", "0644"])
+        self.assertEqual(commands[2][:2], ["sudo", "apt-get"])
+        self.assertIn("update", commands[2])
+        self.assertIn("Dir::Etc::sourcelist=/etc/apt/sources.list.d/cxxlens-llvm.list", commands[2])
+
+    def test_fresh_cache_hit_refreshes_repository_before_archive_install(self) -> None:
+        expected = package_authority(self.lock, "compiler")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            cached = {name: root / f"{name}.deb" for name in expected}
+            private = {name: root / f"private-{name}.deb" for name in expected}
+            events: list[object] = []
+
+            def fake_run(
+                command: list[str], *, capture: bool = False, cwd: pathlib.Path | None = None
+            ) -> str:
+                del capture, cwd
+                if command[0] == "dpkg-query":
+                    return expected[command[-1]]["version"]
+                if command[0] == "clang++-22":
+                    return "Ubuntu clang version 22.1.8"
+                raise AssertionError(f"unexpected command on cache hit: {command}")
+
+            with mock.patch(
+                "bootstrap_supply_chain.resolve_cached_archives",
+                return_value=(cached, "hit", None),
+            ), mock.patch(
+                "bootstrap_supply_chain.configure_llvm_repository",
+                side_effect=lambda llvm: events.append("repository-refresh"),
+            ), mock.patch(
+                "bootstrap_supply_chain.copy_cached_archives",
+                side_effect=lambda archives, expected, directory: events.append("private-copy")
+                or private,
+            ), mock.patch(
+                "bootstrap_supply_chain.install_package_archives",
+                side_effect=lambda archives: events.append("archive-install"),
+            ), mock.patch("bootstrap_supply_chain.run", side_effect=fake_run):
+                status, source = install_llvm(self.lock, "compiler", root)
+
+            self.assertEqual((status, source), ("hit", "verified-cache"))
+            self.assertEqual(
+                events, ["repository-refresh", "private-copy", "archive-install"]
+            )
+
     def test_package_cache_provenance_binds_lock_key_and_source(self) -> None:
         lock_digest = "sha256:" + sha256_bytes(
             (ROOT / "tools/ci/llvm22-noble.lock.json").read_bytes()
@@ -300,6 +379,8 @@ class NgCiSupplyChainTest(unittest.TestCase):
         record = build_package_cache_provenance(
             self.lock, "compiler", lock_digest, "hit", "verified-cache"
         )
+        self.assertEqual(record["dependency_resolution"], "locked-apt-repository")
+        self.assertEqual(record["repository_refresh"], "verified-before-install")
         with tempfile.TemporaryDirectory() as temporary:
             path = pathlib.Path(temporary) / "package-cache.json"
             write_package_cache_provenance(path, record)
@@ -317,6 +398,13 @@ class NgCiSupplyChainTest(unittest.TestCase):
             changed["digest"] = cache_provenance_digest(changed)
             write_package_cache_provenance(path, changed)
             with self.assertRaisesRegex(ValueError, "differs from lock"):
+                load_package_cache_provenance(path, ROOT)
+
+            changed = copy.deepcopy(record)
+            changed["repository_refresh"] = "not-required"
+            changed["digest"] = cache_provenance_digest(changed)
+            write_package_cache_provenance(path, changed)
+            with self.assertRaisesRegex(ValueError, "repository refresh mismatch"):
                 load_package_cache_provenance(path, ROOT)
 
 

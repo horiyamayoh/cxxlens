@@ -244,6 +244,18 @@ def load_package_cache_provenance(
         raise ValueError("package-cache provenance status/source mismatch")
     if document.get("transport_only") is not True:
         raise ValueError("package-cache provenance must be transport-only")
+    expected_dependency_resolution = (
+        "locked-apt-repository"
+        if profile != "documentation"
+        else "locked-package-archive"
+    )
+    expected_repository_refresh = (
+        "verified-before-install" if profile != "documentation" else "not-required"
+    )
+    if document.get("dependency_resolution") != expected_dependency_resolution:
+        raise ValueError("package-cache provenance dependency source mismatch")
+    if document.get("repository_refresh") != expected_repository_refresh:
+        raise ValueError("package-cache provenance repository refresh mismatch")
     if document.get("cache_key") != package_cache_key(lock, profile, lock_digest):
         raise ValueError("package-cache provenance key mismatch")
     rows = document.get("packages")

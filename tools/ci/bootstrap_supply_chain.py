@@ -20,7 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 LOCK = pathlib.Path("tools/ci/llvm22-noble.lock.json")
 KEYRING = pathlib.Path("/etc/apt/keyrings/cxxlens-llvm.gpg")
 SOURCE_LIST = pathlib.Path("/etc/apt/sources.list.d/cxxlens-llvm.list")
-PACKAGE_CACHE_SCHEMA = "cxxlens.ci-package-cache-provenance.v1"
+PACKAGE_CACHE_SCHEMA = "cxxlens.ci-package-cache-provenance.v2"
 
 
 class SupplyChainError(ValueError):
@@ -221,6 +221,16 @@ def build_package_cache_provenance(
         "transport_only": True,
         "cache_status": cache_status,
         "cache_source": cache_source,
+        "dependency_resolution": (
+            "locked-apt-repository"
+            if profile_name != "documentation"
+            else "locked-package-archive"
+        ),
+        "repository_refresh": (
+            "verified-before-install"
+            if profile_name != "documentation"
+            else "not-required"
+        ),
         "cache_key": package_cache_key(lock, profile_name, lock_digest),
         "cache_key_authority_digest": lock_digest,
         "packages": [
@@ -383,6 +393,44 @@ def verify_key(content: bytes, expected_fingerprint: str, directory: pathlib.Pat
     return keyring
 
 
+def configure_llvm_repository(llvm: dict[str, Any]) -> None:
+    signing_key = llvm["signing_key"]
+    key_content = download(signing_key["url"])
+    verify_bytes(key_content, signing_key["sha256"], "LLVM signing key")
+    with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-bootstrap-") as temporary:
+        directory = pathlib.Path(temporary)
+        keyring = verify_key(
+            key_content, signing_key["primary_fingerprint"], directory
+        )
+        source = directory / "cxxlens-llvm.list"
+        source.write_text(
+            "deb [arch={architecture} signed-by={keyring}] {repository} "
+            "{suite} {component}\n".format(
+                architecture=llvm["architecture"],
+                keyring=KEYRING,
+                repository=llvm["repository"],
+                suite=llvm["suite"],
+                component=llvm["component"],
+            ),
+            encoding="utf-8",
+        )
+        run(["sudo", "install", "-D", "-m", "0644", str(keyring), str(KEYRING)])
+        run(["sudo", "install", "-D", "-m", "0644", str(source), str(SOURCE_LIST)])
+    run(
+        [
+            "sudo",
+            "apt-get",
+            "-o",
+            f"Dir::Etc::sourcelist={SOURCE_LIST}",
+            "-o",
+            "Dir::Etc::sourceparts=-",
+            "-o",
+            "APT::Get::List-Cleanup=0",
+            "update",
+        ]
+    )
+
+
 def assert_runner(lock: dict[str, Any]) -> None:
     if platform.machine() != "x86_64":
         raise SupplyChainError(f"unsupported runner architecture: {platform.machine()}")
@@ -460,47 +508,13 @@ def install_llvm(
     package_cache_directory: pathlib.Path | None = None,
 ) -> tuple[str, str]:
     expected = package_authority(lock, profile_name)
+    llvm = lock["llvm"]
+    configure_llvm_repository(llvm)
     archives, cache_status, _ = resolve_cached_archives(
         package_cache_directory, expected
     )
     cache_source = "verified-cache" if archives is not None else "verified-download"
-    llvm = lock["llvm"]
     if archives is None:
-        signing_key = llvm["signing_key"]
-        key_content = download(signing_key["url"])
-        verify_bytes(key_content, signing_key["sha256"], "LLVM signing key")
-        with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-bootstrap-") as temporary:
-            directory = pathlib.Path(temporary)
-            keyring = verify_key(
-                key_content, signing_key["primary_fingerprint"], directory
-            )
-            source = directory / "cxxlens-llvm.list"
-            source.write_text(
-                "deb [arch={architecture} signed-by={keyring}] {repository} "
-                "{suite} {component}\n".format(
-                    architecture=llvm["architecture"],
-                    keyring=KEYRING,
-                    repository=llvm["repository"],
-                    suite=llvm["suite"],
-                    component=llvm["component"],
-                ),
-                encoding="utf-8",
-            )
-            run(["sudo", "install", "-D", "-m", "0644", str(keyring), str(KEYRING)])
-            run(["sudo", "install", "-D", "-m", "0644", str(source), str(SOURCE_LIST)])
-        run(
-            [
-                "sudo",
-                "apt-get",
-                "-o",
-                f"Dir::Etc::sourcelist={SOURCE_LIST}",
-                "-o",
-                "Dir::Etc::sourceparts=-",
-                "-o",
-                "APT::Get::List-Cleanup=0",
-                "update",
-            ]
-        )
         package_requests = [
             f"{name}={expected[name]['version']}" for name in sorted(expected)
         ]

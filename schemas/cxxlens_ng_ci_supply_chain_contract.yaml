@@ -1,6 +1,6 @@
 schema: cxxlens.ng-ci-supply-chain-contract.v1
 kind: ci-supply-chain-contract
-document_version: 1.4.0
+document_version: 1.5.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -32,7 +32,7 @@ provenance:
   actions: names-and-full-commit-shas
   tools: version-path-and-binary-digest
   packages: exact-dpkg-versions
-  package_cache: verified-cache-or-locked-download-with-authority-digest
+  package_cache: verified-cache-or-locked-download-with-authority-and-dependency-resolution
   python_distributions: versions-and-record-digests
   lock_digest: sha256
   requirements_digest: sha256
