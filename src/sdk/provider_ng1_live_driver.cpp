@@ -50,11 +50,11 @@ namespace cxxlens::sdk::provider::detail
 			configuration.invocation, configuration.limits, cancellation);
 		if (!process)
 		{
-			const auto launch_error = process.error();
+			auto launch_error = std::move(process.error());
 			session->fail_before_worker_start();
 			if (auto cleanup = session->cleanup(); !cleanup)
 				return cxxlens::sdk::unexpected(std::move(cleanup.error()));
-			return cxxlens::sdk::unexpected(launch_error);
+			return cxxlens::sdk::unexpected(std::move(launch_error));
 		}
 		return ng1_live_session_driver{std::move(*session),
 									   std::move(*process),
