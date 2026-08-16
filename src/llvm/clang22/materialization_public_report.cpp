@@ -1986,6 +1986,10 @@ namespace cxxlens::detail::clang22::materialization
 				capture.unresolved.size() > limits.max_side_channel_records ||
 				capture.evidence.size() > limits.max_side_channel_records)
 				return sdk::unexpected({"materialization.report-invalid", "task_results", "limit"});
+			if (auto sealed_leaf =
+					validate_detailed_task_report_sealed_transcript_leaf(capture, limits);
+				!sealed_leaf)
+				return sdk::unexpected(std::move(sealed_leaf.error()));
 			for (std::size_t index{}; index < capture.batches.size(); ++index)
 				if (capture.batches[index].descriptor_id != task_descriptor_ids[index])
 					return sdk::unexpected({"materialization.report-invalid",
