@@ -81,8 +81,8 @@ jobs:
 
       - name: Commit the implementation source
         run: |
+          git rm -f .github/agent_fix_272.py
           git rm \
-            .github/agent_fix_272.py \
             .github/agent_fix_272.py.gz.b64 \
             .github/workflows/agent-fix-soft-unresolved-272.yml
           git add \
