@@ -227,6 +227,8 @@ def validate_repository(root: pathlib.Path) -> None:
         "ImageVersion",
         "python_distributions",
         'command_identity("doxygen")',
+        "package_cache",
+        "cache_key_authority_digest",
     ):
         if marker not in collector:
             raise CiSupplyChainError(f"provenance collector lacks supply-chain binding: {marker}")
