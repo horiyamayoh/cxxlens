@@ -238,7 +238,25 @@ jobs:
       - uses: ./.github/actions/setup-ci
         with:
           profile: none
-      - name: "Generate exact-SHA #277 agent context"
+      - name: "Generate exact-SHA authoritative #261 readiness context"
+        run: |
+          SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')"
+          python tools/quality/check_ng_api_development_readiness.py plan \
+            --root . \
+            --issue 261 \
+            --expected-revision "${GITHUB_SHA}" \
+            --expected-tree "${SOURCE_TREE}" \
+            --output-json "${RUNNER_TEMP}/cxxlens-ng-agent-context-issue-261.json" \
+            --output-markdown "${RUNNER_TEMP}/cxxlens-ng-agent-context-issue-261.md"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-ng-agent-context-261-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/cxxlens-ng-agent-context-issue-261.json
+            ${{ runner.temp }}/cxxlens-ng-agent-context-issue-261.md
+          if-no-files-found: error
+          retention-days: 90
+      - name: "Generate exact-SHA non-authoritative #277 projection"
         run: |
           SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')"
           python tools/quality/check_ng_agent_context.py plan \

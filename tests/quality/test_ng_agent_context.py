@@ -57,6 +57,9 @@ class AgentContextTests(unittest.TestCase):
                 tree=packet["binding"]["tree"],
             )
         self.assertEqual(packet["schema"], "cxxlens.ng-agent-context.v1")
+        self.assertEqual(packet["role"], "bounded-non-authoritative-context-projection")
+        self.assertEqual(packet["authority_scope"], "non-authoritative-projection")
+        self.assertEqual(packet["release_authority"], "none")
         self.assertEqual(packet["demand_source"]["tracking_issue"], "#275")
         self.assertEqual(packet["constructibility"]["gate_issue"], "#276")
         self.assertEqual(packet["binding"]["worktree"], "clean")
@@ -301,6 +304,23 @@ class AgentContextTests(unittest.TestCase):
 
         packet = self.packet()
         packet["constructibility"]["required_witnesses"].append("synthetic-witness")
+        with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
+            agent.catalog, "reject_dirty_source_files"
+        ), self.assertRaisesRegex(
+            agent.AgentContextError, r"agent-context\.stale-or-not-machine-derived"
+        ):
+            agent.validate_context(
+                ROOT,
+                packet,
+                use_case_id=USE_CASE_ID,
+                issue="#261",
+                revision=packet["binding"]["revision"],
+                tree=packet["binding"]["tree"],
+            )
+
+    def test_authority_marker_promotion_fails_closed(self) -> None:
+        packet = self.packet()
+        packet["authority_scope"] = "readiness-authority"
         with mock.patch.object(agent, "worktree_status", return_value=[]), mock.patch.object(
             agent.catalog, "reject_dirty_source_files"
         ), self.assertRaisesRegex(

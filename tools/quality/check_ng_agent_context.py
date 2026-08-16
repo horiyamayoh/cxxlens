@@ -39,6 +39,9 @@ DF_0261_RECORD_PATH = pathlib.Path(
 )
 PACKET_TEMPLATE_KEY = "first_packet"
 GENERATOR_PATH = pathlib.Path("tools/quality/check_ng_agent_context.py")
+PROJECTION_ARTIFACT = "cxxlens-ng-agent-context-277-${revision}"
+PROJECTION_AUTHORITY = "non-authoritative-projection"
+PROJECTION_RELEASE_AUTHORITY = "none"
 CANONICAL_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\.v[0-9]+(?:_[0-9]+)?$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 ISSUE = re.compile(r"^#[0-9]+$")
@@ -247,14 +250,24 @@ def select_source(
             "json": "cxxlens-ng-agent-context-issue-277.json",
             "markdown": "cxxlens-ng-agent-context-issue-277.md",
         },
-        "authority_scope": "exact-template-and-machine-projections",
+        "generator": GENERATOR_PATH.as_posix(),
+        "artifact": PROJECTION_ARTIFACT,
+        "authority": PROJECTION_AUTHORITY,
+        "release_authority": PROJECTION_RELEASE_AUTHORITY,
+        "consumer": "developer-context-only",
+        "excluded_from": [
+            "cxxlens-ng-api-development-readiness-report",
+            "cxxlens-ng-release-qualification",
+            "issue-closure",
+        ],
+        "authority_scope": "exact-authority-derived-developer-projection",
         "clean_source_required": True,
         "stale_policy": "reject",
     }
     if projection != expected_projection:
         fail("agent-context.projection-authority-mismatch")
-    if agent_context.get("generator") != GENERATOR_PATH.as_posix():
-        fail("agent-context.generator-authority-mismatch")
+    if agent_context.get("generator") != "tools/quality/check_ng_api_development_readiness.py":
+        fail("agent-context.authoritative-generator-mismatch")
     return family, template, report
 
 
@@ -485,6 +498,7 @@ def build_context(
         "result_contract": result_contract,
         "use_case": family,
         "packet_template": template,
+        "agent_context_projection": agent_context["projection"],
         "constructibility_gate": gate,
         "constructibility_projection": constructibility_projection,
         "demand_source": demand_source,
@@ -502,6 +516,8 @@ def build_context(
         "context_schema_digest": file_digest(root / CONTEXT_SCHEMA_PATH),
         "authority_projection_digest": digest(authority_projection),
         "generator": GENERATOR_PATH.as_posix(),
+        "authority_scope": PROJECTION_AUTHORITY,
+        "release_authority": PROJECTION_RELEASE_AUTHORITY,
         "worktree": "clean",
         "authority_reading_digest": digest(authority_reading_bindings),
         "design_feedback_records_digest": digest(design_feedback_records),
@@ -511,7 +527,9 @@ def build_context(
     packet = {
         "schema": "cxxlens.ng-agent-context.v1",
         "document_version": "1.0.0",
-        "role": "bounded-authority-derived-context",
+        "role": "bounded-non-authoritative-context-projection",
+        "authority_scope": PROJECTION_AUTHORITY,
+        "release_authority": PROJECTION_RELEASE_AUTHORITY,
         "packet_id": template["packet_id"],
         "issue": issue,
         "use_case_id": use_case_id,
@@ -591,7 +609,14 @@ def validate_context_integrity(
         binding.get("revision"), binding.get("tree")
     ) != (revision, tree):
         fail("agent-context.stale-or-not-machine-derived")
-    if binding.get("worktree") != "clean" or binding.get("generator") != GENERATOR_PATH.as_posix():
+    if (
+        packet.get("authority_scope") != PROJECTION_AUTHORITY
+        or packet.get("release_authority") != PROJECTION_RELEASE_AUTHORITY
+        or binding.get("worktree") != "clean"
+        or binding.get("generator") != GENERATOR_PATH.as_posix()
+        or binding.get("authority_scope") != PROJECTION_AUTHORITY
+        or binding.get("release_authority") != PROJECTION_RELEASE_AUTHORITY
+    ):
         fail("agent-context.stale-or-not-machine-derived")
     readings = bind_authority_reading(root, packet["authority_reading_set"])
     if readings != packet["authority_reading_bindings"]:
@@ -643,6 +668,8 @@ def render_markdown(packet: dict[str, Any]) -> str:
     return (
         f"# cxxlens agent context: {packet['use_case_id']}\n\n"
         f"- Schema: `{packet['schema']}`\n"
+        f"- Authority scope: `{packet['authority_scope']}`\n"
+        f"- Release authority: `{packet['release_authority']}`\n"
         f"- Packet: `{packet['packet_id']}`\n"
         f"- Issue: `{packet['issue']}`\n"
         f"- Consumer: `{packet['consumer']}`\n"

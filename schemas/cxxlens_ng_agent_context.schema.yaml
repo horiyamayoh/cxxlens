@@ -1,12 +1,14 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.ng-agent-context.v1
-title: cxxlens bounded authority-derived agent context
+title: cxxlens bounded non-authoritative agent-context projection
 type: object
 additionalProperties: false
 required:
   - schema
   - document_version
   - role
+  - authority_scope
+  - release_authority
   - packet_id
   - issue
   - use_case_id
@@ -34,7 +36,9 @@ required:
 properties:
   schema: {const: cxxlens.ng-agent-context.v1}
   document_version: {const: 1.0.0}
-  role: {const: bounded-authority-derived-context}
+  role: {const: bounded-non-authoritative-context-projection}
+  authority_scope: {const: non-authoritative-projection}
+  release_authority: {const: none}
   packet_id:
     type: string
     pattern: '^agent-context\.[a-z0-9._-]+\.v[0-9]+$'
@@ -235,6 +239,8 @@ properties:
       - context_schema_digest
       - authority_projection_digest
       - generator
+      - authority_scope
+      - release_authority
       - worktree
       - authority_reading_digest
       - design_feedback_records_digest
@@ -253,6 +259,8 @@ properties:
       context_schema_digest: {$ref: '#/$defs/digest'}
       authority_projection_digest: {$ref: '#/$defs/digest'}
       generator: {const: tools/quality/check_ng_agent_context.py}
+      authority_scope: {const: non-authoritative-projection}
+      release_authority: {const: none}
       worktree: {const: clean}
       authority_reading_digest: {$ref: '#/$defs/digest'}
       design_feedback_records_digest: {$ref: '#/$defs/digest'}

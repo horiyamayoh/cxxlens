@@ -280,8 +280,10 @@ properties:
         contract: agent.minimal-context.v1
         tracking_issue: '#277'
         source: machine-readable-authorities
-        generator: tools/quality/check_ng_agent_context.py
-        artifact: cxxlens-ng-agent-context-277-${revision}
+        generator: tools/quality/check_ng_api_development_readiness.py
+        artifact: cxxlens-ng-agent-context-261-${revision}
+        authority: wave0-readiness
+        output_contract: cxxlens.agent-context.v1
         required_fields:
         - goal-use-case
         - capability-gap
@@ -304,7 +306,16 @@ properties:
           output:
             json: cxxlens-ng-agent-context-issue-277.json
             markdown: cxxlens-ng-agent-context-issue-277.md
-          authority_scope: exact-template-and-machine-projections
+          generator: tools/quality/check_ng_agent_context.py
+          artifact: cxxlens-ng-agent-context-277-${revision}
+          authority: non-authoritative-projection
+          release_authority: none
+          consumer: developer-context-only
+          excluded_from:
+          - cxxlens-ng-api-development-readiness-report
+          - cxxlens-ng-release-qualification
+          - issue-closure
+          authority_scope: exact-authority-derived-developer-projection
           clean_source_required: true
           stale_policy: reject
         first_packet:

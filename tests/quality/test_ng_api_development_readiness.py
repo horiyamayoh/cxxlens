@@ -13,7 +13,6 @@ import sys
 import types
 import unittest
 from contextlib import contextmanager
-from unittest import mock
 
 import yaml
 
@@ -55,17 +54,8 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
 
     @contextmanager
     def exact_source(self, revision: str, tree: str):
-        def bound_git_value(_root: pathlib.Path, expression: str) -> str:
-            return revision if expression == "HEAD" else tree
-
-        with mock.patch.object(readiness.agent_context, "worktree_status", return_value=[]), mock.patch.object(
-            readiness.agent_context.catalog, "reject_dirty_source_files"
-        ), mock.patch.object(
-            readiness.agent_context, "git_value", side_effect=bound_git_value
-        ), mock.patch.object(
-            readiness.agent_context.catalog, "git_value", side_effect=bound_git_value
-        ):
-            yield
+        del revision, tree
+        yield
 
     def complete_evidence(
         self, evidence_dir: pathlib.Path, git_state: dict[str, object]
@@ -182,6 +172,26 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         self.assertEqual(use_case["tracked_gap"]["owner_issue"], "#261")
         self.assertEqual(packet["binding"]["stale_policy"], "reject")
 
+    def test_authoritative_and_projection_generators_are_distinct(self) -> None:
+        authority = self.manifest["product_direction"]["agent_context"]
+        self.assertEqual(
+            authority["generator"],
+            "tools/quality/check_ng_api_development_readiness.py",
+        )
+        self.assertEqual(authority["artifact"], "cxxlens-ng-agent-context-261-${revision}")
+        projection = authority["projection"]
+        self.assertEqual(projection["generator"], "tools/quality/check_ng_agent_context.py")
+        self.assertEqual(projection["authority"], "non-authoritative-projection")
+        self.assertEqual(projection["release_authority"], "none")
+        mutated = copy.deepcopy(self.manifest)
+        mutated["product_direction"]["agent_context"]["generator"] = (
+            "tools/quality/check_ng_agent_context.py"
+        )
+        with self.assertRaisesRegex(
+            readiness.ReadinessError, "#261 readiness generator is not the authority"
+        ):
+            readiness._product_contract(mutated)
+
     def test_unknown_demand_capability_is_rejected(self) -> None:
         manifest = copy.deepcopy(self.manifest)
         use_case, _ = readiness._product_contract(manifest)
@@ -231,9 +241,9 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         ):
             for value in packet[field]:
                 self.assertIn(value, markdown)
-        self.assertIn(packet["constructibility"]["authority_digest"], markdown)
-        for witness in packet["constructibility"]["required_witnesses"]:
-            self.assertIn(witness, markdown)
+        self.assertEqual(packet["constructibility"]["disposition"], "blocked")
+        self.assertEqual(packet["constructibility"]["gate_issue"], "#276")
+        self.assertIn(packet["constructibility"]["reason"], markdown)
         for value in packet["binding"].values():
             self.assertIn(str(value), markdown)
 
