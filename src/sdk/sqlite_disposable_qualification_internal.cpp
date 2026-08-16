@@ -430,6 +430,9 @@ namespace cxxlens::detail::sqlite_qualification
 			sqlite_disposable_cleanup_policy::retain_private_root};
 		void (*pre_remove_signal)(void*) noexcept {};
 		void* pre_remove_signal_context{};
+		// Once a normalization boundary is entered, the capability is terminal for every
+		// subsequent normalization or handoff attempt, including an opaque syscall failure.
+		bool normalization_attempted{};
 		bool active{true};
 	};
 
@@ -1268,6 +1271,9 @@ namespace cxxlens::detail::sqlite_qualification
 			if (state == nullptr || !state->active)
 				return cxxlens::sdk::unexpected(
 					raw_family_error("normalization-capability-revoked"));
+			if (state->normalization_attempted)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-capability-consumed"));
 			if (request.requested_effect != sqlite_disposable_requested_effect::normalize_source)
 				return cxxlens::sdk::unexpected(
 					raw_family_error("normalization-effect-not-authorized"));
@@ -1300,6 +1306,18 @@ namespace cxxlens::detail::sqlite_qualification
 
 			if (!revalidate_live_root_objects(*state))
 				return cxxlens::sdk::unexpected(raw_family_error("normalization-anchor-drift"));
+
+			// The test signal models an actor that races between the initial census and the
+			// mutation boundary. Re-read both source leaves after that point and reject any
+			// identity, size, metadata, or byte drift before unlinking either object.
+			state->normalization_attempted = true;
+			const auto signal = std::exchange(state->pre_remove_signal, nullptr);
+			auto* const signal_context = std::exchange(state->pre_remove_signal_context, nullptr);
+			if (signal != nullptr)
+				signal(signal_context);
+			auto current_main = read_raw_regular_file(state->root.get(), "main");
+			if (!current_main || current_main->observation != before->main)
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-main-drift"));
 			auto current_wal = read_raw_regular_file(state->root.get(), "main-wal");
 			if (!current_wal || current_wal->observation.byte_count != 0U ||
 				current_wal->observation != *before->wal)
@@ -1307,12 +1325,8 @@ namespace cxxlens::detail::sqlite_qualification
 			if (!revalidate_live_root_objects(*state))
 				return cxxlens::sdk::unexpected(raw_family_error("normalization-anchor-drift"));
 
-			// This is the only mutation boundary. A test may rebind the known leaf here; the
-			// subsequent census must reject the result, and this function must never retry.
-			const auto signal = std::exchange(state->pre_remove_signal, nullptr);
-			auto* const signal_context = std::exchange(state->pre_remove_signal_context, nullptr);
-			if (signal != nullptr)
-				signal(signal_context);
+			// This is the only mutation boundary. The terminal state above is deliberately
+			// recorded before either unlink, so a failure below cannot be retried.
 			if (::unlinkat(state->root.get(), "main-wal", 0) != 0)
 				return cxxlens::sdk::unexpected(
 					raw_family_error("normalization-wal-unlink-uncertain"));

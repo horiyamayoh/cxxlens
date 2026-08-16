@@ -109,6 +109,7 @@ namespace
 										 "preexisting-regular",
 										 "rebound-root",
 										 "renamed-original",
+										 "renamed-main",
 										 "renamed-wal",
 										 "nonempty-after-mint"})
 				{
@@ -788,6 +789,27 @@ namespace
 		swap.create_status = ::close(replacement);
 	}
 
+	struct main_unlink_boundary_swap
+	{
+		int root{-1};
+		int rename_status{-1};
+		int create_status{-1};
+	};
+
+	void swap_main_at_unlink_boundary(void* context) noexcept
+	{
+		auto& swap = *static_cast<main_unlink_boundary_swap*>(context);
+		swap.rename_status = ::renameat(swap.root, "main", swap.root, "renamed-main");
+		const auto replacement =
+			::openat(swap.root, "main", O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+		if (replacement < 0)
+		{
+			swap.create_status = -1;
+			return;
+		}
+		swap.create_status = ::close(replacement);
+	}
+
 	void exercise_fz_post_fixture_cleanup()
 	{
 		{
@@ -820,6 +842,10 @@ namespace
 						cleaned->after.family.phase == sqlite_disposable_family_phase::post &&
 						!cleaned->after.wal && cleaned->after.main == cleaned->before.main,
 					"FZ-post cleanup returns a stable rollback-empty anchor observation");
+			const auto repeated =
+				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			require(!repeated && repeated.error().detail == "normalization-capability-consumed",
+					"successful cleanup consumes the normalization capability");
 		}
 
 		{
@@ -931,16 +957,58 @@ namespace
 				*minted, swap_wal_at_unlink_boundary, &swap);
 			const auto rejected =
 				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			struct stat renamed_wal = {};
+			require(::fstatat(swap.root, "renamed-wal", &renamed_wal, AT_SYMLINK_NOFOLLOW) == 0,
+					"renamed WAL remains observable after pre-effect rejection");
 			require(::close(swap.root) == 0, "close unlink-boundary WAL fixture root");
-			require(!rejected && rejected.error().detail == "raw-family-unresolved-topology",
-					"WAL rebind at the mutation boundary is not silently accepted");
+			require(!rejected && rejected.error().detail == "normalization-wal-drift",
+					"WAL rebind is rejected before the unlink boundary");
 			require(swap.rename_status == 0 && swap.create_status == 0,
 					"WAL rebind negative signal executed");
 			auto classify = setup;
 			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
 			const auto unresolved = observe_sqlite_disposable_raw_empty_family(*minted, classify);
 			require(!unresolved && unresolved.error().detail == "raw-family-unresolved-topology",
-					"post-effect WAL rebind remains explicitly unresolved without retry");
+					"pre-effect WAL rebind remains explicitly unresolved without retry");
+			const auto repeated =
+				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			require(!repeated && repeated.error().detail == "normalization-capability-consumed",
+					"WAL drift consumes the normalization capability without retry");
+		}
+
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint unlink-boundary main drift capability");
+			const auto setup = minted->no_effect_request();
+			auto normalize = setup;
+			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main", canonical_empty_main(1U))),
+					"write unlink-boundary main drift fixture");
+			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
+						*minted, setup, "main-wal", {})),
+					"write unlink-boundary main drift WAL");
+			main_unlink_boundary_swap swap;
+			swap.root = parent.open_directory("qualification-root");
+			set_sqlite_disposable_pre_remove_signal_for_testing(
+				*minted, swap_main_at_unlink_boundary, &swap);
+			const auto rejected =
+				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			struct stat renamed_main = {};
+			struct stat preserved_wal = {};
+			require(::fstatat(swap.root, "renamed-main", &renamed_main, AT_SYMLINK_NOFOLLOW) == 0 &&
+						::fstatat(swap.root, "main-wal", &preserved_wal, AT_SYMLINK_NOFOLLOW) == 0,
+					"main drift preserves both the renamed source and WAL");
+			require(::close(swap.root) == 0, "close unlink-boundary main drift root");
+			require(!rejected && rejected.error().detail == "normalization-main-drift",
+					"main replacement is rejected before unlinking the WAL");
+			require(swap.rename_status == 0 && swap.create_status == 0,
+					"main rebind negative signal executed");
+			const auto repeated =
+				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			require(!repeated && repeated.error().detail == "normalization-capability-consumed",
+					"main drift consumes the normalization capability without retry");
 		}
 	}
 
