@@ -1,5 +1,5 @@
 {
-  "asset_count": 691,
+  "asset_count": 694,
   "assets": [
     {
       "authority": "active",
@@ -1824,6 +1824,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_agent_context.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4028,6 +4035,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_agent_context.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_api_development_readiness.py",
       "removal_issue": null,
       "replacement": null,
@@ -4532,6 +4546,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_agent_context.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_api_development_readiness.py",
       "removal_issue": null,
       "replacement": null,
@@ -4840,7 +4861,7 @@
     }
   ],
   "classifications": {
-    "active": 655,
+    "active": 658,
     "archived": 35,
     "generated": 1
   },
