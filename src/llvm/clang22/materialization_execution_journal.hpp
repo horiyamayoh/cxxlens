@@ -157,7 +157,8 @@ namespace cxxlens::detail::clang22::materialization
 		 *
 		 * This operation has no compact-failure counterpart: once publish() was attempted, a
 		 * zero-effect response cannot be authored. The returned token retains the exact Store
-		 * observation so callers cannot accidentally claim zero commit or retry blindly.
+		 * observation so callers cannot accidentally claim zero commit or retry blindly. Successful
+		 * authority issuance consumes this journal; repeated rvalue issuance is rejected.
 		 */
 		[[nodiscard]] sdk::result<class materialization_postpublication_failure_authority>
 		issue_no_response_failure(materialization_postpublication_failure_phase phase,
@@ -167,6 +168,7 @@ namespace cxxlens::detail::clang22::materialization
 		explicit materialization_postpublication_journal(
 			materialization_store_observation observation);
 		materialization_store_observation observation_;
+		bool consumed_{};
 
 		friend class materialization_execution_journal;
 	};

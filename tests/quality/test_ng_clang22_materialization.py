@@ -5252,6 +5252,76 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             materialization.validate_contract_exact(contract)
 
+    def test_postpublication_setup_is_guarded_and_oom_fallback_is_prebuilt(
+        self,
+    ) -> None:
+        source = (ROOT / "tools/clang22/materialize_main.cpp").read_text(
+            encoding="utf-8"
+        )
+        publication = source.index(
+            "auto postpublication = std::move(*journal).begin_publication();"
+        )
+        recovery_helper = source.index(
+            "auto fail_after_publication =", publication
+        )
+        guarded_setup = source.index(
+            "\n\ttry\n\t{\n\t\tpublic_materialization_success_report_input public_input;",
+            recovery_helper,
+        )
+        bad_alloc_catch = source.index(
+            "\n\tcatch (const std::bad_alloc&)", guarded_setup
+        )
+        postpublication_prefix = source[publication:guarded_setup]
+        guarded_body = source[guarded_setup:bad_alloc_catch]
+        self.assertNotIn(
+            "public_materialization_success_report_input public_input;",
+            postpublication_prefix,
+        )
+        self.assertNotIn(
+            "materialization_execution_census_projection(execution_census)",
+            postpublication_prefix,
+        )
+        self.assertNotIn("projections.values.emplace", postpublication_prefix)
+        self.assertNotIn("utc_now()", postpublication_prefix)
+        self.assertIn(
+            "materialization_execution_census_projection(execution_census)",
+            guarded_body,
+        )
+        self.assertIn("projections.values.emplace", guarded_body)
+        self.assertIn("public_input.generated_at = utc_now();", guarded_body)
+
+        for name in (
+            "postpublication_allocation_error",
+            "postpublication_exception_error",
+        ):
+            declaration = f"sdk::error {name};"
+            self.assertLess(
+                source.index(declaration),
+                publication,
+                f"{name} must exist before the publication boundary",
+            )
+            self.assertLess(
+                source.index(f"{name}.code.reserve(64U);"),
+                publication,
+                f"{name} storage must be reserved before the publication boundary",
+            )
+
+        unknown_catch = source.index("\n\tcatch (...)", bad_alloc_catch)
+        bad_alloc_body = source[bad_alloc_catch:unknown_catch]
+        unknown_body = source[unknown_catch:]
+        self.assertIn(
+            "std::move(postpublication_allocation_error)", bad_alloc_body
+        )
+        self.assertIn("std::move(postpublication_exception_error)", unknown_body)
+        self.assertNotIn(
+            '{"materialization.report-invalid", "postpublication", "allocation"}',
+            bad_alloc_body,
+        )
+        self.assertNotIn(
+            '{"materialization.report-invalid", "postpublication", "exception"}',
+            unknown_body,
+        )
+
     def test_machine_contract_requires_bounded_two_phase_report_lifecycle(self) -> None:
         accepted = materialization.load(ROOT / materialization.CONTRACT)
         materialization.validate_contract_exact(copy.deepcopy(accepted))

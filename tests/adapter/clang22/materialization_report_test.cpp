@@ -743,6 +743,14 @@ namespace
 				failure->process_exit_status() == 2 && !failure->response_authoritative() &&
 				!failure->compact_downgrade_allowed(),
 			"postpublication failure lost the committed-record-only/no-response contract");
+
+		auto repeated = std::move(*postpublication)
+							.issue_no_response_failure(
+								materialization_postpublication_failure_phase::stdout_transport,
+								{"materialization.report-invalid", "stdout", "repeated"});
+		require(!repeated && repeated.error().code == "materialization.execution-journal-invalid" &&
+					repeated.error().detail == "consumed-journal",
+				"postpublication journal issued a second recovery authority");
 	}
 
 	void bounded_detailed_projection_never_promotes_unverified_store()

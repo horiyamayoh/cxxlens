@@ -2044,6 +2044,8 @@ int main(const int argc, char**)
 								  request_subject,
 								  prepublication.error());
 	public_materialization_prior_artifact_persistence prior_artifact_persistence;
+	sdk::error postpublication_allocation_error;
+	sdk::error postpublication_exception_error;
 	try
 	{
 		// Allocate the memory-backend unavailable representation before the irreversible Store
@@ -2055,13 +2057,25 @@ int main(const int argc, char**)
 		prior_artifact_persistence.error_code = "materialization.incremental-artifact-invalid";
 		prior_artifact_persistence.error_field = "publication.prior-artifact";
 		prior_artifact_persistence.error_detail = "persistence-failed";
+		// These errors are moved, never constructed, by the post-publication catch handlers. Their
+		// storage is reserved while compact prepublication failure is still possible so an OOM
+		// catch cannot throw while trying to describe the recovery-only outcome.
+		postpublication_allocation_error.code.reserve(64U);
+		postpublication_allocation_error.field.reserve(64U);
+		postpublication_allocation_error.detail.reserve(64U);
+		postpublication_allocation_error.code = "materialization.report-invalid";
+		postpublication_allocation_error.field = "postpublication";
+		postpublication_allocation_error.detail = "allocation";
+		postpublication_exception_error.code.reserve(64U);
+		postpublication_exception_error.field.reserve(64U);
+		postpublication_exception_error.detail.reserve(64U);
+		postpublication_exception_error.code = "materialization.report-invalid";
+		postpublication_exception_error.field = "postpublication";
+		postpublication_exception_error.detail = "exception";
 	}
 	catch (const std::bad_alloc&)
 	{
-		return emit_failure(std::move(*journal),
-							{"materialization.report-invalid",
-							 request_subject,
-							 "prior-artifact-fallback-allocation"});
+		return no_response();
 	}
 
 	// Only the bounded publication-independent projection is constructed before the irreversible
@@ -2095,29 +2109,29 @@ int main(const int argc, char**)
 		}
 		return no_response();
 	};
-	public_materialization_success_report_input public_input;
-	public_input.request = &*request;
-	public_input.request_globals = &*request_globals;
-	public_input.task_report_spool = &task_reports;
-	public_input.raw_input = &*observed;
-	public_input.occurrence_manifest = &occurrence->manifest();
-	public_input.occurrence_receipt = &occurrence->receipt();
-	public_input.bounded_claims = &coordinated->bounded_claim_source();
-	public_input.store = &postpublication->store_observation();
-	public_input.prepublication = &*prepublication;
-	auto execution_projection = materialization_execution_census_projection(execution_census);
-	if (!execution_projection)
-		return fail_after_publication(
-			materialization_postpublication_failure_phase::report_construction,
-			std::move(execution_projection.error()));
-	public_input.projections.values.emplace("incremental_execution",
-											std::move(*execution_projection));
-	if (rooted_opener && rooted_opener->receipt())
-		public_input.rooted_vfs_receipt = &*rooted_opener->receipt();
-	public_input.generated_at = utc_now();
-	public_input.maximum_report_bytes = report_limits.max_projection_bytes;
 	try
 	{
+		public_materialization_success_report_input public_input;
+		public_input.request = &*request;
+		public_input.request_globals = &*request_globals;
+		public_input.task_report_spool = &task_reports;
+		public_input.raw_input = &*observed;
+		public_input.occurrence_manifest = &occurrence->manifest();
+		public_input.occurrence_receipt = &occurrence->receipt();
+		public_input.bounded_claims = &coordinated->bounded_claim_source();
+		public_input.store = &postpublication->store_observation();
+		public_input.prepublication = &*prepublication;
+		auto execution_projection = materialization_execution_census_projection(execution_census);
+		if (!execution_projection)
+			return fail_after_publication(
+				materialization_postpublication_failure_phase::report_construction,
+				std::move(execution_projection.error()));
+		public_input.projections.values.emplace("incremental_execution",
+												std::move(*execution_projection));
+		if (rooted_opener && rooted_opener->receipt())
+			public_input.rooted_vfs_receipt = &*rooted_opener->receipt();
+		public_input.generated_at = utc_now();
+		public_input.maximum_report_bytes = report_limits.max_projection_bytes;
 		if (admitted_request.publication().backend == "memory")
 		{
 			// The memory backend is intentionally process-local.  This installed tool consumes one
@@ -2196,12 +2210,12 @@ int main(const int argc, char**)
 	{
 		return fail_after_publication(
 			materialization_postpublication_failure_phase::report_construction,
-			{"materialization.report-invalid", "postpublication", "allocation"});
+			std::move(postpublication_allocation_error));
 	}
 	catch (...)
 	{
 		return fail_after_publication(
 			materialization_postpublication_failure_phase::report_construction,
-			{"materialization.report-invalid", "postpublication", "exception"});
+			std::move(postpublication_exception_error));
 	}
 }

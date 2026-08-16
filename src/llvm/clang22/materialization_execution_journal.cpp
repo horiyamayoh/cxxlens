@@ -361,6 +361,8 @@ namespace cxxlens::detail::clang22::materialization
 	materialization_postpublication_journal::issue_no_response_failure(
 		const materialization_postpublication_failure_phase phase, sdk::error error) &&
 	{
+		if (consumed_)
+			return sdk::unexpected(journal_error("postpublication-failure", "consumed-journal"));
 		if (!postpublication_phase_valid(phase) || !observation_.publication_attempted ||
 			observation_.publish_call_count != 1U || !sdk::validate_utf8_text(error.code) ||
 			!sdk::validate_utf8_text(error.field) || !sdk::validate_utf8_text(error.detail) ||
@@ -379,6 +381,7 @@ namespace cxxlens::detail::clang22::materialization
 			? materialization_postpublication_recovery_authority::committed_record_only
 			: materialization_postpublication_recovery_authority::read_only_recovery_required;
 		failure->observation = std::move(observation_);
+		consumed_ = true;
 		return materialization_postpublication_failure_authority{std::move(failure)};
 	}
 
