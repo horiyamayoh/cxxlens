@@ -130,6 +130,8 @@ def pinned_actions(root: pathlib.Path) -> list[dict[str, str]]:
             else:
                 continue
             reference = reference.split("#", 1)[0].rstrip()
+            if reference.startswith("./"):
+                continue
             name, separator, revision = reference.partition("@")
             if not separator or len(revision) != 40 or any(
                 character not in "0123456789abcdef" for character in revision

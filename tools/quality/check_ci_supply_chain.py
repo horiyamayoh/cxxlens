@@ -108,6 +108,8 @@ def validate_workflow(path: pathlib.Path, lock: dict[str, Any]) -> None:
         if stripped.startswith("- uses:") or stripped.startswith("uses:"):
             reference = stripped.removeprefix("-").strip().removeprefix("uses:")
             reference = reference.split("#", 1)[0].strip()
+            if reference.startswith("./"):
+                continue
             name, separator, revision = reference.partition("@")
             if not separator or expected_actions.get(name) != revision:
                 raise CiSupplyChainError(f"workflow action differs from lock: {path}: {reference}")
@@ -164,7 +166,7 @@ def validate_repository(root: pathlib.Path) -> None:
         (root / workflow).read_text(encoding="utf-8") for workflow in WORKFLOWS
     )
     expected_profiles = {
-        "--profile developer": 9,
+        "--profile developer": 10,
         "--profile compiler": 0,
         "--profile static-analysis": 1,
         "--profile documentation": 1,
