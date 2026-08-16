@@ -1391,7 +1391,6 @@ namespace
 		for (const auto& seal : journal.ordered_task_receipt_seal_digests)
 			seals.push_back(sdk::canonical_value::from_string(seal));
 		auto payload = sdk::canonical_binary(sdk::canonical_value::from_tuple({
-			sdk::canonical_value::from_string(journal.request_binding.canonical_binding_digest),
 			sdk::canonical_value::from_string(journal.materialization_request_id),
 			receipt_u64_bytes(journal.exact_task_count),
 			sdk::canonical_value::from_tuple(std::move(task_ids)),
@@ -1889,7 +1888,6 @@ namespace
 				sdk::canonical_value::from_string(receipt.pre_encoder_task_receipt_seal_digest));
 		}
 		auto expected_payload = sdk::canonical_binary(sdk::canonical_value::from_tuple({
-			sdk::canonical_value::from_string(request_binding->canonical_binding_digest),
 			sdk::canonical_value::from_string(request_id),
 			receipt_u64_bytes(static_cast<std::uint64_t>(receipts.size())),
 			sdk::canonical_value::from_tuple(std::move(expected_task_ids)),
@@ -2029,6 +2027,33 @@ namespace
 		require(external_valid.has_value(),
 				"Store external authority rejected the sealed journal: " +
 					(external_valid ? std::string{} : failure(external_valid.error())));
+		auto rebound_journal = *journal;
+		rebound_journal.request_binding.catalog_id =
+			"catalog:semantic-v2:sha256:" + std::string(64U, 'f');
+		rebound_journal.request_binding.catalog_digest =
+			"semantic-v2:sha256:" + std::string(64U, 'e');
+		auto rebound_binding_digest =
+			seal_materialization_claim_request_binding(rebound_journal.request_binding);
+		require(rebound_binding_digest.has_value(),
+				"journal binding-rebound fixture binding seal failed");
+		rebound_journal.request_binding.canonical_binding_digest =
+			std::move(*rebound_binding_digest);
+		require(
+			rebound_journal.execution_journal_receipt_set_digest ==
+					journal->execution_journal_receipt_set_digest &&
+				validate_materialization_incremental_execution_journal(rebound_journal).has_value(),
+			"journal v1 projection unexpectedly carried the complete request binding");
+		const materialization_store_external_authority rebound_journal_authority{
+			&*source,
+			&rebound_journal,
+			*request_binding,
+		};
+		auto rebound_journal_external =
+			validate_materialization_store_external_authority(rebound_journal_authority);
+		require(!rebound_journal_external &&
+					failure(rebound_journal_external.error()) ==
+						"store.external-authority/request-binding/mismatch",
+				"Store external authority accepted a journal with a rebound complete binding");
 		const materialization_store_external_authority cross_request_stream_and_journal{
 			&*source_b,
 			&*journal_b,
