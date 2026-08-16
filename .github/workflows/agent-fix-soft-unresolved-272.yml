@@ -27,6 +27,52 @@ jobs:
         with:
           python-version: "3.12.11"
 
+      - name: Make recovered replacements formatting-tolerant
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/agent_fix_272.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''def replace_exact(path: str, old: str, new: str, *, count: int = 1) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              actual = text.count(old)
+              if actual != count:
+                  raise RuntimeError(f"{path}: expected {count} matches, found {actual}")
+              file.write_text(text.replace(old, new), encoding="utf-8")
+          '''
+          # The source file stores this function without the YAML heredoc indentation.
+          old = '\n'.join(line[12:] if line.startswith('            ') else line for line in old.splitlines()) + '\n'
+          new = '''def replace_exact(path: str, old: str, new: str, *, count: int = 1) -> None:
+              import re
+
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              actual = text.count(old)
+              if actual == count:
+                  file.write_text(text.replace(old, new), encoding="utf-8")
+                  return
+
+              pieces = re.split(r"([ \\t]+)", old)
+              pattern = "".join(
+                  r"[ \\t]+" if piece and all(character in " \\t" for character in piece)
+                  else re.escape(piece)
+                  for piece in pieces
+              )
+              matches = list(re.finditer(pattern, text))
+              if len(matches) != count:
+                  raise RuntimeError(
+                      f"{path}: expected {count} matches, found {actual} exact and {len(matches)} whitespace-flexible"
+                  )
+              file.write_text(re.sub(pattern, lambda _: new, text, count=count), encoding="utf-8")
+          '''
+          new = '\n'.join(line[12:] if line.startswith('            ') else line for line in new.splitlines()) + '\n'
+          if text.count(old) != 1:
+              raise RuntimeError('recovered replace_exact function shape changed')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
       - name: Apply the reviewed implementation
         run: |
           python3 -m py_compile .github/agent_fix_272.py
