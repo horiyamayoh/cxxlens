@@ -17,12 +17,20 @@ jobs:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'issue-316-ci-setup-integration'
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
+
+      - name: Integrate current main without rewriting branch history
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git fetch origin main
+          git merge --no-commit --no-ff origin/main
 
       - name: Recover and verify the reviewed migration payload
         env:
@@ -103,8 +111,6 @@ jobs:
       - name: Commit the exact generated result
         run: |
           set -euo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
           if git diff --cached --quiet; then
             echo "issue 316 migration produced no changes" >&2
