@@ -12,21 +12,12 @@ import pathlib
 import re
 import shutil
 import subprocess
-import sys
 from typing import Any
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SUPPLY_CHAIN_LOCK = pathlib.Path("tools/ci/llvm22-noble.lock.json")
 REQUIREMENTS_LOCK = pathlib.Path("tools/quality/requirements.lock")
-sys.path.insert(0, str(ROOT / "tools" / "ci"))
-
-from bootstrap_supply_chain import (  # noqa: E402
-    PACKAGE_CACHE_SCHEMA,
-    cache_provenance_digest,
-    package_authority,
-    package_cache_key,
-)
 
 
 def run(*command: str) -> str:
@@ -40,16 +31,90 @@ def file_digest(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def local_workflow_lock(root: pathlib.Path) -> dict[str, str]:
+def local_reference_lock(
+    root: pathlib.Path, reference: pathlib.PurePosixPath, kind: str
+) -> tuple[pathlib.Path, str]:
     try:
         lock = json.loads((root / SUPPLY_CHAIN_LOCK).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"could not read local workflow lock: {error}") from error
-    workflows = lock.get("local_workflows")
-    if not isinstance(workflows, dict):
-        raise ValueError("local workflow lock is missing")
-    return workflows
+        raise ValueError(f"could not read local reference lock: {error}") from error
+    if kind == "workflow":
+        section = lock.get("local_workflows")
+        local_path = root / reference
+    elif kind == "action":
+        section = lock.get("local_actions")
+        reference = pathlib.PurePosixPath(reference.as_posix() + "/action.yml")
+        local_path = root / reference
+    else:
+        raise ValueError(f"unknown local reference kind: {kind}")
+    if not isinstance(section, dict):
+        raise ValueError(f"local {kind} lock is missing")
+    expected = section.get(reference.as_posix())
+    if not isinstance(expected, str):
+        raise ValueError(f"local {kind} is absent from supply-chain lock: {reference}")
+    return local_path, expected
 
+
+def package_cache_authority_digest(lock: dict[str, Any]) -> str:
+    return "sha256:" + hashlib.sha256(
+        json.dumps(
+            lock["package_cache"], sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def package_cache_provenance(lock: dict[str, Any]) -> dict[str, Any]:
+    config = lock.get("package_cache")
+    if not isinstance(config, dict):
+        raise ValueError("package-cache authority is missing")
+    authority_digest = package_cache_authority_digest(lock)
+    raw_path = os.environ.get(config["receipt_environment"])
+    if not raw_path:
+        return {
+            "status": "not-requested",
+            "authority_digest": authority_digest,
+            "key": "unavailable",
+            "cache_hit": "not-requested",
+            "profiles": {},
+        }
+    path = pathlib.Path(raw_path)
+    if not path.is_absolute() or not path.is_file():
+        raise ValueError("package-cache provenance receipt is unavailable")
+    document = json.loads(path.read_text(encoding="utf-8"))
+    expected_key = os.environ.get(config["key_environment"], "unavailable")
+    expected_hit = (
+        "hit"
+        if os.environ.get(config["hit_environment"], "").lower() == "true"
+        else "miss"
+    )
+    if (
+        document.get("schema") != "cxxlens.ci-package-cache-receipt.v1"
+        or document.get("authority_digest") != authority_digest
+        or document.get("key") != expected_key
+        or document.get("cache_hit") != expected_hit
+        or not isinstance(document.get("profiles"), dict)
+    ):
+        raise ValueError("package-cache provenance receipt binding differs")
+    allowed_sources = {"verified-cache", "verified-download"}
+    for profile, rows in document["profiles"].items():
+        if not isinstance(profile, str) or not isinstance(rows, list) or not rows:
+            raise ValueError("package-cache provenance profile is invalid")
+        for row in rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("source") not in allowed_sources
+                or not isinstance(row.get("package_digest"), str)
+                or not row["package_digest"].startswith("sha256:")
+            ):
+                raise ValueError("package-cache provenance package record is invalid")
+    return {
+        "status": "verified",
+        "authority_digest": authority_digest,
+        "key": expected_key,
+        "cache_hit": expected_hit,
+        "profiles": document["profiles"],
+        "receipt_digest": file_digest(path),
+    }
 
 def provenance_digest(document: dict[str, Any]) -> str:
     projection = {key: value for key, value in document.items() if key != "digest"}
@@ -77,7 +142,6 @@ def package_versions(lock: dict[str, Any]) -> list[dict[str, str]]:
         package: {
             "version": version,
             "digest": lock["llvm"]["package_sha256"][package],
-            "architecture": lock["llvm"]["architecture"],
         }
         for package, version in lock["llvm"]["packages"].items()
     }
@@ -85,7 +149,6 @@ def package_versions(lock: dict[str, Any]) -> list[dict[str, str]]:
     packages[documentation["package"]] = {
         "version": documentation["version"],
         "digest": documentation["sha256"],
-        "architecture": documentation["architecture"],
     }
     result = []
     for package, authority in sorted(packages.items()):
@@ -97,7 +160,6 @@ def package_versions(lock: dict[str, Any]) -> list[dict[str, str]]:
                 {
                     "package": package,
                     "version": version,
-                    "architecture": authority["architecture"],
                     "package_digest": "sha256:" + authority["digest"],
                 }
             )
@@ -156,32 +218,36 @@ def pinned_actions(root: pathlib.Path) -> list[dict[str, str]]:
             if reference.startswith("./"):
                 local_reference = pathlib.PurePosixPath(reference[2:])
                 if (
-                    not reference.startswith("./.github/workflows/")
-                    or local_reference.is_absolute()
+                    local_reference.is_absolute()
                     or ".." in local_reference.parts
                     or local_reference.as_posix() != reference[2:]
                 ):
                     raise ValueError(
-                        f"local workflow reference is not a tracked workflow: {workflow}: {reference}"
+                        f"local reference is not repository-scoped: {workflow}: {reference}"
                     )
-                local_path = root / local_reference
-                if not local_path.is_file():
+                if reference.startswith("./.github/workflows/"):
+                    kind = "workflow"
+                elif reference.startswith("./.github/actions/"):
+                    kind = "action"
+                else:
                     raise ValueError(
-                        f"local workflow reference is unavailable: {workflow}: {reference}"
+                        f"unsupported local reference: {workflow}: {reference}"
                     )
-                expected_digest = local_workflow_lock(root).get(local_reference.as_posix())
+                local_path, expected_digest = local_reference_lock(
+                    root, local_reference, kind
+                )
                 if (
-                    not isinstance(expected_digest, str)
+                    not local_path.is_file()
                     or len(expected_digest) != 64
                     or any(character not in "0123456789abcdef" for character in expected_digest)
                 ):
                     raise ValueError(
-                        f"local workflow is absent from supply-chain lock: {workflow}: {reference}"
+                        f"local {kind} lock binding is invalid: {workflow}: {reference}"
                     )
                 actual_digest = file_digest(local_path).removeprefix("sha256:")
                 if actual_digest != expected_digest:
                     raise ValueError(
-                        f"local workflow differs from supply-chain lock: {workflow}: {reference}"
+                        f"local {kind} differs from supply-chain lock: {workflow}: {reference}"
                     )
                 continue
             name, separator, revision = reference.partition("@")
@@ -215,81 +281,12 @@ def supply_chain(root: pathlib.Path) -> tuple[dict[str, Any], dict[str, str]]:
     return lock, binding
 
 
-def load_package_cache_provenance(
-    path: pathlib.Path, root: pathlib.Path
-) -> dict[str, Any]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"could not read package-cache provenance: {error}") from error
-    if not isinstance(document, dict) or document.get("schema") != PACKAGE_CACHE_SCHEMA:
-        raise ValueError("unknown package-cache provenance schema")
-    if document.get("digest") != cache_provenance_digest(document):
-        raise ValueError("package-cache provenance digest mismatch")
-    lock = json.loads((root / SUPPLY_CHAIN_LOCK).read_text(encoding="utf-8"))
-    lock_digest = file_digest(root / SUPPLY_CHAIN_LOCK)
-    if document.get("cache_key_authority_digest") != lock_digest:
-        raise ValueError("package-cache provenance authority digest mismatch")
-    profile = document.get("profile")
-    if not isinstance(profile, str):
-        raise ValueError("package-cache provenance profile is missing")
-    expected = package_authority(lock, profile)
-    status = document.get("cache_status")
-    source = document.get("cache_source")
-    if status not in {"disabled", "hit", "miss", "invalid"}:
-        raise ValueError("package-cache provenance status is invalid")
-    if source not in {"verified-cache", "verified-download"}:
-        raise ValueError("package-cache provenance source is invalid")
-    if (status == "hit") != (source == "verified-cache"):
-        raise ValueError("package-cache provenance status/source mismatch")
-    if document.get("transport_only") is not True:
-        raise ValueError("package-cache provenance must be transport-only")
-    expected_dependency_resolution = (
-        "locked-apt-repository"
-        if profile != "documentation"
-        else "locked-package-archive"
-    )
-    expected_repository_refresh = (
-        "verified-before-install" if profile != "documentation" else "not-required"
-    )
-    if document.get("dependency_resolution") != expected_dependency_resolution:
-        raise ValueError("package-cache provenance dependency source mismatch")
-    if document.get("repository_refresh") != expected_repository_refresh:
-        raise ValueError("package-cache provenance repository refresh mismatch")
-    if document.get("cache_key") != package_cache_key(lock, profile, lock_digest):
-        raise ValueError("package-cache provenance key mismatch")
-    rows = document.get("packages")
-    if not isinstance(rows, list) or len(rows) != len(expected):
-        raise ValueError("package-cache provenance package set is incomplete")
-    by_name: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            raise ValueError("package-cache provenance package row is invalid")
-        name = row.get("package")
-        if not isinstance(name, str) or name in by_name or name not in expected:
-            raise ValueError("package-cache provenance package identity is invalid")
-        expected_row = {
-            "package": name,
-            "version": expected[name]["version"],
-            "architecture": expected[name]["architecture"],
-            "sha256": "sha256:" + expected[name]["sha256"],
-            "source": source,
-        }
-        if row != expected_row:
-            raise ValueError(f"package-cache provenance differs from lock: {name}")
-        by_name[name] = row
-    if set(by_name) != set(expected):
-        raise ValueError("package-cache provenance package set differs from profile")
-    return document
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--compiler", default="clang++-22")
     parser.add_argument("--configuration", required=True)
-    parser.add_argument("--package-cache-provenance", type=pathlib.Path)
     args = parser.parse_args()
     root = args.root.resolve()
     lock, supply_chain_binding = supply_chain(root)
@@ -323,17 +320,8 @@ def main() -> int:
             "kernel": run("uname", "-srmo"),
         },
         "supply_chain": supply_chain_binding,
+        "package_cache": package_cache_provenance(lock),
     }
-    package_cache_path = args.package_cache_provenance
-    if package_cache_path is None:
-        configured_path = os.environ.get("CXXLENS_PACKAGE_CACHE_PROVENANCE")
-        package_cache_path = pathlib.Path(configured_path) if configured_path else None
-    if package_cache_path is not None:
-        if not package_cache_path.is_absolute():
-            package_cache_path = root / package_cache_path
-        document["package_cache"] = load_package_cache_provenance(
-            package_cache_path, root
-        )
     document["digest"] = provenance_digest(document)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

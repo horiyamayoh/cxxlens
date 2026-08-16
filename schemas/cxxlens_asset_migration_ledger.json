@@ -1,5 +1,5 @@
 {
-  "asset_count": 683,
+  "asset_count": 685,
   "assets": [
     {
       "authority": "active",
@@ -38,6 +38,13 @@
     },
     {
       "authority": "active",
+      "path": ".github/actions/setup-ci/action.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": ".github/dependabot.yml",
       "removal_issue": null,
       "replacement": null,
@@ -46,6 +53,13 @@
     {
       "authority": "active",
       "path": ".github/workflows/nightly.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/pr-integration.yml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4784,7 +4798,7 @@
     }
   ],
   "classifications": {
-    "active": 647,
+    "active": 649,
     "archived": 35,
     "generated": 1
   },
