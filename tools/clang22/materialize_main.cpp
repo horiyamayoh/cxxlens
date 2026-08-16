@@ -2076,6 +2076,25 @@ int main(const int argc, char**)
 	auto postpublication = std::move(*journal).begin_publication();
 	if (!postpublication)
 		return no_response();
+	auto fail_after_publication = [&](const materialization_postpublication_failure_phase phase,
+									  sdk::error error) -> int
+	{
+		try
+		{
+			auto failure =
+				std::move(*postpublication).issue_no_response_failure(phase, std::move(error));
+			// The token is source-private evidence only. No JSON response may be emitted after this
+			// boundary; a returned publication record (when present) remains the sole recovery
+			// authority. If the observation itself is contradictory, fail closed identically.
+			static_cast<void>(failure);
+		}
+		catch (...)
+		{
+			// Failure-authority allocation is itself post-publication work. It cannot reopen the
+			// response boundary or turn an unknown outcome into a compact zero-effect response.
+		}
+		return no_response();
+	};
 	public_materialization_success_report_input public_input;
 	public_input.request = &*request;
 	public_input.request_globals = &*request_globals;
@@ -2088,7 +2107,9 @@ int main(const int argc, char**)
 	public_input.prepublication = &*prepublication;
 	auto execution_projection = materialization_execution_census_projection(execution_census);
 	if (!execution_projection)
-		return no_response();
+		return fail_after_publication(
+			materialization_postpublication_failure_phase::report_construction,
+			std::move(execution_projection.error()));
 	public_input.projections.values.emplace("incremental_execution",
 											std::move(*execution_projection));
 	if (rooted_opener && rooted_opener->receipt())
@@ -2110,7 +2131,9 @@ int main(const int argc, char**)
 		{
 			const auto& store_observation = postpublication->store_observation();
 			if (!store_observation.publish_returned_record)
-				return no_response();
+				return fail_after_publication(
+					materialization_postpublication_failure_phase::store_persistence,
+					{"materialization.report-invalid", "publication", "returned-record-missing"});
 			try
 			{
 				auto persisted = persist_materialization_prior_artifact(
@@ -2121,16 +2144,22 @@ int main(const int argc, char**)
 					task_reports,
 					std::move(artifact_tasks));
 				if (!persisted)
-					return no_response();
+					return fail_after_publication(
+						materialization_postpublication_failure_phase::store_persistence,
+						std::move(persisted.error()));
 			}
 			catch (...)
 			{
-				return no_response();
+				return fail_after_publication(
+					materialization_postpublication_failure_phase::store_persistence,
+					{"materialization.report-invalid", "publication.prior-artifact", "exception"});
 			}
 			prior_artifact_persistence.committed = true;
 		}
 		else
-			return no_response();
+			return fail_after_publication(
+				materialization_postpublication_failure_phase::report_construction,
+				{"materialization.report-invalid", "publication.backend", "unsupported"});
 		if (prior_artifact_persistence.committed)
 		{
 			prior_artifact_persistence.error_code.clear();
@@ -2140,25 +2169,39 @@ int main(const int argc, char**)
 		public_input.prior_artifact_persistence = &prior_artifact_persistence;
 		auto public_model = build_public_materialization_success_report(public_input);
 		if (!public_model)
-			return no_response();
+			return fail_after_publication(
+				materialization_postpublication_failure_phase::report_validation,
+				std::move(public_model.error()));
 		auto report = encode_public_materialization_success_report(std::move(*public_model));
 		if (!report)
-			return no_response();
+			return fail_after_publication(
+				materialization_postpublication_failure_phase::report_construction,
+				std::move(report.error()));
 		auto final_response = stage_public_materialization_final_response(
 			std::move(*report), report_limits.max_projection_bytes);
 		if (!final_response)
-			return no_response();
+			return fail_after_publication(
+				materialization_postpublication_failure_phase::response_spool,
+				std::move(final_response.error()));
 		// The sealed memfd is now the sole authoritative response storage.  Release any
 		// moved-from string capacity before the bounded stdout replay begins.
 		std::string{}.swap(*report);
-		return write_authoritative_response(**final_response) ? 0 : no_response();
+		return write_authoritative_response(**final_response)
+			? 0
+			: fail_after_publication(
+				  materialization_postpublication_failure_phase::stdout_transport,
+				  {"materialization.report-invalid", "stdout", "short-or-failed-write"});
 	}
 	catch (const std::bad_alloc&)
 	{
-		return no_response();
+		return fail_after_publication(
+			materialization_postpublication_failure_phase::report_construction,
+			{"materialization.report-invalid", "postpublication", "allocation"});
 	}
 	catch (...)
 	{
-		return no_response();
+		return fail_after_publication(
+			materialization_postpublication_failure_phase::report_construction,
+			{"materialization.report-invalid", "postpublication", "exception"});
 	}
 }
