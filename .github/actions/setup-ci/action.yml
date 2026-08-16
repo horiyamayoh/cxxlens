@@ -55,6 +55,10 @@ runs:
         echo "CXXLENS_PACKAGE_CACHE=${HOME}/.cache/cxxlens/packages" >> "${GITHUB_ENV}"
         echo "CXXLENS_PACKAGE_CACHE_KEY=cxxlens-ci-packages-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.profile }}-${{ inputs.documentation }}-${{ hashFiles('tools/ci/llvm22-noble.lock.json') }}" >> "${GITHUB_ENV}"
         echo "CXXLENS_PACKAGE_CACHE_HIT=${{ steps.package-cache.outputs.cache-hit }}" >> "${GITHUB_ENV}"
+        echo "CXXLENS_PACKAGE_CACHE_PROFILE=${{ inputs.profile }}" >> "${GITHUB_ENV}"
+        echo "CXXLENS_PACKAGE_CACHE_DOCUMENTATION=${{ inputs.documentation }}" >> "${GITHUB_ENV}"
+        echo "CXXLENS_PACKAGE_CACHE_RUNNER_OS=${{ runner.os }}" >> "${GITHUB_ENV}"
+        echo "CXXLENS_PACKAGE_CACHE_RUNNER_ARCH=${{ runner.arch }}" >> "${GITHUB_ENV}"
         echo "CXXLENS_PACKAGE_CACHE_RECEIPT=${RUNNER_TEMP}/cxxlens-package-cache-receipt.json" >> "${GITHUB_ENV}"
 
     - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
