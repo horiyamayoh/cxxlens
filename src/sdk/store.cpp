@@ -4774,6 +4774,7 @@ namespace cxxlens::sdk
 		struct sqlite_source_shm_map_route_observation
 		{
 			bool used_cantinit_heap_route{};
+			bool mapped_route_seen{};
 		};
 
 		[[nodiscard]] std::optional<sqlite_source_shm_map_route_observation>
@@ -4828,11 +4829,13 @@ namespace cxxlens::sdk
 						projection.byte_offset != byte_offset || projection.byte_count != size ||
 						projection.sealed_shm_size < byte_offset + size)
 						return std::nullopt;
+					route.mapped_route_seen = true;
 					continue;
 				}
 				if (event.native_status == sqlite_readonly_cantinit)
 				{
-					if (event.page != 0 || (index != 0U && !route.used_cantinit_heap_route) ||
+					if (event.page != 0 || route.mapped_route_seen ||
+						(index != 0U && !route.used_cantinit_heap_route) ||
 						event.native_mapping_nonnull ||
 						event.returned_status != sqlite_readonly_cantinit ||
 						event.returned_mapping_nonnull)
@@ -4846,6 +4849,7 @@ namespace cxxlens::sdk
 				{
 					if (event.returned_status != sqlite_readonly || !event.returned_mapping_nonnull)
 						return std::nullopt;
+					route.mapped_route_seen = true;
 				}
 				else if (event.returned_status != sqlite_readonly_cantinit ||
 						 event.returned_mapping_nonnull)
@@ -8727,6 +8731,40 @@ namespace cxxlens::sdk
 			observation.shm_map_events.push_back(
 				event(cantinit_page, sqlite_readonly_cantinit, false, true));
 		return qualified_source_shm_map_route(observation, receipt).has_value();
+	}
+
+	bool sqlite_source_shm_cantinit_after_mapped_route_rejected_for_testing()
+	{
+		static const int underlying_vfs_identity{};
+		static const int underlying_vfs_app_data_identity{};
+		sqlite_source_shm_open_callback_receipt receipt;
+		receipt.pinned_underlying_vfs_identity = &underlying_vfs_identity;
+		receipt.pinned_underlying_vfs_app_data_identity = &underlying_vfs_app_data_identity;
+		sqlite_backend_connection_observation observation;
+		auto event = [&](const int page,
+						 const int native_status,
+						 const bool native_mapping_nonnull,
+						 const bool seen_before)
+		{
+			sqlite_backend_shm_map_observation value;
+			value.page = page;
+			value.page_size = 32'768;
+			value.caller_extend = 1;
+			value.delegated_extend = 0;
+			value.native_status = native_status;
+			value.returned_status = native_status;
+			value.native_mapping_nonnull = native_mapping_nonnull;
+			value.returned_mapping_nonnull = native_mapping_nonnull;
+			value.readonly_family_seen_before = seen_before;
+			value.readonly_family_seen_after = true;
+			value.pinned_underlying_vfs_identity = &underlying_vfs_identity;
+			value.pinned_underlying_vfs_app_data_identity = &underlying_vfs_app_data_identity;
+			return value;
+		};
+		observation.shm_map_events.push_back(event(0, sqlite_readonly_cantinit, false, false));
+		observation.shm_map_events.push_back(event(0, sqlite_readonly, true, true));
+		observation.shm_map_events.push_back(event(0, sqlite_readonly_cantinit, false, true));
+		return !qualified_source_shm_map_route(observation, receipt).has_value();
 	}
 
 	bool sqlite_source_shm_callback_epoch_binding_valid_for_testing(const bool same_epoch_identity)
