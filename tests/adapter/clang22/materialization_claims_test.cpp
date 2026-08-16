@@ -3506,10 +3506,27 @@ namespace
 		require(duplicate_task_source->consume_task(make_task(0U)).has_value(),
 				"duplicate task source first window adoption failed");
 		const auto partition_count_before_duplicate = duplicate_task_source->partition_count();
-		auto duplicate_task = duplicate_task_source->consume_task(make_task(0U));
+		auto relabeled_task = make_task(0U);
+		relabeled_task.canonical_task_index = 1U;
+		auto relabeled_result = duplicate_task_source->consume_task(std::move(relabeled_task));
+		require(!relabeled_result && relabeled_result.error().field == "task-binding" &&
+					relabeled_result.error().detail == "sealed-index" &&
+					duplicate_task_source->partition_count() == partition_count_before_duplicate,
+				"bounded adoption accepted a relabeled duplicate task window");
+
+		auto duplicate_task_source_after_relabel =
+			materialization_bounded_claim_source::begin(request);
+		require(duplicate_task_source_after_relabel.has_value(),
+				"duplicate task source after relabel begin failed");
+		require(duplicate_task_source_after_relabel->consume_task(make_task(0U)).has_value(),
+				"duplicate task source after relabel first window adoption failed");
+		const auto partition_count_before_duplicate_after_relabel =
+			duplicate_task_source_after_relabel->partition_count();
+		auto duplicate_task = duplicate_task_source_after_relabel->consume_task(make_task(0U));
 		require(!duplicate_task && duplicate_task.error().field == "task-order" &&
 					duplicate_task.error().detail == "canonical-next" &&
-					duplicate_task_source->partition_count() == partition_count_before_duplicate,
+					duplicate_task_source_after_relabel->partition_count() ==
+						partition_count_before_duplicate_after_relabel,
 				"bounded adoption staged a duplicate task window");
 	}
 } // namespace

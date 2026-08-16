@@ -19,6 +19,7 @@
 
 #include "materialization_admission_error.hpp"
 #include "materialization_identity.hpp"
+#include "materialization_incremental_receipt.hpp"
 #include "sdk/claim_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
@@ -2101,7 +2102,8 @@ namespace cxxlens::detail::clang22::materialization
 		const sealed_materialization_result& result,
 		const materialization_producer_authority* const producer_authority,
 		const materialization_guarantee_authority* const guarantee_authority,
-		const materialization_v2_1_claim_authority* const v2_authority)
+		const materialization_v2_1_claim_authority* const v2_authority,
+		std::string sealed_request_entry_binding_digest)
 	{
 		try
 		{
@@ -2852,16 +2854,18 @@ namespace cxxlens::detail::clang22::materialization
 				association_values.push_back(std::move(association));
 			}
 
-			return materialization_bounded_task_claims{static_cast<std::uint64_t>(task_index),
-													   basis->materializer_semantics,
-													   basis->direct_basis,
-													   basis->canonical_transform,
-													   basis->base_transform,
-													   assumption_set,
-													   std::move(envelope_values),
-													   std::move(edge_values),
-													   std::move(association_values),
-													   std::move(partitions)};
+			return materialization_bounded_task_claims{
+				static_cast<std::uint64_t>(task_index),
+				std::move(sealed_request_entry_binding_digest),
+				basis->materializer_semantics,
+				basis->direct_basis,
+				basis->canonical_transform,
+				basis->base_transform,
+				assumption_set,
+				std::move(envelope_values),
+				std::move(edge_values),
+				std::move(association_values),
+				std::move(partitions)};
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -2879,10 +2883,21 @@ namespace cxxlens::detail::clang22::materialization
 		const materialization_producer_authority& producer_authority,
 		const materialization_guarantee_authority& guarantee_authority)
 	{
+		auto selected_entry =
+			seal_materialization_incremental_selected_request_entry_binding(request, task_index);
+		if (!selected_entry)
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "selected-request-entry",
+											   nested_error(selected_entry.error())));
 		const materialization_claim_request_view request_view{
 			request.catalog, request.engine, request.tasks, &request.document.root()};
-		return construct_materialization_bounded_task_claims_impl(
-			request_view, task_index, result, &producer_authority, &guarantee_authority, nullptr);
+		return construct_materialization_bounded_task_claims_impl(request_view,
+																  task_index,
+																  result,
+																  &producer_authority,
+																  &guarantee_authority,
+																  nullptr,
+																  std::move(*selected_entry));
 	}
 
 	materialization_v2_1_claim_authority::materialization_v2_1_claim_authority(
@@ -3073,6 +3088,12 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			if (auto valid = validate_v2_1_task_window(authority, task_index, task); !valid)
 				return sdk::unexpected(std::move(valid.error()));
+			auto selected_entry = seal_materialization_incremental_selected_request_entry_binding(
+				authority, task_index, task);
+			if (!selected_entry)
+				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+												   "selected-request-entry",
+												   nested_error(selected_entry.error())));
 
 			validated_task_request current{task.input,
 										   task.metadata.provider_task_id,
@@ -3089,8 +3110,13 @@ namespace cxxlens::detail::clang22::materialization
 					claim_error("materialization.identity-mismatch", "claim-authority", "owner"));
 			const materialization_claim_request_view request_view{
 				*catalog, *engine, current_task, nullptr};
-			return construct_materialization_bounded_task_claims_impl(
-				request_view, task_index, result, nullptr, nullptr, &authority);
+			return construct_materialization_bounded_task_claims_impl(request_view,
+																	  task_index,
+																	  result,
+																	  nullptr,
+																	  nullptr,
+																	  &authority,
+																	  std::move(*selected_entry));
 		}
 		catch (const std::bad_alloc&)
 		{
