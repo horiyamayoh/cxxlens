@@ -5633,6 +5633,43 @@ class NgClang22MaterializationTests(unittest.TestCase):
             unknown_body,
         )
 
+    def test_prepublication_capacity_is_consumed_before_publication_boundary(self) -> None:
+        source = (ROOT / "tools/clang22/materialize_main.cpp").read_text(
+            encoding="utf-8"
+        )
+        report_source = (
+            ROOT / "src/llvm/clang22/materialization_public_report.cpp"
+        ).read_text(encoding="utf-8")
+        consume = source.index(
+            "prepublication->consume_reserved_capacity(reserved_report_bytes)"
+        )
+        publication_gate = source.index(
+            "if (!begin_production_publication_gate())"
+        )
+        publication_attempt = source.index(
+            "auto postpublication = std::move(*journal).begin_publication();"
+        )
+        self.assertLess(
+            consume,
+            publication_gate,
+            "prepublication capacity must be consumed before the publication gate",
+        )
+        self.assertLess(
+            publication_gate,
+            publication_attempt,
+            "publication gate must precede the Store publication attempt",
+        )
+        self.assertIn(
+            '"reservation-not-consumed"',
+            report_source,
+            "success report builder must reject an unconsumed reservation",
+        )
+        self.assertIn(
+            '"already-consumed"',
+            report_source,
+            "capacity consumption must be single-use",
+        )
+
     def test_machine_contract_requires_bounded_two_phase_report_lifecycle(self) -> None:
         accepted = materialization.load(ROOT / materialization.CONTRACT)
         materialization.validate_contract_exact(copy.deepcopy(accepted))
