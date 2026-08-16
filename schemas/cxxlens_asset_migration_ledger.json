@@ -1,5 +1,5 @@
 {
-  "asset_count": 680,
+  "asset_count": 683,
   "assets": [
     {
       "authority": "active",
@@ -2908,6 +2908,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_store_outcome.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_store_outcome.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_streaming_claims.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3728,6 +3742,13 @@
     {
       "authority": "active",
       "path": "tests/adapter/clang22/materialization_seal_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_store_outcome_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4763,7 +4784,7 @@
     }
   ],
   "classifications": {
-    "active": 644,
+    "active": 647,
     "archived": 35,
     "generated": 1
   },
