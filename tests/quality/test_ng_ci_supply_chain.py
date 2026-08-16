@@ -28,6 +28,7 @@ from bootstrap_supply_chain import (  # noqa: E402
     resolve_cached_archive,
     verify_bytes,
     verify_deb_archive,
+    write_package_cache_receipt,
 )
 from check_ci_supply_chain import (  # noqa: E402
     CiSupplyChainError,
@@ -710,6 +711,23 @@ class NgCiSupplyChainTest(unittest.TestCase):
             with mock.patch.dict(os.environ, environment, clear=True):
                 with self.assertRaisesRegex(ValueError, "runner differs"):
                     package_cache_provenance(self.lock)
+
+    def test_package_cache_receipt_rejects_non_object_json(self) -> None:
+        records = self.package_rows("developer", "verified-download")
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "receipt.json"
+            environment = self.cache_environment(receipt)
+            for document in ([], "scalar", 7):
+                with self.subTest(document=document):
+                    receipt.write_text(json.dumps(document), encoding="utf-8")
+                    with mock.patch.dict(os.environ, environment, clear=True):
+                        with self.assertRaisesRegex(
+                            SupplyChainError,
+                            "package-cache receipt must be a JSON object",
+                        ):
+                            write_package_cache_receipt(
+                                self.lock, "developer", records
+                            )
 
 
 if __name__ == "__main__":

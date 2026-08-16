@@ -415,6 +415,8 @@ def write_package_cache_receipt(
             document = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise SupplyChainError(f"could not read package-cache receipt: {error}") from error
+        if not isinstance(document, dict):
+            raise SupplyChainError("package-cache receipt must be a JSON object")
         if (
             document.get("schema") != config["receipt_schema"]
             or document.get("authority_digest") != authority_digest
