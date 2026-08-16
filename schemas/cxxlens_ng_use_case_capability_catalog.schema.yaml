@@ -1,0 +1,113 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-use-case-capability-catalog.v1
+title: cxxlens readiness-derived use-case and capability catalog projection
+type: object
+additionalProperties: false
+required: [schema, document_version, role, source, projection, use_cases, capability_registry]
+properties:
+  schema: {const: cxxlens.ng-use-case-capability-catalog.v1}
+  document_version: {const: 1.0.0}
+  role: {const: demand-reference-projection}
+  source:
+    type: object
+    additionalProperties: false
+    required:
+      - readiness_schema
+      - readiness_path
+      - contract
+      - owner_issue
+      - tracking_issue
+      - source_pointer
+      - revision
+      - tree
+      - readiness_digest
+    properties:
+      readiness_schema:
+        const: cxxlens.ng-api-development-readiness.v1
+      readiness_path:
+        const: schemas/cxxlens_ng_api_development_readiness.yaml
+      contract:
+        const: product.demand-closure.v1
+      owner_issue:
+        const: '#271'
+      tracking_issue:
+        const: '#275'
+      source_pointer:
+        const: /product_direction/roadmap/use_case_families
+      revision:
+        type: string
+        pattern: '^[0-9a-f]{40}$'
+      tree:
+        type: string
+        pattern: '^[0-9a-f]{40}$'
+      readiness_digest:
+        type: string
+        pattern: '^sha256:[0-9a-f]{64}$'
+  projection:
+    type: object
+    additionalProperties: false
+    required: [scope, status, excludes]
+    properties:
+      scope:
+        const: readiness-declared-use-case-families
+      status:
+        const: declaration-only-not-qualified
+      excludes:
+        const:
+          - consumer-identity
+          - dependency-edges
+          - provider-bindings
+          - relation-bindings
+          - evidence-qualification
+  use_cases:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, stage, flagship, capabilities, disposition, tracking_issue]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*$'
+        stage:
+          type: string
+          minLength: 1
+        flagship:
+          type: string
+          minLength: 1
+        capabilities:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            pattern: '^[a-z][a-z0-9-]*$'
+        disposition:
+          enum:
+            - blocked
+            - tracked-gap
+            - tracked-roadmap
+            - optional-versioned-capability
+            - implementation-tracked
+        tracking_issue:
+          type: string
+          pattern: '^#[0-9]+$'
+  capability_registry:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, demanded_by]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*$'
+        demanded_by:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            pattern: '^[a-z][a-z0-9-]*$'
