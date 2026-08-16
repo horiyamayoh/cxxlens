@@ -391,6 +391,17 @@ namespace cxxlens::detail::clang22::materialization
 						return sdk::unexpected(receipt_error("execution-journal", "task-order"));
 					if (!semantic_digest(seals[index]))
 						return sdk::unexpected(receipt_error("execution-journal", "task-seal"));
+					// A provider task ID is a generic member of the composite execution
+					// key and may recur across selected executions.  The pre-encoder
+					// receipt seal is the ordered-unique receipt identity at this boundary.
+					// Scan the already-retained prefix instead of allocating a second
+					// identity index or copying the receipt set; this keeps the boundary's
+					// residency O(1) beyond the existing task-id/seal columns.
+					for (std::size_t prior{}; prior < index; ++prior)
+					{
+						if (seals[prior] == seals[index])
+							return sdk::unexpected(receipt_error("execution-journal", "task-seal"));
+					}
 				}
 
 				auto marker_size = encoded_string_size(semantic_marker);
@@ -2971,7 +2982,9 @@ namespace cxxlens::detail::clang22::materialization
 			journal.materialization_request_id,
 			std::span<const std::string>{journal.canonical_task_ids},
 			std::span<const std::string>{journal.ordered_task_receipt_seal_digests});
-		if (!digest || *digest != journal.execution_journal_receipt_set_digest)
+		if (!digest)
+			return sdk::unexpected(std::move(digest.error()));
+		if (*digest != journal.execution_journal_receipt_set_digest)
 			return sdk::unexpected(receipt_error("execution-journal", "seal-mismatch"));
 		return {};
 	}

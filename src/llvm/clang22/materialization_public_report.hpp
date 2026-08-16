@@ -90,6 +90,18 @@ namespace cxxlens::detail::clang22::materialization
 		std::string error_detail;
 	};
 
+	/**
+	 * Re-bind request installation assertions to the measured installed occurrence.
+	 *
+	 * This is a source-private report-construction validator. It does not introduce a public Store
+	 * or SDK error: the occurrence manifest and rooted receipt remain the measured authorities.
+	 */
+	[[nodiscard]] sdk::result<void> validate_materialization_public_report_occurrence_binding(
+		const materialization_v2_1_tool_authority& tool,
+		const materialization_v2_1_worker_authority& worker,
+		const materialization_occurrence_manifest& occurrence_manifest,
+		const materialization_occurrence_receipt& occurrence_receipt);
+
 	/** Build the bounded publication-independent projection before publication is attempted. */
 	[[nodiscard]] sdk::result<public_materialization_prepublication_projection>
 	prepare_public_materialization_prepublication_projection(
