@@ -14,6 +14,7 @@
 namespace cxxlens::sdk::provider::detail
 {
 	struct expected_provider_identity;
+	struct ng1_session_binding;
 
 	enum class transcript_terminal_kind : std::uint8_t
 	{
@@ -32,6 +33,11 @@ namespace cxxlens::sdk::provider::detail
 		const execution_budget* budget{};
 		bool require_handshake{};
 		const expected_provider_identity* expected_provider{};
+		std::uint64_t expected_stream_id{1U};
+		/** Select the source-private NG1 control grammar for the transcript pass. */
+		bool ng1_control_transcript{};
+		/** Exact host-authorized NG1 provider/session/task/stream binding. */
+		const ng1_session_binding* expected_ng1_binding{};
 	};
 
 	/** Closed provider/session/launcher authority supplied independently of provider stdout. */
