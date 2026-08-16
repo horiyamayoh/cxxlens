@@ -252,6 +252,9 @@ int main(const int argument_count, const char* const* arguments)
 		(void)::close(ready_pipe[0U]);
 		if (received != ready.size())
 			return EXIT_FAILURE;
+		// Keep the leader alive with its descendants so the host observes a typed timeout
+		// rather than an EOF/truncated transcript before process-group cleanup.
+		std::this_thread::sleep_for(std::chrono::seconds{30});
 		return EXIT_SUCCESS;
 	}
 #endif
