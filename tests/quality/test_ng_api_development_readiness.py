@@ -362,7 +362,7 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             goal = root / readiness.AGENT_GOAL_PATH
             goal.write_text(
                 goal.read_text(encoding="utf-8").replace(
-                    "それらの aggregate gate は exact merged-main SHA の required checks と fail-closed evidence を引き続き検証します。",
+                    "exact merged-main SHA の required checks と fail-closed evidence",
                     "aggregate gate wording removed",
                 ),
                 encoding="utf-8",
