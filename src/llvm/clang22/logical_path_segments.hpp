@@ -35,6 +35,7 @@ namespace cxxlens::provider::clang22::detail
 	static_assert(contains_parent_path_segment("../main.cpp"));
 	static_assert(contains_parent_path_segment("src/.."));
 	static_assert(contains_parent_path_segment("src/../main.cpp"));
+	static_assert(contains_parent_path_segment("src/..\\main.cpp"));
 	static_assert(contains_parent_path_segment("src\\..\\main.cpp"));
 	static_assert(contains_parent_path_segment("project://../main.cpp"));
 } // namespace cxxlens::provider::clang22::detail
