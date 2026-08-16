@@ -1060,10 +1060,10 @@ namespace
 					*outcome, *process_request);
 				!bound)
 			{
-				return sdk::unexpected(sdk::error{
-					"materialization.worker-failure",
-					task.provider_task_id,
-					"runtime-binding:" + bound.error().code + ":" + bound.error().field});
+				return sdk::unexpected(sdk::error{"materialization.worker-failure",
+												  task.provider_task_id,
+												  "runtime-binding:" + bound.error().code + ":" +
+													  bound.error().field});
 			}
 			const auto task_metadata = execution.metadata;
 			streamed_validated_materialization_task_request seal_request{
@@ -1454,16 +1454,16 @@ namespace
 				*processes_, *process_request, replay);
 			if (!outcome || !outcome->succeeded() || !outcome->sealed || !outcome->runtime_receipt)
 				return sdk::unexpected(sdk::error{"materialization.worker-failure",
-											  execution.metadata.provider_task_id,
-											  "execution"});
+												  execution.metadata.provider_task_id,
+												  "execution"});
 			if (auto bound = sdk::provider::detail::validate_provider_process_runtime_binding(
 					*outcome, *process_request);
 				!bound)
 			{
-				return sdk::unexpected(sdk::error{
-					"materialization.worker-failure",
-					execution.metadata.provider_task_id,
-					"runtime-binding:" + bound.error().code + ":" + bound.error().field});
+				return sdk::unexpected(sdk::error{"materialization.worker-failure",
+												  execution.metadata.provider_task_id,
+												  "runtime-binding:" + bound.error().code + ":" +
+													  bound.error().field});
 			}
 			if (auto consumed = consume_materialization_v2_1_task_window(execution); !consumed)
 				return sdk::unexpected(std::move(consumed.error()));
@@ -1865,8 +1865,7 @@ int main(const int argc, char**)
 			if (auto passed = journal->pass_request_version(); !passed)
 				return no_response();
 		}
-		return emit_failure(std::move(*journal),
-							{source.code, source.field, source.detail});
+		return emit_failure(std::move(*journal), {source.code, source.field, source.detail});
 	}
 	if (auto passed = journal->pass_json_decode(); !passed)
 		return no_response();
@@ -1975,12 +1974,6 @@ int main(const int argc, char**)
 	const detailed_report_limits report_limits{};
 	if (admitted_request.task_count() > report_limits.max_tasks)
 		return no_response();
-	auto capacity_reservation = check_public_materialization_capacity_reservation(report_limits);
-	if (!capacity_reservation)
-		return emit_typed_failure(std::move(*journal),
-							  "materialization.report-invalid",
-							  request_subject,
-							  capacity_reservation.error());
 	auto task_report_spool_result = detailed_task_report_replayable_spool::create(report_limits);
 	if (!task_report_spool_result)
 		return no_response();
@@ -2071,6 +2064,9 @@ int main(const int argc, char**)
 				&*preparation.observation().first_issue))
 			store_failure = typed->error;
 	}
+	auto candidate_manifest = preparation.observation().candidate_manifest;
+	if (ready_for_publish && !candidate_manifest)
+		return no_response();
 	if (auto recorded = journal->record_store_preparation(std::move(preparation)); !recorded)
 		return no_response();
 	if (!ready_for_publish)
@@ -2082,12 +2078,40 @@ int main(const int argc, char**)
 	}
 	if (!journal->complete_store_preparation())
 		return no_response();
+	const auto generated_at = utc_now();
+	auto execution_projection = materialization_execution_census_projection(execution_census);
+	if (!execution_projection)
+		return emit_typed_failure(std::move(*journal),
+								  "materialization.report-invalid",
+								  request_subject,
+								  execution_projection.error());
+	public_materialization_success_report_input capacity_input;
+	capacity_input.request = &*request;
+	capacity_input.request_globals = &*request_globals;
+	capacity_input.task_report_spool = &task_reports;
+	capacity_input.raw_input = &*observed;
+	capacity_input.occurrence_manifest = &occurrence->manifest();
+	capacity_input.occurrence_receipt = &occurrence->receipt();
+	capacity_input.bounded_claims = &coordinated->bounded_claim_source();
+	capacity_input.generated_at = generated_at;
+	capacity_input.projections.values.emplace("incremental_execution", *execution_projection);
+	capacity_input.maximum_report_bytes = report_limits.max_projection_bytes;
+	auto capacity_projection =
+		derive_public_materialization_capacity_projection(capacity_input, *candidate_manifest);
+	if (!capacity_projection)
+		return emit_typed_failure(std::move(*journal),
+								  "materialization.report-invalid",
+								  request_subject,
+								  capacity_projection.error());
+	auto capacity_reservation =
+		check_public_materialization_capacity_reservation(report_limits, *capacity_projection);
+	if (!capacity_reservation)
+		return emit_typed_failure(std::move(*journal),
+								  "materialization.report-invalid",
+								  request_subject,
+								  capacity_reservation.error());
 	auto prepublication = prepare_public_materialization_prepublication_projection(
-		*request,
-		*observed,
-		occurrence->manifest(),
-		occurrence->receipt(),
-		*capacity_reservation);
+		*request, *observed, occurrence->manifest(), occurrence->receipt(), *capacity_reservation);
 	if (!prepublication)
 		return emit_typed_failure(std::move(*journal),
 								  "materialization.report-invalid",
@@ -2178,16 +2202,10 @@ int main(const int argc, char**)
 		public_input.store = &postpublication->store_observation();
 		public_input.capacity_reservation = &*capacity_reservation;
 		public_input.prepublication = &*prepublication;
-		auto execution_projection = materialization_execution_census_projection(execution_census);
-		if (!execution_projection)
-			return fail_after_publication(
-				materialization_postpublication_failure_phase::report_construction,
-				std::move(execution_projection.error()));
-		public_input.projections.values.emplace("incremental_execution",
-												std::move(*execution_projection));
+		public_input.projections.values.emplace("incremental_execution", *execution_projection);
 		if (rooted_opener && rooted_opener->receipt())
 			public_input.rooted_vfs_receipt = &*rooted_opener->receipt();
-		public_input.generated_at = utc_now();
+		public_input.generated_at = generated_at;
 		public_input.maximum_report_bytes = report_limits.max_projection_bytes;
 		if (admitted_request.publication().backend == "memory")
 		{

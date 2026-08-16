@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -23,36 +24,6 @@
 #include "llvm/clang22/materialization_public_report.hpp"
 #include "llvm/clang22/materialization_rooted_vfs.hpp"
 #include "sdk/provider_runtime_internal.hpp"
-
-namespace cxxlens::detail::clang22::materialization
-{
-	class public_materialization_prepublication_projection_test_peer final
-	{
-	  public:
-		[[nodiscard]] static public_materialization_prepublication_projection
-		make(std::string binding_digest,
-			 std::string request_digest,
-			 std::string semantic_request_digest,
-			 std::string occurrence_inventory_digest,
-			 const std::uint64_t task_count,
-			 const std::size_t reserved_bytes,
-			 std::string capacity_proof_digest,
-			 const bool issue_capability)
-		{
-			public_materialization_prepublication_projection projection{
-				std::move(binding_digest),
-				std::move(request_digest),
-				std::move(semantic_request_digest),
-				std::move(occurrence_inventory_digest),
-				task_count,
-				reserved_bytes,
-				std::move(capacity_proof_digest)};
-			if (issue_capability)
-				projection.issue_capability();
-			return projection;
-		}
-	};
-} // namespace cxxlens::detail::clang22::materialization
 
 namespace
 {
@@ -1950,7 +1921,9 @@ namespace
 	void prepublication_capacity_reservation_is_exact_and_single_use()
 	{
 		detailed_report_limits limits;
-		auto capacity_result = check_public_materialization_capacity_reservation(limits);
+		const public_materialization_capacity_projection measured_projection{1U, 1U, "projection"};
+		auto capacity_result =
+			check_public_materialization_capacity_reservation(limits, measured_projection);
 		require(capacity_result.has_value(),
 				"accepted report-limit profile did not mint a capacity proof");
 		auto capacity = std::move(*capacity_result);
@@ -1965,7 +1938,7 @@ namespace
 									const std::string& capacity_proof,
 									const bool issue_capability = false)
 		{
-			return public_materialization_prepublication_projection_test_peer::make(
+			return public_materialization_prepublication_projection::make_for_testing(
 				binding,
 				request,
 				semantic,
@@ -2045,15 +2018,17 @@ namespace
 					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
 			"capacity validation accepted an empty projection proof");
 
-		auto moved_from_capacity_result = check_public_materialization_capacity_reservation(limits);
+		auto moved_from_capacity_result =
+			check_public_materialization_capacity_reservation(limits, measured_projection);
 		require(moved_from_capacity_result.has_value(),
 				"second capacity proof could not be minted for the moved-from regression");
 		auto moved_to_capacity = std::move(*moved_from_capacity_result);
 		require(moved_to_capacity.reserved_bytes() == limit &&
 					!moved_to_capacity.proof_digest().empty(),
 				"moving a capacity reservation lost its proof");
-		require(moved_from_capacity_result->proof_digest().empty(),
-				"moved-from capacity reservation retained its proof digest");
+		require(moved_from_capacity_result->reserved_bytes() == 0U &&
+					moved_from_capacity_result->proof_digest().empty(),
+				"moved-from capacity reservation retained authority state");
 		auto moved_from_consumed =
 			issued_baseline().consume_reserved_capacity(*moved_from_capacity_result);
 		require(
@@ -2063,11 +2038,41 @@ namespace
 			"capacity consumption accepted a moved-from reservation");
 		auto moved_from_state =
 			issued_baseline().validate_reserved_capacity(*moved_from_capacity_result, limit);
+		require(!moved_from_state &&
+					moved_from_state.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "zero-reservation"},
+				"capacity validation accepted a moved-from reservation");
+
+		auto move_assigned_source_result =
+			check_public_materialization_capacity_reservation(limits, measured_projection);
+		auto move_assigned_destination_result =
+			check_public_materialization_capacity_reservation(limits, measured_projection);
+		require(move_assigned_source_result.has_value() &&
+					move_assigned_destination_result.has_value(),
+				"capacity proofs could not be minted for move-assignment regression");
+		auto move_assigned_source = std::move(*move_assigned_source_result);
+		auto move_assigned_destination = std::move(*move_assigned_destination_result);
+		move_assigned_destination = std::move(move_assigned_source);
+		require(move_assigned_source.reserved_bytes() == 0U &&
+					move_assigned_source.proof_digest().empty(),
+				"move assignment retained source capacity authority");
+		auto move_assigned_consumed =
+			issued_baseline().consume_reserved_capacity(move_assigned_source);
 		require(
-			!moved_from_state &&
-				moved_from_state.error() ==
+			!move_assigned_consumed &&
+				move_assigned_consumed.error() ==
 					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
-			"capacity validation accepted a moved-from reservation");
+			"capacity consumption accepted a move-assignment source");
+		auto move_assigned_state =
+			issued_baseline().validate_reserved_capacity(move_assigned_source, limit);
+		require(!move_assigned_state &&
+					move_assigned_state.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "zero-reservation"},
+				"capacity validation accepted a move-assignment source");
 
 		auto proof_mismatch = projection(
 			"binding", "request", "semantic", "occurrence", 1U, limit, "proof-drift", true);
@@ -2116,9 +2121,36 @@ namespace
 			}
 		}
 
+		const auto near_limit = public_materialization_capacity_projection{limit - 1U, 1U, "near"};
+		auto near_limit_result =
+			check_public_materialization_capacity_reservation(limits, near_limit);
+		require(near_limit_result.has_value(),
+				"capacity reservation rejected a compositional near-limit projection");
+		const auto overflow_projection = public_materialization_capacity_projection{
+			std::numeric_limits<std::size_t>::max(), 1U, "overflow"};
+		auto overflow_result =
+			check_public_materialization_capacity_reservation(limits, overflow_projection);
+		require(!overflow_result &&
+					overflow_result.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "capacity-overflow"},
+				"capacity reservation did not reject checked size overflow");
+		const auto over_limit_projection =
+			public_materialization_capacity_projection{limit - 1U, 2U, "over-limit"};
+		auto over_limit_result =
+			check_public_materialization_capacity_reservation(limits, over_limit_projection);
+		require(!over_limit_result &&
+					over_limit_result.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "capacity-exceeded"},
+				"capacity reservation accepted a post-publication tail beyond the response limit");
+
 		auto invalid_limits = limits;
 		--invalid_limits.max_projection_bytes;
-		auto rejected_profile = check_public_materialization_capacity_reservation(invalid_limits);
+		auto rejected_profile =
+			check_public_materialization_capacity_reservation(invalid_limits, measured_projection);
 		require(!rejected_profile &&
 					rejected_profile.error() ==
 						sdk::error{"materialization.report-invalid",

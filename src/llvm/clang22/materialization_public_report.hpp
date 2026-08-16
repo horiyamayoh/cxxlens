@@ -62,6 +62,21 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
+	 * Checked public-report capacity components measured before Store publication.
+	 *
+	 * The first component is the actual canonical JSON projection which is independent of the
+	 * publication outcome.  The second is a checked upper bound for all fields which can only be
+	 * completed after publication.  Keeping both values in the proof prevents a fixed limit profile
+	 * from being mistaken for a proof about one particular report.
+	 */
+	struct public_materialization_capacity_projection
+	{
+		std::size_t publication_independent_bytes{};
+		std::size_t bounded_postpublication_tail_bytes{};
+		std::string publication_independent_digest;
+	};
+
+	/**
 	 * Checked response-capacity reservation minted from the accepted report-limit profile.
 	 *
 	 * The constructor and stored proof are source-private. Callers can only obtain this value from
@@ -77,9 +92,9 @@ namespace cxxlens::detail::clang22::materialization
 		public_materialization_capacity_reservation&
 		operator=(const public_materialization_capacity_reservation&) = delete;
 		public_materialization_capacity_reservation(
-			public_materialization_capacity_reservation&&) noexcept = default;
+			public_materialization_capacity_reservation&&) noexcept;
 		public_materialization_capacity_reservation&
-		operator=(public_materialization_capacity_reservation&&) noexcept = default;
+		operator=(public_materialization_capacity_reservation&&) noexcept;
 		~public_materialization_capacity_reservation() = default;
 
 		[[nodiscard]] std::size_t reserved_bytes() const noexcept
@@ -100,14 +115,16 @@ namespace cxxlens::detail::clang22::materialization
 		std::string proof_digest_;
 
 		friend sdk::result<public_materialization_capacity_reservation>
-		check_public_materialization_capacity_reservation(const detailed_report_limits& limits);
+		check_public_materialization_capacity_reservation(
+			const detailed_report_limits& limits,
+			const public_materialization_capacity_projection& projection);
 	};
 
-	/** Validate and mint the source-private checked tail-capacity proof. */
+	/** Validate and mint the source-private checked projection-plus-tail capacity proof. */
 	[[nodiscard]] sdk::result<public_materialization_capacity_reservation>
-	check_public_materialization_capacity_reservation(const detailed_report_limits& limits);
-
-	class public_materialization_prepublication_projection_test_peer;
+	check_public_materialization_capacity_reservation(
+		const detailed_report_limits& limits,
+		const public_materialization_capacity_projection& projection);
 
 	/**
 	 * Publication-independent report authority reserved before the Store publish call.
@@ -159,6 +176,19 @@ namespace cxxlens::detail::clang22::materialization
 				capacity_proof_digest_ == other.capacity_proof_digest_;
 		}
 
+#if defined(CXXLENS_CLANG22_MATERIALIZATION_REPORT_TESTING)
+		/** Test-only source-private construction seam; omitted from non-test headers. */
+		[[nodiscard]] static public_materialization_prepublication_projection
+		make_for_testing(std::string binding_digest,
+						 std::string request_digest,
+						 std::string semantic_request_digest,
+						 std::string occurrence_inventory_digest,
+						 std::uint64_t task_count,
+						 std::size_t reserved_bytes,
+						 std::string capacity_proof_digest,
+						 bool issue_capability);
+#endif
+
 	  private:
 		public_materialization_prepublication_projection(std::string binding_digest,
 														 std::string request_digest,
@@ -197,7 +227,6 @@ namespace cxxlens::detail::clang22::materialization
 			const materialization_occurrence_manifest& occurrence_manifest,
 			const materialization_occurrence_receipt& occurrence_receipt,
 			const public_materialization_capacity_reservation& capacity);
-		friend class public_materialization_prepublication_projection_test_peer;
 	};
 
 	/** Observable result of the source-private prior-artifact write after Store commit. */
@@ -256,6 +285,16 @@ namespace cxxlens::detail::clang22::materialization
 		public_materialization_authority_projections projections;
 		std::size_t maximum_report_bytes{detailed_report_limits::maximum_report_bytes};
 	};
+
+	/**
+	 * Derive the actual publication-independent report projection and its bounded post-publication
+	 * tail from sealed inputs.  `candidate_manifest` is the already validated Store candidate; it
+	 * is not a publication record and does not claim that publication occurred.
+	 */
+	[[nodiscard]] sdk::result<public_materialization_capacity_projection>
+	derive_public_materialization_capacity_projection(
+		const public_materialization_success_report_input& input,
+		const sdk::snapshot_manifest& candidate_manifest);
 
 	/**
 	 * Complete immutable model for one public `detailed/passed` response.

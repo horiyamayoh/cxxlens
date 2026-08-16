@@ -460,6 +460,11 @@ target_include_directories(cxxlens_clang22_materializer_core
 target_compile_features(cxxlens_clang22_materializer_core PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_core)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_core)
+if(BUILD_TESTING)
+  target_compile_definitions(
+    cxxlens_clang22_materializer_core
+    PRIVATE CXXLENS_CLANG22_MATERIALIZATION_REPORT_TESTING=1)
+endif()
 
 add_executable(cxxlens-provider-scaffold tools/sdk/provider_scaffold_main.cpp)
 target_link_libraries(cxxlens-provider-scaffold PRIVATE cxxlens::provider_sdk)
