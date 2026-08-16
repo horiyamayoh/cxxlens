@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: issue-316-package-cache-${{ github.event.pull_request.number }}
@@ -83,7 +83,10 @@ jobs:
           python tools/quality/check_documentation_consistency.py check --root .
           python tools/quality/verify_checksums.py check --root .
 
-      - name: Commit and export exact generated tree
+      - name: Commit, export, and publish exact generated Git objects
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EXPORT_PATH: ${{ runner.temp }}/issue-316-package-cache-tree.json
         run: |
           set -euo pipefail
           git add -A
@@ -93,7 +96,108 @@ jobs:
           fi
           git commit -m "Cache exact CI package downloads (#316)"
           python "${RUNNER_TEMP}/apply_issue_316_package_cache.py" export \
-            --output "${RUNNER_TEMP}/issue-316-package-cache-tree.json"
+            --output "${EXPORT_PATH}"
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import urllib.request
+
+          export_path = pathlib.Path(os.environ["EXPORT_PATH"])
+          document = json.loads(export_path.read_text(encoding="utf-8"))
+          repository = os.environ["GITHUB_REPOSITORY"]
+
+          def api(path: str, *, method: str = "GET", payload=None):
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{repository}/{path}",
+                  method=method,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "User-Agent": "cxxlens-issue-316-package-cache",
+                  },
+                  data=(
+                      json.dumps(payload).encode("utf-8")
+                      if payload is not None
+                      else None
+                  ),
+              )
+              with urllib.request.urlopen(request, timeout=120) as response:
+                  return json.loads(response.read().decode("utf-8"))
+
+          parent = document["parent"]
+          parent_commit = api(f"git/commits/{parent}")
+          tree_entries = []
+          for row in document["entries"]:
+              if row["status"] == "D":
+                  tree_entries.append(
+                      {
+                          "path": row["path"],
+                          "mode": "100644",
+                          "type": "blob",
+                          "sha": None,
+                      }
+                  )
+                  continue
+              blob = api(
+                  "git/blobs",
+                  method="POST",
+                  payload={
+                      "content": row["content_base64"],
+                      "encoding": "base64",
+                  },
+              )
+              row["blob_sha"] = blob["sha"]
+              tree_entries.append(
+                  {
+                      "path": row["path"],
+                      "mode": row["mode"],
+                      "type": "blob",
+                      "sha": blob["sha"],
+                  }
+              )
+          tree = api(
+              "git/trees",
+              method="POST",
+              payload={
+                  "base_tree": parent_commit["tree"]["sha"],
+                  "tree": tree_entries,
+              },
+          )
+          if tree["sha"] != document["expected_tree"]:
+              raise SystemExit(
+                  "remote package-cache tree differs: "
+                  f"expected {document['expected_tree']}, received {tree['sha']}"
+              )
+          commit = api(
+              "git/commits",
+              method="POST",
+              payload={
+                  "message": "Cache exact CI package downloads (#316)",
+                  "tree": tree["sha"],
+                  "parents": [parent],
+              },
+          )
+          document["remote_tree"] = tree["sha"]
+          document["remote_commit"] = commit["sha"]
+          export_path.write_text(
+              json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True)
+              + "\n",
+              encoding="utf-8",
+          )
+          print(
+              json.dumps(
+                  {
+                      "parent": parent,
+                      "remote_tree": tree["sha"],
+                      "remote_commit": commit["sha"],
+                      "entry_count": len(document["entries"]),
+                  },
+                  sort_keys=True,
+              )
+          )
+          PY
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
