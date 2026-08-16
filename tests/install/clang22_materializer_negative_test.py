@@ -267,9 +267,7 @@ def detailed_source_identity(
             "revision": report["source"]["revision"],
             "tree": report["source"]["tree"],
             "package_configuration": measured["configuration"],
-            "occurrence_manifest_digest": report["installation"]["requested"][
-                "occurrence_manifest_digest"
-            ],
+            "occurrence_manifest_digest": measured["manifest_file_digest"],
             "materializer_digest": measured["tool"]["digest"],
             "worker_digest": measured["worker"]["digest"],
         }
@@ -285,6 +283,21 @@ def detailed_source_identity(
     if report.get("request") != expected_request:
         fail("detailed evidence report request identity differs from the request")
     return expected
+
+
+def validate_detailed_report_occurrence(
+    root: pathlib.Path,
+    oracle: Any,
+    request: dict[str, Any],
+    report: dict[str, Any],
+) -> None:
+    """Validate the report's measured installed occurrence against its request."""
+
+    try:
+        measured = report["installation"]["measured"]
+    except (KeyError, TypeError) as error:
+        fail(f"detailed evidence report lacks measured occurrence: {error}")
+    oracle.validate_measured_occurrence(root, request, measured)
 
 
 def report_store_projection(report: dict[str, Any]) -> dict[str, Any]:
@@ -424,6 +437,12 @@ def validate_negative_evidence_manifest(
         fail(f"negative evidence manifest is not JSON: {error}")
     if manifest["schema"] != NEGATIVE_EVIDENCE_SCHEMA:
         fail("negative evidence manifest schema differs")
+    if manifest["report"]["path"] != NEGATIVE_REPORT_FILENAME:
+        fail("negative evidence report path differs from canonical filename")
+    if manifest["execution_receipt"]["path"] != NEGATIVE_RECEIPT_FILENAME:
+        fail(
+            "negative evidence execution receipt path differs from canonical filename"
+        )
     binding_state = evidence_binding_state(report)
     if manifest["binding_state"] != binding_state:
         fail("negative evidence binding state differs from report")
@@ -628,6 +647,7 @@ def prepare_sqlite_baseline(
         "installed baseline Store publication report",
         error_code="materialization.report-invalid",
     )
+    validate_detailed_report_occurrence(root, oracle, request, report)
     if (
         report["response_kind"] != "detailed"
         or report["result"] != "passed"

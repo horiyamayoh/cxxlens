@@ -696,6 +696,32 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 receipt_bytes,
                 manifest_bytes,
             )
+            report_path_drift = copy.deepcopy(json.loads(manifest_bytes))
+            report_path_drift["report"]["path"] = "replaced-report.json"
+            with self.assertRaisesRegex(AssertionError, "report path"):
+                installed_negative.validate_negative_evidence_manifest(
+                    materialization,
+                    request,
+                    report,
+                    request_bytes,
+                    completed,
+                    receipt_bytes,
+                    materialization.canonical_json(report_path_drift),
+                )
+            receipt_path_drift = copy.deepcopy(json.loads(manifest_bytes))
+            receipt_path_drift["execution_receipt"]["path"] = (
+                "replaced-execution-receipt.json"
+            )
+            with self.assertRaisesRegex(AssertionError, "execution receipt path"):
+                installed_negative.validate_negative_evidence_manifest(
+                    materialization,
+                    request,
+                    report,
+                    request_bytes,
+                    completed,
+                    receipt_bytes,
+                    materialization.canonical_json(receipt_path_drift),
+                )
             drift = copy.deepcopy(json.loads(manifest_bytes))
             drift["source"]["tree"] = "0" * 40
             with self.assertRaisesRegex(AssertionError, "source identity"):
@@ -775,6 +801,23 @@ class NgClang22MaterializationTests(unittest.TestCase):
             detailed_report,
             request_bytes=detailed_request_bytes,
         )
+        installed_negative.validate_detailed_report_occurrence(
+            ROOT,
+            materialization,
+            detailed_request,
+            detailed_report,
+        )
+        measured_occurrence_drift = copy.deepcopy(detailed_report)
+        measured_occurrence_drift["installation"]["measured"][
+            "manifest_file_digest"
+        ] = "sha256:" + "0" * 64
+        with self.assertRaises(materialization.MaterializationError):
+            installed_negative.validate_detailed_report_occurrence(
+                ROOT,
+                materialization,
+                detailed_request,
+                measured_occurrence_drift,
+            )
         detailed_completed = subprocess.CompletedProcess(
             ["installed-materializer-fixture"],
             0,
@@ -810,6 +853,32 @@ class NgClang22MaterializationTests(unittest.TestCase):
         self.assertEqual(
             detailed_manifest["source"],
             installed_negative.negative_source_identity(detailed_request),
+        )
+        requested_occurrence_drift = copy.deepcopy(detailed_report)
+        requested_occurrence_drift["installation"]["requested"] = {
+            "occurrence_manifest_digest": "sha256:" + "f" * 64,
+        }
+        requested_drift_manifest = installed_negative.build_negative_evidence_manifest(
+            materialization,
+            detailed_request,
+            requested_occurrence_drift,
+            detailed_request_bytes,
+            detailed_completed,
+            detailed_receipt,
+        )
+        requested_drift_projection = json.loads(requested_drift_manifest)
+        self.assertEqual(
+            requested_drift_projection["source"]["occurrence_manifest_digest"],
+            detailed_report["installation"]["measured"]["manifest_file_digest"],
+        )
+        installed_negative.validate_negative_evidence_manifest(
+            materialization,
+            detailed_request,
+            requested_occurrence_drift,
+            detailed_request_bytes,
+            detailed_completed,
+            detailed_receipt,
+            requested_drift_manifest,
         )
 
         unbound_request = self.request("static", "sqlite")
