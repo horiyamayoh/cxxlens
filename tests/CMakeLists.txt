@@ -432,13 +432,13 @@ check_cxx_source_compiles(
 #ifndef SYS_pidfd_send_signal
 #error "The timeout regression requires pidfd_send_signal"
 #endif
-#ifndef P_PIDFD
-#error "The timeout regression requires P_PIDFD"
-#endif
-int main() { return 0; }
+int main() {
+  siginfo_t status{};
+  return waitid(P_PIDFD, 0, &status, WEXITED | WNOHANG);
+}
 ]=]
-  CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
+  CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   add_test(NAME unit.sdk-provider-runtime-timeout
            COMMAND cxxlens-unit-sdk-provider-runtime --timeout-regression
                    "$<TARGET_FILE:cxxlens-provider-process-fixture>")
@@ -457,7 +457,7 @@ set_tests_properties(
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     PROCESSORS 2)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   set_tests_properties(
     unit.sdk-provider-runtime-timeout
     PROPERTIES LABELS
