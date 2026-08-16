@@ -17,6 +17,7 @@ namespace cxxlens::sdk::provider::detail
 		constexpr std::string_view heartbeat_schema{"cxxlens.provider-control.heartbeat.v1"};
 		constexpr std::string_view progress_schema{"cxxlens.provider-control.progress.v2"};
 		constexpr std::string_view semantic_digest_prefix{"semantic-v2:sha256:"};
+		constexpr std::size_t ng1_max_control_bytes = 65'536U;
 
 		[[nodiscard]] error transport_error(std::string field, std::string detail)
 		{
@@ -213,6 +214,8 @@ namespace cxxlens::sdk::provider::detail
 		decode_cbor_map(const std::span<const std::byte> input,
 						const std::size_t expected_field_count)
 		{
+			if (input.size() > ng1_max_control_bytes)
+				return unexpected(transport_error("control", "limit-exceeded"));
 			if (input.empty())
 				return unexpected(transport_error("cbor", "empty"));
 			const auto initial = std::to_integer<std::uint8_t>(input.front());
