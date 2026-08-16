@@ -859,6 +859,7 @@ def _require_head_bound_authorities(
         AGENT_CONTRACT,
         AUTHORIZATION_DECISION_ADR,
         pathlib.Path("CMakeLists.txt"),
+        pathlib.Path("tests/CMakeLists.txt"),
         pathlib.Path("include/cxxlens/sdk.hpp"),
         pathlib.Path("tools/quality/check_ng_migration_completion.py"),
         pathlib.Path("docs/design/adr/0089-high-level-author-sdk-and-wave0-readiness.md"),
