@@ -2639,7 +2639,7 @@ namespace
 		require(descendant_budget.has_value(),
 				"could not derive a process budget for the NG1 live descendant test");
 		const auto descendant_command =
-			"/usr/bin/sleep 30 & child=$! read -r pid comm state ppid pgrp session tty_nr tpgid "
+			"/usr/bin/sleep 30 & child=$!; read -r pid comm state ppid pgrp session tty_nr tpgid "
 			"flags minflt cminflt majflt cmajflt utime stime cutime cstime priority nice "
 			"num_threads itrealvalue start_time rest < /proc/$child/stat; printf '%s %s\\n' "
 			"\"$child\" \"$start_time\" > " +
