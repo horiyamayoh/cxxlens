@@ -1,0 +1,52 @@
+name: Apply adopted CI acceleration and merge policy
+
+on:
+  push:
+    branches:
+      - adoption-ci-cache-merge-policy
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: apply-adopted-ci-policy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: github.repository == 'horiyamayoh/cxxlens'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12.11"
+      - name: Apply and validate the formally adopted policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 tools/ci/apply_adopted_policy.py
+          rm tools/ci/apply_adopted_policy.py
+          rm .github/workflows/apply-adopted-ci-policy.yml
+          python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock
+          python tools/quality/check_documentation_consistency.py generate --root .
+          python tools/quality/verify_checksums.py generate --root .
+          python tools/quality/check_documentation_consistency.py check --root .
+          python tools/quality/verify_checksums.py check --root .
+          python tools/quality/check_ng_api_development_readiness.py check --root .
+          python tests/quality/test_ng_ci_supply_chain.py
+          python tests/quality/test_ng_api_development_readiness.py
+          python -m py_compile tools/quality/check_ci_supply_chain.py tests/quality/test_ng_ci_supply_chain.py
+          git diff --check
+      - name: Commit the adopted policy
+        run: |
+          git config user.name "cxxlens-policy-bot"
+          git config user.email "cxxlens-policy-bot@users.noreply.github.com"
+          git add --all
+          git commit -m "Adopt tier-specific CI cache and squash automerge"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
