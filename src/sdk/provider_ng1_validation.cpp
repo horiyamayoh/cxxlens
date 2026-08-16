@@ -730,6 +730,15 @@ namespace cxxlens::sdk::provider::detail
 		return {};
 	}
 
+	result<void> ng1_spill_resume_frontier::validate() const
+	{
+		if (auto valid = receipt.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		if (resume_generation == 0U)
+			return unexpected(ng1_error("resume-token-stale", "resume_generation", "zero"));
+		return {};
+	}
+
 	result<void> ng1_spill_binding::validate() const
 	{
 		for (const auto [value, field] :

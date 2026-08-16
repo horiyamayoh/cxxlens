@@ -416,14 +416,17 @@ namespace cxxlens::sdk::provider::detail
 	result<ng1_spill_fsync_receipt>
 	ng1_session_coordinator::fsync_spill(const std::uint64_t highest_contiguous_acked_sequence,
 										 const std::uint64_t highest_observed_sequence,
-										 std::string staged_digest)
+										 std::string staged_digest,
+										 const std::uint64_t resume_generation)
 	{
 		if (auto open = ensure_open("spill"); !open)
 			return unexpected(std::move(open.error()));
 		if (!is_running(recovery_.state()))
 			return unexpected(recovery_error("state", "spill-not-open"));
-		auto receipt = spill_.fsync(
-			highest_contiguous_acked_sequence, highest_observed_sequence, std::move(staged_digest));
+		auto receipt = spill_.fsync(highest_contiguous_acked_sequence,
+									highest_observed_sequence,
+									std::move(staged_digest),
+									resume_generation);
 		if (!receipt)
 		{
 			poisoned_ = true;
@@ -493,6 +496,9 @@ namespace cxxlens::sdk::provider::detail
 		auto token = control.to_validation_token();
 		if (!token)
 			return reject_resume(std::move(token.error()));
+		if (auto frontier = spill_.validate_persisted_frontier(receipt, token->token_generation);
+			!frontier)
+			return reject_resume(std::move(frontier.error()));
 		return recovery_.accept_durable_resume(
 			*token, receipt, open_dependency_group, terminal, highest_observed_sequence);
 	}
@@ -512,7 +518,8 @@ namespace cxxlens::sdk::provider::detail
 			return reject_resume(error{"provider.resume-replay-invalid",
 									   "fsync_receipt",
 									   "coordinator-observation-present"});
-		if (auto restored = spill_.restore_from_fsync_receipt(receipt); !restored)
+		if (auto restored = spill_.restore_from_fsync_receipt(receipt, control.token_generation);
+			!restored)
 			return reject_resume(std::move(restored.error()));
 		latest_fsync_receipt_ = receipt;
 		return accept_durable_resume(
@@ -556,6 +563,10 @@ namespace cxxlens::sdk::provider::detail
 			return accepted;
 		replay_output_digest_ = std::string{replay_receipt.sealed_transcript_digest()};
 		replay_frame_transcript_digest_ = std::string{replay_receipt.frame_transcript_digest()};
+		// A shared validated task-complete replay is the terminal-progress receipt for a
+		// fresh coordinator. No provider progress sample can be replayed into the new
+		// progress clock, so seal_output must use this sealed lifecycle observation.
+		progress_terminal_ = true;
 		return {};
 	}
 
@@ -584,11 +595,10 @@ namespace cxxlens::sdk::provider::detail
 				error{"provider.replay-invalid", "replay_receipt", "not-replayed-seal"});
 		if (!progress_terminal_)
 			return poison(error{"provider.progress-rate", "terminal", "missing"});
-		if (auto complete = progress_.finish(); !complete)
+		if (current_state == ng1_recovery_state::running)
 		{
-			if (current_state == ng1_recovery_state::resumed)
-				return recovery_.reject_output();
-			return poison(std::move(complete.error()));
+			if (auto complete = progress_.finish(); !complete)
+				return poison(std::move(complete.error()));
 		}
 		if (auto sealed = recovery_.seal_output(); !sealed)
 			return sealed;

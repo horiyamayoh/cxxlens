@@ -203,7 +203,8 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<ng1_spill_fsync_receipt>
 		fsync_spill(std::uint64_t highest_contiguous_acked_sequence,
 					std::uint64_t highest_observed_sequence,
-					std::string staged_digest);
+					std::string staged_digest,
+					std::uint64_t resume_generation);
 
 		/** Explicit process observations supplied by the future live process port. */
 		[[nodiscard]] result<void> observe_worker_exit();

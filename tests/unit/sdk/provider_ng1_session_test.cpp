@@ -47,6 +47,20 @@ namespace
 		return *output;
 	}
 
+	[[nodiscard]] result<void> persist_frontier(std::optional<ng1_spill_resume_frontier>& current,
+												const ng1_spill_resume_frontier& next)
+	{
+		if (auto valid = next.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		if (current &&
+			(next.resume_generation <= current->resume_generation ||
+			 next.receipt.fsync_sequence <= current->receipt.fsync_sequence))
+			return unexpected(
+				error{"provider.resume-token-stale", "resume_frontier", "not-increasing"});
+		current = next;
+		return {};
+	}
+
 	[[nodiscard]] std::string manifest_digest(const char fill)
 	{
 		return std::string{"sha256:"} + std::string(64U, fill);
@@ -71,6 +85,16 @@ namespace
 			return bytes_;
 		}
 
+		result<std::optional<ng1_spill_resume_frontier>> read_resume_frontier() const override
+		{
+			return frontier_;
+		}
+
+		result<void> persist_resume_frontier(const ng1_spill_resume_frontier& frontier) override
+		{
+			return persist_frontier(frontier_, frontier);
+		}
+
 		result<void> cleanup() override
 		{
 			cleaned_ = true;
@@ -80,6 +104,7 @@ namespace
 	  private:
 		std::vector<std::byte> bytes_;
 		std::uint64_t fsync_sequence_{};
+		std::optional<ng1_spill_resume_frontier> frontier_;
 		bool cleaned_{};
 	};
 
@@ -87,6 +112,7 @@ namespace
 	{
 		std::vector<std::byte> bytes;
 		std::uint64_t fsync_sequence{};
+		std::optional<ng1_spill_resume_frontier> frontier;
 	};
 
 	class restartable_spill_storage final : public ng1_spill_storage_port
@@ -119,6 +145,20 @@ namespace
 			return state_->bytes;
 		}
 
+		result<std::optional<ng1_spill_resume_frontier>> read_resume_frontier() const override
+		{
+			if (cleaned_)
+				return unexpected(error{"provider.recovery-failed", "resume_frontier", "cleaned"});
+			return state_->frontier;
+		}
+
+		result<void> persist_resume_frontier(const ng1_spill_resume_frontier& frontier) override
+		{
+			if (cleaned_)
+				return unexpected(error{"provider.recovery-failed", "resume_frontier", "cleaned"});
+			return persist_frontier(state_->frontier, frontier);
+		}
+
 		result<void> cleanup() override
 		{
 			if (cleaned_)
@@ -148,6 +188,16 @@ namespace
 		result<std::vector<std::byte>> read_all() const override
 		{
 			return unexpected(error{"provider.spill-port-failed", "read", "injected"});
+		}
+
+		result<std::optional<ng1_spill_resume_frontier>> read_resume_frontier() const override
+		{
+			return unexpected(error{"provider.spill-port-failed", "resume_frontier", "injected"});
+		}
+
+		result<void> persist_resume_frontier(const ng1_spill_resume_frontier&) override
+		{
+			return unexpected(error{"provider.spill-port-failed", "resume_frontier", "injected"});
 		}
 
 		result<void> cleanup() override
@@ -432,7 +482,7 @@ namespace
 		auto session = ng1_session_coordinator::create(values.configuration());
 		require(session, "NG1 session creation failed");
 		require(session->append_spill(values.spill_record()), "spill append was rejected");
-		auto receipt = session->fsync_spill(0U, 0U, digest("staged"));
+		auto receipt = session->fsync_spill(0U, 0U, digest("staged"), 1U);
 		require(receipt, "spill fsync receipt was not created");
 		admit_progress_and_heartbeat(*session, values);
 		auto output = values.output_receipt();
@@ -507,7 +557,7 @@ namespace
 		require(resume_session, "live adapter resume session creation failed");
 		require(resume_session->append_spill(values.spill_record()),
 				"live adapter resume spill append failed");
-		auto receipt = resume_session->fsync_spill(0U, 0U, digest("staged"));
+		auto receipt = resume_session->fsync_spill(0U, 0U, digest("staged"), 1U);
 		require(receipt, "live adapter resume spill fsync failed");
 		require(resume_session->observe_worker_exit(), "live adapter resume worker exit failed");
 		ng1_live_session_adapter resume_adapter{*resume_session};
@@ -530,7 +580,7 @@ namespace
 		auto session = ng1_session_coordinator::create(values.configuration());
 		require(session, "recovery session creation failed");
 		require(session->append_spill(values.spill_record()), "recovery spill append failed");
-		auto receipt = session->fsync_spill(0U, 0U, digest("staged"));
+		auto receipt = session->fsync_spill(0U, 0U, digest("staged"), 1U);
 		require(receipt, "recovery spill fsync failed");
 		admit_progress_and_heartbeat(*session, values);
 		auto timeout = session->check_liveness(10'000'001'000U + 5'000'000'000U);
@@ -559,7 +609,7 @@ namespace
 		auto corrupted = ng1_session_coordinator::create(values.configuration());
 		require(corrupted, "corrupted-receipt session creation failed");
 		require(corrupted->append_spill(values.spill_record()), "corrupted spill append failed");
-		auto corrupted_receipt = corrupted->fsync_spill(0U, 0U, digest("staged"));
+		auto corrupted_receipt = corrupted->fsync_spill(0U, 0U, digest("staged"), 1U);
 		require(corrupted_receipt, "corrupted receipt setup failed");
 		require(corrupted->observe_worker_exit(), "worker exit setup failed");
 		auto bad_receipt = *corrupted_receipt;
@@ -582,17 +632,43 @@ namespace
 		require(predecessor, "durable predecessor session creation failed");
 		require(predecessor->append_spill(values.spill_record()),
 				"durable predecessor spill append failed");
-		auto receipt = predecessor->fsync_spill(0U, 0U, digest("staged"));
-		require(receipt, "durable predecessor fsync failed");
+		auto first_receipt = predecessor->fsync_spill(0U, 0U, digest("staged"), 1U);
+		require(first_receipt, "durable predecessor first fsync failed");
+		auto latest_receipt = predecessor->fsync_spill(0U, 0U, digest("staged"), 2U);
+		require(latest_receipt, "durable predecessor latest fsync failed");
 		require(predecessor->observe_worker_exit(), "durable predecessor exit failed");
+
+		auto stale_restart = ng1_session_coordinator::create(
+			values.configuration(std::make_unique<restartable_spill_storage>(durable)));
+		require(stale_restart, "stale restart session creation failed");
+		require(stale_restart->observe_worker_exit(), "stale restart exit observation failed");
+		auto stale_receipt = stale_restart->restore_durable_resume(
+			values.resume_control(1U), *first_receipt, false, false, 0U);
+		require(!stale_receipt && stale_receipt.error().code == "provider.resume-token-stale" &&
+					stale_restart->state() == ng1_recovery_state::failed,
+				"fresh coordinator accepted an older persisted receipt");
+		require(stale_restart->cleanup(), "stale restart cleanup failed");
+
+		auto stale_generation_restart = ng1_session_coordinator::create(
+			values.configuration(std::make_unique<restartable_spill_storage>(durable)));
+		require(stale_generation_restart, "stale generation session creation failed");
+		require(stale_generation_restart->observe_worker_exit(),
+				"stale generation exit observation failed");
+		auto stale_generation = stale_generation_restart->restore_durable_resume(
+			values.resume_control(1U), *latest_receipt, false, false, 0U);
+		require(!stale_generation &&
+					stale_generation.error().code == "provider.resume-token-stale" &&
+					stale_generation_restart->state() == ng1_recovery_state::failed,
+				"fresh coordinator accepted an older resume generation for the latest receipt");
+		require(stale_generation_restart->cleanup(), "stale generation cleanup failed");
 
 		auto restarted = ng1_session_coordinator::create(
 			values.configuration(std::make_unique<restartable_spill_storage>(durable)));
 		require(restarted, "fresh restart session creation failed");
 		require(restarted->observe_worker_exit(), "fresh restart exit observation failed");
-		require(
-			restarted->restore_durable_resume(values.resume_control(), *receipt, false, false, 0U),
-			"fresh coordinator did not restore the durable prefix");
+		require(restarted->restore_durable_resume(
+					values.resume_control(2U), *latest_receipt, false, false, 0U),
+				"fresh coordinator did not restore the durable prefix");
 		require(restarted->spill_total_records() == predecessor->spill_total_records() &&
 					restarted->spill_total_bytes() == predecessor->spill_total_bytes(),
 				"fresh coordinator did not install the exact durable prefix");
@@ -606,14 +682,15 @@ namespace
 		require(restarted->accept_replay(*replay), "fresh coordinator replay was rejected");
 		require(restarted->state() == ng1_recovery_state::resumed,
 				"fresh coordinator did not enter resumed state");
+		require(restarted->seal_output(output),
+				"validated restart replay did not establish terminal progress");
+		require(restarted->state() == ng1_recovery_state::completed,
+				"validated restart replay did not complete output sealing");
 
 		auto predecessor_rejected = predecessor->reject_output();
 		require(!predecessor_rejected && predecessor->state() == ng1_recovery_state::failed,
 				"predecessor was reusable after restart handoff");
 		require(predecessor->cleanup(), "durable predecessor cleanup failed");
-		auto restarted_rejected = restarted->reject_output();
-		require(!restarted_rejected && restarted->state() == ng1_recovery_state::failed,
-				"restarted session did not classify rejected output");
 		require(restarted->cleanup(), "fresh restart cleanup failed");
 	}
 
@@ -626,7 +703,7 @@ namespace
 		require(predecessor, "resume-negative predecessor creation failed");
 		require(predecessor->append_spill(values.spill_record()),
 				"resume-negative predecessor append failed");
-		auto receipt = predecessor->fsync_spill(0U, 0U, digest("staged"));
+		auto receipt = predecessor->fsync_spill(0U, 0U, digest("staged"), 1U);
 		require(receipt, "resume-negative predecessor fsync failed");
 
 		auto no_exit = ng1_session_coordinator::create(
@@ -643,14 +720,13 @@ namespace
 				"resume-negative session did not fail closed for cleanup");
 		require(no_exit->cleanup(), "resume-negative no-exit cleanup failed");
 
+		durable->bytes.back() ^= std::byte{1U};
 		auto corrupted = ng1_session_coordinator::create(
 			values.configuration(std::make_unique<restartable_spill_storage>(durable)));
 		require(corrupted, "resume-negative corrupted session creation failed");
 		require(corrupted->observe_worker_exit(), "resume-negative corrupted exit failed");
-		auto bad_receipt = *receipt;
-		++bad_receipt.total_records;
 		auto rejected = corrupted->restore_durable_resume(
-			values.resume_control(), bad_receipt, false, false, 0U);
+			values.resume_control(1U), *receipt, false, false, 0U);
 		require(!rejected && rejected.error().code == "provider.spill-corrupt" &&
 					corrupted->state() == ng1_recovery_state::failed,
 				"fresh coordinator accepted a receipt for a different spill prefix");
@@ -750,7 +826,7 @@ namespace
 		require(session, "replay-negative session creation failed");
 		require(session->append_spill(values.spill_record()),
 				"replay-negative spill append failed");
-		auto receipt = session->fsync_spill(0U, 0U, digest("staged"));
+		auto receipt = session->fsync_spill(0U, 0U, digest("staged"), 1U);
 		require(receipt, "replay-negative fsync failed");
 		require(session->observe_worker_exit(), "replay-negative worker exit failed");
 		require(session->accept_durable_resume(values.resume_control(), *receipt, false, false, 0U),
@@ -801,7 +877,7 @@ namespace
 		auto session = ng1_session_coordinator::create(values.configuration());
 		require(session, "provenance session creation failed");
 		require(session->append_spill(values.spill_record()), "provenance spill append failed");
-		auto receipt = session->fsync_spill(0U, 0U, digest("staged"));
+		auto receipt = session->fsync_spill(0U, 0U, digest("staged"), 1U);
 		require(receipt, "provenance fsync failed");
 		require(session->observe_worker_exit(), "provenance worker exit failed");
 		require(session->accept_durable_resume(values.resume_control(), *receipt, false, false, 0U),
@@ -854,7 +930,7 @@ namespace
 			if (effect == throwing_spill_effect::fsync)
 			{
 				require(append, "fsync-throw setup append failed");
-				auto receipt = session->fsync_spill(0U, 0U, digest("staged"));
+				auto receipt = session->fsync_spill(0U, 0U, digest("staged"), 1U);
 				require(!receipt, "fsync throw was swallowed as success");
 			}
 			else
@@ -870,7 +946,7 @@ namespace
 		auto session = ng1_session_coordinator::create(std::move(configuration));
 		require(session, "read-throw spill session creation failed");
 		require(session->append_spill(values.spill_record()), "read-throw setup append failed");
-		auto receipt = session->fsync_spill(0U, 0U, digest("staged"));
+		auto receipt = session->fsync_spill(0U, 0U, digest("staged"), 1U);
 		require(receipt, "read-throw setup fsync failed");
 		require(session->observe_worker_exit(), "read-throw worker exit failed");
 		auto resumed =

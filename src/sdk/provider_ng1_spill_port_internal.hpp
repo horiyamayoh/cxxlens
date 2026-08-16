@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -28,6 +29,12 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] virtual result<std::uint64_t> fsync() = 0;
 		/** Read the complete bounded object for source-private recovery. */
 		[[nodiscard]] virtual result<std::vector<std::byte>> read_all() const = 0;
+		/** Read the port-owned latest resume-generation/fsync frontier. */
+		[[nodiscard]] virtual result<std::optional<ng1_spill_resume_frontier>>
+		read_resume_frontier() const = 0;
+		/** Persist one validated, strictly newer resume-generation/fsync frontier. */
+		[[nodiscard]] virtual result<void>
+		persist_resume_frontier(const ng1_spill_resume_frontier& frontier) = 0;
 		/** Dispose the private object; an unknown cleanup effect is terminal. */
 		[[nodiscard]] virtual result<void> cleanup() = 0;
 	};
@@ -62,7 +69,12 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<ng1_spill_fsync_receipt>
 		fsync(std::uint64_t highest_contiguous_acked_sequence,
 			  std::uint64_t highest_observed_sequence,
-			  std::string staged_digest);
+			  std::string staged_digest,
+			  std::uint64_t resume_generation);
+		/** Validate that the supplied receipt and generation are the port's latest frontier. */
+		[[nodiscard]] result<void>
+		validate_persisted_frontier(const ng1_spill_fsync_receipt& receipt,
+									std::uint64_t resume_generation);
 		/** Re-read and validate the complete stored prefix from the private port. */
 		[[nodiscard]] result<ng1_spill_prefix_state> recover();
 		/**
@@ -73,7 +85,8 @@ namespace cxxlens::sdk::provider::detail
 		 * termination and resume-token acceptance as separate lifecycle observations.
 		 */
 		[[nodiscard]] result<void>
-		restore_from_fsync_receipt(const ng1_spill_fsync_receipt& receipt);
+		restore_from_fsync_receipt(const ng1_spill_fsync_receipt& receipt,
+								   std::uint64_t resume_generation);
 
 		/** Cleanup after final report/token disposal or after recovery classification. */
 		[[nodiscard]] result<void> cleanup();
@@ -105,7 +118,9 @@ namespace cxxlens::sdk::provider::detail
 		ng1_spill_binding binding_;
 		std::unique_ptr<ng1_spill_storage_port> storage_;
 		std::uint64_t last_fsync_sequence_{};
+		std::uint64_t last_resume_generation_{};
 		bool has_fsync_sequence_{};
+		bool has_resume_generation_{};
 		bool poisoned_{};
 		bool cleaned_{};
 	};
