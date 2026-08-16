@@ -1,19 +1,17 @@
 {
   "actions": {
+    "actions/cache": "0057852bfaa89a56745cba8c7296529d2fc39830",
     "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
     "actions/download-artifact": "fa0a91b85d4f404e444e00e005971372dc801d16",
     "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
     "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02"
-  },
-  "local_workflows": {
-    ".github/workflows/nightly.yml": "7d85c8356497dc14cfadc56d5df005638df0f1e7e3f22e2a97a97e90de8f4a4b"
   },
   "authority": {
     "adr": "docs/design/adr/0072-ci-supply-chain-provenance.md",
     "issue": "#141",
     "owner": "steward.ci-supply-chain"
   },
-  "document_version": "1.3.0",
+  "document_version": "1.5.0",
   "documentation": {
     "architecture": "amd64",
     "expected_release": "1.9.8",
@@ -73,6 +71,24 @@
       "url": "https://apt.llvm.org/llvm-snapshot.gpg.key"
     },
     "suite": "llvm-toolchain-noble-22"
+  },
+  "local_actions": {
+    ".github/actions/setup-ci/action.yml": "2c6b3a845e31639e7bcfc2070eb8e97f7d4159dba93ed3166d10f41cfe622a43"
+  },
+  "local_workflows": {
+    ".github/workflows/nightly.yml": "09a19395896317772ff5662bd38f0e195c28898689eac7c3424d9d2d4606ae06"
+  },
+  "package_cache": {
+    "correctness_role": "transport-optimization-only",
+    "directory": "~/.cache/cxxlens/packages",
+    "environment": "CXXLENS_PACKAGE_CACHE",
+    "hit_environment": "CXXLENS_PACKAGE_CACHE_HIT",
+    "key_environment": "CXXLENS_PACKAGE_CACHE_KEY",
+    "key_template": "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-${profile}-${documentation}-${lock_digest}",
+    "key_version": "v1",
+    "receipt_environment": "CXXLENS_PACKAGE_CACHE_RECEIPT",
+    "restore_keys": false,
+    "scope": "exact-downloaded-debs-only"
   },
   "python": {
     "architecture": "x86_64",
