@@ -150,9 +150,13 @@ namespace cxxlens::detail::clang22::materialization
 
 		materialization_bounded_claim_source(std::string materialization_request_id,
 											 const sdk::relation_engine& engine,
-											 std::uint64_t expected_task_count)
+											 std::uint64_t expected_task_count,
+											 std::function<sdk::result<std::string>(std::size_t)>
+												 selected_request_entry_binding_resolver)
 			: materialization_request_id_{std::move(materialization_request_id)}, engine_{&engine},
-			  expected_task_count_{expected_task_count}
+			  expected_task_count_{expected_task_count},
+			  selected_request_entry_binding_resolver_{
+				  std::move(selected_request_entry_binding_resolver)}
 		{
 		}
 
@@ -160,6 +164,8 @@ namespace cxxlens::detail::clang22::materialization
 		const sdk::relation_engine* engine_{};
 		std::uint64_t expected_task_count_{};
 		std::uint64_t consumed_task_count_{};
+		std::function<sdk::result<std::string>(std::size_t)>
+			selected_request_entry_binding_resolver_;
 		std::map<std::string, partition_state, std::less<>> partitions_;
 		std::string materializer_semantics_digest_;
 		std::string direct_basis_digest_;
