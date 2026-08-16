@@ -15,6 +15,8 @@
 
 namespace cxxlens::sdk::provider::detail
 {
+	class ng1_live_session_adapter;
+
 	/**
 	 * Opaque output-validation authority supplied by the shared provider validator.
 	 *
@@ -264,5 +266,58 @@ namespace cxxlens::sdk::provider::detail
 		bool poisoned_{};
 		bool cleaned_{};
 		bool moved_from_{};
+
+		friend class ng1_live_session_adapter;
+	};
+
+	/**
+	 * Source-private bridge from decoded live wire frames to the NG1 session coordinator.
+	 *
+	 * The adapter deliberately does not launch a process, own a pipe, or advertise NG1. It only
+	 * binds the typed control codecs to host-receipted coordinator observations. Ordinary output
+	 * frames return `false` so the caller can still pass them through the shared transcript
+	 * validator. A resume acceptance requires the independently host-observed spill receipt and is
+	 * therefore exposed as a separate operation rather than being inferred from a frame alone.
+	 */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_live_session_adapter
+	{
+	  public:
+		explicit ng1_live_session_adapter(ng1_session_coordinator& session) noexcept
+			: session_{&session}
+		{
+		}
+
+		/** Observe one provider-to-host frame; return true for an admitted NG1 control frame. */
+		[[nodiscard]] result<bool> observe_provider_frame(const frame& value,
+														  std::uint64_t host_receipt_time_ns,
+														  std::uint64_t highest_observed_sequence,
+														  std::string_view host_staged_digest,
+														  bool terminal_progress_sample = false);
+
+		/** Observe one host-to-provider frame; return true for an admitted NG1 control frame. */
+		[[nodiscard]] result<bool> observe_host_frame(const frame& value,
+													  std::uint64_t host_receipt_time_ns,
+													  std::uint64_t highest_observed_sequence,
+													  std::string_view host_staged_digest);
+
+		/**
+		 * Admit a provider resume response only with the latest host-observed durable receipt. The
+		 * frame's control is decoded and identity-checked before the coordinator is mutated.
+		 */
+		[[nodiscard]] result<void>
+		accept_provider_resume_frame(const frame& value,
+									 std::uint64_t host_receipt_time_ns,
+									 const ng1_spill_fsync_receipt& receipt,
+									 bool open_dependency_group,
+									 bool terminal,
+									 std::uint64_t highest_observed_sequence);
+
+	  private:
+		[[nodiscard]] result<void> validate_frame_header(const frame& value) const;
+		[[nodiscard]] result<void> reject_heartbeat(error original_error);
+		[[nodiscard]] result<void> reject_progress(error original_error);
+		[[nodiscard]] result<void> reject_resume(error original_error);
+
+		ng1_session_coordinator* session_{};
 	};
 } // namespace cxxlens::sdk::provider::detail

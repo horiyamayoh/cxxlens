@@ -574,4 +574,138 @@ namespace cxxlens::sdk::provider::detail
 			poisoned_ = true;
 		return result;
 	}
+
+	result<void> ng1_live_session_adapter::validate_frame_header(const frame& value) const
+	{
+		if (session_ == nullptr)
+			return unexpected(error{"provider.recovery-failed", "session", "missing"});
+		if (value.protocol_major != 1U || value.protocol_minor != 1U)
+			return unexpected(error{"provider.protocol-minor-mismatch", "frame", "ng1"});
+		if (value.stream_id != session_->resume_binding_.stream_id)
+			return unexpected(error{"provider.task-binding-mismatch", "stream_id", "frame"});
+		if (value.flags != 0U)
+			return unexpected(error{"provider.protocol-state-invalid", "flags", "ng1-control"});
+		if (!value.payload.empty())
+			return unexpected(error{"provider.protocol-state-invalid", "payload", "ng1-control"});
+		return {};
+	}
+
+	result<void> ng1_live_session_adapter::reject_heartbeat(error original_error)
+	{
+		if (session_ == nullptr)
+			return unexpected(std::move(original_error));
+		return session_->reject_heartbeat(std::move(original_error));
+	}
+
+	result<void> ng1_live_session_adapter::reject_progress(error original_error)
+	{
+		if (session_ == nullptr)
+			return unexpected(std::move(original_error));
+		return session_->reject_progress(std::move(original_error));
+	}
+
+	result<void> ng1_live_session_adapter::reject_resume(error original_error)
+	{
+		if (session_ == nullptr)
+			return unexpected(std::move(original_error));
+		return session_->reject_resume(std::move(original_error));
+	}
+
+	result<bool>
+	ng1_live_session_adapter::observe_provider_frame(const frame& value,
+													 const std::uint64_t host_receipt_time_ns,
+													 const std::uint64_t highest_observed_sequence,
+													 const std::string_view host_staged_digest,
+													 const bool terminal_progress_sample)
+	{
+		if (!is_ng1_heartbeat_message(value.type) && value.type != message_type::progress)
+			return false;
+		if (auto valid = validate_frame_header(value); !valid)
+		{
+			if (value.type == message_type::progress)
+				return unexpected(std::move(reject_progress(std::move(valid.error())).error()));
+			return unexpected(std::move(reject_heartbeat(std::move(valid.error())).error()));
+		}
+		if (is_ng1_heartbeat_message(value.type))
+		{
+			auto control = decode_ng1_heartbeat_control(value.control);
+			if (!control)
+				return unexpected(std::move(reject_heartbeat(std::move(control.error())).error()));
+			if (control->kind != ng1_heartbeat_kind::ack)
+				return unexpected(std::move(
+					reject_heartbeat(
+						error{"provider.protocol-state-invalid", "heartbeat.kind", "provider-ack"})
+						.error()));
+			if (auto observed = session_->observe_provider_ack(
+					*control, host_receipt_time_ns, highest_observed_sequence, host_staged_digest);
+				!observed)
+				return unexpected(std::move(observed.error()));
+			return true;
+		}
+
+		auto control = decode_ng1_progress_control(value.control);
+		if (!control)
+			return unexpected(std::move(reject_progress(std::move(control.error())).error()));
+		if (auto observed = session_->observe_progress(
+				*control, host_receipt_time_ns, terminal_progress_sample);
+			!observed)
+			return unexpected(std::move(observed.error()));
+		return true;
+	}
+
+	result<bool>
+	ng1_live_session_adapter::observe_host_frame(const frame& value,
+												 const std::uint64_t host_receipt_time_ns,
+												 const std::uint64_t highest_observed_sequence,
+												 const std::string_view host_staged_digest)
+	{
+		if (!is_ng1_heartbeat_message(value.type) && value.type != message_type::progress)
+			return false;
+		if (auto valid = validate_frame_header(value); !valid)
+			return unexpected(std::move(reject_heartbeat(std::move(valid.error())).error()));
+		if (value.type == message_type::progress)
+			return unexpected(std::move(
+				reject_progress(
+					error{"provider.protocol-state-invalid", "progress", "host-to-provider"})
+					.error()));
+		auto control = decode_ng1_heartbeat_control(value.control);
+		if (!control)
+			return unexpected(std::move(reject_heartbeat(std::move(control.error())).error()));
+		if (control->kind != ng1_heartbeat_kind::probe)
+			return unexpected(std::move(
+				reject_heartbeat(
+					error{"provider.protocol-state-invalid", "heartbeat.kind", "host-probe"})
+					.error()));
+		if (auto observed = session_->observe_host_probe(
+				*control, host_receipt_time_ns, highest_observed_sequence, host_staged_digest);
+			!observed)
+			return unexpected(std::move(observed.error()));
+		return true;
+	}
+
+	result<void> ng1_live_session_adapter::accept_provider_resume_frame(
+		const frame& value,
+		const std::uint64_t host_receipt_time_ns,
+		const ng1_spill_fsync_receipt& receipt,
+		const bool open_dependency_group,
+		const bool terminal,
+		const std::uint64_t highest_observed_sequence)
+	{
+		if (value.type != message_type::resume)
+			return reject_resume(
+				error{"provider.protocol-state-invalid", "message_type", "resume"});
+		if (auto valid = validate_frame_header(value); !valid)
+			return reject_resume(std::move(valid.error()));
+		auto control = decode_ng1_resume_control(value.control);
+		if (!control)
+			return reject_resume(std::move(control.error()));
+		if (auto monotonic = session_->admit_host_receipt(host_receipt_time_ns); !monotonic)
+			return reject_resume(std::move(monotonic.error()));
+		if (auto accepted = session_->accept_durable_resume(
+				*control, receipt, open_dependency_group, terminal, highest_observed_sequence);
+			!accepted)
+			return unexpected(std::move(accepted.error()));
+		session_->last_host_receipt_time_ns_ = host_receipt_time_ns;
+		return {};
+	}
 } // namespace cxxlens::sdk::provider::detail
