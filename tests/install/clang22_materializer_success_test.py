@@ -54,6 +54,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--root", required=True, type=pathlib.Path)
     parser.add_argument("--prefix", required=True, type=pathlib.Path)
     parser.add_argument(
+        "--executable-suffix",
+        default="",
+        help=(
+            "configured CMake executable suffix used to resolve the installed "
+            "materializer and worker; manifest paths remain canonical"
+        ),
+    )
+    parser.add_argument(
         "--backend", choices=("memory", "sqlite"), default="memory"
     )
     parser.add_argument("--translation-unit-count", type=int, default=2)
@@ -240,7 +248,13 @@ def main() -> int:
     environment = dict(os.environ)
     environment.pop("LD_LIBRARY_PATH", None)
     environment.pop("DYLD_LIBRARY_PATH", None)
-    materializer = args.prefix / "bin" / "cxxlens-clang22-materialize"
+    materializer = install_matrix.resolve_installed_executable(
+        args.prefix,
+        "bin/cxxlens-clang22-materialize",
+        args.executable_suffix,
+    )
+    if not materializer.is_file() or materializer.is_symlink():
+        fail(f"installed materializer is missing or not regular: {materializer}")
     # Keep mutable SQLite files outside the immutable install prefix. The
     # install-artifact manifest is verified by sibling CTest jobs, so a
     # journal/WAL sidecar created under the prefix would race that exact file
@@ -280,7 +294,11 @@ def main() -> int:
         error_code="materialization.report-invalid",
     )
     raw_occurrences = install_matrix.capture_installed_raw_provider_transcripts(
-        args.root, args.prefix, request, occurrence
+        args.root,
+        args.prefix,
+        request,
+        occurrence,
+        executable_suffix=args.executable_suffix,
     )
     install_matrix.validate_independent_raw_provider_transcripts(
         args.root, request, report, raw_occurrences
