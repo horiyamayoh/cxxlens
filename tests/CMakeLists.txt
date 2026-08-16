@@ -400,6 +400,10 @@ target_link_libraries(cxxlens-provider-process-fixture
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-runtime
                             unit/sdk/provider_runtime_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-runtime
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
 target_link_libraries(cxxlens-unit-sdk-provider-runtime
                       PRIVATE cxxlens::provider_sdk)
 target_include_directories(cxxlens-unit-sdk-provider-runtime
