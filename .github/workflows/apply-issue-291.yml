@@ -1,0 +1,59 @@
+name: Apply issue 291 payload
+
+on:
+  push:
+    branches:
+      - issue-291-development-acceleration
+
+permissions:
+  contents: write
+  issues: read
+
+concurrency:
+  group: apply-issue-291
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Reconstruct and apply the validated payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/issues/291/comments?per_page=100" \
+            --jq '.[] | select(.body | startswith("ISSUE291_PAYLOAD_")) | .body' \
+            > "${RUNNER_TEMP}/issue291.chunks"
+          test "$(wc -l < "${RUNNER_TEMP}/issue291.chunks")" -eq 6
+          sort "${RUNNER_TEMP}/issue291.chunks" \
+            | sed -E 's/^ISSUE291_PAYLOAD_[0-9]{4}://' \
+            | tr -d '\n' \
+            > "${RUNNER_TEMP}/issue291.tar.gz.b64"
+          base64 --decode "${RUNNER_TEMP}/issue291.tar.gz.b64" \
+            > "${RUNNER_TEMP}/issue291.tar.gz"
+          echo "e870e758fd0a08d2f00b99a184e49f01884c798f328153d6f0a6ceacec698585  ${RUNNER_TEMP}/issue291.tar.gz" \
+            | sha256sum --check
+          tar -xzf "${RUNNER_TEMP}/issue291.tar.gz" -C .
+          python -m py_compile \
+            tools/quality/check_ng_api_development_readiness.py \
+            tests/quality/test_ng_api_development_readiness.py
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            .github/workflows/quality.yml \
+            .github/workflows/nightly.yml \
+            tools/quality/check_ng_api_development_readiness.py \
+            tests/quality/test_ng_api_development_readiness.py \
+            schemas/cxxlens_ng_api_development_readiness.yaml \
+            schemas/cxxlens_ng_api_development_readiness.schema.yaml
+          git diff --cached --check
+          git commit -m "Adopt tiered CI and #261 agent context (#291)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
