@@ -1,0 +1,114 @@
+name: Issue 316 bootstrap
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  issues: read
+
+concurrency:
+  group: issue-316-bootstrap-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'issue-316-ci-setup-integration'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Recover and verify the reviewed migration payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: "5306714689"
+          EXPECTED_RAW_SHA256: c68a50fc9ba328fcba80b3e90100c1da6cc09b73ecc825bdcb0fc680a1ec3adf
+          EXPECTED_GZIP_SHA256: 5c5f5343907c98810162e2e907671718f23897f981818e62036fde7d5acf48ba
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}" --jq .body \
+            > "${RUNNER_TEMP}/issue-316-payload-comment.txt"
+          python3 - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import os
+          import pathlib
+          import re
+
+          body = pathlib.Path(os.environ["RUNNER_TEMP"], "issue-316-payload-comment.txt").read_text(
+              encoding="utf-8"
+          )
+          match = re.search(r"```base64\s*\n(?P<payload>[A-Za-z0-9+/=\r\n]+)\n```", body)
+          if match is None:
+              raise SystemExit("issue 316 payload code block is missing")
+          compressed = base64.b64decode("".join(match.group("payload").split()), validate=True)
+          compressed_digest = hashlib.sha256(compressed).hexdigest()
+          if compressed_digest != os.environ["EXPECTED_GZIP_SHA256"]:
+              raise SystemExit(
+                  f"issue 316 gzip digest differs: {compressed_digest}"
+              )
+          source = gzip.decompress(compressed)
+          source_digest = hashlib.sha256(source).hexdigest()
+          if source_digest != os.environ["EXPECTED_RAW_SHA256"]:
+              raise SystemExit(f"issue 316 raw digest differs: {source_digest}")
+          destination = pathlib.Path(".github/bootstrap/apply_issue_316.py")
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          destination.write_bytes(source)
+          PY
+          python3 -m py_compile .github/bootstrap/apply_issue_316.py
+
+      - name: Apply the reviewed issue 316 migration
+        run: python3 .github/bootstrap/apply_issue_316.py
+
+      - name: Remove the one-shot bootstrap assets
+        run: |
+          rm -f .github/bootstrap/apply_issue_316.py
+          rm -f .github/workflows/issue-316-bootstrap.yml
+          rmdir .github/bootstrap 2>/dev/null || true
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12.11"
+
+      - name: Install exact checker dependencies
+        run: >-
+          python -m pip install --require-hashes --only-binary=:all:
+          --requirement tools/quality/requirements.lock
+
+      - name: Regenerate tracked inventories
+        run: |
+          python tools/quality/check_documentation_consistency.py generate --root .
+          python tools/quality/verify_checksums.py generate --root .
+
+      - name: Validate the migrated repository contracts
+        run: |
+          python -m py_compile \
+            tools/quality/check_ci_supply_chain.py \
+            tools/quality/collect_toolchain_provenance.py \
+            tools/quality/check_ng_api_development_readiness.py \
+            tests/quality/test_ng_ci_supply_chain.py
+          python tools/quality/check_ci_supply_chain.py check --root .
+          python tools/quality/check_ng_api_development_readiness.py check --root .
+          python tests/quality/test_ng_ci_supply_chain.py
+          python tools/quality/check_documentation_consistency.py check --root .
+          python tools/quality/verify_checksums.py check --root .
+
+      - name: Commit the exact generated result
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then
+            echo "issue 316 migration produced no changes" >&2
+            exit 1
+          fi
+          git commit -m "Commonize CI setup and automate PR integration (#316)"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
