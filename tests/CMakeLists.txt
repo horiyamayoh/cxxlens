@@ -1,10 +1,15 @@
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 
+set(CXXLENS_NG_TEST_BINARY_TARGETS)
+
 function(cxxlens_add_test_executable target source)
   add_executable(${target} ${source})
   target_compile_features(${target} PRIVATE cxx_std_23)
   cxxlens_set_project_warnings(${target})
   cxxlens_enable_sanitizers(${target})
+  set(CXXLENS_NG_TEST_BINARY_TARGETS
+      ${CXXLENS_NG_TEST_BINARY_TARGETS} ${target}
+      PARENT_SCOPE)
 endfunction()
 
 cxxlens_add_test_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
@@ -1092,55 +1097,5 @@ add_custom_target(cxxlens-ng-test-binaries)
 add_dependencies(
   cxxlens-ng-test-binaries
   cxxlens-clang-worker-22
-  cxxlens-clang22-provider-normalizer
-  cxxlens-clang22-provider-worker-protocol
-  cxxlens-clang22-materialization-json
-  cxxlens-clang22-materialization-identity
-  cxxlens-clang22-materialization-request-driver
-  cxxlens-clang22-materialization-io
-  cxxlens-clang22-materialization-claims
-  cxxlens-clang22-materialization-seal
-  cxxlens-clang22-materialization-store
-  cxxlens-clang22-materialization-request-stream
-  cxxlens-clang22-materialization-request-identity
-  cxxlens-clang22-materialization-task-spool
-  cxxlens-clang22-materialization-request-v2-1
-  cxxlens-clang22-materialization-rooted-vfs
-  cxxlens-clang22-materialization-occurrence
-  cxxlens-clang22-materialization-report
-  cxxlens-clang22-observation-v2
-  cxxlens-clang22-unicode-nfc
-  cxxlens-r2-vertical-slice
-  cxxlens-provider-process-fixture
-  cxxlens-public-header-cxxlens
-  cxxlens-public-header-provider-clang22
-  cxxlens-public-header-sdk
-  cxxlens-unit-sdk
-  cxxlens-unit-sdk-provider-runtime
-  cxxlens-unit-sdk-provider-ng1-validation
-  cxxlens-unit-sdk-provider-ng1-spill-port
-  cxxlens-unit-sdk-provider-ng1-transport
-  cxxlens-unit-sdk-provider-ng1-recovery-adapter
-  cxxlens-unit-sdk-provider-ng1-session
-  cxxlens-unit-sdk-provider-ng1-live-driver
-  cxxlens-unit-sdk-query-runtime
-  cxxlens-unit-sdk-sqlite-connection-lifecycle
-  cxxlens-unit-sdk-sqlite-default-forwarding-vfs
-  cxxlens-unit-sdk-sqlite-disposable-qualification
-  cxxlens-unit-sdk-sqlite-limit-length-precedence
-  cxxlens-unit-sdk-sqlite-payload-streaming
-  cxxlens-unit-sdk-sqlite-shm-identity-issuer
-  cxxlens-unit-sdk-sqlite-shm-mapping-lease
-  cxxlens-unit-sdk-sqlite-shm-mapping-registry
-  cxxlens-unit-sdk-sqlite-writer-shm-mapping-epoch
-  cxxlens-unit-sdk-sqlite-writer-shm-mapping-semantics
-  cxxlens-unit-sdk-sqlite-source-shm-readonly-preflight
-  cxxlens-unit-sdk-sqlite-store-fault-injection
-  cxxlens-unit-sdk-sqlite-store-terminal
-  cxxlens-unit-sdk-sqlite-terminal-reclassifier
-  cxxlens-unit-sdk-sqlite-store-wal-routing
-  cxxlens-unit-sdk-sqlite-wal-source-capture
-  cxxlens-unit-sdk-sqlite-wal-recovery-workspace
-  cxxlens-unit-sdk-sqlite-wal-receipt
-  cxxlens-unit-sdk-store
-  cxxlens-g5-runtime)
+  cxxlens-clang22-materialize
+  ${CXXLENS_NG_TEST_BINARY_TARGETS})
