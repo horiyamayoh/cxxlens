@@ -251,6 +251,34 @@ class QualityOwnershipTest(unittest.TestCase):
         self.assertIn('--source-revision "@CXXLENS_SOURCE_REVISION@"', install_script)
         self.assertIn('--source-tree "@CXXLENS_SOURCE_TREE@"', install_script)
 
+    def test_install_test_uses_configured_executable_suffix(self) -> None:
+        install_script = (ROOT / "tests/install/run_install_test.cmake.in").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")',
+            install_script,
+        )
+        for executable in (
+            "cxxlens-provider-scaffold",
+            "cxxlens-sdk-doctor",
+            "cxxlens-clang-worker-22",
+            "cxxlens-clang22-materialize",
+        ):
+            with self.subTest(executable=executable):
+                self.assertIn(
+                    f"${{install_prefix}}/bin/{executable}${{install_executable_suffix}}",
+                    install_script,
+                )
+        self.assertIn(
+            "${build_dir}/cxxlens-${consumer_executable}${install_executable_suffix}",
+            install_script,
+        )
+        self.assertIn(
+            "${example_build_dir}/cxxlens-installed-${example}${install_executable_suffix}",
+            install_script,
+        )
+
 
 class ConstructibilityGateProjectionTest(unittest.TestCase):
     @staticmethod
