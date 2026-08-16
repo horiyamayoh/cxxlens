@@ -129,7 +129,6 @@ namespace cxxlens::detail::clang22::materialization
 		const validated_materialization_request* request_{};
 		std::string request_id_;
 		std::vector<std::vector<std::string>> expected_partition_ids_;
-		std::vector<std::optional<materialization_incremental_task_receipt>> task_receipts_;
 		std::vector<materialization_claim_stream_task> claim_stream_tasks_;
 		std::size_t next_task_index_{};
 		const materialization_producer_authority* producer_authority_{};
