@@ -1792,6 +1792,7 @@ namespace cxxlens::sdk::provider
 			bool coverage_seen{};
 			bool unresolved_seen{};
 			bool progress_seen{};
+			bool ng1_progress_terminal{};
 			bool terminal_seen{};
 			std::optional<ng1_progress_control> last_ng1_progress;
 			std::uint64_t output_rows{};
@@ -1820,6 +1821,18 @@ namespace cxxlens::sdk::provider
 			const auto expected_hello = request.provider_manifest == nullptr
 				? std::string{}
 				: request.provider_manifest->canonical_json();
+			if (request.ng1_control_transcript)
+			{
+				if (request.expected_ng1_binding == nullptr)
+					return fail("provider.protocol-state-invalid", request.task_id, "ng1-binding");
+				if (auto valid = request.expected_ng1_binding->validate(); !valid)
+					return fail("provider.protocol-state-invalid", request.task_id, "ng1-binding");
+				if (request.expected_ng1_binding->provider_id != request.provider_id ||
+					request.expected_ng1_binding->provider_version != request.provider_version ||
+					request.expected_ng1_binding->task_id != request.task_id ||
+					request.expected_ng1_binding->stream_id != request.expected_stream_id)
+					return fail("provider.task-binding-mismatch", request.task_id, "ng1-binding");
+			}
 			for (std::size_t index = 0U; index < frames.size(); ++index)
 			{
 				const auto& value = frames[index];
@@ -1852,6 +1865,21 @@ namespace cxxlens::sdk::provider
 					if (!heartbeat)
 						return fail(
 							"provider.protocol-state-invalid", request.task_id, "ng1-heartbeat");
+					if (heartbeat->kind != ng1_heartbeat_kind::ack)
+						return fail("provider.protocol-state-invalid",
+									request.task_id,
+									"ng1-heartbeat-direction");
+					const ng1_session_binding binding{heartbeat->provider_id,
+													  heartbeat->provider_version,
+													  heartbeat->protocol_session_id,
+													  heartbeat->task_id,
+													  heartbeat->stream_id};
+					if (request.expected_ng1_binding == nullptr ||
+						binding != *request.expected_ng1_binding ||
+						value.stream_id != request.expected_ng1_binding->stream_id)
+						return fail("provider.task-binding-mismatch",
+									request.task_id,
+									"ng1-heartbeat-binding");
 					continue;
 				}
 				if (optional_extension)
@@ -2144,6 +2172,10 @@ namespace cxxlens::sdk::provider
 						if (request.ng1_control_transcript)
 						{
 							auto progress = decode_ng1_progress_control(value.control);
+							if (ng1_progress_terminal)
+								return fail("provider.protocol-state-invalid",
+											request.task_id,
+											"ng1-progress-after-terminal");
 							if (!accepted || batch || !progress ||
 								progress->task_id != request.task_id || !value.payload.empty())
 								return fail("provider.protocol-state-invalid",
@@ -2174,6 +2206,8 @@ namespace cxxlens::sdk::provider
 								return fail("provider.protocol-state-invalid",
 											request.task_id,
 											"ng1-progress-sequence");
+							ng1_progress_terminal =
+								progress->completed_units == progress->total_units;
 							last_ng1_progress = std::move(*progress);
 							progress_seen = true;
 							break;
@@ -2197,7 +2231,9 @@ namespace cxxlens::sdk::provider
 					{
 						auto metadata = decode_task_complete_metadata(value.control);
 						if (!accepted || batch || !coverage_seen || !unresolved_seen ||
-							!progress_seen || !metadata || metadata->task_id != request.task_id ||
+							!progress_seen ||
+							(request.ng1_control_transcript && !ng1_progress_terminal) ||
+							!metadata || metadata->task_id != request.task_id ||
 							!value.payload.empty())
 							return fail(
 								"provider.protocol-state-invalid", request.task_id, "complete");

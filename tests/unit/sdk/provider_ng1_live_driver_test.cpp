@@ -462,7 +462,7 @@ namespace
 															 0U,
 															 1'000U,
 															 1U,
-															 1U});
+															 2U});
 		require(progress_control, "NG1 shared-validator progress encoding failed");
 		const auto next_progress_control =
 			encode_ng1_progress_control(ng1_progress_control{"cxxlens.provider-control.progress.v2",
@@ -470,8 +470,8 @@ namespace
 															 "dependency:test",
 															 1U,
 															 1'100U,
-															 1U,
-															 1U});
+															 2U,
+															 2U});
 		require(next_progress_control, "NG1 shared-validator second progress encoding failed");
 
 		std::vector<frame> frames;
@@ -502,11 +502,83 @@ namespace
 													false,
 													nullptr,
 													7U,
-													true};
+													true,
+													&values.heartbeat};
 		auto validated = validate_provider_transcript(request, frames, limits);
 		require(validated && validated->kind == transcript_terminal_kind::complete &&
 					validated->sealed() && validated->sealed()->evidence().empty(),
 				"explicit NG1 controls were not separated from NG0 evidence");
+
+		auto validate_heartbeat_mutation = [&](const auto& mutate, const std::string_view detail)
+		{
+			auto candidate = frames;
+			auto heartbeat = values.heartbeat_control(ng1_heartbeat_kind::ack, 1U, 1'000U);
+			mutate(heartbeat);
+			auto encoded = encode_ng1_heartbeat_control(heartbeat);
+			require(encoded, "NG1 heartbeat negative-vector encoding failed");
+			candidate.at(1U).control = std::move(*encoded);
+			auto rejected = validate_provider_transcript(request, candidate, limits);
+			require(!rejected && rejected.error().detail == detail,
+					"NG1 heartbeat binding/direction negative vector was accepted");
+		};
+		validate_heartbeat_mutation(
+			[](auto& heartbeat)
+			{
+				heartbeat.kind = ng1_heartbeat_kind::probe;
+			},
+			"ng1-heartbeat-direction");
+		validate_heartbeat_mutation(
+			[](auto& heartbeat)
+			{
+				heartbeat.provider_id = "provider:other";
+			},
+			"ng1-heartbeat-binding");
+		validate_heartbeat_mutation(
+			[](auto& heartbeat)
+			{
+				heartbeat.protocol_session_id = "session:other";
+			},
+			"ng1-heartbeat-binding");
+		validate_heartbeat_mutation(
+			[](auto& heartbeat)
+			{
+				heartbeat.task_id = "task:other";
+			},
+			"ng1-heartbeat-binding");
+		validate_heartbeat_mutation(
+			[](auto& heartbeat)
+			{
+				heartbeat.stream_id = 8U;
+			},
+			"ng1-heartbeat-binding");
+
+		auto nonterminal = frames;
+		nonterminal.erase(nonterminal.begin() + 3U);
+		for (std::size_t index{}; index < nonterminal.size(); ++index)
+			nonterminal[index].sequence = index;
+		auto nonterminal_result = validate_provider_transcript(request, nonterminal, limits);
+		require(!nonterminal_result && nonterminal_result.error().detail == "complete",
+				"NG1 nonterminal progress was accepted as successful completion");
+
+		auto after_terminal = frames;
+		auto terminal_progress =
+			encode_ng1_progress_control(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+															 "task:test",
+															 "dependency:test",
+															 2U,
+															 1'200U,
+															 2U,
+															 2U});
+		require(terminal_progress, "NG1 post-terminal progress encoding failed");
+		after_terminal.insert(
+			after_terminal.begin() + 4U,
+			frame{message_type::progress, 7U, 0U, *terminal_progress, {}, 1U, 1U, 0U});
+		for (std::size_t index{}; index < after_terminal.size(); ++index)
+			after_terminal[index].sequence = index;
+		auto after_terminal_result = validate_provider_transcript(request, after_terminal, limits);
+		require(!after_terminal_result &&
+					after_terminal_result.error().detail == "ng1-progress-after-terminal",
+				"NG1 progress after terminal sample was accepted");
 
 		auto ng0_mode = request;
 		ng0_mode.ng1_control_transcript = false;
