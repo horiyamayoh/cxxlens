@@ -32,6 +32,9 @@ namespace cxxlens::sdk::provider::detail
 		const execution_budget* budget{};
 		bool require_handshake{};
 		const expected_provider_identity* expected_provider{};
+		std::uint64_t expected_stream_id{1U};
+		/** Select the source-private NG1 control grammar for the transcript pass. */
+		bool ng1_control_transcript{};
 	};
 
 	/** Closed provider/session/launcher authority supplied independently of provider stdout. */
