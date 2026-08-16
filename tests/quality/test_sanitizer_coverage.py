@@ -62,12 +62,21 @@ class SanitizerCoverageTest(unittest.TestCase):
         )
         asan_boundary = source[shared_branch_start:shared_branch_end]
         self.assertIn("if(NOT TARGET clang-cpp)", asan_boundary)
+        self.assertIn("if(NOT TARGET LLVM)", asan_boundary)
         self.assertIn("get_target_property(_cxxlens_clang_cpp_type clang-cpp TYPE)", asan_boundary)
         self.assertIn(
             'if(NOT _cxxlens_clang_cpp_type STREQUAL "SHARED_LIBRARY")',
             asan_boundary,
         )
-        self.assertIn("target_link_libraries(${target} PRIVATE clang-cpp)", asan_boundary)
+        self.assertIn("get_target_property(_cxxlens_llvm_type LLVM TYPE)", asan_boundary)
+        self.assertIn(
+            'if(NOT _cxxlens_llvm_type STREQUAL "SHARED_LIBRARY")',
+            asan_boundary,
+        )
+        self.assertIn(
+            "target_link_libraries(${target} PRIVATE clang-cpp LLVM)",
+            asan_boundary,
+        )
         self.assertIn(
             "set(CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY\n"
             "          TRUE",
@@ -171,6 +180,11 @@ class SanitizerCoverageTest(unittest.TestCase):
                         'extern "C" int cxxlens_fake_clang_cpp() { return 0; }\n',
                         encoding="utf-8",
                     )
+                    fake_llvm_source = root / "fake_llvm.cpp"
+                    fake_llvm_source.write_text(
+                        'extern "C" int cxxlens_fake_llvm() { return 0; }\n',
+                        encoding="utf-8",
+                    )
                     compiler = os.environ.get("CXX") or shutil.which("c++")
                     if compiler is None:
                         return 1, "no C++ compiler available for shared-boundary fixture", ""
@@ -193,6 +207,25 @@ class SanitizerCoverageTest(unittest.TestCase):
                             shared_result.stdout + shared_result.stderr,
                             "",
                         )
+                    llvm_result = subprocess.run(
+                        [
+                            compiler,
+                            "-shared",
+                            "-fPIC",
+                            str(fake_llvm_source),
+                            "-o",
+                            str(library_dir / "libLLVM.so"),
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if llvm_result.returncode != 0:
+                        return (
+                            llvm_result.returncode,
+                            llvm_result.stdout + llvm_result.stderr,
+                            "",
+                        )
                 (llvm_dir / "LLVMConfig.cmake").write_text(
                     "\n".join(
                         (
@@ -202,6 +235,8 @@ class SanitizerCoverageTest(unittest.TestCase):
                             "set(LLVM_CMAKE_DIR \"${CMAKE_CURRENT_LIST_DIR}\")",
                             "set(LLVM_LIBRARY_DIRS \"${CMAKE_CURRENT_LIST_DIR}/../lib\")",
                             "set(LLVM_INCLUDE_DIRS \"${CMAKE_CURRENT_LIST_DIR}/../include\")",
+                            "add_library(LLVM SHARED IMPORTED GLOBAL)",
+                            "set_target_properties(LLVM PROPERTIES IMPORTED_LOCATION \"${CMAKE_CURRENT_LIST_DIR}/../lib/libLLVM.so\")",
                         )
                         + tuple(
                             f"add_library({component} INTERFACE IMPORTED GLOBAL)"
@@ -316,6 +351,7 @@ class SanitizerCoverageTest(unittest.TestCase):
             "CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY:INTERNAL=TRUE", generated
         )
         self.assertIn("libclang-cpp.so", generated)
+        self.assertIn("libLLVM.so", generated)
         self.assertNotIn("libclangBasic.a", generated)
 
         for kind, expected in (
