@@ -567,7 +567,10 @@ namespace cxxlens::sdk::provider
 					return cxxlens::sdk::unexpected(process_error(
 						"provider.protocol-state-invalid", "ng1-live", "input-closed"));
 				if (auto deadline = check_deadline(); !deadline)
+				{
+					(void)terminate(process_status::timed_out);
 					return deadline;
+				}
 				auto encoded = encode_frame(value, limits_);
 				if (!encoded)
 					return cxxlens::sdk::unexpected(std::move(encoded.error()));
@@ -620,7 +623,10 @@ namespace cxxlens::sdk::provider
 							return cxxlens::sdk::unexpected(process_error(
 								"provider.worker-exit", "ng1-live-write", "stdin-closed"));
 						if (auto deadline = check_deadline(); !deadline)
+						{
+							(void)terminate(process_status::timed_out);
 							return deadline;
+						}
 						continue;
 					}
 					return cxxlens::sdk::unexpected(process_error(
@@ -684,8 +690,12 @@ namespace cxxlens::sdk::provider
 			result<process_output> finish(const std::stop_token cancellation) override
 			{
 				if (finished_)
+				{
+					if (completed_output_)
+						return *completed_output_;
 					return cxxlens::sdk::unexpected(
 						process_error("provider.protocol-state-invalid", "ng1-live", "finished"));
+				}
 				input_.reset();
 				for (;;)
 				{
@@ -756,14 +766,19 @@ namespace cxxlens::sdk::provider
 					output.sandbox = sandbox_evidence(
 						policy_, budget_, sandbox_assurance::none, false, measured_digest_);
 				}
+				completed_output_ = output;
 				return output;
 			}
 
 			result<process_output> terminate(const process_status status) override
 			{
 				if (finished_)
+				{
+					if (completed_output_)
+						return *completed_output_;
 					return cxxlens::sdk::unexpected(
 						process_error("provider.protocol-state-invalid", "ng1-live", "finished"));
+				}
 				forced_status_ = status;
 				kill_process_group();
 				return finish({});
@@ -942,6 +957,7 @@ namespace cxxlens::sdk::provider
 			bool reaped_{};
 			bool process_group_killed_{};
 			bool finished_{};
+			std::optional<process_output> completed_output_;
 		};
 
 		class linux_process_port final : public provider_process_port,

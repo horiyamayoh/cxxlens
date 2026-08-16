@@ -60,6 +60,8 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void> accept(const ng1_heartbeat_sample& sample,
 										  std::uint64_t highest_observed_sequence,
 										  std::string_view host_observed_staged_digest);
+		/** Rebase the lifecycle clock at the validated task-accepted receipt. */
+		void rebase_start(std::uint64_t started_at_ns) noexcept;
 		[[nodiscard]] result<void> check_liveness(std::uint64_t now_ns) const;
 		[[nodiscard]] result<void> mark_terminal() noexcept;
 
@@ -105,6 +107,8 @@ namespace cxxlens::sdk::provider::detail
 
 		[[nodiscard]] result<void> observe(const ng1_progress_sample& sample,
 										   bool terminal_sample = false);
+		/** Rebase the lifecycle clock at the validated task-accepted receipt. */
+		void rebase_start(std::uint64_t started_at_ns) noexcept;
 		[[nodiscard]] result<void> finish() const;
 
 	  private:

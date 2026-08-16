@@ -278,6 +278,21 @@ namespace
 					1U,
 					0U};
 		}
+
+		[[nodiscard]] frame task_accepted_frame(const std::uint64_t sequence) const
+		{
+			auto encoded = encode_task_accepted_metadata(task_accepted_metadata{
+				heartbeat.provider_id, heartbeat.provider_version.string(), heartbeat.task_id});
+			require(encoded, "live-driver task-accepted encoding failed");
+			return {message_type::task_accepted,
+					heartbeat.stream_id,
+					sequence,
+					std::move(*encoded),
+					{},
+					1U,
+					1U,
+					0U};
+		}
 	};
 
 	void test_live_control_bridge_and_bounded_retention()
@@ -286,8 +301,9 @@ namespace
 		auto clock = std::make_shared<clock_state>();
 		auto observation = std::make_shared<observation_state>();
 		auto process = std::make_shared<process_state>();
+		process->incoming.push_back(values.task_accepted_frame(0U));
 		process->incoming.push_back(values.heartbeat_frame(ng1_heartbeat_kind::ack, 0U, 1'800U));
-		process->incoming.push_back(frame{message_type::task_accepted, 7U, 1U, {}, {}, 1U, 1U, 0U});
+		process->incoming.push_back(frame{message_type::batch_begin, 7U, 2U, {}, {}, 1U, 1U, 0U});
 
 		auto driver =
 			ng1_live_session_driver::start(values.configuration(clock, observation, process), {});
@@ -299,6 +315,9 @@ namespace
 					process->sent.front().type == ng1_heartbeat_message_type,
 				"live-driver did not send the admitted host probe");
 
+		auto accepted = driver->receive_provider_frame({});
+		require(accepted && accepted->has_value() && accepted->value().ng1_control_admitted(),
+				"live-driver did not admit task acceptance");
 		auto receipt = driver->receive_provider_frame({});
 		require(receipt, "live-driver provider ACK receive failed");
 		require(receipt->has_value() && receipt->value().ng1_control_admitted(),
@@ -310,7 +329,7 @@ namespace
 		require(ordinary, "live-driver ordinary frame receive failed");
 		require(ordinary->has_value() && !ordinary->value().ng1_control_admitted(),
 				"ordinary frame was incorrectly classified as NG1 control");
-		require(driver->provider_frames().size() == 2U,
+		require(driver->provider_frames().size() == 3U,
 				"live-driver did not retain the bounded provider transcript prefix");
 
 		clock->now_ns = 5'000'003'000ULL;
@@ -338,7 +357,7 @@ namespace
 		auto observation = std::make_shared<observation_state>();
 		auto process = std::make_shared<process_state>();
 		process->incoming.push_back(values.heartbeat_frame(ng1_heartbeat_kind::ack, 0U, 1'800U));
-		process->incoming.push_back(frame{message_type::task_accepted, 7U, 1U, {}, {}, 1U, 1U, 0U});
+		process->incoming.push_back(values.task_accepted_frame(1U));
 
 		auto driver = ng1_live_session_driver::start(
 			values.configuration(clock, observation, process, 1U), {});
@@ -386,6 +405,42 @@ namespace
 		require(driver->cleanup(), "live-driver resume session cleanup failed");
 	}
 
+	void test_live_driver_rebases_task_timers_at_acceptance()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		process->incoming.push_back(values.task_accepted_frame(0U));
+
+		auto driver =
+			ng1_live_session_driver::start(values.configuration(clock, observation, process), {});
+		require(driver, "task-acceptance timer fixture start failed");
+		auto accepted = driver->receive_provider_frame({});
+		require(accepted && accepted->has_value() && accepted->value().ng1_control_admitted(),
+				"validated task acceptance was not admitted as NG1 control");
+
+		// The configured session timestamp is 1,000 ns. At this point the old implementation
+		// would be exactly at the inclusive 10-second startup boundary, while the validated
+		// task-accepted receipt is 2,000 ns and therefore still has grace remaining.
+		clock->now_ns = 10'000'001'000ULL;
+		require(driver->check_liveness(),
+				"NG1 lifecycle timer was anchored before validated task acceptance");
+		auto output = driver->finish({});
+		require(output && output->status == process_status::exited,
+				"task-acceptance timer fixture did not preserve process outcome");
+		require(driver->session().observe_worker_exit(),
+				"task-acceptance timer fixture did not record worker exit");
+		auto rejected_resume = driver->session().accept_durable_resume(
+			ng1_resume_control{}, ng1_spill_fsync_receipt{}, false, false, 0U);
+		require(!rejected_resume, "task-acceptance timer fixture accepted an unreceipted resume");
+		auto cleanup = driver->cleanup();
+		if (!cleanup)
+			require(false,
+					"task-acceptance timer fixture cleanup failed: " + cleanup.error().code + ":" +
+						cleanup.error().detail);
+	}
+
 	void test_shared_validator_accepts_explicit_ng1_controls()
 	{
 		fixture values;
@@ -409,6 +464,15 @@ namespace
 															 1U,
 															 1U});
 		require(progress_control, "NG1 shared-validator progress encoding failed");
+		const auto next_progress_control =
+			encode_ng1_progress_control(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+															 "task:test",
+															 "dependency:test",
+															 1U,
+															 1'100U,
+															 1U,
+															 1U});
+		require(next_progress_control, "NG1 shared-validator second progress encoding failed");
 
 		std::vector<frame> frames;
 		frames.push_back(
@@ -416,11 +480,13 @@ namespace
 		frames.push_back(values.heartbeat_frame(ng1_heartbeat_kind::ack, 1U, 1'000U));
 		frames.push_back(frame{message_type::progress, 7U, 2U, *progress_control, {}, 1U, 1U, 0U});
 		frames.push_back(
-			frame{message_type::coverage_chunk, 7U, 3U, *coverage_control, {}, 1U, 1U, 0U});
+			frame{message_type::progress, 7U, 3U, *next_progress_control, {}, 1U, 1U, 0U});
 		frames.push_back(
-			frame{message_type::unresolved_chunk, 7U, 4U, *unresolved_control, {}, 1U, 1U, 0U});
+			frame{message_type::coverage_chunk, 7U, 4U, *coverage_control, {}, 1U, 1U, 0U});
 		frames.push_back(
-			frame{message_type::task_complete, 7U, 5U, *complete_control, {}, 1U, 1U, 0U});
+			frame{message_type::unresolved_chunk, 7U, 5U, *unresolved_control, {}, 1U, 1U, 0U});
+		frames.push_back(
+			frame{message_type::task_complete, 7U, 6U, *complete_control, {}, 1U, 1U, 0U});
 
 		protocol_limits limits;
 		limits.minimum_minor = 1U;
@@ -455,6 +521,7 @@ int main()
 	test_live_control_bridge_and_bounded_retention();
 	test_live_driver_rejects_retention_overflow();
 	test_live_driver_rejects_host_resume_without_receipt();
+	test_live_driver_rebases_task_timers_at_acceptance();
 	test_shared_validator_accepts_explicit_ng1_controls();
 	return 0;
 }

@@ -2575,6 +2575,39 @@ namespace
 		require(closed_input_finished.has_value(),
 				"NG1 live closed-input provider could not finish after typed write failure");
 
+		// Receive-side cancellation terminates the worker while returning an error to the driver.
+		// The subsequent finish must still expose the exact retained process outcome.
+		auto cancelled_process = start_process(invocation);
+		std::stop_source cancellation;
+		cancellation.request_stop();
+		auto cancelled_receive = cancelled_process->receive_frame(cancellation.get_token());
+		require(!cancelled_receive && cancelled_receive.error().code == "provider.cancelled",
+				"NG1 receive cancellation did not return its typed error");
+		auto cancelled_finish = cancelled_process->finish({});
+		require(cancelled_finish.has_value() &&
+					cancelled_finish->status == process_status::cancelled,
+				"NG1 receive cancellation discarded the exact process outcome");
+
+		// A provider that never reads stdin must be killed when a backpressured send reaches its
+		// wall deadline, and the later finish must retain the timeout evidence.
+		auto blocked_send = make_invocation({"/usr/bin/sleep", "5"});
+		blocked_send.budget.wall_ms = 50U;
+		auto blocked_send_process = start_process(blocked_send);
+		auto blocked_send_payload = std::vector<std::byte>(4U * 1024U * 1024U, std::byte{0x43});
+		auto blocked_send_result =
+			blocked_send_process->send_frame(make_wire(std::move(blocked_send_payload)));
+		if (blocked_send_result || blocked_send_result.error().code != "provider.timeout")
+			require(false,
+					"NG1 backpressured send did not terminate at its wall deadline: " +
+						(blocked_send_result ? std::string{"success"}
+											 : blocked_send_result.error().code + ":" +
+								 blocked_send_result.error().field + ":" +
+								 blocked_send_result.error().detail));
+		auto blocked_send_finish = blocked_send_process->finish({});
+		require(blocked_send_finish.has_value() &&
+					blocked_send_finish->status == process_status::timed_out,
+				"NG1 send deadline discarded timeout process evidence");
+
 		// The leader can exit while a descendant retains the output pipe.  Forced cleanup must
 		// still address the original process group after leader reap, rather than waiting for the
 		// wall deadline and leaking the descendant.

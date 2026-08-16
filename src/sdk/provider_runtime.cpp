@@ -1793,6 +1793,7 @@ namespace cxxlens::sdk::provider
 			bool unresolved_seen{};
 			bool progress_seen{};
 			bool terminal_seen{};
+			std::optional<ng1_progress_control> last_ng1_progress;
 			std::uint64_t output_rows{};
 			std::uint64_t diagnostics{};
 			transcript_validation_result terminal;
@@ -2143,11 +2144,37 @@ namespace cxxlens::sdk::provider
 						if (request.ng1_control_transcript)
 						{
 							auto progress = decode_ng1_progress_control(value.control);
-							if (!accepted || batch || progress_seen || !progress ||
+							if (!accepted || batch || !progress ||
 								progress->task_id != request.task_id || !value.payload.empty())
 								return fail("provider.protocol-state-invalid",
 											request.task_id,
 											"ng1-progress");
+							if (last_ng1_progress)
+							{
+								const auto next_progress_sequence =
+									last_ng1_progress->progress_sequence ==
+										std::numeric_limits<std::uint64_t>::max()
+									? std::optional<std::uint64_t>{}
+									: std::optional<std::uint64_t>{
+										  last_ng1_progress->progress_sequence + 1U};
+								if (!next_progress_sequence ||
+									progress->progress_sequence != *next_progress_sequence ||
+									progress->dependency_group_id !=
+										last_ng1_progress->dependency_group_id ||
+									progress->total_units != last_ng1_progress->total_units ||
+									progress->completed_units <
+										last_ng1_progress->completed_units ||
+									progress->monotonic_time_ns <
+										last_ng1_progress->monotonic_time_ns)
+									return fail("provider.protocol-state-invalid",
+												request.task_id,
+												"ng1-progress-sequence");
+							}
+							else if (progress->progress_sequence != 0U)
+								return fail("provider.protocol-state-invalid",
+											request.task_id,
+											"ng1-progress-sequence");
+							last_ng1_progress = std::move(*progress);
 							progress_seen = true;
 							break;
 						}

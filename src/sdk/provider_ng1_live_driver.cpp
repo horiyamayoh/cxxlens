@@ -165,7 +165,8 @@ namespace cxxlens::sdk::provider::detail
 		last_provider_receipt_ = *receipt;
 
 		if (is_ng1_heartbeat_message(receipt->value_.type) ||
-			receipt->value_.type == message_type::progress)
+			receipt->value_.type == message_type::progress ||
+			receipt->value_.type == message_type::task_accepted)
 		{
 			bool terminal_progress_sample = false;
 			if (receipt->value_.type == message_type::progress)
