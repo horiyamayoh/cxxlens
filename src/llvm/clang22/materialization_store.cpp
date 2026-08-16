@@ -521,8 +521,6 @@ namespace cxxlens::detail::clang22::materialization
 
 		try
 		{
-			std::vector<materialization_incremental_task_receipt> receipts;
-			receipts.reserve(source.task_count());
 			for (std::size_t index{}; index < source.task_count(); ++index)
 			{
 				const auto* receipt = source.task_receipt(index);
@@ -534,12 +532,12 @@ namespace cxxlens::detail::clang22::materialization
 					journal.ordered_task_receipt_seal_digests[index] !=
 						receipt->pre_encoder_task_receipt_seal_digest)
 					return invalid("source", "task-binding-mismatch");
-				receipts.push_back(*receipt);
+				if (auto valid = validate_materialization_incremental_task_receipt_seal(*receipt);
+					!valid)
+					return invalid("source", "execution-journal-seal-mismatch");
 			}
-			auto recomputed = seal_materialization_incremental_execution_journal(
-				std::string{source.materialization_request_id()},
-				std::span<const materialization_incremental_task_receipt>{receipts});
-			if (!recomputed || *recomputed != journal)
+			if (auto valid = validate_materialization_incremental_execution_journal(journal);
+				!valid)
 				return invalid("source", "execution-journal-seal-mismatch");
 			return {};
 		}
