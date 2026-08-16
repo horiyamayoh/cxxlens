@@ -28,6 +28,8 @@ namespace cxxlens::detail::clang22
 		const sdk::semantic_version provider_version{1U, 0U, 0U};
 		constexpr std::uint32_t maximum_arguments = 4096U;
 		constexpr std::uint64_t maximum_source_bytes = 16U * 1024U * 1024U;
+		constexpr std::uint64_t maximum_source_base64_bytes =
+			((maximum_source_bytes + 2U) / 3U) * 4U;
 		constexpr std::array<std::string_view, 6U> exact_descriptor_ids{
 			"cc.call_direct_target.v1",
 			"cc.call_site.v1",
@@ -124,56 +126,111 @@ namespace cxxlens::detail::clang22
 			return sdk::canonical_value::from_tuple(std::move(output));
 		}
 
-		[[nodiscard]] sdk::result<std::string> base64_decode(const std::string_view input)
+		[[nodiscard]] std::optional<std::uint32_t> base64_value(const char value)
+		{
+			if (value >= 'A' && value <= 'Z')
+				return static_cast<std::uint32_t>(value - 'A');
+			if (value >= 'a' && value <= 'z')
+				return static_cast<std::uint32_t>(value - 'a' + 26);
+			if (value >= '0' && value <= '9')
+				return static_cast<std::uint32_t>(value - '0' + 52);
+			if (value == '+')
+				return 62U;
+			if (value == '/')
+				return 63U;
+			return std::nullopt;
+		}
+
+		struct base64_quantum
+		{
+			std::uint32_t word{};
+			std::size_t decoded_bytes{};
+		};
+
+		[[nodiscard]] sdk::result<base64_quantum>
+		decode_base64_quantum(const std::array<char, 4U>& quartet, const bool final)
+		{
+			const bool padding_two = quartet[2U] == '=';
+			const bool padding_one = quartet[3U] == '=';
+			if (quartet[0U] == '=' || quartet[1U] == '=' ||
+				(!final && (padding_two || padding_one)) || (padding_two && !padding_one))
+				return sdk::unexpected(provider_error(
+					"provider.frontend-request-invalid", "source.content_base64", "padding"));
+			auto first = base64_value(quartet[0U]);
+			auto second = base64_value(quartet[1U]);
+			auto third = padding_two ? std::optional<std::uint32_t>{0U} : base64_value(quartet[2U]);
+			auto fourth =
+				padding_one ? std::optional<std::uint32_t>{0U} : base64_value(quartet[3U]);
+			if (!first || !second || !third || !fourth)
+				return sdk::unexpected(provider_error(
+					"provider.frontend-request-invalid", "source.content_base64", "alphabet"));
+			if ((padding_two && ((*second & 0x0fU) != 0U)) ||
+				(padding_one && !padding_two && ((*third & 0x03U) != 0U)))
+				return sdk::unexpected(provider_error("provider.frontend-request-invalid",
+													  "source.content_base64",
+													  "nonzero-padding-bits"));
+			return base64_quantum{
+				(*first << 18U) | (*second << 12U) | (*third << 6U) | *fourth,
+				padding_two		  ? 1U
+					: padding_one ? 2U
+								  : 3U,
+			};
+		}
+
+		[[nodiscard]] sdk::result<std::uint64_t> base64_decoded_size(const std::string_view input)
 		{
 			if (input.size() % 4U != 0U)
-				return sdk::unexpected(
-					provider_error("provider.frontend-request-invalid", "source.content_base64"));
-			const auto decode = [](const char value) -> std::optional<std::uint32_t>
-			{
-				if (value >= 'A' && value <= 'Z')
-					return static_cast<std::uint32_t>(value - 'A');
-				if (value >= 'a' && value <= 'z')
-					return static_cast<std::uint32_t>(value - 'a' + 26);
-				if (value >= '0' && value <= '9')
-					return static_cast<std::uint32_t>(value - '0' + 52);
-				if (value == '+')
-					return 62U;
-				if (value == '/')
-					return 63U;
-				return std::nullopt;
-			};
-			std::string output;
-			output.reserve((input.size() / 4U) * 3U);
+				return sdk::unexpected(provider_error(
+					"provider.frontend-request-invalid", "source.content_base64", "shape"));
+
+			const bool encoded_length_exceeds_limit = input.size() > maximum_source_base64_bytes;
+			std::uint64_t decoded_bytes{};
 			for (std::size_t offset{}; offset < input.size(); offset += 4U)
 			{
-				const bool final = offset + 4U == input.size();
-				const bool padding_two = input[offset + 2U] == '=';
-				const bool padding_one = input[offset + 3U] == '=';
-				if ((!final && (padding_two || padding_one)) || (padding_two && !padding_one))
-					return sdk::unexpected(provider_error("provider.frontend-request-invalid",
-														  "source.content_base64"));
-				auto first = decode(input[offset]);
-				auto second = decode(input[offset + 1U]);
-				auto third =
-					padding_two ? std::optional<std::uint32_t>{0U} : decode(input[offset + 2U]);
-				auto fourth =
-					padding_one ? std::optional<std::uint32_t>{0U} : decode(input[offset + 3U]);
-				if (!first || !second || !third || !fourth)
-					return sdk::unexpected(provider_error("provider.frontend-request-invalid",
-														  "source.content_base64"));
-				if ((padding_two && ((*second & 0x0fU) != 0U)) ||
-					(padding_one && !padding_two && ((*third & 0x03U) != 0U)))
-					return sdk::unexpected(provider_error("provider.frontend-request-invalid",
-														  "source.content_base64",
-														  "nonzero-padding-bits"));
-				const auto word = (*first << 18U) | (*second << 12U) | (*third << 6U) | *fourth;
-				output.push_back(static_cast<char>((word >> 16U) & 0xffU));
-				if (!padding_two)
-					output.push_back(static_cast<char>((word >> 8U) & 0xffU));
-				if (!padding_one)
-					output.push_back(static_cast<char>(word & 0xffU));
+				const std::array<char, 4U> quartet{
+					input[offset], input[offset + 1U], input[offset + 2U], input[offset + 3U]};
+				auto decoded = decode_base64_quantum(quartet, input.size() - offset == 4U);
+				if (!decoded)
+					return sdk::unexpected(std::move(decoded.error()));
+				const auto group_bytes = static_cast<std::uint64_t>(decoded->decoded_bytes);
+				if (decoded_bytes > maximum_source_bytes - group_bytes)
+					decoded_bytes = maximum_source_bytes + 1U;
+				else if (decoded_bytes <= maximum_source_bytes)
+					decoded_bytes += group_bytes;
 			}
+			if (encoded_length_exceeds_limit || decoded_bytes > maximum_source_bytes)
+				return sdk::unexpected(provider_error(
+					"provider.frontend-request-invalid", "source.content_base64", "maximum-bytes"));
+			return decoded_bytes;
+		}
+
+		[[nodiscard]] sdk::result<std::string> base64_decode(const std::string_view input,
+															 const std::uint64_t decoded_size)
+		{
+			if (input.size() % 4U != 0U || decoded_size > maximum_source_bytes)
+				return sdk::unexpected(
+					provider_error("provider.frontend-request-invalid",
+								   "source.content_base64",
+								   input.size() % 4U != 0U ? "shape" : "maximum-bytes"));
+			std::string output;
+			output.reserve(static_cast<std::size_t>(decoded_size));
+			for (std::size_t offset{}; offset < input.size(); offset += 4U)
+			{
+				const std::array<char, 4U> quartet{
+					input[offset], input[offset + 1U], input[offset + 2U], input[offset + 3U]};
+				auto decoded = decode_base64_quantum(quartet, input.size() - offset == 4U);
+				if (!decoded)
+					return sdk::unexpected(std::move(decoded.error()));
+				output.push_back(static_cast<char>((decoded->word >> 16U) & 0xffU));
+				if (decoded->decoded_bytes > 1U)
+					output.push_back(static_cast<char>((decoded->word >> 8U) & 0xffU));
+				if (decoded->decoded_bytes > 2U)
+					output.push_back(static_cast<char>(decoded->word & 0xffU));
+			}
+			if (output.size() != static_cast<std::size_t>(decoded_size))
+				return sdk::unexpected(provider_error("provider.frontend-request-invalid",
+													  "source.content_base64",
+													  "decoded-size-mismatch"));
 			return output;
 		}
 
@@ -323,6 +380,20 @@ namespace cxxlens::detail::clang22
 			if (object.type != sdk::canonical_value::kind::ordered_tuple)
 				return nullptr;
 			for (auto& entry : object.tuple)
+				if (entry.type == sdk::canonical_value::kind::ordered_tuple &&
+					entry.tuple.size() == 2U &&
+					entry.tuple[0U].type == sdk::canonical_value::kind::utf8_string &&
+					entry.tuple[0U].text == key)
+					return &entry.tuple[1U];
+			return nullptr;
+		}
+
+		[[nodiscard]] const sdk::canonical_value* object_member(const sdk::canonical_value& object,
+																const std::string_view key)
+		{
+			if (object.type != sdk::canonical_value::kind::ordered_tuple)
+				return nullptr;
+			for (const auto& entry : object.tuple)
 				if (entry.type == sdk::canonical_value::kind::ordered_tuple &&
 					entry.tuple.size() == 2U &&
 					entry.tuple[0U].type == sdk::canonical_value::kind::utf8_string &&
@@ -943,7 +1014,6 @@ namespace cxxlens::detail::clang22
 			return invalid("interpretation_domain", "unsupported");
 		if (!schema_logical_path(catalog.logical_root) || !schema_logical_path(working_directory) ||
 			logical_path.empty() || !logical_path.starts_with("project://") ||
-			source_size_bytes > maximum_source_bytes ||
 			(source_receipt == nullptr && source_size_bytes != source.size()))
 			return invalid("source", "path-or-size");
 		if (source_encoding != "utf8" && source_encoding != "utf16le" &&
@@ -1007,16 +1077,29 @@ namespace cxxlens::detail::clang22
 				 budget.open_files,
 				 budget.subprocesses,
 			 })
+		{
 			if (value > signed_max)
 				return invalid("budget", "signed-int64-overflow");
+		}
 		if (source_receipt == nullptr)
 		{
 			if (source_content_digest != sdk::content_digest(std::as_bytes(std::span{source})))
 				return invalid("source.content_digest", "mismatch");
-			auto decoded_source = base64_decode(source_content_base64);
-			if (!decoded_source || *decoded_source != source)
+			auto decoded_size = base64_decoded_size(source_content_base64);
+			if (!decoded_size)
+				return invalid("source.content_base64", decoded_size.error().detail);
+			if (source_size_bytes > maximum_source_bytes)
+				return invalid("source.size_bytes", "maximum-bytes");
+			if (*decoded_size != source_size_bytes)
+				return invalid("source.size_bytes", "mismatch");
+			auto decoded_source = base64_decode(source_content_base64, *decoded_size);
+			if (!decoded_source)
+				return invalid("source.content_base64", decoded_source.error().detail);
+			if (*decoded_source != source)
 				return invalid("source.content_base64", "decoded-bytes-mismatch");
 		}
+		else if (source_size_bytes > maximum_source_bytes)
+			return invalid("source.size_bytes", "maximum-bytes");
 		else if (!source.empty() || !source_content_base64.empty() ||
 				 source_receipt->size_bytes != source_size_bytes ||
 				 source_receipt->content_digest != source_content_digest ||
@@ -1136,8 +1219,6 @@ namespace cxxlens::detail::clang22
 	namespace
 	{
 		constexpr std::uint64_t maximum_task_input_bytes = 64U * 1024U * 1024U;
-		constexpr std::uint64_t maximum_source_base64_bytes =
-			((maximum_source_bytes + 2U) / 3U) * 4U;
 		constexpr std::size_t maximum_canonical_depth = 64U;
 		constexpr std::array<std::size_t, 5U> source_base64_value_path{4U, 15U, 1U, 0U, 1U};
 
@@ -1165,6 +1246,18 @@ namespace cxxlens::detail::clang22
 					return failure("task.v3", "source-or-trailing-bytes");
 				if (auto valid = value->validate(); !valid)
 					return failure("task.v3", valid.error().detail);
+				auto declared_size = declared_source_size(*value);
+				if (!declared_size)
+					return sdk::unexpected(std::move(declared_size.error()));
+				auto decoded_size = count_base64_replay();
+				if (!decoded_size)
+					return sdk::unexpected(std::move(decoded_size.error()));
+				if (*declared_size > maximum_source_bytes)
+					return failure("source.size_bytes", "maximum-bytes");
+				if (*decoded_size != *declared_size)
+					return failure("source.size_bytes", "mismatch");
+				if (auto appended = append_base64_replay(*decoded_size); !appended)
+					return sdk::unexpected(std::move(appended.error()));
 				return value;
 			}
 
@@ -1227,90 +1320,168 @@ namespace cxxlens::detail::clang22
 									   source_base64_value_path);
 			}
 
-			[[nodiscard]] sdk::result<void> decode_base64(const std::uint64_t length)
+			[[nodiscard]] sdk::result<void> discard_exact(const std::uint64_t length)
 			{
-				if (source_seen_ || length > maximum_source_base64_bytes || length % 4U != 0U)
+				std::uint64_t consumed{};
+				std::array<std::byte, 64U * 1024U> scratch{};
+				while (consumed < length)
+				{
+					const auto count = static_cast<std::size_t>(
+						std::min<std::uint64_t>(scratch.size(), length - consumed));
+					if (auto read = read_exact(std::span{scratch}.first(count)); !read)
+						return read;
+					consumed += count;
+				}
+				return {};
+			}
+
+			[[nodiscard]] sdk::result<void> read_at_exact(const std::uint64_t offset,
+														  const std::span<std::byte> destination)
+			{
+				if (offset > input_.size_bytes() ||
+					static_cast<std::uint64_t>(destination.size()) > input_.size_bytes() - offset)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "task.v3", "truncated-replay"));
+				std::size_t consumed{};
+				std::uint64_t current = offset;
+				while (consumed < destination.size())
+				{
+					auto read = input_.read_at(current, destination.subspan(consumed));
+					if (!read)
+						return sdk::unexpected(std::move(read.error()));
+					if (*read == 0U || *read > destination.size() - consumed)
+						return sdk::unexpected(provider_error(
+							"provider.frontend-request-invalid", "task.v3", "truncated-replay"));
+					consumed += *read;
+					current += static_cast<std::uint64_t>(*read);
+				}
+				return {};
+			}
+
+			[[nodiscard]] sdk::result<void> capture_base64(const std::uint64_t length)
+			{
+				if (source_seen_ || length % 4U != 0U)
 					return sdk::unexpected(provider_error(
 						"provider.frontend-request-invalid", "source.content_base64", "shape"));
 				source_seen_ = true;
 				base64_bytes_ = length;
-				const auto decode = [](const std::uint8_t value) -> std::optional<std::uint32_t>
-				{
-					if (value >= static_cast<std::uint8_t>('A') &&
-						value <= static_cast<std::uint8_t>('Z'))
-						return value - static_cast<std::uint8_t>('A');
-					if (value >= static_cast<std::uint8_t>('a') &&
-						value <= static_cast<std::uint8_t>('z'))
-						return value - static_cast<std::uint8_t>('a') + 26U;
-					if (value >= static_cast<std::uint8_t>('0') &&
-						value <= static_cast<std::uint8_t>('9'))
-						return value - static_cast<std::uint8_t>('0') + 52U;
-					if (value == static_cast<std::uint8_t>('+'))
-						return 62U;
-					if (value == static_cast<std::uint8_t>('/'))
-						return 63U;
-					return std::nullopt;
-				};
+				source_base64_offset_ = offset_;
+				return discard_exact(length);
+			}
 
+			[[nodiscard]] sdk::result<std::uint64_t>
+			declared_source_size(const sdk::canonical_value& value) const
+			{
+				if (value.type != sdk::canonical_value::kind::ordered_tuple ||
+					value.tuple.size() <= 4U)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "task.v3", "projection-shape"));
+				const auto* source = object_member(value.tuple[4U], "source");
+				if (source == nullptr)
+					return sdk::unexpected(
+						provider_error("provider.frontend-request-invalid", "source", "object"));
+				const auto* size = object_member(*source, "size_bytes");
+				if (size == nullptr)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "source.size_bytes", "missing"));
+				return parse_nonnegative_integer(*size, "source.size_bytes");
+			}
+
+			[[nodiscard]] static sdk::result<base64_quantum>
+			decode_quantum(const std::span<const std::byte> encoded, const bool final)
+			{
+				if (encoded.size() != 4U)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "source.content_base64", "shape"));
+				std::array<char, 4U> quartet{};
+				for (std::size_t index{}; index < quartet.size(); ++index)
+					quartet[index] =
+						static_cast<char>(std::to_integer<std::uint8_t>(encoded[index]));
+				return decode_base64_quantum(quartet, final);
+			}
+
+			[[nodiscard]] sdk::result<std::uint64_t> count_base64_replay()
+			{
+				std::array<std::byte, 64U * 1024U> encoded{};
+				std::uint64_t consumed{};
+				std::uint64_t decoded_total{};
+				while (consumed < base64_bytes_)
+				{
+					const auto count = static_cast<std::size_t>(
+						std::min<std::uint64_t>(encoded.size(), base64_bytes_ - consumed));
+					if (auto read = read_at_exact(source_base64_offset_ + consumed,
+												  std::span{encoded}.first(count));
+						!read)
+						return sdk::unexpected(std::move(read.error()));
+					for (std::size_t index{}; index < count; index += 4U)
+					{
+						auto decoded = decode_quantum(std::span{encoded}.subspan(index, 4U),
+													  base64_bytes_ - consumed - index == 4U);
+						if (!decoded)
+							return sdk::unexpected(std::move(decoded.error()));
+						if (decoded_total <= maximum_source_bytes)
+						{
+							if (decoded->decoded_bytes > maximum_source_bytes - decoded_total)
+								decoded_total = maximum_source_bytes + 1U;
+							else
+								decoded_total += static_cast<std::uint64_t>(decoded->decoded_bytes);
+						}
+					}
+					consumed += count;
+				}
+				if (decoded_total > maximum_source_bytes)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "source", "maximum-bytes"));
+				return decoded_total;
+			}
+
+			[[nodiscard]] sdk::result<void>
+			append_base64_replay(const std::uint64_t expected_decoded_bytes)
+			{
+				if (expected_decoded_bytes > maximum_source_bytes)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "source.size_bytes", "maximum-bytes"));
 				std::array<std::byte, 64U * 1024U> encoded{};
 				std::array<std::byte, 48U * 1024U> decoded{};
 				std::uint64_t consumed{};
-				std::uint64_t decoded_total{};
-				while (consumed < length)
+				std::uint64_t appended_total{};
+				while (consumed < base64_bytes_)
 				{
 					const auto count = static_cast<std::size_t>(
-						std::min<std::uint64_t>(encoded.size(), length - consumed));
-					if (auto read = read_exact(std::span{encoded}.first(count)); !read)
+						std::min<std::uint64_t>(encoded.size(), base64_bytes_ - consumed));
+					if (auto read = read_at_exact(source_base64_offset_ + consumed,
+												  std::span{encoded}.first(count));
+						!read)
 						return read;
 					std::size_t decoded_size{};
 					for (std::size_t index{}; index < count; index += 4U)
 					{
-						const bool final = consumed + index + 4U == length;
-						const auto third_byte = std::to_integer<std::uint8_t>(encoded[index + 2U]);
-						const auto fourth_byte = std::to_integer<std::uint8_t>(encoded[index + 3U]);
-						const bool padding_two = third_byte == static_cast<std::uint8_t>('=');
-						const bool padding_one = fourth_byte == static_cast<std::uint8_t>('=');
-						if ((!final && (padding_two || padding_one)) ||
-							(padding_two && !padding_one))
-							return sdk::unexpected(
-								provider_error("provider.frontend-request-invalid",
-											   "source.content_base64",
-											   "padding"));
-						auto first = decode(std::to_integer<std::uint8_t>(encoded[index]));
-						auto second = decode(std::to_integer<std::uint8_t>(encoded[index + 1U]));
-						auto third =
-							padding_two ? std::optional<std::uint32_t>{0U} : decode(third_byte);
-						auto fourth =
-							padding_one ? std::optional<std::uint32_t>{0U} : decode(fourth_byte);
-						if (!first || !second || !third || !fourth)
-							return sdk::unexpected(
-								provider_error("provider.frontend-request-invalid",
-											   "source.content_base64",
-											   "alphabet"));
-						if ((padding_two && ((*second & 0x0fU) != 0U)) ||
-							(padding_one && !padding_two && ((*third & 0x03U) != 0U)))
-							return sdk::unexpected(
-								provider_error("provider.frontend-request-invalid",
-											   "source.content_base64",
-											   "nonzero-padding-bits"));
-						const auto word =
-							(*first << 18U) | (*second << 12U) | (*third << 6U) | *fourth;
+						auto quantum = decode_quantum(std::span{encoded}.subspan(index, 4U),
+													  base64_bytes_ - consumed - index == 4U);
+						if (!quantum)
+							return sdk::unexpected(std::move(quantum.error()));
+						const auto word = quantum->word;
 						decoded[decoded_size++] = static_cast<std::byte>((word >> 16U) & 0xffU);
-						if (!padding_two)
+						if (quantum->decoded_bytes > 1U)
 							decoded[decoded_size++] = static_cast<std::byte>((word >> 8U) & 0xffU);
-						if (!padding_one)
+						if (quantum->decoded_bytes > 2U)
 							decoded[decoded_size++] = static_cast<std::byte>(word & 0xffU);
 					}
-					if (decoded_size > maximum_source_bytes - decoded_total)
+					if (decoded_size > maximum_source_bytes - appended_total ||
+						static_cast<std::uint64_t>(decoded_size) >
+							expected_decoded_bytes - appended_total)
 						return sdk::unexpected(provider_error(
-							"provider.frontend-request-invalid", "source", "maximum-bytes"));
+							"provider.frontend-request-invalid", "source.size_bytes", "mismatch"));
 					if (decoded_size != 0U)
 						if (auto appended = source_.append(std::span{decoded}.first(decoded_size));
 							!appended)
 							return sdk::unexpected(std::move(appended.error()));
-					decoded_total += static_cast<std::uint64_t>(decoded_size);
+					appended_total += static_cast<std::uint64_t>(decoded_size);
 					consumed += count;
 				}
+				if (appended_total != expected_decoded_bytes)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "source.size_bytes", "mismatch"));
 				return {};
 			}
 
@@ -1378,8 +1549,8 @@ namespace cxxlens::detail::clang22
 							return failure("task.v3", "truncated-payload");
 						if (*tag == 0x04U && external_source_value())
 						{
-							if (auto decoded = decode_base64(*length); !decoded)
-								return sdk::unexpected(std::move(decoded.error()));
+							if (auto captured = capture_base64(*length); !captured)
+								return sdk::unexpected(std::move(captured.error()));
 							output = sdk::canonical_value::from_string({});
 						}
 						else if (*tag == 0x03U)
@@ -1436,6 +1607,7 @@ namespace cxxlens::detail::clang22
 			clang22_task_input_replay& input_;
 			clang22_task_source_spool& source_;
 			std::uint64_t offset_{};
+			std::uint64_t source_base64_offset_{};
 			std::uint64_t base64_bytes_{};
 			std::array<std::size_t, maximum_canonical_depth> path_{};
 			std::size_t path_size_{};
@@ -1682,12 +1854,24 @@ namespace cxxlens::detail::clang22
 			output.source_size_bytes = *source_size;
 			if (source_receipt == nullptr)
 			{
+				auto decoded_size = base64_decoded_size(*source_base64);
+				if (!decoded_size)
+					return sdk::unexpected(std::move(decoded_size.error()));
+				if (*source_size > maximum_source_bytes)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "source.size_bytes", "maximum-bytes"));
+				if (*decoded_size != *source_size)
+					return sdk::unexpected(provider_error(
+						"provider.frontend-request-invalid", "source.size_bytes", "mismatch"));
 				output.source_content_base64 = *source_base64;
-				auto source = base64_decode(*source_base64);
+				auto source = base64_decode(*source_base64, *decoded_size);
 				if (!source)
 					return sdk::unexpected(std::move(source.error()));
 				output.source = std::move(*source);
 			}
+			else if (*source_size > maximum_source_bytes)
+				return sdk::unexpected(provider_error(
+					"provider.frontend-request-invalid", "source.size_bytes", "maximum-bytes"));
 			else if (!source_base64->empty())
 				return sdk::unexpected(provider_error(
 					"provider.frontend-request-invalid", "source.content_base64", "stream-marker"));
