@@ -30,6 +30,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, type=pathlib.Path)
     parser.add_argument("--prefix", required=True, type=pathlib.Path)
+    parser.add_argument(
+        "--executable-suffix",
+        default="",
+        help=(
+            "configured CMake executable suffix used to resolve the installed "
+            "materializer; manifest paths remain canonical"
+        ),
+    )
     parser.add_argument("--evidence-dir", type=pathlib.Path)
     return parser.parse_args()
 
@@ -232,11 +240,17 @@ def main() -> int:
     args = parse_args()
     root = args.root.resolve()
     prefix = args.prefix.resolve()
-    materializer = prefix / "bin/cxxlens-clang22-materialize"
-    if not materializer.is_file():
-        fail(f"installed materializer is missing: {materializer}")
     sys.path.insert(0, str(root / "tools" / "quality"))
     import check_ng_clang22_materialization as oracle  # pylint: disable=import-error
+    import check_ng_clang22_install_matrix as install_matrix  # pylint: disable=import-error
+
+    materializer = install_matrix.resolve_installed_executable(
+        prefix,
+        "bin/cxxlens-clang22-materialize",
+        args.executable_suffix,
+    )
+    if not materializer.is_file() or materializer.is_symlink():
+        fail(f"installed materializer is missing or not regular: {materializer}")
 
     evidence_dir = args.evidence_dir.resolve() if args.evidence_dir else None
     for role in ("materializer-executable", "worker-executable"):
