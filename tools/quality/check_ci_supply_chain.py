@@ -235,17 +235,22 @@ def validate_repository(root: pathlib.Path) -> None:
     expected_cache = {
         "directory": "~/.cache/cxxlens/packages",
         "environment": "CXXLENS_PACKAGE_CACHE",
+        "documentation_environment": "CXXLENS_PACKAGE_CACHE_DOCUMENTATION",
         "hit_environment": "CXXLENS_PACKAGE_CACHE_HIT",
         "key_environment": "CXXLENS_PACKAGE_CACHE_KEY",
         "receipt_environment": "CXXLENS_PACKAGE_CACHE_RECEIPT",
         "key_version": "v1",
         "key_template": (
             "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-"
-            "${profile}-${documentation}-${lock_digest}"
+            "${profile}-${documentation}-${lock_hash_files_digest}"
         ),
+        "profile_environment": "CXXLENS_PACKAGE_CACHE_PROFILE",
+        "receipt_schema": "cxxlens.ci-package-cache-receipt.v2",
         "scope": "exact-downloaded-debs-only",
         "correctness_role": "transport-optimization-only",
         "restore_keys": False,
+        "runner_arch_environment": "CXXLENS_PACKAGE_CACHE_RUNNER_ARCH",
+        "runner_os_environment": "CXXLENS_PACKAGE_CACHE_RUNNER_OS",
     }
     if lock.get("package_cache") != expected_cache:
         raise CiSupplyChainError("downloaded-package cache contract differs")
@@ -257,6 +262,10 @@ def validate_repository(root: pathlib.Path) -> None:
         "CXXLENS_PACKAGE_CACHE_KEY",
         "CXXLENS_PACKAGE_CACHE_HIT",
         "CXXLENS_PACKAGE_CACHE_RECEIPT",
+        "CXXLENS_PACKAGE_CACHE_PROFILE",
+        "CXXLENS_PACKAGE_CACHE_DOCUMENTATION",
+        "CXXLENS_PACKAGE_CACHE_RUNNER_OS",
+        "CXXLENS_PACKAGE_CACHE_RUNNER_ARCH",
         "cxxlens-ci-packages-v1-${{ runner.os }}-${{ runner.arch }}-",
         "${{ inputs.profile }}-${{ inputs.documentation }}-",
         "hashFiles('tools/ci/llvm22-noble.lock.json')",
@@ -278,6 +287,7 @@ def validate_repository(root: pathlib.Path) -> None:
         "resolve_cached_archive",
         "verify_deb_archive",
         "write_package_cache_receipt",
+        "cxxlens.ci-package-cache-receipt.v2",
         "verified-cache",
         "verified-download",
         '["apt-get", "download"',
@@ -299,7 +309,7 @@ def validate_repository(root: pathlib.Path) -> None:
         'command_identity("doxygen")',
         "package_cache_provenance",
         "package_cache_authority_digest",
-        '"package_cache": package_cache_provenance(lock)',
+        '"package_cache": package_cache_provenance(',
     ):
         if marker not in collector:
             raise CiSupplyChainError(f"provenance collector lacks supply-chain binding: {marker}")
