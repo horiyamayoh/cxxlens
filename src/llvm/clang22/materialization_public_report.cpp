@@ -4858,6 +4858,22 @@ namespace cxxlens::detail::clang22::materialization
 			worker.installed_binary_digest, *worker_digest, "installation.worker");
 	}
 
+	sdk::result<void> public_materialization_prepublication_projection::consume_reserved_capacity(
+		const std::size_t required_bytes)
+	{
+		if (capacity_consumed)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "already-consumed"});
+		if (reserved_bytes == 0U)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "zero-reservation"});
+		if (required_bytes != reserved_bytes)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "reservation-mismatch"});
+		capacity_consumed = true;
+		return {};
+	}
+
 	sdk::result<public_materialization_prepublication_projection>
 	prepare_public_materialization_prepublication_projection(
 		const validated_materialization_request_v2_1& request,
@@ -5020,6 +5036,12 @@ namespace cxxlens::detail::clang22::materialization
 							  {},
 							  "prepublication_projection",
 							  "recompute-mismatch"}));
+		if (!input.prepublication->reservation_consumed())
+			return sdk::unexpected(
+				report_error({public_materialization_report_error_kind::invalid_projection,
+							  {},
+							  "report.capacity",
+							  "reservation-not-consumed"}));
 
 		const auto& request = input.request->request();
 		const auto& tool = request.tool();
