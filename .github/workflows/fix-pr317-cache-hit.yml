@@ -1,0 +1,149 @@
+name: Fix exact PR 317 cache-hit dependency resolution
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message == 'Fix PR 317 cache-hit dependency resolution'
+    runs-on: ubuntu-24.04
+    env:
+      HEAD_REF: issue-316-ci-setup-integration
+      EXPECTED_HEAD_SHA: 6546c6712cf40a3b2ee3c5d3e7778c74ee893654
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Configure the exact LLVM source on cache hits
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin "${HEAD_REF}"
+          test "$(git rev-parse "origin/${HEAD_REF}")" = "${EXPECTED_HEAD_SHA}"
+          git checkout -B "${HEAD_REF}" "origin/${HEAD_REF}"
+
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import pathlib
+
+          bootstrap_path = pathlib.Path('tools/ci/bootstrap_supply_chain.py')
+          text = bootstrap_path.read_text(encoding='utf-8')
+
+          helper_marker = '\ndef package_cache_authority_digest(lock: dict[str, Any]) -> str:\n'
+          helper = '''
+
+def configure_llvm_repository(llvm: dict[str, Any], key_content: bytes) -> None:
+    """Install the verified LLVM source and refresh its exact package index."""
+    signing_key = llvm["signing_key"]
+    with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-bootstrap-") as temporary:
+        directory = pathlib.Path(temporary)
+        keyring = verify_key(
+            key_content, signing_key["primary_fingerprint"], directory
+        )
+        source = directory / "cxxlens-llvm.list"
+        source.write_text(
+            "deb [arch={architecture} signed-by={keyring}] {repository} "
+            "{suite} {component}\\n".format(
+                architecture=llvm["architecture"],
+                keyring=KEYRING,
+                repository=llvm["repository"],
+                suite=llvm["suite"],
+                component=llvm["component"],
+            ),
+            encoding="utf-8",
+        )
+        run(["sudo", "install", "-D", "-m", "0644", str(keyring), str(KEYRING)])
+        run(["sudo", "install", "-D", "-m", "0644", str(source), str(SOURCE_LIST)])
+    run(
+        [
+            "sudo",
+            "apt-get",
+            "-o",
+            f"Dir::Etc::sourcelist={SOURCE_LIST}",
+            "-o",
+            "Dir::Etc::sourceparts=-",
+            "-o",
+            "APT::Get::List-Cleanup=0",
+            "update",
+        ]
+    )
+'''
+          if 'def configure_llvm_repository(' not in text:
+              if text.count(helper_marker) != 1:
+                  raise SystemExit('LLVM repository helper insertion marker differs')
+              text = text.replace(helper_marker, helper + helper_marker, 1)
+
+          old_verify = '''    with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-key-") as temporary:
+        verify_key(key_content, signing_key["primary_fingerprint"], pathlib.Path(temporary))
+'''
+          new_verify = '    configure_llvm_repository(llvm, key_content)\n'
+          if old_verify in text:
+              text = text.replace(old_verify, new_verify, 1)
+          elif new_verify not in text:
+              raise SystemExit('LLVM repository configuration call marker differs')
+
+          block_start = text.index(
+              '    if missing:\n'
+              '        with tempfile.TemporaryDirectory(prefix="cxxlens-llvm-bootstrap-") as temporary:\n'
+          )
+          package_line = text.index(
+              '        package_requests = [f"{name}={llvm[\'packages\'][name]}" for name in missing]\n',
+              block_start,
+          )
+          text = text[: block_start + len('    if missing:\n')] + text[package_line:]
+          bootstrap_path.write_text(text, encoding='utf-8')
+
+          test_path = pathlib.Path('tests/quality/test_ng_ci_supply_chain.py')
+          tests = test_path.read_text(encoding='utf-8')
+          import_marker = '    install_documentation,\n'
+          if '    install,\n' not in tests:
+              if tests.count(import_marker) != 1:
+                  raise SystemExit('test import marker differs')
+              tests = tests.replace(import_marker, '    install,\n' + import_marker, 1)
+
+          test_marker = '    def test_verified_cached_package_is_reused(self) -> None:\n'
+          regression = '''    def test_cache_hit_configures_repository_before_archive_resolution(self) -> None:
+        lock = copy.deepcopy(self.lock)
+        events = mock.Mock()
+        with mock.patch("bootstrap_supply_chain.load_lock", return_value=lock), \\
+             mock.patch("bootstrap_supply_chain.assert_runner"), \\
+             mock.patch("bootstrap_supply_chain.download", return_value=b"verified-key"), \\
+             mock.patch("bootstrap_supply_chain.verify_bytes"), \\
+             mock.patch("bootstrap_supply_chain.configure_llvm_repository") as configure, \\
+             mock.patch("bootstrap_supply_chain.package_cache_directory", return_value=pathlib.Path("/tmp/cache")), \\
+             mock.patch("bootstrap_supply_chain.package_cache_hit_claimed", return_value=True), \\
+             mock.patch("bootstrap_supply_chain.resolve_cached_archive", side_effect=RuntimeError("archive-resolution")) as resolve:
+            events.attach_mock(configure, "configure")
+            events.attach_mock(resolve, "resolve")
+            with self.assertRaisesRegex(RuntimeError, "archive-resolution"):
+                install(ROOT, "compiler")
+        self.assertEqual(events.mock_calls[0], mock.call.configure(lock["llvm"], b"verified-key"))
+
+'''
+          if 'test_cache_hit_configures_repository_before_archive_resolution' not in tests:
+              if tests.count(test_marker) != 1:
+                  raise SystemExit('cache regression test insertion marker differs')
+              tests = tests.replace(test_marker, regression + test_marker, 1)
+          test_path.write_text(tests, encoding='utf-8')
+          PY
+
+          python3 -m pip install --require-hashes --only-binary=:all: \
+            --requirement tools/quality/requirements.lock
+          python3 -m py_compile \
+            tools/ci/bootstrap_supply_chain.py \
+            tests/quality/test_ng_ci_supply_chain.py
+          python3 tests/quality/test_ng_ci_supply_chain.py
+          python3 tools/quality/check_ci_supply_chain.py check --root .
+          python3 tools/quality/check_ng_api_development_readiness.py check --root .
+          python3 tools/quality/check_documentation_consistency.py check --root .
+          git diff --check
+          git add tools/ci/bootstrap_supply_chain.py tests/quality/test_ng_ci_supply_chain.py
+          git commit -m 'Configure locked LLVM source on cache hits'
+          git push --force-with-lease="refs/heads/${HEAD_REF}:${EXPECTED_HEAD_SHA}" \
+            origin "HEAD:refs/heads/${HEAD_REF}"
