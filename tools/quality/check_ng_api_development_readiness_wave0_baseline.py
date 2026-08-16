@@ -1330,10 +1330,14 @@ def build_report(
         "clean": True,
     }:
         fail(f"Wave 0 report requires exact clean main revision: {git}")
-    required_jobs = [
-        *manifest["required_status_checks"]["contexts"],
-        "foundation-completion",
-    ]
+    required_jobs = manifest.get("merged_main_ci_jobs")
+    if not isinstance(required_jobs, list) or not all(
+        isinstance(job, str) and job for job in required_jobs
+    ):
+        fail("Wave 0 merged-main CI job list is missing or malformed")
+    if "check-tier" in required_jobs:
+        fail("Wave 0 merged-main CI job list must exclude PR-only check-tier")
+    required_jobs = list(required_jobs)
     if sorted(ci_jobs) != sorted(required_jobs):
         fail(f"Wave 0 CI job evidence differs: {ci_jobs}")
 

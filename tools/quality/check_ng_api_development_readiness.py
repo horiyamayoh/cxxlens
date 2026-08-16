@@ -28,7 +28,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASELINE_PATH = pathlib.Path(
     "tools/quality/check_ng_api_development_readiness_wave0_baseline.py"
 )
-BASELINE_DIGEST = "sha256:4e81eff25e898794381624a82d9d3c06ef9d219ddcb32de3721cd2b56f32089f"
+BASELINE_DIGEST = "sha256:c9447cf1bae5b41dacd9a9377451fe02cb9076b01f199ce7625e2b740e67eb4b"
 MANIFEST_PATH = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
 QUALITY_PATH = pathlib.Path(".github/workflows/quality.yml")
 NIGHTLY_PATH = pathlib.Path(".github/workflows/nightly.yml")
@@ -422,6 +422,31 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
     ):
         if name not in jobs:
             _fail(f"required accelerated CI job is missing: {name}")
+    merged_main_ci_jobs = manifest.get("merged_main_ci_jobs")
+    if not isinstance(merged_main_ci_jobs, list) or not all(
+        isinstance(job, str) and job for job in merged_main_ci_jobs
+    ):
+        _fail("merged-main CI job list is missing or malformed")
+    if "check-tier" in merged_main_ci_jobs:
+        _fail("merged-main CI job list must exclude PR-only check-tier")
+    wave0_report = _step(
+        _job(quality, "wave0-readiness"),
+        "Generate exact-SHA Wave 0 readiness baseline",
+    )
+    report_run = wave0_report.get("run")
+    if not isinstance(report_run, str):
+        _fail("Wave 0 readiness report command is missing")
+    ci_job_matches = re.findall(
+        r"--ci-job\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))", report_run
+    )
+    workflow_ci_jobs = [
+        next(value for value in match if value) for match in ci_job_matches
+    ]
+    if workflow_ci_jobs != merged_main_ci_jobs:
+        _fail(
+            "Wave 0 readiness workflow CI jobs differ from merged-main authority: "
+            f"{workflow_ci_jobs}"
+        )
     fast = _job(quality, "fast-gate")
     if _normalized_condition(fast.get("if")) != "github.event_name == 'pull_request' && github.event.pull_request.draft":
         _fail("fast tier must run only for draft pull requests")

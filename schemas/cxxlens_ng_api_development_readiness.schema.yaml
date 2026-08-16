@@ -17,6 +17,7 @@ required:
 - production_scope_closure
 - implementation_learning
 - required_status_checks
+- merged_main_ci_jobs
 - merged_main_checks
 - baseline
 - api_unit_workflow
@@ -25,7 +26,7 @@ properties:
   schema:
     const: cxxlens.ng-api-development-readiness.v1
   document_version:
-    const: 1.5.0
+    const: 1.6.0
   maturity:
     const: implemented
   authority:
@@ -481,6 +482,16 @@ properties:
       - quality-contracts
       - quality-evidence
       - check-tier
+  merged_main_ci_jobs:
+    const:
+    - build-test (OFF)
+    - build-test (ON)
+    - gcc-public-headers
+    - install-consumer (OFF)
+    - install-consumer (ON)
+    - quality-contracts
+    - quality-evidence
+    - foundation-completion
   merged_main_checks:
     const:
     - foundation-completion
