@@ -187,6 +187,7 @@ namespace
 		{
 			if (sealed_)
 				return sdk::unexpected(sdk::error{"test.source-spool", "append", "sealed"});
+			++append_calls_;
 			bytes_.insert(bytes_.end(), bytes.begin(), bytes.end());
 			return {};
 		}
@@ -232,9 +233,15 @@ namespace
 			return bytes_;
 		}
 
+		[[nodiscard]] std::size_t append_calls() const noexcept
+		{
+			return append_calls_;
+		}
+
 	  private:
 		std::vector<std::byte> bytes_;
 		clang22_task_source_receipt receipt_;
+		std::size_t append_calls_{};
 		bool sealed_{};
 	};
 
@@ -1408,6 +1415,22 @@ int main()
 					exact_task.source_content_base64.size() == maximum_source_base64_bytes,
 				"one-shot task.v3 encoder rejected the exact decoded source limit");
 		const auto exact_digest = sdk::content_digest(*exact_encoded);
+		auto boundary_declared_size =
+			[&](const std::int64_t declared_size, const std::string& label)
+		{
+			auto projection = sdk::canonical_binary_decode(*exact_encoded);
+			require(projection.has_value(), label + " projection decode failed");
+			auto* payload = object_member(projection->tuple[4U], "source");
+			auto* size_member =
+				payload != nullptr ? object_member(*payload, "size_bytes") : nullptr;
+			require(size_member != nullptr &&
+						size_member->type == sdk::canonical_value::kind::signed_integer,
+					label + " source size member was not found");
+			size_member->integer = declared_size;
+			auto mutated = sdk::canonical_binary(*projection);
+			require(mutated.has_value(), label + " projection re-encode failed");
+			return *mutated;
+		};
 
 		auto exact_streaming_task = exact_task;
 		exact_streaming_task.source.clear();
@@ -1428,10 +1451,51 @@ int main()
 		require(exact_streamed && exact_streamed->source.size_bytes == maximum_source_bytes &&
 					exact_streamed->canonical_base64_bytes == maximum_source_base64_bytes &&
 					exact_streamed->task_input_bytes == exact_encoded->size() &&
-					exact_spool.sealed() &&
+					exact_spool.sealed() && exact_spool.append_calls() > 0U &&
 					std::ranges::equal(exact_spool.bytes(),
 									   std::as_bytes(std::span{exact_task.source})),
 				"streaming task.v3 decoder rejected the exact decoded source limit");
+
+		auto declared_zero = boundary_declared_size(0, "buffered declared-zero");
+		auto buffered_zero = decode_task_input(declared_zero);
+		require(
+			!buffered_zero && buffered_zero.error().field == "source.size_bytes" &&
+				buffered_zero.error().detail == "mismatch",
+			"buffered decoder did not reject a declared zero size before Base64 output allocation");
+
+		auto declared_oversized =
+			boundary_declared_size(static_cast<std::int64_t>(maximum_source_bytes + 1U),
+								   "buffered declared-limit-plus-one");
+		auto buffered_oversized = decode_task_input(declared_oversized);
+		require(
+			!buffered_oversized && buffered_oversized.error().field == "source.size_bytes" &&
+				buffered_oversized.error().detail == "maximum-bytes",
+			"buffered decoder did not reject a declared source size above the limit before decode");
+
+		{
+			fragmented_task_replay replay{declared_zero, 65535U};
+			vector_source_spool source_spool;
+			auto streaming_mismatch = decode_task_input_streaming(replay, source_spool);
+			require(!streaming_mismatch &&
+						streaming_mismatch.error().field == "source.size_bytes" &&
+						streaming_mismatch.error().detail == "mismatch" &&
+						source_spool.append_calls() == 0U && source_spool.bytes().empty() &&
+						!source_spool.sealed(),
+					"streaming decoder appended source bytes before rejecting a declared-size "
+					"mismatch");
+		}
+		{
+			fragmented_task_replay replay{declared_oversized, 65535U};
+			vector_source_spool source_spool;
+			auto streaming_oversized = decode_task_input_streaming(replay, source_spool);
+			require(!streaming_oversized &&
+						streaming_oversized.error().field == "source.size_bytes" &&
+						streaming_oversized.error().detail == "maximum-bytes" &&
+						source_spool.append_calls() == 0U && source_spool.bytes().empty() &&
+						!source_spool.sealed(),
+					"streaming decoder appended source bytes before rejecting a declared oversized "
+					"size");
+		}
 
 		auto boundary_encoding = [&](const std::string& content, const std::string& label)
 		{
@@ -1450,7 +1514,9 @@ int main()
 			vector_source_spool source_spool;
 			auto result = decode_task_input_streaming(replay, source_spool);
 			require(!result && result.error().field == "source" &&
-						result.error().detail == "maximum-bytes",
+						result.error().detail == "maximum-bytes" &&
+						source_spool.append_calls() == 0U && source_spool.bytes().empty() &&
+						!source_spool.sealed(),
 					label + " did not fail closed at decoded source maximum-bytes");
 		};
 
