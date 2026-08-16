@@ -388,6 +388,23 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
     ):
         if _normalized_condition(_job(quality, name).get("if")) != ready_condition:
             _fail(f"check/full tier routing differs: {name}")
+    quality_contracts = _job(quality, "quality-contracts")
+    quality_steps = quality_contracts.get("steps")
+    if not isinstance(quality_steps, list):
+        quality_steps = []
+    checkout_steps = [
+        step
+        for step in quality_steps
+        if isinstance(step, dict)
+        and isinstance(step.get("uses"), str)
+        and step["uses"].startswith("actions/checkout@")
+    ]
+    if (
+        len(checkout_steps) != 1
+        or not isinstance(checkout_steps[0].get("with"), dict)
+        or checkout_steps[0]["with"].get("fetch-depth") != 2
+    ):
+        _fail("quality-contracts public callable stable-ID check requires fetch-depth: 2")
     check = _job(quality, "check-tier")
     if _normalized_condition(check.get("if")) != "github.event_name == 'pull_request' && !github.event.pull_request.draft":
         _fail("check tier must close only ready pull requests")
