@@ -12,7 +12,10 @@ namespace cxxlens::detail::clang22::materialization
 	 *
 	 * The request roots and catalog identity are retained alongside the derived digest so every
 	 * bounded source, external receipt, and Store handoff can compare the same canonical value.
-	 * This type is deliberately source-private; it does not alter the public API or wire schema.
+	 * The accepted cxxlens.df-0200.execution-journal-receipt-set.v1 seal remains the separate
+	 * four-field projection; this complete binding is validated alongside it rather than folded
+	 * into that digest domain. This type is deliberately source-private; it does not alter the
+	 * public API or wire schema.
 	 */
 	struct materialization_claim_request_binding
 	{
