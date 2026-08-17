@@ -17,8 +17,6 @@ authority_refs:
   - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
   - schemas/cxxlens_ng_provider_task.schema.yaml
   - schemas/cxxlens_ng_provider_protocol.yaml
-  - schemas/cxxlens_ng_clang22_source_closure_contract.yaml
-  - docs/design/adr/0101-digest-addressed-source-closure-vfs.md
 tracking_issue: '#261'
 implementation_issues:
   - '#261'

@@ -1,5 +1,5 @@
 {
-  "asset_count": 696,
+  "asset_count": 703,
   "assets": [
     {
       "authority": "active",
@@ -67,6 +67,13 @@
     {
       "authority": "active",
       "path": ".github/workflows/quality.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/source-export-issue-261-implementation.yml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1186,6 +1193,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0101-digest-addressed-source-closure-vfs.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1936,6 +1950,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_source_closure_contract.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_source_closure_contract.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3055,6 +3083,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/source_closure.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/unicode_nfc.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3833,6 +3875,13 @@
     {
       "authority": "active",
       "path": "tests/adapter/clang22/provider_worker_protocol_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/source_closure_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4875,7 +4924,7 @@
     }
   ],
   "classifications": {
-    "active": 660,
+    "active": 667,
     "archived": 35,
     "generated": 1
   },

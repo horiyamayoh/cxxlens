@@ -371,7 +371,7 @@ endif()
 add_library(
   cxxlens_clang22_materialization_codecs STATIC
   src/llvm/clang22/provider_task_v3.cpp src/llvm/clang22/observation_v2.cpp
-  src/llvm/clang22/unicode_nfc.cpp)
+  src/llvm/clang22/source_closure.cpp src/llvm/clang22/unicode_nfc.cpp)
 target_link_libraries(
   cxxlens_clang22_materialization_codecs
   PUBLIC cxxlens::provider_sdk
