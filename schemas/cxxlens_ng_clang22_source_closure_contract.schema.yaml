@@ -1,0 +1,78 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens_ng_clang22_source_closure_contract.schema.yaml
+title: cxxlens Clang 22 source closure contract
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - maturity
+  - authority
+  - compatibility
+  - identity
+  - logical_path
+  - members
+  - blobs
+  - limits
+  - transport
+  - vfs
+  - system_inputs
+  - failure_codes
+  - constructibility
+  - qualification
+properties:
+  schema: {const: cxxlens.clang22-source-closure-contract.v1}
+  document_version: {const: 1.0.0}
+  maturity: {enum: [proposed, accepted, implemented, qualified]}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, decision_adr, owner_issue, owner]
+    properties:
+      design: {$ref: '#/$defs/repo_path'}
+      decision_adr: {$ref: '#/$defs/repo_path'}
+      owner_issue: {const: '#261'}
+      owner: {const: steward.ng-clang22-provider}
+  compatibility:
+    type: object
+    additionalProperties: false
+    required: [legacy_request_version, successor_request_version, legacy_task_codec, successor_task_codec, legacy_canonical_bytes, required_protocol_features, downgrade]
+    properties:
+      legacy_request_version: {const: 2.1.0}
+      successor_request_version: {const: 2.2.0}
+      legacy_task_codec: {const: cxxlens.clang22.task.v3}
+      successor_task_codec: {const: cxxlens.clang22.task.v4}
+      legacy_canonical_bytes: {const: unchanged}
+      required_protocol_features: {const: [task-input-chunks-v1, task-source-closure-v1]}
+      downgrade: {const: forbidden}
+  identity: {$ref: '#/$defs/nonempty_object'}
+  logical_path: {$ref: '#/$defs/nonempty_object'}
+  members: {$ref: '#/$defs/nonempty_object'}
+  blobs: {$ref: '#/$defs/nonempty_object'}
+  limits:
+    type: object
+    additionalProperties: false
+    required: [maximum_members, maximum_unique_blobs, maximum_logical_path_utf8_bytes, maximum_blob_bytes, maximum_unique_blob_bytes_per_task, maximum_task_v4_bytes, processing, shared_host_blob_storage]
+    properties:
+      maximum_members: {const: 4096}
+      maximum_unique_blobs: {const: 4096}
+      maximum_logical_path_utf8_bytes: {const: 4096}
+      maximum_blob_bytes: {const: 16777216}
+      maximum_unique_blob_bytes_per_task: {const: 50331648}
+      maximum_task_v4_bytes: {const: 67108864}
+      processing: {const: one-task-one-mounted-closure-at-a-time}
+      shared_host_blob_storage: {const: permitted-by-content-digest}
+  transport: {$ref: '#/$defs/nonempty_object'}
+  vfs: {$ref: '#/$defs/nonempty_object'}
+  system_inputs: {$ref: '#/$defs/nonempty_object'}
+  failure_codes:
+    type: array
+    minItems: 13
+    maxItems: 13
+    uniqueItems: true
+    items: {type: string, pattern: '^source-closure\.[a-z0-9-]+$'}
+  constructibility: {$ref: '#/$defs/nonempty_object'}
+  qualification: {$ref: '#/$defs/nonempty_object'}
+$defs:
+  repo_path: {type: string, pattern: '^(?!/)(?!.*\.\.)(?!https?://).+'}
+  nonempty_object: {type: object, minProperties: 1}

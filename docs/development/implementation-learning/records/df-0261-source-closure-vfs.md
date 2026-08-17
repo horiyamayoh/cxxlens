@@ -17,6 +17,8 @@ authority_refs:
   - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
   - schemas/cxxlens_ng_provider_task.schema.yaml
   - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_clang22_source_closure_contract.yaml
+  - docs/design/adr/0101-digest-addressed-source-closure-vfs.md
 tracking_issue: '#261'
 implementation_issues:
   - '#261'
@@ -206,3 +208,18 @@ This disposition does not accept a source-closure identity, request version,
 wire feature, reuse/cache rule, compiler VFS, or production qualification. The
 tracking issue #261 remains open. An independent reviewer and an accepted ADR are required
 before implementation crosses any of those boundaries.
+
+
+## Implementation restart — 2026-08-17
+
+The repository owner reopened #261 and authorized an incremental implementation
+branch from exact main. ADR 0101 and
+`cxxlens.clang22-source-closure-contract.v1` now make the proposed successor
+boundary explicit: request 2.2.0, task.v4, and the separately negotiated
+`task-source-closure-v1` capability. Existing request v2.1 and task.v3 bytes
+remain unchanged.
+
+This record remains `proposed / blocked` until an independent whole-contract
+review is complete. The implementation branch may retain reviewable experimental
+commits, but no merge, capability advertisement, or qualification claim is
+authorized by this checkpoint.

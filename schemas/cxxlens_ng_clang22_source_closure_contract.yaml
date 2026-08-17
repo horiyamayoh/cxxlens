@@ -1,0 +1,155 @@
+schema: cxxlens.clang22-source-closure-contract.v1
+document_version: 1.0.0
+maturity: proposed
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  decision_adr: docs/design/adr/0101-digest-addressed-source-closure-vfs.md
+  owner_issue: '#261'
+  owner: steward.ng-clang22-provider
+compatibility:
+  legacy_request_version: 2.1.0
+  successor_request_version: 2.2.0
+  legacy_task_codec: cxxlens.clang22.task.v3
+  successor_task_codec: cxxlens.clang22.task.v4
+  legacy_canonical_bytes: unchanged
+  required_protocol_features: [task-input-chunks-v1, task-source-closure-v1]
+  downgrade: forbidden
+identity:
+  contract: cxxlens.clang22.source-closure.v1
+  digest_kind: semantic-v2-sha256
+  snapshot_id_prefix: source-closure
+  member_order: canonical-logical-path-utf8-byte-order
+  blob_order: content-digest-byte-order
+  projection:
+    - contract-id
+    - case-model
+    - ordered-member-records
+    - ordered-unique-blob-records
+  transfer_chunking: excluded
+  physical-location: excluded
+  task-order: excluded
+logical_path:
+  scheme: project://
+  encoding: strict-utf8
+  normalization: nfc-required
+  separator: forward-slash-only
+  comparison: exact-normalized-utf8
+  portable_alias_key: unicode-default-casefold-then-nfc
+  reject:
+    - empty-remainder
+    - leading-or-trailing-separator
+    - empty-segment
+    - dot-segment
+    - parent-segment
+    - backslash
+    - control-character
+    - query
+    - fragment
+    - embedded-nul
+    - non-nfc
+    - duplicate-normalized-path
+    - casefold-alias
+members:
+  allowed_roles: [main, header, generated, forced-include, macro-file]
+  exactly_one_main: true
+  file_kinds: [regular]
+  symlinks: forbidden
+  hardlinks: unrepresentable
+  read_only: required-true
+  required_fields:
+    - file-id
+    - logical-path
+    - role
+    - encoding
+    - size-bytes
+    - content-digest
+    - read-only
+blobs:
+  digest: full-sha256-content-digest
+  deduplication: exact-content-digest
+  conflicting-metadata: reject
+  missing-reference: reject
+  digest-mismatch: reject
+limits:
+  maximum_members: 4096
+  maximum_unique_blobs: 4096
+  maximum_logical_path_utf8_bytes: 4096
+  maximum_blob_bytes: 16777216
+  maximum_unique_blob_bytes_per_task: 50331648
+  maximum_task_v4_bytes: 67108864
+  processing: one-task-one-mounted-closure-at-a-time
+  shared_host_blob_storage: permitted-by-content-digest
+transport:
+  protocol: cxxlens.provider-protocol.v1
+  protocol_minor: 1
+  physical_feature: task-input-chunks-v1
+  semantic_feature: task-source-closure-v1
+  semantic_codec: cxxlens.clang22.task.v4
+  raw_chunks_authority: transport-occurrence-only
+  semantic_authority: decoded-validated-task-v4-and-closure-digest
+vfs:
+  mode: process-local-read-only
+  synthetic_root: /__cxxlens_project__
+  project_and_generated_lookup: closure-only
+  missing_member: typed-fail-closed
+  ambient_project_fallback: forbidden
+  writable_operations: forbidden
+  physical_staging: non-authoritative-and-not-required
+system_inputs:
+  project_generated: closure-only
+  builtin_headers: qualified-resource-directory-only
+  sysroot: qualified-explicit-only
+  external_system: unsupported-unless-explicitly-qualified
+  silent_discovery: forbidden
+failure_codes:
+  - source-closure.path-invalid
+  - source-closure.path-not-nfc
+  - source-closure.path-collision
+  - source-closure.case-collision
+  - source-closure.duplicate-member
+  - source-closure.role-invalid
+  - source-closure.blob-missing
+  - source-closure.digest-mismatch
+  - source-closure.limit-exceeded
+  - source-closure.main-invalid
+  - source-closure.member-missing
+  - source-closure.ambient-fallback-denied
+  - source-closure.toolchain-input-unqualified
+constructibility:
+  phases:
+    - raw-task-bytes
+    - task-v4-decoded
+    - closure-schema-validated
+    - closure-identity-bound
+    - closure-vfs-mounted
+    - clang-executed
+    - detached-output-validated
+    - closure-released
+  outcome_union: phase-authentic-success-or-typed-failure
+  minimal_witness: nested-and-generated-header-with-conflicting-ambient-shadow
+  resource_witness: bounded-streaming-spooling-and-one-mounted-task
+  crash_effect: process-local-read-only-vfs-no-external-effect
+  independent_review: required-before-acceptance
+qualification:
+  positive:
+    - quoted-header
+    - angle-header
+    - nested-header
+    - shared-header-multi-tu
+    - generated-header
+    - forced-include
+    - macro-file
+    - root-relocation
+    - task-order-permutation
+  negative:
+    - missing-member
+    - traversal
+    - non-nfc
+    - casefold-alias
+    - duplicate-member
+    - digest-mutation
+    - oversize-member
+    - oversize-aggregate
+    - ambient-shadow-mutation
+    - cancellation
+  production_claim: separate-gate
