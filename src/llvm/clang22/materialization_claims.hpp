@@ -13,6 +13,7 @@
 #include <cxxlens/sdk/store.hpp>
 
 #include "materialization_request.hpp"
+#include "materialization_request_binding.hpp"
 #include "materialization_request_v2_1.hpp"
 #include "materialization_seal.hpp"
 
@@ -162,23 +163,6 @@ namespace cxxlens::detail::clang22::materialization
 		std::uint64_t sdk_claim_occurrence_count{};
 		std::uint64_t origin_association_count{};
 		bool empty_partition{};
-	};
-
-	/**
-	 * Source-private request authority retained by sealed claims.
-	 *
-	 * The request ID binds the validated semantic request projection, while the catalog identity
-	 * and exact task count keep Store adoption from pairing this claim set with a coherent but
-	 * different request that happens to have compatible mutable projections.
-	 */
-	struct materialization_claim_request_binding
-	{
-		std::string materialization_request_id;
-		std::string catalog_id;
-		std::string catalog_digest;
-		std::uint64_t task_count{};
-
-		[[nodiscard]] bool operator==(const materialization_claim_request_binding&) const = default;
 	};
 
 	struct materialization_bounded_task_claims;
@@ -363,6 +347,11 @@ namespace cxxlens::detail::clang22::materialization
 	 * sources. */
 	[[nodiscard]] sdk::result<materialization_claim_request_binding>
 	make_materialization_claim_request_binding(const validated_materialization_request& request);
+
+	/** Derive the same complete binding from a live v2.1 request authority. */
+	[[nodiscard]] sdk::result<materialization_claim_request_binding>
+	make_materialization_claim_request_binding(
+		const materialization_v2_1_claim_authority& authority);
 
 	/** Validate a sealed claim set against the candidate request before Store adoption. */
 	[[nodiscard]] sdk::result<void>

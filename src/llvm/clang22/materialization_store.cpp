@@ -525,9 +525,14 @@ namespace cxxlens::detail::clang22::materialization
 		};
 		if (authority.claim_stream == nullptr || authority.execution_journal == nullptr)
 			return invalid("source", "authority-unbound");
+		if (!authority.expected_request_binding)
+			return invalid("request-binding", "authority-unbound");
 
 		const auto& source = *authority.claim_stream;
 		const auto& journal = *authority.execution_journal;
+		const auto& expected = *authority.expected_request_binding;
+		if (source.request_binding() != expected || journal.request_binding != expected)
+			return invalid("request-binding", "mismatch");
 		if (!sdk::validate_strong_id(source.materialization_request_id()) ||
 			source.task_count() == 0U ||
 			journal.materialization_request_id != source.materialization_request_id() ||
@@ -790,18 +795,9 @@ namespace cxxlens::detail::clang22::materialization
 		if (!validate_engine_registry_binding(output, engine, publication))
 			return materialization_store_preparation{std::move(state_value)};
 
-		auto indexed =
-			index_streaming_partitions(engine, prepared.draft, prepared.closures, source);
-		if (!indexed)
-		{
-			retain_sdk_failure(output,
-							   materialization_store_operation::configuration,
-							   std::nullopt,
-							   indexed.error());
-			return materialization_store_preparation{std::move(state_value)};
-		}
-		if (prepared.external_authority.claim_stream != nullptr ||
-			prepared.external_authority.execution_journal != nullptr)
+		const bool has_external_authority = prepared.external_authority.claim_stream != nullptr ||
+			prepared.external_authority.execution_journal != nullptr;
+		if (has_external_authority)
 		{
 			if (auto valid =
 					validate_materialization_store_external_authority(prepared.external_authority);
@@ -813,7 +809,20 @@ namespace cxxlens::detail::clang22::materialization
 								   valid.error());
 				return materialization_store_preparation{std::move(state_value)};
 			}
+		}
 
+		auto indexed =
+			index_streaming_partitions(engine, prepared.draft, prepared.closures, source);
+		if (!indexed)
+		{
+			retain_sdk_failure(output,
+							   materialization_store_operation::configuration,
+							   std::nullopt,
+							   indexed.error());
+			return materialization_store_preparation{std::move(state_value)};
+		}
+		if (has_external_authority)
+		{
 			std::vector<std::string> external_partition_ids;
 			external_partition_ids.reserve(
 				prepared.external_authority.claim_stream->partition_count());

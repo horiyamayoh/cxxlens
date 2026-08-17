@@ -1,5 +1,5 @@
 schema: cxxlens.ng-api-development-readiness.v1
-document_version: 1.5.0
+document_version: 1.6.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -359,6 +359,15 @@ required_status_checks:
     - quality-contracts
     - quality-evidence
     - check-tier
+merged_main_ci_jobs:
+  - build-test (OFF)
+  - build-test (ON)
+  - gcc-public-headers
+  - install-consumer (OFF)
+  - install-consumer (ON)
+  - quality-contracts
+  - quality-evidence
+  - foundation-completion
 merged_main_checks:
   - foundation-completion
   - wave0-readiness

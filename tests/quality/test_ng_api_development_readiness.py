@@ -19,7 +19,7 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASELINE_PATH = "tests/quality/test_ng_api_development_readiness_wave0_baseline.py"
-BASELINE_DIGEST = "sha256:23db2ab6ae3ae011d199cf25e59685caff35a44675a956b0911d7266af012b75"
+BASELINE_DIGEST = "sha256:f07e3b5242f53f26633e62c253ad1e31c1e0b3441bbcfc9ae3aec9b6f3507485"
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 import check_ng_api_development_readiness as readiness  # noqa: E402
@@ -346,12 +346,48 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
 
     def test_check_tier_is_required_and_sqlite_bound(self) -> None:
         self.assertIn("check-tier", self.manifest["required_status_checks"]["contexts"])
+        self.assertEqual(
+            self.manifest["merged_main_ci_jobs"],
+            [
+                "build-test (OFF)",
+                "build-test (ON)",
+                "gcc-public-headers",
+                "install-consumer (OFF)",
+                "install-consumer (ON)",
+                "quality-contracts",
+                "quality-evidence",
+                "foundation-completion",
+            ],
+        )
+        self.assertNotIn("check-tier", self.manifest["merged_main_ci_jobs"])
         quality = yaml.safe_load(
             (ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8")
         )
         self.assertIn(
             "sqlite-store-v3-qualification",
             quality["jobs"]["check-tier"]["needs"],
+        )
+        wave0_run = readiness._step(
+            quality["jobs"]["wave0-readiness"],
+            "Generate exact-SHA Wave 0 readiness baseline",
+        )["run"]
+        self.assertNotIn("--ci-job check-tier", wave0_run)
+        for job in self.manifest["merged_main_ci_jobs"]:
+            marker = f'--ci-job "{job}"' if " " in job else f"--ci-job {job}"
+            self.assertIn(marker, wave0_run)
+        self.assertEqual(
+            quality["jobs"]["g5-qualification"]["needs"], ["wave0-readiness"]
+        )
+        self.assertEqual(
+            quality["jobs"]["full-tier"]["needs"],
+            ["g5-qualification", "sqlite-store-v3-qualification", "agent-context"],
+        )
+        self.assertEqual(
+            quality["jobs"]["nightly-quality"]["needs"], ["full-tier"]
+        )
+        self.assertEqual(
+            quality["jobs"]["release-evaluation"]["needs"],
+            ["nightly-quality", "g5-qualification", "sqlite-store-v3-qualification"],
         )
 
     def test_projection_is_not_a_required_qualification_dependency(self) -> None:

@@ -166,18 +166,49 @@ namespace cxxlens::detail::clang22::materialization
 				identity.final_relation_compile_unit_id == task.worker_input.compile_unit;
 		}
 
+		[[nodiscard]] bool identity_matches_v2_1_metadata(
+			const materialization_incremental_task_identity& identity,
+			const std::size_t task_index,
+			const materialization_v2_1_task_metadata_receipt& metadata) noexcept
+		{
+			return metadata.task_index == task_index &&
+				identity.canonical_task_ordinal == task_index &&
+				identity.provider_task_id == metadata.provider_task_id &&
+				identity.task_input_digest == metadata.task_input_digest &&
+				identity.selected_catalog_compile_unit_id ==
+				metadata.selected_catalog_compile_unit_id &&
+				identity.final_relation_compile_unit_id == metadata.final_relation_compile_unit_id;
+		}
+
 		[[nodiscard]] bool
 		identity_matches_v2_1_task(const materialization_incremental_task_identity& identity,
 								   const std::size_t task_index,
 								   const materialization_v2_1_task_execution& task) noexcept
 		{
-			return identity.canonical_task_ordinal == task_index &&
-				identity.provider_task_id == task.metadata.provider_task_id &&
-				identity.task_input_digest == task.metadata.task_input_digest &&
-				identity.selected_catalog_compile_unit_id ==
-				task.metadata.selected_catalog_compile_unit_id &&
-				identity.final_relation_compile_unit_id ==
-				task.metadata.final_relation_compile_unit_id;
+			return identity_matches_v2_1_metadata(identity, task_index, task.metadata);
+		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_plan_entry_binding(const sdk::incremental::plan_entry& plan_entry,
+									const materialization_incremental_partition_binding& binding)
+		{
+			if (!binding.current_state)
+				return sdk::unexpected(coordinator_error("bindings", "plan-state-mismatch"));
+			std::optional<sdk::incremental::partition_state> prior_state;
+			if (binding.prior_artifact)
+				prior_state = binding.prior_artifact->state;
+			const sdk::incremental::partition_candidate candidate{*binding.current_state,
+																  std::move(prior_state)};
+			const std::span<const sdk::incremental::partition_candidate> candidates{&candidate, 1U};
+			auto derived_plan = sdk::incremental::make_materialization_plan(candidates);
+			if (!derived_plan || derived_plan->entries.size() != 1U)
+				return sdk::unexpected(coordinator_error("bindings", "plan-state-mismatch"));
+			const auto& derived_entry = derived_plan->entries.front();
+			if (derived_entry.partition_id != plan_entry.partition_id ||
+				derived_entry.decision != plan_entry.decision ||
+				derived_entry.reason != plan_entry.reason)
+				return sdk::unexpected(coordinator_error("bindings", "plan-state-mismatch"));
+			return {};
 		}
 
 		[[nodiscard]] bool
@@ -191,6 +222,37 @@ namespace cxxlens::detail::clang22::materialization
 				task.metadata.selected_catalog_compile_unit_id &&
 				result.final_relation_compile_unit_id() ==
 				task.metadata.final_relation_compile_unit_id;
+		}
+
+		[[nodiscard]] bool canonical_sealed_artifact_digest(const std::string_view value) noexcept
+		{
+			constexpr std::string_view prefix{
+				"materialization.incremental-sealed-artifact:sha256:"};
+			return value.size() == prefix.size() + 64U && value.starts_with(prefix) &&
+				std::ranges::all_of(value.substr(prefix.size()),
+									[](const char byte)
+									{
+										return (byte >= '0' && byte <= '9') ||
+											(byte >= 'a' && byte <= 'f');
+									});
+		}
+
+		/**
+		 * Validate only binding-owned reuse authority. The loaded result is checked again after the
+		 * executor/cache boundary against this preflight authority.
+		 */
+		[[nodiscard]] sdk::result<void> validate_reuse_partition_binding(
+			const materialization_incremental_partition_binding& binding)
+		{
+			if (!binding.current_state || !binding.prior_artifact ||
+				!binding.prior_artifact->state.validate() ||
+				binding.prior_artifact->state.partition_id != binding.partition_id ||
+				binding.prior_artifact->state.corruption_detected ||
+				binding.prior_artifact->state != *binding.current_state)
+				return sdk::unexpected(coordinator_error("prior", "sealed-artifact-mismatch"));
+			if (!canonical_sealed_artifact_digest(binding.prior_artifact->sealed_artifact_digest))
+				return sdk::unexpected(coordinator_error("prior", "artifact-receipt-mismatch"));
+			return {};
 		}
 
 		[[nodiscard]] sdk::error execution_error(const std::string_view detail)
@@ -372,6 +434,11 @@ namespace cxxlens::detail::clang22::materialization
 						partition.current_state->partition_id != partition.partition_id)
 						return sdk::unexpected(
 							coordinator_error("bindings", "partition-task-mismatch"));
+					if (partition.current_state->corruption_detected)
+						return sdk::unexpected(coordinator_error("current", "corrupt-partition"));
+					if (auto valid = validate_plan_entry_binding(*plan_entry->second, partition);
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
 					if (task_action && *task_action != plan_entry->second->decision)
 						return sdk::unexpected(
 							coordinator_error("bindings", "mixed-task-decisions"));
@@ -390,6 +457,16 @@ namespace cxxlens::detail::clang22::materialization
 									}))
 				return sdk::unexpected(coordinator_error("bindings", "missing-task"));
 
+			for (std::size_t task_index{}; task_index < task_count_size; ++task_index)
+			{
+				auto metadata = request.task_metadata(static_cast<std::uint64_t>(task_index));
+				if (!metadata)
+					return sdk::unexpected(std::move(metadata.error()));
+				if (!identity_matches_v2_1_metadata(
+						by_task[task_index]->task_identity, task_index, *metadata))
+					return sdk::unexpected(coordinator_error("bindings", "task-identity-mismatch"));
+			}
+
 			std::set<std::string, std::less<>> plan_ids;
 			for (const auto& [partition_id, entry] : plan_entries)
 			{
@@ -399,6 +476,17 @@ namespace cxxlens::detail::clang22::materialization
 			if (binding_ids != plan_ids ||
 				recompute_partition_count != plan.frontend_provider_executions)
 				return sdk::unexpected(coordinator_error("bindings", "plan-partition-census"));
+
+			for (std::size_t task_index{}; task_index < task_count_size; ++task_index)
+			{
+				if (*task_actions[task_index] != sdk::incremental::action::reuse)
+					continue;
+				for (const auto& partition : by_task[task_index]->partitions)
+				{
+					if (auto valid = validate_reuse_partition_binding(partition); !valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+			}
 
 			auto cursor_result = make_materialization_v2_1_task_cursor(request);
 			if (!cursor_result)
@@ -505,6 +593,11 @@ namespace cxxlens::detail::clang22::materialization
 						partition.current_state->partition_id != partition.partition_id)
 						return sdk::unexpected(
 							coordinator_error("bindings", "partition-task-mismatch"));
+					if (partition.current_state->corruption_detected)
+						return sdk::unexpected(coordinator_error("current", "corrupt-partition"));
+					if (auto valid = validate_plan_entry_binding(*plan_entry->second, partition);
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
 					if (task_action && *task_action != plan_entry->second->decision)
 						return sdk::unexpected(
 							coordinator_error("bindings", "mixed-task-decisions"));
@@ -533,6 +626,17 @@ namespace cxxlens::detail::clang22::materialization
 			if (binding_ids != plan_ids ||
 				recompute_partition_count != plan.frontend_provider_executions)
 				return sdk::unexpected(coordinator_error("bindings", "plan-partition-census"));
+
+			for (std::size_t task_index{}; task_index < task_count_size; ++task_index)
+			{
+				if (*task_actions[task_index] != sdk::incremental::action::reuse)
+					continue;
+				for (const auto& partition : by_task[task_index]->partitions)
+				{
+					if (auto valid = validate_reuse_partition_binding(partition); !valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+			}
 
 			auto ingress_begin = materialization_incremental_ingress::begin_dynamic(
 				request, claim_authority, binding_set);
@@ -585,6 +689,15 @@ namespace cxxlens::detail::clang22::materialization
 				if (!artifact_digest || *artifact_digest != output.receipt.sealed_artifact_digest)
 					return sdk::unexpected(
 						coordinator_error("executor", "artifact-receipt-mismatch"));
+				if (action == sdk::incremental::action::reuse &&
+					!std::ranges::all_of(binding.partitions,
+										 [&](const auto& partition)
+										 {
+											 return partition.prior_artifact &&
+												 partition.prior_artifact->sealed_artifact_digest ==
+												 *artifact_digest;
+										 }))
+					return sdk::unexpected(coordinator_error("prior", "artifact-receipt-mismatch"));
 				auto pre_encoder = std::move(*output.receipt.pre_encoder_seal);
 				if (pre_encoder.result_artifact_digest != *artifact_digest ||
 					pre_encoder.partition_ids != output.receipt.covered_partition_ids ||
@@ -744,9 +857,12 @@ namespace cxxlens::detail::clang22::materialization
 			if (!ingress_result)
 				return sdk::unexpected(coordinator_error("receipt", ingress_result.error().detail));
 			census.execution_journal_receipt = ingress_result->journal;
+			auto request_binding = make_materialization_claim_request_binding(claim_authority);
+			if (!request_binding)
+				return sdk::unexpected(
+					coordinator_error("claim-stream", request_binding.error().detail));
 			auto claim_stream = materialization_claim_stream_source::begin(
-				request.identity().materialization_request_id,
-				task_count,
+				std::move(*request_binding),
 				ingress_result->journal,
 				std::move(ingress_result->claim_stream_tasks));
 			if (!claim_stream)
@@ -799,6 +915,12 @@ namespace cxxlens::detail::clang22::materialization
 		return execution_census_;
 	}
 
+	materialization_claim_stream_source*
+	sealed_materialization_incremental_result::claim_stream() noexcept
+	{
+		return &claim_stream_;
+	}
+
 	const materialization_claim_stream_source*
 	sealed_materialization_incremental_result::claim_stream() const noexcept
 	{
@@ -845,6 +967,8 @@ namespace cxxlens::detail::clang22::materialization
 		bool cleanup_failed{};
 		try
 		{
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(coordinator_error("request", "binding"));
 			if (auto valid = plan.validate(); !valid)
 				return sdk::unexpected(coordinator_error("plan", "plan-validation"));
 			if (request.tasks.empty() || bindings.size() != request.tasks.size())
@@ -887,6 +1011,11 @@ namespace cxxlens::detail::clang22::materialization
 						partition.current_state->partition_id != partition.partition_id)
 						return sdk::unexpected(
 							coordinator_error("bindings", "partition-task-mismatch"));
+					if (partition.current_state->corruption_detected)
+						return sdk::unexpected(coordinator_error("current", "corrupt-partition"));
+					if (auto valid = validate_plan_entry_binding(*plan_entry->second, partition);
+						!valid)
+						return sdk::unexpected(std::move(valid.error()));
 					if (task_action && *task_action != plan_entry->second->decision)
 						return sdk::unexpected(
 							coordinator_error("bindings", "mixed-task-decisions"));
@@ -915,6 +1044,17 @@ namespace cxxlens::detail::clang22::materialization
 			if (binding_ids != plan_ids ||
 				recompute_partition_count != plan.frontend_provider_executions)
 				return sdk::unexpected(coordinator_error("bindings", "plan-partition-census"));
+
+			for (std::size_t task_index{}; task_index < by_task.size(); ++task_index)
+			{
+				if (*task_actions[task_index] != sdk::incremental::action::reuse)
+					continue;
+				for (const auto& partition : by_task[task_index]->partitions)
+				{
+					if (auto valid = validate_reuse_partition_binding(partition); !valid)
+						return sdk::unexpected(std::move(valid.error()));
+				}
+			}
 
 			const bool dynamic_typed_partition_ids = executor.dynamic_typed_partition_ids();
 			std::vector<std::vector<std::string>> expected_partition_ids(request.tasks.size());
@@ -970,6 +1110,8 @@ namespace cxxlens::detail::clang22::materialization
 				if (!current || !current_task_index)
 					return sdk::unexpected(
 						coordinator_error("claim-source", "missing-current-task"));
+				if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+					return sdk::unexpected(coordinator_error("request", "binding"));
 				auto task_claims =
 					construct_materialization_bounded_task_claims(request,
 																  *current_task_index,
@@ -986,6 +1128,8 @@ namespace cxxlens::detail::clang22::materialization
 					return {};
 				if (!current || !current_receipt || !ingress)
 					return sdk::unexpected(coordinator_error("ingress", "missing-current-task"));
+				if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+					return sdk::unexpected(coordinator_error("request", "binding"));
 				materialization_incremental_task_ingress task{std::move(*current),
 															  std::move(*current_receipt),
 															  std::move(current_partition_spools)};
@@ -1077,15 +1221,12 @@ namespace cxxlens::detail::clang22::materialization
 					{
 						for (const auto& partition : binding->partitions)
 						{
-							if (!partition.prior_artifact ||
-								!partition.prior_artifact->state.validate() ||
-								partition.prior_artifact->state.partition_id !=
-									partition.partition_id ||
-								partition.prior_artifact->state.corruption_detected ||
-								partition.prior_artifact->state != *partition.current_state)
-								return sdk::unexpected(
-									coordinator_error("prior", "sealed-artifact-mismatch"));
+							if (auto valid = validate_reuse_partition_binding(partition); !valid)
+								return sdk::unexpected(std::move(valid.error()));
 						}
+						if (auto valid = validate_materialization_legacy_request_binding(request);
+							!valid)
+							return sdk::unexpected(coordinator_error("request", "binding"));
 						auto prior =
 							executor.load_reusable(task_index, request.tasks[task_index], *binding);
 						if (!prior)
@@ -1154,6 +1295,9 @@ namespace cxxlens::detail::clang22::materialization
 
 					if (executor.cancellation_requested())
 						return sdk::unexpected(coordinator_error("executor", "cancelled"));
+					if (auto valid = validate_materialization_legacy_request_binding(request);
+						!valid)
+						return sdk::unexpected(coordinator_error("request", "binding"));
 					auto executed =
 						executor.execute(task_index, request.tasks[task_index], *binding);
 					if (!executed)
@@ -1257,10 +1401,14 @@ namespace cxxlens::detail::clang22::materialization
 					census.actual_provider_executions ||
 				census.warm_zero != (census.actual_provider_executions == 0U))
 				return sdk::unexpected(coordinator_error("execution", "census-mismatch"));
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(coordinator_error("request", "binding"));
 			auto ingress_result = std::move(*ingress).finalize_with_claim_stream();
 			if (!ingress_result)
 				return sdk::unexpected(coordinator_error("receipt", ingress_result.error().detail));
 			census.execution_journal_receipt = ingress_result->journal;
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(coordinator_error("request", "binding"));
 			auto claim_stream = materialization_claim_stream_source::begin(
 				request, ingress_result->journal, std::move(ingress_result->claim_stream_tasks));
 			if (!claim_stream)

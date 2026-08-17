@@ -1,5 +1,5 @@
 {
-  "asset_count": 695,
+  "asset_count": 696,
   "assets": [
     {
       "authority": "active",
@@ -2859,6 +2859,13 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_request_binding.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_request_identity.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4868,7 +4875,7 @@
     }
   ],
   "classifications": {
-    "active": 659,
+    "active": 660,
     "archived": 35,
     "generated": 1
   },

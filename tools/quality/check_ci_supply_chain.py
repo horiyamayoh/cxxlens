@@ -261,6 +261,7 @@ def validate_repository(root: pathlib.Path) -> None:
         "CXXLENS_PACKAGE_CACHE",
         "CXXLENS_PACKAGE_CACHE_KEY",
         "CXXLENS_PACKAGE_CACHE_HIT",
+        "CXXLENS_PACKAGE_CACHE_HIT=${{ steps.package-cache.outputs.cache-hit || 'false' }}",
         "CXXLENS_PACKAGE_CACHE_RECEIPT",
         "CXXLENS_PACKAGE_CACHE_PROFILE",
         "CXXLENS_PACKAGE_CACHE_DOCUMENTATION",

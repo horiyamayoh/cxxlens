@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "materialization_partition_event_stream.hpp"
+#include "materialization_request_binding.hpp"
 #include "materialization_seal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
@@ -84,6 +85,7 @@ namespace cxxlens::detail::clang22::materialization
 	/** Final cycle-free receipt-set seal created after all canonical task receipts are sealed. */
 	struct materialization_incremental_execution_journal_receipt
 	{
+		materialization_claim_request_binding request_binding;
 		std::string materialization_request_id;
 		std::uint64_t exact_task_count{};
 		std::vector<std::string> canonical_task_ids;
@@ -246,16 +248,16 @@ namespace cxxlens::detail::clang22::materialization
 	[[nodiscard]] sdk::result<void> validate_materialization_incremental_execution_journal(
 		const materialization_incremental_execution_journal_receipt& journal);
 
-	/** Seal the exact canonical-order task receipt set; task receipts cannot bind this value. */
+	/** Seal the exact canonical-order task receipt set against the complete request authority. */
 	[[nodiscard]] sdk::result<materialization_incremental_execution_journal_receipt>
 	seal_materialization_incremental_execution_journal(
-		std::string materialization_request_id,
+		materialization_claim_request_binding request_binding,
 		std::span<const materialization_incremental_task_receipt> task_receipts);
 
 	/** Seal the exact receipt set through a source-private bounded reader. */
 	[[nodiscard]] sdk::result<materialization_incremental_execution_journal_receipt>
 	seal_materialization_incremental_execution_journal(
-		std::string materialization_request_id,
+		materialization_claim_request_binding request_binding,
 		std::size_t task_count,
 		const materialization_incremental_task_receipt_reader& task_receipt_at);
 } // namespace cxxlens::detail::clang22::materialization
