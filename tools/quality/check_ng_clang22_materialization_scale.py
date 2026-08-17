@@ -434,7 +434,24 @@ def check_installed_positive(
             raise ScaleEvidenceError(f"{scenario['id']} installed output is not an object")
         if report_raw != oracle.canonical_json(report):
             raise ScaleEvidenceError(f"{scenario['id']} installed output is not canonical JSON")
-        oracle.validate_report(root, request, report, request_bytes=request_bytes)
+        # Real installed reports have no known-good fixture transcript to compare
+        # against: `oracle.validate_report`'s default `runtime_raw_occurrences`
+        # (`fixture_runtime_raw_occurrences`) synthesizes canned fixture row
+        # content from the request alone and is only valid for the oracle's own
+        # fixture-driven unit tests. For an installed report we must instead
+        # independently re-derive the raw wire from the report's *own* claimed
+        # row/coverage/evidence content via `report_runtime_raw_occurrences`,
+        # which checks that the tool's runtime receipt is self-consistent with
+        # what it actually claimed -- not that the claimed content matches an
+        # unrelated synthetic fixture.
+        runtime_occurrences = oracle.report_runtime_raw_occurrences(root, request, report)
+        oracle.validate_report(
+            root,
+            request,
+            report,
+            request_bytes=request_bytes,
+            runtime_raw_occurrences=runtime_occurrences,
+        )
     except (KeyError, TypeError, ValueError) as error:
         raise ScaleEvidenceError(
             f"{scenario['id']} installed report failed the independent materialization validator: {error}"

@@ -224,6 +224,80 @@ class NgClang22MaterializationScaleTests(unittest.TestCase):
                     scenario_id="raw-request-limit-plus-one",
                 )
 
+    def test_installed_positive_validates_against_the_reports_own_wire_authority(
+        self,
+    ) -> None:
+        """`check_installed_positive` must independently re-derive the raw wire
+        from the report's *own* claimed row/coverage/evidence content
+        (`report_runtime_raw_occurrences`), not `validate_report`'s default
+        `fixture_runtime_raw_occurrences`, which synthesizes canned fixture row
+        content from the request alone for the oracle's own fixture-driven unit
+        tests and is not a real installed tool's independent wire authority.
+
+        A real installed report's claimed content differs from that synthetic
+        fixture in exactly the fields that differ between an
+        `installed_runtime=True` and `installed_runtime=False` wire encoding
+        (evidence records, provider manifest) -- so validating any genuinely
+        installed report against the default occurrences always fails with
+        materialization.transcript-invalid, independent of whether the
+        installed tool actually did anything wrong. This reproduced the
+        Nightly `materialization-scale` job's `one-task` installed-report
+        failure (`runtime receipt differs from independent raw wire/frame/seal
+        authority`) end to end against a real local install-check build.
+        """
+
+        request, _task_count, _aggregate = scale.build_request(ROOT, oracle, "one-task")
+        request_bytes = oracle.canonical_json(request)
+        report = oracle.sample_report(ROOT, request, request_bytes=request_bytes)
+        tasks = {oracle.task_execution_key(task): task for task in request["tasks"]}
+        for result in report["task_results"]:
+            task = tasks[oracle.task_execution_key(result)]
+            raw_stdout = oracle.encode_fixture_runtime_raw(
+                ROOT, request, task, result, installed_runtime=True
+            )
+            observation = oracle.derive_runtime_observation(
+                ROOT, request, task, raw_stdout
+            )
+            result["runtime_receipt"] = oracle.materialization_runtime_receipt(
+                observation["receipt"]
+            )
+        oracle.rebind_report_digest_chain(ROOT, request, report)
+
+        # The default authority (what the pre-fix checker implicitly used by
+        # omitting `runtime_raw_occurrences`) must reject this installed-style
+        # report with the exact Nightly failure.
+        with self.assertRaisesRegex(
+            oracle.MaterializationError,
+            r"materialization\.transcript-invalid: runtime receipt differs "
+            r"from independent raw wire/frame/seal authority",
+        ):
+            oracle.validate_report(ROOT, request, report, request_bytes=request_bytes)
+
+        # Independently re-deriving the wire from the report's own claims must
+        # accept it -- this is the authority `check_installed_positive` must use.
+        runtime_occurrences = oracle.report_runtime_raw_occurrences(
+            ROOT, request, report
+        )
+        oracle.validate_report(
+            ROOT,
+            request,
+            report,
+            request_bytes=request_bytes,
+            runtime_raw_occurrences=runtime_occurrences,
+        )
+
+    def test_check_installed_positive_is_wired_to_the_reports_own_wire_authority(
+        self,
+    ) -> None:
+        source = (
+            ROOT / "tools" / "quality" / "check_ng_clang22_materialization_scale.py"
+        ).read_text(encoding="utf-8")
+        body = source.split("def check_installed_positive(", 1)[1].split(
+            "\ndef ", 1
+        )[0]
+        self.assertIn("oracle.report_runtime_raw_occurrences(", body)
+        self.assertIn("runtime_raw_occurrences=runtime_occurrences", body)
+
     def test_run_marker_binds_terminal_scenario_results_to_the_tree(self) -> None:
         marker = scale.new_run_marker(
             ROOT,
