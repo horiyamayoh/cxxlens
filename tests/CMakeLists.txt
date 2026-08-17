@@ -460,11 +460,24 @@ set_tests_properties(
     PROCESSORS 2)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
    AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
+  # The regression exercises several fork/watcher/cleanup sequences whose own
+  # internal budgets already sum to several seconds in the best case (see
+  # provider_runtime_test.cpp); ASan/UBSan's per-process-spawn instrumentation
+  # overhead leaves too little headroom against a flat 30s CTest wall timeout
+  # (observed: Nightly run 32049712322, sanitizers job, Timeout). This widens
+  # only the outer CTest kill timeout for instrumented builds; it does not
+  # change any internal wall/watcher/cleanup budget the test itself asserts.
+  if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)
+    set(CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT 90)
+  else()
+    set(CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT 30)
+  endif()
   set_tests_properties(
     unit.sdk-provider-runtime-timeout
     PROPERTIES LABELS
                "unit;sdk;provider;process;budget;cancellation;regression"
-               TIMEOUT 30 SKIP_RETURN_CODE 77)
+               TIMEOUT ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT}
+               SKIP_RETURN_CODE 77)
 endif()
 set_tests_properties(unit.sdk-provider-runtime-sealed
                      PROPERTIES LABELS "unit;sdk;provider;sealed;adoption")
