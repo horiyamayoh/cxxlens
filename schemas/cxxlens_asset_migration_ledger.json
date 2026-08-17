@@ -1,5 +1,5 @@
 {
-  "asset_count": 706,
+  "asset_count": 713,
   "assets": [
     {
       "authority": "active",
@@ -3048,6 +3048,13 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/provider_sdk_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/provider_task_v3.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3091,6 +3098,34 @@
     {
       "authority": "active",
       "path": "src/llvm/clang22/source_closure.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_invocation.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_invocation.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_native.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_native.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3889,6 +3924,20 @@
     {
       "authority": "active",
       "path": "tests/adapter/clang22/provider_worker_protocol_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/source_closure_invocation_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/source_closure_native_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4945,7 +4994,7 @@
     }
   ],
   "classifications": {
-    "active": 670,
+    "active": 677,
     "archived": 35,
     "generated": 1
   },

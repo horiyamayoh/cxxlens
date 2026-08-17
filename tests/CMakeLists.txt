@@ -880,6 +880,31 @@ set_tests_properties(
   PROPERTIES LABELS
              "adapter;provider;clang22;source-closure;vfs;security;contract")
 
+
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-invocation
+                            adapter/clang22/source_closure_invocation_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-invocation
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure-invocation
+         COMMAND cxxlens-clang22-source-closure-invocation)
+set_tests_properties(
+  adapter.clang22-source-closure-invocation
+  PROPERTIES LABELS
+             "adapter;provider;clang22;source-closure;invocation;security;contract")
+
+
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-native
+                            adapter/clang22/source_closure_native_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-native
+                      PRIVATE cxxlens_clang22_worker_core)
+add_test(NAME adapter.clang22-source-closure-native
+         COMMAND cxxlens-clang22-source-closure-native)
+set_tests_properties(
+  adapter.clang22-source-closure-native
+  PROPERTIES LABELS
+             "adapter;provider;clang22;source-closure;vfs;native;security;contract"
+             SKIP_RETURN_CODE 77)
+
 cxxlens_add_test_executable(cxxlens-r2-vertical-slice
                             integration/r2_vertical_slice_test.cpp)
 target_link_libraries(cxxlens-r2-vertical-slice
