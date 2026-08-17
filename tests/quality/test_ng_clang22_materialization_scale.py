@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "tests" / "install"))
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 import clang22_materializer_scale_test as scale  # noqa: E402
+import check_ng_clang22_materialization as oracle  # noqa: E402
 import check_ng_clang22_materialization_scale as checker  # noqa: E402
 
 
@@ -34,6 +35,33 @@ class NgClang22MaterializationScaleTests(unittest.TestCase):
             scale.padded_source(scale.SOURCE_CHUNK_BYTES),
         )
         self.assertEqual(len(scale.padded_source(scale.SOURCE_CHUNK_BYTES)), 16 << 20)
+
+    def test_large_source_scenarios_budget_a_transport_ceiling_above_their_source(
+        self,
+    ) -> None:
+        # The installed worker spools both the raw wire input and the decoded
+        # source into private memfd-backed files (materialization_task_spool.cpp),
+        # each bounded by the RLIMIT_FSIZE the process adapter derives from the
+        # task's transport_bytes budget (provider_process_adapter.cpp, ADR 0087).
+        # A per-task transport_bytes budget that is not comfortably above the
+        # task's own source size reproducibly kills the worker with SIGXFSZ
+        # once that source is spooled, regardless of how small the eventual
+        # wire response is -- so every generated scenario request must budget
+        # a transport ceiling with real headroom above its source.
+        for scenario_id in (
+            "one-task",
+            "four-thousand-ninety-six-tasks",
+            "sixteen-mib-source",
+            "arbitrary-short-reads",
+        ):
+            with self.subTest(scenario_id=scenario_id):
+                request, _task_count, _aggregate = scale.build_request(
+                    ROOT, oracle, scenario_id
+                )
+                for task in request["tasks"]:
+                    source_bytes = task["source"]["size_bytes"]
+                    transport_bytes = task["budget"]["transport_bytes"]
+                    self.assertGreaterEqual(transport_bytes, 2 * source_bytes)
 
     def test_checker_rejects_non_pass_process_observation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

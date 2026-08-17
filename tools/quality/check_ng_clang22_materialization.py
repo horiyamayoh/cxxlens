@@ -8263,6 +8263,7 @@ def sample_request(
     backend: str = "memory",
     translation_unit_count: int = 1,
     source_factory: Callable[[int], bytes] | None = None,
+    task_transport_bytes: int = 2097152,
 ) -> dict[str, Any]:
     if translation_unit_count < 1:
         raise ValueError("translation_unit_count must be positive")
@@ -8511,7 +8512,7 @@ def sample_request(
                     "wall_ms": 10000,
                     "cpu_ms": 10000,
                     "address_space_bytes": 1073741824,
-                    "transport_bytes": 2097152,
+                    "transport_bytes": task_transport_bytes,
                     "open_files": 64,
                     "subprocesses": 1,
                 },
