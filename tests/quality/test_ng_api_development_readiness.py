@@ -12,6 +12,7 @@ import subprocess
 import sys
 import types
 import unittest
+from contextlib import contextmanager
 
 import yaml
 
@@ -51,16 +52,22 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         shutil.copy2(ROOT / readiness.BUILD_TEST_GUIDE_PATH, destination)
         return root
 
+    @contextmanager
+    def exact_source(self, revision: str, tree: str):
+        del revision, tree
+        yield
+
     def complete_evidence(
         self, evidence_dir: pathlib.Path, git_state: dict[str, object]
     ) -> pathlib.Path:
         result = super().complete_evidence(evidence_dir, git_state)
-        packet = readiness.build_agent_context_packet(
-            ROOT,
-            self.manifest,
-            str(git_state["revision"]),
-            str(git_state["tree"]),
-        )
+        with self.exact_source(str(git_state["revision"]), str(git_state["tree"])):
+            packet = readiness.build_agent_context_packet(
+                ROOT,
+                self.manifest,
+                str(git_state["revision"]),
+                str(git_state["tree"]),
+            )
         self.write_json(evidence_dir / readiness.PACKET_JSON_NAME, packet)
         (evidence_dir / readiness.PACKET_MARKDOWN_NAME).write_text(
             readiness.render_agent_context_markdown(packet), encoding="utf-8"
@@ -165,6 +172,80 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         self.assertEqual(use_case["tracked_gap"]["owner_issue"], "#261")
         self.assertEqual(packet["binding"]["stale_policy"], "reject")
 
+    def test_authoritative_and_projection_generators_are_distinct(self) -> None:
+        authority = self.manifest["product_direction"]["agent_context"]
+        self.assertEqual(
+            authority["generator"],
+            "tools/quality/check_ng_api_development_readiness.py",
+        )
+        self.assertEqual(authority["artifact"], "cxxlens-ng-agent-context-261-${revision}")
+        projection = authority["projection"]
+        self.assertEqual(projection["generator"], "tools/quality/check_ng_agent_context.py")
+        self.assertEqual(projection["authority"], "non-authoritative-projection")
+        self.assertEqual(projection["release_authority"], "none")
+        self.assertEqual(projection["workflow_job"], "agent-context-projection")
+        self.assertTrue(projection["non_gating"])
+        self.assertEqual(projection["failure_policy"], "continue-on-error")
+        mutated = copy.deepcopy(self.manifest)
+        mutated["product_direction"]["agent_context"]["generator"] = (
+            "tools/quality/check_ng_agent_context.py"
+        )
+        with self.assertRaisesRegex(
+            readiness.ReadinessError, "#261 readiness generator is not the authority"
+        ):
+            readiness._product_contract(mutated)
+
+    def test_head_authority_rejects_assume_unchanged_manifest_mutation(self) -> None:
+        relative = readiness.MANIFEST.as_posix()
+        path = ROOT / readiness.MANIFEST
+        original = path.read_bytes()
+        prior_flag = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "-v", "--", relative],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.startswith("h")
+        try:
+            path.write_bytes(original + b"\n# hidden tracked authority mutation\n")
+            subprocess.run(
+                ["git", "-C", str(ROOT), "update-index", "--assume-unchanged", "--", relative],
+                check=True,
+            )
+            self.assertEqual(
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(ROOT),
+                        "status",
+                        "--porcelain=v1",
+                        "--untracked-files=all",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout,
+                "",
+            )
+            with self.assertRaisesRegex(
+                readiness.ReadinessError, "path-content-mismatch"
+            ):
+                readiness.validate_documents(ROOT)
+        finally:
+            path.write_bytes(original)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(ROOT),
+                    "update-index",
+                    "--assume-unchanged" if prior_flag else "--no-assume-unchanged",
+                    "--",
+                    relative,
+                ],
+                check=True,
+            )
+
     def test_unknown_demand_capability_is_rejected(self) -> None:
         manifest = copy.deepcopy(self.manifest)
         use_case, _ = readiness._product_contract(manifest)
@@ -184,12 +265,27 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             readiness.validate_demand_closure(ROOT, manifest)
 
     def test_agent_packet_is_exact_bound_and_digested(self) -> None:
-        packet = readiness.build_agent_context_packet(
-            ROOT, self.manifest, "1" * 40, "2" * 40
-        )
-        readiness.validate_agent_context_packet(
-            ROOT, self.manifest, packet, "1" * 40, "2" * 40
-        )
+        bound_sources = {
+            readiness.MANIFEST_PATH.as_posix(): (
+                ROOT / readiness.MANIFEST_PATH
+            ).read_bytes()
+        }
+        with self.exact_source("1" * 40, "2" * 40):
+            packet = readiness.build_agent_context_packet(
+                ROOT,
+                self.manifest,
+                "1" * 40,
+                "2" * 40,
+                bound_sources=bound_sources,
+            )
+            readiness.validate_agent_context_packet(
+                ROOT,
+                self.manifest,
+                packet,
+                "1" * 40,
+                "2" * 40,
+                bound_sources=bound_sources,
+            )
         self.assertEqual(packet["binding"]["revision"], "1" * 40)
         self.assertTrue(packet["canonical_digest"].startswith("sha256:"))
         markdown = readiness.render_agent_context_markdown(packet)
@@ -213,10 +309,40 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
         ):
             for value in packet[field]:
                 self.assertIn(value, markdown)
-        for value in packet["constructibility"].values():
-            self.assertIn(str(value), markdown)
+        self.assertEqual(packet["constructibility"]["disposition"], "blocked")
+        self.assertEqual(packet["constructibility"]["gate_issue"], "#276")
+        self.assertIn(packet["constructibility"]["reason"], markdown)
         for value in packet["binding"].values():
             self.assertIn(str(value), markdown)
+
+    def test_packet_uses_bound_manifest_bytes_and_rejects_unbound_reads(self) -> None:
+        authority = readiness._require_head_bound_authorities(ROOT)
+        manifest_bytes = authority.records[readiness.MANIFEST.as_posix()][2]
+        manifest = yaml.safe_load(manifest_bytes.decode("utf-8"))
+        manifest_path = ROOT / readiness.MANIFEST
+        original = manifest_path.read_bytes()
+        try:
+            manifest_path.write_bytes(original + b"\n# replacement after binding\n")
+            packet = readiness.build_agent_context_packet(
+                ROOT,
+                manifest,
+                authority.snapshot.revision,
+                authority.snapshot.tree,
+                bound_sources=authority.sources,
+                snapshot=authority.snapshot,
+            )
+            expected_digest = "sha256:" + hashlib.sha256(manifest_bytes).hexdigest()
+            self.assertEqual(packet["binding"]["manifest_file_digest"], expected_digest)
+            with readiness._bound_authority_reads(
+                ROOT,
+                {readiness.MANIFEST.as_posix(): manifest_bytes},
+            ), self.assertRaisesRegex(
+                readiness.ReadinessError,
+                r"authority source was not bound to snapshot",
+            ):
+                (ROOT / readiness.QUALITY_PATH).read_text(encoding="utf-8")
+        finally:
+            manifest_path.write_bytes(original)
 
     def test_check_tier_is_required_and_sqlite_bound(self) -> None:
         self.assertIn("check-tier", self.manifest["required_status_checks"]["contexts"])
@@ -263,6 +389,23 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             quality["jobs"]["release-evaluation"]["needs"],
             ["nightly-quality", "g5-qualification", "sqlite-store-v3-qualification"],
         )
+
+    def test_projection_is_not_a_required_qualification_dependency(self) -> None:
+        quality = yaml.safe_load(
+            (ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8")
+        )
+        jobs = quality["jobs"]
+        self.assertIn("agent-context", jobs["quality-evidence"]["needs"])
+        self.assertIn("agent-context", jobs["full-tier"]["needs"])
+        self.assertIn("agent-context-projection", jobs)
+        self.assertTrue(jobs["agent-context-projection"]["continue-on-error"])
+        self.assertNotIn("continue-on-error", jobs["agent-context"])
+        for job_name, job in jobs.items():
+            needs = job.get("needs", [])
+            if isinstance(needs, str):
+                needs = [needs]
+            with self.subTest(job=job_name):
+                self.assertNotIn("agent-context-projection", needs)
 
     def test_required_status_documentation_is_bound_to_readiness(self) -> None:
         document = (ROOT / readiness.BUILD_TEST_GUIDE_PATH).read_text(encoding="utf-8")
@@ -330,6 +473,10 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
                 ROOT / readiness.BASELINE_PATH,
                 root / readiness.BASELINE_PATH,
             )
+            shutil.copy2(
+                ROOT / "tools/quality/check_ng_git_authority.py",
+                root / "tools/quality/check_ng_git_authority.py",
+            )
             self.assertFalse((root / ".git").exists())
             completed = subprocess.run(
                 [
@@ -346,16 +493,32 @@ class NgApiDevelopmentReadinessTest(_baseline.NgApiDevelopmentReadinessTest):
             self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_stale_agent_packet_is_rejected(self) -> None:
-        packet = readiness.build_agent_context_packet(
-            ROOT, self.manifest, "1" * 40, "2" * 40
-        )
+        bound_sources = {
+            readiness.MANIFEST_PATH.as_posix(): (
+                ROOT / readiness.MANIFEST_PATH
+            ).read_bytes()
+        }
+        with self.exact_source("1" * 40, "2" * 40):
+            packet = readiness.build_agent_context_packet(
+                ROOT,
+                self.manifest,
+                "1" * 40,
+                "2" * 40,
+                bound_sources=bound_sources,
+            )
         packet["binding"]["revision"] = "3" * 40
         with self.assertRaisesRegex(
-            readiness.ReadinessError, "stale, malformed, or not machine-derived"
+            readiness.ReadinessError, r"agent-context\.stale-or-not-machine-derived"
         ):
-            readiness.validate_agent_context_packet(
-                ROOT, self.manifest, packet, "1" * 40, "2" * 40
-            )
+            with self.exact_source("1" * 40, "2" * 40):
+                readiness.validate_agent_context_packet(
+                    ROOT,
+                    self.manifest,
+                    packet,
+                    "1" * 40,
+                    "2" * 40,
+                    bound_sources=bound_sources,
+                )
 
     def test_release_polling_tokens_are_forbidden(self) -> None:
         import tempfile

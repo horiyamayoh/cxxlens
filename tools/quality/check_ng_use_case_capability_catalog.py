@@ -16,10 +16,12 @@ import json
 import pathlib
 import subprocess
 import sys
-from typing import Any
+from typing import Any, Mapping
 
 import jsonschema
 import yaml
+
+import check_ng_git_authority as git_authority
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -41,10 +43,39 @@ class CatalogError(ValueError):
     """A fail-closed catalog projection violation."""
 
 
-def load_yaml(path: pathlib.Path) -> Any:
+def _source_bytes(
+    path: pathlib.Path,
+    *,
+    source_bytes: Mapping[str, bytes] | None,
+    root: pathlib.Path | None,
+) -> bytes:
+    if source_bytes is None:
+        try:
+            return path.read_bytes()
+        except (OSError, UnicodeError) as error:
+            raise CatalogError(f"cannot read source: {path}") from error
+    if root is None:
+        raise CatalogError(f"bound source root is missing: {path}")
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        relative = path.absolute().relative_to(root.absolute()).as_posix()
+    except ValueError as error:
+        raise CatalogError(f"source is outside bound root: {path}") from error
+    if relative not in source_bytes:
+        raise CatalogError(f"source was not bound to HEAD: {relative}")
+    return source_bytes[relative]
+
+
+def load_yaml(
+    path: pathlib.Path,
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
+    root: pathlib.Path | None = None,
+) -> Any:
+    try:
+        return yaml.safe_load(
+            _source_bytes(path, source_bytes=source_bytes, root=root).decode("utf-8")
+        )
+    except (CatalogError, UnicodeError, yaml.YAMLError) as error:
         raise CatalogError(f"cannot load YAML: {path}: {error}") from error
 
 
@@ -101,10 +132,17 @@ def reject_dirty_source_files(root: pathlib.Path) -> None:
         )
 
 
-def sha256(path: pathlib.Path) -> str:
+def sha256(
+    path: pathlib.Path,
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
+    root: pathlib.Path | None = None,
+) -> str:
     try:
-        return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
-    except (OSError, UnicodeError) as error:
+        return "sha256:" + hashlib.sha256(
+            _source_bytes(path, source_bytes=source_bytes, root=root)
+        ).hexdigest()
+    except CatalogError as error:
         raise CatalogError(f"cannot digest source: {path}") from error
 
 
@@ -173,12 +211,19 @@ def project_use_cases(readiness: dict[str, Any]) -> tuple[list[dict[str, Any]], 
     return use_cases, capabilities
 
 
-def build_report(root: pathlib.Path) -> dict[str, Any]:
+def build_report(
+    root: pathlib.Path,
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
+    snapshot: git_authority.HeadSnapshot | None = None,
+) -> dict[str, Any]:
     root = root.resolve()
     reject_dirty_source_files(root)
     readiness_path = root / READINESS_PATH
-    readiness = load_yaml(readiness_path)
-    readiness_schema = load_yaml(root / READINESS_SCHEMA_PATH)
+    readiness = load_yaml(readiness_path, source_bytes=source_bytes, root=root)
+    readiness_schema = load_yaml(
+        root / READINESS_SCHEMA_PATH, source_bytes=source_bytes, root=root
+    )
     validate_readiness_document(readiness, readiness_schema)
     if not isinstance(readiness, dict):
         raise CatalogError("readiness document must be a mapping")
@@ -194,9 +239,15 @@ def build_report(root: pathlib.Path) -> dict[str, Any]:
             "owner_issue": "#271",
             "tracking_issue": "#275",
             "source_pointer": "/product_direction/roadmap/use_case_families",
-            "revision": git_value(root, "HEAD"),
-            "tree": git_value(root, "HEAD^{tree}"),
-            "readiness_digest": sha256(readiness_path),
+            "revision": snapshot.revision
+            if snapshot is not None
+            else git_value(root, "HEAD"),
+            "tree": snapshot.tree
+            if snapshot is not None
+            else git_value(root, "HEAD^{tree}"),
+            "readiness_digest": sha256(
+                readiness_path, source_bytes=source_bytes, root=root
+            ),
         },
         "projection": {
             "scope": "readiness-declared-use-case-families",
@@ -212,12 +263,20 @@ def build_report(root: pathlib.Path) -> dict[str, Any]:
         "use_cases": use_cases,
         "capability_registry": capabilities,
     }
-    validate_report(report, root)
+    validate_report(report, root, source_bytes=source_bytes)
     return report
 
 
-def validate_report(report: dict[str, Any], root: pathlib.Path = ROOT) -> None:
-    schema = load_yaml(root.resolve() / CATALOG_SCHEMA_PATH)
+def validate_report(
+    report: dict[str, Any],
+    root: pathlib.Path = ROOT,
+    *,
+    source_bytes: Mapping[str, bytes] | None = None,
+) -> None:
+    root = root.resolve()
+    schema = load_yaml(
+        root / CATALOG_SCHEMA_PATH, source_bytes=source_bytes, root=root
+    )
     if not isinstance(schema, dict):
         raise CatalogError("catalog schema must be a mapping")
     validate(report, schema, "catalog report")

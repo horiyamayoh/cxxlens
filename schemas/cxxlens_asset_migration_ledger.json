@@ -1,5 +1,5 @@
 {
-  "asset_count": 692,
+  "asset_count": 696,
   "assets": [
     {
       "authority": "active",
@@ -1824,6 +1824,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_agent_context.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4035,6 +4042,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_agent_context.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_api_development_readiness.py",
       "removal_issue": null,
       "replacement": null,
@@ -4539,6 +4553,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_agent_context.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_api_development_readiness.py",
       "removal_issue": null,
       "replacement": null,
@@ -4596,6 +4617,13 @@
     {
       "authority": "active",
       "path": "tools/quality/check_ng_g5_qualification.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/quality/check_ng_git_authority.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4847,7 +4875,7 @@
     }
   ],
   "classifications": {
-    "active": 656,
+    "active": 660,
     "archived": 35,
     "generated": 1
   },

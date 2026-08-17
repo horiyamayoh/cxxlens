@@ -19,9 +19,14 @@ import re
 import sys
 import tempfile
 import types
+from contextlib import contextmanager
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import yaml
+
+import check_ng_git_authority as git_authority
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -36,6 +41,8 @@ BUILD_TEST_GUIDE_PATH = pathlib.Path("docs/development/build-and-test.md")
 AGENT_GOAL_PATH = pathlib.Path("docs/development/agent-api-development-goal.md")
 PACKET_JSON_NAME = "cxxlens-ng-agent-context-issue-261.json"
 PACKET_MARKDOWN_NAME = "cxxlens-ng-agent-context-issue-261.md"
+PROJECTION_PACKET_JSON_NAME = "cxxlens-ng-agent-context-issue-277.json"
+PROJECTION_PACKET_MARKDOWN_NAME = "cxxlens-ng-agent-context-issue-277.md"
 USE_CASE_ID = "repository-semantic-query.explain-translation-unit.v1"
 ISSUE_ID = "#261"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -61,10 +68,50 @@ LEGACY_GOAL_ISSUE_CLOSE_PATTERNS = (
     re.compile(r"merged-main qualification と learning checkpoint 後の active issue close"),
     re.compile(r"production scope に tracked gap がある intermediate unit の merge 後"),
 )
+PRODUCTION_SCOPE_SOURCE_PATHS = (
+    "schemas/cxxlens_ng_acceptance_manifest.yaml",
+    "schemas/cxxlens_ng_g5_qualification.yaml",
+    "schemas/cxxlens_ng_logical_query_contract.yaml",
+    "schemas/cxxlens_ng_namespace_registry.yaml",
+    "schemas/cxxlens_ng_provider_protocol.yaml",
+    "schemas/cxxlens_ng_provider_runtime_contract.yaml",
+    "schemas/cxxlens_ng_clang22_materialization_contract.yaml",
+    "schemas/cxxlens_ng_provider_support_matrix.yaml",
+    "schemas/cxxlens_ng_public_api_catalog.yaml",
+    "schemas/cxxlens_ng_public_callable_inventory.yaml",
+    "schemas/cxxlens_ng_quality_ownership.yaml",
+    "schemas/cxxlens_ng_relation_registry.yaml",
+    "schemas/cxxlens_ng_release_bundle.yaml",
+    "schemas/cxxlens_ng_release_qualification.yaml",
+    "schemas/cxxlens_ng_security_profile.yaml",
+    "schemas/cxxlens_ng_provider_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_query_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_security_conformance_vectors.yaml",
+)
 
 
 class AccelerationError(ValueError):
     """A fail-closed #291 contract violation."""
+
+
+@dataclass(frozen=True)
+class BoundAuthority:
+    """All authority bytes bound to one immutable Git commit/tree snapshot."""
+
+    snapshot: git_authority.HeadSnapshot
+    records: Mapping[str, tuple[str, str, bytes]]
+
+    @property
+    def sources(self) -> Mapping[str, bytes]:
+        return {path: record[2] for path, record in self.records.items()}
+
+
+class BoundManifest(dict[str, Any]):
+    """Manifest mapping carrying the exact binding used to validate it."""
+
+    def __init__(self, value: dict[str, Any], authority: BoundAuthority):
+        super().__init__(value)
+        self.authority = authority
 
 
 def _load_baseline() -> types.ModuleType:
@@ -122,8 +169,33 @@ def _semantic_digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
-def _file_digest(path: pathlib.Path) -> str:
-    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+def _bound_bytes(
+    path: pathlib.Path,
+    *,
+    bound_sources: Mapping[str, bytes] | None,
+    root: pathlib.Path,
+) -> bytes:
+    if bound_sources is None:
+        return path.read_bytes()
+    try:
+        relative = path.absolute().relative_to(root.absolute()).as_posix()
+    except ValueError as error:
+        raise ReadinessError(f"authority source is outside root: {path}") from error
+    if relative not in bound_sources:
+        raise ReadinessError(f"authority source was not bound to snapshot: {relative}")
+    return bound_sources[relative]
+
+
+def _file_digest(
+    path: pathlib.Path,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+    root: pathlib.Path | None = None,
+) -> str:
+    source_root = root or ROOT
+    return "sha256:" + hashlib.sha256(
+        _bound_bytes(path, bound_sources=bound_sources, root=source_root)
+    ).hexdigest()
 
 
 def _normalized_condition(value: Any) -> str:
@@ -169,6 +241,45 @@ def _product_contract(manifest: dict[str, Any]) -> tuple[dict[str, Any], dict[st
     packet = agent.get("first_packet")
     if not isinstance(packet, dict):
         _fail("the first #261 agent packet template is missing")
+    if agent.get("generator") != "tools/quality/check_ng_api_development_readiness.py":
+        _fail("#261 readiness generator is not the authority")
+    if agent.get("artifact") != "cxxlens-ng-agent-context-261-${revision}":
+        _fail("#261 readiness artifact differs")
+    if agent.get("authority") != "wave0-readiness":
+        _fail("#261 readiness authority marker differs")
+    if agent.get("output_contract") != "cxxlens.agent-context.v1":
+        _fail("#261 readiness output contract differs")
+    expected_projection = {
+        "contract": "cxxlens.ng-agent-context.v1",
+        "issue": "#277",
+        "packet_issue": "#261",
+        "use_case_id": USE_CASE_ID,
+        "demand_closure_issue": "#275",
+        "constructibility_issue": "#276",
+        "design_feedback_record": "DF-0261",
+        "output": {
+            "json": PROJECTION_PACKET_JSON_NAME,
+            "markdown": PROJECTION_PACKET_MARKDOWN_NAME,
+        },
+        "generator": "tools/quality/check_ng_agent_context.py",
+        "artifact": "cxxlens-ng-agent-context-277-${revision}",
+        "authority": "non-authoritative-projection",
+        "release_authority": "none",
+        "consumer": "developer-context-only",
+        "excluded_from": [
+            "cxxlens-ng-api-development-readiness-report",
+            "cxxlens-ng-release-qualification",
+            "issue-closure",
+        ],
+        "authority_scope": "exact-authority-derived-developer-projection",
+        "clean_source_required": True,
+        "stale_policy": "reject",
+        "workflow_job": "agent-context-projection",
+        "non_gating": True,
+        "failure_policy": "continue-on-error",
+    }
+    if agent.get("projection") != expected_projection:
+        _fail("#277 projection boundary differs")
     return matches[0], packet
 
 
@@ -407,6 +518,7 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         "sqlite-store-v3-qualification",
         "quality-contracts",
         "agent-context",
+        "agent-context-projection",
         "install-consumer",
         "gcc-public-headers",
         "quality-evidence",
@@ -458,6 +570,7 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         "sqlite-store-v3-qualification",
         "quality-contracts",
         "agent-context",
+        "agent-context-projection",
         "install-consumer",
         "gcc-public-headers",
         "quality-evidence",
@@ -512,8 +625,12 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         _fail("stress tier must be an exact-SHA reusable workflow dependency")
 
     agent_job = _job(quality, "agent-context")
-    plan_step = _step(agent_job, "Generate exact-SHA #261 agent context")
-    run = plan_step.get("run")
+    if agent_job.get("continue-on-error") is True:
+        _fail("authoritative #261 agent-context job must remain gating")
+    authoritative_step = _step(
+        agent_job, "Generate exact-SHA authoritative #261 readiness context"
+    )
+    authoritative_run = authoritative_step.get("run")
     for marker in (
         "check_ng_api_development_readiness.py plan",
         "--issue 261",
@@ -522,8 +639,51 @@ def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any])
         PACKET_JSON_NAME,
         PACKET_MARKDOWN_NAME,
     ):
-        if not isinstance(run, str) or marker not in run:
-            _fail(f"#261 agent-context generation marker is missing: {marker}")
+        if not isinstance(authoritative_run, str) or marker not in authoritative_run:
+            _fail(f"authoritative #261 agent-context generation marker is missing: {marker}")
+
+    projection_job = _job(quality, "agent-context-projection")
+    if projection_job.get("continue-on-error") is not True:
+        _fail("non-authoritative #277 projection must explicitly be non-gating")
+    if "needs" in projection_job:
+        _fail("non-authoritative #277 projection must not have qualification dependencies")
+    for job_name, job in jobs.items():
+        needs = job.get("needs", []) if isinstance(job, dict) else []
+        if isinstance(needs, str):
+            needs = [needs]
+        if isinstance(needs, list) and "agent-context-projection" in needs:
+            _fail(
+                "non-authoritative #277 projection must not feed another CI job: "
+                f"{job_name}"
+            )
+    projection_step = _step(
+        projection_job, "Generate exact-SHA non-authoritative #277 projection"
+    )
+    projection_run = projection_step.get("run")
+    for marker in (
+        "check_ng_agent_context.py plan",
+        "check_ng_agent_context.py check",
+        "--use-case repository-semantic-query.explain-translation-unit.v1",
+        "--issue 261",
+        '--expected-revision "${GITHUB_SHA}"',
+        '--expected-tree "${SOURCE_TREE}"',
+        PROJECTION_PACKET_JSON_NAME,
+        PROJECTION_PACKET_MARKDOWN_NAME,
+    ):
+        if not isinstance(projection_run, str) or marker not in projection_run:
+            _fail(f"non-authoritative #277 projection marker is missing: {marker}")
+
+    authoritative_artifacts = json.dumps(agent_job, ensure_ascii=False, sort_keys=True)
+    if "cxxlens-ng-agent-context-261-${{ github.sha }}" not in authoritative_artifacts:
+        _fail("agent-context artifact boundary is missing: cxxlens-ng-agent-context-261-${{ github.sha }}")
+    projection_artifacts = json.dumps(
+        projection_job, ensure_ascii=False, sort_keys=True
+    )
+    if "cxxlens-ng-agent-context-277-${{ github.sha }}" not in projection_artifacts:
+        _fail(
+            "agent-context projection artifact boundary is missing: "
+            "cxxlens-ng-agent-context-277-${{ github.sha }}"
+        )
 
     evaluation = _job(quality, "release-evaluation")
     if evaluation.get("needs") != [
@@ -620,7 +780,184 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     _legacy_projection(root, manifest)
 
 
+@contextmanager
+def _bound_authority_reads(
+    root: pathlib.Path, bound_sources: Mapping[str, bytes]
+) -> Iterator[None]:
+    """Make all subsequent authority parses consume the bound byte snapshot."""
+    original_read_bytes = pathlib.Path.read_bytes
+    original_read_text = pathlib.Path.read_text
+
+    def bound_key(path: pathlib.Path) -> str | None:
+        try:
+            return path.absolute().relative_to(root.absolute()).as_posix()
+        except ValueError:
+            return None
+
+    def read_bytes(path: pathlib.Path) -> bytes:
+        relative = bound_key(path)
+        if relative in bound_sources:
+            return bound_sources[relative]
+        if relative is not None:
+            raise ReadinessError(
+                f"authority source was not bound to snapshot: {relative}"
+            )
+        return original_read_bytes(path)
+
+    def read_text(
+        path: pathlib.Path, *args: Any, **kwargs: Any
+    ) -> str:
+        relative = bound_key(path)
+        if relative in bound_sources:
+            encoding = kwargs.get("encoding")
+            if encoding is None and args:
+                encoding = args[0]
+            errors = kwargs.get("errors")
+            if errors is None and len(args) > 1:
+                errors = args[1]
+            return bound_sources[relative].decode(
+                encoding or "utf-8", errors or "strict"
+            )
+        if relative is not None:
+            raise ReadinessError(
+                f"authority source was not bound to snapshot: {relative}"
+            )
+        return original_read_text(path, *args, **kwargs)
+
+    pathlib.Path.read_bytes = read_bytes
+    pathlib.Path.read_text = read_text
+    try:
+        yield
+    finally:
+        pathlib.Path.read_bytes = original_read_bytes
+        pathlib.Path.read_text = original_read_text
+
+
+def _require_head_bound_authorities(
+    root: pathlib.Path,
+    *,
+    snapshot: git_authority.HeadSnapshot | None = None,
+    expected_revision: str | None = None,
+    expected_tree: str | None = None,
+) -> BoundAuthority:
+    if snapshot is None:
+        if (expected_revision is None) != (expected_tree is None):
+            _fail("exact authority snapshot requires both revision and tree")
+        try:
+            snapshot = (
+                git_authority.HeadSnapshot.capture_expected(
+                    root,
+                    revision=expected_revision,
+                    tree=expected_tree,
+                )
+                if expected_revision is not None and expected_tree is not None
+                else git_authority.HeadSnapshot.capture(root)
+            )
+        except git_authority.GitAuthorityError as error:
+            _fail(f"agent-context.authority-source-{error}")
+    fixed_paths = [
+        BASELINE_PATH,
+        MANIFEST,
+        MANIFEST_SCHEMA,
+        REPORT_SCHEMA,
+        QUALITY_PATH,
+        NIGHTLY_PATH,
+        BUILD_TEST_GUIDE_PATH,
+        AGENT_GOAL_PATH,
+        RELEASE_BUNDLE,
+        PUBLIC_API,
+        RELATION_REGISTRY,
+        ACCEPTANCE,
+        PUBLIC_CALLABLE_INVENTORY,
+        PUBLIC_CALLABLE_INVENTORY_SCHEMA,
+        PUBLIC_CALLABLE_REPORT_SCHEMA,
+        PUBLIC_CALLABLE_CHECKER,
+        PRODUCTION_SCOPE_MANIFEST,
+        PRODUCTION_SCOPE_MANIFEST_SCHEMA,
+        PRODUCTION_SCOPE_REPORT_SCHEMA,
+        PRODUCTION_SCOPE_CHECKER,
+        PRODUCTION_SCOPE_DECISION_ADR,
+        IMPLEMENTATION_LEARNING_HANDBOOK,
+        DESIGN_FEEDBACK_SCHEMA,
+        DESIGN_FEEDBACK_CHECKER,
+        DESIGN_FEEDBACK_ISSUE_TEMPLATE,
+        AGENT_CONTRACT,
+        AUTHORIZATION_DECISION_ADR,
+        pathlib.Path("CMakeLists.txt"),
+        pathlib.Path("tests/CMakeLists.txt"),
+        pathlib.Path("include/cxxlens/sdk.hpp"),
+        pathlib.Path("tools/quality/check_ng_migration_completion.py"),
+        pathlib.Path("docs/design/adr/0089-high-level-author-sdk-and-wave0-readiness.md"),
+        pathlib.Path("docs/design/adr/0092-exact-public-callable-inventory.md"),
+        pathlib.Path("docs/design/adr/0093-implementation-learning-design-feedback.md"),
+        pathlib.Path(__file__).resolve().relative_to(root),
+        pathlib.Path(git_authority.__file__).resolve().relative_to(root),
+    ]
+    try:
+        initial_paths = tuple(path.as_posix() for path in fixed_paths)
+        initial_records = git_authority.require_head_bound_records(
+            root,
+            initial_paths,
+            snapshot=snapshot,
+            verify_current=False,
+        )
+        manifest_bytes = initial_records[MANIFEST.as_posix()][2]
+        manifest = yaml.safe_load(manifest_bytes.decode("utf-8"))
+        if not isinstance(manifest, dict):
+            _fail("HEAD readiness manifest is not a mapping")
+        packet = (
+            manifest.get("product_direction", {})
+            .get("agent_context", {})
+            .get("first_packet", {})
+        )
+        authority_paths = packet.get("authority_reading_set")
+        if not isinstance(authority_paths, list) or not all(
+            isinstance(path, str) for path in authority_paths
+        ):
+            _fail("HEAD #261 authority reading set is missing")
+        fixed_paths.extend(pathlib.Path(path) for path in authority_paths)
+        fixed_paths.extend(pathlib.Path(path) for path in PRODUCTION_SCOPE_SOURCE_PATHS)
+        fixed_paths.extend(
+            pathlib.Path(path)
+            for path in snapshot.tracked_paths(
+                root, "docs/development/implementation-learning/records"
+            )
+            if pathlib.PurePosixPath(path).name.startswith("df-")
+        )
+        records = git_authority.require_head_bound_records(
+            root,
+            tuple(path.as_posix() for path in fixed_paths),
+            snapshot=snapshot,
+            verify_current=False,
+        )
+        snapshot.assert_current(root)
+        return BoundAuthority(snapshot=snapshot, records=records)
+    except git_authority.GitAuthorityError as error:
+        _fail(f"agent-context.authority-source-{error}")
+    except (UnicodeDecodeError, yaml.YAMLError) as error:
+        _fail(f"agent-context.authority-manifest-invalid:{error}")
+
+
+def _validate_documents_with_binding(
+    root: pathlib.Path, authority: BoundAuthority
+) -> BoundManifest:
+    with _bound_authority_reads(root, authority.sources):
+        manifest = _baseline_validate_documents(root)
+        validate_bounded_completion_contract(root)
+        validate_demand_closure(root, manifest)
+        _validate_required_status_documentation(root, manifest)
+    try:
+        authority.snapshot.assert_current(root)
+    except git_authority.GitAuthorityError as error:
+        _fail(f"agent-context.source-snapshot-{error}")
+    return BoundManifest(manifest, authority)
+
+
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
+    if (root / ".git").exists():
+        return _validate_documents_with_binding(
+            root, _require_head_bound_authorities(root)
+        )
     manifest = _baseline_validate_documents(root)
     validate_bounded_completion_contract(root)
     validate_demand_closure(root, manifest)
@@ -644,9 +981,22 @@ def build_agent_context_packet(
     manifest: dict[str, Any],
     revision: str,
     tree: str,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+    snapshot: git_authority.HeadSnapshot | None = None,
 ) -> dict[str, Any]:
     if HEX40.fullmatch(revision) is None or HEX40.fullmatch(tree) is None:
         _fail("agent context requires exact 40-hex revision and tree")
+    authority = getattr(manifest, "authority", None)
+    if authority is not None and bound_sources is None:
+        bound_sources = authority.sources
+        snapshot = snapshot or authority.snapshot
+    if bound_sources is None and (root / ".git").exists():
+        authority = _require_head_bound_authorities(
+            root, expected_revision=revision, expected_tree=tree
+        )
+        bound_sources = authority.sources
+        snapshot = snapshot or authority.snapshot
     use_case, template = _product_contract(manifest)
     packet = {
         "schema": "cxxlens.agent-context.v1",
@@ -671,12 +1021,21 @@ def build_agent_context_packet(
             "revision": revision,
             "tree": tree,
             "manifest_path": MANIFEST_PATH.as_posix(),
-            "manifest_file_digest": _file_digest(root / MANIFEST_PATH),
+            "manifest_file_digest": _file_digest(
+                root / MANIFEST_PATH,
+                bound_sources=bound_sources,
+                root=root,
+            ),
             "authority_projection_digest": _semantic_digest(authority_projection(manifest)),
             "stale_policy": "reject",
         },
     }
     packet["canonical_digest"] = _semantic_digest(packet)
+    if snapshot is not None:
+        try:
+            snapshot.assert_current(root)
+        except git_authority.GitAuthorityError as error:
+            _fail(f"agent-context.source-snapshot-{error}")
     return packet
 
 
@@ -686,10 +1045,20 @@ def validate_agent_context_packet(
     packet: dict[str, Any],
     revision: str,
     tree: str,
+    *,
+    bound_sources: Mapping[str, bytes] | None = None,
+    snapshot: git_authority.HeadSnapshot | None = None,
 ) -> None:
-    expected = build_agent_context_packet(root, manifest, revision, tree)
+    expected = build_agent_context_packet(
+        root,
+        manifest,
+        revision,
+        tree,
+        bound_sources=bound_sources,
+        snapshot=snapshot,
+    )
     if packet != expected:
-        _fail("agent-context packet is stale, malformed, or not machine-derived")
+        _fail("agent-context.stale-or-not-machine-derived")
 
 
 def render_agent_context_markdown(packet: dict[str, Any]) -> str:
@@ -780,6 +1149,7 @@ def build_report(
     generated_at: str,
     expected_revision: str,
 ) -> dict[str, Any]:
+    authority = getattr(manifest, "authority", None)
     baseline_current_git_state = _baseline.current_git_state
     _baseline.current_git_state = current_git_state
     try:
@@ -797,7 +1167,15 @@ def build_report(
     json_path, markdown_path = _packet_paths(evidence_dir)
     packet = json.loads(json_path.read_text(encoding="utf-8"))
     git = report["git"]
-    validate_agent_context_packet(root, manifest, packet, git["revision"], git["tree"])
+    validate_agent_context_packet(
+        root,
+        manifest,
+        packet,
+        git["revision"],
+        git["tree"],
+        bound_sources=authority.sources if authority is not None else None,
+        snapshot=authority.snapshot if authority is not None else None,
+    )
     if markdown_path.read_text(encoding="utf-8") != render_agent_context_markdown(packet):
         _fail("#261 agent-context Markdown differs from the canonical packet")
     report["evidence_artifacts"].extend(
@@ -821,16 +1199,35 @@ def _plan(arguments: list[str]) -> int:
     parser.add_argument("--output-markdown", type=pathlib.Path, required=True)
     parsed = parser.parse_args(arguments)
     root = parsed.root.resolve()
+    if parsed.issue != 261:
+        print(f"unknown agent-context packet issue: {parsed.issue}", file=sys.stderr)
+        return 1
     try:
-        if parsed.issue != 261:
-            _fail(f"unknown agent-context issue: {parsed.issue}")
-        manifest = validate_documents(root)
-        actual_revision = _baseline.git_output(root, "rev-parse", "HEAD")
-        actual_tree = _baseline.git_output(root, "rev-parse", "HEAD^{tree}")
-        if (parsed.expected_revision, parsed.expected_tree) != (actual_revision, actual_tree):
-            _fail("agent-context revision/tree binding is stale")
+        authority = _require_head_bound_authorities(
+            root,
+            expected_revision=parsed.expected_revision,
+            expected_tree=parsed.expected_tree,
+        )
+        manifest = _validate_documents_with_binding(root, authority)
+        status = _baseline.git_output(
+            root, "status", "--porcelain=v1", "--untracked-files=all"
+        )
+        if status:
+            _fail(
+                "agent-context.worktree-dirty: exact-bound #261 readiness context "
+                "requires a clean tracked/untracked worktree"
+            )
+        try:
+            authority.snapshot.assert_current(root)
+        except git_authority.GitAuthorityError as error:
+            _fail(f"agent-context.source-snapshot-{error}")
         packet = build_agent_context_packet(
-            root, manifest, parsed.expected_revision, parsed.expected_tree
+            root,
+            manifest,
+            parsed.expected_revision,
+            parsed.expected_tree,
+            bound_sources=authority.sources,
+            snapshot=authority.snapshot,
         )
         parsed.output_json.parent.mkdir(parents=True, exist_ok=True)
         parsed.output_markdown.parent.mkdir(parents=True, exist_ok=True)
@@ -843,9 +1240,29 @@ def _plan(arguments: list[str]) -> int:
         )
         print(f"wrote exact #261 agent context to {parsed.output_json}")
         return 0
-    except (ReadinessError, OSError, json.JSONDecodeError, yaml.YAMLError) as error:
-        print(f"agent-context generation failed: {error}", file=sys.stderr)
+    except (ReadinessError, OSError, UnicodeError, json.JSONDecodeError) as error:
+        print(f"readiness agent-context plan failed: {error}", file=sys.stderr)
         return 1
+
+
+# Make the frozen baseline's internal git lookup use one commit/tree capture.
+def current_git_state(root: pathlib.Path) -> dict[str, Any]:
+    try:
+        snapshot = git_authority.HeadSnapshot.capture(root)
+    except git_authority.GitAuthorityError as error:
+        _fail(f"agent-context.source-snapshot-{error}")
+    branch = git_output(root, "branch", "--show-current")
+    clean = git_output(root, "status", "--porcelain=v1") == ""
+    try:
+        snapshot.assert_current(root)
+    except git_authority.GitAuthorityError as error:
+        _fail(f"agent-context.source-snapshot-{error}")
+    return {
+        "revision": snapshot.revision,
+        "tree": snapshot.tree,
+        "branch": branch,
+        "clean": clean,
+    }
 
 
 # Make the frozen baseline's internal global lookups use the composed contracts.

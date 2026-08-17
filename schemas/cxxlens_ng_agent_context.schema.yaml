@@ -1,0 +1,341 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-agent-context.v1
+title: cxxlens bounded non-authoritative agent-context projection
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - role
+  - authority_scope
+  - release_authority
+  - packet_id
+  - issue
+  - use_case_id
+  - consumer
+  - goal
+  - expected_result_states
+  - preserved_semantics
+  - capability_path
+  - capability_gap
+  - exact_contract_ids
+  - authority_reading_set
+  - authority_reading_bindings
+  - allowed_write_paths
+  - required_evidence
+  - known_design_feedback
+  - design_feedback_records
+  - constructibility
+  - forbidden_shortcuts
+  - completion_commands
+  - blocked_reason
+  - completion_plan
+  - demand_source
+  - binding
+  - canonical_digest
+properties:
+  schema: {const: cxxlens.ng-agent-context.v1}
+  document_version: {const: 1.0.0}
+  role: {const: bounded-non-authoritative-context-projection}
+  authority_scope: {const: non-authoritative-projection}
+  release_authority: {const: none}
+  packet_id:
+    type: string
+    pattern: '^agent-context\.[a-z0-9._-]+\.v[0-9]+$'
+  issue:
+    type: string
+    pattern: '^#[0-9]+$'
+  use_case_id: {$ref: '#/$defs/canonical_id'}
+  consumer:
+    type: string
+    minLength: 1
+  goal:
+    type: string
+    minLength: 1
+  expected_result_states:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      enum: [proved, disproved, unknown, partial, conflicting]
+  preserved_semantics:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      minLength: 1
+  capability_path:
+    type: array
+    minItems: 1
+    items: {$ref: '#/$defs/capability'}
+  capability_gap:
+    type: object
+    additionalProperties: false
+    required: [reason_code, owner_issue, completion_plan, reevaluation_trigger]
+    properties:
+      reason_code:
+        type: string
+        minLength: 1
+      owner_issue:
+        type: string
+        pattern: '^#[0-9]+$'
+      completion_plan:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+      reevaluation_trigger:
+        type: string
+        minLength: 1
+  exact_contract_ids:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/canonical_id'}
+  authority_reading_set:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/repository_path'}
+  authority_reading_bindings:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/authority_reading_binding'}
+  allowed_write_paths:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/repository_path'}
+  required_evidence:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      minLength: 1
+  known_design_feedback:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      pattern: '^[A-Za-z][A-Za-z0-9._#-]*$'
+  design_feedback_records:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/design_feedback_record'}
+  constructibility:
+    type: object
+    additionalProperties: false
+    required:
+      - contract
+      - tracking_issue
+      - applies_to
+      - required_witnesses
+      - acceptance_rule
+      - disposition
+      - reason
+      - gate_issue
+      - authority_digest
+    properties:
+      contract: {const: development.constructibility-gate.v1}
+      tracking_issue: {const: '#276'}
+      applies_to:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+      required_witnesses:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+      acceptance_rule:
+        type: string
+        minLength: 1
+      disposition: {enum: [constructible, blocked, not-applicable]}
+      reason:
+        type: string
+        minLength: 1
+      gate_issue:
+        type: string
+        pattern: '^#[0-9]+$'
+      authority_digest: {$ref: '#/$defs/digest'}
+  forbidden_shortcuts:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      minLength: 1
+  completion_commands:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      minLength: 1
+  blocked_reason:
+    type: string
+    minLength: 1
+  completion_plan:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      minLength: 1
+  demand_source:
+    type: object
+    additionalProperties: false
+    required:
+      - schema
+      - document_version
+      - readiness_schema
+      - contract
+      - tracking_issue
+      - projection_scope
+      - projection_status
+      - revision
+      - tree
+      - source_pointer
+      - owner_issue
+      - readiness_digest
+      - catalog_digest
+    properties:
+      schema: {const: cxxlens.ng-use-case-capability-catalog.v1}
+      document_version: {const: 1.0.0}
+      readiness_schema: {const: cxxlens.ng-api-development-readiness.v1}
+      contract: {const: product.demand-closure.v1}
+      tracking_issue: {const: '#275'}
+      projection_scope: {const: readiness-declared-use-case-families}
+      projection_status: {const: declaration-only-not-qualified}
+      source_pointer: {const: /product_direction/roadmap/use_case_families}
+      owner_issue: {const: '#271'}
+      revision: {$ref: '#/$defs/hex40'}
+      tree: {$ref: '#/$defs/hex40'}
+      readiness_digest: {$ref: '#/$defs/digest'}
+      catalog_digest: {$ref: '#/$defs/digest'}
+  binding:
+    type: object
+    additionalProperties: false
+    required:
+      - revision
+      - tree
+      - readiness_path
+      - readiness_digest
+      - readiness_schema_digest
+      - demand_catalog_schema
+      - demand_catalog_digest
+      - context_schema_digest
+      - authority_projection_digest
+      - generator
+      - authority_scope
+      - release_authority
+      - worktree
+      - authority_reading_digest
+      - design_feedback_records_digest
+      - constructibility_authority_digest
+      - stale_policy
+    properties:
+      revision: {$ref: '#/$defs/hex40'}
+      tree: {$ref: '#/$defs/hex40'}
+      readiness_path:
+        const: schemas/cxxlens_ng_api_development_readiness.yaml
+      readiness_digest: {$ref: '#/$defs/digest'}
+      readiness_schema_digest: {$ref: '#/$defs/digest'}
+      demand_catalog_schema:
+        const: schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml
+      demand_catalog_digest: {$ref: '#/$defs/digest'}
+      context_schema_digest: {$ref: '#/$defs/digest'}
+      authority_projection_digest: {$ref: '#/$defs/digest'}
+      generator: {const: tools/quality/check_ng_agent_context.py}
+      authority_scope: {const: non-authoritative-projection}
+      release_authority: {const: none}
+      worktree: {const: clean}
+      authority_reading_digest: {$ref: '#/$defs/digest'}
+      design_feedback_records_digest: {$ref: '#/$defs/digest'}
+      constructibility_authority_digest: {$ref: '#/$defs/digest'}
+      stale_policy: {const: reject}
+  canonical_digest: {$ref: '#/$defs/digest'}
+$defs:
+  hex40:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  canonical_id:
+    type: string
+    pattern: '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\.v[0-9]+(?:_[0-9]+)?$'
+  repository_path:
+    type: string
+    minLength: 1
+    pattern: '^(?!/)(?!.*\.\.)(?!.*\\).+$'
+  authority_reading_binding:
+    type: object
+    additionalProperties: false
+    required: [path, mode, blob, digest]
+    properties:
+      path: {$ref: '#/$defs/repository_path'}
+      mode: {type: string, enum: ["100644", "100755"]}
+      blob: {$ref: '#/$defs/hex40'}
+      digest: {$ref: '#/$defs/digest'}
+  design_feedback_record:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - path
+      - digest
+      - status
+      - implementation_disposition
+      - review_status
+      - resolution_refs
+    properties:
+      id: {const: DF-0261}
+      path:
+        const: docs/development/implementation-learning/records/df-0261-source-closure-vfs.md
+      digest: {$ref: '#/$defs/digest'}
+      status: {const: proposed}
+      implementation_disposition: {const: blocked}
+      review_status: {const: pending}
+      resolution_refs:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/repository_path'}
+  capability:
+    type: object
+    additionalProperties: false
+    required: [id, kind, requires, disposition, owner_issue]
+    properties:
+      id: {$ref: '#/$defs/canonical_id'}
+      kind:
+        type: string
+        minLength: 1
+      requires:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/canonical_id'}
+      disposition:
+        enum:
+          - implemented
+          - partial
+          - blocked
+          - missing
+          - tracked-gap
+          - tracked-roadmap
+          - optional-versioned-capability
+          - implementation-tracked
+      owner_issue:
+        type: string
+        pattern: '^#[0-9]+$'

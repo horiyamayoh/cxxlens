@@ -164,6 +164,54 @@ completion commands
 手書き要約を新しい shadow authority にせず、catalog/registry/readiness/issue から生成します。不足 field を agent に推測させず、
 blocked reason として返します。
 
+### Bounded #277 context slice
+
+Issue #277 の最初の disjoint slice は、既存の #261 `first_packet` template を入力として、#275 の
+`cxxlens.ng-use-case-capability-catalog.v1` declaration projection、#276 の constructibility projection、DF-0261 の
+blocked record を同じ exact revision/tree に bind する、schema-first の context/completion-plan projection です。generator
+と schema は `tools/quality/check_ng_agent_context.py` と `schemas/cxxlens_ng_agent_context.schema.yaml` にあります。
+ただし、この #277 出力は machine-readable な開発者向け projection であり、明示的に
+`authority: non-authoritative-projection`、`release_authority: none` です。
+
+```sh
+REV=$(git rev-parse HEAD)
+TREE=$(git rev-parse HEAD^{tree})
+python tools/quality/check_ng_agent_context.py plan \
+  --use-case repository-semantic-query.explain-translation-unit.v1 \
+  --issue 261 --expected-revision "$REV" --expected-tree "$TREE" \
+  --output-json /tmp/cxxlens-ng-agent-context-issue-277.json \
+  --output-markdown /tmp/cxxlens-ng-agent-context-issue-277.md
+python tools/quality/check_ng_agent_context.py check \
+  --use-case repository-semantic-query.explain-translation-unit.v1 \
+  --issue 261 --expected-revision "$REV" --expected-tree "$TREE" \
+  --input-json /tmp/cxxlens-ng-agent-context-issue-277.json
+```
+
+出力は dependency-ordered capability path、preserved semantics、tracked gap の reason/owner/reevaluation
+trigger、completion plan、許可された write path、required evidence、known feedback、実在する authority reading file の
+digest、DF-0261 の path/digest/status/disposition/review/resolution refs、#275/#276 の状態、authority digest、canonical
+digest を保持します。未知の use case、未登録または forward dependency、path overlap、dirty worktree、stale digest、
+constructibility の promotion、machine authority と異なる contract ID は fail closed です。現在、完全な template が
+authority にあるのは #261 だけであり、他の admitted family を推測して packet 化しません。
+
+CI の `quality` workflow は二つの明示的な artifact lane を生成します。`agent-context` job が生成する
+`cxxlens-ng-agent-context-261-${revision}`（`cxxlens-ng-agent-context-issue-261.json/.md`）は Wave 0 readiness の
+authoritative artifact で、required #261/full gate の入力です。一方、独立した
+`agent-context-projection` job が `check_ng_agent_context.py` で生成する
+`cxxlens-ng-agent-context-277-${revision}`（`cxxlens-ng-agent-context-issue-277.json/.md`）は #277 の
+non-authoritative projection です。projection job は authority に `workflow_job: agent-context-projection`、
+`non_gating: true`、`failure_policy: continue-on-error` として記録され、workflow の `continue-on-error: true`、`needs` なし、
+他 job からの依存なしを checker が検証します。したがって projection の失敗は advisory evidence として残りますが、required
+`#261` lane、readiness report、release qualification、issue closure を失敗させません。artifact 名、packet schema、generator、
+consumer を分けることで、二つの generator が同じ authority を曖昧に競合しないようにしています。
+
+`check_ng_agent_context.py` が #277 non-authoritative projection の唯一の producer です。`check_ng_api_development_readiness.py`
+は #261 readiness artifact の authority/generator であり、readiness document と workflow を検証します。#277 projection の出力は
+Issue #261 の source-closure implementation や #276 の constructibility acceptance を進めるものではなく、
+source-closure/VFS、provider qualification、real-project evidence、golden path 評価、`agent-autonomous-completion-rate`
+の測定、Nightly の release qualification は別の accepted slice が必要です。この generator の出力だけで constructible、
+qualified、production-ready を主張してはいけません。
+
 ## Completion checklist
 
 - consumer/use case と capability dependency path を固定した
