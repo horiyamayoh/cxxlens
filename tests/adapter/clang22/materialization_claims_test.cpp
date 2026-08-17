@@ -2298,6 +2298,7 @@ namespace
 					  const validated_task_request&,
 					  const materialization_incremental_task_binding&) override
 		{
+			++reuse_calls;
 			if (request_task_index >= reusable_.size() || !reusable_[request_task_index])
 				return sdk::unexpected(
 					sdk::error{"fixture.incremental-prior-missing", "cache", "deliberate"});
@@ -2363,6 +2364,7 @@ namespace
 		}
 
 		std::size_t calls{};
+		std::size_t reuse_calls{};
 		std::size_t returned_executions{};
 		std::vector<std::size_t> called_indices;
 
@@ -2665,13 +2667,15 @@ namespace
 	[[nodiscard]] v2_1_plan_fixture
 	make_v2_1_plan_fixture(validated_materialization_request_v2_1& request,
 						   const std::array<std::string, 2U>& artifact_digests,
-						   const bool warm_zero)
+						   const bool warm_zero,
+						   const bool corrupt_current = false)
 	{
 		auto first = incremental_state("partition:a");
 		auto second = incremental_state("partition:b");
 		auto current_first = first;
 		if (!warm_zero)
 			current_first.input.source_digest = incremental_digest('e');
+		current_first.corruption_detected = corrupt_current;
 		const std::array candidates{
 			incremental::partition_candidate{current_first, first},
 			incremental::partition_candidate{second, second},
@@ -2771,6 +2775,144 @@ namespace
 					"v2.1 bounded source did not bind the production Store metadata to the exact "
 					"request "
 					"census");
+		}
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 prior-artifact binding admission failed");
+			auto authority = make_materialization_v2_1_claim_authority(
+				*accepted, v2_1_producer_authority(root), guarantee);
+			require(authority.has_value(), "v2.1 prior-artifact binding authority failed");
+			auto binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*authority);
+			require(binding_set.has_value(), "v2.1 prior-artifact binding set failed");
+			auto results = v2_1_reference_results();
+			std::array<std::string, 2U> artifact_digests;
+			for (std::size_t index{}; index < results.size(); ++index)
+			{
+				auto digest = seal_materialization_incremental_artifact_digest(results[index]);
+				require(digest.has_value(), "v2.1 prior-artifact binding digest failed");
+				artifact_digests[index] = std::move(*digest);
+			}
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false);
+			fixture.bindings[1U].partitions.front().prior_artifact->sealed_artifact_digest =
+				"semantic-v2:sha256:" + std::string(64U, 'f');
+			fixture_v2_1_executor executor{
+				*authority, *binding_set, std::move(results), v2_1_receipt_mode::valid};
+			auto outcome =
+				run_materialization_incremental_coordinator_v2_1(*accepted,
+																 fixture.plan,
+																 std::move(fixture.bindings),
+																 executor,
+																 *authority,
+																 *binding_set);
+			require(!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+						outcome.error().field == "prior" &&
+						outcome.error().detail == "artifact-receipt-mismatch" &&
+						executor.execute_calls == 0U && executor.reuse_calls == 0U &&
+						executor.finalize_calls == 0U && executor.called_indices.empty(),
+					"v2.1 earlier recompute ran before a later tampered reuse was rejected");
+		}
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 plan-state mismatch request admission failed");
+			auto authority = make_materialization_v2_1_claim_authority(
+				*accepted, v2_1_producer_authority(root), guarantee);
+			require(authority.has_value(), "v2.1 plan-state mismatch claim authority failed");
+			auto binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*authority);
+			require(binding_set.has_value(), "v2.1 plan-state mismatch binding set failed");
+			auto results = v2_1_reference_results();
+			std::array<std::string, 2U> artifact_digests;
+			for (std::size_t index{}; index < results.size(); ++index)
+			{
+				auto digest = seal_materialization_incremental_artifact_digest(results[index]);
+				require(digest.has_value(), "v2.1 plan-state mismatch artifact digest failed");
+				artifact_digests[index] = std::move(*digest);
+			}
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false);
+			fixture.bindings[0U].partitions.front().current_state =
+				incremental_state("partition:a");
+			fixture_v2_1_executor executor{
+				*authority, *binding_set, std::move(results), v2_1_receipt_mode::valid};
+			auto outcome =
+				run_materialization_incremental_coordinator_v2_1(*accepted,
+																 fixture.plan,
+																 std::move(fixture.bindings),
+																 executor,
+																 *authority,
+																 *binding_set);
+			require(!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+						outcome.error().field == "bindings" &&
+						outcome.error().detail == "plan-state-mismatch" &&
+						executor.execute_calls == 0U && executor.reuse_calls == 0U &&
+						executor.finalize_calls == 0U,
+					"v2.1 plan/state mismatch reached the executor");
+		}
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 corruption admission failed");
+			auto authority = make_materialization_v2_1_claim_authority(
+				*accepted, v2_1_producer_authority(root), guarantee);
+			require(authority.has_value(), "v2.1 corruption authority failed");
+			auto binding_set =
+				seal_materialization_incremental_selected_request_binding_set(*authority);
+			require(binding_set.has_value(), "v2.1 corruption binding set failed");
+			auto results = v2_1_reference_results();
+			std::array<std::string, 2U> artifact_digests;
+			for (std::size_t index{}; index < results.size(); ++index)
+			{
+				auto digest = seal_materialization_incremental_artifact_digest(results[index]);
+				require(digest.has_value(), "v2.1 corruption artifact digest failed");
+				artifact_digests[index] = std::move(*digest);
+			}
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false, true);
+			fixture_v2_1_executor executor{
+				*authority, *binding_set, std::move(results), v2_1_receipt_mode::valid};
+			auto outcome =
+				run_materialization_incremental_coordinator_v2_1(*accepted,
+																 fixture.plan,
+																 std::move(fixture.bindings),
+																 executor,
+																 *authority,
+																 *binding_set);
+			require(!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+						outcome.error().field == "current" &&
+						outcome.error().detail == "corrupt-partition" &&
+						executor.execute_calls == 0U && executor.reuse_calls == 0U &&
+						executor.finalize_calls == 0U,
+					"v2.1 self-consistent corrupted state reached the executor");
+		}
+
+		{
+			auto accepted = validate_v2_1_request_fixture();
+			require(accepted.has_value(), "v2.1 direct cursor admission failed");
+			const std::array<std::string, 2U> artifact_digests{incremental_digest('1'),
+															   incremental_digest('2')};
+			auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false);
+			// The invalid binding is the later task; all bindings must be checked before the
+			// cursor is allowed to hand the first task to the consumer.
+			fixture.bindings[1U].task_identity.provider_task_id += ":late";
+			std::size_t consumer_calls{};
+			auto outcome = run_materialization_incremental_v2_1_task_cursor(
+				*accepted,
+				fixture.plan,
+				std::span<const materialization_incremental_task_binding>{fixture.bindings},
+				[&](const std::size_t,
+					const incremental::action,
+					materialization_v2_1_task_execution&,
+					const materialization_incremental_task_binding&) -> sdk::result<void>
+				{
+					++consumer_calls;
+					return {};
+				});
+			require(
+				!outcome && outcome.error().code == "materialization.incremental-invalid" &&
+					outcome.error().field == "bindings" &&
+					outcome.error().detail == "task-identity-mismatch" && consumer_calls == 0U,
+				"v2.1 direct cursor invoked the consumer before validating a late task identity");
 		}
 
 		{
@@ -3085,6 +3227,56 @@ namespace
 						multi_executor.calls == 0U,
 					"multi-partition exact reuse crossed the provider boundary");
 
+			{
+				auto tampered_prior = seal_all(request);
+				std::vector<materialization_incremental_task_binding> tampered_bindings;
+				auto tampered_first = materialization_incremental_task_binding{
+					incremental_identity(request, 0U),
+					{materialization_incremental_partition_binding{
+						 "partition:a",
+						 std::optional<incremental::partition_state>{first},
+						 std::optional<materialization_incremental_prior_artifact>{
+							 incremental_prior_artifact(first, tampered_prior[0U])}},
+					 materialization_incremental_partition_binding{
+						 "partition:c",
+						 std::optional<incremental::partition_state>{third},
+						 std::optional<materialization_incremental_prior_artifact>{
+							 incremental_prior_artifact(third, tampered_prior[0U])}}}};
+				tampered_first.partitions.back().prior_artifact->sealed_artifact_digest =
+					incremental_digest('f');
+				tampered_bindings.emplace_back(std::move(tampered_first));
+				tampered_bindings.emplace_back(incremental_binding(
+					request,
+					"partition:b",
+					1U,
+					second,
+					second,
+					std::optional<materialization_incremental_prior_artifact>{
+						incremental_prior_artifact(second, tampered_prior[1U])}));
+				fixture_incremental_executor tampered_executor{request,
+															   producer,
+															   guarantee,
+															   false,
+															   false,
+															   false,
+															   1U,
+															   false,
+															   std::move(tampered_prior)};
+				auto tampered =
+					run_materialization_incremental_coordinator(request,
+																*multi_plan,
+																std::move(tampered_bindings),
+																tampered_executor,
+																producer,
+																guarantee);
+				require(!tampered &&
+							tampered.error().code == "materialization.incremental-invalid" &&
+							tampered.error().field == "prior" &&
+							tampered.error().detail == "artifact-receipt-mismatch" &&
+							tampered_executor.calls == 0U,
+						"multi-partition reuse accepted a tampered prior artifact binding");
+			}
+
 			auto changed_first = first;
 			changed_first.input.source_digest = incremental_digest('e');
 			auto changed_third = third;
@@ -3248,6 +3440,54 @@ namespace
 		auto affected_plan = incremental::make_materialization_plan(affected_candidates);
 		require(affected_plan && affected_plan->frontend_provider_executions == 1U,
 				"incremental fixture did not isolate one changed partition");
+
+		{
+			auto tampered_prior = seal_all(request);
+			auto later_tampered =
+				incremental_binding(request,
+									"partition:b",
+									1U,
+									unchanged,
+									second,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(second, tampered_prior[1U])});
+			later_tampered.partitions.front().prior_artifact->sealed_artifact_digest =
+				incremental_digest('f');
+			std::vector<materialization_incremental_task_binding> tampered_bindings;
+			tampered_bindings.emplace_back(std::move(later_tampered));
+			tampered_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:a",
+									0U,
+									changed,
+									first,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(first, tampered_prior[0U])}));
+			fixture_incremental_executor tampered_executor{request,
+														   producer,
+														   guarantee,
+														   false,
+														   false,
+														   false,
+														   1U,
+														   false,
+														   std::move(tampered_prior)};
+			auto tampered =
+				run_materialization_incremental_coordinator(request,
+															*affected_plan,
+															std::move(tampered_bindings),
+															tampered_executor,
+															producer,
+															guarantee);
+			require(!tampered && tampered.error().code == "materialization.incremental-invalid" &&
+						tampered.error().field == "prior" &&
+						tampered.error().detail == "artifact-receipt-mismatch" &&
+						tampered_executor.calls == 0U && tampered_executor.reuse_calls == 0U &&
+						tampered_executor.returned_executions == 0U &&
+						tampered_executor.called_indices.empty(),
+					"legacy earlier recompute ran before a later tampered reuse was rejected");
+		}
+
 		prior = seal_all(request);
 		std::vector<materialization_incremental_task_binding> affected_bindings;
 		affected_bindings.emplace_back(
@@ -3284,6 +3524,86 @@ namespace
 					affected_executor.calls == 1U &&
 					affected_executor.called_indices == std::vector<std::size_t>{0U},
 				"incremental coordinator executed an unrelated partition or lost order");
+
+		{
+			auto invalid_prior = seal_all(request);
+			std::vector<materialization_incremental_task_binding> invalid_bindings;
+			invalid_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:b",
+									1U,
+									unchanged,
+									second,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(second, invalid_prior[1U])}));
+			invalid_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:a",
+									0U,
+									first,
+									first,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(first, invalid_prior[0U])}));
+			fixture_incremental_executor invalid_executor{request,
+														  producer,
+														  guarantee,
+														  false,
+														  false,
+														  false,
+														  1U,
+														  false,
+														  std::move(invalid_prior)};
+			auto invalid = run_materialization_incremental_coordinator(request,
+																	   *affected_plan,
+																	   std::move(invalid_bindings),
+																	   invalid_executor,
+																	   producer,
+																	   guarantee);
+			require(!invalid && invalid.error().code == "materialization.incremental-invalid" &&
+						invalid.error().field == "bindings" &&
+						invalid.error().detail == "plan-state-mismatch" &&
+						invalid_executor.calls == 0U,
+					"plan/state mismatch reached the legacy executor");
+		}
+
+		{
+			prior = seal_all(request);
+			auto later_corrupt =
+				incremental_binding(request,
+									"partition:b",
+									1U,
+									unchanged,
+									second,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(second, prior[1U])});
+			later_corrupt.partitions.front().current_state->corruption_detected = true;
+			std::vector<materialization_incremental_task_binding> later_corrupt_bindings;
+			later_corrupt_bindings.emplace_back(std::move(later_corrupt));
+			later_corrupt_bindings.emplace_back(
+				incremental_binding(request,
+									"partition:a",
+									0U,
+									changed,
+									first,
+									std::optional<materialization_incremental_prior_artifact>{
+										incremental_prior_artifact(first, prior[0U])}));
+			fixture_incremental_executor later_corrupt_executor{
+				request, producer, guarantee, false, false, false, 1U, false, std::move(prior)};
+			auto later_corrupt_outcome =
+				run_materialization_incremental_coordinator(request,
+															*affected_plan,
+															std::move(later_corrupt_bindings),
+															later_corrupt_executor,
+															producer,
+															guarantee);
+			require(!later_corrupt_outcome &&
+						later_corrupt_outcome.error().code ==
+							"materialization.incremental-invalid" &&
+						later_corrupt_outcome.error().field == "current" &&
+						later_corrupt_outcome.error().detail == "corrupt-partition" &&
+						later_corrupt_executor.calls == 0U,
+					"late corrupt current state reached the legacy executor");
+		}
 
 		prior = seal_all(request);
 		std::vector<materialization_incremental_task_binding> missing_prior;
