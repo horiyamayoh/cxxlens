@@ -316,6 +316,7 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] const materialization_incremental_execution_census&
 		execution_census() const noexcept;
 		/** Independently replayable D2/D3 event source retained behind sealed spools. */
+		[[nodiscard]] materialization_claim_stream_source* claim_stream() noexcept;
 		[[nodiscard]] const materialization_claim_stream_source* claim_stream() const noexcept;
 
 	  private:

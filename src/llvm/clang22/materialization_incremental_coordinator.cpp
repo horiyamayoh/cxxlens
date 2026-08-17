@@ -912,6 +912,12 @@ namespace cxxlens::detail::clang22::materialization
 		return execution_census_;
 	}
 
+	materialization_claim_stream_source*
+	sealed_materialization_incremental_result::claim_stream() noexcept
+	{
+		return &claim_stream_;
+	}
+
 	const materialization_claim_stream_source*
 	sealed_materialization_incremental_result::claim_stream() const noexcept
 	{

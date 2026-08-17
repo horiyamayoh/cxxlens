@@ -2076,6 +2076,10 @@ int main(const int argc, char**)
 	}
 	if (!journal->complete_store_preparation())
 		return no_response();
+	if (auto released =
+			coordinated->claim_stream()->release_replay_payloads_after_store_preparation();
+		!released)
+		return no_response();
 	auto prepublication = prepare_public_materialization_prepublication_projection(
 		*request,
 		*observed,
