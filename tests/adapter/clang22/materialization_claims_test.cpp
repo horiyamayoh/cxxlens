@@ -2249,7 +2249,7 @@ namespace
 				"claim stream source did not replay the sealed event boundary");
 		auto released = source->release_replay_payloads_after_store_preparation();
 		require(released.has_value(), "claim stream payload release rejected the first release");
-		require(source->materialization_request_id() == *request_id &&
+		require(source->materialization_request_id() == request_id &&
 					source->task_count() == retained_receipts.size() &&
 					source->partition_count() == request.tasks.size(),
 				"claim stream payload release discarded request or census identity");
@@ -2262,7 +2262,7 @@ namespace
 				"claim stream payload release discarded retained task authority");
 		}
 		auto retained_authority_valid = validate_materialization_store_external_authority(
-			materialization_store_external_authority{&*source, &*journal});
+			materialization_store_external_authority{&*source, &*journal, *request_binding});
 		require(retained_authority_valid.has_value(),
 				"Store authority could not validate retained metadata after payload release");
 		require(!validate_materialization_store_external_authority(tampered_authority),
