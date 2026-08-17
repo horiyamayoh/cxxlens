@@ -1,0 +1,130 @@
+name: Apply issue 261 CI root repair
+
+on:
+  push:
+    branches:
+      - agent/issue-261-source-closure-vfs-implementation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-261-ci-root-repair
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: agent/issue-261-source-closure-vfs-implementation
+          fetch-depth: 0
+      - name: Apply the bounded repair and publish one checkpoint
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          report = Path("src/llvm/clang22/materialization_public_report.cpp")
+          source = report.read_text(encoding="utf-8")
+          if "std::optional<std::string> capacity_guarantee_digest;" not in source:
+              source = source.replace(
+                  "\t\t\tstd::optional<json_value> base_claims;\n"
+                  "\t\t\tstd::optional<json_value> side_channels;\n"
+                  "\t\t\tif (has_task_reports)\n",
+                  "\t\t\tstd::optional<json_value> base_claims;\n"
+                  "\t\t\tstd::optional<json_value> side_channels;\n"
+                  "\t\t\tstd::optional<std::string> capacity_guarantee_digest;\n"
+                  "\t\t\tif (has_task_reports)\n",
+                  1,
+              )
+              marker = (
+                  "\t\t\t\tif (guarantee_digest == nullptr || guarantee_digest->as_string() == nullptr)\n"
+                  "\t\t\t\t\treturn sdk::unexpected(\n"
+                  "\t\t\t\t\t\t{\"materialization.report-invalid\", \"side_channels.guarantee\", \"digest\"});\n"
+                  "\t\t\t\tauto base = base_claims_json(\n"
+              )
+              replacement = (
+                  "\t\t\t\tif (guarantee_digest == nullptr || guarantee_digest->as_string() == nullptr)\n"
+                  "\t\t\t\t\treturn sdk::unexpected(\n"
+                  "\t\t\t\t\t\t{\"materialization.report-invalid\", \"side_channels.guarantee\", \"digest\"});\n"
+                  "\t\t\t\tcapacity_guarantee_digest = *guarantee_digest->as_string();\n"
+                  "\t\t\t\tauto base = base_claims_json(\n"
+              )
+              if marker not in source:
+                  raise SystemExit("capacity guarantee capture insertion point not found")
+              source = source.replace(marker, replacement, 1)
+              old = (
+                  "\t\t\tif (!task_results || !side_channels)\n"
+                  "\t\t\t\treturn sdk::unexpected({\"materialization.report-invalid\",\n"
+                  "\t\t\t\t\t\t\t\t\t\t\"report.capacity\",\n"
+                  "\t\t\t\t\t\t\t\t\t\t\"task-authority-required\"});\n"
+                  "\t\t\tconst auto* guarantee = side_channels->member(\"guarantee\");\n"
+                  "\t\t\tconst auto* guarantee_digest =\n"
+                  "\t\t\t\tguarantee == nullptr ? nullptr : guarantee->member(\"digest\");\n"
+                  "\t\t\tif (guarantee_digest == nullptr || guarantee_digest->as_string() == nullptr)\n"
+                  "\t\t\t\treturn sdk::unexpected(\n"
+                  "\t\t\t\t\t{\"materialization.report-invalid\", \"side_channels.guarantee\", \"digest\"});\n"
+                  "\t\t\tauto stages =\n"
+                  "\t\t\t\tclaim_stages_json(task_results->results, *store, *guarantee_digest->as_string());\n"
+              )
+              new = (
+                  "\t\t\tif (!task_results || !capacity_guarantee_digest)\n"
+                  "\t\t\t\treturn sdk::unexpected({\"materialization.report-invalid\",\n"
+                  "\t\t\t\t\t\t\t\t\t\t\"report.capacity\",\n"
+                  "\t\t\t\t\t\t\t\t\t\t\"task-authority-required\"});\n"
+                  "\t\t\tauto stages = claim_stages_json(\n"
+                  "\t\t\t\ttask_results->results, *store, *capacity_guarantee_digest);\n"
+              )
+              if old not in source:
+                  raise SystemExit("moved side-channel access block not found")
+              source = source.replace(old, new, 1)
+              report.write_text(source, encoding="utf-8")
+
+          tests = Path("tests/CMakeLists.txt")
+          source = tests.read_text(encoding="utf-8")
+          if "matching the sealed worker" not in source:
+              old = (
+                  "target_link_libraries(cxxlens-clang22-source-closure-native\n"
+                  "                      PRIVATE cxxlens_clang22_worker_core)\n"
+                  "add_test(NAME adapter.clang22-source-closure-native\n"
+              )
+              new = (
+                  "target_link_libraries(cxxlens-clang22-source-closure-native\n"
+                  "                      PRIVATE cxxlens_clang22_worker_core)\n"
+                  "if(CXXLENS_BUILD_SHARED)\n"
+                  "  # The worker-private provider SDK is a static closure.  Its provider.cpp\n"
+                  "  # references hidden transcript/runtime definitions that cannot be resolved\n"
+                  "  # from the public shared SDK.  Place the exact private runtime objects on the\n"
+                  "  # final native-fixture link after that closure, matching the sealed worker.\n"
+                  "  target_sources(\n"
+                  "    cxxlens-clang22-source-closure-native\n"
+                  "    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)\n"
+                  "endif()\n"
+                  "add_test(NAME adapter.clang22-source-closure-native\n"
+              )
+              if old not in source:
+                  raise SystemExit("native fixture link insertion point not found")
+              tests.write_text(source.replace(old, new, 1), encoding="utf-8")
+          PY
+
+          python3 tools/quality/check_documentation_consistency.py generate --root .
+          python3 tools/quality/verify_checksums.py generate --root .
+          python3 tools/quality/check_documentation_consistency.py check --root .
+          python3 tools/quality/verify_checksums.py check --root .
+          git diff --check
+
+          if git diff --quiet; then
+            echo "repair already present"
+            exit 0
+          fi
+          git config user.name horiyamayoh
+          git config user.email 44720751+horiyamayoh@users.noreply.github.com
+          git add src/llvm/clang22/materialization_public_report.cpp \
+                  tests/CMakeLists.txt \
+                  schemas/cxxlens_asset_migration_ledger.json \
+                  docs/design/SHA256SUMS \
+                  .github/workflows/issue-261-ci-root-repair.yml
+          git commit -m "Repair #261 checkpoint CI roots"
+          git push origin HEAD:agent/issue-261-source-closure-vfs-implementation
