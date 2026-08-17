@@ -5645,6 +5645,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         )
         postpublication_prefix = source[publication:guarded_setup]
         guarded_body = source[guarded_setup:bad_alloc_catch]
+        prepublication_prefix = source[:publication]
         self.assertNotIn(
             "public_materialization_success_report_input public_input;",
             postpublication_prefix,
@@ -5657,10 +5658,13 @@ class NgClang22MaterializationTests(unittest.TestCase):
         self.assertNotIn("utc_now()", postpublication_prefix)
         self.assertIn(
             "materialization_execution_census_projection(execution_census)",
+            prepublication_prefix,
+        )
+        self.assertIn(
+            'public_input.projections.values.emplace("incremental_execution", *execution_projection);',
             guarded_body,
         )
-        self.assertIn("projections.values.emplace", guarded_body)
-        self.assertIn("public_input.generated_at = utc_now();", guarded_body)
+        self.assertIn("public_input.generated_at = generated_at;", guarded_body)
 
         for name in (
             "postpublication_allocation_error",
@@ -5692,6 +5696,64 @@ class NgClang22MaterializationTests(unittest.TestCase):
         self.assertNotIn(
             '{"materialization.report-invalid", "postpublication", "exception"}',
             unknown_body,
+        )
+
+    def test_prepublication_capacity_is_consumed_before_publication_boundary(self) -> None:
+        source = (ROOT / "tools/clang22/materialize_main.cpp").read_text(
+            encoding="utf-8"
+        )
+        report_source = (
+            ROOT / "src/llvm/clang22/materialization_public_report.cpp"
+        ).read_text(encoding="utf-8")
+        derived_capacity = source.index(
+            "derive_public_materialization_capacity_projection("
+        )
+        checked_capacity = source.index(
+            "check_public_materialization_capacity_reservation(report_limits"
+        )
+        consume = source.index(
+            "prepublication->consume_reserved_capacity(*capacity_reservation)"
+        )
+        publication_gate = source.index(
+            "if (!begin_production_publication_gate())"
+        )
+        publication_attempt = source.index(
+            "auto postpublication = std::move(*journal).begin_publication();"
+        )
+        self.assertLess(
+            derived_capacity,
+            checked_capacity,
+            "capacity must be derived from the actual prepublication projection first",
+        )
+        self.assertLess(
+            checked_capacity,
+            consume,
+            "the independently checked capacity proof must precede consumption",
+        )
+        self.assertLess(
+            consume,
+            publication_gate,
+            "prepublication capacity must be consumed before the publication gate",
+        )
+        self.assertLess(
+            publication_gate,
+            publication_attempt,
+            "publication gate must precede the Store publication attempt",
+        )
+        self.assertIn(
+            "public_input.capacity_reservation = &*capacity_reservation;",
+            source,
+            "the post-publication builder must receive the checked capacity proof",
+        )
+        self.assertIn(
+            '"reservation-not-consumed"',
+            report_source,
+            "success report builder must reject an unconsumed reservation",
+        )
+        self.assertIn(
+            '"already-consumed"',
+            report_source,
+            "capacity consumption must be single-use",
         )
 
     def test_machine_contract_requires_bounded_two_phase_report_lifecycle(self) -> None:

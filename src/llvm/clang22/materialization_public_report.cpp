@@ -3515,6 +3515,219 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<json_value>
+		store_projection_for_capacity_json(const prevalidated_materialization_request_v2_1& request,
+										   claim_report_source& claims,
+										   const sdk::snapshot_series_selector& selector_value,
+										   const sdk::snapshot_manifest& candidate_manifest)
+		{
+			auto selector = selector_json(selector_value);
+			if (!selector)
+				return sdk::unexpected(std::move(selector.error()));
+			auto direct_input = sdk::claim_input_basis_digest(
+				sdk::direct_claim_basis{std::string{claims.direct_basis_digest()}});
+			if (!direct_input)
+				return sdk::unexpected(std::move(direct_input.error()));
+
+			std::vector<materialization_claim_envelope> envelopes;
+			if (auto replayed = claims.replay_claim_envelopes(
+					[&](const materialization_claim_envelope& envelope) -> sdk::result<void>
+					{
+						envelopes.push_back(envelope);
+						return {};
+					});
+				!replayed)
+				return sdk::unexpected(std::move(replayed.error()));
+			std::ranges::sort(envelopes,
+							  [](const auto& left, const auto& right)
+							  {
+								  return left.claim_ref < right.claim_ref;
+							  });
+			json_value::array_type envelope_values;
+			std::map<std::string, std::pair<std::string, std::string>, std::less<>> rows;
+			for (const auto& envelope : envelopes)
+			{
+				auto value = claim_envelope_json(envelope);
+				if (!value)
+					return sdk::unexpected(std::move(value.error()));
+				envelope_values.push_back(std::move(*value));
+				auto [found, inserted] = rows.emplace(
+					envelope.row_ref,
+					std::pair{envelope.value.descriptor, envelope.value.row.canonical_form()});
+				if (!inserted &&
+					found->second !=
+						std::pair{envelope.value.descriptor, envelope.value.row.canonical_form()})
+					return sdk::unexpected({"materialization.report-invalid",
+											"store.claim_rows",
+											"row-ref-collision"});
+			}
+			json_value::array_type row_values;
+			for (const auto& [row_ref, identity] : rows)
+				row_values.push_back(
+					make_object({{"row_ref", text_value(row_ref)},
+								 {"descriptor_id", text_value(identity.first)},
+								 {"row_canonical_form", text_value(identity.second)}})
+						.value());
+
+			json_value::array_type edge_values;
+			std::vector<materialization_canonicalization_edge> edges;
+			if (auto replayed = claims.replay_canonicalization_edges(
+					[&](const materialization_canonicalization_edge& edge) -> sdk::result<void>
+					{
+						edges.push_back(edge);
+						return {};
+					});
+				!replayed)
+				return sdk::unexpected(std::move(replayed.error()));
+			std::ranges::sort(edges,
+							  [](const auto& left, const auto& right)
+							  {
+								  return std::tie(left.precursor_claim_ref,
+												  left.final_claim_ref,
+												  left.transform_semantics) <
+									  std::tie(right.precursor_claim_ref,
+											   right.final_claim_ref,
+											   right.transform_semantics);
+							  });
+			for (const auto& edge : edges)
+				edge_values.push_back(
+					make_object({{"precursor_claim_ref", text_value(edge.precursor_claim_ref)},
+								 {"final_claim_ref", text_value(edge.final_claim_ref)},
+								 {"transform_semantics", text_value(edge.transform_semantics)}})
+						.value());
+
+			json_value::array_type association_values;
+			std::vector<materialization_origin_association> associations;
+			if (auto replayed = claims.replay_origin_associations(
+					[&](const materialization_origin_association& association) -> sdk::result<void>
+					{
+						associations.push_back(association);
+						return {};
+					});
+				!replayed)
+				return sdk::unexpected(std::move(replayed.error()));
+			std::ranges::sort(associations,
+							  [](const auto& left, const auto& right)
+							  {
+								  return left.association_id < right.association_id;
+							  });
+			for (const auto& association : associations)
+			{
+				auto context = task_context_json(association.originating_task);
+				if (!context)
+					return sdk::unexpected(std::move(context.error()));
+				association_values.push_back(
+					make_object({{"association_id", text_value(association.association_id)},
+								 {"stored_claim_ref", text_value(association.stored_claim_ref)},
+								 {"originating_task", std::move(*context)},
+								 {"sealed_row_digest", text_value(association.sealed_row_digest)},
+								 {"source_evidence_digest",
+								  association.source_evidence_digest
+									  ? text_value(*association.source_evidence_digest)
+									  : json_value::null()}})
+						.value());
+			}
+
+			auto batch_status = claims.status();
+			if (!batch_status)
+				return sdk::unexpected(std::move(batch_status.error()));
+			std::vector<std::string> final_refs;
+			std::set<std::string, std::less<>> final_contents;
+			for (const auto& envelope : envelopes)
+				if (envelope.role == "stored_final")
+				{
+					final_refs.push_back(envelope.claim_ref);
+					final_contents.insert(envelope.value.content);
+				}
+			std::ranges::sort(final_refs);
+			if (final_refs.size() != batch_status->claim_count ||
+				batch_status->content_digest.empty() || batch_status->unresolved_count != 0U ||
+				batch_status->conflict_count != 0U ||
+				batch_status->differential_disagreement_count != 0U)
+				return sdk::unexpected({"materialization.report-invalid",
+										"store.claim_batch_validation",
+										"census-mismatch"});
+			json_value::array_type final_ref_values;
+			for (const auto& ref : final_refs)
+				final_ref_values.push_back(text_value(ref));
+			auto claim_batch = make_object({
+				{"contract", text_value("cxxlens.claim-batch.v2")},
+				{"final_claim_refs", json_value::array(std::move(final_ref_values))},
+				{"sdk_claim_occurrence_count",
+				 json_value::unsigned_integer(batch_status->claim_count)},
+				{"unique_claim_content_count", json_value::unsigned_integer(final_contents.size())},
+				{"unresolved_count", json_value::unsigned_integer(batch_status->unresolved_count)},
+				{"conflict_count", json_value::unsigned_integer(batch_status->conflict_count)},
+				{"differential_disagreement_count",
+				 json_value::unsigned_integer(batch_status->differential_disagreement_count)},
+				{"content_digest", text_value(batch_status->content_digest)},
+			});
+			if (!claim_batch)
+				return sdk::unexpected(std::move(claim_batch.error()));
+
+			json_value::array_type partition_values;
+			std::set<std::string, std::less<>> partition_ids;
+			std::size_t partition_count{};
+			auto replayed_partitions = claims.replay_partitions(
+				request.engine(),
+				[&](const materialization_claim_partition& partition) -> sdk::result<void>
+				{
+					if (!partition_ids.insert(partition.manifest.partition_id).second)
+						return sdk::unexpected(
+							{"materialization.report-invalid", "store.partitions", "duplicate"});
+					if (!std::ranges::any_of(candidate_manifest.partitions,
+											 [&](const sdk::partition_manifest& value)
+											 {
+												 return value == partition.manifest;
+											 }))
+						return sdk::unexpected({"materialization.report-invalid",
+												"store.snapshot_manifest",
+												"partition-mismatch"});
+					auto value = partition_json(partition);
+					if (!value)
+						return sdk::unexpected(std::move(value.error()));
+					partition_values.push_back(std::move(*value));
+					++partition_count;
+					return {};
+				});
+			if (!replayed_partitions)
+				return sdk::unexpected(std::move(replayed_partitions.error()));
+			if (partition_values.empty() || partition_count != batch_status->partition_count ||
+				candidate_manifest.partitions.size() != partition_count)
+				return sdk::unexpected({"materialization.report-invalid",
+										"store.snapshot_manifest",
+										"partition-count"});
+			auto manifest = snapshot_manifest_json(candidate_manifest);
+			if (!manifest)
+				return sdk::unexpected(std::move(manifest.error()));
+
+			auto direct_basis = make_object({
+				{"projection_version",
+				 text_value("cxxlens.clang22-direct-materialization-basis.v1")},
+				{"materializer_semantics_digest",
+				 text_value(claims.materializer_semantics_digest())},
+				{"basis_digest", text_value(claims.direct_basis_digest())},
+				{"producer_input_basis_digest", text_value(*direct_input)},
+				{"canonical_adoption_transform_digest",
+				 text_value(claims.canonical_adoption_transform_digest())},
+				{"base_ingestion_transform_digest",
+				 text_value(claims.base_ingestion_transform_digest())},
+			});
+			if (!direct_basis)
+				return sdk::unexpected(std::move(direct_basis.error()));
+			return make_object({
+				{"selector", std::move(*selector)},
+				{"direct_basis", std::move(*direct_basis)},
+				{"claim_rows", json_value::array(std::move(row_values))},
+				{"claim_envelopes", json_value::array(std::move(envelope_values))},
+				{"canonicalization_edges", json_value::array(std::move(edge_values))},
+				{"origin_associations", json_value::array(std::move(association_values))},
+				{"claim_batch_validation", std::move(*claim_batch)},
+				{"partitions", json_value::array(std::move(partition_values))},
+				{"snapshot_manifest", std::move(*manifest)},
+			});
+		}
+
+		[[nodiscard]] sdk::result<json_value>
 		claim_stages_json(const json_value& task_results,
 						  const json_value& store,
 						  const std::string_view guarantee_digest)
@@ -4858,17 +5071,197 @@ namespace cxxlens::detail::clang22::materialization
 			worker.installed_binary_digest, *worker_digest, "installation.worker");
 	}
 
+	public_materialization_capacity_reservation::public_materialization_capacity_reservation(
+		const std::size_t reserved_bytes, std::string proof_digest) noexcept
+		: reserved_bytes_(reserved_bytes), proof_digest_(std::move(proof_digest))
+	{
+	}
+
+	public_materialization_capacity_reservation::public_materialization_capacity_reservation(
+		public_materialization_capacity_reservation&& other) noexcept
+		: reserved_bytes_(other.reserved_bytes_), proof_digest_(std::move(other.proof_digest_))
+	{
+		other.reserved_bytes_ = 0U;
+		other.proof_digest_.clear();
+	}
+
+	public_materialization_capacity_reservation&
+	public_materialization_capacity_reservation::operator=(
+		public_materialization_capacity_reservation&& other) noexcept
+	{
+		if (this != &other)
+		{
+			reserved_bytes_ = other.reserved_bytes_;
+			proof_digest_ = std::move(other.proof_digest_);
+			other.reserved_bytes_ = 0U;
+			other.proof_digest_.clear();
+		}
+		return *this;
+	}
+
+	public_materialization_prepublication_projection::
+		public_materialization_prepublication_projection(std::string binding_digest,
+														 std::string request_digest,
+														 std::string semantic_request_digest,
+														 std::string occurrence_inventory_digest,
+														 const std::uint64_t task_count,
+														 const std::size_t reserved_bytes,
+														 std::string capacity_proof_digest)
+		: binding_digest_(std::move(binding_digest)), request_digest_(std::move(request_digest)),
+		  semantic_request_digest_(std::move(semantic_request_digest)),
+		  occurrence_inventory_digest_(std::move(occurrence_inventory_digest)),
+		  task_count_(task_count), reserved_bytes_(reserved_bytes),
+		  capacity_proof_digest_(std::move(capacity_proof_digest))
+	{
+	}
+
+	void public_materialization_prepublication_projection::issue_capability()
+	{
+		issued_capability_ = std::make_unique<issued_capability>();
+	}
+
+#if defined(CXXLENS_CLANG22_MATERIALIZATION_REPORT_TESTING)
+	public_materialization_prepublication_projection
+	public_materialization_prepublication_projection::make_for_testing(
+		std::string binding_digest,
+		std::string request_digest,
+		std::string semantic_request_digest,
+		std::string occurrence_inventory_digest,
+		const std::uint64_t task_count,
+		const std::size_t reserved_bytes,
+		std::string capacity_proof_digest,
+		const bool issue_capability)
+	{
+		auto projection =
+			public_materialization_prepublication_projection{std::move(binding_digest),
+															 std::move(request_digest),
+															 std::move(semantic_request_digest),
+															 std::move(occurrence_inventory_digest),
+															 task_count,
+															 reserved_bytes,
+															 std::move(capacity_proof_digest)};
+		if (issue_capability)
+			projection.issue_capability();
+		return projection;
+	}
+#endif
+
+	sdk::result<public_materialization_capacity_reservation>
+	check_public_materialization_capacity_reservation(
+		const detailed_report_limits& limits,
+		const public_materialization_capacity_projection& projection)
+	{
+		const detailed_report_limits authority{};
+		if (limits.max_tasks != authority.max_tasks ||
+			limits.max_batches_per_task != authority.max_batches_per_task ||
+			limits.max_chunks_per_batch != authority.max_chunks_per_batch ||
+			limits.max_side_channel_records != authority.max_side_channel_records ||
+			limits.max_string_bytes != authority.max_string_bytes ||
+			limits.max_projection_bytes != authority.max_projection_bytes)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "authority-profile"});
+		if (projection.publication_independent_digest.empty() ||
+			projection.publication_independent_bytes == 0U ||
+			projection.bounded_postpublication_tail_bytes == 0U)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "projection-empty"});
+		if (projection.publication_independent_bytes >
+			std::numeric_limits<std::size_t>::max() - projection.bounded_postpublication_tail_bytes)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "capacity-overflow"});
+		const auto checked_total = projection.publication_independent_bytes +
+			projection.bounded_postpublication_tail_bytes;
+		if (checked_total > limits.max_projection_bytes)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "capacity-exceeded"});
+		try
+		{
+			std::vector<sdk::canonical_value> proof_fields{
+				sdk::canonical_value::from_string(std::to_string(limits.max_tasks)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_batches_per_task)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_chunks_per_batch)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_side_channel_records)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_string_bytes)),
+				sdk::canonical_value::from_string(std::to_string(limits.max_projection_bytes)),
+				sdk::canonical_value::from_string(
+					std::to_string(projection.publication_independent_bytes)),
+				sdk::canonical_value::from_string(
+					std::to_string(projection.bounded_postpublication_tail_bytes)),
+				sdk::canonical_value::from_string(std::to_string(checked_total)),
+				sdk::canonical_value::from_string(projection.publication_independent_digest)};
+			auto proof = sdk::canonical_identity_digest(
+				"cxxlens.clang22.materialization-report-capacity.v2", proof_fields);
+			if (!proof)
+				return sdk::unexpected(std::move(proof.error()));
+			return public_materialization_capacity_reservation{limits.max_projection_bytes,
+															   std::move(*proof)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "proof-allocation"});
+		}
+	}
+
+	sdk::result<void> public_materialization_prepublication_projection::consume_reserved_capacity(
+		const public_materialization_capacity_reservation& capacity)
+	{
+		if (state_ == lifecycle_state::consumed)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "already-consumed"});
+		if (capacity_proof_digest_.empty() || capacity.proof_digest().empty())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "proof-empty"});
+		if (reserved_bytes_ == 0U || capacity.reserved_bytes() == 0U)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "zero-reservation"});
+		if (reserved_bytes_ != capacity.reserved_bytes() ||
+			capacity_proof_digest_ != capacity.proof_digest())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "reservation-mismatch"});
+		if (!issued_capability_)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "unissued-capability"});
+		state_ = lifecycle_state::consumed;
+		return {};
+	}
+
+	sdk::result<void> public_materialization_prepublication_projection::validate_reserved_capacity(
+		const public_materialization_capacity_reservation& capacity,
+		const std::size_t maximum_report_bytes) const
+	{
+		if (maximum_report_bytes == 0U || reserved_bytes_ == 0U || capacity.reserved_bytes() == 0U)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "zero-reservation"});
+		if (capacity_proof_digest_.empty() || capacity.proof_digest().empty())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "proof-empty"});
+		if (maximum_report_bytes != capacity.reserved_bytes() ||
+			reserved_bytes_ != capacity.reserved_bytes() ||
+			capacity_proof_digest_ != capacity.proof_digest())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "reservation-mismatch"});
+		if (state_ != lifecycle_state::consumed)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "reservation-not-consumed"});
+		if (!issued_capability_)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "unissued-capability"});
+		return {};
+	}
+
 	sdk::result<public_materialization_prepublication_projection>
 	prepare_public_materialization_prepublication_projection(
 		const validated_materialization_request_v2_1& request,
 		const raw_input_observation& raw_input,
 		const materialization_occurrence_manifest& occurrence_manifest,
 		const materialization_occurrence_receipt& occurrence_receipt,
-		const std::size_t maximum_report_bytes)
+		const public_materialization_capacity_reservation& capacity)
 	{
 		try
 		{
-			if (maximum_report_bytes == 0U || raw_input.byte_limit == 0U || !raw_input.complete ||
+			if (capacity.reserved_bytes() == 0U || capacity.proof_digest().empty() ||
+				raw_input.byte_limit == 0U || !raw_input.complete ||
 				raw_input.observed_size_bytes > raw_input.byte_limit ||
 				raw_input.observed_prefix_digest.empty())
 				return sdk::unexpected(
@@ -4899,18 +5292,22 @@ namespace cxxlens::detail::clang22::materialization
 				sdk::canonical_value::from_string(occurrence_manifest.occurrence_payload_digest),
 				sdk::canonical_value::from_string(occurrence_manifest.inventory_digest),
 				sdk::canonical_value::from_string(std::to_string(task_count)),
-				sdk::canonical_value::from_string(std::to_string(maximum_report_bytes))};
+				sdk::canonical_value::from_string(std::to_string(capacity.reserved_bytes())),
+				sdk::canonical_value::from_string(std::string{capacity.proof_digest()})};
 			auto binding = sdk::canonical_identity_digest(
 				"cxxlens.clang22.prepublication-report.v1", binding_fields);
 			if (!binding)
 				return sdk::unexpected(std::move(binding.error()));
-			return public_materialization_prepublication_projection{
+			auto projection = public_materialization_prepublication_projection{
 				std::move(*binding),
 				identity.request_digest,
 				identity.semantic_request_digest,
 				occurrence_manifest.inventory_digest,
 				task_count,
-				maximum_report_bytes};
+				capacity.reserved_bytes(),
+				std::string{capacity.proof_digest()}};
+			projection.issue_capability();
+			return projection;
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -4944,6 +5341,288 @@ namespace cxxlens::detail::clang22::materialization
 		return fields_;
 	}
 
+	sdk::result<public_materialization_capacity_projection>
+	derive_public_materialization_capacity_projection(
+		const public_materialization_success_report_input& input,
+		const sdk::snapshot_manifest& candidate_manifest)
+	{
+		try
+		{
+			if (input.request == nullptr || input.request_globals == nullptr ||
+				input.raw_input == nullptr || input.occurrence_manifest == nullptr ||
+				input.occurrence_receipt == nullptr ||
+				(input.claims == nullptr && input.bounded_claims == nullptr) ||
+				(input.task_reports != nullptr && input.task_report_spool != nullptr) ||
+				input.generated_at.empty() || !generated_at_is_closed_utc(input.generated_at))
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report.capacity", "missing-authority"});
+			const bool has_task_reports =
+				input.task_reports != nullptr || input.task_report_spool != nullptr;
+			for (const auto& [name, _] : input.projections.values)
+				if (name == "claim_stages" || name == "provenance" || name == "store" ||
+					name == "publication" || name == "semantic_verification")
+					return sdk::unexpected({"materialization.report-invalid",
+											"report.capacity",
+											"publication-dependent-input"});
+
+			const auto& request = input.request->request();
+			claim_report_source claims{input.claims, input.bounded_claims};
+			if (!claims.valid())
+				return sdk::unexpected(
+					{"materialization.report-invalid", "claims", "exactly-one-source-required"});
+			auto claim_status = claims.status();
+			if (!claim_status || claim_status->content_digest.empty() ||
+				claim_status->unresolved_count != 0U || claim_status->conflict_count != 0U ||
+				claim_status->differential_disagreement_count != 0U ||
+				claim_status->partition_count == 0U)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "claims", "not-complete"});
+			if (input.occurrence_manifest->occurrence_payload_digest !=
+					input.occurrence_receipt->occurrence_payload_digest ||
+				input.occurrence_manifest->inventory_digest !=
+					input.occurrence_receipt->inventory_digest ||
+				input.occurrence_receipt->files.empty())
+				return sdk::unexpected({"materialization.report-invalid",
+										"installation.receipt",
+										"manifest-mismatch"});
+
+			std::optional<task_results_projection> task_results;
+			std::optional<json_value> span_validation;
+			std::optional<json_value> base_claims;
+			std::optional<json_value> side_channels;
+			if (has_task_reports)
+			{
+				task_report_source source = input.task_reports != nullptr
+					? task_report_source{*input.task_reports}
+					: task_report_source{*input.task_report_spool};
+				auto projected = project_task_results(source, claims, detailed_report_limits{});
+				if (!projected)
+					return sdk::unexpected(std::move(projected.error()));
+				task_results = std::move(*projected);
+				auto span =
+					span_validation_json(source, request.engine(), detailed_report_limits{});
+				if (!span)
+					return sdk::unexpected(std::move(span.error()));
+				span_validation = std::move(*span);
+				auto channels = side_channels_json(task_results->results, request);
+				if (!channels)
+					return sdk::unexpected(std::move(channels.error()));
+				side_channels = std::move(*channels);
+				const auto* guarantee = side_channels->member("guarantee");
+				const auto* guarantee_digest =
+					guarantee == nullptr ? nullptr : guarantee->member("digest");
+				if (guarantee_digest == nullptr || guarantee_digest->as_string() == nullptr)
+					return sdk::unexpected(
+						{"materialization.report-invalid", "side_channels.guarantee", "digest"});
+				auto base = base_claims_json(
+					source, request, *guarantee_digest->as_string(), detailed_report_limits{});
+				if (!base)
+					return sdk::unexpected(std::move(base.error()));
+				base_claims = std::move(*base);
+			}
+
+			const auto& tool = request.tool();
+			const auto& worker = request.worker();
+			auto raw_input = raw_input_json(*input.raw_input);
+			auto source = source_json(*input.occurrence_manifest);
+			auto bound_request = request_json(*input.request);
+			auto installation = installation_json(
+				tool, worker, *input.occurrence_manifest, *input.occurrence_receipt);
+			auto provider = provider_json(tool, worker);
+			auto project = project_json(request);
+			if (!raw_input || !source || !bound_request || !installation || !provider || !project)
+			{
+				if (!raw_input)
+					return sdk::unexpected(std::move(raw_input.error()));
+				if (!source)
+					return sdk::unexpected(std::move(source.error()));
+				if (!bound_request)
+					return sdk::unexpected(std::move(bound_request.error()));
+				if (!installation)
+					return sdk::unexpected(std::move(installation.error()));
+				if (!provider)
+					return sdk::unexpected(std::move(provider.error()));
+				return sdk::unexpected(std::move(project.error()));
+			}
+
+			std::map<std::string, json_value, utf8_byte_less> fields;
+			fields.emplace("raw_input_observation", std::move(*raw_input));
+			fields.emplace("source", std::move(*source));
+			fields.emplace("request", std::move(*bound_request));
+			fields.emplace("installation", std::move(*installation));
+			fields.emplace("provider", std::move(*provider));
+			fields.emplace("project", std::move(*project));
+			if (task_results)
+			{
+				fields.emplace("task_results", task_results->results);
+				auto adoption = make_object({
+					{"boundary", text_value("sealed-materialization-result")},
+					{"visibility", text_value("tool-private-immutable")},
+					{"state", text_value("sealed")},
+					{"partial_policy", text_value("forbid")},
+					{"all_tasks_mandatory", json_value::boolean(true)},
+					{"all_groups_mandatory", json_value::boolean(true)},
+					{"all_batches_mandatory", json_value::boolean(true)},
+					{"task_result_set_digest", text_value(task_results->result_set_digest)},
+					{"raw_frames",
+					 make_object(
+						 {
+							 {"authority", text_value("diagnostic-only-non-authoritative")},
+							 {"retained", json_value::boolean(false)},
+							 {"frame_count",
+							  json_value::unsigned_integer(task_results->frame_count)},
+							 {"frame_set_digest", text_value(task_results->frame_set_digest)},
+						 })
+						 .value()},
+				});
+				if (!adoption)
+					return sdk::unexpected(std::move(adoption.error()));
+				fields.emplace("adoption", std::move(*adoption));
+				fields.emplace("span_validation", std::move(*span_validation));
+				fields.emplace("base_claims", std::move(*base_claims));
+				fields.emplace("side_channels", std::move(*side_channels));
+			}
+
+			const auto& globals = input.request_globals->root();
+			const auto copy_global = [&](const std::string_view name) -> sdk::result<void>
+			{
+				const auto* value = member(globals, name);
+				if (value == nullptr)
+					return sdk::unexpected(
+						{"materialization.report-invalid", std::string{name}, "missing"});
+				if (!fields.emplace(std::string{name}, *value).second)
+					return sdk::unexpected({"materialization.report-invalid",
+											std::string{name},
+											"duplicate-derived-field"});
+				return {};
+			};
+			const auto* registry = member(globals, "registry");
+			if (registry == nullptr || !is_object(registry))
+				return sdk::unexpected(
+					{"materialization.report-invalid", "registry", "missing-or-not-object"});
+			object registry_projection;
+			for (const auto name : {std::string_view{"authority_registry_digest"},
+									std::string_view{"base_descriptors"},
+									std::string_view{"descriptors"}})
+			{
+				const auto* value = member(*registry, name);
+				if (value == nullptr)
+					return sdk::unexpected(
+						{"materialization.report-invalid", "registry", "missing-member"});
+				registry_projection.emplace(std::string{name}, *value);
+			}
+			auto registry_value = json_value::object(std::move(registry_projection));
+			if (!registry_value || !fields.emplace("registry", std::move(*registry_value)).second)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "registry", "invalid-projection"});
+			for (const auto name : {std::string_view{"engine"},
+									std::string_view{"interpretation_policy"},
+									std::string_view{"trust_policy"}})
+				if (auto copied = copy_global(name); !copied)
+					return sdk::unexpected(std::move(copied.error()));
+
+			auto authority_digests = authority_digests_json(*input.occurrence_receipt);
+			if (!authority_digests)
+				return sdk::unexpected(std::move(authority_digests.error()));
+			if (const auto supplied = input.projections.values.find("authority_digests");
+				supplied != input.projections.values.end())
+			{
+				if (supplied->second != *authority_digests)
+					return sdk::unexpected({"materialization.report-invalid",
+											"authority_digests",
+											"authority-mismatch"});
+			}
+			else
+				fields.emplace("authority_digests", std::move(*authority_digests));
+			for (const auto& [name, value] : input.projections.values)
+				if (!fields.emplace(name, value).second)
+					return sdk::unexpected(
+						{"materialization.report-invalid", name, "duplicate-derived-field"});
+
+			object root{{"schema", string("cxxlens.clang22-materialization-report.v2").value()},
+						{"report_version", string("2.1.0").value()},
+						{"response_kind", string("detailed").value()},
+						{"result", string("passed").value()},
+						{"generated_at", string(input.generated_at).value()},
+						{"process_exit_status", json_value::unsigned_integer(0U)},
+						{"error", json_value::null()}};
+			for (const auto& [name, value] : fields)
+				if (!root.emplace(name, value).second)
+					return sdk::unexpected(
+						{"materialization.report-invalid", name, "duplicate-root-member"});
+			const auto independent_projection =
+				canonical_json(json_value::object(std::move(root)).value());
+			const auto independent_digest = content_digest_text(independent_projection);
+
+			// Store data, claim stages, and provenance are all derived from the sealed candidate
+			// and are therefore measurable before publication.  The remaining semantic-reopen and
+			// exact publication values are bounded from that measured data plus fixed
+			// framing/diagnostics.
+			const auto& capacity_request = request;
+			auto store = store_projection_for_capacity_json(
+				capacity_request, claims, request.publication().selector, candidate_manifest);
+			if (!store)
+				return sdk::unexpected(std::move(store.error()));
+			if (!task_results || !side_channels)
+				return sdk::unexpected({"materialization.report-invalid",
+										"report.capacity",
+										"task-authority-required"});
+			const auto* guarantee = side_channels->member("guarantee");
+			const auto* guarantee_digest =
+				guarantee == nullptr ? nullptr : guarantee->member("digest");
+			if (guarantee_digest == nullptr || guarantee_digest->as_string() == nullptr)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "side_channels.guarantee", "digest"});
+			auto stages =
+				claim_stages_json(task_results->results, *store, *guarantee_digest->as_string());
+			if (!stages)
+				return sdk::unexpected(std::move(stages.error()));
+			auto provenance = provenance_json(*stages);
+			if (!provenance)
+				return sdk::unexpected(std::move(provenance.error()));
+
+			const auto member_bytes = [](const std::string_view name, const json_value& value)
+			{
+				return name.size() + 3U + canonical_json(value).size(); // quoted key, colon, comma
+			};
+			const auto checked_add = [](std::size_t& total, const std::size_t value) noexcept
+			{
+				if (value > std::numeric_limits<std::size_t>::max() - total)
+					return false;
+				total += value;
+				return true;
+			};
+			const auto checked_mul =
+				[](const std::size_t value,
+				   const std::size_t multiplier) noexcept -> std::optional<std::size_t>
+			{
+				if (multiplier != 0U &&
+					value > std::numeric_limits<std::size_t>::max() / multiplier)
+					return std::nullopt;
+				return value * multiplier;
+			};
+			std::size_t tail{};
+			if (!checked_add(tail, member_bytes("store", *store)) ||
+				!checked_add(tail, member_bytes("claim_stages", *stages)) ||
+				!checked_add(tail, member_bytes("provenance", *provenance)))
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report.capacity", "capacity-overflow"});
+			const auto store_bytes = canonical_json(*store).size();
+			const auto semantic_bound = checked_mul(store_bytes, 8U);
+			if (!semantic_bound || !checked_add(tail, *semantic_bound) ||
+				!checked_add(tail, 262144U) || !checked_add(tail, 5U))
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report.capacity", "capacity-overflow"});
+			return public_materialization_capacity_projection{
+				independent_projection.size(), tail, independent_digest};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "allocation"});
+		}
+	}
+
 	sdk::result<public_materialization_success_report_model>
 	build_public_materialization_success_report(
 		const public_materialization_success_report_input& input)
@@ -4961,6 +5640,8 @@ namespace cxxlens::detail::clang22::materialization
 			missing.emplace_back("claims");
 		if (input.store == nullptr)
 			missing.emplace_back("store.observation");
+		if (input.capacity_reservation == nullptr)
+			missing.emplace_back("prepublication_capacity_reservation");
 		if (input.task_reports != nullptr && input.task_report_spool != nullptr)
 			return sdk::unexpected(
 				report_error({public_materialization_report_error_kind::invalid_projection,
@@ -5007,12 +5688,18 @@ namespace cxxlens::detail::clang22::materialization
 							  {},
 							  "report",
 							  "zero-limit"}));
+		if (input.maximum_report_bytes != input.capacity_reservation->reserved_bytes())
+			return sdk::unexpected(
+				report_error({public_materialization_report_error_kind::invalid_projection,
+							  {},
+							  "report.capacity",
+							  "reservation-mismatch"}));
 		auto prepublication =
 			prepare_public_materialization_prepublication_projection(*input.request,
 																	 *input.raw_input,
 																	 *input.occurrence_manifest,
 																	 *input.occurrence_receipt,
-																	 input.maximum_report_bytes);
+																	 *input.capacity_reservation);
 		if (!prepublication || input.prepublication == nullptr ||
 			*prepublication != *input.prepublication)
 			return sdk::unexpected(
@@ -5020,6 +5707,23 @@ namespace cxxlens::detail::clang22::materialization
 							  {},
 							  "prepublication_projection",
 							  "recompute-mismatch"}));
+		auto capacity_state = input.prepublication->validate_reserved_capacity(
+			*input.capacity_reservation, input.maximum_report_bytes);
+		if (!capacity_state)
+			return sdk::unexpected(std::move(capacity_state.error()));
+		if (!input.store->candidate_manifest)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "candidate-missing"});
+		auto measured_capacity = derive_public_materialization_capacity_projection(
+			input, *input.store->candidate_manifest);
+		if (!measured_capacity)
+			return sdk::unexpected(std::move(measured_capacity.error()));
+		auto recomputed_capacity = check_public_materialization_capacity_reservation(
+			detailed_report_limits{}, *measured_capacity);
+		if (!recomputed_capacity ||
+			recomputed_capacity->proof_digest() != input.capacity_reservation->proof_digest())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report.capacity", "projection-mismatch"});
 
 		const auto& request = input.request->request();
 		const auto& tool = request.tool();

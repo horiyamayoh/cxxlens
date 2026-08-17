@@ -821,6 +821,9 @@ cxxlens_add_test_executable(cxxlens-clang22-materialization-report
                             adapter/clang22/materialization_report_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-report
                       PRIVATE cxxlens_clang22_materializer_core)
+target_compile_definitions(
+  cxxlens-clang22-materialization-report
+  PRIVATE CXXLENS_CLANG22_MATERIALIZATION_REPORT_TESTING=1)
 add_test(NAME adapter.clang22-materialization-report
          COMMAND cxxlens-clang22-materialization-report)
 add_test(

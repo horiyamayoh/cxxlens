@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -67,6 +68,19 @@ namespace
 	static_assert(!compact_failure_capable<materialization_postpublication_journal>);
 	static_assert(!std::copy_constructible<detailed_task_report_replayable_spool>);
 	static_assert(std::move_constructible<detailed_task_report_replayable_spool>);
+	static_assert(!std::default_initializable<public_materialization_capacity_reservation>);
+	static_assert(!std::copy_constructible<public_materialization_capacity_reservation>);
+	static_assert(std::move_constructible<public_materialization_capacity_reservation>);
+	static_assert(!std::copy_constructible<public_materialization_prepublication_projection>);
+	static_assert(std::move_constructible<public_materialization_prepublication_projection>);
+	static_assert(!std::constructible_from<public_materialization_prepublication_projection,
+										   std::string,
+										   std::string,
+										   std::string,
+										   std::string,
+										   std::uint64_t,
+										   std::size_t,
+										   std::string>);
 
 	[[nodiscard]] raw_input_observation complete_input()
 	{
@@ -1904,12 +1918,259 @@ namespace
 			"public success report did not admit an explicit unavailable prior-artifact status");
 	}
 
+	void prepublication_capacity_reservation_is_exact_and_single_use()
+	{
+		detailed_report_limits limits;
+		const public_materialization_capacity_projection measured_projection{1U, 1U, "projection"};
+		auto capacity_result =
+			check_public_materialization_capacity_reservation(limits, measured_projection);
+		require(capacity_result.has_value(),
+				"accepted report-limit profile did not mint a capacity proof");
+		auto capacity = std::move(*capacity_result);
+		const auto limit = capacity.reserved_bytes();
+		const auto proof = std::string{capacity.proof_digest()};
+		const auto projection = [&](const std::string& binding,
+									const std::string& request,
+									const std::string& semantic,
+									const std::string& occurrence,
+									const std::uint64_t task_count,
+									const std::size_t reserved_bytes,
+									const std::string& capacity_proof,
+									const bool issue_capability = false)
+		{
+			return public_materialization_prepublication_projection::make_for_testing(
+				binding,
+				request,
+				semantic,
+				occurrence,
+				task_count,
+				reserved_bytes,
+				capacity_proof,
+				issue_capability);
+		};
+		const auto baseline = [&]
+		{
+			return projection("binding", "request", "semantic", "occurrence", 1U, limit, proof);
+		};
+		const auto issued_baseline = [&]
+		{
+			return projection(
+				"binding", "request", "semantic", "occurrence", 1U, limit, proof, true);
+		};
+		const auto require_equality_mutation = [&](auto&& mutated, const std::string_view field)
+		{
+			require(!(baseline() == mutated),
+					"publication-independent equality ignored mutation of " + std::string{field});
+		};
+
+		require_equality_mutation(
+			projection("binding-drift", "request", "semantic", "occurrence", 1U, limit, proof),
+			"binding_digest");
+		require_equality_mutation(
+			projection("binding", "request-drift", "semantic", "occurrence", 1U, limit, proof),
+			"request_digest");
+		require_equality_mutation(
+			projection("binding", "request", "semantic-drift", "occurrence", 1U, limit, proof),
+			"semantic_request_digest");
+		require_equality_mutation(
+			projection("binding", "request", "semantic", "occurrence-drift", 1U, limit, proof),
+			"occurrence_inventory_digest");
+		require_equality_mutation(
+			projection("binding", "request", "semantic", "occurrence", 2U, limit, proof),
+			"task_count");
+		require_equality_mutation(
+			projection("binding", "request", "semantic", "occurrence", 1U, limit + 1U, proof),
+			"reserved_bytes");
+		require_equality_mutation(
+			projection("binding", "request", "semantic", "occurrence", 1U, limit, "proof-drift"),
+			"capacity_proof_digest");
+
+		auto forged = baseline();
+		auto forged_consumed = forged.consume_reserved_capacity(capacity);
+		require(!forged_consumed &&
+					forged_consumed.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "unissued-capability"},
+				"matching forged authority fields crossed the private capability boundary");
+
+		auto unconsumed = issued_baseline();
+		auto unconsumed_state = unconsumed.validate_reserved_capacity(capacity, limit);
+		require(!unconsumed_state &&
+					unconsumed_state.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "reservation-not-consumed"},
+				"the report builder did not reject an unconsumed prepublication projection");
+
+		auto empty_proof =
+			projection("binding", "request", "semantic", "occurrence", 1U, limit, {}, true);
+		auto empty_proof_consumed = empty_proof.consume_reserved_capacity(capacity);
+		require(
+			!empty_proof_consumed &&
+				empty_proof_consumed.error() ==
+					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
+			"capacity consumption accepted an empty projection proof");
+		auto empty_proof_state = empty_proof.validate_reserved_capacity(capacity, limit);
+		require(
+			!empty_proof_state &&
+				empty_proof_state.error() ==
+					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
+			"capacity validation accepted an empty projection proof");
+
+		auto moved_from_capacity_result =
+			check_public_materialization_capacity_reservation(limits, measured_projection);
+		require(moved_from_capacity_result.has_value(),
+				"second capacity proof could not be minted for the moved-from regression");
+		auto moved_to_capacity = std::move(*moved_from_capacity_result);
+		require(moved_to_capacity.reserved_bytes() == limit &&
+					!moved_to_capacity.proof_digest().empty(),
+				"moving a capacity reservation lost its proof");
+		require(moved_from_capacity_result->reserved_bytes() == 0U &&
+					moved_from_capacity_result->proof_digest().empty(),
+				"moved-from capacity reservation retained authority state");
+		auto moved_from_consumed =
+			issued_baseline().consume_reserved_capacity(*moved_from_capacity_result);
+		require(
+			!moved_from_consumed &&
+				moved_from_consumed.error() ==
+					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
+			"capacity consumption accepted a moved-from reservation");
+		auto moved_from_state =
+			issued_baseline().validate_reserved_capacity(*moved_from_capacity_result, limit);
+		require(!moved_from_state &&
+					moved_from_state.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "zero-reservation"},
+				"capacity validation accepted a moved-from reservation");
+
+		auto move_assigned_source_result =
+			check_public_materialization_capacity_reservation(limits, measured_projection);
+		auto move_assigned_destination_result =
+			check_public_materialization_capacity_reservation(limits, measured_projection);
+		require(move_assigned_source_result.has_value() &&
+					move_assigned_destination_result.has_value(),
+				"capacity proofs could not be minted for move-assignment regression");
+		auto move_assigned_source = std::move(*move_assigned_source_result);
+		auto move_assigned_destination = std::move(*move_assigned_destination_result);
+		move_assigned_destination = std::move(move_assigned_source);
+		require(move_assigned_source.reserved_bytes() == 0U &&
+					move_assigned_source.proof_digest().empty(),
+				"move assignment retained source capacity authority");
+		auto move_assigned_consumed =
+			issued_baseline().consume_reserved_capacity(move_assigned_source);
+		require(
+			!move_assigned_consumed &&
+				move_assigned_consumed.error() ==
+					sdk::error{"materialization.report-invalid", "report.capacity", "proof-empty"},
+			"capacity consumption accepted a move-assignment source");
+		auto move_assigned_state =
+			issued_baseline().validate_reserved_capacity(move_assigned_source, limit);
+		require(!move_assigned_state &&
+					move_assigned_state.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "zero-reservation"},
+				"capacity validation accepted a move-assignment source");
+
+		auto proof_mismatch = projection(
+			"binding", "request", "semantic", "occurrence", 1U, limit, "proof-drift", true);
+		auto proof_mismatch_consumed = proof_mismatch.consume_reserved_capacity(capacity);
+		require(!proof_mismatch_consumed &&
+					proof_mismatch_consumed.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "reservation-mismatch"},
+				"capacity consumption accepted a mismatched proof");
+
+		for (const auto attempt : std::array<std::size_t, 4>{0U, limit - 1U, limit, limit + 1U})
+		{
+			auto candidate = projection(
+				"binding", "request", "semantic", "occurrence", 1U, attempt, proof, true);
+			auto consumed = candidate.consume_reserved_capacity(capacity);
+			const bool expected = attempt == limit;
+			require(static_cast<bool>(consumed) == expected,
+					"prepublication capacity accepted the wrong boundary: attempt=" +
+						std::to_string(attempt));
+			require(candidate.reservation_consumed() == expected,
+					"prepublication capacity changed lifecycle state on a rejected boundary");
+			if (!expected)
+			{
+				const auto expected_error = attempt == 0U
+					? sdk::error{"materialization.report-invalid",
+								 "report.capacity",
+								 "zero-reservation"}
+					: sdk::error{"materialization.report-invalid",
+								 "report.capacity",
+								 "reservation-mismatch"};
+				require(consumed.error() == expected_error,
+						"prepublication capacity returned the wrong boundary error");
+			}
+			if (expected)
+			{
+				auto repeated = candidate.consume_reserved_capacity(capacity);
+				require(!repeated &&
+							repeated.error() ==
+								sdk::error{"materialization.report-invalid",
+										   "report.capacity",
+										   "already-consumed"},
+						"prepublication capacity reservation was consumable twice");
+				require(candidate == issued_baseline(),
+						"capacity consumption changed publication-independent authority");
+			}
+		}
+
+		const auto near_limit = public_materialization_capacity_projection{limit - 1U, 1U, "near"};
+		auto near_limit_result =
+			check_public_materialization_capacity_reservation(limits, near_limit);
+		require(near_limit_result.has_value(),
+				"capacity reservation rejected a compositional near-limit projection");
+		const auto overflow_projection = public_materialization_capacity_projection{
+			std::numeric_limits<std::size_t>::max(), 1U, "overflow"};
+		auto overflow_result =
+			check_public_materialization_capacity_reservation(limits, overflow_projection);
+		require(!overflow_result &&
+					overflow_result.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "capacity-overflow"},
+				"capacity reservation did not reject checked size overflow");
+		const auto over_limit_projection =
+			public_materialization_capacity_projection{limit - 1U, 2U, "over-limit"};
+		auto over_limit_result =
+			check_public_materialization_capacity_reservation(limits, over_limit_projection);
+		require(!over_limit_result &&
+					over_limit_result.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "capacity-exceeded"},
+				"capacity reservation accepted a post-publication tail beyond the response limit");
+
+		auto invalid_limits = limits;
+		--invalid_limits.max_projection_bytes;
+		auto rejected_profile =
+			check_public_materialization_capacity_reservation(invalid_limits, measured_projection);
+		require(!rejected_profile &&
+					rejected_profile.error() ==
+						sdk::error{"materialization.report-invalid",
+								   "report.capacity",
+								   "authority-profile"},
+				"capacity proof accepted a non-authoritative report-limit profile");
+	}
+
 	void final_response_spool_is_sealed_before_transport()
 	{
 		const std::string response{
 			R"({"error":null,"process_exit_status":0,"report_version":"2.1.0",)"
 			R"("response_kind":"detailed","result":"passed",)"
 			R"("schema":"cxxlens.clang22-materialization-report.v2"})"};
+		auto zero_limit = stage_public_materialization_final_response(response, 0U);
+		require(!zero_limit &&
+					zero_limit.error() ==
+						sdk::error{
+							"materialization.report-invalid", "report", "final-response-boundary"},
+				"final response spool accepted a zero-byte response limit");
 		auto too_small =
 			stage_public_materialization_final_response(response, response.size() - 1U);
 		require(!too_small &&
@@ -1936,6 +2197,28 @@ namespace
 		auto appended = (*staged)->append(extra);
 		require(!appended && (*staged)->sealed(),
 				"final response spool accepted mutation after seal");
+
+		auto limit_plus_one =
+			stage_public_materialization_final_response(response, response.size() + 1U);
+		require(limit_plus_one && (*limit_plus_one)->sealed(),
+				"final response spool rejected the exact limit-plus-one boundary");
+		for (const auto fragment : std::array<std::size_t, 3>{1U, 3U, 7U})
+		{
+			std::vector<std::byte> fragmented(expected.size());
+			std::size_t offset{};
+			while (offset < fragmented.size())
+			{
+				const auto remaining = fragmented.size() - offset;
+				const auto count = fragment < remaining ? fragment : remaining;
+				auto target = std::span{fragmented}.subspan(offset, count);
+				auto fragmented_read = (*staged)->read_at(offset, target);
+				require(fragmented_read && *fragmented_read == count,
+						"fragmented final-response replay returned a short read");
+				offset += count;
+			}
+			require(fragmented == expected,
+					"fragmented final-response replay changed authoritative bytes");
+		}
 	}
 } // namespace
 
@@ -2009,6 +2292,7 @@ int main(const int argument_count, const char* const* arguments)
 	detailed_report_capacity_reservation_is_compositional_and_closed();
 	public_report_occurrence_binding_rejects_forged_combinations();
 	public_success_report_requires_all_authority_inputs();
+	prepublication_capacity_reservation_is_exact_and_single_use();
 	final_response_spool_is_sealed_before_transport();
 
 	return 0;
