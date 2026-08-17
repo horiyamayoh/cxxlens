@@ -1,5 +1,5 @@
 {
-  "asset_count": 741,
+  "asset_count": 733,
   "assets": [
     {
       "authority": "active",
@@ -52,55 +52,6 @@
     },
     {
       "authority": "active",
-      "path": ".github/workflows/issue-261-ci-root-repair.yml",
-      "removal_issue": null,
-      "replacement": null,
-      "status": "active"
-    },
-    {
-      "authority": "active",
-      "path": ".github/workflows/issue-261-compiler-vfs-check.yml",
-      "removal_issue": null,
-      "replacement": null,
-      "status": "active"
-    },
-    {
-      "authority": "active",
-      "path": ".github/workflows/issue-261-request-v2_2-check.yml",
-      "removal_issue": null,
-      "replacement": null,
-      "status": "active"
-    },
-    {
-      "authority": "active",
-      "path": ".github/workflows/issue-261-source-closure-check.yml",
-      "removal_issue": null,
-      "replacement": null,
-      "status": "active"
-    },
-    {
-      "authority": "active",
-      "path": ".github/workflows/issue-261-task-v4-check.yml",
-      "removal_issue": null,
-      "replacement": null,
-      "status": "active"
-    },
-    {
-      "authority": "active",
-      "path": ".github/workflows/issue-261-task-v4-decode-check.yml",
-      "removal_issue": null,
-      "replacement": null,
-      "status": "active"
-    },
-    {
-      "authority": "active",
-      "path": ".github/workflows/issue-261-worker-check.yml",
-      "removal_issue": null,
-      "replacement": null,
-      "status": "active"
-    },
-    {
-      "authority": "active",
       "path": ".github/workflows/nightly.yml",
       "removal_issue": null,
       "replacement": null,
@@ -116,13 +67,6 @@
     {
       "authority": "active",
       "path": ".github/workflows/quality.yml",
-      "removal_issue": null,
-      "replacement": null,
-      "status": "active"
-    },
-    {
-      "authority": "active",
-      "path": ".github/workflows/source-export-issue-261-implementation.yml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -5190,7 +5134,7 @@
     }
   ],
   "classifications": {
-    "active": 705,
+    "active": 697,
     "archived": 35,
     "generated": 1
   },
