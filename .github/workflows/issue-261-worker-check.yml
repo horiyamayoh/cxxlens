@@ -1,0 +1,37 @@
+name: Issue 261 task v4 worker checkpoint
+
+on:
+  push:
+    branches:
+      - agent/issue-261-source-closure-vfs-implementation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-261-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  task-v4-worker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+          documentation: "false"
+      - name: Configure, build, and run the exact worker checkpoint
+        env:
+          CXX: clang++-22
+        run: |
+          set -euo pipefail
+          cmake -S tests/issue261-worker \
+            -B "${RUNNER_TEMP}/cxxlens-issue-261-worker" -G Ninja \
+            -DCXXLENS_ROOT="${GITHUB_WORKSPACE}" \
+            -DLLVM_DIR=/usr/lib/llvm-22/lib/cmake/llvm \
+            -DClang_DIR=/usr/lib/llvm-22/lib/cmake/clang
+          cmake --build "${RUNNER_TEMP}/cxxlens-issue-261-worker" -j2
+          "${RUNNER_TEMP}/cxxlens-issue-261-worker/cxxlens-issue-261-worker-test"
+      - name: Verify branch diff hygiene
+        run: git diff --check HEAD^ HEAD
