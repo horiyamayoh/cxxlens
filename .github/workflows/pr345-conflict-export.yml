@@ -1,4 +1,4 @@
-name: PR 345 merge-conflict export
+name: PR 345 conflict resolver
 
 on:
   push:
@@ -6,10 +6,11 @@ on:
       - audit/issue-277-agent-context-slice
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  resolve:
+    if: github.repository == 'horiyamayoh/cxxlens' && github.ref_name == 'audit/issue-277-agent-context-slice'
     runs-on: ubuntu-24.04
     steps:
       - name: Check out the complete PR branch
@@ -17,52 +18,138 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Export exact base, ours, theirs, and conflicted worktree
+      - name: Merge current main, reconcile generated authority, validate, and push
         shell: bash
         run: |
           set -euo pipefail
+          git config user.name 'horiyamayoh'
+          git config user.email '44720751+horiyamayoh@users.noreply.github.com'
           git fetch --no-tags origin main
-          branch_sha="$(git rev-parse HEAD)"
           main_sha="$(git rev-parse origin/main)"
 
           set +e
-          git -c user.name='cxxlens conflict exporter' \
-            -c user.email='44720751+horiyamayoh@users.noreply.github.com' \
-            merge --no-commit --no-ff origin/main
+          git merge --no-commit --no-ff origin/main
           merge_status=$?
           set -e
+          if [[ "${merge_status}" -ne 1 ]]; then
+            echo "expected a two-file content conflict, merge status=${merge_status}" >&2
+            exit 1
+          fi
 
-          mkdir -p merge-conflict/stages
-          printf '%s\n' "${branch_sha}" > merge-conflict/branch-sha.txt
-          printf '%s\n' "${main_sha}" > merge-conflict/main-sha.txt
-          printf '%s\n' "${merge_status}" > merge-conflict/merge-status.txt
-          git status --porcelain=v1 > merge-conflict/status.txt
-          git diff --name-only --diff-filter=U > merge-conflict/conflicted-paths.txt
+          mapfile -t conflicts < <(git diff --name-only --diff-filter=U | LC_ALL=C sort)
+          expected=(
+            'docs/design/SHA256SUMS'
+            'schemas/cxxlens_asset_migration_ledger.json'
+          )
+          if [[ "${#conflicts[@]}" -ne "${#expected[@]}" ]]; then
+            printf 'unexpected conflict count: %s\n' "${#conflicts[@]}" >&2
+            printf 'conflict: %s\n' "${conflicts[@]}" >&2
+            exit 1
+          fi
+          for index in "${!expected[@]}"; do
+            if [[ "${conflicts[index]}" != "${expected[index]}" ]]; then
+              printf 'unexpected conflict[%s]: %s\n' "${index}" "${conflicts[index]}" >&2
+              exit 1
+            fi
+          done
 
-          while IFS= read -r path; do
-            [[ -n "${path}" ]] || continue
-            key="$(printf '%s' "${path}" | sha256sum | cut -d' ' -f1)"
-            mkdir -p "merge-conflict/stages/${key}"
-            printf '%s\n' "${path}" > "merge-conflict/stages/${key}/path.txt"
-            git show ":1:${path}" > "merge-conflict/stages/${key}/base" || true
-            git show ":2:${path}" > "merge-conflict/stages/${key}/ours" || true
-            git show ":3:${path}" > "merge-conflict/stages/${key}/theirs" || true
-            cp -- "${path}" "merge-conflict/stages/${key}/with-markers" || true
-          done < merge-conflict/conflicted-paths.txt
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import re
+          import subprocess
 
-          tar --exclude=.git \
-            --exclude=merge-conflict \
-            -czf /tmp/pr345-worktree-with-conflicts.tgz .
-          tar -czf /tmp/pr345-conflict-stages.tgz merge-conflict
-          mv /tmp/pr345-worktree-with-conflicts.tgz .
-          mv /tmp/pr345-conflict-stages.tgz .
+          def stage(stage_number: int, path: str) -> str:
+              return subprocess.check_output(
+                  ["git", "show", f":{stage_number}:{path}"], text=True
+              )
 
-      - name: Upload conflict diagnostics
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: pr345-merge-conflict-${{ github.sha }}
-          path: |
-            pr345-conflict-stages.tgz
-            pr345-worktree-with-conflicts.tgz
-          if-no-files-found: error
-          retention-days: 1
+          ledger_path = "schemas/cxxlens_asset_migration_ledger.json"
+          ours = json.loads(stage(2, ledger_path))
+          theirs = json.loads(stage(3, ledger_path))
+          by_path = {entry["path"]: entry for entry in theirs["assets"]}
+          for entry in ours["assets"]:
+              previous = by_path.get(entry["path"])
+              if previous is not None and previous != entry:
+                  raise SystemExit(f"conflicting ledger entry: {entry['path']}")
+              by_path[entry["path"]] = entry
+          assets = [by_path[path] for path in sorted(by_path)]
+          counts: dict[str, int] = {}
+          for entry in assets:
+              counts[entry["status"]] = counts.get(entry["status"], 0) + 1
+          merged = {
+              "asset_count": len(assets),
+              "assets": assets,
+              "classifications": {
+                  "active": counts.get("active", 0),
+                  "archived": counts.get("archived", 0),
+                  "generated": counts.get("generated", 0),
+              },
+              "document_version": theirs["document_version"],
+              "generated_by": theirs["generated_by"],
+              "schema": theirs["schema"],
+              "source_policy": theirs["source_policy"],
+          }
+          ledger_text = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
+          pathlib.Path(ledger_path).write_text(ledger_text, encoding="utf-8")
+          digest = hashlib.sha256(ledger_text.encode()).hexdigest()
+
+          sums_path = pathlib.Path("docs/design/SHA256SUMS")
+          sums_text = sums_path.read_text(encoding="utf-8")
+          conflict_pattern = re.compile(
+              r"^<<<<<<< HEAD\n"
+              r".*?  \.\./\.\./schemas/cxxlens_asset_migration_ledger\.json\n"
+              r"^=======\n"
+              r".*?  \.\./\.\./schemas/cxxlens_asset_migration_ledger\.json\n"
+              r"^>>>>>>> origin/main\n",
+              re.MULTILINE | re.DOTALL,
+          )
+          replacement = (
+              f"{digest}  ../../schemas/cxxlens_asset_migration_ledger.json\n"
+          )
+          sums_text, replacements = conflict_pattern.subn(replacement, sums_text)
+          if replacements != 1:
+              raise SystemExit(f"unexpected checksum conflict count: {replacements}")
+          sums_path.write_text(sums_text, encoding="utf-8")
+          print(
+              f"merged asset ledger: count={merged['asset_count']} "
+              f"classifications={merged['classifications']} sha256={digest}"
+          )
+          PY
+
+          git add docs/design/SHA256SUMS schemas/cxxlens_asset_migration_ledger.json
+          rm .github/workflows/pr345-conflict-export.yml
+          git add -A
+          if git ls-files -u | grep -q .; then
+            git ls-files -u >&2
+            exit 1
+          fi
+          git diff --cached --check
+          git commit -m "Merge current main into PR #345"
+
+          revision="$(git rev-parse HEAD)"
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          python3 tests/quality/test_ng_agent_context.py
+          python3 tools/quality/check_documentation_consistency.py check --root .
+          python3 tools/quality/verify_checksums.py check --root .
+          python3 tools/quality/check_ng_api_development_readiness.py check \
+            --root . --expected-revision "${revision}"
+          python3 tools/quality/check_ng_agent_context.py plan \
+            --root . \
+            --use-case repository-semantic-query.explain-translation-unit.v1 \
+            --issue 261 \
+            --expected-revision "${revision}" \
+            --expected-tree "${tree}" \
+            --output-json /tmp/cxxlens-ng-agent-context-issue-277.json \
+            --output-markdown /tmp/cxxlens-ng-agent-context-issue-277.md
+          python3 tools/quality/check_ng_agent_context.py check \
+            --root . \
+            --use-case repository-semantic-query.explain-translation-unit.v1 \
+            --issue 261 \
+            --expected-revision "${revision}" \
+            --expected-tree "${tree}" \
+            --input-json /tmp/cxxlens-ng-agent-context-issue-277.json
+
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          printf 'published merge commit %s with main %s\n' "${revision}" "${main_sha}"
