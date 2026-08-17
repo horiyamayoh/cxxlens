@@ -476,8 +476,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
     unit.sdk-provider-runtime-timeout
     PROPERTIES LABELS
                "unit;sdk;provider;process;budget;cancellation;regression"
-               TIMEOUT ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT}
-               SKIP_RETURN_CODE 77)
+               TIMEOUT
+               ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT}
+               SKIP_RETURN_CODE
+               77)
 endif()
 set_tests_properties(unit.sdk-provider-runtime-sealed
                      PROPERTIES LABELS "unit;sdk;provider;sealed;adoption")
