@@ -1,5 +1,5 @@
 {
-  "asset_count": 713,
+  "asset_count": 741,
   "assets": [
     {
       "authority": "active",
@@ -46,6 +46,55 @@
     {
       "authority": "active",
       "path": ".github/dependabot.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/issue-261-ci-root-repair.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/issue-261-compiler-vfs-check.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/issue-261-request-v2_2-check.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/issue-261-source-closure-check.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/issue-261-task-v4-check.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/issue-261-task-v4-decode-check.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/issue-261-worker-check.yml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1942,6 +1991,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_clang22_materialization_scale_evidence.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -2635,6 +2691,34 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/clang_compiler_vfs.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/clang_compiler_vfs.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/compiler_vfs.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/compiler_vfs.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/logical_path_segments.hpp",
       "removal_issue": null,
       "replacement": null,
@@ -2936,6 +3020,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_request_v2_2.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_request_v2_2.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_rooted_vfs.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3063,6 +3161,48 @@
     {
       "authority": "active",
       "path": "src/llvm/clang22/provider_task_v3.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/provider_task_v4.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/provider_task_v4.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/provider_task_v4_decode.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/provider_task_v4_decode.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/provider_task_v4_worker.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/provider_task_v4_worker.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3776,6 +3916,20 @@
     },
     {
       "authority": "active",
+      "path": "tests/adapter/clang22/clang_compiler_vfs_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/compiler_vfs_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/adapter/clang22/df_0200_claim_batch_corpus_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3874,6 +4028,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/adapter/clang22/materialization_request_v2_2_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/adapter/clang22/materialization_rooted_vfs_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3917,6 +4078,27 @@
     {
       "authority": "active",
       "path": "tests/adapter/clang22/provider_normalizer_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/provider_task_v4_decode_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/provider_task_v4_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/provider_task_v4_worker_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4113,6 +4295,20 @@
     {
       "authority": "active",
       "path": "tests/integration/r2_vertical_slice_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/issue261-worker/CMakeLists.txt",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/issue261/CMakeLists.txt",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4994,7 +5190,7 @@
     }
   ],
   "classifications": {
-    "active": 677,
+    "active": 705,
     "archived": 35,
     "generated": 1
   },

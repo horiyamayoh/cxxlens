@@ -897,6 +897,15 @@ cxxlens_add_test_executable(cxxlens-clang22-source-closure-native
                             adapter/clang22/source_closure_native_test.cpp)
 target_link_libraries(cxxlens-clang22-source-closure-native
                       PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  # The worker-private provider SDK is a static closure.  Its provider.cpp
+  # references hidden transcript/runtime definitions that cannot be resolved
+  # from the public shared SDK.  Place the exact private runtime objects on the
+  # final native-fixture link after that closure, matching the sealed worker.
+  target_sources(
+    cxxlens-clang22-source-closure-native
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 add_test(NAME adapter.clang22-source-closure-native
          COMMAND cxxlens-clang22-source-closure-native)
 set_tests_properties(
