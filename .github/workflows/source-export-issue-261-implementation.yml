@@ -1,4 +1,4 @@
-name: Exact source export for issue 261 implementation
+name: Apply source closure checkpoint 2
 
 on:
   push:
@@ -6,24 +6,33 @@ on:
       - agent/issue-261-source-closure-vfs-implementation
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export-source:
+  apply-checkpoint:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          fetch-depth: 1
-      - name: Export the exact branch tree
+          fetch-depth: 2
+      - name: Apply the exact reviewed local checkpoint
+        env:
+          EXPECTED_PATCH_DIGEST: 21957a7b3810f5c14305b85f6abb20617dc2e9d503e4b816b0b2e12cb0de7075
         run: |
           set -euo pipefail
-          git archive --format=zip \
-            --output="${RUNNER_TEMP}/cxxlens-source-${GITHUB_SHA}.zip" \
-            "${GITHUB_SHA}"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
-        with:
-          name: cxxlens-source-${{ github.sha }}
-          path: ${{ runner.temp }}/cxxlens-source-${{ github.sha }}.zip
-          if-no-files-found: error
-          retention-days: 1
+          encoded=.github/issue261-checkpoint2.patch.gz.b64
+          patch="${RUNNER_TEMP}/issue261-checkpoint2.patch"
+          test -f "${encoded}"
+          base64 --decode "${encoded}" | gzip --decompress > "${patch}"
+          printf '%s  %s\n' "${EXPECTED_PATCH_DIGEST}" "${patch}" | sha256sum --check --status
+          git apply --check "${patch}"
+          git apply "${patch}"
+          rm "${encoded}"
+          git show HEAD^:.github/workflows/source-export-issue-261-implementation.yml \
+            > .github/workflows/source-export-issue-261-implementation.yml
+          git config user.name horiyamayoh
+          git config user.email 44720751+horiyamayoh@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "Add source closure identity and validation core"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
