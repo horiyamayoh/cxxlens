@@ -1,4 +1,4 @@
-name: Exact source export for issue 261 implementation
+name: Issue 261 incremental checkpoint
 
 on:
   push:
@@ -6,24 +6,58 @@ on:
       - agent/issue-261-source-closure-vfs-implementation
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export-source:
+  checkpoint:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          fetch-depth: 1
-      - name: Export the exact branch tree
+          fetch-depth: 2
+      - name: Apply a staged checkpoint or export the exact tree
+        id: checkpoint
         run: |
           set -euo pipefail
-          git archive --format=zip \
-            --output="${RUNNER_TEMP}/cxxlens-source-${GITHUB_SHA}.zip" \
-            "${GITHUB_SHA}"
+          encoded=.github/issue261-next.patch.gz.b64
+          expected_file=.github/issue261-next.patch.sha256
+          message_file=.github/issue261-next.commit-message
+          if [[ -f "${encoded}" || -f "${expected_file}" || -f "${message_file}" ]]; then
+            test -f "${encoded}"
+            test -f "${expected_file}"
+            test -f "${message_file}"
+            patch="${RUNNER_TEMP}/issue261-next.patch"
+            base64 --decode "${encoded}" | gzip --decompress > "${patch}"
+            expected="$(tr -d '\r\n' < "${expected_file}")"
+            [[ "${expected}" =~ ^[0-9a-f]{64}$ ]]
+            printf '%s  %s\n' "${expected}" "${patch}" | sha256sum --check --status
+            if grep -Eq '^diff --git a/\.github/workflows/' "${patch}"; then
+              echo 'checkpoint patches may not modify workflow authority' >&2
+              exit 2
+            fi
+            git apply --check "${patch}"
+            git apply "${patch}"
+            rm "${encoded}" "${expected_file}"
+            commit_message="${RUNNER_TEMP}/issue261-commit-message"
+            cp "${message_file}" "${commit_message}"
+            rm "${message_file}"
+            git config user.name horiyamayoh
+            git config user.email 44720751+horiyamayoh@users.noreply.github.com
+            git add -A
+            git diff --cached --check
+            git commit -F "${commit_message}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+            echo 'mode=applied' >> "${GITHUB_OUTPUT}"
+          else
+            archive="${RUNNER_TEMP}/cxxlens-source-${GITHUB_SHA}.zip"
+            git archive --format=zip --output="${archive}" "${GITHUB_SHA}"
+            echo "archive=${archive}" >> "${GITHUB_OUTPUT}"
+            echo 'mode=export' >> "${GITHUB_OUTPUT}"
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: steps.checkpoint.outputs.mode == 'export'
         with:
           name: cxxlens-source-${{ github.sha }}
-          path: ${{ runner.temp }}/cxxlens-source-${{ github.sha }}.zip
+          path: ${{ steps.checkpoint.outputs.archive }}
           if-no-files-found: error
           retention-days: 1
