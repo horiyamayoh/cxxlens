@@ -206,3 +206,60 @@ This disposition does not accept a source-closure identity, request version,
 wire feature, reuse/cache rule, compiler VFS, or production qualification. The
 tracking issue #261 remains open. An independent reviewer and an accepted ADR are required
 before implementation crosses any of those boundaries.
+
+2026-08-18: Independent review of the candidate implementation staged on
+`agent/issue-261-source-closure-vfs-implementation` (PR #353; ADR 0101 and the
+`cxxlens.clang22-source-closure-contract.v1` schemas). Rebased cleanly onto
+exact `main` `f3b02df3507ec85c689ae11c379710617ed3af60` (the one conflicting
+file, `materialization_public_report.cpp`, had the same use-after-move fix
+applied independently on both sides; main's version was kept verbatim).
+**Verdict: not accepted — two blocking findings, implementation is not
+qualification-ready.**
+
+1. `source_closure_native.cpp`'s VFS denies any filesystem touch outside the
+   closure and outside a fixed `qualified_read_roots` allowlist. A real Clang
+   driver invocation performs speculative, distro/toolchain-dependent probes
+   (e.g. `/etc/os-release`, GCC-installation candidate directories) that Clang
+   itself tolerates on ENOENT but that this design hard-fails the whole task
+   on. No static allowlist can enumerate Clang's full candidate set; this is
+   why `adapter.clang22-source-closure-native` fails today. The fail-closed
+   policy needs a way to distinguish genuinely-required closure input from
+   Clang's own optional/speculative probing, which is exactly the kind of
+   security-relevant rule this record already flags as needing accepted
+   authority (see "Working mental model" / symlink-policy note above) — not
+   something to decide unilaterally while reviewing.
+2. `with_source_closure_translation_unit` only consults
+   `missing_failure()` (an absent project/generated closure member — the
+   record's core invariant: a missing member is a determinate failure, never
+   an ambient fallback) inside the `!outcome` branch, i.e. only when Clang's
+   own run already reports failure. `policy_failure()` (ambient/toolchain
+   denial) is checked unconditionally and does fail closed correctly. Any
+   construct where Clang tolerates a missing header without erroring
+   (`__has_include`, conditional generated-file probing) could let extraction
+   proceed against an incomplete closure undetected. The shipped test passes
+   only because its one negative case happens to make Clang itself fail too;
+   nothing in the code ties the two signals together.
+3. Structural: `compiler_vfs.*`, `clang_compiler_vfs.*`, `provider_task_v4*.*`,
+   and `materialization_request_v2_2.*` (~10 files) are an orphaned earlier
+   design iteration — they reference a type vocabulary that no longer exists
+   in `source_closure.hpp` and fail `-fsyntax-only`. They are not referenced
+   by the root `CMakeLists.txt`/`tests/CMakeLists.txt`, only by the
+   branch-local `tests/issue261{,-worker}/CMakeLists.txt` that the PR
+   description itself says will be removed before merge. These must be
+   deleted, not merged.
+
+What does hold up under review: `source_closure.{hpp,cpp}` (closure
+value/identity — exact-segment traversal rejection, NFC+casefold collision
+detection, order-independent digest, all inspected and exercised) and
+`source_closure_vfs.{hpp,cpp}` (logical-path mapping/include resolution).
+These are a sound basis for unit 1/3 once findings 1-2 above have an accepted
+resolution. Unit 2 (bounded transfer/capability contract, task.v4) has no
+working implementation — only the dead code in finding 3. Unit 4
+(qualification) is premature until units 2-3 are functionally complete.
+
+Remains `proposed / blocked`. Next increment: accept a policy for
+distinguishing mandatory closure members from Clang's optional/speculative
+filesystem probes (finding 1), make `missing_failure()` enforcement
+unconditional and prove it with a test where Clang itself does not also fail
+(finding 2), and delete the dead task.v4/compiler_vfs/request-v2.2 files
+before any further qualification work.
