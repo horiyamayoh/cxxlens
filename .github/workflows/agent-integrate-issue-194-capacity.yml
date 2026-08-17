@@ -1,0 +1,145 @@
+name: Integrate issue 194 report capacity
+
+on:
+  push:
+    branches:
+      - agent/issue-194-prepublication-capacity-v4
+    paths:
+      - .github/workflows/agent-integrate-issue-194-capacity.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-194-report-capacity-current-main
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Build exact current-main candidate
+        shell: bash
+        env:
+          EXPECTED_MAIN_SHA: 0480bba7f6374c681150043fd7d1179000832a36
+          SOURCE_SHA: 9c3058dad3669cf695ec3ea8effded09b89bc2ac
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          actual_main_sha="$(git rev-parse origin/main)"
+          if [[ "${actual_main_sha}" != "${EXPECTED_MAIN_SHA}" ]]; then
+            echo "main moved: expected ${EXPECTED_MAIN_SHA}, observed ${actual_main_sha}" >&2
+            exit 1
+          fi
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          git switch --detach "${actual_main_sha}"
+          git checkout "${SOURCE_SHA}" -- \
+            CMakeLists.txt \
+            src/llvm/clang22/materialization_public_report.cpp \
+            src/llvm/clang22/materialization_public_report.hpp \
+            tests/CMakeLists.txt \
+            tests/adapter/clang22/materialization_report_test.cpp \
+            tests/quality/test_ng_clang22_materialization.py \
+            tools/clang22/materialize_main.cpp
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          tests_cmake = Path("tests/CMakeLists.txt")
+          text = tests_cmake.read_text(encoding="utf-8")
+          old = "        use_case_capability_catalog\n        design_feedback\n"
+          new = "        use_case_capability_catalog\n        agent_context\n        design_feedback\n"
+          if text.count(old) != 1:
+              raise SystemExit("tests/CMakeLists.txt no longer has the expected #277 merge anchor")
+          tests_cmake.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          materializer = Path("tools/clang22/materialize_main.cpp")
+          text = materializer.read_text(encoding="utf-8")
+          old_authority = """\tstreaming_transaction->external_authority = {
+          \t\tcoordinated->claim_stream(),
+          \t\t&*execution_census.execution_journal_receipt,
+          \t};"""
+          new_authority = """\tstreaming_transaction->external_authority.claim_stream = coordinated->claim_stream();
+          \tstreaming_transaction->external_authority.execution_journal =
+          \t\t&*execution_census.execution_journal_receipt;"""
+          if text.count(old_authority) != 1:
+              raise SystemExit("materialize_main.cpp no longer has the expected #340 authority anchor")
+          text = text.replace(old_authority, new_authority, 1)
+
+          old_release = """\tif (!journal->complete_store_preparation())
+          \t\treturn no_response();
+          \tconst auto generated_at = utc_now();"""
+          new_release = """\tif (!journal->complete_store_preparation())
+          \t\treturn no_response();
+          \tif (auto released =
+          \t\t\tcoordinated->claim_stream()->release_replay_payloads_after_store_preparation();
+          \t\t!released)
+          \t\treturn no_response();
+          \tconst auto generated_at = utc_now();"""
+          if text.count(old_release) != 1:
+              raise SystemExit("materialize_main.cpp no longer has the expected #200 release anchor")
+          materializer.write_text(text.replace(old_release, new_release, 1), encoding="utf-8")
+          PY
+
+          LC_ALL=C git diff --name-only "${actual_main_sha}" | LC_ALL=C sort > /tmp/actual-paths
+          cat > /tmp/expected-paths <<'EOF'
+          CMakeLists.txt
+          src/llvm/clang22/materialization_public_report.cpp
+          src/llvm/clang22/materialization_public_report.hpp
+          tests/CMakeLists.txt
+          tests/adapter/clang22/materialization_report_test.cpp
+          tests/quality/test_ng_clang22_materialization.py
+          tools/clang22/materialize_main.cpp
+          EOF
+          LC_ALL=C sort -o /tmp/expected-paths /tmp/expected-paths
+          diff -u /tmp/expected-paths /tmp/actual-paths
+          grep -F "bounded_postpublication_tail_bytes" \
+            src/llvm/clang22/materialization_public_report.cpp >/dev/null
+          grep -F "const auto checked_total = projection.publication_independent_bytes +" \
+            src/llvm/clang22/materialization_public_report.cpp >/dev/null
+          grep -F "release_replay_payloads_after_store_preparation" \
+            tools/clang22/materialize_main.cpp >/dev/null
+          grep -F "agent_context" tests/CMakeLists.txt >/dev/null
+          git diff --check
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: none
+
+      - name: Validate bounded materialization contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/quality/test_ng_clang22_materialization.py
+          git diff --check
+
+      - name: Commit and publish exact candidate
+        shell: bash
+        env:
+          EXPECTED_MAIN_SHA: 0480bba7f6374c681150043fd7d1179000832a36
+          CANDIDATE_BRANCH: agent/issue-194-capacity-current-main
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${EXPECTED_MAIN_SHA}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            CMakeLists.txt \
+            src/llvm/clang22/materialization_public_report.cpp \
+            src/llvm/clang22/materialization_public_report.hpp \
+            tests/CMakeLists.txt \
+            tests/adapter/clang22/materialization_report_test.cpp \
+            tests/quality/test_ng_clang22_materialization.py \
+            tools/clang22/materialize_main.cpp
+          git commit \
+            -m "Harden prepublication report capacity on current main (#194)" \
+            -m "Reapply the reviewed #335 bounded capacity lifecycle while preserving the merged #277 test registration and #200/#340 materializer lifecycle changes.\n\nLearning checkpoint: DF-0194\nProduction qualification: not claimed."
+          candidate_sha="$(git rev-parse HEAD)"
+          echo "candidate_sha=${candidate_sha}" >> "${GITHUB_STEP_SUMMARY}"
+          git push origin "HEAD:refs/heads/${CANDIDATE_BRANCH}"
+          git push origin HEAD:main
