@@ -51,13 +51,32 @@ aggregate source, 1 GiB raw input, limit-plus-one, and pipe-fragmented input) an
 records `wait4` peak RSS plus exact stdout/stderr digests. An explicitly selected
 subset may also run through the installed materializer.
 
-`clang22_materializer_negative_test.py` runs the installed executable through two
-authority-bound negative paths: a raw-input-only request-schema rejection, and a
-fresh SQLite non-genesis request whose `head_current` observation is the exact
-`store.current-not-found`/`absent` case. It verifies the compact response, exact
-operation/path, discarded logical draft, zero publication, and empty stderr. A
-non-`store.current-not-found` `head_current` SDK error still requires an injected
-Store failure seam and is not claimed by this install test.
+`clang22_materializer_negative_test.py` runs the installed executable through
+authority-bound raw-input and Store negative paths: request-schema rejection,
+invalid UTF-8, BOM, duplicate member, non-object, trailing value, and a fresh
+SQLite non-genesis request whose `head_current` observation is the exact
+`store.current-not-found`/`absent` case. Every case verifies the compact
+response, phase, zero-effect ledger, and empty stderr. The optional
+`--evidence-dir` writes the exact stdin bytes, stdout report, stderr bytes, and
+contract execution receipt for each case; the receipt binds exit status, exact
+stdout byte count/digest, parsed response count, and stderr digest. A
+non-`store.current-not-found` `head_current` matrix is also exercised through
+two disposable copies of a real one-task SQLite genesis Store: one flips a
+persisted payload byte and the other tampers with its payload checksum. The
+installed response must preserve `sdk-error`, `head_current`,
+`current-selector`, the exact publication ID, and the zero-publication effect
+ledger as `store.current-corrupt`. The DB and its source-private incremental
+sidecar remain outside the installed prefix, and no fault-injection seam or
+native/hosted qualification is implied. Each negative case also emits a
+test-only `evidence-manifest.json` beside the raw input/report/receipt. Its
+validator cross-binds request-bound compact cases and the detailed baseline to
+the exact source revision/tree, package configuration, occurrence-manifest
+digest, materializer/worker digests, report projection, and external execution
+receipt/artifact digests. A raw-input-only case retains no request identity; a
+compact response without a binding is recorded as `unbound` with null source
+identity rather than inventing attribution. Every manifest is explicitly
+marked negative-only and cannot be used as positive or release qualification
+evidence.
 
 `check_ng_clang22_materialization_scale.py` is an independent checker. The report
 is intentionally marked `release_qualification: false` and `semantic_status:

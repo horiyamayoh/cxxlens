@@ -17,6 +17,7 @@
 #include <cxxlens/sdk/provider.hpp>
 
 #include "json_internal.hpp"
+#include "provider_ng1_transport_internal.hpp"
 #include "provider_runtime_internal.hpp"
 #include "provider_validation_internal.hpp"
 
@@ -838,15 +839,32 @@ namespace cxxlens::sdk::provider
 			return semantic_digest(domain, bytes);
 		}
 
+		[[nodiscard]] bool valid_semantic_digest(const std::string_view value) noexcept
+		{
+			constexpr std::string_view prefix{"semantic-v2:sha256:"};
+			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
+				return false;
+			for (const auto byte : value.substr(prefix.size()))
+				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+					return false;
+			return true;
+		}
+
 		[[nodiscard]] result<std::string>
 		frame_transcript_receipt_digest(const std::span<const frame> frames)
 		{
+			if (frames.empty())
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-state-invalid", "runtime-receipt", "empty-frame-stream"));
+			const auto stream_id = frames.front().stream_id;
+			const auto first_sequence = frames.front().sequence;
 			std::vector<canonical_value> projected;
 			projected.reserve(frames.size());
 			for (std::size_t index{}; index < frames.size(); ++index)
 			{
 				const auto& value = frames[index];
-				if (value.sequence != index ||
+				if (index > std::numeric_limits<std::uint64_t>::max() - first_sequence ||
+					value.sequence != first_sequence + index || value.stream_id != stream_id ||
 					value.stream_id >
 						static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
 					value.sequence >
@@ -868,58 +886,58 @@ namespace cxxlens::sdk::provider
 											 canonical_value::from_tuple(std::move(projected)));
 		}
 
-		[[nodiscard]] result<std::string>
-		sealed_transcript_receipt_digest(const std::string_view task_id,
-										 const std::string_view terminal,
-										 const detail::sealed_provider_transcript& sealed)
+		[[nodiscard]] result<std::string> sealed_transcript_receipt_digest_projection(
+			const std::string_view task_id,
+			const std::string_view terminal,
+			const std::span<const detail::provider_sealed_transcript_batch_receipt_projection>
+				batches,
+			const std::span<const coverage_unit> coverage_records,
+			const std::span<const unresolved_item> unresolved_records,
+			const std::span<const evidence_item> evidence_records)
 		{
 			if (task_id.empty() || terminal.empty())
 				return cxxlens::sdk::unexpected(runtime_error(
 					"provider.protocol-state-invalid", "runtime-receipt", "terminal-projection"));
-			std::vector<canonical_value> batches;
-			batches.reserve(sealed.batches().size());
-			for (const auto& batch : sealed.batches())
+			std::vector<canonical_value> projected_batches;
+			projected_batches.reserve(batches.size());
+			for (const auto& batch : batches)
 			{
-				if (batch.task_id() != task_id)
+				if (batch.task_id != task_id)
 					return cxxlens::sdk::unexpected(runtime_error(
 						"provider.protocol-state-invalid", "runtime-receipt", "batch-task"));
-				std::vector<std::string> row_forms;
-				row_forms.reserve(batch.rows().size());
-				for (const auto& row : batch.rows())
-					row_forms.push_back(row.canonical_form());
-				batches.push_back(canonical_value::from_tuple({
-					canonical_value::from_string(std::string{batch.task_id()}),
-					canonical_value::from_string(std::string{batch.descriptor_id()}),
-					canonical_value::from_string(std::string{batch.descriptor_digest()}),
-					canonical_value::from_string(std::string{batch.dependency_group_id()}),
-					canonical_value::from_string(std::string{batch.atomic_output_group_id()}),
-					canonical_value::from_string(std::string{batch.batch_id()}),
-					canonical_value::from_string(std::string{batch.batch_digest()}),
-					runtime_string_tuple(batch.ordered_chunk_digests()),
-					runtime_string_tuple(row_forms),
+				projected_batches.push_back(canonical_value::from_tuple({
+					canonical_value::from_string(batch.task_id),
+					canonical_value::from_string(batch.descriptor_id),
+					canonical_value::from_string(batch.descriptor_digest),
+					canonical_value::from_string(batch.dependency_group_id),
+					canonical_value::from_string(batch.atomic_output_group_id),
+					canonical_value::from_string(batch.batch_id),
+					canonical_value::from_string(batch.batch_digest),
+					runtime_string_tuple(batch.ordered_chunk_digests),
+					runtime_string_tuple(batch.row_canonical_forms),
 				}));
 			}
-			std::vector<canonical_value> coverage;
-			coverage.reserve(sealed.coverage().size());
-			for (const auto& record : sealed.coverage())
-				coverage.push_back(canonical_value::from_tuple({
+			std::vector<canonical_value> projected_coverage;
+			projected_coverage.reserve(coverage_records.size());
+			for (const auto& record : coverage_records)
+				projected_coverage.push_back(canonical_value::from_tuple({
 					canonical_value::from_string(record.kind),
 					canonical_value::from_string(record.id),
 					canonical_value::from_string(record.state),
 					canonical_value::from_string(record.reason),
 				}));
-			std::vector<canonical_value> unresolved;
-			unresolved.reserve(sealed.unresolved().size());
-			for (const auto& record : sealed.unresolved())
-				unresolved.push_back(canonical_value::from_tuple({
+			std::vector<canonical_value> projected_unresolved;
+			projected_unresolved.reserve(unresolved_records.size());
+			for (const auto& record : unresolved_records)
+				projected_unresolved.push_back(canonical_value::from_tuple({
 					canonical_value::from_string(record.code),
 					canonical_value::from_string(record.subject),
 					canonical_value::from_string(record.detail),
 				}));
-			std::vector<canonical_value> evidence;
-			evidence.reserve(sealed.evidence().size());
-			for (const auto& record : sealed.evidence())
-				evidence.push_back(canonical_value::from_tuple({
+			std::vector<canonical_value> projected_evidence;
+			projected_evidence.reserve(evidence_records.size());
+			for (const auto& record : evidence_records)
+				projected_evidence.push_back(canonical_value::from_tuple({
 					canonical_value::from_string(record.kind),
 					canonical_value::from_string(record.subject),
 					canonical_value::from_string(record.producer),
@@ -930,11 +948,43 @@ namespace cxxlens::sdk::provider
 				canonical_value::from_tuple({
 					canonical_value::from_string(std::string{task_id}),
 					canonical_value::from_string(std::string{terminal}),
-					canonical_value::from_tuple(std::move(batches)),
-					canonical_value::from_tuple(std::move(coverage)),
-					canonical_value::from_tuple(std::move(unresolved)),
-					canonical_value::from_tuple(std::move(evidence)),
+					canonical_value::from_tuple(std::move(projected_batches)),
+					canonical_value::from_tuple(std::move(projected_coverage)),
+					canonical_value::from_tuple(std::move(projected_unresolved)),
+					canonical_value::from_tuple(std::move(projected_evidence)),
 				}));
+		}
+
+		[[nodiscard]] result<std::string>
+		sealed_transcript_receipt_digest(const std::string_view task_id,
+										 const std::string_view terminal,
+										 const detail::sealed_provider_transcript& sealed)
+		{
+			std::vector<detail::provider_sealed_transcript_batch_receipt_projection> batches;
+			batches.reserve(sealed.batches().size());
+			for (const auto& batch : sealed.batches())
+			{
+				detail::provider_sealed_transcript_batch_receipt_projection projection;
+				projection.task_id = std::string{batch.task_id()};
+				projection.descriptor_id = std::string{batch.descriptor_id()};
+				projection.descriptor_digest = std::string{batch.descriptor_digest()};
+				projection.dependency_group_id = std::string{batch.dependency_group_id()};
+				projection.atomic_output_group_id = std::string{batch.atomic_output_group_id()};
+				projection.batch_id = std::string{batch.batch_id()};
+				projection.batch_digest = std::string{batch.batch_digest()};
+				projection.ordered_chunk_digests.assign(batch.ordered_chunk_digests().begin(),
+														batch.ordered_chunk_digests().end());
+				projection.row_canonical_forms.reserve(batch.rows().size());
+				for (const auto& row : batch.rows())
+					projection.row_canonical_forms.push_back(row.canonical_form());
+				batches.push_back(std::move(projection));
+			}
+			return sealed_transcript_receipt_digest_projection(task_id,
+															   terminal,
+															   batches,
+															   sealed.coverage(),
+															   sealed.unresolved(),
+															   sealed.evidence());
 		}
 	} // namespace
 
@@ -944,13 +994,17 @@ namespace cxxlens::sdk::provider
 			const std::uint64_t raw_stdout_byte_count,
 			std::string raw_stdout_sha256,
 			const std::uint64_t decoded_frame_count,
+			const std::uint64_t first_frame_sequence,
 			std::string frame_transcript_digest,
-			std::string sealed_transcript_digest)
+			std::string sealed_transcript_digest,
+			provider_runtime_provenance provenance)
 			: raw_stdout_byte_count_{raw_stdout_byte_count},
 			  raw_stdout_sha256_{std::move(raw_stdout_sha256)},
 			  decoded_frame_count_{decoded_frame_count},
+			  first_frame_sequence_{first_frame_sequence},
 			  frame_transcript_digest_{std::move(frame_transcript_digest)},
-			  sealed_transcript_digest_{std::move(sealed_transcript_digest)}
+			  sealed_transcript_digest_{std::move(sealed_transcript_digest)},
+			  provenance_{std::move(provenance)}
 		{
 		}
 
@@ -960,6 +1014,18 @@ namespace cxxlens::sdk::provider
 												  const detail::sealed_provider_transcript& sealed)
 		{
 			return sealed_transcript_receipt_digest(task_id, terminal, sealed);
+		}
+
+		result<std::string> provider_sealed_transcript_receipt_digest(
+			const std::string_view task_id,
+			const std::string_view terminal,
+			const std::span<const provider_sealed_transcript_batch_receipt_projection> batches,
+			const std::span<const coverage_unit> coverage,
+			const std::span<const unresolved_item> unresolved,
+			const std::span<const evidence_item> evidence)
+		{
+			return sealed_transcript_receipt_digest_projection(
+				task_id, terminal, batches, coverage, unresolved, evidence);
 		}
 
 		result<std::string>
@@ -980,6 +1046,10 @@ namespace cxxlens::sdk::provider
 		{
 			return decoded_frame_count_;
 		}
+		std::uint64_t provider_runtime_receipt::first_frame_sequence() const noexcept
+		{
+			return first_frame_sequence_;
+		}
 		std::string_view provider_runtime_receipt::frame_transcript_digest() const noexcept
 		{
 			return frame_transcript_digest_;
@@ -987,6 +1057,20 @@ namespace cxxlens::sdk::provider
 		std::string_view provider_runtime_receipt::sealed_transcript_digest() const noexcept
 		{
 			return sealed_transcript_digest_;
+		}
+		const provider_runtime_provenance& provider_runtime_receipt::provenance() const noexcept
+		{
+			return provenance_;
+		}
+		result<void> provider_runtime_receipt::validate() const
+		{
+			if (raw_stdout_byte_count_ == 0U || !canonical_digest(raw_stdout_sha256_) ||
+				decoded_frame_count_ == 0U || !valid_semantic_digest(frame_transcript_digest_) ||
+				!valid_semantic_digest(sealed_transcript_digest_) || provenance_.task_id.empty() ||
+				provenance_.task_id.contains('\0'))
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-state-invalid", "runtime-receipt", "identity-incomplete"));
+			return {};
 		}
 
 		result<provider_runtime_receipt>
@@ -997,21 +1081,76 @@ namespace cxxlens::sdk::provider
 									  const std::string_view terminal,
 									  const sealed_provider_transcript& sealed)
 		{
+			provider_runtime_provenance provenance;
+			provenance.task_id = task_id;
+			return make_provider_runtime_receipt(raw_stdout_byte_count,
+												 std::move(raw_stdout_sha256),
+												 frames,
+												 std::move(provenance),
+												 terminal,
+												 sealed);
+		}
+
+		result<provider_runtime_receipt>
+		make_provider_runtime_receipt(const std::uint64_t raw_stdout_byte_count,
+									  std::string raw_stdout_sha256,
+									  const std::span<const frame> frames,
+									  provider_runtime_provenance provenance,
+									  const std::string_view terminal,
+									  const sealed_provider_transcript& sealed)
+		{
 			if (!canonical_digest(raw_stdout_sha256) || raw_stdout_byte_count == 0U ||
-				frames.empty())
+				frames.empty() || provenance.task_id.empty() || provenance.task_id.contains('\0'))
 				return cxxlens::sdk::unexpected(runtime_error(
 					"provider.protocol-state-invalid", "runtime-receipt", "raw-observation"));
+			if (provenance.stream_id != 0U && provenance.stream_id != frames.front().stream_id)
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-state-invalid", "runtime-receipt", "stream-binding"));
+			if (provenance.stream_id == 0U)
+				provenance.stream_id = frames.front().stream_id;
 			auto frame_digest = frame_transcript_receipt_digest(frames);
 			if (!frame_digest)
 				return cxxlens::sdk::unexpected(std::move(frame_digest.error()));
-			auto sealed_digest = sealed_transcript_receipt_digest(task_id, terminal, sealed);
+			auto sealed_digest =
+				sealed_transcript_receipt_digest(provenance.task_id, terminal, sealed);
 			if (!sealed_digest)
 				return cxxlens::sdk::unexpected(std::move(sealed_digest.error()));
-			return provider_runtime_receipt{raw_stdout_byte_count,
+			if (sealed.batches().size() == 1U)
+			{
+				const auto& batch = sealed.batches().front();
+				if (batch.task_id() != provenance.task_id)
+					return cxxlens::sdk::unexpected(runtime_error(
+						"provider.protocol-state-invalid", "runtime-receipt", "batch-task"));
+				if (provenance.dependency_group_id.empty())
+					provenance.dependency_group_id = batch.dependency_group_id();
+				if (provenance.atomic_output_group_id.empty())
+					provenance.atomic_output_group_id = batch.atomic_output_group_id();
+				if (provenance.batch_id.empty())
+					provenance.batch_id = batch.batch_id();
+				if (provenance.dependency_group_id != batch.dependency_group_id() ||
+					provenance.atomic_output_group_id != batch.atomic_output_group_id() ||
+					provenance.batch_id != batch.batch_id())
+					return cxxlens::sdk::unexpected(runtime_error(
+						"provider.protocol-state-invalid", "runtime-receipt", "batch-binding"));
+			}
+			else if (!provenance.dependency_group_id.empty() ||
+					 provenance.atomic_output_group_id.size() != 0U ||
+					 provenance.batch_id.size() != 0U)
+			{
+				return cxxlens::sdk::unexpected(runtime_error("provider.protocol-state-invalid",
+															  "runtime-receipt",
+															  "multi-batch-provenance"));
+			}
+			provider_runtime_receipt output{raw_stdout_byte_count,
 											std::move(raw_stdout_sha256),
 											frames.size(),
+											frames.front().sequence,
 											std::move(*frame_digest),
-											std::move(*sealed_digest)};
+											std::move(*sealed_digest),
+											std::move(provenance)};
+			if (auto valid = output.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			return output;
 		}
 
 		result<void> expected_provider_identity::validate() const
@@ -1697,7 +1836,9 @@ namespace cxxlens::sdk::provider
 			bool coverage_seen{};
 			bool unresolved_seen{};
 			bool progress_seen{};
+			bool ng1_progress_terminal{};
 			bool terminal_seen{};
+			std::optional<ng1_progress_control> last_ng1_progress;
 			std::uint64_t output_rows{};
 			std::uint64_t diagnostics{};
 			transcript_validation_result terminal;
@@ -1724,10 +1865,23 @@ namespace cxxlens::sdk::provider
 			const auto expected_hello = request.provider_manifest == nullptr
 				? std::string{}
 				: request.provider_manifest->canonical_json();
+			if (request.ng1_control_transcript)
+			{
+				if (request.expected_ng1_binding == nullptr)
+					return fail("provider.protocol-state-invalid", request.task_id, "ng1-binding");
+				if (auto valid = request.expected_ng1_binding->validate(); !valid)
+					return fail("provider.protocol-state-invalid", request.task_id, "ng1-binding");
+				if (request.expected_ng1_binding->provider_id != request.provider_id ||
+					request.expected_ng1_binding->provider_version != request.provider_version ||
+					request.expected_ng1_binding->task_id != request.task_id ||
+					request.expected_ng1_binding->stream_id != request.expected_stream_id)
+					return fail("provider.task-binding-mismatch", request.task_id, "ng1-binding");
+			}
 			for (std::size_t index = 0U; index < frames.size(); ++index)
 			{
 				const auto& value = frames[index];
-				if (value.stream_id != 1U || value.sequence != expected_sequence++)
+				if (value.stream_id != request.expected_stream_id ||
+					value.sequence != expected_sequence++)
 					return fail("provider.protocol-state-invalid", request.task_id, "sequence");
 				const auto optional_extension =
 					(value.flags & static_cast<std::uint16_t>(frame_flag::optional_extension)) !=
@@ -1745,6 +1899,33 @@ namespace cxxlens::sdk::provider
 					 value.type != message_type::task_failed))
 					return fail(
 						"provider.protocol-state-invalid", request.task_id, "terminal-order");
+				if (is_ng1_heartbeat_message(value.type))
+				{
+					if (!request.ng1_control_transcript || value.protocol_minor != 1U ||
+						value.flags != 0U || !value.payload.empty())
+						return fail(
+							"provider.protocol-state-invalid", request.task_id, "ng1-heartbeat");
+					auto heartbeat = decode_ng1_heartbeat_control(value.control);
+					if (!heartbeat)
+						return fail(
+							"provider.protocol-state-invalid", request.task_id, "ng1-heartbeat");
+					if (heartbeat->kind != ng1_heartbeat_kind::ack)
+						return fail("provider.protocol-state-invalid",
+									request.task_id,
+									"ng1-heartbeat-direction");
+					const ng1_session_binding binding{heartbeat->provider_id,
+													  heartbeat->provider_version,
+													  heartbeat->protocol_session_id,
+													  heartbeat->task_id,
+													  heartbeat->stream_id};
+					if (request.expected_ng1_binding == nullptr ||
+						binding != *request.expected_ng1_binding ||
+						value.stream_id != request.expected_ng1_binding->stream_id)
+						return fail("provider.task-binding-mismatch",
+									request.task_id,
+									"ng1-heartbeat-binding");
+					continue;
+				}
 				if (optional_extension)
 					continue;
 				std::optional<std::string> control;
@@ -2032,6 +2213,49 @@ namespace cxxlens::sdk::provider
 					}
 					case message_type::progress:
 					{
+						if (request.ng1_control_transcript)
+						{
+							auto progress = decode_ng1_progress_control(value.control);
+							if (ng1_progress_terminal)
+								return fail("provider.protocol-state-invalid",
+											request.task_id,
+											"ng1-progress-after-terminal");
+							if (!accepted || batch || !progress ||
+								progress->task_id != request.task_id || !value.payload.empty())
+								return fail("provider.protocol-state-invalid",
+											request.task_id,
+											"ng1-progress");
+							if (last_ng1_progress)
+							{
+								const auto next_progress_sequence =
+									last_ng1_progress->progress_sequence ==
+										std::numeric_limits<std::uint64_t>::max()
+									? std::optional<std::uint64_t>{}
+									: std::optional<std::uint64_t>{
+										  last_ng1_progress->progress_sequence + 1U};
+								if (!next_progress_sequence ||
+									progress->progress_sequence != *next_progress_sequence ||
+									progress->dependency_group_id !=
+										last_ng1_progress->dependency_group_id ||
+									progress->total_units != last_ng1_progress->total_units ||
+									progress->completed_units <
+										last_ng1_progress->completed_units ||
+									progress->monotonic_time_ns <
+										last_ng1_progress->monotonic_time_ns)
+									return fail("provider.protocol-state-invalid",
+												request.task_id,
+												"ng1-progress-sequence");
+							}
+							else if (progress->progress_sequence != 0U)
+								return fail("provider.protocol-state-invalid",
+											request.task_id,
+											"ng1-progress-sequence");
+							ng1_progress_terminal =
+								progress->completed_units == progress->total_units;
+							last_ng1_progress = std::move(*progress);
+							progress_seen = true;
+							break;
+						}
 						auto records = decode_evidence_metadata(value.control);
 						if (!accepted || batch || progress_seen || !records ||
 							!value.payload.empty())
@@ -2051,7 +2275,9 @@ namespace cxxlens::sdk::provider
 					{
 						auto metadata = decode_task_complete_metadata(value.control);
 						if (!accepted || batch || !coverage_seen || !unresolved_seen ||
-							!progress_seen || !metadata || metadata->task_id != request.task_id ||
+							!progress_seen ||
+							(request.ng1_control_transcript && !ng1_progress_terminal) ||
+							!metadata || metadata->task_id != request.task_id ||
 							!value.payload.empty())
 							return fail(
 								"provider.protocol-state-invalid", request.task_id, "complete");
@@ -2533,10 +2759,23 @@ namespace cxxlens::sdk::provider
 			report.sealing_error = std::move(*terminal).take_sealing_error();
 			if (report.validated_transcript_success && report.sealed)
 			{
+				detail::provider_runtime_provenance provenance;
+				provenance.provider_id = selected_manifest.provider_id;
+				provenance.provider_version = selected_manifest.provider_version;
+				provenance.provider_binary_digest = selected_manifest.provider_binary_digest;
+				provenance.provider_semantic_contract_digest =
+					selected_manifest.provider_semantic_contract_digest;
+				provenance.task_id = request.task_id;
+				provenance.task_input_digest = request.task_input_digest;
+				provenance.normalized_invocation_digest = request.normalized_invocation_digest;
+				provenance.toolchain_digest = request.toolchain_digest;
+				provenance.environment_digest = request.environment_digest;
+				provenance.sandbox_policy_digest = prepared.sandbox.policy_digest;
+				provenance.stream_id = frames->front().stream_id;
 				auto receipt = detail::make_provider_runtime_receipt(raw_stdout_byte_count,
 																	 std::move(raw_stdout_sha256),
 																	 *frames,
-																	 request.task_id,
+																	 std::move(provenance),
 																	 report.terminal,
 																	 *report.sealed);
 				if (!receipt)
@@ -2562,6 +2801,116 @@ namespace cxxlens::sdk::provider
 			return report;
 		}
 	} // namespace
+
+	result<void> detail::validate_provider_process_runtime_binding(
+		const detail::provider_process_validation_outcome& outcome,
+		const process_task_request& request)
+	{
+		const auto fail = [](std::string field,
+							 std::string detail = "runtime-boundary") -> result<void>
+		{
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.task-binding-mismatch", std::move(field), std::move(detail)));
+		};
+
+		if (auto valid = request.selection.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		const auto& selected_manifest = request.selection.selected_candidate().description;
+		if (auto valid = selected_manifest.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (!outcome.validated_transcript_success || outcome.terminal != "provider.success" ||
+			outcome.frames.empty() || outcome.frames.back().type != message_type::task_complete ||
+			!outcome.input_seal || !outcome.sealed || !outcome.provider_identity ||
+			!outcome.runtime_receipt)
+			return fail("outcome", "successful-sealed-outcome-required");
+		if (outcome.provider.canonical_json() != selected_manifest.canonical_json())
+			return fail("provider_manifest");
+		if (outcome.task_input_digest != request.task_input_digest)
+			return fail("task_input_digest");
+		if (outcome.normalized_invocation_digest != request.normalized_invocation_digest)
+			return fail("normalized_invocation_digest");
+		if (outcome.toolchain_digest != request.toolchain_digest)
+			return fail("toolchain_digest");
+		if (outcome.environment_digest != request.environment_digest)
+			return fail("environment_digest");
+		if (outcome.measured_executable_digest != selected_manifest.provider_binary_digest)
+			return fail("measured_executable_digest");
+		if (auto valid = outcome.sandbox.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (request.sandbox.policy_digest !=
+				request.selection.authority_request().sandbox.policy_digest ||
+			outcome.sandbox.policy_digest != request.sandbox.policy_digest)
+			return fail("sandbox_policy_digest");
+
+		const auto& identity = *outcome.provider_identity;
+		if (auto valid = identity.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		auto required_features = selected_manifest.protocol.required_features;
+		std::ranges::sort(required_features);
+		auto offered_relations = selected_manifest.offered_relations;
+		std::ranges::sort(offered_relations);
+		const auto& first_frame = outcome.frames.front();
+		if (identity.provider_id != selected_manifest.provider_id ||
+			identity.provider_version != selected_manifest.provider_version ||
+			identity.provider_binary_digest != selected_manifest.provider_binary_digest ||
+			identity.provider_semantic_contract_digest !=
+				selected_manifest.provider_semantic_contract_digest ||
+			identity.protocol_major != request.limits.protocol_major ||
+			identity.protocol_major != first_frame.protocol_major ||
+			identity.protocol_minor != first_frame.protocol_minor ||
+			identity.required_features != required_features ||
+			identity.sandbox_policy_digest != request.sandbox.policy_digest ||
+			identity.offered_relations != offered_relations)
+			return fail("provider_identity");
+
+		const auto& input_seal = *outcome.input_seal;
+		const open_task_metadata expected_input_task{request.task_id,
+													 request.task_input_digest,
+													 request.normalized_invocation_digest,
+													 request.toolchain_digest,
+													 request.environment_digest};
+		if (input_seal.task() != expected_input_task ||
+			input_seal.protocol_major() != first_frame.protocol_major ||
+			input_seal.protocol_minor() != first_frame.protocol_minor ||
+			input_seal.credit().bytes != request.output_credit.bytes ||
+			input_seal.credit().frames != request.output_credit.frames)
+			return fail("input_seal");
+
+		const auto& receipt = *outcome.runtime_receipt;
+		if (auto valid = receipt.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		const auto& provenance = receipt.provenance();
+		if (provenance.provider_id != selected_manifest.provider_id ||
+			provenance.provider_version != selected_manifest.provider_version ||
+			provenance.provider_binary_digest != selected_manifest.provider_binary_digest ||
+			provenance.provider_semantic_contract_digest !=
+				selected_manifest.provider_semantic_contract_digest ||
+			provenance.task_id != request.task_id ||
+			provenance.task_input_digest != request.task_input_digest ||
+			provenance.normalized_invocation_digest != request.normalized_invocation_digest ||
+			provenance.toolchain_digest != request.toolchain_digest ||
+			provenance.environment_digest != request.environment_digest ||
+			provenance.sandbox_policy_digest != request.sandbox.policy_digest ||
+			provenance.stream_id != first_frame.stream_id)
+			return fail("runtime_receipt.provenance");
+		if (receipt.raw_stdout_byte_count() != outcome.raw_frame_stream.size() ||
+			receipt.raw_stdout_sha256() != content_digest(outcome.raw_frame_stream) ||
+			receipt.decoded_frame_count() != outcome.frames.size() ||
+			receipt.first_frame_sequence() != first_frame.sequence)
+			return fail("runtime_receipt.raw_observation");
+		auto frame_digest = detail::provider_frame_transcript_receipt_digest(outcome.frames);
+		if (!frame_digest)
+			return cxxlens::sdk::unexpected(std::move(frame_digest.error()));
+		if (receipt.frame_transcript_digest() != *frame_digest)
+			return fail("runtime_receipt.frame_digest");
+		auto sealed_digest = detail::provider_sealed_transcript_receipt_digest(
+			request.task_id, outcome.terminal, *outcome.sealed);
+		if (!sealed_digest)
+			return cxxlens::sdk::unexpected(std::move(sealed_digest.error()));
+		if (receipt.sealed_transcript_digest() != *sealed_digest)
+			return fail("runtime_receipt.sealed_digest");
+		return {};
+	}
 
 	result<detail::provider_process_validation_outcome>
 	detail::execute_provider_process(const provider_process_port& processes,

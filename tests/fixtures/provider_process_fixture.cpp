@@ -4,12 +4,10 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
 #include <iterator>
 #include <limits>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -20,6 +18,9 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #if defined(__linux__) && defined(__GLIBC__)
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #endif
 
@@ -100,28 +101,179 @@ namespace
 	};
 
 #if defined(__linux__) && defined(__GLIBC__)
-	[[nodiscard]] std::optional<std::uint64_t> process_start_time()
+	class child_process_guard final
 	{
-		std::ifstream stat{"/proc/self/stat"};
-		std::string line;
-		if (!std::getline(stat, line))
+	  public:
+		explicit child_process_guard(const pid_t child) noexcept : child_{child} {}
+		child_process_guard(const child_process_guard&) = delete;
+		child_process_guard& operator=(const child_process_guard&) = delete;
+		~child_process_guard() noexcept
+		{
+			cleanup();
+		}
+		void release() noexcept
+		{
+			child_ = -1;
+		}
+		void cleanup_now() noexcept
+		{
+			cleanup();
+		}
+
+	  private:
+		void cleanup() noexcept
+		{
+			const auto child = child_;
+			child_ = -1;
+			if (child <= 0)
+				return;
+			(void)::kill(child, SIGKILL);
+			while (::waitpid(child, nullptr, 0) < 0 && errno == EINTR)
+			{
+			}
+		}
+
+		pid_t child_{};
+	};
+
+	[[nodiscard]] bool append_unsigned_decimal(char* const output,
+											   const std::size_t capacity,
+											   std::size_t& offset,
+											   const std::uint64_t value) noexcept
+	{
+		std::array<char, 32U> digits{};
+		std::size_t digit_count{};
+		std::uint64_t remaining = value;
+		do
+		{
+			digits[digit_count++] = static_cast<char>('0' + remaining % 10U);
+			remaining /= 10U;
+		} while (remaining != 0U);
+		if (offset + digit_count > capacity)
+			return false;
+		while (digit_count > 0U)
+			output[offset++] = digits[--digit_count];
+		return true;
+	}
+
+	[[nodiscard]] bool
+	write_all(const int descriptor, const char* const bytes, const std::size_t size) noexcept
+	{
+		std::size_t offset{};
+		while (offset < size)
+		{
+			const auto written = ::write(descriptor, bytes + offset, size - offset);
+			if (written > 0)
+			{
+				offset += static_cast<std::size_t>(written);
+				continue;
+			}
+			if (written < 0 && errno == EINTR)
+				continue;
+			return false;
+		}
+		return true;
+	}
+
+	[[nodiscard]] std::optional<std::uint64_t> process_start_time() noexcept
+	{
+		const auto descriptor = ::open("/proc/self/stat", O_RDONLY | O_CLOEXEC);
+		if (descriptor < 0)
 			return std::nullopt;
-		const auto closing_name = line.rfind(')');
-		if (closing_name == std::string::npos || closing_name + 2U >= line.size())
+		std::array<char, 4096U> buffer{};
+		std::size_t size{};
+		while (size < buffer.size())
+		{
+			const auto count = ::read(descriptor, buffer.data() + size, buffer.size() - size);
+			if (count > 0)
+			{
+				size += static_cast<std::size_t>(count);
+				continue;
+			}
+			if (count < 0 && errno == EINTR)
+				continue;
+			break;
+		}
+		(void)::close(descriptor);
+		if (size == 0U)
 			return std::nullopt;
-		std::istringstream fields{line.substr(closing_name + 2U)};
-		char state{};
-		if (!(fields >> state))
+		std::size_t closing_name = size;
+		while (closing_name > 0U && buffer[closing_name - 1U] != ')')
+			--closing_name;
+		if (closing_name == 0U || closing_name + 1U >= size)
 			return std::nullopt;
+		std::size_t cursor = closing_name;
+		while (cursor < size && buffer[cursor] == ' ')
+			++cursor;
+		if (cursor >= size)
+			return std::nullopt;
+		++cursor;
 		for (std::uint32_t field = 4U; field <= 22U; ++field)
 		{
-			std::uint64_t value{};
-			if (!(fields >> value))
+			while (cursor < size && buffer[cursor] == ' ')
+				++cursor;
+			if (cursor < size && buffer[cursor] == '-')
+				++cursor;
+			if (cursor >= size || buffer[cursor] < '0' || buffer[cursor] > '9')
 				return std::nullopt;
+			std::uint64_t value{};
+			while (cursor < size && buffer[cursor] >= '0' && buffer[cursor] <= '9')
+			{
+				const auto digit = static_cast<std::uint64_t>(buffer[cursor] - '0');
+				if (value > (std::numeric_limits<std::uint64_t>::max() - digit) / 10U)
+					return std::nullopt;
+				value = value * 10U + digit;
+				++cursor;
+			}
 			if (field == 22U)
 				return value;
 		}
 		return std::nullopt;
+	}
+
+	[[nodiscard]] bool write_process_marker(const std::string_view temporary_path,
+											const std::string_view marker_path) noexcept
+	{
+		const auto start_time = process_start_time();
+		if (!start_time)
+			return false;
+		std::array<char, 64U> line{};
+		std::size_t size{};
+		if (!append_unsigned_decimal(
+				line.data(), line.size(), size, static_cast<std::uint64_t>(::getpid())) ||
+			size >= line.size())
+			return false;
+		line[size++] = ' ';
+		if (!append_unsigned_decimal(line.data(), line.size(), size, *start_time))
+			return false;
+		if (size >= line.size())
+			return false;
+		line[size++] = '\n';
+		const auto descriptor = ::open(
+			temporary_path.data(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR | S_IWUSR);
+		if (descriptor < 0)
+			return false;
+		const bool written = write_all(descriptor, line.data(), size);
+		const bool closed = ::close(descriptor) == 0;
+		if (!written || !closed)
+		{
+			(void)::unlink(temporary_path.data());
+			return false;
+		}
+		if (::rename(temporary_path.data(), marker_path.data()) != 0)
+		{
+			(void)::unlink(temporary_path.data());
+			return false;
+		}
+		return true;
+	}
+
+	void sleep_for_seconds(const std::uint32_t seconds) noexcept
+	{
+		timespec remaining{static_cast<time_t>(seconds), 0};
+		while (::nanosleep(&remaining, &remaining) < 0 && errno == EINTR)
+		{
+		}
 	}
 #endif
 } // namespace
@@ -189,6 +341,10 @@ int main(const int argument_count, const char* const* arguments)
 		const auto marker_path = mode.substr(timeout_grandchild_prefix.size());
 		if (marker_path.empty())
 			return EXIT_FAILURE;
+		const std::string holder_marker{std::string{marker_path} + ".holder"};
+		const std::string holder_marker_temporary{holder_marker + ".tmp"};
+		const std::string sentinel_marker{std::string{marker_path} + ".sentinel"};
+		const std::string sentinel_marker_temporary{sentinel_marker + ".tmp"};
 		std::array<int, 2U> ready_pipe{-1, -1};
 		if (::pipe(ready_pipe.data()) != 0)
 			return EXIT_FAILURE;
@@ -205,36 +361,33 @@ int main(const int argument_count, const char* const* arguments)
 			{
 				(void)::close(STDOUT_FILENO);
 				(void)::close(STDERR_FILENO);
-				const auto start_time = process_start_time();
-				if (!start_time)
-					::_exit(EXIT_FAILURE);
-				std::ofstream marker{std::string{marker_path} + ".sentinel", std::ios::trunc};
-				marker << ::getpid() << ' ' << *start_time << '\n';
-				marker.close();
-				if (!marker)
+				if (!write_process_marker(sentinel_marker_temporary, sentinel_marker))
 					::_exit(EXIT_FAILURE);
 				const std::byte ready{0x01};
 				if (::write(ready_pipe[1U], &ready, sizeof(ready)) != sizeof(ready))
 					::_exit(EXIT_FAILURE);
 				(void)::close(ready_pipe[1U]);
-				std::this_thread::sleep_for(std::chrono::seconds{5});
+				sleep_for_seconds(30U);
 				::_exit(EXIT_SUCCESS);
 			}
-			const auto start_time = process_start_time();
-			if (!start_time)
+			child_process_guard sentinel_guard{sentinel};
+			if (!write_process_marker(holder_marker_temporary, holder_marker))
+			{
+				sentinel_guard.cleanup_now();
 				::_exit(EXIT_FAILURE);
-			std::ofstream marker{std::string{marker_path} + ".holder", std::ios::trunc};
-			marker << ::getpid() << ' ' << *start_time << '\n';
-			marker.close();
-			if (!marker)
-				::_exit(EXIT_FAILURE);
+			}
 			const std::byte ready{0x01};
 			if (::write(ready_pipe[1U], &ready, sizeof(ready)) != sizeof(ready))
+			{
+				sentinel_guard.cleanup_now();
 				::_exit(EXIT_FAILURE);
+			}
 			(void)::close(ready_pipe[1U]);
-			std::this_thread::sleep_for(std::chrono::seconds{5});
+			sentinel_guard.release();
+			sleep_for_seconds(30U);
 			::_exit(EXIT_SUCCESS);
 		}
+		child_process_guard holder_guard{holder};
 		(void)::close(ready_pipe[1U]);
 		std::array<std::byte, 2U> ready{};
 		std::size_t received{};
@@ -252,6 +405,10 @@ int main(const int argument_count, const char* const* arguments)
 		(void)::close(ready_pipe[0U]);
 		if (received != ready.size())
 			return EXIT_FAILURE;
+		holder_guard.release();
+		// Keep the leader alive with its descendants so the host observes a typed timeout
+		// rather than an EOF/truncated transcript before process-group cleanup.
+		sleep_for_seconds(30U);
 		return EXIT_SUCCESS;
 	}
 #endif

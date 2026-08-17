@@ -190,6 +190,15 @@ function(cxxlens_configure_clang22 target)
   set(CXXLENS_CLANG22_LIBRARY_DIRS
       ""
       CACHE INTERNAL "Exact LLVM/Clang 22 runtime library directories" FORCE)
+  set(CXXLENS_CLANG22_UNAVAILABLE_REASON
+      ""
+      CACHE INTERNAL "Reason the exact Clang 22 adapter is unavailable" FORCE)
+  set(CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY
+      FALSE
+      CACHE INTERNAL
+        "Whether the last exact Clang 22 ASan boundary uses the packaged shared clang-cpp target"
+        FORCE)
+  set_property(TARGET ${target} PROPERTY CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY FALSE)
   if(NOT CXXLENS_CLANG_ADAPTER MATCHES "^(AUTO|ON|OFF)$")
     message(
       FATAL_ERROR
@@ -199,45 +208,16 @@ function(cxxlens_configure_clang22 target)
 
   if(CXXLENS_CLANG_ADAPTER STREQUAL "OFF")
     target_compile_definitions(${target} PRIVATE CXXLENS_HAS_CLANG22=0)
+    set(CXXLENS_CLANG22_UNAVAILABLE_REASON
+        "disabled-by-user"
+        CACHE INTERNAL "Reason the exact Clang 22 adapter is unavailable" FORCE)
     set(CXXLENS_CLANG22_AVAILABLE
         FALSE
         CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
-    return()
-  endif()
-
-  find_package(LLVM 22.1 CONFIG QUIET)
-  if(LLVM_FOUND AND LLVM_VERSION_MAJOR EQUAL 22)
-    get_filename_component(_cxxlens_llvm_cmake_dir "${LLVM_CMAKE_DIR}" REALPATH)
-    get_filename_component(_cxxlens_llvm_cmake_root
-                           "${_cxxlens_llvm_cmake_dir}" DIRECTORY)
-    find_library(
-      _cxxlens_clang_basic_library
-      NAMES clangBasic
-      PATHS ${LLVM_LIBRARY_DIRS}
-      NO_DEFAULT_PATH NO_CACHE)
-    if(_cxxlens_clang_basic_library)
-      find_package(Clang CONFIG QUIET PATHS "${_cxxlens_llvm_cmake_root}/clang"
-                   NO_DEFAULT_PATH)
-    endif()
-  endif()
-
-  if(NOT LLVM_FOUND
-     OR NOT LLVM_VERSION_MAJOR EQUAL 22
-     OR NOT Clang_FOUND)
-    if(CXXLENS_CLANG_ADAPTER STREQUAL "ON")
-      message(
-        FATAL_ERROR
-          "Exact LLVM/Clang 22 development packages are required when CXXLENS_CLANG_ADAPTER=ON"
-      )
-    endif()
     message(
       STATUS
-        "Exact LLVM/Clang 22 not found; building the structured unavailable adapter"
+        "Exact LLVM/Clang 22 adapter unavailable: CXXLENS_CLANG_ADAPTER=OFF (structured unavailable build)"
     )
-    target_compile_definitions(${target} PRIVATE CXXLENS_HAS_CLANG22=0)
-    set(CXXLENS_CLANG22_AVAILABLE
-        FALSE
-        CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
     return()
   endif()
 
@@ -255,13 +235,69 @@ function(cxxlens_configure_clang22 target)
       clangSerialization
       clangTooling
       clangToolingCore)
-  foreach(component IN LISTS _cxxlens_clang22_components)
-    if(NOT TARGET ${component})
+  set(_cxxlens_clang22_unavailable_reason "")
+  find_package(LLVM 22.1 CONFIG QUIET)
+  if(NOT LLVM_FOUND)
+    set(_cxxlens_clang22_unavailable_reason "llvm-package-not-found")
+  elseif(NOT LLVM_VERSION_MAJOR STREQUAL "22")
+    set(_cxxlens_clang22_unavailable_reason "llvm-major-mismatch")
+  elseif(NOT LLVM_CMAKE_DIR OR NOT LLVM_LIBRARY_DIRS)
+    set(_cxxlens_clang22_unavailable_reason "llvm-package-metadata-incomplete")
+  else()
+    get_filename_component(_cxxlens_llvm_cmake_dir "${LLVM_CMAKE_DIR}" REALPATH)
+    get_filename_component(_cxxlens_llvm_cmake_root
+                           "${_cxxlens_llvm_cmake_dir}" DIRECTORY)
+    find_library(
+      _cxxlens_clang_basic_library
+      NAMES clangBasic
+      PATHS ${LLVM_LIBRARY_DIRS}
+      NO_DEFAULT_PATH NO_CACHE)
+    if(NOT _cxxlens_clang_basic_library)
+      set(_cxxlens_clang22_unavailable_reason "clang-basic-library-missing")
+    else()
+      find_package(Clang CONFIG QUIET PATHS "${_cxxlens_llvm_cmake_root}/clang"
+                   NO_DEFAULT_PATH)
+      if(NOT Clang_FOUND)
+        set(_cxxlens_clang22_unavailable_reason "clang-package-not-found")
+      endif()
+    endif()
+  endif()
+
+  if(_cxxlens_clang22_unavailable_reason STREQUAL "")
+    set(_cxxlens_clang22_missing_targets "")
+    foreach(component IN LISTS _cxxlens_clang22_components)
+      if(NOT TARGET ${component})
+        list(APPEND _cxxlens_clang22_missing_targets "${component}")
+      endif()
+    endforeach()
+    if(_cxxlens_clang22_missing_targets)
+      string(JOIN "," _cxxlens_clang22_missing_target_text
+             ${_cxxlens_clang22_missing_targets})
+      set(_cxxlens_clang22_unavailable_reason
+          "required-targets-missing:${_cxxlens_clang22_missing_target_text}")
+    endif()
+  endif()
+
+  if(NOT _cxxlens_clang22_unavailable_reason STREQUAL "")
+    set(CXXLENS_CLANG22_UNAVAILABLE_REASON
+        "${_cxxlens_clang22_unavailable_reason}"
+        CACHE INTERNAL "Reason the exact Clang 22 adapter is unavailable" FORCE)
+    if(CXXLENS_CLANG_ADAPTER STREQUAL "ON")
       message(
-        FATAL_ERROR "Required explicit Clang 22 target is missing: ${component}"
+        FATAL_ERROR
+          "Exact LLVM/Clang 22 development packages are required when CXXLENS_CLANG_ADAPTER=ON (reason=${_cxxlens_clang22_unavailable_reason}; LLVM_DIR=${LLVM_DIR}; Clang_DIR=${Clang_DIR})"
       )
     endif()
-  endforeach()
+    message(
+      STATUS
+        "Exact LLVM/Clang 22 unavailable (reason=${_cxxlens_clang22_unavailable_reason}; LLVM_DIR=${LLVM_DIR}; Clang_DIR=${Clang_DIR}); building the structured unavailable adapter"
+    )
+    target_compile_definitions(${target} PRIVATE CXXLENS_HAS_CLANG22=0)
+    set(CXXLENS_CLANG22_AVAILABLE
+        FALSE
+        CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
+    return()
+  endif()
 
   target_compile_definitions(${target} PRIVATE CXXLENS_HAS_CLANG22=1)
   target_compile_definitions(
@@ -280,27 +316,58 @@ function(cxxlens_configure_clang22 target)
   target_include_directories(${target} SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS}
                                                       ${CLANG_INCLUDE_DIRS})
   # The exact LLVM 22 distribution exports both non-PIC component archives and
-  # a shared clang-cpp DSO.  A shared public SDK cannot embed those archives:
-  # the transitive LLVMSupport closure includes a non-PIC zstd archive and the
-  # link must fail closed instead of producing a text-relocation DSO.  Keep the
-  # worker's private static closure explicit, while making the installed public
-  # shared SDK depend on the exact packaged clang-cpp DSO.
-  if(CXXLENS_BUILD_SHARED AND UNIX
-     AND target STREQUAL "cxxlens_clang22_provider_sdk")
+  # a shared clang-cpp DSO. A shared public SDK cannot embed those archives: the
+  # transitive LLVMSupport closure includes a non-PIC zstd archive and the link
+  # must fail closed instead of producing a text-relocation DSO. The same
+  # boundary is required for UNIX ASan builds, including the private worker
+  # native SDK closure: the packaged archives are not sanitizer-instrumented,
+  # while LLVM 22's allocator inline definitions are sanitizer-dependent.
+  set(_cxxlens_use_shared_clang_cpp FALSE)
+  if(UNIX AND CXXLENS_ENABLE_ASAN)
+    set(_cxxlens_use_shared_clang_cpp TRUE)
+  elseif(CXXLENS_BUILD_SHARED AND UNIX
+         AND target STREQUAL "cxxlens_clang22_provider_sdk")
+    set(_cxxlens_use_shared_clang_cpp TRUE)
+  endif()
+  if(_cxxlens_use_shared_clang_cpp)
     if(NOT TARGET clang-cpp)
       message(
         FATAL_ERROR
-          "Shared Clang 22 provider SDK requires the exact packaged clang-cpp shared target"
+          "The exact Clang 22 boundary requires the packaged clang-cpp shared target"
+      )
+    endif()
+    if(NOT TARGET LLVM)
+      message(
+        FATAL_ERROR
+          "The exact Clang 22 boundary requires the packaged LLVM shared target"
       )
     endif()
     get_target_property(_cxxlens_clang_cpp_type clang-cpp TYPE)
     if(NOT _cxxlens_clang_cpp_type STREQUAL "SHARED_LIBRARY")
       message(
         FATAL_ERROR
-          "Shared Clang 22 provider SDK requires clang-cpp to be a shared library target"
+          "The exact Clang 22 boundary requires clang-cpp to be a shared library target"
       )
     endif()
-    target_link_libraries(${target} PRIVATE clang-cpp)
+    get_target_property(_cxxlens_llvm_type LLVM TYPE)
+    if(NOT _cxxlens_llvm_type STREQUAL "SHARED_LIBRARY")
+      message(
+        FATAL_ERROR
+          "The exact Clang 22 boundary requires LLVM to be a shared library target"
+      )
+    endif()
+    # Adapter objects call inline LLVM helpers whose out-of-line symbols live
+    # in libLLVM.  Link both DSOs explicitly; a transitive DT_NEEDED entry
+    # from clang-cpp is not sufficient for direct references under GNU ld.
+    target_link_libraries(${target} PRIVATE clang-cpp LLVM)
+    if(UNIX AND CXXLENS_ENABLE_ASAN)
+      set(CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY
+          TRUE
+          CACHE INTERNAL
+            "Whether the last exact Clang 22 ASan boundary uses the packaged shared clang-cpp target"
+            FORCE)
+      set_property(TARGET ${target} PROPERTY CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY TRUE)
+    endif()
   else()
     target_link_libraries(${target} PRIVATE ${_cxxlens_clang22_components})
   endif()

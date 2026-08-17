@@ -366,15 +366,14 @@ namespace cxxlens::sdk::provider::detail
 				"heartbeat-clock-invalid", "host_receipt_time_ns", "before-session-start"));
 		if (sample.provider_monotonic_time_ns > sample.host_receipt_time_ns)
 			return unexpected(ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "future"));
+		if (last_provider_time_ns_ && sample.provider_monotonic_time_ns < *last_provider_time_ns_)
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "backwards"));
 		if (last_host_receipt_time_ns_ && sample.host_receipt_time_ns < *last_host_receipt_time_ns_)
 			return unexpected(
 				ng1_error("heartbeat-clock-invalid", "host_receipt_time_ns", "backwards"));
 		if (sample.kind == ng1_heartbeat_kind::probe)
 		{
-			if (last_probe_provider_time_ns_ &&
-				sample.provider_monotonic_time_ns < *last_probe_provider_time_ns_)
-				return unexpected(
-					ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "backwards"));
 			auto next_sequence = last_probe_sequence_;
 			if (auto valid = accept_contiguous(next_sequence,
 											   sample.heartbeat_sequence,
@@ -387,7 +386,6 @@ namespace cxxlens::sdk::provider::detail
 											"highest_contiguous_acked_sequence",
 											"ahead-of-observed"));
 			last_probe_sequence_ = next_sequence;
-			last_probe_provider_time_ns_ = sample.provider_monotonic_time_ns;
 			last_probe_host_receipt_ns_ = sample.host_receipt_time_ns;
 		}
 		else
@@ -416,10 +414,6 @@ namespace cxxlens::sdk::provider::detail
 					return unexpected(ng1_error(
 						"heartbeat-timeout", "host_receipt_time_ns", "ack-deadline-reached"));
 			}
-			if (last_ack_provider_time_ns_ &&
-				sample.provider_monotonic_time_ns < *last_ack_provider_time_ns_)
-				return unexpected(
-					ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "backwards"));
 			auto next_sequence = last_ack_sequence_;
 			if (auto valid = accept_contiguous(next_sequence,
 											   sample.heartbeat_sequence,
@@ -432,9 +426,9 @@ namespace cxxlens::sdk::provider::detail
 											"highest_contiguous_acked_sequence",
 											"ahead-of-observed"));
 			last_ack_sequence_ = next_sequence;
-			last_ack_provider_time_ns_ = sample.provider_monotonic_time_ns;
 			last_valid_ack_received_ns_ = sample.host_receipt_time_ns;
 		}
+		last_provider_time_ns_ = sample.provider_monotonic_time_ns;
 		last_host_receipt_time_ns_ = sample.host_receipt_time_ns;
 		return {};
 	}
@@ -479,6 +473,18 @@ namespace cxxlens::sdk::provider::detail
 		return {};
 	}
 
+	void ng1_heartbeat_state::rebase_start(const std::uint64_t started_at_ns) noexcept
+	{
+		started_at_ns_ = started_at_ns;
+		last_probe_sequence_.reset();
+		last_ack_sequence_.reset();
+		last_provider_time_ns_.reset();
+		last_probe_host_receipt_ns_.reset();
+		last_host_receipt_time_ns_.reset();
+		last_valid_ack_received_ns_.reset();
+		terminal_ = false;
+	}
+
 	result<ng1_progress_state> ng1_progress_state::create(std::string task_id,
 														  std::string dependency_group_id,
 														  const std::uint64_t started_at_ns)
@@ -509,13 +515,16 @@ namespace cxxlens::sdk::provider::detail
 		if (total_units_ && sample.total_units != *total_units_)
 			return unexpected(ng1_error("progress-rate", "total_units", "changed"));
 		if (sample.host_receipt_time_ns < started_at_ns_)
-			return unexpected(ng1_error("progress-rate", "host_receipt_time_ns", "before-start"));
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "host_receipt_time_ns", "before-start"));
 		if (sample.provider_monotonic_time_ns > sample.host_receipt_time_ns)
 			return unexpected(ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "future"));
 		if (last_host_receipt_time_ns_ && sample.host_receipt_time_ns < *last_host_receipt_time_ns_)
-			return unexpected(ng1_error("progress-rate", "host_receipt_time_ns", "backwards"));
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "host_receipt_time_ns", "backwards"));
 		if (last_provider_time_ns_ && sample.provider_monotonic_time_ns < *last_provider_time_ns_)
-			return unexpected(ng1_error("progress-rate", "monotonic_time_ns", "backwards"));
+			return unexpected(
+				ng1_error("heartbeat-clock-invalid", "monotonic_time_ns", "backwards"));
 
 		auto next_sequence = last_sequence_;
 		if (auto valid = accept_contiguous(
@@ -608,6 +617,19 @@ namespace cxxlens::sdk::provider::detail
 			*last_completed_units_ != *total_units_)
 			return unexpected(ng1_error("progress-rate", "terminal", "total-not-reached"));
 		return {};
+	}
+
+	void ng1_progress_state::rebase_start(const std::uint64_t started_at_ns) noexcept
+	{
+		started_at_ns_ = started_at_ns;
+		last_sequence_.reset();
+		last_provider_time_ns_.reset();
+		last_host_receipt_time_ns_.reset();
+		last_completed_units_.reset();
+		rate_checkpoint_receipt_ns_.reset();
+		rate_checkpoint_completed_units_.reset();
+		total_units_.reset();
+		terminal_observed_ = false;
 	}
 
 	result<void> ng1_resume_binding::validate() const
@@ -708,6 +730,15 @@ namespace cxxlens::sdk::provider::detail
 			return unexpected(std::move(valid.error()));
 		if (fsync_sequence == 0U)
 			return unexpected(ng1_error("resume-token-stale", "fsync_sequence", "zero"));
+		return {};
+	}
+
+	result<void> ng1_spill_resume_frontier::validate() const
+	{
+		if (auto valid = receipt.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		if (resume_generation == 0U)
+			return unexpected(ng1_error("resume-token-stale", "resume_generation", "zero"));
 		return {};
 	}
 
@@ -816,6 +847,15 @@ namespace cxxlens::sdk::provider::detail
 		return {};
 	}
 
+	result<void> ng1_spill_prefix_state::validate_ack_frontier(
+		const std::uint64_t highest_contiguous_acked_sequence) const
+	{
+		if (record_digests_.empty() || highest_contiguous_acked_sequence >= next_sequence_)
+			return unexpected(
+				ng1_error("spill-corrupt", "highest_contiguous_acked_sequence", "not-in-prefix"));
+		return {};
+	}
+
 	result<std::string> ng1_spill_prefix_state::spill_digest() const
 	{
 		std::vector<canonical_value> fields;
@@ -832,6 +872,8 @@ namespace cxxlens::sdk::provider::detail
 	{
 		if (!valid_semantic_digest(staged_digest))
 			return unexpected(ng1_error("spill-corrupt", "staged_digest", "semantic-v2"));
+		if (auto valid = validate_ack_frontier(highest_contiguous_acked_sequence); !valid)
+			return unexpected(std::move(valid.error()));
 		if (fsync_sequence == 0U)
 			return unexpected(ng1_error("spill-corrupt", "fsync_sequence", "zero"));
 		auto prefix_digest = spill_digest();

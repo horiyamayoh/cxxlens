@@ -211,7 +211,8 @@ if(BUILD_TESTING)
   add_library(
     cxxlens-sqlite-disposable-qualification-internal STATIC EXCLUDE_FROM_ALL
     src/sdk/sqlite_disposable_qualification_internal.cpp
-    src/sdk/sqlite_disposable_normalization_internal.cpp)
+    src/sdk/sqlite_disposable_normalization_internal.cpp
+    src/sdk/sqlite_payload_streaming_internal.cpp)
   target_compile_features(cxxlens-sqlite-disposable-qualification-internal
                           PRIVATE cxx_std_23)
   target_include_directories(
@@ -266,7 +267,8 @@ set_target_properties(cxxlens PROPERTIES EXPORT_NAME cxxlens)
 add_library(
   cxxlens_provider_runtime_internal OBJECT
   EXCLUDE_FROM_ALL src/sdk/provider_runtime.cpp
-  src/runtime/provider_process_adapter.cpp)
+  src/runtime/provider_process_adapter.cpp src/sdk/provider_ng1_transport.cpp
+  src/sdk/provider_ng1_validation.cpp)
 target_compile_definitions(cxxlens_provider_runtime_internal
                            PRIVATE CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY=1)
 target_link_libraries(cxxlens_provider_runtime_internal
@@ -284,8 +286,17 @@ cxxlens_enable_sanitizers(cxxlens_provider_runtime_internal)
 
 add_library(
   cxxlens_provider_sdk
-  ${CXXLENS_LIBRARY_TYPE} src/sdk/provider.cpp src/sdk/incremental.cpp
-  src/runtime/provider_process_adapter.cpp src/sdk/provider_runtime.cpp
+  ${CXXLENS_LIBRARY_TYPE}
+  src/sdk/provider.cpp
+  src/sdk/incremental.cpp
+  src/runtime/provider_process_adapter.cpp
+  src/sdk/provider_runtime.cpp
+  src/sdk/provider_ng1_validation.cpp
+  src/sdk/provider_ng1_transport.cpp
+  src/sdk/provider_ng1_recovery.cpp
+  src/sdk/provider_ng1_spill_port_internal.cpp
+  src/sdk/provider_ng1_session.cpp
+  src/sdk/provider_ng1_live_driver.cpp
   src/sdk/testing.cpp)
 add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
 cxxlens_configure_component(cxxlens_provider_sdk provider_sdk)
@@ -392,6 +403,17 @@ target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_worker_core)
 cxxlens_enable_sanitizers(cxxlens_clang22_worker_core)
 cxxlens_configure_clang22(cxxlens_clang22_worker_core)
+# Keep the provider SDK runtime on the project-wide RTTI configuration. Its
+# context owns standard-library polymorphic state (including shared_ptr control
+# blocks), so compiling only this translation unit with an RTTI-disabled
+# override makes UBSan observe invalid vtables when the exact provider is
+# enabled.
+if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
+  set_source_files_properties(
+    src/llvm/clang22/materialization_io.cpp
+    src/llvm/clang22/materialization_task_spool.cpp PROPERTIES COMPILE_OPTIONS
+                                                               "-frtti")
+endif()
 
 # Provider-owned implementation for the installed Clang 22 machine surface. This
 # target is deliberately private: no headers, symbols, or CMake target are
@@ -417,6 +439,7 @@ add_library(
   src/llvm/clang22/materialization_claim_stream.cpp
   src/llvm/clang22/materialization_bounded_claim_source.cpp
   src/llvm/clang22/materialization_store.cpp
+  src/llvm/clang22/materialization_store_outcome.cpp
   src/llvm/clang22/materialization_rooted_vfs.cpp
   src/llvm/clang22/materialization_occurrence.cpp
   src/llvm/clang22/materialization_execution_journal.cpp

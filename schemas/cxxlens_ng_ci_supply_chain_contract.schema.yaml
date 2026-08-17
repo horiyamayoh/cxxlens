@@ -54,12 +54,13 @@ properties:
   workflow:
     type: object
     additionalProperties: false
-    required: [files, action_revision, runner_label, bootstrap_profiles]
+    required: [files, action_revision, local_workflow_digest, runner_label, bootstrap_profiles]
     properties:
       files:
         type: array
         const: [.github/workflows/quality.yml, .github/workflows/nightly.yml]
       action_revision: {const: full-commit-sha}
+      local_workflow_digest: {const: sha256-from-supply-chain-lock}
       runner_label: {const: ubuntu-24.04}
       bootstrap_profiles:
         type: array
@@ -73,6 +74,8 @@ properties:
       - actions
       - tools
       - packages
+      - package_cache
+      - package_cache_receipt
       - python_distributions
       - lock_digest
       - requirements_digest
@@ -82,6 +85,9 @@ properties:
       actions: {const: names-and-full-commit-shas}
       tools: {const: version-path-and-binary-digest}
       packages: {const: exact-dpkg-versions}
+      package_cache: {const: verified-cache-or-locked-download-with-authority-and-dependency-resolution}
+      package_cache_receipt:
+        const: cxxlens.ci-package-cache-receipt.v2
       python_distributions: {const: versions-and-record-digests}
       lock_digest: {const: sha256}
       requirements_digest: {const: sha256}

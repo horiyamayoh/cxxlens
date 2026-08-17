@@ -400,6 +400,12 @@ target_link_libraries(cxxlens-provider-process-fixture
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-runtime
                             unit/sdk/provider_runtime_test.cpp)
+if(NOT CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-runtime
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+endif()
 target_link_libraries(cxxlens-unit-sdk-provider-runtime
                       PRIVATE cxxlens::provider_sdk)
 target_include_directories(cxxlens-unit-sdk-provider-runtime
@@ -426,13 +432,14 @@ check_cxx_source_compiles(
 #ifndef SYS_pidfd_send_signal
 #error "The timeout regression requires pidfd_send_signal"
 #endif
-#ifndef P_PIDFD
-#error "The timeout regression requires P_PIDFD"
-#endif
-int main() { return 0; }
+int main() {
+  siginfo_t status{};
+  return waitid(P_PIDFD, 0, &status, WEXITED | WNOHANG);
+}
 ]=]
-  CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
+  CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   add_test(NAME unit.sdk-provider-runtime-timeout
            COMMAND cxxlens-unit-sdk-provider-runtime --timeout-regression
                    "$<TARGET_FILE:cxxlens-provider-process-fixture>")
@@ -451,7 +458,8 @@ set_tests_properties(
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     PROCESSORS 2)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   set_tests_properties(
     unit.sdk-provider-runtime-timeout
     PROPERTIES LABELS
@@ -479,6 +487,22 @@ set_tests_properties(
   unit.sdk-provider-ng1-validation
   PROPERTIES LABELS "unit;sdk;provider;ng1;validation;fail-closed")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-spill-port
+                            unit/sdk/provider_ng1_spill_port_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-spill-port
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-spill-port
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-spill-port
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-ng1-spill-port
+         COMMAND cxxlens-unit-sdk-provider-ng1-spill-port)
+set_tests_properties(
+  unit.sdk-provider-ng1-spill-port
+  PROPERTIES LABELS "unit;sdk;provider;ng1;spill;fsync;recovery;fail-closed")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-transport
                             unit/sdk/provider_ng1_transport_test.cpp)
 target_sources(
@@ -495,6 +519,77 @@ set_tests_properties(
   unit.sdk-provider-ng1-transport
   PROPERTIES LABELS
              "unit;sdk;provider;ng1;transport;deterministic-cbor;fail-closed")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-recovery-adapter
+                            unit/sdk/provider_ng1_recovery_adapter_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-recovery-adapter
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-recovery-adapter
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-recovery-adapter
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-ng1-recovery-adapter
+         COMMAND cxxlens-unit-sdk-provider-ng1-recovery-adapter)
+set_tests_properties(
+  unit.sdk-provider-ng1-recovery-adapter
+  PROPERTIES LABELS "unit;sdk;provider;ng1;recovery;resume;fail-closed")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-session
+                            unit/sdk/provider_ng1_session_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-session
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
+if(NOT CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-ng1-session
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+endif()
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-session
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-unit-sdk-provider-ng1-session
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+add_test(NAME unit.sdk-provider-ng1-session
+         COMMAND cxxlens-unit-sdk-provider-ng1-session)
+set_tests_properties(
+  unit.sdk-provider-ng1-session
+  PROPERTIES LABELS "unit;sdk;provider;ng1;session;recovery;spill;fail-closed")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-live-driver
+                            unit/sdk/provider_ng1_live_driver_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-provider-ng1-live-driver
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_live_driver.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
+if(NOT CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-ng1-live-driver
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+endif()
+target_link_libraries(cxxlens-unit-sdk-provider-ng1-live-driver
+                      PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-ng1-live-driver
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-unit-sdk-provider-ng1-live-driver
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+add_test(NAME unit.sdk-provider-ng1-live-driver
+         COMMAND cxxlens-unit-sdk-provider-ng1-live-driver)
+set_tests_properties(
+  unit.sdk-provider-ng1-live-driver
+  PROPERTIES LABELS "unit;sdk;provider;ng1;live;transport;session;fail-closed")
 
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)
@@ -629,6 +724,18 @@ set_tests_properties(
   PROPERTIES LABELS
              "adapter;provider;clang22;materialization;store;transaction;sqlite"
 )
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-store-outcome
+  adapter/clang22/materialization_store_outcome_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-store-outcome
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-store-outcome
+         COMMAND cxxlens-clang22-materialization-store-outcome)
+set_tests_properties(
+  adapter.clang22-materialization-store-outcome
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;store;outcome;security")
 
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-request-stream
@@ -793,6 +900,18 @@ add_test(NAME public-api.provider-clang22-header
 set_tests_properties(public-api.provider-clang22-header
                      PROPERTIES LABELS "public-api;native-sdk;clang22")
 
+cxxlens_add_test_executable(
+  cxxlens-public-api-provider-clang22-translation-unit-input
+  public_headers/provider_clang22_translation_unit_input_test.cpp)
+target_link_libraries(cxxlens-public-api-provider-clang22-translation-unit-input
+                      PRIVATE cxxlens::clang22_provider_sdk)
+add_test(NAME acceptance.public-api.provider-clang22-translation-unit-input
+         COMMAND cxxlens-public-api-provider-clang22-translation-unit-input)
+set_tests_properties(
+  acceptance.public-api.provider-clang22-translation-unit-input
+  PROPERTIES LABELS
+             "acceptance;public-api;native-sdk;clang22;validation;security")
+
 foreach(
   example IN
   ITEMS typed_query
@@ -895,6 +1014,7 @@ foreach(
         migration_completion
         foundation_completion
         api_development_readiness
+        use_case_capability_catalog
         design_feedback
         public_callable_inventory
         g5_qualification)
@@ -938,6 +1058,7 @@ foreach(
         sdk-consumer
         clang22-sdk-consumer
         clang22-materializer-success
+        clang22-materializer-base64
         clang22-materializer-negative
         real-project-consumer
         real-project-incompatible-version
@@ -953,12 +1074,37 @@ foreach(
                installed_prefix PROCESSORS 2)
 endforeach()
 
+add_test(
+  NAME install.clang22-materializer-installation-binding
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/install/clang22_materializer_installation_binding_test.py"
+    --root "${PROJECT_SOURCE_DIR}" --prefix
+    "${CMAKE_CURRENT_BINARY_DIR}/install-consumer/relocated-prefix"
+    --executable-suffix "${CMAKE_EXECUTABLE_SUFFIX}" --evidence-dir
+    "${CMAKE_CURRENT_BINARY_DIR}/install-consumer/materialization-binding-evidence"
+)
+set_tests_properties(
+  install.clang22-materializer-installation-binding
+  PROPERTIES LABELS
+             "install;package;acceptance;consumer;materialization;failure;phase"
+             FIXTURES_REQUIRED installed_prefix PROCESSORS 2)
+
 cxxlens_configure_sanitizer_tests()
+if(CXXLENS_ENABLE_ASAN)
+  set_property(
+    TEST install.clang22-materializer-success
+         install.clang22-materializer-base64
+         install.clang22-materializer-negative
+    APPEND
+    PROPERTY ENVIRONMENT "CXXLENS_ASAN_INSTALLED_QUALIFICATION=1")
+endif()
 
 add_custom_target(cxxlens-ng-test-binaries)
 add_dependencies(
   cxxlens-ng-test-binaries
   cxxlens-clang-worker-22
+  cxxlens-clang22-materialize
   cxxlens-clang22-provider-normalizer
   cxxlens-clang22-provider-worker-protocol
   cxxlens-clang22-materialization-json
@@ -968,6 +1114,7 @@ add_dependencies(
   cxxlens-clang22-materialization-claims
   cxxlens-clang22-materialization-seal
   cxxlens-clang22-materialization-store
+  cxxlens-clang22-materialization-store-outcome
   cxxlens-clang22-materialization-request-stream
   cxxlens-clang22-materialization-request-identity
   cxxlens-clang22-materialization-task-spool
@@ -981,17 +1128,25 @@ add_dependencies(
   cxxlens-provider-process-fixture
   cxxlens-public-header-cxxlens
   cxxlens-public-header-provider-clang22
+  cxxlens-public-api-provider-clang22-translation-unit-input
   cxxlens-public-header-sdk
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
   cxxlens-unit-sdk-provider-ng1-validation
+  cxxlens-unit-sdk-provider-ng1-spill-port
   cxxlens-unit-sdk-provider-ng1-transport
+  cxxlens-unit-sdk-provider-ng1-recovery-adapter
+  cxxlens-unit-sdk-provider-ng1-session
+  cxxlens-unit-sdk-provider-ng1-live-driver
   cxxlens-unit-sdk-query-runtime
   cxxlens-unit-sdk-sqlite-connection-lifecycle
   cxxlens-unit-sdk-sqlite-default-forwarding-vfs
   cxxlens-unit-sdk-sqlite-disposable-qualification
   cxxlens-unit-sdk-sqlite-limit-length-precedence
   cxxlens-unit-sdk-sqlite-payload-streaming
+  cxxlens-unit-sdk-sqlite-shm-process-port
+  cxxlens-unit-sdk-sqlite-shm-vfs-alias-registration
+  cxxlens-unit-sdk-sqlite-shm-vfs-alias-identity-sealer
   cxxlens-unit-sdk-sqlite-shm-identity-issuer
   cxxlens-unit-sdk-sqlite-shm-mapping-lease
   cxxlens-unit-sdk-sqlite-shm-mapping-registry
@@ -1006,4 +1161,27 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-wal-recovery-workspace
   cxxlens-unit-sdk-sqlite-wal-receipt
   cxxlens-unit-sdk-store
+  cxxlens-unit-sdk-sqlite-writer-gate-outcome
+  cxxlens-df0200-claim-batch-corpus
+  cxxlens-sdk-example-typed_query
+  cxxlens-sdk-example-dynamic_query
+  cxxlens-sdk-example-portable_provider
+  cxxlens-sdk-example-recipe
+  cxxlens-sdk-example-relation_claim_batch
+  cxxlens-sdk-example-snapshot_store
+  cxxlens-sdk-example-query_execution
+  cxxlens-sdk-example-incremental_materialization
+  cxxlens-sdk-example-clang22-native
+  cxxlens-sdk-negative-dynamic_literal_type_mismatch
+  cxxlens-sdk-negative-unordered_limit
+  cxxlens-sdk-negative-invalid_recipe
+  cxxlens-sdk-negative-provider_no_credit
   cxxlens-g5-runtime)
+
+if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)
+  add_dependencies(cxxlens-ng-test-binaries cxxlens-sanitizer-canary)
+endif()
+if(CXXLENS_ENABLE_TSAN)
+  add_dependencies(cxxlens-ng-test-binaries cxxlens-tsan-test-canary
+                   cxxlens-tsan-provider-canary)
+endif()

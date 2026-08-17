@@ -124,6 +124,18 @@ namespace cxxlens::detail::clang22::materialization
 			return materialization_request_id_;
 		}
 
+		/** Return the complete source-private request binding sealed at source admission. */
+		[[nodiscard]] const materialization_claim_request_binding& request_binding() const noexcept
+		{
+			return request_binding_;
+		}
+
+		/** Return the exact task census sealed into this source's request authority. */
+		[[nodiscard]] std::uint64_t task_count() const noexcept
+		{
+			return expected_task_count_;
+		}
+
 		[[nodiscard]] std::size_t partition_count() const noexcept
 		{
 			return partitions_.size();
@@ -132,6 +144,12 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] bool sealed() const noexcept
 		{
 			return sealed_;
+		}
+
+		/** Exact installed publication remains closed while any partial guarantee is retained. */
+		[[nodiscard]] bool exact_publication_ready() const noexcept
+		{
+			return sealed_ && !failed_ && exact_publication_ready_;
 		}
 
 	  private:
@@ -148,14 +166,29 @@ namespace cxxlens::detail::clang22::materialization
 			std::uint64_t appended_claim_count{};
 		};
 
-		materialization_bounded_claim_source(std::string materialization_request_id,
-											 const sdk::relation_engine& engine)
-			: materialization_request_id_{std::move(materialization_request_id)}, engine_{&engine}
+		materialization_bounded_claim_source(materialization_claim_request_binding request_binding,
+											 const sdk::relation_engine& engine,
+											 std::uint64_t expected_task_count,
+											 std::function<sdk::result<std::string>(std::size_t)>
+												 selected_request_entry_binding_resolver)
+			: request_binding_{std::move(request_binding)},
+			  materialization_request_id_{request_binding_.materialization_request_id},
+			  engine_{&engine}, expected_task_count_{expected_task_count},
+			  selected_request_entry_binding_resolver_{
+				  std::move(selected_request_entry_binding_resolver)}
 		{
 		}
 
+		/** Validate every retained coverage/guarantee field before opening exact publication. */
+		[[nodiscard]] sdk::result<bool> assess_exact_publication_state();
+
+		materialization_claim_request_binding request_binding_;
 		std::string materialization_request_id_;
 		const sdk::relation_engine* engine_{};
+		std::uint64_t expected_task_count_{};
+		std::uint64_t consumed_task_count_{};
+		std::function<sdk::result<std::string>(std::size_t)>
+			selected_request_entry_binding_resolver_;
 		std::map<std::string, partition_state, std::less<>> partitions_;
 		std::string materializer_semantics_digest_;
 		std::string direct_basis_digest_;
@@ -167,5 +200,8 @@ namespace cxxlens::detail::clang22::materialization
 		std::unique_ptr<materialization_replayable_spool> origin_associations_;
 		bool sealed_{};
 		bool failed_{};
+		bool exact_publication_ready_{};
+		std::uint64_t conflict_count_{};
+		std::uint64_t differential_disagreement_count_{};
 	};
 } // namespace cxxlens::detail::clang22::materialization

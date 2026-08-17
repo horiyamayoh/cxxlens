@@ -19,7 +19,14 @@ from typing import Any
 import jsonschema
 import yaml
 
-from collect_toolchain_provenance import pinned_actions, provenance_digest
+from collect_toolchain_provenance import (
+    hash_files_digest,
+    package_cache_authority_digest,
+    package_cache_config,
+    pinned_actions,
+    provenance_digest,
+    validate_package_cache_profiles,
+)
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -69,6 +76,26 @@ def load_document(path: pathlib.Path) -> dict[str, Any]:
     return value
 
 
+def public_api_contract_pending(root: pathlib.Path) -> list[dict[str, str]]:
+    """Project catalog contract-pending entries into foundation evidence.
+
+    Catalog maturity describes the catalog authority itself.  Individual
+    contract-pending entries are not foundation failures; production scope and
+    release qualification own their promotion to a qualified surface.  Keep
+    the pending entries in the foundation report so this distinction cannot
+    turn into an implicit production claim.
+    """
+
+    catalog = load_document(root / PUBLIC_API)
+    return [
+        {"id": entry["id"], "owner_issue": entry["owner_issue"]}
+        for entry in sorted(
+            catalog["entries"], key=lambda entry: entry["id"]
+        )
+        if entry["status"] == "contract-pending"
+    ]
+
+
 def validate_schema(document: Any, schema: dict[str, Any], label: str) -> None:
     try:
         jsonschema.Draft202012Validator.check_schema(schema)
@@ -104,6 +131,139 @@ def load_provenance_directory(directory: pathlib.Path) -> list[dict[str, Any]]:
     return records
 
 
+def canonical_package_cache_key(
+    lock: dict[str, Any],
+    lock_path: pathlib.Path,
+    profile: str,
+    documentation: str,
+    runner_os: str,
+    runner_arch: str,
+) -> str:
+    """Reconstruct the cache key from locked authority, not submitted evidence."""
+
+    config = package_cache_config(lock)
+    lock_hash_files_digest = hash_files_digest(lock_path)
+
+    runner = lock.get("runner")
+    if not isinstance(runner, dict):
+        fail("verified package-cache runner authority is invalid")
+    if runner_os != runner.get("os"):
+        fail("verified package-cache runner_os differs from locked authority")
+    if runner_arch != runner.get("architecture"):
+        fail("verified package-cache runner_arch differs from locked authority")
+
+    expected_key = config["key_template"]
+    for token, value in {
+        "${runner.os}": runner.get("os"),
+        "${runner.arch}": runner.get("architecture"),
+        "${profile}": profile,
+        "${documentation}": documentation,
+        "${lock_hash_files_digest}": lock_hash_files_digest,
+    }.items():
+        if not isinstance(value, str) or not value:
+            fail("verified package-cache key authority is invalid")
+        expected_key = expected_key.replace(token, value)
+    if "${" in expected_key or not expected_key.startswith(
+        f"cxxlens-ci-packages-{config['key_version']}-"
+    ):
+        fail("verified package-cache key authority is invalid")
+    return expected_key
+
+
+def validate_package_cache_evidence(
+    root: pathlib.Path,
+    evidence: Any,
+    expected_lock_digest: str,
+) -> None:
+    if not isinstance(evidence, dict):
+        fail("toolchain provenance lacks package-cache evidence")
+    lock = load_document(root / "tools/ci/llvm22-noble.lock.json")
+    base_fields = {
+        "status",
+        "receipt_schema",
+        "authority_digest",
+        "lock_digest",
+        "key",
+        "cache_hit",
+        "profiles",
+    }
+    if evidence.get("receipt_schema") != "cxxlens.ci-package-cache-receipt.v2":
+        fail("toolchain provenance package-cache receipt schema differs")
+    if evidence.get("authority_digest") != package_cache_authority_digest(lock):
+        fail("toolchain provenance package-cache authority differs")
+    if evidence.get("lock_digest") != expected_lock_digest:
+        fail("toolchain provenance package-cache lock differs")
+    status = evidence.get("status")
+    if status == "not-requested":
+        if set(evidence) != base_fields:
+            fail("not-requested package-cache evidence contains a fabricated binding")
+        if (
+            evidence.get("key") != "unavailable"
+            or evidence.get("cache_hit") != "not-requested"
+            or evidence.get("profiles") != {}
+        ):
+            fail("not-requested package-cache evidence is invalid")
+        return
+    if status != "verified":
+        fail("toolchain provenance package-cache status is invalid")
+    verified_fields = base_fields | {
+        "profile",
+        "documentation",
+        "runner_os",
+        "runner_arch",
+        "receipt_digest",
+    }
+    if set(evidence) != verified_fields:
+        fail("verified package-cache evidence is incomplete")
+    if evidence.get("cache_hit") not in {"hit", "miss"}:
+        fail("verified package-cache cache-hit evidence is invalid")
+    profile = evidence.get("profile")
+    documentation = evidence.get("documentation")
+    if not isinstance(profile, str) or not isinstance(documentation, str):
+        fail("verified package-cache scope is invalid")
+    if profile != "none" and profile not in lock["llvm"]["profiles"]:
+        fail("verified package-cache profile is not locked")
+    if documentation not in {"true", "false"}:
+        fail("verified package-cache documentation scope is invalid")
+    expected_profiles = set()
+    if profile != "none":
+        expected_profiles.add(profile)
+    elif documentation != "true":
+        fail("verified package-cache scope is empty")
+    if documentation == "true":
+        expected_profiles.add("documentation")
+    for field in ("key", "runner_os", "runner_arch"):
+        if not isinstance(evidence.get(field), str) or not evidence[field]:
+            fail(f"verified package-cache {field} is unavailable")
+    expected_key = canonical_package_cache_key(
+        lock,
+        root / "tools/ci/llvm22-noble.lock.json",
+        profile,
+        documentation,
+        evidence["runner_os"],
+        evidence["runner_arch"],
+    )
+    if evidence["key"] != expected_key:
+        fail("verified package-cache key differs from locked authority")
+    try:
+        validate_package_cache_profiles(
+            lock,
+            evidence.get("profiles"),
+            evidence["cache_hit"],
+            expected_profiles,
+        )
+    except ValueError as error:
+        fail(f"invalid verified package-cache evidence: {error}")
+    receipt_digest = evidence.get("receipt_digest")
+    if (
+        not isinstance(receipt_digest, str)
+        or not receipt_digest.startswith("sha256:")
+        or len(receipt_digest) != len("sha256:") + 64
+        or any(character not in "0123456789abcdef" for character in receipt_digest[7:])
+    ):
+        fail("verified package-cache receipt digest is invalid")
+
+
 def summarize_supply_chain(
     root: pathlib.Path,
     records: list[dict[str, Any]],
@@ -116,6 +276,7 @@ def summarize_supply_chain(
         "tree": git_state["tree"],
     }
     expected_actions = pinned_actions(root)
+    lock = load_document(root / "tools/ci/llvm22-noble.lock.json")
     for record in records:
         if record.get("digest") != provenance_digest(record):
             fail("toolchain provenance digest mismatch")
@@ -128,6 +289,9 @@ def summarize_supply_chain(
             fail("toolchain provenance requirements lock mismatch")
         if record.get("actions") != expected_actions:
             fail("toolchain provenance action set mismatch")
+        validate_package_cache_evidence(
+            root, record.get("package_cache"), supply_chain.get("lock_digest", lock_digest)
+        )
         runner = record.get("runner")
         if not isinstance(runner, dict) or runner.get("image_os") in (None, "unavailable") or runner.get(
             "image_version"
@@ -150,11 +314,14 @@ def summarize_supply_chain(
     runners = unique_rows("runner")
     tools = unique_rows("tools")
     packages = unique_rows("packages")
+    package_cache = unique_rows("package_cache")
     python_packages = unique_rows("python_distributions")
     if not packages or any("package_digest" not in row for row in packages):
         fail("toolchain provenance lacks package digests")
     if not python_packages or any("record_digest" not in row for row in python_packages):
         fail("toolchain provenance lacks Python distribution digests")
+    if not package_cache:
+        fail("toolchain provenance lacks package-cache evidence")
     return {
         "schema": "cxxlens.ci-supply-chain-summary.v1",
         "lock_digest": lock_digest,
@@ -165,6 +332,7 @@ def summarize_supply_chain(
         "runners": runners,
         "tools": tools,
         "packages": packages,
+        "package_cache": package_cache,
         "python_distributions": python_packages,
     }
 
@@ -283,11 +451,8 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         fail(f"provider support matrix contains migration blockers: {blockers}")
 
     public_api = load_document(root / PUBLIC_API)
-    pending = [
-        row["id"] for row in public_api["entries"] if row["status"] != "implemented"
-    ]
-    if public_api["maturity"] != "implemented" or pending:
-        fail(f"public API catalog contains non-implemented entries: {pending}")
+    if public_api["maturity"] != "implemented":
+        fail("public API catalog maturity is not implemented")
 
     if set(manifest["zero_audits"]) != EXPECTED_ZERO_AUDITS:
         fail("foundation zero-audit set differs from the accepted gate")
@@ -589,6 +754,7 @@ def build_report(
         "git": git_state,
         "authority_digests": authority_digests,
         "version_contracts": manifest["version_contracts"],
+        "public_api_contract_pending": public_api_contract_pending(root),
         "evidence_claims": evidence_claims,
         "ci": {
             "repository": repository,

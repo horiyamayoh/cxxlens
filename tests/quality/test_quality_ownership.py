@@ -10,17 +10,22 @@ import sys
 import unittest
 import tempfile
 
+import yaml
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools/quality"))
 
 from check_quality_ownership import (  # noqa: E402
+    CONSTRUCTIBILITY_MANIFEST,
+    CONSTRUCTIBILITY_SCHEMA,
     MANIFEST,
     QualityOwnershipError,
     canonical_digest,
     evidence_id,
     load_yaml,
     select_mode,
+    validate_constructibility_projection,
     validate_evidence,
     validate_manifest,
 )
@@ -184,9 +189,237 @@ class QualityOwnershipTest(unittest.TestCase):
                         verify_manifest(ROOT, prefix, compiler, "static-test", changed)
 
             artifact.write_text("substituted\n", encoding="utf-8")
-            with self.assertRaisesRegex(InstallArtifactError, "binding mismatch"):
+            with self.assertRaisesRegex(
+                InstallArtifactError,
+                r"binding mismatch: .*files .*changed=\['artifact.txt'\]",
+            ):
                 verify_manifest(ROOT, prefix, compiler, "static-test", baseline)
 
+    def test_install_artifact_rejects_stale_occurrence_provenance(self) -> None:
+        compiler = pathlib.Path(shutil.which("c++") or "")
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = pathlib.Path(temporary) / "prefix"
+            occurrence = prefix / "share/cxxlens/materialization/clang22"
+            occurrence.mkdir(parents=True)
+            (prefix / "artifact.txt").write_text("accepted\n", encoding="utf-8")
+            (occurrence / "occurrence-v1.json").write_text(
+                '{"source_revision":"' + "0" * 40 + '","source_tree":"' + "0" * 40 + '"}\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                InstallArtifactError,
+                "occurrence source provenance mismatch.*refusing to create",
+            ):
+                build_manifest(ROOT, prefix, compiler, "static-test")
+
+    def test_install_artifact_accepts_configured_source_provenance(self) -> None:
+        compiler = pathlib.Path(shutil.which("c++") or "")
+        revision = "a" * 40
+        tree = "b" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = pathlib.Path(temporary) / "prefix"
+            occurrence = prefix / "share/cxxlens/materialization/clang22"
+            occurrence.mkdir(parents=True)
+            (prefix / "artifact.txt").write_text("accepted\n", encoding="utf-8")
+            (occurrence / "occurrence-v1.json").write_text(
+                '{"source_revision":"' + revision + '","source_tree":"' + tree + '"}\n',
+                encoding="utf-8",
+            )
+            manifest = build_manifest(
+                ROOT,
+                prefix,
+                compiler,
+                "static-test",
+                source_revision=revision,
+                source_tree=tree,
+            )
+            self.assertEqual(manifest["source"], {"revision": revision, "tree": tree})
+            verify_manifest(
+                ROOT,
+                prefix,
+                compiler,
+                "static-test",
+                manifest,
+                source_revision=revision,
+                source_tree=tree,
+            )
+
+    def test_install_test_passes_configured_source_identity(self) -> None:
+        install_script = (ROOT / "tests/install/run_install_test.cmake.in").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('--source-revision "@CXXLENS_SOURCE_REVISION@"', install_script)
+        self.assertIn('--source-tree "@CXXLENS_SOURCE_TREE@"', install_script)
+
+    def test_install_test_uses_configured_executable_suffix(self) -> None:
+        install_script = (ROOT / "tests/install/run_install_test.cmake.in").read_text(
+            encoding="utf-8"
+        )
+        occurrence_generator = (
+            ROOT / "cmake/GenerateClang22OccurrenceManifest.cmake.in"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")',
+            install_script,
+        )
+        self.assertIn(
+            "function(resolve_install_artifact_path canonical_path resolved_path)",
+            install_script,
+        )
+        self.assertIn(
+            'string(APPEND resolved "${install_executable_suffix}")',
+            install_script,
+        )
+        for executable in (
+            "cxxlens-provider-scaffold",
+            "cxxlens-sdk-doctor",
+            "cxxlens-clang-worker-22",
+            "cxxlens-clang22-materialize",
+        ):
+            with self.subTest(executable=executable):
+                self.assertIn(
+                    f'"${{install_prefix}}/bin/{executable}"',
+                    install_script,
+                )
+        for executable in (
+            "cxxlens-provider-scaffold",
+            "cxxlens-sdk-doctor",
+            "cxxlens-clang-worker-22",
+        ):
+            with self.subTest(runtime_executable=executable):
+                self.assertIn(
+                    f"${{install_prefix}}/bin/{executable}${{install_executable_suffix}}",
+                    install_script,
+                )
+        self.assertIn(
+            'resolve_install_artifact_path("${required}" resolved_required)',
+            install_script,
+        )
+        self.assertIn(
+            "${build_dir}/cxxlens-${consumer_executable}${install_executable_suffix}",
+            install_script,
+        )
+        self.assertIn(
+            "${example_build_dir}/cxxlens-installed-${example}${install_executable_suffix}",
+            install_script,
+        )
+        self.assertIn(
+            'set(_cxxlens_occurrence_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")',
+            occurrence_generator,
+        )
+        self.assertIn(
+            "function(_cxxlens_occurrence_resolve_path role relative_path resolved_path)",
+            occurrence_generator,
+        )
+        self.assertIn(
+            'string(APPEND _resolved "${_cxxlens_occurrence_executable_suffix}")',
+            occurrence_generator,
+        )
+        self.assertIn(
+            'set(_absolute "${_cxxlens_occurrence_prefix}/${_resolved_relative_path}")',
+            occurrence_generator,
+        )
+        self.assertIn(
+            '\\"path\\":\\"${relative_path}\\"',
+            occurrence_generator,
+            "occurrence manifest paths must remain canonical after filesystem resolution",
+        )
+        for harness in (
+            "tests/install/clang22_materializer_success_test.py",
+            "tests/install/clang22_materializer_negative_test.py",
+            "tests/install/clang22_materializer_installation_binding_test.py",
+        ):
+            with self.subTest(harness=harness):
+                source = (ROOT / harness).read_text(encoding="utf-8")
+                self.assertIn('"--executable-suffix"', source)
+                self.assertIn(
+                    "resolve_installed_executable(",
+                    source,
+                )
+        self.assertEqual(
+            install_script.count(
+                '--executable-suffix "${install_executable_suffix}"'
+            ),
+            4,
+        )
+
+
+class ConstructibilityGateProjectionTest(unittest.TestCase):
+    @staticmethod
+    def copied_authority_root(temporary: str) -> pathlib.Path:
+        root = pathlib.Path(temporary)
+        for relative in (CONSTRUCTIBILITY_MANIFEST, CONSTRUCTIBILITY_SCHEMA):
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, destination)
+        return root
+
+    @staticmethod
+    def write_manifest(root: pathlib.Path, manifest: dict) -> None:
+        (root / CONSTRUCTIBILITY_MANIFEST).write_text(
+            yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+    def test_admitted_projection_passes_and_reports_file_provenance(self) -> None:
+        result = validate_constructibility_projection(ROOT)
+        self.assertEqual(result["contract"], "development.constructibility-gate.v1")
+        self.assertEqual(result["gate_issue"], "#276")
+        self.assertEqual(result["blocked_issue"], "#261")
+        self.assertEqual(result["disposition"], "blocked")
+        self.assertEqual(result["witness_count"], 7)
+        self.assertTrue(result["manifest_digest"].startswith("sha256:"))
+        self.assertTrue(result["schema_digest"].startswith("sha256:"))
+
+    def test_authority_schema_rejects_constructibility_mutations(self) -> None:
+        mutations = (
+            lambda manifest: manifest["product_direction"]["constructibility_gate"][
+                "required_witnesses"
+            ].append("synthetic-witness"),
+            lambda manifest: manifest["product_direction"]["agent_context"]["first_packet"][
+                "constructibility"
+            ].__setitem__("disposition", "constructible"),
+            lambda manifest: manifest["product_direction"]["agent_context"]["first_packet"][
+                "constructibility"
+            ].__setitem__("disposition", "not-applicable"),
+            lambda manifest: manifest["product_direction"]["agent_context"]["first_packet"][
+                "constructibility"
+            ].__setitem__("gate_issue", "#261"),
+            lambda manifest: manifest["product_direction"]["agent_context"]["first_packet"][
+                "exact_contract_ids"
+            ].remove("development.constructibility-gate.v1"),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = self.copied_authority_root(temporary)
+                    manifest = load_yaml(root / CONSTRUCTIBILITY_MANIFEST)
+                    mutate(manifest)
+                    self.write_manifest(root, manifest)
+                    with self.assertRaises(QualityOwnershipError):
+                        validate_constructibility_projection(root)
+
+    def test_paired_authority_mutation_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_authority_root(temporary)
+            manifest = load_yaml(root / CONSTRUCTIBILITY_MANIFEST)
+            schema = load_yaml(root / CONSTRUCTIBILITY_SCHEMA)
+            manifest["product_direction"]["constructibility_gate"][
+                "required_witnesses"
+            ].remove("bounded-resource-witness")
+            schema["properties"]["product_direction"]["const"][
+                "constructibility_gate"
+            ]["required_witnesses"].remove("bounded-resource-witness")
+            self.write_manifest(root, manifest)
+            (root / CONSTRUCTIBILITY_SCHEMA).write_text(
+                yaml.safe_dump(schema, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                QualityOwnershipError,
+                "pinned v1 contract",
+            ):
+                validate_constructibility_projection(root)
 
 if __name__ == "__main__":
     unittest.main()

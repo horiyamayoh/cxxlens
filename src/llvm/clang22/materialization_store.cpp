@@ -436,6 +436,23 @@ namespace cxxlens::detail::clang22::materialization
 			return !output.first_issue.has_value();
 		}
 
+		[[nodiscard]] bool
+		validate_engine_registry_binding(materialization_store_observation& output,
+										 const sdk::relation_engine& engine,
+										 const validated_publication_request& publication)
+		{
+			const auto& admitted_digest = engine.registry_digest();
+			const auto& requested_digest = publication.selector.relation_registry_digest;
+			if (admitted_digest != requested_digest)
+				retain_mismatch(output,
+								materialization_store_operation::configuration,
+								std::nullopt,
+								"engine-registry-digest",
+								requested_digest,
+								std::string{admitted_digest});
+			return !output.first_issue.has_value();
+		}
+
 		void capture_recovery_lookup(materialization_store_publication_lookup& output,
 									 sdk::result<sdk::snapshot_handle> opened,
 									 const std::string_view not_found_code)
@@ -521,8 +538,6 @@ namespace cxxlens::detail::clang22::materialization
 
 		try
 		{
-			std::vector<materialization_incremental_task_receipt> receipts;
-			receipts.reserve(source.task_count());
 			for (std::size_t index{}; index < source.task_count(); ++index)
 			{
 				const auto* receipt = source.task_receipt(index);
@@ -534,12 +549,12 @@ namespace cxxlens::detail::clang22::materialization
 					journal.ordered_task_receipt_seal_digests[index] !=
 						receipt->pre_encoder_task_receipt_seal_digest)
 					return invalid("source", "task-binding-mismatch");
-				receipts.push_back(*receipt);
+				if (auto valid = validate_materialization_incremental_task_receipt_seal(*receipt);
+					!valid)
+					return invalid("source", "execution-journal-seal-mismatch");
 			}
-			auto recomputed = seal_materialization_incremental_execution_journal(
-				std::string{source.materialization_request_id()},
-				std::span<const materialization_incremental_task_receipt>{receipts});
-			if (!recomputed || *recomputed != journal)
+			if (auto valid = validate_materialization_incremental_execution_journal(journal);
+				!valid)
 				return invalid("source", "execution-journal-seal-mismatch");
 			return {};
 		}
@@ -603,6 +618,8 @@ namespace cxxlens::detail::clang22::materialization
 			engine, publication, initial_observation(publication), opener);
 		auto& output = state_value->observation;
 		if (!validate_configuration(output, publication, prepared.draft))
+			return materialization_store_preparation{std::move(state_value)};
+		if (!validate_engine_registry_binding(output, engine, publication))
 			return materialization_store_preparation{std::move(state_value)};
 
 		auto candidate_manifest = build_candidate_manifest(engine, prepared);
@@ -769,6 +786,8 @@ namespace cxxlens::detail::clang22::materialization
 			engine, publication, initial_observation(publication), opener);
 		auto& output = state_value->observation;
 		if (!validate_configuration(output, publication, prepared.draft))
+			return materialization_store_preparation{std::move(state_value)};
+		if (!validate_engine_registry_binding(output, engine, publication))
 			return materialization_store_preparation{std::move(state_value)};
 
 		auto indexed =

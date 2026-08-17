@@ -1,15 +1,23 @@
 #include "sqlite_disposable_qualification_internal.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cerrno>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <new>
+#include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
+
+#include "sqlite_disposable_normalization_internal.hpp"
+#include "sqlite_payload_streaming_internal.hpp"
 
 #if defined(__linux__)
 #include <dirent.h>
@@ -108,10 +116,17 @@ namespace cxxlens::detail::sqlite_qualification
 		{
 			sqlite_disposable_object_identity identity;
 			std::uint64_t link_count{};
+			std::uint64_t size{};
+			std::int64_t modification_seconds{};
+			std::uint32_t modification_nanoseconds{};
+			std::int64_t change_seconds{};
+			std::uint32_t change_nanoseconds{};
+
+			[[nodiscard]] bool operator==(const object_observation&) const = default;
 		};
 
-		constexpr unsigned int required_statx_mask =
-			STATX_TYPE | STATX_MODE | STATX_NLINK | STATX_INO | STATX_MNT_ID;
+		constexpr unsigned int required_statx_mask = STATX_TYPE | STATX_MODE | STATX_NLINK |
+			STATX_INO | STATX_MNT_ID | STATX_SIZE | STATX_MTIME | STATX_CTIME;
 
 		[[nodiscard]] sqlite_disposable_object_identity
 		make_identity(const struct statx& observed) noexcept
@@ -143,7 +158,13 @@ namespace cxxlens::detail::sqlite_qualification
 			}
 			if ((observed.stx_mask & required_statx_mask) != required_statx_mask)
 				return false;
-			output = {make_identity(observed), observed.stx_nlink};
+			output = {make_identity(observed),
+					  observed.stx_nlink,
+					  observed.stx_size,
+					  observed.stx_mtime.tv_sec,
+					  observed.stx_mtime.tv_nsec,
+					  observed.stx_ctime.tv_sec,
+					  observed.stx_ctime.tv_nsec};
 			return true;
 		}
 
@@ -160,7 +181,13 @@ namespace cxxlens::detail::sqlite_qualification
 			}
 			if ((observed.stx_mask & required_statx_mask) != required_statx_mask)
 				return false;
-			output = {make_identity(observed), observed.stx_nlink};
+			output = {make_identity(observed),
+					  observed.stx_nlink,
+					  observed.stx_size,
+					  observed.stx_mtime.tv_sec,
+					  observed.stx_mtime.tv_nsec,
+					  observed.stx_ctime.tv_sec,
+					  observed.stx_ctime.tv_nsec};
 			return true;
 		}
 
@@ -403,28 +430,41 @@ namespace cxxlens::detail::sqlite_qualification
 			sqlite_disposable_cleanup_policy::retain_private_root};
 		void (*pre_remove_signal)(void*) noexcept {};
 		void* pre_remove_signal_context{};
+		bool parent_sync_failure_for_testing{};
+		// Once a normalization boundary is entered, the capability is terminal for every
+		// subsequent normalization or handoff attempt, including an opaque syscall failure.
+		bool normalization_attempted{};
 		bool active{true};
 	};
 
 	namespace
 	{
 		template <class State>
-		[[nodiscard]] live_root_status revalidate_live_root(const State& state) noexcept
+		[[nodiscard]] bool revalidate_live_root_objects(const State& state) noexcept
 		{
 #if defined(__linux__) && defined(STATX_MNT_ID)
 			if (!state.parent || !state.root)
-				return live_root_status::rebound;
+				return false;
 			sqlite_disposable_object_identity current_parent;
 			sqlite_disposable_object_identity current_root;
 			sqlite_disposable_object_identity current_entry;
-			if (!identity_for_fd(state.parent.get(), current_parent) ||
-				!identity_for_fd(state.root.get(), current_root) ||
-				!identity_for_entry(
-					state.parent.get(), state.private_leaf.c_str(), current_entry) ||
-				current_parent != state.parent_object || current_root != state.root_object ||
-				current_entry != state.root_entry || current_root != current_entry ||
-				!directory_identity(current_root, 0700U) ||
-				!directory_identity(current_entry, 0700U))
+			return identity_for_fd(state.parent.get(), current_parent) &&
+				identity_for_fd(state.root.get(), current_root) &&
+				identity_for_entry(state.parent.get(), state.private_leaf.c_str(), current_entry) &&
+				current_parent == state.parent_object && current_root == state.root_object &&
+				current_entry == state.root_entry && current_root == current_entry &&
+				directory_identity(current_root, 0700U) && directory_identity(current_entry, 0700U);
+#else
+			(void)state;
+			return false;
+#endif
+		}
+
+		template <class State>
+		[[nodiscard]] live_root_status revalidate_live_root(const State& state) noexcept
+		{
+#if defined(__linux__) && defined(STATX_MNT_ID)
+			if (!revalidate_live_root_objects(state))
 				return live_root_status::rebound;
 			const auto census = empty_census(state.root.get());
 			if (census == empty_census_status::empty)
@@ -541,7 +581,404 @@ namespace cxxlens::detail::sqlite_qualification
 			}
 			return "revoke-invalid-status";
 		}
+
+		[[nodiscard]] cxxlens::sdk::error raw_family_error(const std::string_view detail)
+		{
+			return {"store.sqlite-failure", "sqlite-initialization-recovery", std::string{detail}};
+		}
+
+		struct raw_namespace_census
+		{
+			bool main{};
+			bool wal{};
+			bool shared_memory{};
+			bool journal{};
+			bool other{};
+			bool unavailable{};
+
+			[[nodiscard]] bool operator==(const raw_namespace_census&) const = default;
+		};
+
+#if defined(__linux__) && defined(STATX_MNT_ID)
+		constexpr std::uint64_t raw_fixture_maximum_file_bytes = 65'536U;
+		constexpr std::uint64_t sqlite_header_byte_count = 100U;
+
+		struct raw_file_read
+		{
+			sqlite_disposable_raw_file_observation observation;
+			std::vector<std::byte> bytes;
+		};
+
+		[[nodiscard]] raw_namespace_census enumerate_raw_namespace(const int root) noexcept
+		{
+			raw_namespace_census output;
+			const auto descriptor =
+				::openat(root, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+			if (descriptor < 0)
+			{
+				output.unavailable = true;
+				return output;
+			}
+			auto* stream = ::fdopendir(descriptor);
+			if (stream == nullptr)
+			{
+				(void)::close(descriptor);
+				output.unavailable = true;
+				return output;
+			}
+
+			for (;;)
+			{
+				errno = 0;
+				const auto* entry = ::readdir(stream);
+				if (entry == nullptr)
+				{
+					if (errno != 0)
+						output.unavailable = true;
+					break;
+				}
+				const std::string_view name{entry->d_name};
+				if (name == "." || name == "..")
+					continue;
+
+				object_observation observed;
+				if (!observe_entry(root, entry->d_name, observed))
+				{
+					output.unavailable = true;
+					continue;
+				}
+				const auto regular = observed.identity.kind == static_cast<std::uint64_t>(S_IFREG);
+				if (name == "main")
+					output.main = true;
+				else if (name == "main-wal")
+					output.wal = true;
+				else if (name == "main-shm")
+					output.shared_memory = true;
+				else if (name == "main-journal")
+					output.journal = true;
+				else
+					output.other = true;
+				if (!regular)
+					output.unavailable = true;
+			}
+
+			if (::closedir(stream) != 0)
+				output.unavailable = true;
+			return output;
+		}
+
+		[[nodiscard]] std::uint16_t read_big_endian_u16(const std::span<const std::byte> bytes,
+														const std::size_t offset) noexcept
+		{
+			return static_cast<std::uint16_t>(
+				(std::to_integer<std::uint16_t>(bytes[offset]) << 8U) |
+				std::to_integer<std::uint16_t>(bytes[offset + 1U]));
+		}
+
+		[[nodiscard]] std::uint32_t read_big_endian_u32(const std::span<const std::byte> bytes,
+														const std::size_t offset) noexcept
+		{
+			return (std::to_integer<std::uint32_t>(bytes[offset]) << 24U) |
+				(std::to_integer<std::uint32_t>(bytes[offset + 1U]) << 16U) |
+				(std::to_integer<std::uint32_t>(bytes[offset + 2U]) << 8U) |
+				std::to_integer<std::uint32_t>(bytes[offset + 3U]);
+		}
+
+		[[nodiscard]] bool all_zero(const std::span<const std::byte> bytes) noexcept
+		{
+			return std::ranges::all_of(bytes,
+									   [](const std::byte value)
+									   {
+										   return value == std::byte{};
+									   });
+		}
+
+		[[nodiscard]] bool valid_sqlite_page_size(const std::uint16_t encoded,
+												  std::uint32_t& output) noexcept
+		{
+			output = encoded == 1U ? 65'536U : encoded;
+			return output >= 512U && output <= 65'536U && (output & (output - 1U)) == 0U;
+		}
+
+		[[nodiscard]] std::optional<sqlite_disposable_main_header_state>
+		parse_exact_empty_main(const std::span<const std::byte> bytes) noexcept
+		{
+			if (bytes.size() < sqlite_header_byte_count ||
+				std::memcmp(bytes.data(), "SQLite format 3\0", 16U) != 0)
+				return std::nullopt;
+
+			std::uint32_t page_size{};
+			if (!valid_sqlite_page_size(read_big_endian_u16(bytes, 16U), page_size) ||
+				bytes.size() != page_size)
+				return std::nullopt;
+
+			const auto write_version = std::to_integer<std::uint8_t>(bytes[18U]);
+			const auto read_version = std::to_integer<std::uint8_t>(bytes[19U]);
+			if (write_version != read_version || (write_version != 1U && write_version != 2U) ||
+				std::to_integer<std::uint8_t>(bytes[20U]) != 0U ||
+				std::to_integer<std::uint8_t>(bytes[21U]) != 64U ||
+				std::to_integer<std::uint8_t>(bytes[22U]) != 32U ||
+				std::to_integer<std::uint8_t>(bytes[23U]) != 32U)
+				return std::nullopt;
+
+			const auto schema_format = read_big_endian_u32(bytes, 44U);
+			const auto text_encoding = read_big_endian_u32(bytes, 56U);
+			const auto page_one_content_offset = read_big_endian_u16(bytes, 105U);
+			const auto canonical_content_offset =
+				page_size == 65'536U ? 0U : static_cast<std::uint16_t>(page_size);
+			if (read_big_endian_u32(bytes, 28U) != 1U || read_big_endian_u32(bytes, 32U) != 0U ||
+				read_big_endian_u32(bytes, 36U) != 0U || read_big_endian_u32(bytes, 40U) != 0U ||
+				(schema_format != 0U && schema_format != 4U) ||
+				read_big_endian_u32(bytes, 52U) != 0U ||
+				(text_encoding != 0U && text_encoding != 1U) ||
+				read_big_endian_u32(bytes, 60U) != 0U || read_big_endian_u32(bytes, 64U) != 0U ||
+				read_big_endian_u32(bytes, 68U) != 0U || !all_zero(bytes.subspan(72U, 20U)) ||
+				std::to_integer<std::uint8_t>(bytes[100U]) != 0x0dU ||
+				read_big_endian_u16(bytes, 101U) != 0U || read_big_endian_u16(bytes, 103U) != 0U ||
+				page_one_content_offset != canonical_content_offset ||
+				std::to_integer<std::uint8_t>(bytes[107U]) != 0U || !all_zero(bytes.subspan(108U)))
+				return std::nullopt;
+
+			return write_version == 2U ? sqlite_disposable_main_header_state::wal_empty
+									   : sqlite_disposable_main_header_state::rollback_empty;
+		}
+
+		[[nodiscard]] cxxlens::sdk::result<raw_file_read>
+		read_raw_regular_file(const int root, const std::string_view leaf)
+		{
+			std::string leaf_copy;
+			try
+			{
+				leaf_copy = leaf;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-allocation"));
+			}
+
+			object_observation before_entry;
+			if (!observe_entry(root, leaf_copy.c_str(), before_entry) ||
+				before_entry.identity.kind != static_cast<std::uint64_t>(S_IFREG))
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-not-regular"));
+			if (before_entry.size > raw_fixture_maximum_file_bytes)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-too-large"));
+
+			owned_descriptor file{
+				openat(root, leaf_copy.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC)};
+			if (!file)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-open"));
+			object_observation before_file;
+			if (!observe_fd(file.get(), before_file) ||
+				before_file.identity != before_entry.identity ||
+				before_file.size != before_entry.size ||
+				before_file.identity.kind != static_cast<std::uint64_t>(S_IFREG))
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-identity"));
+
+			std::vector<std::byte> bytes;
+			try
+			{
+				bytes.resize(static_cast<std::size_t>(before_file.size));
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-allocation"));
+			}
+
+			cxxlens::sdk::sqlite_incremental_sha256 digest;
+			std::uint64_t offset{};
+			while (offset < before_file.size)
+			{
+				const auto remaining = before_file.size - offset;
+				const auto requested =
+					static_cast<std::size_t>(std::min<std::uint64_t>(remaining, 4096U));
+				ssize_t count{};
+				for (;;)
+				{
+					if (offset > static_cast<std::uint64_t>(std::numeric_limits<off_t>::max()))
+						return cxxlens::sdk::unexpected(raw_family_error("raw-file-offset"));
+					count = ::pread(file.get(),
+									bytes.data() + static_cast<std::size_t>(offset),
+									requested,
+									static_cast<off_t>(offset));
+					if (count >= 0 || errno != EINTR)
+						break;
+				}
+				if (count <= 0 || static_cast<std::size_t>(count) > requested)
+					return cxxlens::sdk::unexpected(raw_family_error("raw-file-short-read"));
+				const auto count_size = static_cast<std::size_t>(count);
+				if (auto updated = digest.update(std::span<const std::byte>{
+						bytes.data() + static_cast<std::size_t>(offset), count_size});
+					!updated)
+					return cxxlens::sdk::unexpected(raw_family_error("raw-file-digest"));
+				offset += static_cast<std::uint64_t>(count_size);
+			}
+
+			// A same-size replacement can preserve identity and size. Re-read the complete bounded
+			// byte sequence before accepting the first digest, then also compare statx change times
+			// below. Either byte drift or metadata drift remains unresolved.
+			std::vector<std::byte> verification;
+			try
+			{
+				verification.resize(bytes.size());
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-allocation"));
+			}
+			offset = 0U;
+			while (offset < before_file.size)
+			{
+				const auto remaining = before_file.size - offset;
+				const auto requested =
+					static_cast<std::size_t>(std::min<std::uint64_t>(remaining, 4096U));
+				ssize_t count{};
+				for (;;)
+				{
+					if (offset > static_cast<std::uint64_t>(std::numeric_limits<off_t>::max()))
+						return cxxlens::sdk::unexpected(raw_family_error("raw-file-offset"));
+					count = ::pread(file.get(),
+									verification.data() + static_cast<std::size_t>(offset),
+									requested,
+									static_cast<off_t>(offset));
+					if (count >= 0 || errno != EINTR)
+						break;
+				}
+				if (count <= 0 || static_cast<std::size_t>(count) > requested)
+					return cxxlens::sdk::unexpected(raw_family_error("raw-file-short-read"));
+				offset += static_cast<std::uint64_t>(count);
+			}
+			if (!std::ranges::equal(bytes, verification))
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-byte-drift"));
+
+			object_observation after_file;
+			object_observation after_entry;
+			if (!observe_fd(file.get(), after_file) ||
+				!observe_entry(root, leaf_copy.c_str(), after_entry) || after_file != before_file ||
+				after_entry != before_entry)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-drift"));
+			auto sha256 = digest.finish();
+			if (!sha256)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-file-digest"));
+
+			return raw_file_read{
+				{before_file.identity, before_entry.identity, before_file.size, std::move(*sha256)},
+				std::move(bytes)};
+		}
+#endif
+
+		template <class State>
+		[[nodiscard]] bool
+		raw_request_matches(const State& state,
+							const sqlite_disposable_qualification_request& request) noexcept
+		{
+#if defined(__linux__) && defined(STATX_MNT_ID)
+			return state.active &&
+				static_cast<std::uint64_t>(::getpid()) == state.creator_process_identity &&
+				process_instance_live(state.creator_process.get()) &&
+				request.creator_process_identity == state.creator_process_identity &&
+				request.qualification_run_id == state.qualification_run_id &&
+				request.parent_object == state.parent_object &&
+				request.root_object == state.root_object &&
+				request.root_entry == state.root_entry &&
+				request.exact_profile_digest == state.exact_profile_digest &&
+				request.family_plan_digest == state.family_plan_digest &&
+				request.effect_fault_schedule_digest == state.effect_fault_schedule_digest &&
+				request.cleanup_policy == state.cleanup_policy &&
+				revalidate_live_root_objects(state);
+#else
+			(void)state;
+			(void)request;
+			return false;
+#endif
+		}
 	} // namespace
+
+	class sqlite_disposable_raw_family_observer
+	{
+	  public:
+		[[nodiscard]] static cxxlens::sdk::result<sqlite_disposable_raw_family_observation>
+		observe(sqlite_disposable_qualification_capability& capability,
+				const sqlite_disposable_qualification_request& request)
+		{
+#if defined(__linux__) && defined(STATX_MNT_ID)
+			auto* const state = capability.state_.get();
+			if (state == nullptr || !state->active)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-capability-revoked"));
+			if (request.requested_effect != sqlite_disposable_requested_effect::classify_source)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-effect-not-authorized"));
+			if (!raw_request_matches(*state, request))
+				return cxxlens::sdk::unexpected(raw_family_error("raw-capability-binding"));
+
+			object_observation parent_before;
+			object_observation root_before;
+			if (!observe_fd(state->parent.get(), parent_before) ||
+				!observe_fd(state->root.get(), root_before))
+				return cxxlens::sdk::unexpected(raw_family_error("raw-anchor-observation"));
+			const auto before = enumerate_raw_namespace(state->root.get());
+			if (before.unavailable)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-census-unavailable"));
+			if (!before.main)
+				return cxxlens::sdk::unexpected(raw_family_error(
+					before.wal || before.shared_memory || before.journal || before.other
+						? "raw-orphan-sidecar"
+						: "raw-main-missing"));
+			if (before.shared_memory || before.journal || before.other)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-family-unresolved-topology"));
+
+			auto main = read_raw_regular_file(state->root.get(), "main");
+			if (!main)
+				return cxxlens::sdk::unexpected(std::move(main.error()));
+			const auto main_header = parse_exact_empty_main(main->bytes);
+			if (!main_header)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-main-not-exact-empty"));
+
+			std::optional<sqlite_disposable_raw_file_observation> wal_observation;
+			if (before.wal)
+			{
+				auto wal = read_raw_regular_file(state->root.get(), "main-wal");
+				if (!wal)
+					return cxxlens::sdk::unexpected(std::move(wal.error()));
+				if (wal->observation.byte_count != 0U)
+					return cxxlens::sdk::unexpected(raw_family_error("raw-nonzero-wal-unresolved"));
+				wal_observation = std::move(wal->observation);
+			}
+
+			const auto after = enumerate_raw_namespace(state->root.get());
+			object_observation parent_after;
+			object_observation root_after;
+			if (after.unavailable || after != before ||
+				!observe_fd(state->parent.get(), parent_after) ||
+				!observe_fd(state->root.get(), root_after) ||
+				parent_after.identity != parent_before.identity ||
+				root_after.identity != root_before.identity)
+				return cxxlens::sdk::unexpected(raw_family_error("raw-namespace-drift"));
+
+			const sqlite_disposable_empty_family_observation family_observation{
+				true,
+				main->observation.object == main->observation.entry,
+				main->observation.object == main->observation.entry,
+				true,
+				*main_header,
+				before.wal ? sqlite_disposable_wal_state::readable_zero_byte
+						   : sqlite_disposable_wal_state::absent,
+				false,
+				sqlite_disposable_journal_state::absent,
+				false};
+			auto family = classify_sqlite_disposable_empty_family(family_observation);
+			if (!family)
+				return cxxlens::sdk::unexpected(std::move(family.error()));
+
+			return sqlite_disposable_raw_family_observation{family_observation,
+															*family,
+															std::move(main->observation),
+															std::move(wal_observation)};
+#else
+			(void)capability;
+			(void)request;
+			return cxxlens::sdk::unexpected(raw_family_error("raw-unsupported-platform"));
+#endif
+		}
+	};
 
 	sqlite_disposable_parent_directory::sqlite_disposable_parent_directory(
 		const int descriptor, const sqlite_disposable_object_identity identity) noexcept
@@ -808,10 +1245,187 @@ namespace cxxlens::detail::sqlite_qualification
 		capability.state_->pre_remove_signal_context = context;
 	}
 
+	void set_sqlite_disposable_parent_sync_failure_for_testing(
+		sqlite_disposable_qualification_capability& capability, const bool enabled) noexcept
+	{
+		if (capability.state_ == nullptr || !capability.state_->active)
+			return;
+		capability.state_->parent_sync_failure_for_testing = enabled;
+	}
+
 	void invalidate_sqlite_disposable_process_instance_for_testing(
 		sqlite_disposable_qualification_capability& capability) noexcept
 	{
 		if (capability.state_ != nullptr)
 			capability.state_->creator_process.reset();
+	}
+
+	cxxlens::sdk::result<sqlite_disposable_raw_family_observation>
+	observe_sqlite_disposable_raw_empty_family(
+		sqlite_disposable_qualification_capability& capability,
+		const sqlite_disposable_qualification_request& request)
+	{
+		return sqlite_disposable_raw_family_observer::observe(capability, request);
+	}
+
+	cxxlens::sdk::result<sqlite_disposable_fz_post_cleanup_result>
+	cleanup_sqlite_disposable_fz_post_wal_for_testing(
+		sqlite_disposable_qualification_capability& capability,
+		const sqlite_disposable_qualification_request& request) noexcept
+	{
+#if defined(__linux__) && defined(STATX_MNT_ID)
+		try
+		{
+			auto* const state = capability.state_.get();
+			if (state == nullptr || !state->active)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-capability-revoked"));
+			if (state->normalization_attempted)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-capability-consumed"));
+			if (request.requested_effect != sqlite_disposable_requested_effect::normalize_source)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-effect-not-authorized"));
+			if (!raw_request_matches(*state, request))
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-capability-binding"));
+
+			auto classify_request = request;
+			classify_request.requested_effect = sqlite_disposable_requested_effect::classify_source;
+			auto before =
+				sqlite_disposable_raw_family_observer::observe(capability, classify_request);
+			if (!before)
+				return cxxlens::sdk::unexpected(std::move(before.error()));
+			if (before->family.family !=
+					sqlite_disposable_empty_family::exact_pre_or_post_zero_wal ||
+				before->family.phase != sqlite_disposable_family_phase::post || !before->wal ||
+				before->wal->byte_count != 0U)
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-fz-post-required"));
+
+			auto plan = plan_sqlite_disposable_empty_normalization(before->observation);
+			if (!plan)
+				return cxxlens::sdk::unexpected(std::move(plan.error()));
+			if (plan->family != before->family ||
+				plan->route !=
+					sqlite_disposable_normalization_route::establish_rollback_empty_anchor ||
+				plan->uses_existing_zero_byte_wal ||
+				plan->may_handoff_to_ordinary_fresh_initialization)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-route-not-authorized"));
+
+			if (!revalidate_live_root_objects(*state))
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-anchor-drift"));
+
+			// The test signal models an actor that races between the initial census and the
+			// mutation boundary. Re-read both source leaves after that point and reject any
+			// identity, size, metadata, or byte drift before unlinking either object.
+			state->normalization_attempted = true;
+			const auto signal = std::exchange(state->pre_remove_signal, nullptr);
+			auto* const signal_context = std::exchange(state->pre_remove_signal_context, nullptr);
+			if (signal != nullptr)
+				signal(signal_context);
+			auto current_main = read_raw_regular_file(state->root.get(), "main");
+			if (!current_main || current_main->observation != before->main)
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-main-drift"));
+			auto current_wal = read_raw_regular_file(state->root.get(), "main-wal");
+			if (!current_wal || current_wal->observation.byte_count != 0U ||
+				current_wal->observation != *before->wal)
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-wal-drift"));
+			if (!revalidate_live_root_objects(*state))
+				return cxxlens::sdk::unexpected(raw_family_error("normalization-anchor-drift"));
+
+			// This is the only mutation boundary. The terminal state above is deliberately
+			// recorded before either unlink, so a failure below cannot be retried.
+			if (::unlinkat(state->root.get(), "main-wal", 0) != 0)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-wal-unlink-uncertain"));
+			if (state->parent_sync_failure_for_testing || !fsync_exact(state->root.get()))
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-parent-sync-uncertain"));
+
+			auto after =
+				sqlite_disposable_raw_family_observer::observe(capability, classify_request);
+			if (!after)
+				return cxxlens::sdk::unexpected(std::move(after.error()));
+			if (after->family.family !=
+					sqlite_disposable_empty_family::complete_rollback_empty_no_sidecar ||
+				after->family.phase != sqlite_disposable_family_phase::post || after->wal ||
+				after->main != before->main)
+				return cxxlens::sdk::unexpected(
+					raw_family_error("normalization-anchor-not-established"));
+
+			return sqlite_disposable_fz_post_cleanup_result{std::move(*before), std::move(*after)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return cxxlens::sdk::unexpected(raw_family_error("normalization-allocation"));
+		}
+		catch (...)
+		{
+			return cxxlens::sdk::unexpected(raw_family_error("normalization-exception"));
+		}
+#else
+		(void)capability;
+		(void)request;
+		return cxxlens::sdk::unexpected(raw_family_error("normalization-unsupported-platform"));
+#endif
+	}
+
+	cxxlens::sdk::result<void> write_sqlite_disposable_fixture_file_for_testing(
+		sqlite_disposable_qualification_capability& capability,
+		const sqlite_disposable_qualification_request& request,
+		const std::string_view leaf,
+		const std::span<const std::byte> bytes) noexcept
+	{
+#if defined(__linux__) && defined(STATX_MNT_ID)
+		auto* const state = capability.state_.get();
+		if (state == nullptr || !state->active)
+			return cxxlens::sdk::unexpected(qualification_error("fixture-capability-revoked"));
+		if (request.requested_effect != sqlite_disposable_requested_effect::no_effect ||
+			!raw_request_matches(*state, request))
+			return cxxlens::sdk::unexpected(qualification_error("fixture-capability-binding"));
+		if (!valid_leaf(leaf) || bytes.size() > 65'536U)
+			return cxxlens::sdk::unexpected(qualification_error("fixture-file"));
+
+		std::string leaf_copy;
+		try
+		{
+			leaf_copy = leaf;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return cxxlens::sdk::unexpected(qualification_error("fixture-allocation"));
+		}
+
+		owned_descriptor file{::openat(state->root.get(),
+									   leaf_copy.c_str(),
+									   O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC,
+									   0600)};
+		if (!file)
+			return cxxlens::sdk::unexpected(qualification_error("fixture-file-open"));
+		std::size_t offset{};
+		while (offset < bytes.size())
+		{
+			ssize_t count{};
+			for (;;)
+			{
+				count = ::write(file.get(), bytes.data() + offset, bytes.size() - offset);
+				if (count >= 0 || errno != EINTR)
+					break;
+			}
+			if (count <= 0 || static_cast<std::size_t>(count) > bytes.size() - offset)
+				return cxxlens::sdk::unexpected(qualification_error("fixture-file-write"));
+			offset += static_cast<std::size_t>(count);
+		}
+		if (!fsync_exact(file.get()) || !fsync_exact(state->root.get()))
+			return cxxlens::sdk::unexpected(qualification_error("fixture-file-sync"));
+		return {};
+#else
+		(void)capability;
+		(void)request;
+		(void)leaf;
+		(void)bytes;
+		return cxxlens::sdk::unexpected(qualification_error("unsupported-platform"));
+#endif
 	}
 } // namespace cxxlens::detail::sqlite_qualification

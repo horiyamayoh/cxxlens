@@ -60,6 +60,8 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void> accept(const ng1_heartbeat_sample& sample,
 										  std::uint64_t highest_observed_sequence,
 										  std::string_view host_observed_staged_digest);
+		/** Rebase the lifecycle clock at the validated task-accepted receipt. */
+		void rebase_start(std::uint64_t started_at_ns) noexcept;
 		[[nodiscard]] result<void> check_liveness(std::uint64_t now_ns) const;
 		[[nodiscard]] result<void> mark_terminal() noexcept;
 
@@ -73,8 +75,7 @@ namespace cxxlens::sdk::provider::detail
 		std::uint64_t started_at_ns_{};
 		std::optional<std::uint64_t> last_probe_sequence_;
 		std::optional<std::uint64_t> last_ack_sequence_;
-		std::optional<std::uint64_t> last_probe_provider_time_ns_;
-		std::optional<std::uint64_t> last_ack_provider_time_ns_;
+		std::optional<std::uint64_t> last_provider_time_ns_;
 		std::optional<std::uint64_t> last_probe_host_receipt_ns_;
 		std::optional<std::uint64_t> last_host_receipt_time_ns_;
 		std::optional<std::uint64_t> last_valid_ack_received_ns_;
@@ -106,6 +107,8 @@ namespace cxxlens::sdk::provider::detail
 
 		[[nodiscard]] result<void> observe(const ng1_progress_sample& sample,
 										   bool terminal_sample = false);
+		/** Rebase the lifecycle clock at the validated task-accepted receipt. */
+		void rebase_start(std::uint64_t started_at_ns) noexcept;
 		[[nodiscard]] result<void> finish() const;
 
 	  private:
@@ -187,6 +190,22 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] bool operator==(const ng1_spill_fsync_receipt&) const = default;
 	};
 
+	/**
+	 * Source-private durable frontier for the latest accepted resume checkpoint.
+	 *
+	 * The receipt proves the exact spill prefix; the generation proves which resume
+	 * publication is latest. Keeping both values in the port-owned frontier prevents
+	 * a fresh coordinator from treating a matching but older receipt as current.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_spill_resume_frontier
+	{
+		ng1_spill_fsync_receipt receipt;
+		std::uint64_t resume_generation{};
+
+		[[nodiscard]] result<void> validate() const;
+		[[nodiscard]] bool operator==(const ng1_spill_resume_frontier&) const = default;
+	};
+
 	/** Exact identity binding for one source-private staged spill prefix. */
 	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_spill_binding
 	{
@@ -246,6 +265,9 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] static result<ng1_spill_prefix_state> create(ng1_spill_binding binding);
 
 		[[nodiscard]] result<void> append(const ng1_spill_record& record);
+		/** Reject an ACK unless its sequence is represented by this exact spill prefix. */
+		[[nodiscard]] result<void>
+		validate_ack_frontier(std::uint64_t highest_contiguous_acked_sequence) const;
 		[[nodiscard]] result<std::string> spill_digest() const;
 		[[nodiscard]] result<ng1_spill_fsync_receipt>
 		observe_host_fsync(std::uint64_t highest_contiguous_acked_sequence,

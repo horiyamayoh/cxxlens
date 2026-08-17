@@ -37,6 +37,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "sdk/provider_ng1_process_internal.hpp"
+#include "sdk/provider_ng1_transport_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 #include "sdk/provider_validation_internal.hpp"
 
@@ -523,6 +525,7 @@ namespace
 	{
 		holder_observation holder;
 		holder_observation sentinel;
+		std::chrono::steady_clock::time_point ready_at{};
 	};
 
 	[[nodiscard]] std::optional<holder_observation>
@@ -603,6 +606,75 @@ namespace
 		if (maximum < requested)
 			return std::nullopt;
 		return requested;
+	}
+
+	void check_ng1_post_fork_guard_kills_group_without_ack()
+	{
+		if (!pidfd_runtime_available())
+			return;
+		int ready[2]{};
+		require(::pipe(ready) == 0, "NG1 post-fork guard readiness pipe failed");
+		const auto child = ::fork();
+		require(child >= 0, "NG1 post-fork guard fork failed");
+		if (child == 0)
+		{
+			(void)::close(ready[0]);
+			if (::setpgid(0, 0) != 0)
+				::_exit(120);
+			const auto descendant = ::fork();
+			if (descendant < 0)
+				::_exit(121);
+			if (descendant == 0)
+			{
+				(void)::close(ready[1]);
+				for (;;)
+					(void)::pause();
+			}
+			const auto written = ::write(ready[1], &descendant, sizeof(descendant));
+			(void)::close(ready[1]);
+			if (written != static_cast<ssize_t>(sizeof(descendant)))
+				::_exit(122);
+			for (;;)
+				(void)::pause();
+		}
+
+		(void)::close(ready[1]);
+		bool ready_ok{};
+		pid_t descendant{};
+		int descendant_pidfd{-1};
+		bool descendant_alive_before_cleanup{};
+		{
+			// Deliberately do not provide an ACK/established marker.  This models the
+			// parent being descheduled until the bounded process-group handshake expires.
+			cxxlens::sdk::provider::detail::ng1_post_fork_process_guard guard{
+				static_cast<int>(child)};
+			pollfd descriptor{ready[0], POLLIN | POLLHUP | POLLERR, 0};
+			if (::poll(&descriptor, 1U, 1000) > 0)
+			{
+				const auto received = ::read(ready[0], &descendant, sizeof(descendant));
+				ready_ok = received == static_cast<ssize_t>(sizeof(descendant));
+			}
+			(void)::close(ready[0]);
+			if (ready_ok)
+			{
+				descendant_pidfd = open_pidfd(descendant);
+				descendant_alive_before_cleanup =
+					descendant_pidfd >= 0 && !pidfd_exited(descendant_pidfd);
+			}
+		} // The guard must kill the unacknowledged group's descendant before returning.
+
+		bool descendant_exited_after_cleanup{};
+		if (descendant_pidfd >= 0)
+		{
+			descendant_exited_after_cleanup =
+				wait_pidfd_exit(descendant_pidfd, std::chrono::milliseconds{500});
+			(void)::close(descendant_pidfd);
+		}
+		require(ready_ok, "NG1 post-fork guard did not observe the descendant");
+		require(descendant_alive_before_cleanup,
+				"NG1 post-fork guard descendant was not alive before cleanup");
+		require(descendant_exited_after_cleanup,
+				"NG1 post-fork guard leaked a descendant when the ACK was unobserved");
 	}
 #endif
 
@@ -1397,6 +1469,21 @@ namespace
 					positive->reason == "provider.success" && positive->sealed() &&
 					!positive->sealing_error(),
 				"valid transcript did not produce an adoption seal");
+		detail::provider_runtime_provenance forged_multi_batch_provenance;
+		forged_multi_batch_provenance.task_id = task.task_id;
+		forged_multi_batch_provenance.dependency_group_id = "dependency:forged";
+		forged_multi_batch_provenance.atomic_output_group_id = "atomic:forged";
+		forged_multi_batch_provenance.batch_id = "batch:forged";
+		auto forged_multi_batch_receipt =
+			detail::make_provider_runtime_receipt(1U,
+												  "sha256:" + std::string(64U, 'a'),
+												  *frames,
+												  std::move(forged_multi_batch_provenance),
+												  "provider.success",
+												  *positive->sealed());
+		require(!forged_multi_batch_receipt &&
+					forged_multi_batch_receipt.error().detail == "multi-batch-provenance",
+				"runtime receipt admitted caller provenance for multiple sealed batches");
 		const auto batches = positive->sealed()->batches();
 		require(batches.size() == 3U && batches[0U].task_id() == task.task_id &&
 					batches[0U].descriptor_id() == descriptor.id &&
@@ -1642,6 +1729,25 @@ namespace
 					sealed_execution->sealed && sealed_execution->provider_identity &&
 					sealed_execution->runtime_receipt,
 				receipt_failure);
+		auto runtime_binding =
+			detail::validate_provider_process_runtime_binding(*sealed_execution, receipt_request);
+		require(runtime_binding.has_value(),
+				"accepted process task was not bound to its sealed runtime receipt");
+		auto stale_input_request = receipt_request;
+		stale_input_request.task_input_digest =
+			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+		auto stale_input = detail::validate_provider_process_runtime_binding(*sealed_execution,
+																			 stale_input_request);
+		require(!stale_input && stale_input.error().code == "provider.task-binding-mismatch" &&
+					stale_input.error().field == "task_input_digest",
+				"stale task input digest reached the runtime handoff");
+		auto mutated_raw_observation = *sealed_execution;
+		mutated_raw_observation.raw_frame_stream.back() ^= std::byte{1U};
+		auto mutated_raw = detail::validate_provider_process_runtime_binding(
+			mutated_raw_observation, receipt_request);
+		require(!mutated_raw && mutated_raw.error().code == "provider.task-binding-mismatch" &&
+					mutated_raw.error().field == "runtime_receipt.raw_observation",
+				"mutated raw provider output reached the runtime handoff");
 		auto missing_runtime_receipt = *sealed_execution;
 		missing_runtime_receipt.runtime_receipt.reset();
 		require(!missing_runtime_receipt.succeeded(),
@@ -2219,6 +2325,21 @@ namespace
 		require(!marker_error, "could not remove stale holder descendant marker");
 		fs::remove(sentinel_marker, marker_error);
 		require(!marker_error, "could not remove stale sentinel descendant marker");
+		const auto negative_marker = fs::path{marker.string() + ".negative"};
+		fs::remove(negative_marker, marker_error);
+		require(!marker_error, "could not remove stale negative descendant marker");
+		{
+			std::ofstream negative_marker_output{negative_marker};
+			require(negative_marker_output.good(),
+					"could not create the negative descendant marker");
+			negative_marker_output << "partial-marker";
+			require(negative_marker_output.good(),
+					"could not write the negative descendant marker");
+		}
+		require(!observe_descendant(negative_marker),
+				"descendant observation accepted an incomplete marker");
+		fs::remove(negative_marker, marker_error);
+		require(!marker_error, "could not remove the negative descendant marker");
 		auto grandchild_request = task(select(executable, "timeout-grandchild:" + marker.string()));
 		// The fixture forks after launch; derive the budget from the inherited ceiling and
 		// current same-UID thread count instead of assuming a fixed host process count.
@@ -2226,20 +2347,22 @@ namespace
 		if (!subprocess_budget)
 			return false;
 		grandchild_request.budget.subprocesses = *subprocess_budget;
-		grandchild_request.budget.wall_ms = 1000U;
+		grandchild_request.budget.wall_ms = 5000U;
 		std::promise<descendant_observation> holder_promise;
 		auto holder_future = holder_promise.get_future();
 		std::thread holder_watcher{
 			[marker, promise = std::move(holder_promise)]() mutable
 			{
-				const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+				const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{7};
 				while (std::chrono::steady_clock::now() < deadline)
 				{
 					auto holder = observe_descendant(marker.string() + ".holder");
 					auto sentinel = observe_descendant(marker.string() + ".sentinel");
 					if (holder && sentinel)
 					{
-						promise.set_value({std::move(*holder), std::move(*sentinel)});
+						promise.set_value({std::move(*holder),
+										   std::move(*sentinel),
+										   std::chrono::steady_clock::now()});
 						return;
 					}
 					if (holder)
@@ -2253,9 +2376,13 @@ namespace
 		};
 		const auto grandchild_started = std::chrono::steady_clock::now();
 		auto grandchild_report = runtime.execute(grandchild_request);
-		const auto grandchild_elapsed = std::chrono::steady_clock::now() - grandchild_started;
+		const auto grandchild_finished = std::chrono::steady_clock::now();
 		const auto grandchild_terminal =
 			grandchild_report ? grandchild_report->terminal : grandchild_report.error().code;
+		// Capture the typed terminal before any observation fallback or descendant cleanup.  The
+		// cleanup assertions below must not turn a valid timeout into an observation-only result.
+		const bool typed_timeout_terminal =
+			grandchild_report && grandchild_report->terminal == "provider.timeout";
 		const auto cleanup_descendant = [&](const descendant_observation observation)
 		{
 			const bool holder_valid = observation.holder.valid;
@@ -2299,6 +2426,15 @@ namespace
 		};
 		const auto descendants = holder_future.get();
 		holder_watcher.join();
+		// Executable verification is part of runtime setup and is materially slower under
+		// sanitizer instrumentation.  The cleanup bound starts at the positive fixture readiness
+		// observation, so it measures timeout/RAII behavior rather than hashing cold-start time.
+		const auto observation_origin =
+			descendants.ready_at != std::chrono::steady_clock::time_point{} &&
+				descendants.ready_at <= grandchild_finished
+			? descendants.ready_at
+			: grandchild_started;
+		const auto grandchild_elapsed = grandchild_finished - observation_origin;
 		auto observed_descendants = descendants;
 		if (!observed_descendants.holder.valid)
 			if (auto holder = observe_descendant(holder_marker))
@@ -2307,7 +2443,7 @@ namespace
 			if (auto sentinel = observe_descendant(sentinel_marker))
 				observed_descendants.sentinel = std::move(*sentinel);
 		const auto cleanup = cleanup_descendant(observed_descendants);
-		require(grandchild_report && grandchild_report->terminal == "provider.timeout",
+		require(typed_timeout_terminal,
 				"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal);
 		require(cleanup[0] && cleanup[1],
 				"pipe-holding process-group descendant identities could not be observed");
@@ -2324,7 +2460,9 @@ namespace
 				"ms");
 		require(cleanup[4] && cleanup[5], "pipe-holding descendants cleanup failed");
 		require(cleanup[6], "pipe-holding descendant markers could not be removed");
-		require(grandchild_elapsed < std::chrono::seconds{4},
+		fs::remove(negative_marker, marker_error);
+		require(!marker_error, "could not clean up the negative descendant marker");
+		require(grandchild_elapsed < std::chrono::seconds{8},
 				"provider timeout waited for the pipe-holding descendant instead of closing it: " +
 					std::to_string(
 						std::chrono::duration_cast<std::chrono::milliseconds>(grandchild_elapsed)
@@ -2352,8 +2490,18 @@ namespace
 		require(processes != nullptr, "system provider process port unavailable");
 		process_provider_runtime runtime{*processes};
 		auto report = runtime.execute(request);
-		require(report && report->succeeded(),
-				"semantic provider input digests were rejected by the process runtime");
+		std::string failure_detail{
+			"semantic provider input digests were rejected by the process runtime"};
+		if (report)
+		{
+			failure_detail += " terminal=" + report->terminal;
+			failure_detail += " exit=" + std::to_string(report->exit_code);
+			for (const auto& diagnostic : report->diagnostics)
+				failure_detail += " [" + diagnostic.code + ":" + diagnostic.detail + "]";
+		}
+		else
+			failure_detail += " error=" + report.error().code;
+		require(report && report->succeeded(), failure_detail);
 	}
 
 	void check_prior_snapshot_preserved(const std::string& executable)
@@ -2397,6 +2545,274 @@ namespace
 				"failed worker destroyed or replaced the prior snapshot");
 	}
 
+	void check_ng1_live_duplex_process()
+	{
+#if defined(__linux__) && defined(__GLIBC__)
+		const auto policy = baseline_policy();
+		process_invocation invocation;
+		invocation.argv = {"/bin/cat"};
+		invocation.budget.wall_ms = 3000U;
+		invocation.budget.cpu_ms = 3000U;
+		invocation.budget.address_space_bytes = provider_address_space_budget;
+		invocation.budget.transport_bytes = 1024U * 1024U;
+		invocation.budget.output_bytes = 1024U * 1024U;
+		invocation.budget.open_files = 64U;
+		invocation.budget.subprocesses = provider_subprocess_budget;
+		invocation.sandbox = {sandbox_assurance::enforced, policy.policy_digest()};
+		invocation.expected_binary_digest = executable_digest("/bin/cat");
+
+		protocol_limits limits;
+		limits.minimum_minor = 1U;
+		limits.maximum_minor = 1U;
+		auto port = detail::make_system_ng1_duplex_process_port();
+		require(port != nullptr, "NG1 live process port was not created");
+		auto make_invocation = [&](std::vector<std::string> arguments)
+		{
+			auto value = invocation;
+			value.argv = std::move(arguments);
+			value.expected_binary_digest = executable_digest(value.argv.front());
+			return value;
+		};
+		auto start_process = [&](const process_invocation& request)
+		{
+			auto started = port->start(request, limits, {});
+			if (!started)
+				require(false,
+						"NG1 live regression process launch failed: " + started.error().code);
+			return std::move(*started);
+		};
+		auto process = port->start(invocation, limits, {});
+		if (!process)
+			require(false, "NG1 live process launch failed: " + process.error().code);
+		auto staged_digest = semantic_digest("test.ng1.live", "staged");
+		require(staged_digest.has_value(), "NG1 live staged digest construction failed");
+
+		detail::ng1_heartbeat_control control{"cxxlens.provider-control.heartbeat.v1",
+											  detail::ng1_heartbeat_kind::ack,
+											  "provider:test",
+											  {1U, 2U, 3U},
+											  "session:test",
+											  "task:test",
+											  7U,
+											  0U,
+											  123U,
+											  0U,
+											  *staged_digest};
+		auto encoded_control = detail::encode_ng1_heartbeat_control(control);
+		require(encoded_control.has_value(), "NG1 live heartbeat encoding failed");
+		frame wire;
+		wire.type = detail::ng1_heartbeat_message_type;
+		wire.stream_id = 7U;
+		wire.sequence = 0U;
+		wire.control = *encoded_control;
+		wire.protocol_major = 1U;
+		wire.protocol_minor = 1U;
+		auto sent = (*process)->send_frame(wire);
+		require(sent.has_value(), "NG1 live frame send failed");
+		auto received = (*process)->receive_frame({});
+		require(received.has_value() && received->has_value(),
+				"NG1 live frame receive reached EOF");
+		require(received->value().type == wire.type &&
+					received->value().stream_id == wire.stream_id &&
+					received->value().sequence == wire.sequence &&
+					received->value().control == wire.control &&
+					received->value().payload == wire.payload &&
+					received->value().protocol_major == wire.protocol_major &&
+					received->value().protocol_minor == wire.protocol_minor &&
+					received->value().flags == wire.flags,
+				"NG1 live frame round trip changed wire data");
+		auto finished = (*process)->finish({});
+		std::string finish_detail{
+			"NG1 live process did not finish with exact identity and exit evidence"};
+		if (finished)
+		{
+			finish_detail += " status=" + std::to_string(static_cast<int>(finished->status));
+			finish_detail += " exit=" + std::to_string(finished->exit_code);
+			finish_detail += " signal=" + std::to_string(finished->termination_signal);
+			finish_detail += " digest=" + finished->measured_executable_digest;
+			finish_detail += " stderr=" + finished->standard_error;
+		}
+		else
+			finish_detail += " error=" + finished.error().code + ":" + finished.error().detail;
+		require(finished.has_value() && finished->status == process_status::exited &&
+					finished->exit_code == 0 &&
+					finished->measured_executable_digest == invocation.expected_binary_digest,
+				finish_detail);
+		require(finished->sandbox.achieved == sandbox_assurance::enforced,
+				"NG1 live process lost enforced sandbox evidence");
+
+		auto rejected_process = port->start(invocation, limits, {});
+		if (!rejected_process)
+			require(false,
+					"NG1 live negative process launch failed: " + rejected_process.error().code);
+		wire.flags = static_cast<std::uint16_t>(frame_flag::optional_extension);
+		auto rejected = (*rejected_process)->send_frame(wire);
+		require(!rejected && rejected.error().code == "provider.protocol-state-invalid",
+				"NG1 live channel accepted optional flags on the reserved heartbeat");
+		auto terminated = (*rejected_process)->terminate(process_status::cancelled);
+		require(terminated.has_value() && terminated->status == process_status::cancelled,
+				"NG1 live channel did not preserve explicit cancellation evidence");
+
+		auto make_wire = [&](std::vector<std::byte> payload = {})
+		{
+			auto value = wire;
+			value.type = message_type::input_chunk;
+			value.flags = {};
+			value.payload = std::move(payload);
+			return value;
+		};
+
+		// Host input is not provider stdout/stderr transport.  A one-byte output budget must
+		// not reject a larger frame that is consumed by the provider without producing output.
+		auto input_only = make_invocation({"/bin/sh", "-c", "while IFS= read -r line; do :; done"});
+		input_only.budget.transport_bytes = 1U;
+		input_only.budget.wall_ms = 5000U;
+		auto input_only_process = start_process(input_only);
+		auto input_only_wire = make_wire(std::vector<std::byte>(4096U, std::byte{0x41}));
+		auto input_only_sent = input_only_process->send_frame(input_only_wire);
+		if (!input_only_sent)
+			require(false,
+					"NG1 live host input was incorrectly charged to the output transport budget: " +
+						input_only_sent.error().code + ":" + input_only_sent.error().field + ":" +
+						input_only_sent.error().detail);
+		auto input_only_finished = input_only_process->finish({});
+		require(input_only_finished.has_value() &&
+					input_only_finished->status == process_status::exited &&
+					input_only_finished->exit_code == 0,
+				"NG1 live input-only process did not finish cleanly");
+
+		// A provider that closes stdin must produce a typed write failure, not terminate the
+		// host through the default SIGPIPE disposition.
+		auto closed_input = make_invocation({"/bin/sh", "-c", "exec 0<&-; exit 0"});
+		closed_input.budget.wall_ms = 5000U;
+		auto closed_input_process = start_process(closed_input);
+		auto closed_input_eof = closed_input_process->receive_frame({});
+		require(closed_input_eof.has_value() && !closed_input_eof->has_value(),
+				"NG1 live closed-input provider did not reach stdout EOF");
+		auto closed_input_send = closed_input_process->send_frame(make_wire());
+		require(!closed_input_send,
+				"NG1 live write to a closed provider stdin unexpectedly succeeded");
+		auto closed_input_finished = closed_input_process->finish({});
+		require(closed_input_finished.has_value(),
+				"NG1 live closed-input provider could not finish after typed write failure");
+
+		// Receive-side cancellation terminates the worker while returning an error to the driver.
+		// The subsequent finish must still expose the exact retained process outcome.
+		auto cancelled_process = start_process(invocation);
+		std::stop_source cancellation;
+		cancellation.request_stop();
+		auto cancelled_receive = cancelled_process->receive_frame(cancellation.get_token());
+		require(!cancelled_receive && cancelled_receive.error().code == "provider.cancelled",
+				"NG1 receive cancellation did not return its typed error");
+		auto cancelled_finish = cancelled_process->finish({});
+		require(cancelled_finish.has_value() &&
+					cancelled_finish->status == process_status::cancelled,
+				"NG1 receive cancellation discarded the exact process outcome");
+
+		// A provider that never reads stdin must be killed when a backpressured send reaches its
+		// wall deadline, and the later finish must retain the timeout evidence.
+		auto blocked_send = make_invocation({"/usr/bin/sleep", "5"});
+		blocked_send.budget.wall_ms = 50U;
+		auto blocked_send_process = start_process(blocked_send);
+		auto blocked_send_payload = std::vector<std::byte>(4U * 1024U * 1024U, std::byte{0x43});
+		auto blocked_send_result =
+			blocked_send_process->send_frame(make_wire(std::move(blocked_send_payload)));
+		if (blocked_send_result || blocked_send_result.error().code != "provider.timeout")
+			require(false,
+					"NG1 backpressured send did not terminate at its wall deadline: " +
+						(blocked_send_result ? std::string{"success"}
+											 : blocked_send_result.error().code + ":" +
+								 blocked_send_result.error().field + ":" +
+								 blocked_send_result.error().detail));
+		auto blocked_send_finish = blocked_send_process->finish({});
+		require(blocked_send_finish.has_value() &&
+					blocked_send_finish->status == process_status::timed_out,
+				"NG1 send deadline discarded timeout process evidence");
+
+		// The leader can exit while a descendant retains the output pipe.  The bounded finish
+		// path must preserve its typed timeout while killing the original process group.
+		namespace fs = std::filesystem;
+		const auto descendant_marker = fs::temp_directory_path() /
+			("cxxlens-ng1-live-descendant-" + std::to_string(::getpid()) + ".pid");
+		std::error_code marker_error;
+		fs::remove(descendant_marker, marker_error);
+		require(!marker_error, "could not remove stale NG1 live descendant marker");
+		const auto descendant_budget = descendant_fixture_subprocess_budget();
+		require(descendant_budget.has_value(),
+				"could not derive a process budget for the NG1 live descendant test");
+		const auto descendant_command =
+			"/usr/bin/sleep 30 & child=$!; read -r pid comm state ppid pgrp session tty_nr tpgid "
+			"flags minflt cminflt majflt cmajflt utime stime cutime cstime priority nice "
+			"num_threads itrealvalue start_time rest < /proc/$child/stat; printf '%s %s\\n' "
+			"\"$child\" \"$start_time\" > " +
+			descendant_marker.string() + "; exit 0";
+		auto descendant = make_invocation({"/bin/sh", "-c", descendant_command});
+		descendant.budget.subprocesses = *descendant_budget;
+		descendant.budget.wall_ms = 2000U;
+		const auto descendant_deadline_origin = std::chrono::steady_clock::now();
+		auto descendant_process = start_process(descendant);
+		std::optional<holder_observation> observed_descendant;
+		// Use shell builtins for the /proc read so marker readiness stays inside the live
+		// operation deadline without spawning a helper process after the descendant fork.  The
+		// origin is captured before start_process(), whose internal deadline starts during the
+		// call, so descheduling after startup cannot extend this readiness window.
+		const auto marker_deadline =
+			descendant_deadline_origin + std::chrono::milliseconds{descendant.budget.wall_ms};
+		while (std::chrono::steady_clock::now() < marker_deadline && !observed_descendant)
+		{
+			observed_descendant = observe_descendant(descendant_marker);
+			if (!observed_descendant)
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+		require(observed_descendant.has_value(),
+				"NG1 live descendant identity could not be observed before cleanup");
+		std::this_thread::sleep_for(std::chrono::milliseconds{50});
+		const bool descendant_alive_before_cleanup = !pidfd_exited(observed_descendant->pidfd);
+		const auto descendant_finished = descendant_process->finish({});
+		const bool descendant_exited_after_cleanup =
+			wait_pidfd_exit(observed_descendant->pidfd, std::chrono::milliseconds{500});
+		if (!descendant_exited_after_cleanup)
+		{
+			(void)kill_pidfd(observed_descendant->pidfd);
+			(void)wait_pidfd_exit(observed_descendant->pidfd, std::chrono::seconds{2});
+		}
+		const bool descendant_timed_out = descendant_finished.has_value() &&
+			descendant_finished->status == process_status::timed_out;
+		const bool descendant_exited = pidfd_exited(observed_descendant->pidfd);
+		(void)::close(observed_descendant->pidfd);
+		fs::remove(descendant_marker, marker_error);
+		require(descendant_timed_out && descendant_alive_before_cleanup &&
+					descendant_exited_after_cleanup && descendant_exited && !marker_error,
+				"NG1 live process-group cleanup leaked a post-reap descendant");
+
+		// While the provider is writing a large stderr burst, the host must continue draining it
+		// while its nonblocking stdin is backpressured.  Polling stdin alone deadlocks this case.
+		auto backpressured = make_invocation(
+			{"/bin/sh",
+			 "-c",
+			 "/usr/bin/dd if=/dev/zero bs=4096 count=256 >&2; /bin/cat >/dev/null"});
+		backpressured.budget.wall_ms = 5000U;
+		backpressured.budget.subprocesses = *descendant_budget;
+		backpressured.budget.transport_bytes = 2U * 1024U * 1024U;
+		auto backpressured_process = start_process(backpressured);
+		auto backpressure_payload = std::vector<std::byte>(1024U * 1024U, std::byte{0x42});
+		auto backpressure_sent =
+			backpressured_process->send_frame(make_wire(std::move(backpressure_payload)));
+		if (!backpressure_sent)
+			require(false,
+					"NG1 live duplex write deadlocked instead of draining provider stderr: " +
+						backpressure_sent.error().code + ":" + backpressure_sent.error().field +
+						":" + backpressure_sent.error().detail);
+		auto backpressured_finished = backpressured_process->finish({});
+		require(backpressured_finished.has_value() &&
+					backpressured_finished->status == process_status::exited &&
+					backpressured_finished->exit_code == 0,
+				"NG1 live backpressure process did not finish cleanly");
+#else
+		// The unavailable implementation is intentionally fail-closed on non-Linux platforms.
+#endif
+	}
+
 } // namespace
 
 int main(const int argument_count, const char* const* arguments)
@@ -2435,6 +2851,11 @@ int main(const int argument_count, const char* const* arguments)
 	check_host_transcript_validator(executable);
 	check_sealed_provider_validation();
 	check_semantic_input_digests(executable);
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+	check_ng1_post_fork_guard_kills_group_without_ack();
+#endif
+	check_ng1_live_duplex_process();
 	check_process_faults(executable);
 	check_prior_snapshot_preserved(executable);
 }

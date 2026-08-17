@@ -297,6 +297,40 @@ namespace
 				"snapshot receipt lost the exact candidate lookup");
 	}
 
+	void require_three_paths_query_the_same_admitted_snapshot(
+		const materialization_store_observation& observation, const sdk::relation_engine& value)
+	{
+		auto relation = value.require_id(descriptor().id);
+		require(relation.has_value(), "query regression relation was not admitted");
+		const auto expected_descriptor = descriptor();
+		const auto expected_row = row("item:one", "payload").canonical_form();
+		for (const auto& receipt : observation.verification_receipts)
+		{
+			require(receipt.handle.has_value(), "query regression lost a reopened handle");
+			auto persisted_descriptor = receipt.handle->descriptor(expected_descriptor.id);
+			require(persisted_descriptor && *persisted_descriptor == expected_descriptor,
+					"reopened Store descriptor admission differs from the engine descriptor");
+
+			auto claims = receipt.handle->open_claims(expected_descriptor.id);
+			require(claims.has_value(), "reopened Store claim query was unavailable");
+			auto claim = claims->next();
+			require(claim && claim->has_value() && (*claim)->copy(),
+					"reopened Store claim query lost its occurrence");
+			auto claim_end = claims->next();
+			require(claim_end && !*claim_end, "reopened Store claim query was not finite");
+
+			auto rows = receipt.handle->open(*relation);
+			require(rows.has_value(), "reopened Store row query was unavailable");
+			auto first = rows->next();
+			require(first && first->has_value(), "reopened Store row query lost its row");
+			auto copied = (*first)->copy();
+			require(copied && copied->canonical_form() == expected_row,
+					"reopened Store row query returned a different canonical row");
+			auto row_end = rows->next();
+			require(row_end && !*row_end, "reopened Store row query was not finite");
+		}
+	}
+
 	void memory_fresh_genesis()
 	{
 		const auto value = engine();
@@ -330,9 +364,10 @@ namespace
 			require(receipt.projection->publication.publication_id ==
 						observed.publish_returned_record->publication_id,
 					"memory same-Store paths did not resolve the invocation publication");
+		require_three_paths_query_the_same_admitted_snapshot(observed, value);
 	}
 
-	void authority_registry_digest_alias_is_rejected_at_store_admission()
+	void authority_registry_digest_alias_is_rejected_before_store_open()
 	{
 		const auto value = engine();
 		constexpr std::string_view authority_registry_digest =
@@ -346,18 +381,21 @@ namespace
 		authority_bound_selector.relation_registry_digest = std::string{authority_registry_digest};
 		const auto publication =
 			publication_request(authority_bound_selector, "memory", std::nullopt);
-		auto observed = execute_materialization_store(value, publication, plan(value, publication));
-		const auto* failure = observed.first_issue
-			? std::get_if<materialization_store_sdk_failure>(&*observed.first_issue)
+		recording_opener opener;
+		auto observed =
+			execute_materialization_store(value, publication, plan(value, publication), opener);
+		const auto* mismatch = observed.first_issue
+			? std::get_if<materialization_store_mismatch>(&*observed.first_issue)
 			: nullptr;
-		require(failure && failure->operation == materialization_store_operation::writer_begin &&
-					failure->error.code == "store.draft-authority-mismatch" &&
-					failure->error.field == "snapshot" && failure->error.detail.empty() &&
+		require(mismatch && mismatch->operation == materialization_store_operation::configuration &&
+					mismatch->projection == "engine-registry-digest" &&
+					std::get<std::string>(mismatch->expected) == authority_registry_digest &&
+					std::get<std::string>(mismatch->actual) == engine_registry_digest &&
 					observed.head_observation.selector_lookup == authority_bound_selector &&
-					observed.writer_begin_call_count == 1U && !observed.publication_attempted &&
-					observed.publish_call_count == 0U && !observed.publish_returned_record &&
-					!observed.verification_store,
-				"authority registry digest was admitted as the Store engine digest");
+					observed.writer_begin_call_count == 0U && opener.memory_call_count == 0U &&
+					!observed.publication_attempted && observed.publish_call_count == 0U &&
+					!observed.publish_returned_record && !observed.verification_store,
+				"authority registry digest was admitted before Store open");
 	}
 
 	void sqlite_genesis_append_and_stale()
@@ -714,7 +752,7 @@ int main()
 {
 	sqlite_v2_begin_is_phase_authentic_and_does_not_migrate();
 	memory_fresh_genesis();
-	authority_registry_digest_alias_is_rejected_at_store_admission();
+	authority_registry_digest_alias_is_rejected_before_store_open();
 	sqlite_genesis_append_and_stale();
 	sqlite_publish_race_recovers_exact_receipts();
 	typed_prepublication_failures();

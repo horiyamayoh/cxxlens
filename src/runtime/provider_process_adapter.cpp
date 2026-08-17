@@ -34,10 +34,53 @@
 
 #include <cxxlens/sdk/provider.hpp>
 
+#include "../sdk/provider_ng1_process_internal.hpp"
 #include "../sdk/provider_runtime_internal.hpp"
 
 namespace cxxlens::sdk::provider
 {
+#if defined(__linux__) && defined(__GLIBC__)
+	namespace detail
+	{
+		ng1_post_fork_process_guard::ng1_post_fork_process_guard(const int child) noexcept
+			: child_{child}
+		{
+		}
+
+		ng1_post_fork_process_guard::~ng1_post_fork_process_guard() noexcept
+		{
+			cleanup();
+		}
+
+		void ng1_post_fork_process_guard::release() noexcept
+		{
+			child_ = -1;
+		}
+
+		void ng1_post_fork_process_guard::cleanup() noexcept
+		{
+			const auto child = static_cast<pid_t>(std::exchange(child_, -1));
+			if (child <= 0)
+				return;
+
+			const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{100};
+			while (std::chrono::steady_clock::now() < deadline)
+			{
+				// The child PID is freshly allocated and remains waitable until this guard
+				// reaps it, so a group with that ID cannot belong to an unrelated process.
+				// Attempt the group first even when the setup ACK was not observed; this
+				// closes the scheduler/ACK-timeout race for descendants.
+				(void)::kill(-child, SIGKILL);
+				(void)::kill(child, SIGKILL);
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+			}
+			while (::waitpid(child, nullptr, 0) < 0 && errno == EINTR)
+			{
+			}
+		}
+	} // namespace detail
+#endif
+
 	namespace
 	{
 		[[nodiscard]] error
@@ -489,10 +532,625 @@ namespace cxxlens::sdk::provider
 			}
 		}
 
-		class linux_process_port final : public provider_process_port,
-										 public detail::replayable_provider_process_port
+		/** Write to a provider pipe without allowing a closed reader to terminate the host. */
+		[[nodiscard]] ssize_t write_without_sigpipe(const int destination,
+													const std::byte* bytes,
+													const std::size_t size) noexcept
+		{
+			sigset_t blocked{};
+			sigset_t previous{};
+			if (sigemptyset(&blocked) != 0 || sigaddset(&blocked, SIGPIPE) != 0 ||
+				sigprocmask(SIG_BLOCK, &blocked, &previous) != 0)
+			{
+				errno = EPERM;
+				return -1;
+			}
+
+			sigset_t pending_before{};
+			const bool was_pending =
+				sigpending(&pending_before) == 0 && sigismember(&pending_before, SIGPIPE) == 1;
+			const auto written = ::write(destination, bytes, size);
+			const auto write_errno = errno;
+			sigset_t pending_after{};
+			if (!was_pending && sigpending(&pending_after) == 0 &&
+				sigismember(&pending_after, SIGPIPE) == 1)
+			{
+				timespec timeout{};
+				(void)sigtimedwait(&blocked, nullptr, &timeout);
+			}
+			const auto restore_status = sigprocmask(SIG_SETMASK, &previous, nullptr);
+			if (written < 0)
+				errno = write_errno;
+			else if (restore_status != 0)
+			{
+				errno = restore_status;
+				return -1;
+			}
+			return written;
+		}
+
+		/**
+		 * Live Linux process channel used by the source-private NG1 seam.  The existing
+		 * linux_process_port below intentionally remains the completed-process NG0 path; this
+		 * channel has its own explicit lifetime so a caller cannot accidentally reclassify run().
+		 */
+		class linux_ng1_duplex_process final : public detail::ng1_duplex_process
 		{
 		  public:
+			linux_ng1_duplex_process(descriptor input,
+									 descriptor output,
+									 descriptor error,
+									 const pid_t child,
+									 const protocol_limits limits,
+									 sandbox_policy policy,
+									 execution_budget budget,
+									 std::string measured_digest) noexcept
+				: input_{std::move(input)}, output_{std::move(output)}, error_{std::move(error)},
+				  child_{child}, limits_{limits}, policy_{std::move(policy)}, budget_{budget},
+				  measured_digest_{std::move(measured_digest)},
+				  started_{std::chrono::steady_clock::now()}
+			{
+			}
+
+			linux_ng1_duplex_process(const linux_ng1_duplex_process&) = delete;
+			linux_ng1_duplex_process& operator=(const linux_ng1_duplex_process&) = delete;
+			~linux_ng1_duplex_process() override
+			{
+				if (!finished_)
+				{
+					forced_status_ = process_status::cancelled;
+					kill_process_group();
+				}
+			}
+
+			result<void> send_frame(const frame& value) override
+			{
+				if (finished_ || input_.get() < 0)
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.protocol-state-invalid", "ng1-live", "input-closed"));
+				if (auto deadline = check_deadline(); !deadline)
+				{
+					(void)terminate(process_status::timed_out);
+					return deadline;
+				}
+				auto encoded = encode_frame(value, limits_);
+				if (!encoded)
+					return cxxlens::sdk::unexpected(std::move(encoded.error()));
+				std::size_t offset{};
+				while (offset < encoded->size())
+				{
+					const auto written = write_without_sigpipe(
+						input_.get(), encoded->data() + offset, encoded->size() - offset);
+					if (written > 0)
+					{
+						offset += static_cast<std::size_t>(written);
+						continue;
+					}
+					if (written < 0 && errno == EINTR)
+						continue;
+					if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+					{
+						std::array<pollfd, 3U> descriptors{
+							pollfd{input_.get(), POLLOUT | POLLHUP | POLLERR, 0},
+							pollfd{output_.get(), POLLIN | POLLHUP | POLLERR, 0},
+							pollfd{error_.get(), POLLIN | POLLHUP | POLLERR, 0},
+						};
+						const auto polled = ::poll(descriptors.data(), descriptors.size(), 10);
+						if (polled < 0 && errno == EINTR)
+							continue;
+						if (polled < 0)
+							return cxxlens::sdk::unexpected(
+								process_error("provider.process-launch-failed",
+											  "ng1-live-write",
+											  std::to_string(errno)));
+						if ((descriptors[1].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) !=
+								0 &&
+							!drain_stdout())
+						{
+							forced_status_ = process_status::output_limit;
+							kill_process_group();
+							return cxxlens::sdk::unexpected(process_error(
+								"provider.output-limit", "ng1-live", "transport-bytes"));
+						}
+						if ((descriptors[2].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) !=
+								0 &&
+							!drain_stderr())
+						{
+							forced_status_ = process_status::output_limit;
+							kill_process_group();
+							return cxxlens::sdk::unexpected(process_error(
+								"provider.output-limit", "ng1-live", "transport-bytes"));
+						}
+						if ((descriptors[0].revents & (POLLHUP | POLLERR | POLLNVAL)) != 0)
+							return cxxlens::sdk::unexpected(process_error(
+								"provider.worker-exit", "ng1-live-write", "stdin-closed"));
+						if (auto deadline = check_deadline(); !deadline)
+						{
+							(void)terminate(process_status::timed_out);
+							return deadline;
+						}
+						continue;
+					}
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-launch-failed", "ng1-live-write", std::to_string(errno)));
+				}
+				return {};
+			}
+
+			result<std::optional<frame>> receive_frame(const std::stop_token cancellation) override
+			{
+				if (finished_)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.protocol-state-invalid", "ng1-live", "finished"));
+				for (;;)
+				{
+					auto next = take_frame();
+					if (!next)
+						return cxxlens::sdk::unexpected(std::move(next.error()));
+					if (next->has_value())
+						return next;
+					if (cancellation.stop_requested())
+					{
+						(void)terminate(process_status::cancelled);
+						return cxxlens::sdk::unexpected(
+							process_error("provider.cancelled", "ng1-live", "stop-requested"));
+					}
+					if (auto deadline = check_deadline(); !deadline)
+					{
+						(void)terminate(process_status::timed_out);
+						return cxxlens::sdk::unexpected(std::move(deadline.error()));
+					}
+					if (stdout_ended_)
+					{
+						if (!pending_.empty())
+							return cxxlens::sdk::unexpected(process_error(
+								"provider.truncated-stream", "ng1-live", "partial-frame"));
+						return std::optional<frame>{};
+					}
+
+					std::array<pollfd, 2U> descriptors{
+						pollfd{output_.get(), POLLIN | POLLHUP | POLLERR, 0},
+						pollfd{error_.get(), POLLIN | POLLHUP | POLLERR, 0},
+					};
+					const auto polled = ::poll(descriptors.data(), descriptors.size(), 10);
+					if (polled < 0 && errno == EINTR)
+						continue;
+					if (polled < 0)
+						return cxxlens::sdk::unexpected(
+							process_error("provider.process-launch-failed",
+										  "ng1-live-read",
+										  std::to_string(errno)));
+					if (!drain_stdout() || !drain_stderr())
+					{
+						(void)terminate(process_status::output_limit);
+						return cxxlens::sdk::unexpected(
+							process_error("provider.output-limit", "ng1-live", "transport-bytes"));
+					}
+				}
+			}
+
+			result<process_output> finish(const std::stop_token cancellation) override
+			{
+				if (finished_)
+				{
+					if (completed_output_)
+						return *completed_output_;
+					return cxxlens::sdk::unexpected(
+						process_error("provider.protocol-state-invalid", "ng1-live", "finished"));
+				}
+				input_.reset();
+				for (;;)
+				{
+					reap_nonblocking();
+					if (cancellation.stop_requested())
+						forced_status_ = process_status::cancelled;
+					if (forced_status_ != process_status::launch_failed &&
+						(!reaped_ || !stdout_ended_ || !stderr_ended_))
+						kill_process_group();
+					if (reaped_ && stdout_ended_ && stderr_ended_)
+						break;
+					if (std::chrono::steady_clock::now() >= deadline_)
+					{
+						forced_status_ = process_status::timed_out;
+						kill_process_group();
+						output_.reset();
+						error_.reset();
+						stdout_ended_ = true;
+						stderr_ended_ = true;
+						break;
+					}
+					std::array<pollfd, 2U> descriptors{
+						pollfd{output_.get(), POLLIN | POLLHUP | POLLERR, 0},
+						pollfd{error_.get(), POLLIN | POLLHUP | POLLERR, 0},
+					};
+					const auto polled = ::poll(descriptors.data(), descriptors.size(), 10);
+					if (polled < 0 && errno == EINTR)
+						continue;
+					if (polled < 0)
+						return cxxlens::sdk::unexpected(
+							process_error("provider.process-launch-failed",
+										  "ng1-live-finish",
+										  std::to_string(errno)));
+					if (!drain_stdout() || !drain_stderr())
+					{
+						forced_status_ = process_status::output_limit;
+						kill_process_group();
+					}
+				}
+				finished_ = true;
+				process_output output;
+				output.status = forced_status_;
+				if (forced_status_ == process_status::launch_failed)
+				{
+					if (WIFSIGNALED(wait_status_))
+					{
+						output.status = process_status::crashed;
+						output.termination_signal = WTERMSIG(wait_status_);
+					}
+					else if (WIFEXITED(wait_status_))
+					{
+						output.status = process_status::exited;
+						output.exit_code = WEXITSTATUS(wait_status_);
+					}
+				}
+				else if (WIFSIGNALED(wait_status_))
+					output.termination_signal = WTERMSIG(wait_status_);
+				else if (WIFEXITED(wait_status_))
+					output.exit_code = WEXITSTATUS(wait_status_);
+				output.standard_output = std::move(stdout_bytes_);
+				output.standard_error = std::move(stderr_text_);
+				output.measured_executable_digest = measured_digest_;
+				output.sandbox = sandbox_evidence(
+					policy_, budget_, sandbox_assurance::enforced, true, measured_digest_);
+				if (output.exit_code == 126 && output.status == process_status::exited)
+				{
+					output.failure_code = "security.sandbox-insufficient";
+					output.sandbox = sandbox_evidence(
+						policy_, budget_, sandbox_assurance::none, false, measured_digest_);
+				}
+				completed_output_ = output;
+				return output;
+			}
+
+			result<process_output> terminate(const process_status status) override
+			{
+				if (finished_)
+				{
+					if (completed_output_)
+						return *completed_output_;
+					return cxxlens::sdk::unexpected(
+						process_error("provider.protocol-state-invalid", "ng1-live", "finished"));
+				}
+				forced_status_ = status;
+				kill_process_group();
+				return finish({});
+			}
+
+		  private:
+			static constexpr std::size_t wire_header_bytes = 104U;
+
+			[[nodiscard]] static std::uint64_t
+			read_big_endian(const std::span<const std::byte> input,
+							const std::size_t offset,
+							const std::size_t width) noexcept
+			{
+				std::uint64_t value{};
+				for (std::size_t index{}; index < width; ++index)
+					value = (value << 8U) | std::to_integer<std::uint64_t>(input[offset + index]);
+				return value;
+			}
+
+			[[nodiscard]] result<void> check_deadline() const
+			{
+				if (std::chrono::steady_clock::now() >= deadline_)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.timeout", "ng1-live", "wall-deadline"));
+				return {};
+			}
+
+			[[nodiscard]] result<std::optional<frame>> take_frame()
+			{
+				if (pending_.size() < wire_header_bytes)
+					return std::optional<frame>{};
+				const auto header = std::span<const std::byte>{pending_}.first(wire_header_bytes);
+				const auto control_length = read_big_endian(header, 28U, 4U);
+				const auto payload_length = read_big_endian(header, 32U, 8U);
+				if (control_length > limits_.max_control_bytes ||
+					payload_length > limits_.max_payload_bytes)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.oversized-frame", "ng1-live", "frame-length"));
+				if (payload_length >
+					std::numeric_limits<std::size_t>::max() - wire_header_bytes - control_length)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.oversized-frame", "ng1-live", "frame-overflow"));
+				const auto total = wire_header_bytes + static_cast<std::size_t>(control_length) +
+					static_cast<std::size_t>(payload_length);
+				if (pending_.size() < total)
+					return std::optional<frame>{};
+				auto decoded =
+					decode_frame(std::span<const std::byte>{pending_}.first(total), limits_);
+				if (!decoded)
+					return cxxlens::sdk::unexpected(std::move(decoded.error()));
+				pending_.erase(pending_.begin(),
+							   pending_.begin() + static_cast<std::ptrdiff_t>(total));
+				return std::optional<frame>{std::move(*decoded)};
+			}
+
+			[[nodiscard]] bool account_transport(const std::size_t received) noexcept
+			{
+				if (transport_bytes_ > budget_.transport_bytes ||
+					received > budget_.transport_bytes - transport_bytes_)
+					return false;
+				transport_bytes_ += received;
+				return true;
+			}
+
+			[[nodiscard]] bool drain_stdout()
+			{
+				std::array<char, 4096U> buffer{};
+				for (;;)
+				{
+					const auto count = ::read(output_.get(), buffer.data(), buffer.size());
+					if (count > 0)
+					{
+						const auto received = static_cast<std::size_t>(count);
+						if (!account_transport(received))
+							return false;
+						for (const auto value : std::span{buffer}.first(received))
+						{
+							const auto byte =
+								static_cast<std::byte>(static_cast<unsigned char>(value));
+							stdout_bytes_.push_back(byte);
+							pending_.push_back(byte);
+						}
+						continue;
+					}
+					if (count == 0)
+					{
+						stdout_ended_ = true;
+						return true;
+					}
+					if (errno == EINTR)
+						continue;
+					if (errno == EAGAIN || errno == EWOULDBLOCK)
+						return true;
+					stdout_ended_ = true;
+					return false;
+				}
+			}
+
+			[[nodiscard]] bool drain_stderr()
+			{
+				std::array<char, 4096U> buffer{};
+				for (;;)
+				{
+					const auto count = ::read(error_.get(), buffer.data(), buffer.size());
+					if (count > 0)
+					{
+						const auto received = static_cast<std::size_t>(count);
+						if (!account_transport(received))
+							return false;
+						stderr_text_.append(buffer.data(), received);
+						continue;
+					}
+					if (count == 0)
+					{
+						stderr_ended_ = true;
+						return true;
+					}
+					if (errno == EINTR)
+						continue;
+					if (errno == EAGAIN || errno == EWOULDBLOCK)
+						return true;
+					stderr_ended_ = true;
+					return false;
+				}
+			}
+
+			void reap_nonblocking() noexcept
+			{
+				if (reaped_ || child_ <= 0)
+					return;
+				const auto waited = ::waitpid(child_, &wait_status_, WNOHANG);
+				if (waited == child_ || (waited < 0 && errno == ECHILD))
+					reaped_ = true;
+			}
+
+			void kill_process_group() noexcept
+			{
+				if (child_ <= 0 || process_group_killed_)
+					return;
+				const auto signal_deadline =
+					std::chrono::steady_clock::now() + std::chrono::milliseconds{100};
+				while (std::chrono::steady_clock::now() < signal_deadline)
+				{
+					(void)::kill(-child_, SIGKILL);
+					std::this_thread::sleep_for(std::chrono::milliseconds{1});
+				}
+				if (!reaped_)
+				{
+					while (::waitpid(child_, &wait_status_, 0) < 0 && errno == EINTR)
+					{
+					}
+					reaped_ = true;
+				}
+				process_group_killed_ = true;
+			}
+
+			descriptor input_;
+			descriptor output_;
+			descriptor error_;
+			pid_t child_{};
+			protocol_limits limits_;
+			sandbox_policy policy_;
+			execution_budget budget_;
+			std::string measured_digest_;
+			std::chrono::steady_clock::time_point started_;
+			std::chrono::steady_clock::time_point deadline_ =
+				started_ + std::chrono::milliseconds{budget_.wall_ms};
+			std::vector<std::byte> pending_;
+			std::vector<std::byte> stdout_bytes_;
+			std::string stderr_text_;
+			std::uint64_t transport_bytes_{};
+			process_status forced_status_{process_status::launch_failed};
+			int wait_status_{};
+			bool stdout_ended_{};
+			bool stderr_ended_{};
+			bool reaped_{};
+			bool process_group_killed_{};
+			bool finished_{};
+			std::optional<process_output> completed_output_;
+		};
+
+		class linux_process_port final : public provider_process_port,
+										 public detail::replayable_provider_process_port,
+										 public detail::ng1_duplex_process_port
+		{
+		  public:
+			[[nodiscard]] result<std::unique_ptr<detail::ng1_duplex_process>>
+			start(const process_invocation& invocation,
+				  const protocol_limits limits,
+				  const std::stop_token cancellation) const override
+			{
+				if (auto valid = invocation.budget.validate(); !valid)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-request-invalid", "budget"));
+				if (invocation.argv.empty() || invocation.argv.front().empty() ||
+					!invocation.argv.front().contains('/') ||
+					std::ranges::any_of(invocation.argv, contains_nul) ||
+					contains_nul(invocation.working_directory))
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-request-invalid", "invocation"));
+				if (limits.minimum_minor > limits.maximum_minor)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-request-invalid", "protocol-limits"));
+				if (auto valid = invocation.sandbox.validate(); !valid)
+					return cxxlens::sdk::unexpected(std::move(valid.error()));
+				auto policy = resolve_sandbox_policy(invocation.sandbox.policy_digest);
+				if (!policy)
+					return cxxlens::sdk::unexpected(std::move(policy.error()));
+				auto verified = make_verified_executable(invocation);
+				if (!verified)
+					return cxxlens::sdk::unexpected(std::move(verified.error()));
+				if (invocation.expected_binary_digest.empty() ||
+					verified->digest != invocation.expected_binary_digest)
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.binary-identity-mismatch", "ng1-live", "executable"));
+				if (cancellation.stop_requested())
+					return cxxlens::sdk::unexpected(
+						process_error("provider.cancelled", "ng1-live", "before-launch"));
+
+				auto input = make_pipe();
+				auto output_pipe = make_pipe();
+				auto error_pipe = make_pipe();
+				auto process_group_pipe = make_pipe();
+				if (!input)
+					return cxxlens::sdk::unexpected(std::move(input.error()));
+				if (!output_pipe)
+					return cxxlens::sdk::unexpected(std::move(output_pipe.error()));
+				if (!error_pipe)
+					return cxxlens::sdk::unexpected(std::move(error_pipe.error()));
+				if (!process_group_pipe)
+					return cxxlens::sdk::unexpected(std::move(process_group_pipe.error()));
+				const auto input_flags = ::fcntl(input->write.get(), F_GETFL);
+				if (input_flags < 0 ||
+					::fcntl(input->write.get(), F_SETFL, input_flags | O_NONBLOCK) != 0)
+					return cxxlens::sdk::unexpected(process_error("provider.process-launch-failed",
+																  "input-nonblocking",
+																  std::to_string(errno)));
+
+				std::vector<std::string> environment_storage;
+				environment_storage.reserve(invocation.environment.size() + 2U);
+				environment_storage.emplace_back("LANG=C");
+				environment_storage.emplace_back("LC_ALL=C");
+				for (const auto& [name, value] : invocation.environment)
+				{
+					if (name.empty() || name.contains('=') || contains_nul(name) ||
+						contains_nul(value))
+						return cxxlens::sdk::unexpected(
+							process_error("provider.process-request-invalid", "environment"));
+					std::string entry{name};
+					entry += '=';
+					entry += value;
+					environment_storage.push_back(std::move(entry));
+				}
+				auto arguments_storage = invocation.argv;
+				auto arguments = pointers(arguments_storage);
+				auto environment = pointers(environment_storage);
+
+				const auto child = ::fork();
+				if (child < 0)
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-launch-failed", "fork", std::to_string(errno)));
+				if (child == 0)
+				{
+					process_group_pipe->read.reset();
+					const bool process_group_established = ::setpgid(0, 0) == 0;
+					if (!write_process_group_ack(process_group_pipe->write.get(),
+												 process_group_established ? std::byte{0x01}
+																		   : std::byte{0x00}))
+						::_exit(126);
+					process_group_pipe->write.reset();
+					if (!process_group_established)
+						::_exit(126);
+					const auto input_read_flags = ::fcntl(input->read.get(), F_GETFL);
+					if (input_read_flags < 0 ||
+						::fcntl(input->read.get(), F_SETFL, input_read_flags & ~O_NONBLOCK) != 0)
+						::_exit(126);
+					if (::dup2(input->read.get(), STDIN_FILENO) < 0 ||
+						::dup2(output_pipe->write.get(), STDOUT_FILENO) < 0 ||
+						::dup2(error_pipe->write.get(), STDERR_FILENO) < 0)
+						::_exit(126);
+					if ((verified->image.get() == 3
+							 ? ::fcntl(verified->image.get(), F_SETFD, FD_CLOEXEC)
+							 : ::dup3(verified->image.get(), 3, O_CLOEXEC)) < 0 ||
+						!close_inherited_descriptors())
+						::_exit(126);
+					if (!invocation.working_directory.empty() &&
+						::chdir(invocation.working_directory.c_str()) != 0)
+						::_exit(125);
+					if (!configure_child(invocation, *policy))
+						::_exit(126);
+#if defined(SYS_execveat)
+					(void)::syscall(
+						SYS_execveat, 3, "", arguments.data(), environment.data(), AT_EMPTY_PATH);
+#endif
+					::_exit(127);
+				}
+				detail::ng1_post_fork_process_guard child_guard{child};
+
+				process_group_pipe->write.reset();
+				const auto parent_setpgid = ::setpgid(child, child);
+				const auto parent_setpgid_errno = errno;
+				const auto process_group_ack =
+					read_process_group_ack(process_group_pipe->read.get());
+				const auto actual_process_group = ::getpgid(child);
+				const bool parent_group_confirmed =
+					parent_setpgid == 0 || (parent_setpgid < 0 && parent_setpgid_errno == EACCES);
+				const bool process_group_established = process_group_ack && *process_group_ack &&
+					parent_group_confirmed && actual_process_group == child;
+				process_group_pipe->read.reset();
+				if (!process_group_established)
+				{
+					return cxxlens::sdk::unexpected(
+						process_error("provider.runtime-unavailable", "ng1-live", "process-group"));
+				}
+				input->read.reset();
+				output_pipe->write.reset();
+				error_pipe->write.reset();
+				std::unique_ptr<detail::ng1_duplex_process> process =
+					std::make_unique<linux_ng1_duplex_process>(std::move(input->write),
+															   std::move(output_pipe->read),
+															   std::move(error_pipe->read),
+															   child,
+															   limits,
+															   std::move(*policy),
+															   invocation.budget,
+															   verified->digest);
+				child_guard.release();
+				return process;
+			}
+
 			[[nodiscard]] result<process_output>
 			run(const process_invocation& invocation,
 				const std::stop_token cancellation) const override
@@ -812,9 +1470,17 @@ namespace cxxlens::sdk::provider
 		};
 #else
 		class unavailable_process_port final : public provider_process_port,
-											   public detail::replayable_provider_process_port
+											   public detail::replayable_provider_process_port,
+											   public detail::ng1_duplex_process_port
 		{
 		  public:
+			result<std::unique_ptr<detail::ng1_duplex_process>>
+			start(const process_invocation&, protocol_limits, std::stop_token) const override
+			{
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.runtime-unavailable", "ng1-live", "linux-glibc-required"));
+			}
+
 			result<process_output> run(const process_invocation& invocation,
 									   std::stop_token) const override
 			{
@@ -860,6 +1526,15 @@ namespace cxxlens::sdk::provider
 
 	std::unique_ptr<detail::replayable_provider_process_port>
 	detail::make_system_replayable_provider_process_port()
+	{
+#if defined(__linux__) && defined(__GLIBC__)
+		return std::make_unique<linux_process_port>();
+#else
+		return std::make_unique<unavailable_process_port>();
+#endif
+	}
+
+	std::unique_ptr<detail::ng1_duplex_process_port> detail::make_system_ng1_duplex_process_port()
 	{
 #if defined(__linux__) && defined(__GLIBC__)
 		return std::make_unique<linux_process_port>();

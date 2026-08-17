@@ -165,12 +165,68 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
+	 * Source-private request authority retained by sealed claims.
+	 *
+	 * The request ID binds the validated semantic request projection, while the catalog identity
+	 * and exact task count keep Store adoption from pairing this claim set with a coherent but
+	 * different request that happens to have compatible mutable projections.
+	 */
+	struct materialization_claim_request_binding
+	{
+		std::string materialization_request_id;
+		std::string catalog_id;
+		std::string catalog_digest;
+		std::uint64_t task_count{};
+
+		[[nodiscard]] bool operator==(const materialization_claim_request_binding&) const = default;
+	};
+
+	struct materialization_bounded_task_claims;
+
+	/**
+	 * Unforgeable source-private token issued only by the complete bounded-task factory.
+	 *
+	 * The bounded source intentionally does not recompute the public claim-batch verdict routine.
+	 * This token therefore seals the factory as the only semantic verdict ingress; the task also
+	 * carries a deterministic integrity digest so mutating the public transport fields after
+	 * factory return cannot turn that authority into an unchecked source bypass.
+	 */
+	struct materialization_bounded_task_factory_seal
+	{
+		materialization_bounded_task_factory_seal(
+			materialization_bounded_task_factory_seal&&) noexcept = default;
+		materialization_bounded_task_factory_seal&
+		operator=(materialization_bounded_task_factory_seal&&) noexcept = default;
+		materialization_bounded_task_factory_seal(
+			const materialization_bounded_task_factory_seal&) = delete;
+		materialization_bounded_task_factory_seal&
+		operator=(const materialization_bounded_task_factory_seal&) = delete;
+
+	  private:
+		materialization_bounded_task_factory_seal() noexcept = default;
+
+		friend sdk::result<materialization_bounded_task_claims>
+		construct_materialization_bounded_task_claims(const validated_materialization_request&,
+													  std::size_t,
+													  const sealed_materialization_result&,
+													  const materialization_producer_authority&,
+													  const materialization_guarantee_authority&);
+		friend sdk::result<materialization_bounded_task_claims>
+		construct_materialization_bounded_task_claims(const materialization_v2_1_claim_authority&,
+													  std::size_t,
+													  const materialization_v2_1_task_execution&,
+													  const sealed_materialization_result&);
+	};
+
+	/**
 	 * One bounded task adoption result. The contained drafts are limited to the currently consumed
 	 * sealed task; callers must transfer them to a replayable source before advancing the task
 	 * cursor. This type deliberately has no claim_batch or request-wide result-set member.
 	 */
 	struct materialization_bounded_task_claims
 	{
+		/** Caller-visible ordinal; adoption also checks the sealed source-private copy below. */
+		std::uint64_t canonical_task_index{};
 		std::string materializer_semantics_digest;
 		std::string direct_basis_digest;
 		std::string canonical_adoption_transform_digest;
@@ -181,7 +237,23 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<materialization_origin_association> origin_associations;
 		std::vector<materialization_claim_partition> partitions;
 
+		/** Source-private request-entry seal issued with the validated task/result pair. */
+		[[nodiscard]] std::uint64_t sealed_canonical_task_index() const noexcept
+		{
+			return sealed_canonical_task_index_;
+		}
+		[[nodiscard]] std::string_view sealed_request_entry_binding_digest() const noexcept
+		{
+			return sealed_request_entry_binding_digest_;
+		}
+		/** Reject a task whose factory-sealed verdict-bearing payload was mutated after
+		 * construction. */
+		[[nodiscard]] sdk::result<void> validate_factory_seal() const;
+
 		materialization_bounded_task_claims(
+			materialization_bounded_task_factory_seal factory_seal,
+			const std::uint64_t canonical_task_index,
+			std::string sealed_request_entry_binding_digest,
 			std::string materializer_semantics_digest,
 			std::string direct_basis_digest,
 			std::string canonical_adoption_transform_digest,
@@ -190,17 +262,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<materialization_claim_envelope> claim_envelopes,
 			std::vector<materialization_canonicalization_edge> canonicalization_edges,
 			std::vector<materialization_origin_association> origin_associations,
-			std::vector<materialization_claim_partition> partitions)
-			: materializer_semantics_digest{std::move(materializer_semantics_digest)},
-			  direct_basis_digest{std::move(direct_basis_digest)},
-			  canonical_adoption_transform_digest{std::move(canonical_adoption_transform_digest)},
-			  base_ingestion_transform_digest{std::move(base_ingestion_transform_digest)},
-			  assumption_set_id{std::move(assumption_set_id)},
-			  claim_envelopes{std::move(claim_envelopes)},
-			  canonicalization_edges{std::move(canonicalization_edges)},
-			  origin_associations{std::move(origin_associations)}, partitions{std::move(partitions)}
-		{
-		}
+			std::vector<materialization_claim_partition> partitions);
 
 		materialization_bounded_task_claims(const materialization_bounded_task_claims&) = delete;
 		materialization_bounded_task_claims&
@@ -209,6 +271,12 @@ namespace cxxlens::detail::clang22::materialization
 			default;
 		materialization_bounded_task_claims&
 		operator=(materialization_bounded_task_claims&&) noexcept = default;
+
+	  private:
+		std::uint64_t sealed_canonical_task_index_{};
+		std::string sealed_request_entry_binding_digest_;
+		bool factory_sealed_{};
+		std::string factory_integrity_digest_;
 	};
 
 	/**
@@ -250,6 +318,7 @@ namespace cxxlens::detail::clang22::materialization
 
 	  private:
 		sealed_materialization_claims(
+			materialization_claim_request_binding request_binding,
 			std::string materializer_semantics_digest,
 			std::string direct_basis_digest,
 			std::string canonical_adoption_transform_digest,
@@ -261,6 +330,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<materialization_origin_association> origin_associations,
 			std::vector<materialization_claim_partition> partitions);
 
+		materialization_claim_request_binding request_binding_;
 		std::string materializer_semantics_digest_;
 		std::string direct_basis_digest_;
 		std::string canonical_adoption_transform_digest_;
@@ -271,6 +341,10 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<materialization_canonicalization_edge> canonicalization_edges_;
 		std::vector<materialization_origin_association> origin_associations_;
 		std::vector<materialization_claim_partition> partitions_;
+
+		friend sdk::result<void> validate_materialization_claim_request_binding(
+			const validated_materialization_request& request,
+			const sealed_materialization_claims& claims);
 
 		friend sdk::result<sealed_materialization_claims> construct_materialization_claims(
 			const validated_materialization_request& request,
@@ -284,6 +358,16 @@ namespace cxxlens::detail::clang22::materialization
 			const materialization_producer_authority& producer_authority,
 			const materialization_guarantee_authority& guarantee_authority);
 	};
+
+	/** Derive the exact source-private request binding retained by sealed claims and bounded
+	 * sources. */
+	[[nodiscard]] sdk::result<materialization_claim_request_binding>
+	make_materialization_claim_request_binding(const validated_materialization_request& request);
+
+	/** Validate a sealed claim set against the candidate request before Store adoption. */
+	[[nodiscard]] sdk::result<void>
+	validate_materialization_claim_request_binding(const validated_materialization_request& request,
+												   const sealed_materialization_claims& claims);
 
 	/** Construct, globally validate, and partition every final occurrence exactly once. */
 	[[nodiscard]] sdk::result<sealed_materialization_claims> construct_materialization_claims(

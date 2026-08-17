@@ -10,6 +10,28 @@ if(NOT DEFINED PHASE)
   message(FATAL_ERROR "install test requires an explicit PHASE")
 endif()
 
+set(cxxlens_clang22_available "@CXXLENS_CLANG22_AVAILABLE@")
+set(cxxlens_clang22_adapter "@CXXLENS_CLANG_ADAPTER@")
+set(cxxlens_clang22_unavailable_reason "@CXXLENS_CLANG22_UNAVAILABLE_REASON@")
+set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")
+set(install_executable_names
+    cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
+    cxxlens-clang22-materialize)
+set(artifact_source_arguments --source-revision "@CXXLENS_SOURCE_REVISION@"
+                              --source-tree "@CXXLENS_SOURCE_TREE@")
+
+# These phases are the installed native-provider qualification boundary.  An
+# AUTO/OFF structured-unavailable build remains useful for the portable SDK and
+# its unavailable-mode consumers, but it must not enter a native positive or
+# negative evidence run and later look like a provider failure.
+if(PHASE MATCHES "^clang22-materializer-(success|base64|negative)$"
+   AND NOT "${cxxlens_clang22_available}" STREQUAL "TRUE")
+  message(
+    FATAL_ERROR
+      "installed Clang 22 qualification is unavailable before execution: adapter=${cxxlens_clang22_adapter}, reason=${cxxlens_clang22_unavailable_reason}; configure a clean build with CXXLENS_CLANG_ADAPTER=ON and an exact LLVM_DIR/Clang package, then rerun this phase. No native evidence was produced."
+  )
+endif()
+
 function(run_clean expected_result)
   execute_process(
     COMMAND "@CMAKE_COMMAND@" -E env --unset=LD_LIBRARY_PATH
@@ -25,14 +47,35 @@ function(run_clean expected_result)
   endif()
 endfunction()
 
+function(resolve_install_artifact_path canonical_path resolved_path)
+  set(resolved "${canonical_path}")
+  foreach(executable IN LISTS install_executable_names)
+    if("${canonical_path}" STREQUAL "${install_prefix}/bin/${executable}")
+      string(APPEND resolved "${install_executable_suffix}")
+      break()
+    endif()
+  endforeach()
+  set(${resolved_path}
+      "${resolved}"
+      PARENT_SCOPE)
+endfunction()
+
 function(run_installed_tools label)
-  run_clean(0 "${install_prefix}/bin/cxxlens-sdk-doctor" inspect)
-  run_clean(1 "${install_prefix}/bin/cxxlens-clang-worker-22")
+  run_clean(
+    0 "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
+    inspect)
+  run_clean(
+    1
+    "${install_prefix}/bin/cxxlens-clang-worker-22${install_executable_suffix}")
   set(scaffold_output "${test_root}/scaffold-${label}")
   file(REMOVE_RECURSE "${scaffold_output}")
-  run_clean(0 "${install_prefix}/bin/cxxlens-provider-scaffold"
-            "${scaffold_output}" company.install.provider portable
-            company.install.relation)
+  run_clean(
+    0
+    "${install_prefix}/bin/cxxlens-provider-scaffold${install_executable_suffix}"
+    "${scaffold_output}"
+    company.install.provider
+    portable
+    company.install.relation)
 endfunction()
 
 if(PHASE STREQUAL "prepare")
@@ -42,10 +85,21 @@ if(PHASE STREQUAL "prepare")
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
             cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)
+  # `cmake --install` does not build targets, and the public Clang 22 SDK DSO
+  # plus the installed worker are not dependencies of the materializer binary.
+  # Build the complete installed executable/DSO closure before staging it.
+  execute_process(
+    COMMAND
+      "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+      cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
+      cxxlens_clang22_provider_sdk COMMAND_ERROR_IS_FATAL ANY)
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
 
+  # Keep canonical artifact paths literal for the installed-surface census. Only
+  # the filesystem path used by the existence check receives the platform
+  # executable suffix.
   foreach(
     required IN
     ITEMS
@@ -76,10 +130,11 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/bin/cxxlens-sdk-doctor"
       "${install_prefix}/bin/cxxlens-clang-worker-22"
       "${install_prefix}/bin/cxxlens-clang22-materialize")
-    if(NOT EXISTS "${required}")
+    resolve_install_artifact_path("${required}" resolved_required)
+    if(NOT EXISTS "${resolved_required}")
       message(
-        FATAL_ERROR "installed next-generation artifact is missing: ${required}"
-      )
+        FATAL_ERROR
+          "installed next-generation artifact is missing: ${resolved_required}")
     endif()
   endforeach()
 
@@ -95,10 +150,10 @@ if(PHASE STREQUAL "relocation")
     COMMAND
       "@Python3_EXECUTABLE@"
       "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/install_artifact_manifest.py"
-      create --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix
-      "${install_prefix}" --compiler "@CMAKE_CXX_COMPILER@" --configuration
-      "${artifact_configuration}" --manifest "${artifact_manifest}"
-      COMMAND_ERROR_IS_FATAL ANY)
+      create --root "@CMAKE_CURRENT_SOURCE_DIR@/.."
+      ${artifact_source_arguments} --prefix "${install_prefix}" --compiler
+      "@CMAKE_CXX_COMPILER@" --configuration "${artifact_configuration}"
+      --manifest "${artifact_manifest}" COMMAND_ERROR_IS_FATAL ANY)
   return()
 endif()
 
@@ -106,10 +161,10 @@ execute_process(
   COMMAND
     "@Python3_EXECUTABLE@"
     "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/install_artifact_manifest.py"
-    verify --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
-    --compiler "@CMAKE_CXX_COMPILER@" --configuration
-    "${artifact_configuration}" --manifest "${artifact_manifest}"
-    COMMAND_ERROR_IS_FATAL ANY)
+    verify --root "@CMAKE_CURRENT_SOURCE_DIR@/.." ${artifact_source_arguments}
+    --prefix "${install_prefix}" --compiler "@CMAKE_CXX_COMPILER@"
+    --configuration "${artifact_configuration}" --manifest
+    "${artifact_manifest}" COMMAND_ERROR_IS_FATAL ANY)
 
 if(PHASE STREQUAL "shared-runtime-layout")
   if(NOT "@CXXLENS_BUILD_SHARED@" STREQUAL "ON")
@@ -126,9 +181,10 @@ if(PHASE STREQUAL "shared-runtime-layout"
    AND NOT APPLE)
   find_program(CXXLENS_READELF NAMES readelf llvm-readelf REQUIRED)
   foreach(tool IN ITEMS cxxlens-provider-scaffold cxxlens-sdk-doctor
-                        cxxlens-clang-worker-22)
+                        cxxlens-clang-worker-22 cxxlens-clang22-materialize)
     execute_process(
-      COMMAND "${CXXLENS_READELF}" -d "${install_prefix}/bin/${tool}"
+      COMMAND "${CXXLENS_READELF}" -d
+              "${install_prefix}/bin/${tool}${install_executable_suffix}"
       OUTPUT_VARIABLE dynamic_section COMMAND_ERROR_IS_FATAL ANY)
     if(NOT dynamic_section MATCHES "RUNPATH.*\\$ORIGIN/../${install_libdir}")
       message(FATAL_ERROR "installed tool lacks relocatable RUNPATH: ${tool}")
@@ -166,7 +222,8 @@ if(PHASE STREQUAL "shared-runtime-layout"
   execute_process(
     COMMAND
       "@CMAKE_COMMAND@" -E env --unset=LD_LIBRARY_PATH --unset=DYLD_LIBRARY_PATH
-      "${install_prefix}/bin/cxxlens-sdk-doctor" inspect
+      "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
+      inspect
     RESULT_VARIABLE missing_dependency_result
     OUTPUT_VARIABLE missing_dependency_output
     ERROR_VARIABLE missing_dependency_error)
@@ -230,9 +287,9 @@ if(PHASE STREQUAL "clang22-materializer-success")
         "@Python3_EXECUTABLE@"
         "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_success_test.py"
         --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
-        --backend "${materialization_backend}" --translation-unit-count 2
-        --evidence-dir "${materialization_evidence_dir}" COMMAND_ERROR_IS_FATAL
-        ANY)
+        --executable-suffix "${install_executable_suffix}" --backend
+        "${materialization_backend}" --translation-unit-count 2 --evidence-dir
+        "${materialization_evidence_dir}" COMMAND_ERROR_IS_FATAL ANY)
   endforeach()
   execute_process(
     COMMAND
@@ -240,19 +297,42 @@ if(PHASE STREQUAL "clang22-materializer-success")
       "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/check_ng_clang22_install_matrix.py"
       --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --evidence-dir
       "${materialization_evidence_dir}" --output
-      "${materialization_evidence_dir}/configuration-evidence.json"
+      "${materialization_evidence_dir}/configuration-evidence.json" --prefix
+      "${install_prefix}" --executable-suffix "${install_executable_suffix}"
       COMMAND_ERROR_IS_FATAL ANY)
   message(STATUS "installed Clang 22 evidence: ${materialization_evidence_dir}")
   return()
 endif()
 
+if(PHASE STREQUAL "clang22-materializer-base64")
+  foreach(materialization_backend IN ITEMS memory sqlite)
+    execute_process(
+      COMMAND
+        "@Python3_EXECUTABLE@"
+        "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_success_test.py"
+        --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
+        --executable-suffix "${install_executable_suffix}" --backend
+        "${materialization_backend}" --translation-unit-count 2
+        --canonical-base64-vectors COMMAND_ERROR_IS_FATAL ANY)
+  endforeach()
+  return()
+endif()
+
 if(PHASE STREQUAL "clang22-materializer-negative")
+  set(materialization_negative_evidence_dir
+      "${test_root}/materialization-negative-evidence")
+  file(REMOVE_RECURSE "${materialization_negative_evidence_dir}")
   execute_process(
     COMMAND
       "@Python3_EXECUTABLE@"
       "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_negative_test.py"
       --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
-      COMMAND_ERROR_IS_FATAL ANY)
+      --executable-suffix "${install_executable_suffix}" --evidence-dir
+      "${materialization_negative_evidence_dir}" COMMAND_ERROR_IS_FATAL ANY)
+  message(
+    STATUS
+      "installed Clang 22 negative evidence: ${materialization_negative_evidence_dir}"
+  )
   return()
 endif()
 
@@ -264,7 +344,7 @@ if(PHASE STREQUAL "legacy-zero")
       "${install_prefix}/include/cxxlens/select.hpp"
       "${install_prefix}/include/cxxlens/workspace.hpp"
       "${install_prefix}/include/cxxlens/interop/clang.hpp"
-      "${install_prefix}/bin/cxxlens-frontend-worker"
+      "${install_prefix}/bin/cxxlens-frontend-worker${install_executable_suffix}"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_public_api_contract.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_m2_completion.yaml")
     if(EXISTS "${forbidden}")
@@ -316,12 +396,16 @@ if(PHASE MATCHES "^(core|sdk|clang22-sdk|real-project)-consumer$")
       "-DCXXLENS_ENABLE_TSAN=@CXXLENS_ENABLE_TSAN@" COMMAND_ERROR_IS_FATAL ANY)
   execute_process(COMMAND "@CMAKE_COMMAND@" --build "${build_dir}"
                           COMMAND_ERROR_IS_FATAL ANY)
-  string(REPLACE "_" "-" executable_suffix "${consumer}")
-  run_clean(0 "${build_dir}/cxxlens-${executable_suffix}")
+  string(REPLACE "_" "-" consumer_executable "${consumer}")
+  run_clean(
+    0 "${build_dir}/cxxlens-${consumer_executable}${install_executable_suffix}")
   set(consumer_prefix "${test_root}/${consumer}-prefix")
   execute_process(COMMAND "@CMAKE_COMMAND@" --install "${build_dir}" --prefix
                           "${consumer_prefix}" COMMAND_ERROR_IS_FATAL ANY)
-  run_clean(0 "${consumer_prefix}/bin/cxxlens-${executable_suffix}")
+  run_clean(
+    0
+    "${consumer_prefix}/bin/cxxlens-${consumer_executable}${install_executable_suffix}"
+  )
   return()
 endif()
 
@@ -347,8 +431,14 @@ if(PHASE STREQUAL "examples-consumer")
             "${example_prefix}" COMMAND_ERROR_IS_FATAL ANY)
   foreach(example IN ITEMS recipe typed_query dynamic_query portable_provider
                            clang22-native)
-    run_clean(0 "${example_build_dir}/cxxlens-installed-${example}")
-    run_clean(0 "${example_prefix}/bin/cxxlens-installed-${example}")
+    run_clean(
+      0
+      "${example_build_dir}/cxxlens-installed-${example}${install_executable_suffix}"
+    )
+    run_clean(
+      0
+      "${example_prefix}/bin/cxxlens-installed-${example}${install_executable_suffix}"
+    )
   endforeach()
   return()
 endif()

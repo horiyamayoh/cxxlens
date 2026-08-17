@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,51 @@
 
 namespace cxxlens::sdk::provider::detail
 {
+	/**
+	 * Source-private identity carried by a shared runtime validation pass.  Empty optional
+	 * projections are permitted for the generic NG0 runtime, but the NG1 replay bridge requires
+	 * every field to be present and compares it with the host resume binding.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN provider_runtime_provenance
+	{
+		std::string provider_id;
+		semantic_version provider_version;
+		std::string provider_binary_digest;
+		std::string provider_semantic_contract_digest;
+		std::string protocol_session_id;
+		std::string task_id;
+		std::string task_input_digest;
+		std::string normalized_invocation_digest;
+		std::string toolchain_digest;
+		std::string environment_digest;
+		std::string sandbox_policy_digest;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::uint64_t stream_id{};
+	};
+
+	/**
+	 * Exact source-private batch projection used by the sealed-transcript receipt.
+	 *
+	 * This deliberately contains the canonical row forms rather than a report-specific row-set
+	 * digest.  A materialization report can therefore reprove that its retained leaf is the same
+	 * projection that the shared runtime sealed, without reimplementing the receipt codec or using
+	 * a diagnostic process digest as authority.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN provider_sealed_transcript_batch_receipt_projection
+	{
+		std::string task_id;
+		std::string descriptor_id;
+		std::string descriptor_digest;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::string batch_digest;
+		std::vector<std::string> ordered_chunk_digests;
+		std::vector<std::string> row_canonical_forms;
+	};
+
 	/** Closed runtime-owned evidence derived from raw bytes, decoded frames, and one immutable
 	 * seal. */
 	class CXXLENS_PROVIDER_DETAIL_HIDDEN provider_runtime_receipt
@@ -20,21 +66,30 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] std::uint64_t raw_stdout_byte_count() const noexcept;
 		[[nodiscard]] std::string_view raw_stdout_sha256() const noexcept;
 		[[nodiscard]] std::uint64_t decoded_frame_count() const noexcept;
+		/** Exact sequence of the first decoded frame retained by this receipt. */
+		[[nodiscard]] std::uint64_t first_frame_sequence() const noexcept;
 		[[nodiscard]] std::string_view frame_transcript_digest() const noexcept;
 		[[nodiscard]] std::string_view sealed_transcript_digest() const noexcept;
+		[[nodiscard]] const provider_runtime_provenance& provenance() const noexcept;
+		/** Revalidate the opaque raw/frame/sealed receipt before a source-private handoff. */
+		[[nodiscard]] result<void> validate() const;
 
 	  private:
 		provider_runtime_receipt(std::uint64_t raw_stdout_byte_count,
 								 std::string raw_stdout_sha256,
 								 std::uint64_t decoded_frame_count,
+								 std::uint64_t first_frame_sequence,
 								 std::string frame_transcript_digest,
-								 std::string sealed_transcript_digest);
+								 std::string sealed_transcript_digest,
+								 provider_runtime_provenance provenance);
 
 		std::uint64_t raw_stdout_byte_count_{};
 		std::string raw_stdout_sha256_;
 		std::uint64_t decoded_frame_count_{};
+		std::uint64_t first_frame_sequence_{};
 		std::string frame_transcript_digest_;
 		std::string sealed_transcript_digest_;
+		provider_runtime_provenance provenance_;
 
 		friend result<provider_runtime_receipt>
 		make_provider_runtime_receipt(std::uint64_t,
@@ -43,9 +98,16 @@ namespace cxxlens::sdk::provider::detail
 									  std::string_view,
 									  std::string_view,
 									  const sealed_provider_transcript&);
+		friend result<provider_runtime_receipt>
+		make_provider_runtime_receipt(std::uint64_t,
+									  std::string,
+									  std::span<const frame>,
+									  provider_runtime_provenance,
+									  std::string_view,
+									  const sealed_provider_transcript&);
 	};
 
-	/** Construct the five-field receipt in the same pass that owns the immutable output seal. */
+	/** Construct the runtime receipt in the same pass that owns the immutable output seal. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<provider_runtime_receipt>
 	make_provider_runtime_receipt(std::uint64_t raw_stdout_byte_count,
 								  std::string raw_stdout_sha256,
@@ -54,11 +116,29 @@ namespace cxxlens::sdk::provider::detail
 								  std::string_view terminal,
 								  const sealed_provider_transcript& sealed);
 
+	/** Construct a runtime receipt with the complete source-private NG1 identity projection. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<provider_runtime_receipt>
+	make_provider_runtime_receipt(std::uint64_t raw_stdout_byte_count,
+								  std::string raw_stdout_sha256,
+								  std::span<const frame> frames,
+								  provider_runtime_provenance provenance,
+								  std::string_view terminal,
+								  const sealed_provider_transcript& sealed);
+
 	/** Recompute the sealed-transcript receipt projection for a source-private consumer. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
 	provider_sealed_transcript_receipt_digest(std::string_view task_id,
 											  std::string_view terminal,
 											  const sealed_provider_transcript& sealed);
+	/** Recompute the same receipt from a lossless source-private report leaf projection. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
+	provider_sealed_transcript_receipt_digest(
+		std::string_view task_id,
+		std::string_view terminal,
+		std::span<const provider_sealed_transcript_batch_receipt_projection> batches,
+		std::span<const coverage_unit> coverage,
+		std::span<const unresolved_item> unresolved,
+		std::span<const evidence_item> evidence);
 	/** Recompute the exact frame transcript receipt from a bounded decoded frame stream. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
 	provider_frame_transcript_receipt_digest(std::span<const frame> frames);
@@ -118,6 +198,18 @@ namespace cxxlens::sdk::provider::detail
 				frames.back().type == message_type::task_complete;
 		}
 	};
+
+	/**
+	 * Validate the source-private handoff from an accepted process task to materialization.
+	 *
+	 * The validator binds the selected provider, task/input digests, sealed input, and runtime
+	 * receipt before a caller may adopt the sealed provider transcript.  It does not derive or
+	 * accept a provider-execution identity; that identity remains owned by materialization
+	 * admission.
+	 */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<void>
+	validate_provider_process_runtime_binding(const provider_process_validation_outcome& outcome,
+											  const process_task_request& request);
 
 	/** Launch once and share the exact typed validation pass with the public process runtime. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<provider_process_validation_outcome>

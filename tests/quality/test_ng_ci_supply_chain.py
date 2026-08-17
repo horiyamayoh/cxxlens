@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -18,9 +21,15 @@ sys.path.insert(0, str(ROOT / "tools/ci"))
 
 from bootstrap_supply_chain import (  # noqa: E402
     SupplyChainError,
+    install,
     install_documentation,
     load_lock,
+    package_cache_authority_digest,
+    package_cache_directory,
+    resolve_cached_archive,
     verify_bytes,
+    verify_deb_archive,
+    write_package_cache_receipt,
 )
 from check_ci_supply_chain import (  # noqa: E402
     CiSupplyChainError,
@@ -29,14 +38,180 @@ from check_ci_supply_chain import (  # noqa: E402
     validate_workflow,
 )
 
+from collect_toolchain_provenance import (  # noqa: E402
+    file_digest,
+    hash_files_digest,
+    package_cache_provenance,
+)
+
+
+def github_hash_files_simulation(*paths: pathlib.Path) -> str:
+    """Model GitHub's hashFiles raw per-file digest accumulation."""
+
+    if not paths:
+        return ""
+    result = hashlib.sha256()
+    for path in paths:
+        result.update(hashlib.sha256(path.read_bytes()).digest())
+    return result.hexdigest()
+
 
 class NgCiSupplyChainTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.lock = load_lock(ROOT)
 
+    def package_rows(self, profile: str, source: str) -> list[dict[str, str]]:
+        if profile == "documentation":
+            authority = self.lock["documentation"]
+            packages = [authority["package"]]
+            architecture = authority["architecture"]
+            versions = {authority["package"]: authority["version"]}
+            digests = {authority["package"]: authority["sha256"]}
+        else:
+            packages = self.lock["llvm"]["profiles"][profile]
+            architecture = self.lock["llvm"]["architecture"]
+            versions = self.lock["llvm"]["packages"]
+            digests = self.lock["llvm"]["package_sha256"]
+        return [
+            {
+                "package": package,
+                "version": versions[package],
+                "architecture": architecture,
+                "package_digest": "sha256:" + digests[package],
+                "source": source,
+            }
+            for package in packages
+        ]
+
+    def write_receipt(
+        self,
+        path: pathlib.Path,
+        profiles: dict[str, list[dict[str, str]]],
+        *,
+        cache_hit: str = "hit",
+        authority_digest: str | None = None,
+        key: str | None = None,
+        schema: str | None = None,
+    ) -> None:
+        path.write_text(
+            json.dumps(
+                {
+                    "schema": schema or self.lock["package_cache"]["receipt_schema"],
+                    "authority_digest": authority_digest
+                    or package_cache_authority_digest(self.lock),
+                    "key": key or "cxxlens-ci-packages-v1-Linux-X64-developer-false-"
+                    + hash_files_digest(ROOT / "tools/ci/llvm22-noble.lock.json"),
+                    "cache_hit": cache_hit,
+                    "profiles": profiles,
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    def cache_environment(
+        self,
+        receipt: pathlib.Path,
+        *,
+        profile: str = "developer",
+        documentation: str = "false",
+        runner_os: str = "Linux",
+        runner_arch: str = "X64",
+        cache_hit: str = "true",
+        key: str | None = None,
+        lock_path: pathlib.Path | None = None,
+        include: set[str] | None = None,
+    ) -> dict[str, str]:
+        config = self.lock["package_cache"]
+        effective_lock_path = lock_path or ROOT / "tools/ci/llvm22-noble.lock.json"
+        lock_digest = hash_files_digest(effective_lock_path)
+        expected_key = config["key_template"]
+        for token, value in {
+            "${runner.os}": runner_os,
+            "${runner.arch}": runner_arch,
+            "${profile}": profile,
+            "${documentation}": documentation,
+            "${lock_hash_files_digest}": lock_digest,
+        }.items():
+            expected_key = expected_key.replace(token, value)
+        values = {
+            config["environment"]: "/tmp/cxxlens-package-cache",
+            config["documentation_environment"]: documentation,
+            config["hit_environment"]: cache_hit,
+            config["key_environment"]: key or expected_key,
+            config["profile_environment"]: profile,
+            config["receipt_environment"]: str(receipt),
+            config["runner_arch_environment"]: runner_arch,
+            config["runner_os_environment"]: runner_os,
+        }
+        return (
+            values
+            if include is None
+            else {name: value for name, value in values.items() if name in include}
+        )
+
     def test_repository_contract_and_workflows_are_valid(self) -> None:
         validate_repository(ROOT)
+
+    def test_tracked_reusable_workflow_is_repository_scoped(self) -> None:
+        validate_workflow(ROOT / ".github/workflows/quality.yml", self.lock)
+
+    def test_unavailable_reusable_workflow_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text(
+                "jobs:\n  check:\n    uses: ./.github/workflows/missing.yml\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(CiSupplyChainError, "unavailable"):
+                validate_workflow(workflow, self.lock)
+
+    def test_unlocked_reusable_workflow_is_rejected(self) -> None:
+        lock = copy.deepcopy(self.lock)
+        del lock["local_workflows"][".github/workflows/nightly.yml"]
+        with self.assertRaisesRegex(CiSupplyChainError, "absent from supply-chain lock"):
+            validate_workflow(ROOT / ".github/workflows/quality.yml", lock)
+
+    def test_reusable_workflow_digest_mismatch_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            shutil.copytree(ROOT / ".github/actions", root / ".github/actions")
+            shutil.copy2(ROOT / ".github/workflows/quality.yml", workflows / "quality.yml")
+            shutil.copy2(ROOT / ".github/workflows/nightly.yml", workflows / "nightly.yml")
+            (workflows / "nightly.yml").write_text(
+                (workflows / "nightly.yml").read_text(encoding="utf-8") + "\n# substituted\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(CiSupplyChainError, "differs from supply-chain lock"):
+                validate_workflow(workflows / "quality.yml", self.lock)
+
+    def test_bootstrap_lock_rejects_reusable_workflow_digest_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / "tools/ci").mkdir(parents=True)
+            (root / "tools/quality").mkdir(parents=True)
+            (root / ".github/workflows").mkdir(parents=True)
+            shutil.copy2(
+                ROOT / "tools/ci/llvm22-noble.lock.json",
+                root / "tools/ci/llvm22-noble.lock.json",
+            )
+            shutil.copy2(
+                ROOT / "tools/quality/requirements.lock",
+                root / "tools/quality/requirements.lock",
+            )
+            nightly = root / ".github/workflows/nightly.yml"
+            shutil.copy2(ROOT / ".github/workflows/nightly.yml", nightly)
+            nightly.write_text(
+                nightly.read_text(encoding="utf-8") + "\n# substituted\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SupplyChainError, "local workflow .*checksum mismatch"):
+                load_lock(root)
 
     def test_checksum_mismatch_is_rejected_before_effect(self) -> None:
         with self.assertRaisesRegex(SupplyChainError, "checksum mismatch"):
@@ -50,8 +225,13 @@ class NgCiSupplyChainTest(unittest.TestCase):
         self.assertEqual(len(self.lock["documentation"]["sha256"]), 64)
 
     def test_documentation_checksum_rejects_before_root_effect(self) -> None:
-        with mock.patch(
+        with tempfile.TemporaryDirectory() as temporary, mock.patch(
+            "bootstrap_supply_chain.package_cache_directory",
+            return_value=pathlib.Path(temporary),
+        ), mock.patch(
             "bootstrap_supply_chain.download", return_value=b"substituted"
+        ), mock.patch(
+            "bootstrap_supply_chain.package_cache_hit_claimed", return_value=False
         ), mock.patch("bootstrap_supply_chain.run") as run:
             with self.assertRaisesRegex(SupplyChainError, "checksum mismatch"):
                 install_documentation(self.lock)
@@ -137,6 +317,567 @@ class NgCiSupplyChainTest(unittest.TestCase):
             lock_path.write_text(json.dumps(changed), encoding="utf-8")
             with self.assertRaisesRegex(SupplyChainError, "unlocked packages"):
                 load_lock(root)
+
+    def test_common_setup_action_is_locked_and_used(self) -> None:
+        action = ROOT / ".github/actions/setup-ci/action.yml"
+        self.assertTrue(action.is_file())
+        self.assertEqual(
+            self.lock["local_actions"][".github/actions/setup-ci/action.yml"],
+            __import__("hashlib").sha256(action.read_bytes()).hexdigest(),
+        )
+        workflow_text = "\n".join(
+            (ROOT / path).read_text(encoding="utf-8")
+            for path in (
+                ".github/workflows/quality.yml",
+                ".github/workflows/nightly.yml",
+            )
+        )
+        self.assertGreaterEqual(workflow_text.count("./.github/actions/setup-ci"), 10)
+        self.assertNotIn("actions/setup-python@", workflow_text)
+        self.assertNotIn("bootstrap_supply_chain.py install --profile", workflow_text)
+
+    def test_mutated_local_setup_action_is_rejected(self) -> None:
+        import shutil
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            shutil.copytree(ROOT / ".github", root / ".github")
+            shutil.copytree(ROOT / "schemas", root / "schemas")
+            shutil.copytree(ROOT / "tools", root / "tools")
+            action = root / ".github/actions/setup-ci/action.yml"
+            action.write_text(action.read_text(encoding="utf-8") + "# mutation\n", encoding="utf-8")
+            with self.assertRaisesRegex(CiSupplyChainError, "local action differs"):
+                validate_repository(root)
+
+
+
+    def test_downloaded_package_cache_is_exact_and_has_no_fallback_key(self) -> None:
+        action = (ROOT / ".github/actions/setup-ci/action.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830",
+            action,
+        )
+        self.assertIn("CXXLENS_PACKAGE_CACHE_RECEIPT", action)
+        self.assertIn(
+            "CXXLENS_PACKAGE_CACHE_HIT=${{ steps.package-cache.outputs.cache-hit || 'false' }}",
+            action,
+        )
+        self.assertIn("${{ inputs.profile }}-${{ inputs.documentation }}-", action)
+        self.assertIn("hashFiles('tools/ci/llvm22-noble.lock.json')", action)
+        self.assertNotIn("restore-keys:", action)
+        self.assertEqual(
+            self.lock["package_cache"]["correctness_role"],
+            "transport-optimization-only",
+        )
+
+    def test_package_cache_key_matches_hash_files_not_raw_lock_digest(self) -> None:
+        lock_path = ROOT / "tools/ci/llvm22-noble.lock.json"
+        self.assertEqual(
+            file_digest(lock_path),
+            "sha256:c9dcffa308fd36dfa26c5c0714cf2336abfc8f6eca650fcbb308f0e4e96f9e30",
+        )
+        self.assertEqual(
+            hash_files_digest(lock_path),
+            "742eb09c68a2fc01cb6efa21741e1ae1790cd30e46ee743358d3219221aac8be",
+        )
+        self.assertEqual(
+            hash_files_digest(lock_path), github_hash_files_simulation(lock_path)
+        )
+        self.assertNotEqual(
+            hash_files_digest(lock_path),
+            file_digest(lock_path).removeprefix("sha256:"),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            first = pathlib.Path(temporary) / "first"
+            second = pathlib.Path(temporary) / "second"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+            forward = github_hash_files_simulation(first, second)
+            reverse = github_hash_files_simulation(second, first)
+            self.assertEqual(hash_files_digest(first, second), forward)
+            self.assertEqual(hash_files_digest(second, first), reverse)
+            self.assertNotEqual(forward, reverse)
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "raw-key.json"
+            hashfiles_key = self.cache_environment(receipt)[
+                self.lock["package_cache"]["key_environment"]
+            ]
+            raw_key = hashfiles_key.replace(
+                hash_files_digest(lock_path),
+                file_digest(lock_path).removeprefix("sha256:"),
+            )
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key=raw_key,
+            )
+            environment = self.cache_environment(receipt, key=raw_key)
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "key differs"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_binds_selected_root_lock_path(self) -> None:
+        lock_path = ROOT / "tools/ci/llvm22-noble.lock.json"
+        with tempfile.TemporaryDirectory() as temporary:
+            alternate_lock = pathlib.Path(temporary) / "llvm22-noble.lock.json"
+            alternate_lock.write_bytes(lock_path.read_bytes() + b"\n")
+            self.assertNotEqual(
+                hash_files_digest(alternate_lock), hash_files_digest(lock_path)
+            )
+
+            receipt = pathlib.Path(temporary) / "selected-root.json"
+            environment = self.cache_environment(
+                receipt, lock_path=alternate_lock
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                evidence = package_cache_provenance(
+                    self.lock,
+                    lock_path=alternate_lock,
+                    lock_digest=file_digest(alternate_lock),
+                )
+            self.assertEqual(evidence["status"], "verified")
+            self.assertEqual(evidence["lock_digest"], file_digest(alternate_lock))
+
+            wrong_receipt = pathlib.Path(temporary) / "module-root.json"
+            wrong_environment = self.cache_environment(wrong_receipt)
+            wrong_key = wrong_environment[
+                self.lock["package_cache"]["key_environment"]
+            ]
+            self.write_receipt(
+                wrong_receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key=wrong_key,
+            )
+            with mock.patch.dict(os.environ, wrong_environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "key differs"):
+                    package_cache_provenance(
+                        self.lock,
+                        lock_path=alternate_lock,
+                        lock_digest=file_digest(alternate_lock),
+                    )
+
+    def test_hash_files_uses_raw_digest_bytes_not_hex_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            first = pathlib.Path(temporary) / "first"
+            second = pathlib.Path(temporary) / "second"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+
+            raw_digest = hashlib.sha256(
+                hashlib.sha256(first.read_bytes()).digest()
+                + hashlib.sha256(second.read_bytes()).digest()
+            ).hexdigest()
+            hex_text_digest = hashlib.sha256(
+                (
+                    hashlib.sha256(first.read_bytes()).hexdigest()
+                    + hashlib.sha256(second.read_bytes()).hexdigest()
+                ).encode("ascii")
+            ).hexdigest()
+
+            self.assertEqual(hash_files_digest(first, second), raw_digest)
+            self.assertNotEqual(raw_digest, hex_text_digest)
+            self.assertNotEqual(hash_files_digest(first, second), hex_text_digest)
+
+    def test_relative_downloaded_package_cache_path_is_rejected(self) -> None:
+        with mock.patch.dict(
+            os.environ, {"CXXLENS_PACKAGE_CACHE": "relative/cache"}, clear=False
+        ):
+            with self.assertRaisesRegex(SupplyChainError, "must be absolute"):
+                package_cache_directory(self.lock)
+
+    def test_cache_hit_configures_repository_before_archive_resolution(self) -> None:
+        lock = copy.deepcopy(self.lock)
+        events = mock.Mock()
+        with mock.patch("bootstrap_supply_chain.load_lock", return_value=lock), \
+             mock.patch("bootstrap_supply_chain.assert_runner"), \
+             mock.patch("bootstrap_supply_chain.download", return_value=b"verified-key"), \
+             mock.patch("bootstrap_supply_chain.verify_bytes"), \
+             mock.patch("bootstrap_supply_chain.configure_llvm_repository") as configure, \
+             mock.patch("bootstrap_supply_chain.package_cache_directory", return_value=pathlib.Path("/tmp/cache")), \
+             mock.patch("bootstrap_supply_chain.package_cache_hit_claimed", return_value=True), \
+             mock.patch("bootstrap_supply_chain.resolve_cached_archive", side_effect=RuntimeError("archive-resolution")) as resolve:
+            events.attach_mock(configure, "configure")
+            events.attach_mock(resolve, "resolve")
+            with self.assertRaisesRegex(RuntimeError, "archive-resolution"):
+                install(ROOT, "compiler")
+        self.assertEqual(
+            events.mock_calls[0],
+            mock.call.configure(lock["llvm"], b"verified-key"),
+        )
+
+    def test_verified_cached_package_is_reused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = pathlib.Path(temporary) / "clang.deb"
+            archive.write_bytes(b"fixture")
+            with mock.patch("bootstrap_supply_chain.verify_deb_archive") as verify:
+                resolved = resolve_cached_archive(
+                    archive,
+                    package="clang-22",
+                    version="fixture-version",
+                    architecture="amd64",
+                    digest="0" * 64,
+                    cache_hit=True,
+                )
+            self.assertEqual(resolved, archive)
+            verify.assert_called_once()
+
+    def test_cache_miss_is_explicit_and_claimed_incomplete_hit_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = pathlib.Path(temporary) / "missing.deb"
+            self.assertIsNone(
+                resolve_cached_archive(
+                    archive,
+                    package="clang-22",
+                    version="fixture-version",
+                    architecture="amd64",
+                    digest="0" * 64,
+                    cache_hit=False,
+                )
+            )
+            with self.assertRaisesRegex(SupplyChainError, "omitted locked package"):
+                resolve_cached_archive(
+                    archive,
+                    package="clang-22",
+                    version="fixture-version",
+                    architecture="amd64",
+                    digest="0" * 64,
+                    cache_hit=True,
+                )
+
+    def test_corrupt_cached_package_is_rejected_before_metadata_probe(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = pathlib.Path(temporary) / "package.deb"
+            archive.write_bytes(b"substituted")
+            with mock.patch("bootstrap_supply_chain.run") as run:
+                with self.assertRaisesRegex(SupplyChainError, "checksum mismatch"):
+                    verify_deb_archive(
+                        archive,
+                        package="clang-22",
+                        version=self.lock["llvm"]["packages"]["clang-22"],
+                        architecture=self.lock["llvm"]["architecture"],
+                        digest=self.lock["llvm"]["package_sha256"]["clang-22"],
+                    )
+                run.assert_not_called()
+
+    def test_cached_package_wrong_version_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = pathlib.Path(temporary) / "package.deb"
+            archive.write_bytes(b"fixture")
+            with mock.patch("bootstrap_supply_chain.verify_bytes"), mock.patch(
+                "bootstrap_supply_chain.run",
+                side_effect=["clang-22", "wrong-version", "amd64"],
+            ):
+                with self.assertRaisesRegex(SupplyChainError, "metadata mismatch"):
+                    verify_deb_archive(
+                        archive,
+                        package="clang-22",
+                        version="expected-version",
+                        architecture="amd64",
+                        digest="0" * 64,
+                    )
+
+    def test_cached_package_wrong_architecture_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = pathlib.Path(temporary) / "package.deb"
+            archive.write_bytes(b"fixture")
+            with mock.patch("bootstrap_supply_chain.verify_bytes"), mock.patch(
+                "bootstrap_supply_chain.run",
+                side_effect=["clang-22", "expected-version", "arm64"],
+            ):
+                with self.assertRaisesRegex(SupplyChainError, "metadata mismatch"):
+                    verify_deb_archive(
+                        archive,
+                        package="clang-22",
+                        version="expected-version",
+                        architecture="amd64",
+                        digest="0" * 64,
+                    )
+
+    def test_package_cache_provenance_binds_verified_source_and_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "receipt.json"
+            authority_digest = package_cache_authority_digest(self.lock)
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+            )
+            environment = self.cache_environment(receipt)
+            with mock.patch.dict(os.environ, environment, clear=True):
+                evidence = package_cache_provenance(self.lock)
+            self.assertEqual(evidence["status"], "verified")
+            self.assertEqual(evidence["authority_digest"], authority_digest)
+            self.assertEqual(
+                evidence["lock_digest"],
+                file_digest(ROOT / "tools/ci/llvm22-noble.lock.json"),
+            )
+            self.assertEqual(evidence["profile"], "developer")
+            self.assertEqual(evidence["documentation"], "false")
+            self.assertEqual(
+                evidence["profiles"]["developer"][0]["source"],
+                "verified-cache",
+            )
+
+    def test_package_cache_provenance_accepts_cache_miss_as_download_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "cache-miss.json"
+            environment = self.cache_environment(receipt, cache_hit="false")
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-download")},
+                cache_hit="miss",
+                key=environment[self.lock["package_cache"]["key_environment"]],
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                evidence = package_cache_provenance(self.lock)
+            self.assertEqual(evidence["status"], "verified")
+            self.assertEqual(evidence["cache_hit"], "miss")
+            self.assertEqual(
+                evidence["profiles"]["developer"][0]["source"],
+                "verified-download",
+            )
+
+    def test_package_cache_provenance_rejects_non_authoritative_package_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "receipt.json"
+
+            def write_receipt(row_overrides: dict[str, str]) -> None:
+                rows = self.package_rows("developer", "verified-cache")
+                rows[0].update(row_overrides)
+                self.write_receipt(
+                    receipt,
+                    {"developer": rows},
+                )
+
+            environment = self.cache_environment(receipt)
+            for field, value in (
+                ("package", "not-locked"),
+                ("version", "1:22.1.7-1"),
+                ("architecture", "arm64"),
+                ("package_digest", "sha256:" + "0" * 64),
+            ):
+                with self.subTest(field=field):
+                    write_receipt({field: value})
+                    with mock.patch.dict(os.environ, environment, clear=True):
+                        with self.assertRaisesRegex(ValueError, "package"):
+                            package_cache_provenance(self.lock)
+
+            write_receipt({"source": "verified-download"})
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "cache-hit source"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_rejects_incomplete_hit_and_invalid_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "receipt.json"
+            self.write_receipt(
+                receipt,
+                {
+                    "developer": [
+                        self.package_rows("developer", "verified-cache")[0]
+                    ]
+                },
+            )
+            for malformed in ("", "not-a-boolean", "false "):
+                with self.subTest(malformed=malformed):
+                    environment = self.cache_environment(
+                        receipt, cache_hit=malformed
+                    )
+                    with mock.patch.dict(os.environ, environment, clear=True):
+                        with self.assertRaises(ValueError):
+                            package_cache_provenance(self.lock)
+
+            environment[self.lock["package_cache"]["hit_environment"]] = "true"
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "package set differs"):
+                    package_cache_provenance(self.lock)
+
+    def test_stale_package_cache_provenance_authority_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "receipt.json"
+            environment = self.cache_environment(
+                receipt, cache_hit="false"
+            )
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-download")},
+                cache_hit="miss",
+                authority_digest="sha256:" + "0" * 64,
+                key=environment[self.lock["package_cache"]["key_environment"]],
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "binding differs"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_without_any_cache_variables_is_not_requested(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            evidence = package_cache_provenance(self.lock)
+        self.assertEqual(evidence["status"], "not-requested")
+        self.assertEqual(evidence["profiles"], {})
+
+    def test_package_cache_provenance_rejects_partial_cache_environment(self) -> None:
+        config = self.lock["package_cache"]
+        names = (
+            "environment",
+            "documentation_environment",
+            "hit_environment",
+            "key_environment",
+            "profile_environment",
+            "receipt_environment",
+            "runner_arch_environment",
+            "runner_os_environment",
+        )
+        for field in names:
+            with self.subTest(field=field):
+                with mock.patch.dict(
+                    os.environ, {config[field]: "fixture"}, clear=True
+                ):
+                    with self.assertRaises(ValueError):
+                        package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_binds_every_locked_profile_and_rejects_cross_profile_scope(
+        self,
+    ) -> None:
+        profiles = list(self.lock["llvm"]["profiles"])
+        with tempfile.TemporaryDirectory() as temporary:
+            for profile in profiles:
+                with self.subTest(profile=profile):
+                    receipt = pathlib.Path(temporary) / f"{profile}.json"
+                    environment = self.cache_environment(
+                        receipt, profile=profile, cache_hit="false"
+                    )
+                    key = environment[self.lock["package_cache"]["key_environment"]]
+                    self.write_receipt(
+                        receipt,
+                        {profile: self.package_rows(profile, "verified-download")},
+                        cache_hit="miss",
+                        key=key,
+                    )
+                    with mock.patch.dict(os.environ, environment, clear=True):
+                        evidence = package_cache_provenance(self.lock)
+                    self.assertEqual(evidence["profile"], profile)
+
+            requested = profiles[0]
+            alternate = profiles[1]
+            receipt = pathlib.Path(temporary) / "cross-profile.json"
+            environment = self.cache_environment(
+                receipt, profile=requested, cache_hit="false"
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {alternate: self.package_rows(alternate, "verified-download")},
+                cache_hit="miss",
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "profile scope differs"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_rejects_all_profile_and_documentation_mismatch(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "all-profiles.json"
+            environment = self.cache_environment(
+                receipt, profile="developer", cache_hit="false"
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {
+                    profile: self.package_rows(profile, "verified-download")
+                    for profile in self.lock["llvm"]["profiles"]
+                },
+                cache_hit="miss",
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "profile scope differs"):
+                    package_cache_provenance(self.lock)
+
+            receipt = pathlib.Path(temporary) / "documentation-mismatch.json"
+            environment = self.cache_environment(
+                receipt, profile="developer", documentation="true", cache_hit="false"
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-download")},
+                cache_hit="miss",
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "profile scope differs"):
+                    package_cache_provenance(self.lock)
+
+            receipt = pathlib.Path(temporary) / "extra-documentation.json"
+            environment = self.cache_environment(
+                receipt, profile="developer", documentation="false", cache_hit="false"
+            )
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {
+                    "developer": self.package_rows("developer", "verified-download"),
+                    "documentation": self.package_rows(
+                        "documentation", "verified-download"
+                    ),
+                },
+                cache_hit="miss",
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "profile scope differs"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_provenance_rejects_noncanonical_key_and_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "binding.json"
+            environment = self.cache_environment(receipt, key="fixture-key")
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key="fixture-key",
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "locked authority"):
+                    package_cache_provenance(self.lock)
+
+            environment = self.cache_environment(receipt, runner_os="Windows")
+            key = environment[self.lock["package_cache"]["key_environment"]]
+            self.write_receipt(
+                receipt,
+                {"developer": self.package_rows("developer", "verified-cache")},
+                key=key,
+            )
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(ValueError, "runner differs"):
+                    package_cache_provenance(self.lock)
+
+    def test_package_cache_receipt_rejects_non_object_json(self) -> None:
+        records = self.package_rows("developer", "verified-download")
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = pathlib.Path(temporary) / "receipt.json"
+            environment = self.cache_environment(receipt)
+            for document in ([], "scalar", 7):
+                with self.subTest(document=document):
+                    receipt.write_text(json.dumps(document), encoding="utf-8")
+                    with mock.patch.dict(os.environ, environment, clear=True):
+                        with self.assertRaisesRegex(
+                            SupplyChainError,
+                            "package-cache receipt must be a JSON object",
+                        ):
+                            write_package_cache_receipt(
+                                self.lock, "developer", records
+                            )
 
 
 if __name__ == "__main__":

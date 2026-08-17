@@ -1,27 +1,46 @@
 # Agent-driven public API development goal
 
-この文書は、Codex の `/goal` と複数のコーディングエージェントを使って、cxxlens の公開 API
-全体を継続開発するための実行契約である。次の短い goal からこの文書を参照する。
+この文書は、Codex の `/goal` と複数のコーディングエージェントを使って、cxxlens を継続開発するための実行契約です。
+次の短い goal からこの文書を参照します。
 
 ```text
-/goal docs/development/agent-api-development-goal.md を実行契約として CXXLENS_AGENT_AUTHORIZATION_V1 を適用し、本リポジトリの実質すべての公開 API を contract-driven、issue-tracked、evidence-closed で完成させ、production qualification 可能な状態にしてください。必要に応じて複数のサブエージェントを自律的に編成し、roadmap 作成から実装、issue 単位の branch/PR/merge、最終 SHA の CI green まで継続してください。
+/goal docs/development/agent-api-development-goal.md を実行契約として CXXLENS_AGENT_AUTHORIZATION_V1 を適用し、cxxlens を需要側・供給側の双方で閉じた証拠付き意味知識基盤へ育て、issue 単位の小さな commit を default branch に反映し、最終 SHA の CI evidence まで継続してください。
 ```
+
+## 2026-08-16 delivery amendment
+
+通常の repository delivery は **direct-to-main** とする。feature branch、pull request、merge queue は routine implementation の
+既定条件ではない。この節は delivery workflow に限って、ADR 0094 と過去の goal/issue prose にある branch/PR 必須の順序を置換する。
+製品 semantics、security boundary、bounded implementation completion、exact-SHA integration/release qualification は弱めない。
+
+- current `main` SHA と active unit の contract/path conflict を書き込み直前に確認する。
+- issue scope 内の変更を小さく可逆な atomic commit にする。
+- 変更に対応する focused build/test/checker を事前に実行する。
+- canonical repository は fast-forward だけで更新し、history rewrite を行わない。
+- 更新後の exact `main` SHA に対する CI を integration evidence とする。
+- 変更起因の CI failure は follow-up commit で修正し、公開済み commit を改変しない。
+- issue close evidence は commit SHA、bounded acceptance、残余 gap、Learning checkpoint を含む。
+- PR は external contribution、high-risk independent review、または安全な隔離が必要な例外に限る任意経路とする。
+
+- `delivery-route: main-atomic-commit-post-update-ci`
+- `pull-request: optional-risk-or-external-contribution`
+- `history-policy: fast-forward-no-rewrite`
 
 ## Autonomous execution and approval boundary
 
-上の短い `/goal` のように、この文書と policy ID を明示参照した goal の実行中だけ standing authorization を有効にする。
-単なる質問、診断、read-only review、またはこの実行契約を参照しない依頼から暗黙に有効化しない。ユーザーは実行中でも
-authorization をいつでも revoke または narrow でき、その後の操作は狭められた範囲に従う。
+上の短い `/goal` のように、この文書と policy ID を明示参照した goal の実行中だけ standing authorization を有効にします。
+単なる質問、診断、read-only review、またはこの実行契約を参照しない依頼から暗黙に有効化しません。ユーザーは実行中でも
+authorization をいつでも revoke または narrow でき、その後の操作は狭められた範囲に従います。
 
 | 区分 | 実行境界 |
 | --- | --- |
-| Standing authorization | read-only audit、active unit 内の編集・生成・test/build、同一 issue の CI 根本修正、unit branch/commit/push、canonical cxxlens repository 上の active issue/PR に限定した更新・check rerun・review 対応、exact-head gate 後の active PR merge、merged-main qualification と learning checkpoint 後の active issue close は再承認不要 |
-| Notify and continue | 当初想定外の supporting test/file が必要でも、同一 contract・同一 issue 内で可逆なら、原因、追加 scope、検証方法を commentary で通知して継続する。これは approval gate ではない |
-| Fresh user approval | destructive operation/history rewrite、branch protection 変更、secret/permission 追加、課金、外部 production deploy、active issue/PR workflow 外の顧客・第三者への連絡、ユーザー変更との解消不能な競合、authority で決められない重大な public semantics は停止する。対象、effect、不可逆性または rollback を開示し、exact target/effect に限定した承認を得る |
-| External blocker | 必須 reviewer、toolchain、service、permission を取得できない場合は、証拠と選択肢を示して停止する |
-| Platform approval | sandbox、system、host platform が要求する権限確認は standing authorization で迂回しない |
+| Standing authorization | read-only audit、active unit 内の編集・生成・test/build、同一 issue の CI 根本修正、atomic commit、canonical repository の fast-forward update、active issue の更新、必要時の任意 PR 作成・review 対応・merge、bounded implementation evidence と learning checkpoint 後の active issue close は再承認不要。明示的な integration/readiness/qualification issue は自身の qualification evidence まで満たす |
+| Notify and continue | 当初想定外の supporting test/file が必要でも、同一 contract・同一 issue 内で可逆なら、原因、追加 scope、検証方法を commentary で通知して継続します。これは approval gate ではありません |
+| Fresh user approval | destructive operation/history rewrite、branch protection/ruleset 変更、secret/permission 追加、課金、外部 production deploy、active workflow 外の顧客・第三者への連絡、ユーザー変更との解消不能な競合、authority で決められない重大な public semantics は停止します。対象、effect、不可逆性または rollback を開示し、exact target/effect に限定した承認を得ます |
+| External blocker | 必須 reviewer、toolchain、service、permission を取得できない場合は、証拠と選択肢を示して停止します |
+| Platform approval | sandbox、system、host platform が要求する権限確認は standing authorization で迂回しません |
 
-checker が prose の偶然一致に依存せず境界を固定できるよう、次の binding marker を保持する。
+checker が prose の偶然一致に依存せず境界を固定できるよう、次の binding marker を保持します。
 
 - `activation: explicit-goal-contract-reference`
 - `non-activation: ordinary-request`
@@ -31,84 +50,117 @@ checker が prose の偶然一致に依存せず境界を固定できるよう�
 - `external-blocker: evidence-options-stop`
 - `platform-approval: never-bypass`
 - `skill-compatibility: prior-goal-authorization-satisfies-generic-approval`
-- `protected-main: unit-branch-pr-exact-head-review-merge-exact-merged-main`
-- `direct-main: prohibited`
 - `fresh-approval-reuse: forbidden`
 - `revocation: user-anytime`
+- `completion-class: bounded-implementation`
+- `production-qualification: not-claimed-by-default`
+- `issue-close-owner: bounded-issue-or-explicit-qualification-gate`
+- `aggregate-qualification-owner: exact-merged-main-integration-readiness-release`
+- `reopen-condition: bounded-acceptance-or-scope-regression-only`
 
-skill が一般的な explicit approval を要求しても、操作が active policy の standing-authorization 範囲に明示されていれば、goal
-開始時の承認で満たされたものとする。skill の診断、focused plan、結果報告は実行するが、その approval のためだけに会話を停止しない。
-skill がより具体的な安全条件を持つ場合、または操作が列挙範囲外なら、その条件または fresh-approval gate を維持する。
+次の二つは frozen Wave 0 baseline の移行互換性だけのために残す **non-normative legacy checker token** です。
+delivery の意味を持たず、agent は token から branch/PR 必須運用を復活させてはなりません。
 
-standing authorization は repository 内の active unit を越える mutable authority を与えない。canonical repository の active
-issue/PR における通常の review 応答と、顧客・第三者への外部連絡を区別する。fresh approval は開示した exact target/effect にだけ有効で、
-別 target、別 effect、後続操作へ categorical に流用しない。platform approval も別の capability gate であり、この contract は迂回しない。
+- `protected-main: unit-branch-pr-exact-head-review-merge-exact-merged-main`
+- `direct-main: prohibited`
+
+skill が一般的な explicit approval を要求しても、操作が active policy の standing-authorization 範囲に明示されていれば、
+goal 開始時の承認で満たされたものとします。skill の診断、focused plan、結果報告は実行しますが、その approval のためだけに
+会話を停止しません。skill がより具体的な安全条件を持つ場合、または操作が列挙範囲外なら、その条件または fresh-approval gate を
+維持します。
+
+standing authorization は repository 内の active unit を越える mutable authority を与えません。fresh approval は開示した
+exact target/effect にだけ有効で、別 target、別 effect、後続操作へ categorical に流用しません。platform approval も別の
+capability gate であり、この contract は迂回しません。
 
 ## Mission
 
-本リポジトリの実質すべての公開 API を、次世代統合設計、release profile、Public API Catalog、
-Relation Registry、Provider Protocol、Acceptance Manifest、Security Profile に従って完成させ、
-production qualification 可能な状態にする。
+cxxlens の製品定義は次です。
 
-ここで「すべての公開 API」とは、無制限に新しい API を考案することではない。対象は次の集合とする。
+> **cxxlens は、コンパイラの観測結果を、再現可能・問い合わせ可能・証拠付きの意味知識へ変換し、
+> 分からない場合には何が足りないかまで返す基盤である。**
 
-- 現行 Public API Catalog と Relation Registry に登録された API
-- accepted design、ADR、release profile が要求する API
-- deferred / planned gate の達成に必要な API
-- 独立 consumer の vertical slice から不可避と確認された API
-- contract audit で、既存 API の安全性・完全性を満たすために必要と判明した API
+本 goal は、単に公開 API を実装することではありません。次世代統合設計、release profile、Public API Catalog、
+Relation Registry、Provider Protocol、Acceptance Manifest、Security Profile に従い、次の二つを同時に閉じます。
 
-API 数を増やすこと自体を成果にしない。重複 API、誤った abstraction、根拠のない convenience API は
-追加しない。既存 API の統合、縮約、置換、削除が contract と consumer evidence に照らして適切なら、
-それも完成に向けた正当な作業とする。
+- **供給側閉包**: admitted public API、relation、provider、query/store、analysis、model、recipe、CLI/runtime が
+  contract、implementation、validator/test、documentation、consumer、qualification evidence へ exactly once で結び付く。
+- **需要側閉包**: admitted use case から必要 input capture、capability、provider、relation、analysis/model、query/recipe、
+  result/evidence まで executable dependency path が存在するか、未達なら exact tracked gap と completion plan が存在する。
 
-開発原則は次とする。
+製品完成は両側の orphan がゼロであることを要求します。API 数、relation 数、green check 数、open issue 数だけを
+完成の根拠にしません。
 
-> contract-driven, issue-tracked, evidence-closed, learning-fed
+## Product result contract
 
-- ドキュメントは「現在、何が正しい契約か」を保持する。
-- GitHub issue は「次に、何を変更するか」を追跡する。
-- CI evidence は「その commit が契約を満たしたか」を証明する。
-- implementation learning は「現場の反証とより良いモデルを、次の契約へどう還流するか」を保持する。
+recipe、analysis、inspection、transformation preflight は、少なくとも次を区別します。
 
-## Consumer の定義
+```text
+proved
+disproved
+unknown
+partial
+conflicting
+```
 
-consumer は人間の人数ではなく、公開 API を利用する独立したコードベースを指す。
+結果は coverage、closure、unresolved、conflict、differential disagreement、producer semantic contract、
+guarantee and assumptions、provenance and evidence、logical and physical explanation を損失なく保持します。
 
-独立 consumer として数えられるものは、API 実装とは別に変更・リリースされる application、provider、
-recipe、analysis module、package である。同一リポジトリ内で実装変更に追従するだけの unit test、fixture、
-example は、qualification evidence にはなるが独立 consumer には数えない。
+`unknown` は generic failure または terminal prose ではありません。why unknown、missing input、missing capability、
+missing model or assumption、missing qualification evidence、dependency-ordered completion plan を machine-readable に返します。
+不足を empty success、safe、no finding、unsupported omission へ畳みません。
+
+## Consumer and use-case authority
+
+consumer は人間の人数ではなく、公開 contract を利用する独立コードベースです。独立 consumer として数えられるものは、
+API 実装とは別に変更・リリースされる application、provider、recipe、analysis module、model pack、package です。
+同一 repository 内で実装変更に追従する unit test、fixture、example は qualification evidence にはなりますが、
+独立 consumer には数えません。
+
+新しい capability/API を開始する前に、use-case ID、consumer、question、expected states、input/capture requirements、
+required capability path、coverage/closure/partiality、satisfied/missing/blocked disposition、exact authority/contract/write scope、
+acceptance evidence、support/stability tier、actionable unknown と completion plan を roadmap または issue に記録します。
 
 stable API は、二つ以上の独立 consumer、または不可避な foundational invariant、実装、acceptance fixture、
-error/partial semantics、lifetime/threading/order、versioning、performance characteristics、lower-level escape
-path、experimental period が揃うまで stable と宣言しない。
+error/partial semantics、lifetime/threading/order、versioning、performance characteristics、lower-level escape path、
+experimental period が揃うまで stable と宣言しません。
 
-新規 API は原則として experimental または versioned から開始する。implemented、stable、
-production-supported を混同しない。
+## Capability roadmap
+
+開発は kernel surface の増加ではなく、再利用可能な versioned capability pack を垂直に完成させます。
+
+1. source closure / capture / replay による real-project substrate
+2. declaration/reference/include/macro/inheritance/override/template を含む semantic graph
+3. CFG と control exit
+4. use-def と value flow
+5. alias、read/write/escape、lifetime/invalidation effect
+6. interprocedural summary と versioned model/assumption packs
+7. proof obligation、immutable plan、overlay verification、journaled transaction を持つ transformation/artifact
+8. Clang/GCC/LLVM IR/object/binary 間の cross-provider semantic consensus
+
+各能力は relation/provider/analysis/model/recipe の versioned contract として authority-first に導入し、
+core enum/switch や opaque payload へ用途固有意味を押し込みません。
 
 ## Authority
 
-作業開始時に repository root の `AGENTS.md` を読み、常に次の authority 順序を守る。
+作業開始時に repository root の `AGENTS.md` を読み、常に次の authority 順序を守ります。
 
 1. `docs/design/cxxlens_next_generation_integrated_design_ja.md` の原則と invariant
-2. Relation Registry、Provider Protocol、Public C++ API Catalog、Acceptance Manifest、Security Profile、
-   release bundle
+2. Relation Registry、Provider Protocol、Public C++ API Catalog、Acceptance Manifest、Security Profile、release bundle
 3. accepted ADR と担当 GitHub issue の exact contract
 4. acceptance fixture と実装
 5. `docs/archive/` の履歴資料
 
-archive、旧124 API catalog、旧 freeze、過去の実装都合を新規 API の authority にしない。上位 contract を
-テストや現行実装に合わせて縮小してはならない。
-
-core abstraction、identity、condition、truth、closure、protocol major、snapshot format、native lifetime、
-sandbox、mutation、determinism を変更する場合は、実装前に ADR を作成する。
+delivery workflow だけは本書の 2026-08-16 amendment と root contract が、過去の branch/PR 必須 prose を置換します。
+archive、旧124 API catalog、旧 freeze、過去の実装都合を新規 API の authority にしません。core abstraction、identity、
+condition、truth、closure、protocol major、snapshot format、native lifetime、sandbox、mutation、determinism を変更する場合は、
+実装前に ADR を作成します。
 
 ## Implementation Learning and Design Feedback
 
-normative document は、明示的に置換されるまでは現在の正しい契約である。agent は文書に盲従して evidence を捨ててはならないが、
-より良いと思う設計へ silent deviation してもならない。実装事実と contract の矛盾、hidden assumption、再利用可能な mental model、
-public contract の有力な改善案を発見した場合は
-`docs/development/implementation-learning/README.md` に従う。
+normative document は明示的に置換されるまでは現在の正しい契約です。実装事実と contract の矛盾、hidden assumption、
+再利用可能な mental model、public contract の有力な改善案を発見した場合は
+`docs/development/implementation-learning/README.md` に従います。
 
 - 専用 GitHub issue と non-normative design feedback record に observation、working model、evidence、alternatives を保存する。
 - correctness、security、invariant、compatibility、不可逆な変更は解決まで対象実装を block する。
@@ -116,304 +168,108 @@ public contract の有力な改善案を発見した場合は
 - accepted record 自体を authority にせず、ADR/contract/catalog/test/traceability を先に更新する。
 - issue 完了時に `Learning checkpoint: none` または関連 DF ID を evidence に残す。
 
-raw work log を全 issue に義務化しない。material な知見だけを record にし、reusable な accepted insight は curated mental model へ
-反映する。未解決 blocking record を持つ implementation issue は閉じない。
+raw work log を全 issue に義務化しません。material な知見だけを record にし、reusable な accepted insight は
+curated mental model へ反映します。未解決 blocking record を持つ implementation issue は閉じません。
 
-## Initial Roadmap Phase
+## Constructibility gate
 
-実装を始める前に、現在の API と未完成領域を棚卸しする。最低限、次を調査する。
+public semantics、identity、protocol、persistence、不可逆 effect、resource bound を変更する high-risk contract は、
+acceptance 前に executable state machine、field availability by phase、phase-authentic outcome union、minimal witness、
+finite retained-memory/I/O/open-file/time resource witness、crash/effect/recovery matrix、independent counterexample review を要求します。
 
-- Public API Catalog の全 entry、symbol、status、stability、evidence
-- Relation Registry の全 descriptor、identity、reference、evolution policy
-- Acceptance Manifest の implemented / deferred / planned gate
-- release bundle の NG0〜NG3、G0〜G8、GR、R0〜R7
-- provider support matrix の qualification と pending field
-- public header と実装、test、example、Doxygen の対応
-- closed issue と deferred / planned contract の不整合
-- unchecked Definition of Done、未解決 Open Decision、追跡 issue の欠落
-- 重複 API、過剰 API、欠落 API、lower-level escape path の不足
+report field はその phase で観測可能な値だけを要求します。fixture sentinel、fabricated identity、prose parsing、
+silent fallback で構成不能性を隠しません。
 
-この結果から machine-readable な API roadmap と GitHub tracking issue graph を作る。roadmap の各項目には
-次を持たせる。
+## Execution loop
 
-- API domain と exact contract ID
-- consumer / use case
-- profile、gate、stability tier
-- authority と依存 API
-- semantics、identity、partiality、versioning
-- implementation state と qualification state
-- required tests / examples / evidence
-- owner tracking issue
-- completion criteria
+1. current authority、active issues、CI、tracked gaps、open design feedback を audit する。
+2. 需要側 impact と dependency order から、競合しない最小 active unit を選ぶ。
+3. issue に exact contract ID、allowed write paths、acceptance evidence、completion commands を固定する。
+4. scope 内で implementation、tests、docs、validator を完成させる。
+5. focused checks を実行し、self review または必要な independent review を行う。
+6. current `main` SHA を再確認し、競合がなければ atomic fast-forward commit を反映する。
+7. updated exact SHA の CI を確認し、変更起因 failure は follow-up commit で修正する。
+8. bounded completion evidence と learning checkpoint を issue に残し、残余 gap を別 owner へ route する。
+9. integration/readiness/release owner は exact `main` SHA の aggregate evidence を一度だけ所有する。
 
-G5、GR、production provider qualification、real-project/performance qualification など、deferred / planned のまま
-open tracking issue が存在しない項目には issue を作成する。
+複数 active unit は contract ID と repository-relative write path が競合しない場合だけ並行できます。
+同一・祖先・子孫 path、同じ contract、共有 authority の変更は直列化します。
 
-roadmap を作成しただけで goal を完了してはならない。roadmap に従って API を end-to-end に実装・認定する
-ところまで継続する。
+## Issue completion and qualification boundary
 
-## Multi-agent Operation
+通常の implementation issue の既定完了クラスは **bounded implementation completion** とします。
+issue を閉じるために distribution 全体の production qualification を再実行・再証明してはなりません。
 
-必要に応じて複数のサブエージェントを起動し、調査、設計、実装、検証、セキュリティレビュー、CI 解析を
-委任する。
+bounded implementation completion は次を要求します。
 
-人数、役割、作業分割、モデル、並列化、起動・終了のタイミングは固定しない。依存関係、変更競合、リスク、
-コンテキスト効率、検証コストを考慮して、統括エージェントが自律的に決定する。
+- exact contract と宣言 scope の実装が完成し、placeholder、silent fallback、既知 blocker がない
+- 変更した振る舞いと直接 dependency closure の positive/negative test が成功する
+- 必要な determinism/resource/error evidence が成功する
+- 直接影響する contract、schema、catalog、Doxygen、example、documentation、generated inventory が整合する
+- scope 外 work に owner、依存順、完了条件がある
+- issue evidence に `production qualification: not claimed` または限定 qualification claim を記録する
+- Learning checkpoint を `none` または関連 DF ID として記録する
 
-並列作業による競合や不整合を防ぐ。
+通常の issue に全 static/shared matrix、全 installed consumer、native/platform matrix、`full`/`stress`、Nightly、
+release evaluation、terminal production-scope closure、無関係な gate/issue の完了を要求しません。
 
-- 同じ checkout または同じファイルを複数エージェントに同時編集させない。
-- 並列書き込みは所有範囲が完全に分離している場合に限る。
-- 必要なら agent ごとに独立 worktree / branch を使用する。
-- read-heavy な調査・監査・レビューは積極的に並列化する。
-- 依存する実装や shared contract の変更は直列化する。
-- 関連するサブエージェントの結果を待ち、矛盾を解消してから統合する。
+既存 checker と evidence schema の qualification vocabulary として、
+Foundation、Wave 0、G5、`release-evaluation`、normal/final、および
+exact merged-main SHA の required checks と fail-closed evidence という表現を保持します。
+ここで `merged-main` は PR merge 限定ではなく、更新後の `main` 上で評価対象となる exact SHA を意味します。
+全 tracked gap の解消後は `release-evaluation: qualified` を要求し、
+final-mode production-scope report を同じ exact SHA に束縛します。
+過去 SHA の成功を最終 SHA の evidence として流用しません。
 
-最終的な contract 判断、差分統合、issue state、commit、push、CI 判定には統括エージェントが責任を持つ。
+後続 integration failure はまず gate owner に記録します。閉じた implementation issue を reopen するのは、
+その failure が当該 issue の bounded acceptance を誤りと証明した場合、または当該 scope の regression を示した場合だけです。
+製品全体が未認定であること自体は reopen 理由にしません。
 
-## Issue Workflow
+## Required implementation rules
 
-実装作業は GitHub issue で追跡する。大規模な API domain は tracking issue と bounded child issue に分割する。
-
-```text
-Tracking issue
-├── Contract / ADR
-├── Schema / identity / validator
-├── Runtime implementation
-├── Provider / store / query integration
-├── Examples / consumers
-└── Qualification / release evidence
-```
-
-各 implementation issue は独立して検証できる vertical slice とする。単なるファイル単位や層単位に分割し、
-利用可能な結果が長期間存在しない状態を避ける。
-
-各 issue には次を記載する。
-
-- consumer / use case
-- exact scope と non-goals
-- authority、ADR、contract ID
-- semantics と invariants
-- identity、partiality、versioning
-- public API surface
-- positive / negative acceptance cases
-- Definition of Done
-- dependency issue
-- deferred 項目と follow-up issue
-- design feedback ID または `Learning checkpoint: none`
-
-次を禁止する。
-
-- unchecked DoD を残したまま completed とする
-- deferred / planned 作業を follow-up issue なしで閉じる
-- closed issue を未実装 gate の実行 owner とする
-- issue コメントだけを永続的な仕様 authority にする
-- design feedback を記録せず contract から逸脱する、または non-normative record を authority として実装する
-- test に合わせて上位 contract を縮小する
-- issue を閉じるためだけに unsupported surface を omission する
-
-tracking issue は全 child issue と最終 evidence が揃うまで閉じない。
-
-## API Development Lifecycle
-
-各 API は次の状態遷移を通す。
-
-```text
-proposed
-→ experimental
-→ versioned / implemented
-→ qualified
-→ stable
-```
-
-各 API または API domain を次の順で開発する。
-
-1. authority、relevant mental model、unresolved design feedback を確認する
-2. consumer / use case を確定する
-3. semantics、invariants、non-goals を定義する
-4. identity、value types、condition、interpretation、partiality を定義する
-5. schema、registry、catalog、version evolution を定義する
-6. implementation と独立した validator を実装する
-7. positive / negative / property / fault test を実装する
-8. public API と production implementation を実装する
-9. provider → claim → store → query → recipe の vertical path を接続する
-10. typed / dynamic、memory / SQLite、in-process / process parity を検証する
-11. example、negative example、install consumer、Doxygen を追加する
-12. support matrix と qualification evidence を更新する
-13. learning checkpoint と unresolved blocker の不在を確認する
-14. experimental period と独立 consumer evidence を経て stable admission を判断する
-
-schema-first の順序を崩さない。
-
-```text
-semantics / invariants
-→ identity / value types
-→ schema / registry
-→ validator
-→ tests
-→ service / runtime
-→ public API
-→ integration / qualification
-```
-
-## Implementation Rules
-
-- C++23 を使用する。
-- 公開 namespace、type、function は lower snake case に従う。
-- 通常の public header に `clang::*`、`llvm::*`、LLVM/Clang header を露出しない。
-- compiler-native object、pointer、reference、address を provider 境界外へ出さない。
-- AST pointer を保存、所有、別 thread へ移送しない。
-- raw owning pointer を導入しない。
+- C++23 を使用し、公開 namespace/type/function は設計書の lower snake case に従う。
+- 通常の public header に `clang::*`、`llvm::*` または LLVM/Clang header を露出しない。
+- schema-first の順序は semantics/invariants、identity、value types、schema、validator、tests、service とする。
 - filesystem、process、time、hash は port 越しに扱う。
-- unordered container の iteration order を serialization、ID、公開順序に使わない。
-- name や pretty type string だけを semantic identity に使わない。
-- empty、unresolved、unsupported、unavailable、failed、truncated、stale を区別する。
-- coverage、guarantee、condition、provenance を後段で失わない。
-- compile command、variant、provider、version の silent fallback / first-wins を禁止する。
-- conflict、stale digest、reparse failure、unknown value を無視しない。
-- diagnostic prose substring を制御に使わない。
-- shell command を文字列連結して実行しない。
-- mutation / generation は plan、独立 validator、dry-run、transaction の順を守る。
-- macro expansion range を直接 edit しない。
-- 公開 API、relation、provider を変更したら catalog / registry、Doxygen、acceptance test、設計
-  traceability を更新する。
-- 旧124 API catalog に新しい surface を追加しない。
-- ユーザーの既存変更と無関係な差分を上書きしない。
+- AST pointer を保存、所有、別スレッドへ移送しない。raw owning pointer を導入しない。
+- unordered container の iteration order を serialization や ID に使用しない。
+- read result は empty と unresolved を区別し、evidence/coverage/guarantee を落とさない。
+- `unknown` は不足 input/capability/model/evidence と completion plan を失わない。
+- mutation/generation は plan、独立 validator、dry-run、transaction の順を崩さない。
+- public API/relation/provider を変更したら次世代 catalog/registry、Doxygen、acceptance test、設計 traceability を更新する。
+- implementation issue の完了時に learning checkpoint を行う。
 
-## Verification
+## Forbidden shortcuts
 
-各 issue について変更リスクに応じた targeted test を先に実行し、完了前に以下の full gate を実行する。
+- name や pretty type string だけによる semantic identity
+- compile command や variant の silent fallback/first-wins
+- macro expansion range への直接 edit
+- conflict、stale digest、variant、reparse failure の無視
+- unsupported surface、consumer gap、unresolved capability の omission
+- API 数や relation 数だけによる completion claim
+- actionable な不足理由を持たない generic `unknown`
+- diagnostic prose substring による制御
+- shell command の文字列連結
+- test に合わせた上位 contract の縮小
+- design feedback を記録しない silent contract deviation
+- routine implementation へ branch/PR を機械的に要求すること
+- CI failure を隠すための history rewrite
+
+## Commands and reporting
+
+通常の issue は、issue に固定した affected target/test/checker を実行します。
 
 ```sh
 CXX=clang++ cmake --preset dev-clang
-cmake --build --preset dev-clang
-ctest --preset dev-clang --output-on-failure
-cmake --build --preset dev-clang --target cxxlens-quality
+cmake --build --preset dev-clang --target <affected-targets>
+ctest --preset dev-clang -R '<affected-tests>' --output-on-failure
+python3 tools/quality/run_gate.py fast --preset dev-clang \
+  --report build/dev-clang/fast-report.json
 ```
 
-対象に応じて次を追加検証する。
+public contract/schema/documentation を変更した場合は、その変更に直接対応する validator/checker を追加します。
+全体 `cxxlens-quality`、`check|full|stress`、install/native matrix、Nightly/release command は、
+その qualification surface を issue が明示的に所有する場合だけ issue 完了条件に含めます。
 
-- static / dynamic descriptor・IR parity
-- memory / SQLite semantic parity
-- in-process / process provider surface parity
-- root relocation
-- jobs 1 / 2 / 8
-- insertion order、task order、seeded shuffle
-- cold / warm / no-cache
-- static / shared install consumer
-- GCC / Clang public-header compatibility
-- malformed、truncated、oversized、checksum failure
-- stale、unknown、conflict、corruption
-- timeout、cancel、budget exhaustion、crash
-- prior snapshot survival
-- ASan / UBSan、TSan
-- clang-tidy
-- clean no-cache stress
-- real-project qualification
-- scale / performance manifest
-- provider exact binary / support tuple qualification
-
-テスト失敗時は原因を特定し、contract を弱めずに修正する。flaky test、環境差、既知警告として根拠なく
-無視しない。
-
-固定 fixture と contract checker だけで production qualification を宣言しない。実行時 test、negative test、
-independent consumer、real-project evidence を組み合わせる。
-
-## Commit, Push, Issue Closure
-
-1つの GitHub issue を active write unit とし、qualified `main` から専用 unit branch を作る。対象差分だけを commit して branch へ
-push し、PR を作成する。PR の exact-head required checks、未解決 review の解消、branch protection、single-active-unit invariant を
-確認した後に merge する。protected `main` への direct push を durable workflow として使わない。
-
-production scope に tracked gap がある intermediate unit の merge 後は、exact merged-main SHA の required checks、Foundation、Wave 0、
-G5、`release-evaluation`、normal production-scope report を確認する。`release-evaluation: not-qualified` は評価器の fail-closed success だけを
-意味し、`gate.release`、GR、production support を満たさない。その unit が所有する surface の classification/evidence、completion evidence、
-learning checkpoint が揃った後に issue を閉じる。
-
-全 tracked gap の解消後は `release-evaluation: qualified`、`release-qualification` が生成する strict GR report、final-mode
-production-scope report を同じ exact merged-main SHA で確認する。これは ADR 0095 が ADR 0094 の per-unit post-merge rule に加える
-限定 amendment であり、final release qualification を intermediate evaluation へ弱めるものではない。
-
-複数 issue の無関係な変更を1 commit にまとめない。1 issue に複数 commit が必要な場合も、issue 完了時点の
-exact commit set を記録する。
-
-issue には完了前に次の evidence をコメントする。
-
-- commit SHA
-- 変更した authority / contract / catalog ID
-- production implementation
-- positive / negative tests
-- error / unresolved / coverage / guarantee の扱い
-- 実行した build / test / quality command
-- CI run URL
-- deferred 項目と follow-up issue
-- learning checkpoint (`none` または関連 DF ID) と `issue-ready` の結果
-- 完了判定の根拠
-
-DoD を満たした場合だけ `completed` として閉じる。未実装、未検証、未認定の作業を `not planned` で隠さない。
-
-## CI Monitoring
-
-各 unit の merge 後と全対象 issue の完了後に、exact merged-main SHA の required CI を監視する。
-
-失敗した場合は job、step、log、artifact を調査し、根本原因を修正して commit / push する。新しい SHA の
-全 required CI が緑になるまで継続する。
-
-通常 quality gate だけでなく、最終 SHA について可能な限り次を確認する。
-
-- static / shared build-test
-- install consumers
-- public headers
-- contract / quality evidence
-- foundation completion
-- ASan / UBSan
-- TSan
-- clang-tidy
-- clean no-cache stress
-
-過去 SHA の成功を最終 SHA の evidence として流用しない。
-
-## Progress Reporting
-
-作業中は定期的に日本語で簡潔に報告する。報告には次を含める。
-
-- 現在の API domain / issue
-- 完了したこと
-- 確認した根拠
-- 実行中の検証
-- 残作業
-- blocker または contract decision
-- 新しい design feedback と implementation disposition
-
-生の長大な log を貼るのではなく、結論、失敗箇所、根拠を要約する。
-
-意味契約を変更する複数の妥当な選択肢があり、authority から決定できない場合だけユーザーへ確認する。
-それ以外は安全で reversible な判断を行い、自律的に進める。
-
-## Final Completion Criteria
-
-次をすべて満たすまで goal を完了しない。
-
-- authority が要求する公開 API が roadmap 上で exactly once に分類されている
-- required API が implementation と public surface を持つ
-- semantics、identity、partiality、versioning が明示されている
-- schema、validator、positive / negative test が存在する
-- typed / dynamic、backend、provider surface の必要 parity が成立する
-- example、install consumer、Doxygen、catalog、traceability が揃う
-- G5 と release qualification を含む mandatory gate が evidence 付きで完了する
-- final production-scope report が `qualified` であり、intermediate `not-qualified` evaluation が残っていない
-- production-supported と宣言する provider tuple が exact digest と qualification を持つ
-- deferred / planned 作業が追跡 issue なしで残っていない
-- 全 implementation issue が learning checkpoint を持ち、未解決 blocking design feedback を残していない
-- stable API が stable admission 条件を満たす
-- 全対象 issue が根拠付きで完了している
-- final `main` SHA の required CI がすべて成功する
-- `HEAD` と `origin/main` が一致する
-- worktree が clean
-- 全サブエージェントの結果が統合されている
-- unsupported / future scope が明示され、実装済みと誤認されない
-
-単に open issue が0件、testがgreen、catalogがimplementedであることだけを全体完成の根拠にしてはならない。
-
-完了時には、API roadmap、実装 API、stability / qualification、issue と commit の対応、test / CI evidence、
-support matrix、残存非スコープをまとめた最終レポートを提出する。
+各 completed unit の報告には、issue、contract ID、changed paths、commit SHA、focused validation、
+post-update CI status、残余 gap、production qualification claim、Learning checkpoint を含めます。

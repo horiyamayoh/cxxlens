@@ -19,7 +19,9 @@
 
 #include "materialization_admission_error.hpp"
 #include "materialization_identity.hpp"
+#include "materialization_incremental_receipt.hpp"
 #include "sdk/claim_internal.hpp"
+#include "sdk/store_claim_codec_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -535,6 +537,77 @@ namespace cxxlens::detail::clang22::materialization
 							"materialization.claim-invalid", "base-row", "unexpected-bytes"));
 				},
 				*cell.value);
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::string>>
+		reference_container_elements(const sdk::detached_cell& cell)
+		{
+			if (cell.state != sdk::cell_state::present || !cell.value)
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "reference-container",
+												   "unknown-or-missing-cell"));
+			const auto* encoded = std::get_if<std::vector<std::byte>>(&*cell.value);
+			if (encoded == nullptr)
+				return sdk::unexpected(
+					claim_error("materialization.claim-invalid", "reference-container", "type"));
+			std::vector<std::string> output;
+			for (std::size_t offset{}; offset < encoded->size();)
+			{
+				if (encoded->size() - offset < sizeof(std::uint32_t))
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "reference-container",
+													   "truncated-length"));
+				std::uint32_t length{};
+				for (std::size_t byte{}; byte < sizeof(length); ++byte)
+					length |= std::to_integer<std::uint32_t>((*encoded)[offset + byte])
+						<< (byte * 8U);
+				offset += sizeof(length);
+				if (length == 0U || length > encoded->size() - offset)
+					return sdk::unexpected(claim_error(
+						"materialization.claim-invalid", "reference-container", "invalid-length"));
+				std::string element;
+				element.reserve(length);
+				for (std::size_t byte{}; byte < length; ++byte)
+					element.push_back(static_cast<char>((*encoded)[offset + byte]));
+				offset += length;
+				output.push_back(std::move(element));
+			}
+			return output;
+		}
+
+		void canonicalize_unresolved(std::vector<sdk::unresolved_reference>& values)
+		{
+			std::ranges::sort(
+				values,
+				[](const sdk::unresolved_reference& left, const sdk::unresolved_reference& right)
+				{
+					return std::tie(left.source_assertion,
+									left.source_relation,
+									left.target_relation,
+									left.source_columns,
+									left.reason) < std::tie(right.source_assertion,
+															right.source_relation,
+															right.target_relation,
+															right.source_columns,
+															right.reason);
+				});
+			values.erase(std::unique(values.begin(),
+									 values.end(),
+									 [](const sdk::unresolved_reference& left,
+										const sdk::unresolved_reference& right)
+									 {
+										 return std::tie(left.source_assertion,
+														 left.source_relation,
+														 left.target_relation,
+														 left.source_columns,
+														 left.reason) ==
+											 std::tie(right.source_assertion,
+													  right.source_relation,
+													  right.target_relation,
+													  right.source_columns,
+													  right.reason);
+									 }),
+						 values.end());
 		}
 
 		[[nodiscard]] sdk::result<std::string> base_row_digest(const sdk::relation_engine& engine,
@@ -1094,6 +1167,182 @@ namespace cxxlens::detail::clang22::materialization
 				left.guarantee.verification_modalities == right.guarantee.verification_modalities;
 		}
 
+		[[nodiscard]] bool same_unresolved_metadata(const sdk::unresolved_reference& left,
+													const sdk::unresolved_reference& right)
+		{
+			return left.source_assertion == right.source_assertion &&
+				left.source_relation == right.source_relation &&
+				left.target_relation == right.target_relation &&
+				left.source_columns == right.source_columns && left.reason == right.reason;
+		}
+
+		[[nodiscard]] sdk::canonical_value bounded_u64(const std::uint64_t value)
+		{
+			return text(std::to_string(value));
+		}
+
+		[[nodiscard]] sdk::result<sdk::canonical_value>
+		bounded_claim_integrity_value(const sdk::claim& value)
+		{
+			auto encoded = sdk::detail::encode_store_claim(value);
+			if (!encoded)
+				return sdk::unexpected(std::move(encoded.error()));
+			return sdk::canonical_value::from_bytes(std::move(*encoded));
+		}
+
+		[[nodiscard]] sdk::result<sdk::canonical_value>
+		bounded_claims_integrity_value(const std::vector<sdk::claim>& values)
+		{
+			std::vector<sdk::canonical_value> output;
+			output.reserve(values.size());
+			for (const auto& value : values)
+			{
+				auto encoded = bounded_claim_integrity_value(value);
+				if (!encoded)
+					return sdk::unexpected(std::move(encoded.error()));
+				output.push_back(std::move(*encoded));
+			}
+			return sdk::canonical_value::from_tuple(std::move(output));
+		}
+
+		[[nodiscard]] sdk::canonical_value
+		bounded_coverage_integrity_value(const sdk::snapshot_coverage_unit& value)
+		{
+			return sdk::canonical_value::from_tuple(
+				{text(value.domain), text(value.key), text(value.state), text(value.reason)});
+		}
+
+		[[nodiscard]] sdk::canonical_value
+		bounded_unresolved_integrity_value(const sdk::unresolved_reference& value)
+		{
+			return sdk::canonical_value::from_tuple({
+				text(value.source_assertion),
+				text(value.source_relation),
+				text(value.target_relation),
+				texts(value.source_columns),
+				text(value.reason),
+			});
+		}
+
+		[[nodiscard]] sdk::result<sdk::canonical_value>
+		bounded_partition_integrity_value(const materialization_claim_partition& value)
+		{
+			auto claims = bounded_claims_integrity_value(value.draft.claims);
+			if (!claims)
+				return sdk::unexpected(std::move(claims.error()));
+			std::vector<sdk::canonical_value> coverage;
+			coverage.reserve(value.draft.coverage.size());
+			for (const auto& unit : value.draft.coverage)
+				coverage.push_back(bounded_coverage_integrity_value(unit));
+			std::vector<sdk::canonical_value> unresolved;
+			unresolved.reserve(value.draft.unresolved.size());
+			for (const auto& item : value.draft.unresolved)
+				unresolved.push_back(bounded_unresolved_integrity_value(item));
+			return sdk::canonical_value::from_tuple({
+				text(value.draft.relation_descriptor_id),
+				text(value.draft.scope),
+				text(value.draft.condition.canonical_form()),
+				text(value.draft.interpretation),
+				text(value.draft.producer_semantics),
+				text(value.draft.producer_input_basis_digest),
+				text(value.draft.precision_profile),
+				text(value.draft.assumption_set_id),
+				std::move(*claims),
+				sdk::canonical_value::from_tuple(std::move(coverage)),
+				sdk::canonical_value::from_tuple(std::move(unresolved)),
+				sdk::canonical_value::from_tuple({
+					text(value.manifest.partition_id),
+					text(value.manifest.relation_descriptor_id),
+					text(value.manifest.input_basis_digest),
+					text(value.manifest.claim_set_digest),
+					text(value.manifest.coverage_digest),
+					text(value.manifest.content_digest),
+					bounded_u64(value.manifest.claim_count),
+					sdk::canonical_value::from_boolean(value.manifest.complete),
+				}),
+				sdk::canonical_value::from_tuple({
+					text(value.binding.partition_id),
+					text(value.binding.relation_descriptor_id),
+					text(value.binding.scope),
+					text(value.binding.condition.canonical_form()),
+					text(value.binding.interpretation),
+					text(value.binding.producer_semantics),
+					text(value.binding.producer_input_basis_digest),
+					text(value.binding.precision_profile),
+					text(value.binding.assumption_set_id),
+				}),
+				texts(value.stored_claim_refs),
+				texts(value.claim_content_ids),
+				bounded_u64(value.sdk_claim_occurrence_count),
+				bounded_u64(value.origin_association_count),
+				sdk::canonical_value::from_boolean(value.empty_partition),
+			});
+		}
+
+		[[nodiscard]] sdk::result<std::string>
+		bounded_task_integrity_digest(const materialization_bounded_task_claims& task)
+		{
+			std::vector<sdk::canonical_value> envelopes;
+			envelopes.reserve(task.claim_envelopes.size());
+			for (const auto& envelope : task.claim_envelopes)
+			{
+				auto claim = bounded_claim_integrity_value(envelope.value);
+				if (!claim)
+					return sdk::unexpected(std::move(claim.error()));
+				envelopes.push_back(sdk::canonical_value::from_tuple({
+					text(envelope.role),
+					text(envelope.row_ref),
+					text(envelope.claim_ref),
+					text(envelope.sdk_singleton_claim_batch_digest),
+					std::move(*claim),
+				}));
+			}
+			std::vector<sdk::canonical_value> edges;
+			edges.reserve(task.canonicalization_edges.size());
+			for (const auto& edge : task.canonicalization_edges)
+				edges.push_back(sdk::canonical_value::from_tuple({
+					text(edge.precursor_claim_ref),
+					text(edge.final_claim_ref),
+					text(edge.transform_semantics),
+				}));
+			std::vector<sdk::canonical_value> associations;
+			associations.reserve(task.origin_associations.size());
+			for (const auto& association : task.origin_associations)
+				associations.push_back(sdk::canonical_value::from_tuple({
+					text(association.association_id),
+					text(association.stored_claim_ref),
+					context_tuple_value(association.originating_task),
+					text(association.sealed_row_digest),
+					association.source_evidence_digest ? text(*association.source_evidence_digest)
+													   : sdk::canonical_value::null(),
+				}));
+			std::vector<sdk::canonical_value> partitions;
+			partitions.reserve(task.partitions.size());
+			for (const auto& partition : task.partitions)
+			{
+				auto value = bounded_partition_integrity_value(partition);
+				if (!value)
+					return sdk::unexpected(std::move(value.error()));
+				partitions.push_back(std::move(*value));
+			}
+			const auto projection = sdk::canonical_value::from_tuple({
+				bounded_u64(task.canonical_task_index),
+				text(std::string{task.sealed_request_entry_binding_digest()}),
+				text(task.materializer_semantics_digest),
+				text(task.direct_basis_digest),
+				text(task.canonical_adoption_transform_digest),
+				text(task.base_ingestion_transform_digest),
+				text(task.assumption_set_id),
+				sdk::canonical_value::from_tuple(std::move(envelopes)),
+				sdk::canonical_value::from_tuple(std::move(edges)),
+				sdk::canonical_value::from_tuple(std::move(associations)),
+				sdk::canonical_value::from_tuple(std::move(partitions)),
+			});
+			const std::array fields{projection};
+			return sdk::canonical_identity_digest("materialization-bounded-task-factory-seal.v1",
+												  fields);
+		}
+
 		[[nodiscard]] sdk::result<materialization_claim_envelope> make_envelope(std::string role,
 																				sdk::claim value)
 		{
@@ -1177,6 +1426,98 @@ namespace cxxlens::detail::clang22::materialization
 													  std::move(context),
 													  std::move(sealed_row_digest),
 													  std::move(source_evidence_digest)};
+		}
+
+		[[nodiscard]] sdk::result<std::map<std::string, std::string, std::less<>>>
+		rebind_under_approximate_envelopes(
+			std::map<std::string, materialization_claim_envelope, std::less<>>& envelopes,
+			std::map<std::tuple<std::string, std::string, std::string>,
+					 materialization_canonicalization_edge>& edges,
+			std::map<std::string, materialization_origin_association, std::less<>>& associations,
+			const std::set<std::string, std::less<>>& final_refs)
+		{
+			std::set<std::string, std::less<>> rebind_refs = final_refs;
+			for (const auto& [edge_key, edge] : edges)
+			{
+				(void)edge_key;
+				if (final_refs.contains(edge.final_claim_ref))
+					rebind_refs.insert(edge.precursor_claim_ref);
+			}
+
+			std::map<std::string, std::string, std::less<>> remap;
+			std::map<std::string, materialization_claim_envelope, std::less<>> rebound_envelopes;
+			for (const auto& [old_ref, envelope] : envelopes)
+			{
+				if (!rebind_refs.contains(old_ref))
+				{
+					rebound_envelopes.emplace(old_ref, envelope);
+					continue;
+				}
+				auto value = envelope.value;
+				value.guarantee.approximation = "under_approximation";
+				auto rebound = make_envelope(envelope.role, std::move(value));
+				if (!rebound)
+					return sdk::unexpected(std::move(rebound.error()));
+				if (rebound->row_ref != envelope.row_ref)
+					return sdk::unexpected(
+						claim_error("materialization.claim-invalid", "claim_ref", "row-rebinding"));
+				if (!remap.emplace(old_ref, rebound->claim_ref).second)
+					return sdk::unexpected(claim_error(
+						"materialization.claim-invalid", "claim_ref", "duplicate-rebinding"));
+				if (!rebound_envelopes.emplace(rebound->claim_ref, std::move(*rebound)).second)
+					return sdk::unexpected(claim_error(
+						"materialization.claim-invalid", "claim_ref", "rebound-collision"));
+			}
+			envelopes = std::move(rebound_envelopes);
+
+			std::map<std::tuple<std::string, std::string, std::string>,
+					 materialization_canonicalization_edge>
+				rebound_edges;
+			for (const auto& [edge_key, edge] : edges)
+			{
+				(void)edge_key;
+				auto rebound = edge;
+				if (const auto found = remap.find(rebound.precursor_claim_ref);
+					found != remap.end())
+					rebound.precursor_claim_ref = found->second;
+				if (const auto found = remap.find(rebound.final_claim_ref); found != remap.end())
+					rebound.final_claim_ref = found->second;
+				const auto key = std::tuple{rebound.precursor_claim_ref,
+											rebound.final_claim_ref,
+											rebound.transform_semantics};
+				auto [found, inserted] = rebound_edges.emplace(key, rebound);
+				if (!inserted && found->second != rebound)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "canonicalization-edge",
+													   "rebound-collision"));
+			}
+			edges = std::move(rebound_edges);
+
+			std::map<std::string, materialization_origin_association, std::less<>>
+				rebound_associations;
+			for (const auto& [association_id, association] : associations)
+			{
+				(void)association_id;
+				if (const auto found = remap.find(association.stored_claim_ref);
+					found != remap.end())
+				{
+					auto rebound = make_association(found->second,
+													association.originating_task,
+													association.sealed_row_digest,
+													association.source_evidence_digest);
+					if (!rebound)
+						return sdk::unexpected(std::move(rebound.error()));
+					if (!rebound_associations.emplace(rebound->association_id, std::move(*rebound))
+							 .second)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   "origin-association",
+														   "rebound-collision"));
+				}
+				else
+					rebound_associations.emplace(association_id, association);
+			}
+			associations = std::move(rebound_associations);
+			return remap;
 		}
 
 		[[nodiscard]] sdk::result<std::string>
@@ -1332,6 +1673,49 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	} // namespace
 
+	materialization_bounded_task_claims::materialization_bounded_task_claims(
+		materialization_bounded_task_factory_seal factory_seal,
+		const std::uint64_t canonical_task_index,
+		std::string sealed_request_entry_binding_digest,
+		std::string materializer_semantics_digest,
+		std::string direct_basis_digest,
+		std::string canonical_adoption_transform_digest,
+		std::string base_ingestion_transform_digest,
+		std::string assumption_set_id,
+		std::vector<materialization_claim_envelope> claim_envelopes,
+		std::vector<materialization_canonicalization_edge> canonicalization_edges,
+		std::vector<materialization_origin_association> origin_associations,
+		std::vector<materialization_claim_partition> partitions)
+		: canonical_task_index{canonical_task_index},
+		  materializer_semantics_digest{std::move(materializer_semantics_digest)},
+		  direct_basis_digest{std::move(direct_basis_digest)},
+		  canonical_adoption_transform_digest{std::move(canonical_adoption_transform_digest)},
+		  base_ingestion_transform_digest{std::move(base_ingestion_transform_digest)},
+		  assumption_set_id{std::move(assumption_set_id)},
+		  claim_envelopes{std::move(claim_envelopes)},
+		  canonicalization_edges{std::move(canonicalization_edges)},
+		  origin_associations{std::move(origin_associations)}, partitions{std::move(partitions)},
+		  sealed_canonical_task_index_{canonical_task_index},
+		  sealed_request_entry_binding_digest_{std::move(sealed_request_entry_binding_digest)},
+		  factory_sealed_{true}
+	{
+		(void)factory_seal;
+		if (auto digest = bounded_task_integrity_digest(*this); digest)
+			factory_integrity_digest_ = std::move(*digest);
+	}
+
+	sdk::result<void> materialization_bounded_task_claims::validate_factory_seal() const
+	{
+		if (!factory_sealed_ || factory_integrity_digest_.empty())
+			return sdk::unexpected(
+				claim_error("materialization.claim-invalid", "bounded-task", "factory-seal"));
+		auto expected = bounded_task_integrity_digest(*this);
+		if (!expected || *expected != factory_integrity_digest_)
+			return sdk::unexpected(
+				claim_error("materialization.claim-invalid", "bounded-task", "factory-seal"));
+		return {};
+	}
+
 	sdk::result<void>
 	consume_materialization_v2_1_task_window(materialization_v2_1_task_execution& task)
 	{
@@ -1368,6 +1752,7 @@ namespace cxxlens::detail::clang22::materialization
 	}
 
 	sealed_materialization_claims::sealed_materialization_claims(
+		materialization_claim_request_binding request_binding,
 		std::string materializer_semantics_digest,
 		std::string direct_basis_digest,
 		std::string canonical_adoption_transform_digest,
@@ -1378,7 +1763,8 @@ namespace cxxlens::detail::clang22::materialization
 		std::vector<materialization_canonicalization_edge> canonicalization_edges,
 		std::vector<materialization_origin_association> origin_associations,
 		std::vector<materialization_claim_partition> partitions)
-		: materializer_semantics_digest_{std::move(materializer_semantics_digest)},
+		: request_binding_{std::move(request_binding)},
+		  materializer_semantics_digest_{std::move(materializer_semantics_digest)},
 		  direct_basis_digest_{std::move(direct_basis_digest)},
 		  canonical_adoption_transform_digest_{std::move(canonical_adoption_transform_digest)},
 		  base_ingestion_transform_digest_{std::move(base_ingestion_transform_digest)},
@@ -1445,6 +1831,37 @@ namespace cxxlens::detail::clang22::materialization
 		return partitions_;
 	}
 
+	sdk::result<materialization_claim_request_binding>
+	make_materialization_claim_request_binding(const validated_materialization_request& request)
+	{
+		if (request.tasks.size() > std::numeric_limits<std::uint64_t>::max())
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "request",
+											   "request-identity-or-task-census"));
+		auto request_id = materialization_incremental_request_id(request);
+		if (!request_id)
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "request",
+											   "request-identity-or-task-census"));
+		return materialization_claim_request_binding{
+			std::move(*request_id),
+			request.catalog.catalog_id,
+			request.catalog.catalog_digest,
+			static_cast<std::uint64_t>(request.tasks.size())};
+	}
+
+	sdk::result<void>
+	validate_materialization_claim_request_binding(const validated_materialization_request& request,
+												   const sealed_materialization_claims& claims)
+	{
+		auto expected = make_materialization_claim_request_binding(request);
+		if (!expected || claims.request_binding_ != *expected)
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "request",
+											   "request-identity-or-task-census"));
+		return {};
+	}
+
 	sdk::result<sealed_materialization_claims> construct_materialization_claims_from_loader(
 		const validated_materialization_request& request,
 		const materialization_task_result_loader& load,
@@ -1457,6 +1874,9 @@ namespace cxxlens::detail::clang22::materialization
 		if (auto valid = request.catalog.validate(); !valid)
 			return sdk::unexpected(claim_error(
 				"materialization.claim-invalid", "project-catalog", nested_error(valid.error())));
+		auto request_binding = make_materialization_claim_request_binding(request);
+		if (!request_binding)
+			return sdk::unexpected(std::move(request_binding.error()));
 
 		std::vector<materialization_semantic_task_context> contexts;
 		contexts.reserve(request.tasks.size());
@@ -1787,16 +2207,15 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(claim_error("materialization.claim-invalid",
 											   "complete-final-claim-batch",
 											   nested_error(committed.error())));
-		if (!committed->unresolved.empty() || !committed->conflicts.empty() ||
-			!committed->differential_disagreements.empty())
+		if (!committed->conflicts.empty() || !committed->differential_disagreements.empty())
 		{
 			return sdk::unexpected(claim_error("materialization.claim-invalid",
 											   "complete-final-claim-batch",
-											   "nonzero-unresolved-conflict-or-differential"));
+											   "nonzero-conflict-or-differential"));
 		}
 
-		std::map<std::string, const sdk::claim*, std::less<>> committed_claims_by_ref;
-		for (const auto& claim : committed->claims)
+		std::map<std::string, sdk::claim*, std::less<>> committed_claims_by_ref;
+		for (auto& claim : committed->claims)
 		{
 			auto envelope = make_envelope("stored_final", claim);
 			if (!envelope)
@@ -1809,6 +2228,7 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		std::map<partition_key, partition_accumulator> partition_groups;
+		std::map<std::string, std::vector<partition_accumulator*>, std::less<>> source_partitions;
 		const auto partition_for = [&](const std::string_view descriptor_id,
 									   const materialization_semantic_task_context& context,
 									   std::string producer_semantics,
@@ -1884,6 +2304,9 @@ namespace cxxlens::detail::clang22::materialization
 												   "partition.claim-ref",
 												   "aliases-different-occurrence"));
 			(*partition)->claim_contents.insert(claim_value.content);
+			auto& owners = source_partitions[claim_value.assertion];
+			if (std::ranges::find(owners, *partition) == owners.end())
+				owners.push_back(*partition);
 		}
 
 		for (std::size_t task_index{}; task_index < contexts.size(); ++task_index)
@@ -1941,6 +2364,140 @@ namespace cxxlens::detail::clang22::materialization
 			}
 		}
 
+		std::map<std::string, sdk::unresolved_reference, std::less<>> unresolved_by_assertion;
+		for (const auto& unresolved : committed->unresolved)
+		{
+			if (unresolved.source_assertion.empty() || unresolved.source_relation.empty() ||
+				unresolved.target_relation.empty() || unresolved.source_columns.empty() ||
+				unresolved.reason != "soft-reference-missing")
+				return sdk::unexpected(claim_error(
+					"materialization.claim-invalid", "partition.unresolved", "typed-record"));
+			auto [prior, inserted] =
+				unresolved_by_assertion.emplace(unresolved.source_assertion, unresolved);
+			if (!inserted && !same_unresolved_metadata(prior->second, unresolved))
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "partition.unresolved",
+												   "ambiguous-source-assertion"));
+			const auto owners = source_partitions.find(unresolved.source_assertion);
+			if (owners == source_partitions.end() || owners->second.empty())
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "partition.unresolved",
+												   "source-claim-owner-missing"));
+			auto source = request.engine.require_id(unresolved.source_relation);
+			if (!source)
+				return sdk::unexpected(std::move(source.error()));
+			const sdk::relation_reference_descriptor* matched{};
+			for (const auto& reference : source->descriptor().references)
+			{
+				if (reference.target_relation != unresolved.target_relation ||
+					reference.source_columns != unresolved.source_columns)
+					continue;
+				if (matched != nullptr ||
+					reference.strength != sdk::reference_strength::soft_semantic)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition.unresolved",
+													   "soft-reference-binding"));
+				matched = &reference;
+			}
+			if (matched == nullptr || matched->source_columns.empty() ||
+				matched->source_columns.size() != matched->target_columns.size() ||
+				(matched->container_elements && matched->source_columns.size() != 1U))
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "partition.unresolved",
+												   "reference-shape-or-missing"));
+			for (auto* owner : owners->second)
+			{
+				if (owner->draft.relation_descriptor_id != unresolved.source_relation)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition.unresolved",
+													   "source-relation-binding"));
+				const sdk::claim* source_claim{};
+				for (const auto& [claim_ref, claim] : owner->claims_by_ref)
+				{
+					(void)claim_ref;
+					if (claim.assertion != unresolved.source_assertion)
+						continue;
+					if (source_claim != nullptr)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   "partition.unresolved",
+														   "source-claim-ambiguous"));
+					source_claim = &claim;
+				}
+				if (source_claim == nullptr ||
+					source_claim->descriptor != unresolved.source_relation)
+					return sdk::unexpected(claim_error("materialization.claim-invalid",
+													   "partition.unresolved",
+													   "source-claim-binding"));
+				for (const auto& column : matched->source_columns)
+				{
+					const auto cell = source_claim->row.cells.find(column);
+					if (cell == source_claim->row.cells.end() ||
+						cell->second.state != sdk::cell_state::present || !cell->second.value)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   "partition.unresolved",
+														   "source-cell-binding"));
+					if (matched->container_elements)
+					{
+						auto elements = reference_container_elements(cell->second);
+						if (!elements)
+							return sdk::unexpected(std::move(elements.error()));
+					}
+				}
+				owner->draft.unresolved.push_back(unresolved);
+				owner->draft.precision_profile = "under_approximation";
+			}
+		}
+
+		std::set<std::string, std::less<>> under_approximate_final_refs;
+		for (auto& [key, accumulator] : partition_groups)
+		{
+			(void)key;
+			if (accumulator.draft.precision_profile != "under_approximation")
+				continue;
+			for (auto& [claim_ref, claim] : accumulator.claims_by_ref)
+			{
+				claim.guarantee.approximation = "under_approximation";
+				under_approximate_final_refs.insert(claim_ref);
+			}
+		}
+		if (!under_approximate_final_refs.empty())
+		{
+			for (auto& [claim_ref, claim] : committed_claims_by_ref)
+				if (under_approximate_final_refs.contains(claim_ref))
+					claim->guarantee.approximation = "under_approximation";
+			auto remap = rebind_under_approximate_envelopes(
+				envelopes, edges, associations, under_approximate_final_refs);
+			if (!remap)
+				return sdk::unexpected(std::move(remap.error()));
+			for (auto& [key, accumulator] : partition_groups)
+			{
+				(void)key;
+				std::map<std::string, sdk::claim, std::less<>> rebound_claims;
+				for (const auto& [claim_ref, claim] : accumulator.claims_by_ref)
+				{
+					auto rebound_ref = remap->find(claim_ref);
+					const auto& target_ref =
+						rebound_ref == remap->end() ? claim_ref : rebound_ref->second;
+					if (!rebound_claims.emplace(target_ref, claim).second)
+						return sdk::unexpected(claim_error("materialization.claim-invalid",
+														   "partition.claim-ref",
+														   "rebound-collision"));
+				}
+				accumulator.claims_by_ref = std::move(rebound_claims);
+			}
+			auto content_digest = sdk::claim_batch_content_digest(
+				std::span<const sdk::claim>{committed->claims},
+				std::span<const sdk::unresolved_reference>{committed->unresolved},
+				std::span<const sdk::claim_conflict>{committed->conflicts},
+				std::span<const sdk::differential_disagreement>{
+					committed->differential_disagreements});
+			if (!content_digest)
+				return sdk::unexpected(claim_error("materialization.claim-invalid",
+												   "complete-final-claim-batch",
+												   "content-digest"));
+			committed->content_digest = std::move(*content_digest);
+		}
+
 		std::map<std::string, std::uint64_t, std::less<>> association_count_by_ref;
 		for (const auto& [association_id, association] : associations)
 		{
@@ -1963,6 +2520,7 @@ namespace cxxlens::detail::clang22::materialization
 				(void)coverage_id;
 				accumulator.draft.coverage.push_back(coverage);
 			}
+			canonicalize_unresolved(accumulator.draft.unresolved);
 			auto manifest = sdk::make_partition_manifest(request.engine, accumulator.draft);
 			if (!manifest)
 				return sdk::unexpected(claim_error("materialization.claim-invalid",
@@ -1980,7 +2538,8 @@ namespace cxxlens::detail::clang22::materialization
 			std::vector<std::string> contents{accumulator.claim_contents.begin(),
 											  accumulator.claim_contents.end()};
 			if (manifest->claim_count != contents.size() ||
-				manifest->complete != !accumulator.coverage.empty())
+				manifest->complete !=
+					(!accumulator.coverage.empty() && accumulator.draft.unresolved.empty()))
 				return sdk::unexpected(claim_error("materialization.claim-invalid",
 												   "partition-manifest",
 												   "census-or-completeness"));
@@ -2082,7 +2641,8 @@ namespace cxxlens::detail::clang22::materialization
 			association_values.push_back(std::move(association));
 		}
 
-		return sealed_materialization_claims{basis->materializer_semantics,
+		return sealed_materialization_claims{std::move(*request_binding),
+											 basis->materializer_semantics,
 											 basis->direct_basis,
 											 basis->canonical_transform,
 											 basis->base_transform,
@@ -2096,15 +2656,20 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<materialization_bounded_task_claims>
 	construct_materialization_bounded_task_claims_impl(
+		materialization_bounded_task_factory_seal factory_seal,
 		const materialization_claim_request_view& request,
 		const std::size_t task_index,
 		const sealed_materialization_result& result,
 		const materialization_producer_authority* const producer_authority,
 		const materialization_guarantee_authority* const guarantee_authority,
-		const materialization_v2_1_claim_authority* const v2_authority)
+		const materialization_v2_1_claim_authority* const v2_authority,
+		std::string sealed_request_entry_binding_digest)
 	{
 		try
 		{
+			if (task_index > std::numeric_limits<std::uint64_t>::max())
+				return sdk::unexpected(claim_error(
+					"materialization.task-binding-mismatch", "task-index", "cardinality"));
 			if (request.tasks.empty() || (!v2_authority && task_index >= request.tasks.size()) ||
 				(v2_authority && request.tasks.size() != 1U))
 				return sdk::unexpected(
@@ -2251,6 +2816,8 @@ namespace cxxlens::detail::clang22::materialization
 			std::array<bool, 6U> output_nonempty{};
 			std::set<std::string, std::less<>> base_seen;
 			std::map<partition_key, partition_accumulator> partition_groups;
+			std::map<std::string, std::vector<partition_accumulator*>, std::less<>>
+				source_partitions;
 
 			const auto partition_for = [&](const std::string_view descriptor_id,
 										   const materialization_semantic_task_context& owner,
@@ -2402,6 +2969,9 @@ namespace cxxlens::detail::clang22::materialization
 													   "partition.claim-ref",
 													   "aliases-different-occurrence"));
 				(*partition)->claim_contents.insert(final.content);
+				auto& owners = source_partitions[final.assertion];
+				if (std::ranges::find(owners, *partition) == owners.end())
+					owners.push_back(*partition);
 				return {};
 			};
 
@@ -2594,6 +3164,7 @@ namespace cxxlens::detail::clang22::materialization
 			// Apply the independent hard/soft reference and functional-conflict validator before
 			// any typed partition leaves this task window. The implementation intentionally does
 			// not call sdk::claim_batch::commit or import its verdict routine.
+			std::map<std::string, sdk::unresolved_reference, std::less<>> unresolved_by_assertion;
 			std::vector<const sdk::claim*> reference_space;
 			for (auto& [key, accumulator] : partition_groups)
 				for (auto& [claim_ref, value] : accumulator.claims_by_ref)
@@ -2614,6 +3185,10 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(std::move(descriptor.error()));
 				for (const auto& reference : descriptor->descriptor().references)
 				{
+					if (reference.source_columns.empty() ||
+						reference.source_columns.size() != reference.target_columns.size())
+						return sdk::unexpected(claim_error(
+							"materialization.claim-invalid", value->descriptor, "reference-shape"));
 					const auto absent = [&]()
 					{
 						return std::ranges::any_of(
@@ -2627,96 +3202,131 @@ namespace cxxlens::detail::clang22::materialization
 					};
 					if (absent())
 						continue;
-					const auto matches = [&](const std::optional<std::string_view> element)
+					const auto matches =
+						[&](const std::optional<std::string_view> element) -> sdk::result<bool>
 					{
-						return std::ranges::any_of(
-							reference_space,
-							[&](const sdk::claim* target)
+						for (const auto* target : reference_space)
+						{
+							auto target_descriptor = request.engine.require_id(target->descriptor);
+							if (!target_descriptor)
+								return sdk::unexpected(std::move(target_descriptor.error()));
+							if (target_descriptor->descriptor().name != reference.target_relation)
+								continue;
+							if (value->interpretation != target->interpretation ||
+								value->presence.universe != target->presence.universe ||
+								!std::ranges::includes(target->presence.fragments,
+													   value->presence.fragments))
+								continue;
+							bool matched = true;
+							for (std::size_t index{}; index < reference.source_columns.size();
+								 ++index)
 							{
-								auto target_descriptor =
-									request.engine.require_id(target->descriptor);
-								if (!target_descriptor ||
-									target_descriptor->descriptor().name !=
-										reference.target_relation)
-									return false;
-								if (value->interpretation != target->interpretation ||
-									value->presence.universe != target->presence.universe ||
-									!std::ranges::includes(target->presence.fragments,
-														   value->presence.fragments))
-									return false;
-								for (std::size_t index{}; index < reference.source_columns.size();
-									 ++index)
+								const auto left =
+									value->row.cells.find(reference.source_columns[index]);
+								const auto right =
+									target->row.cells.find(reference.target_columns[index]);
+								if (left == value->row.cells.end() ||
+									right == target->row.cells.end() ||
+									left->second.state != sdk::cell_state::present ||
+									right->second.state != sdk::cell_state::present ||
+									!left->second.value || !right->second.value)
 								{
-									const auto left =
-										value->row.cells.find(reference.source_columns[index]);
-									const auto right =
-										target->row.cells.find(reference.target_columns[index]);
-									if (left == value->row.cells.end() ||
-										right == target->row.cells.end() ||
-										left->second.state != sdk::cell_state::present ||
-										right->second.state != sdk::cell_state::present ||
-										!left->second.value || !right->second.value)
-										return false;
-									if (reference.container_elements)
-									{
-										if (!element)
-											return false;
-										const auto* target_value =
-											std::get_if<std::string>(&*right->second.value);
-										if (target_value == nullptr || *target_value != *element)
-											return false;
-									}
-									else if (left->second.value != right->second.value)
-										return false;
+									matched = false;
+									break;
 								}
+								if (reference.container_elements)
+								{
+									if (!element)
+									{
+										matched = false;
+										break;
+									}
+									const auto* target_value =
+										std::get_if<std::string>(&*right->second.value);
+									if (target_value == nullptr || *target_value != *element)
+									{
+										matched = false;
+										break;
+									}
+								}
+								else if (left->second.value != right->second.value)
+								{
+									matched = false;
+									break;
+								}
+							}
+							if (matched)
 								return true;
-							});
+						}
+						return false;
 					};
 					bool resolved{};
 					if (reference.container_elements)
 					{
+						if (reference.source_columns.size() != 1U)
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   value->descriptor,
+															   "reference-container-shape"));
 						const auto source = value->row.cells.find(reference.source_columns.front());
-						std::vector<std::string> elements;
-						if (source != value->row.cells.end() && source->second.value)
+						if (source == value->row.cells.end())
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   value->descriptor,
+															   "reference-container-source"));
+						auto elements = reference_container_elements(source->second);
+						if (!elements)
+							return sdk::unexpected(std::move(elements.error()));
+						resolved = !elements->empty();
+						for (const auto& element : *elements)
 						{
-							if (const auto* encoded =
-									std::get_if<std::vector<std::byte>>(&*source->second.value))
-							{
-								for (std::size_t offset{}; offset < encoded->size();)
-								{
-									if (encoded->size() - offset < sizeof(std::uint32_t))
-										break;
-									std::uint32_t length{};
-									for (std::size_t byte{}; byte < sizeof(length); ++byte)
-										length |= std::to_integer<std::uint32_t>(
-													  (*encoded)[offset + byte])
-											<< (byte * 8U);
-									offset += sizeof(length);
-									if (length == 0U || length > encoded->size() - offset)
-										break;
-									elements.emplace_back(
-										reinterpret_cast<const char*>(encoded->data() + offset),
-										length);
-									offset += length;
-								}
-							}
+							auto matched = matches(std::string_view{element});
+							if (!matched)
+								return sdk::unexpected(std::move(matched.error()));
+							resolved = resolved && *matched;
 						}
-						resolved = !elements.empty() &&
-							std::ranges::all_of(elements,
-												[&](const std::string& element)
-												{
-													return matches(std::string_view{element});
-												});
 					}
 					else
-						resolved = matches(std::nullopt);
+					{
+						auto matched = matches(std::nullopt);
+						if (!matched)
+							return sdk::unexpected(std::move(matched.error()));
+						resolved = *matched;
+					}
 					if (!resolved)
-						return sdk::unexpected(
-							claim_error("materialization.claim-invalid",
-										value->descriptor,
-										reference.strength == sdk::reference_strength::hard
-											? "hard-reference-missing"
-											: "soft-reference-unresolved"));
+					{
+						if (reference.strength == sdk::reference_strength::hard)
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   value->descriptor,
+															   "hard-reference-missing"));
+						const auto owners = source_partitions.find(value->assertion);
+						if (owners == source_partitions.end() || owners->second.empty())
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   "partition.unresolved",
+															   "source-claim-owner-missing"));
+						const sdk::unresolved_reference unresolved{
+							value->assertion,
+							value->descriptor,
+							reference.target_relation,
+							reference.source_columns,
+							"soft-reference-missing",
+						};
+						auto [prior, inserted] =
+							unresolved_by_assertion.emplace(value->assertion, unresolved);
+						if (!inserted && !same_unresolved_metadata(prior->second, unresolved))
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   "partition.unresolved",
+															   "ambiguous-source-assertion"));
+						for (auto* owner : owners->second)
+						{
+							if (owner->draft.relation_descriptor_id != value->descriptor)
+								return sdk::unexpected(claim_error("materialization.claim-invalid",
+																   "partition.unresolved",
+																   "source-relation-binding"));
+							owner->draft.unresolved.push_back(unresolved);
+							// Keep the exact source claim, but downgrade the containing partition
+							// because its soft semantic closure is open.
+							owner->draft.precision_profile = "under_approximation";
+						}
+					}
 				}
 			}
 
@@ -2755,6 +3365,42 @@ namespace cxxlens::detail::clang22::materialization
 											: "differential-disagreement"));
 				}
 
+			std::set<std::string, std::less<>> under_approximate_final_refs;
+			for (auto& [key, accumulator] : partition_groups)
+			{
+				(void)key;
+				if (accumulator.draft.precision_profile != "under_approximation")
+					continue;
+				for (auto& [claim_ref, claim] : accumulator.claims_by_ref)
+				{
+					claim.guarantee.approximation = "under_approximation";
+					under_approximate_final_refs.insert(claim_ref);
+				}
+			}
+			if (!under_approximate_final_refs.empty())
+			{
+				auto remap = rebind_under_approximate_envelopes(
+					envelopes, edges, associations, under_approximate_final_refs);
+				if (!remap)
+					return sdk::unexpected(std::move(remap.error()));
+				for (auto& [key, accumulator] : partition_groups)
+				{
+					(void)key;
+					std::map<std::string, sdk::claim, std::less<>> rebound_claims;
+					for (const auto& [claim_ref, claim] : accumulator.claims_by_ref)
+					{
+						auto rebound_ref = remap->find(claim_ref);
+						const auto& target_ref =
+							rebound_ref == remap->end() ? claim_ref : rebound_ref->second;
+						if (!rebound_claims.emplace(target_ref, claim).second)
+							return sdk::unexpected(claim_error("materialization.claim-invalid",
+															   "partition.claim-ref",
+															   "rebound-collision"));
+					}
+					accumulator.claims_by_ref = std::move(rebound_claims);
+				}
+			}
+
 			std::vector<materialization_claim_partition> partitions;
 			partitions.reserve(partition_groups.size());
 			std::map<std::string, std::uint64_t, std::less<>> association_count_by_ref;
@@ -2776,6 +3422,7 @@ namespace cxxlens::detail::clang22::materialization
 					(void)coverage_id;
 					accumulator.draft.coverage.push_back(coverage);
 				}
+				canonicalize_unresolved(accumulator.draft.unresolved);
 				auto manifest = sdk::make_partition_manifest(request.engine, accumulator.draft);
 				if (!manifest)
 					return sdk::unexpected(claim_error("materialization.claim-invalid",
@@ -2793,7 +3440,8 @@ namespace cxxlens::detail::clang22::materialization
 				std::vector<std::string> contents{accumulator.claim_contents.begin(),
 												  accumulator.claim_contents.end()};
 				if (manifest->claim_count != contents.size() ||
-					manifest->complete != !accumulator.coverage.empty())
+					manifest->complete !=
+						(!accumulator.coverage.empty() && accumulator.draft.unresolved.empty()))
 					return sdk::unexpected(claim_error("materialization.claim-invalid",
 													   "partition-manifest",
 													   "census-or-completeness"));
@@ -2849,15 +3497,22 @@ namespace cxxlens::detail::clang22::materialization
 				association_values.push_back(std::move(association));
 			}
 
-			return materialization_bounded_task_claims{basis->materializer_semantics,
-													   basis->direct_basis,
-													   basis->canonical_transform,
-													   basis->base_transform,
-													   assumption_set,
-													   std::move(envelope_values),
-													   std::move(edge_values),
-													   std::move(association_values),
-													   std::move(partitions)};
+			auto bounded =
+				materialization_bounded_task_claims{std::move(factory_seal),
+													static_cast<std::uint64_t>(task_index),
+													std::move(sealed_request_entry_binding_digest),
+													basis->materializer_semantics,
+													basis->direct_basis,
+													basis->canonical_transform,
+													basis->base_transform,
+													assumption_set,
+													std::move(envelope_values),
+													std::move(edge_values),
+													std::move(association_values),
+													std::move(partitions)};
+			if (auto valid = bounded.validate_factory_seal(); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return bounded;
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -2875,10 +3530,23 @@ namespace cxxlens::detail::clang22::materialization
 		const materialization_producer_authority& producer_authority,
 		const materialization_guarantee_authority& guarantee_authority)
 	{
+		materialization_bounded_task_factory_seal factory_seal;
+		auto selected_entry =
+			seal_materialization_incremental_selected_request_entry_binding(request, task_index);
+		if (!selected_entry)
+			return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+											   "selected-request-entry",
+											   nested_error(selected_entry.error())));
 		const materialization_claim_request_view request_view{
 			request.catalog, request.engine, request.tasks, &request.document.root()};
-		return construct_materialization_bounded_task_claims_impl(
-			request_view, task_index, result, &producer_authority, &guarantee_authority, nullptr);
+		return construct_materialization_bounded_task_claims_impl(std::move(factory_seal),
+																  request_view,
+																  task_index,
+																  result,
+																  &producer_authority,
+																  &guarantee_authority,
+																  nullptr,
+																  std::move(*selected_entry));
 	}
 
 	materialization_v2_1_claim_authority::materialization_v2_1_claim_authority(
@@ -3067,8 +3735,15 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
+			materialization_bounded_task_factory_seal factory_seal;
 			if (auto valid = validate_v2_1_task_window(authority, task_index, task); !valid)
 				return sdk::unexpected(std::move(valid.error()));
+			auto selected_entry = seal_materialization_incremental_selected_request_entry_binding(
+				authority, task_index, task);
+			if (!selected_entry)
+				return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
+												   "selected-request-entry",
+												   nested_error(selected_entry.error())));
 
 			validated_task_request current{task.input,
 										   task.metadata.provider_task_id,
@@ -3085,8 +3760,14 @@ namespace cxxlens::detail::clang22::materialization
 					claim_error("materialization.identity-mismatch", "claim-authority", "owner"));
 			const materialization_claim_request_view request_view{
 				*catalog, *engine, current_task, nullptr};
-			return construct_materialization_bounded_task_claims_impl(
-				request_view, task_index, result, nullptr, nullptr, &authority);
+			return construct_materialization_bounded_task_claims_impl(std::move(factory_seal),
+																	  request_view,
+																	  task_index,
+																	  result,
+																	  nullptr,
+																	  nullptr,
+																	  &authority,
+																	  std::move(*selected_entry));
 		}
 		catch (const std::bad_alloc&)
 		{

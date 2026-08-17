@@ -1,1213 +1,774 @@
 #!/usr/bin/env python3
-"""Validate Wave 0 API development readiness and emit an exact-SHA baseline."""
+"""Validate Wave 0 readiness plus the #291 acceleration contract.
+
+The pre-#291 checker remains the frozen baseline oracle.  This module composes
+that oracle with CI tiering, event-driven qualification, the first demand-closed
+#261 use case, and exact agent-context generation.  The composition deliberately
+preserves every previous readiness invariant while replacing only the workflow
+assumptions superseded by #291.
+"""
 
 from __future__ import annotations
 
 import argparse
 import copy
-import datetime
-import functools
 import hashlib
 import json
 import pathlib
 import re
-import shlex
-import subprocess
 import sys
-import xml.etree.ElementTree as ET
+import tempfile
+import types
 from typing import Any
 
-import jsonschema
 import yaml
-
-import public_callable_inventory as callable_inventory
-import check_ng_production_scope_closure as production_scope
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-MANIFEST = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
-MANIFEST_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_api_development_readiness.schema.yaml"
+BASELINE_PATH = pathlib.Path(
+    "tools/quality/check_ng_api_development_readiness_wave0_baseline.py"
 )
-REPORT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml"
+BASELINE_DIGEST = "sha256:c9447cf1bae5b41dacd9a9377451fe02cb9076b01f199ce7625e2b740e67eb4b"
+MANIFEST_PATH = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
+QUALITY_PATH = pathlib.Path(".github/workflows/quality.yml")
+NIGHTLY_PATH = pathlib.Path(".github/workflows/nightly.yml")
+BUILD_TEST_GUIDE_PATH = pathlib.Path("docs/development/build-and-test.md")
+AGENT_GOAL_PATH = pathlib.Path("docs/development/agent-api-development-goal.md")
+PACKET_JSON_NAME = "cxxlens-ng-agent-context-issue-261.json"
+PACKET_MARKDOWN_NAME = "cxxlens-ng-agent-context-issue-261.md"
+USE_CASE_ID = "repository-semantic-query.explain-translation-unit.v1"
+ISSUE_ID = "#261"
+HEX40 = re.compile(r"^[0-9a-f]{40}$")
+CANONICAL_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\.v[0-9]+(?:_[0-9]+)?$")
+BOUNDED_COMPLETION_GOAL_MARKERS = (
+    "completion-class: bounded-implementation",
+    "production-qualification: not-claimed-by-default",
+    "issue-close-owner: bounded-issue-or-explicit-qualification-gate",
+    "aggregate-qualification-owner: exact-merged-main-integration-readiness-release",
+    "reopen-condition: bounded-acceptance-or-scope-regression-only",
 )
-RELEASE_BUNDLE = pathlib.Path("schemas/cxxlens_ng_release_bundle.yaml")
-PUBLIC_API = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.yaml")
-RELATION_REGISTRY = pathlib.Path("schemas/cxxlens_ng_relation_registry.yaml")
-ACCEPTANCE = pathlib.Path("schemas/cxxlens_ng_acceptance_manifest.yaml")
-PUBLIC_CALLABLE_INVENTORY = pathlib.Path(
-    "schemas/cxxlens_ng_public_callable_inventory.yaml"
+BOUNDED_COMPLETION_GOAL_TEXT = (
+    "通常の implementation issue の既定完了クラスは **bounded implementation completion**",
+    "issue を閉じるために distribution 全体の production qualification を再実行・再証明してはなりません。",
+    "`production qualification: not claimed`",
+    "Foundation、Wave 0、G5、`release-evaluation`、normal/final",
+    "exact merged-main SHA の required checks と fail-closed evidence",
+    "全 tracked gap の解消後は `release-evaluation: qualified`",
+    "final-mode production-scope report を同じ exact",
+    "過去 SHA の成功を最終 SHA の evidence として流用しません。",
 )
-PUBLIC_CALLABLE_INVENTORY_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_public_callable_inventory.schema.yaml"
-)
-PUBLIC_CALLABLE_REPORT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml"
-)
-PUBLIC_CALLABLE_CHECKER = pathlib.Path("tools/quality/public_callable_inventory.py")
-PRODUCTION_SCOPE_MANIFEST = pathlib.Path(
-    "schemas/cxxlens_ng_production_scope_closure.yaml"
-)
-PRODUCTION_SCOPE_MANIFEST_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_production_scope_closure.schema.yaml"
-)
-PRODUCTION_SCOPE_REPORT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_production_scope_closure_report.schema.yaml"
-)
-PRODUCTION_SCOPE_CHECKER = pathlib.Path(
-    "tools/quality/check_ng_production_scope_closure.py"
-)
-PRODUCTION_SCOPE_DECISION_ADR = pathlib.Path(
-    "docs/design/adr/0095-production-scope-closure.md"
-)
-IMPLEMENTATION_LEARNING_HANDBOOK = pathlib.Path(
-    "docs/development/implementation-learning/README.md"
-)
-DESIGN_FEEDBACK_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_design_feedback_record.schema.yaml"
-)
-DESIGN_FEEDBACK_CHECKER = pathlib.Path(
-    "tools/quality/check_ng_design_feedback.py"
-)
-DESIGN_FEEDBACK_ISSUE_TEMPLATE = pathlib.Path(
-    ".github/ISSUE_TEMPLATE/design-feedback.yml"
-)
-AGENT_CONTRACT = pathlib.Path("AGENTS.md")
-AGENT_GOAL_CONTRACT = pathlib.Path(
-    "docs/development/agent-api-development-goal.md"
-)
-AUTHORIZATION_DECISION_ADR = pathlib.Path(
-    "docs/design/adr/0094-risk-tiered-goal-authorization.md"
-)
-AUTHORIZATION_POLICY_ID = "CXXLENS_AGENT_AUTHORIZATION_V1"
-AUTHORIZATION_POLICY_TOKEN = re.compile(
-    rf"(?<![A-Za-z0-9_]){re.escape(AUTHORIZATION_POLICY_ID)}(?![A-Za-z0-9_])"
-)
-AUTHORIZATION_COMMON_MARKERS = (
-    "activation: explicit-goal-contract-reference",
-    "non-activation: ordinary-request",
-    "standing-scope: canonical-repository-active-unit",
-    "platform-approval: never-bypass",
-    "protected-main: unit-branch-pr-exact-head-review-merge-exact-merged-main",
-)
-AUTHORIZATION_GOAL_MARKERS = (
-    *AUTHORIZATION_COMMON_MARKERS,
-    "notify-and-continue: reversible-same-contract-issue",
-    "fresh-approval: exact-target-effect-after-disclosure",
-    "external-blocker: evidence-options-stop",
-    "skill-compatibility: prior-goal-authorization-satisfies-generic-approval",
-    "revocation: user-anytime",
-    "direct-main: prohibited",
-    "fresh-approval-reuse: forbidden",
-)
-LEGACY_DIRECT_MAIN_PATTERNS = (
-    re.compile(r"(?:`main`|main)\s*(?:へ|に)\s*(?:直接\s*)?push\s*する"),
-    re.compile(r"push\s+(?:directly\s+)?to\s+`?main`?", re.IGNORECASE),
+LEGACY_GOAL_ISSUE_CLOSE_PATTERNS = (
+    re.compile(r"merged-main qualification と learning checkpoint 後の active issue close"),
+    re.compile(r"production scope に tracked gap がある intermediate unit の merge 後"),
 )
 
 
-class ReadinessError(ValueError):
-    """A fail-closed Wave 0 readiness violation."""
+class AccelerationError(ValueError):
+    """A fail-closed #291 contract violation."""
 
 
-def fail(message: str) -> None:
+def _load_baseline() -> types.ModuleType:
+    baseline_path = ROOT / BASELINE_PATH
+    if not baseline_path.is_file():
+        raise RuntimeError(
+            "the tracked frozen readiness baseline is unavailable: "
+            f"{BASELINE_PATH.as_posix()}"
+        )
+    baseline_source = baseline_path.read_bytes()
+    actual_digest = "sha256:" + hashlib.sha256(baseline_source).hexdigest()
+    if actual_digest != BASELINE_DIGEST:
+        raise RuntimeError("the tracked frozen readiness baseline digest differs")
+    module = types.ModuleType("_cxxlens_wave0_readiness_baseline")
+    module.__file__ = str(baseline_path)
+    module.__package__ = None
+    exec(compile(baseline_source.decode("utf-8"), module.__file__, "exec"), module.__dict__)
+    return module
+
+
+_baseline = _load_baseline()
+_baseline_validate_workflow = _baseline.validate_workflow
+_baseline_validate_documents = _baseline.validate_documents
+_baseline_build_report = _baseline.build_report
+
+# Preserve the complete public helper surface used by existing tests and tools.
+for _name in dir(_baseline):
+    if not _name.startswith("__"):
+        globals().setdefault(_name, getattr(_baseline, _name))
+
+ReadinessError = _baseline.ReadinessError
+
+
+def _fail(message: str) -> None:
     raise ReadinessError(message)
 
 
-@functools.lru_cache(maxsize=8)
-def _parse_public_callable_inventory(text: str) -> dict[str, Any]:
-    value = yaml.safe_load(text)
+def _load_yaml(path: pathlib.Path) -> dict[str, Any]:
+    value = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
-        fail("public callable inventory is not a mapping")
+        _fail(f"expected mapping: {path}")
     return value
 
 
-def load_document(path: pathlib.Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    if path.name == PUBLIC_CALLABLE_INVENTORY.name:
-        value = copy.deepcopy(_parse_public_callable_inventory(text))
-    else:
-        value = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
-    if not isinstance(value, dict):
-        fail(f"expected mapping: {path}")
-    return value
+def _canonical_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
-def validate_schema(document: Any, schema: dict[str, Any], label: str) -> None:
-    try:
-        jsonschema.Draft202012Validator.check_schema(schema)
-        jsonschema.Draft202012Validator(
-            schema,
-            format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER,
-        ).validate(document)
-    except (jsonschema.SchemaError, jsonschema.ValidationError) as error:
-        fail(f"{label} schema validation failed: {error.message}")
+def _semantic_digest(value: Any) -> str:
+    return "sha256:" + hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
-def sha256(path: pathlib.Path) -> str:
+def _file_digest(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def public_header_inventory(root: pathlib.Path) -> tuple[list[str], list[str]]:
-    catalog = load_document(root / PUBLIC_API)
-    registry = load_document(root / RELATION_REGISTRY)
-    admitted = {
-        header
-        for collection in (catalog["packages"], catalog["entries"])
-        for row in collection
-        for header in row["headers"]
-    }
-    actual = {
-        path.relative_to(root).as_posix()
-        for path in (root / "include/cxxlens").rglob("*.hpp")
-    }
-    if actual != admitted:
-        fail(
-            "catalog-driven public header inventory differs: "
-            f"missing={sorted(admitted - actual)}, extra={sorted(actual - admitted)}"
-        )
-
-    registry_relation_headers = {
-        "include/cxxlens/relations/" + row["name"].replace(".", "_") + ".hpp"
-        for row in registry["relations"]
-        if row.get("generated_cpp_tag")
-    }
-    admitted_relation_headers = {
-        header
-        for header in admitted
-        if header.startswith("include/cxxlens/relations/")
-    }
-    unbound = sorted(admitted_relation_headers - registry_relation_headers)
-    if unbound:
-        fail(f"catalog relation headers lack registry binding: {unbound}")
-    unadmitted = sorted(registry_relation_headers - admitted_relation_headers)
-    if unadmitted:
-        fail(f"installed-static registry headers lack catalog admission: {unadmitted}")
-    return sorted(actual), sorted(admitted_relation_headers)
+def _normalized_condition(value: Any) -> str:
+    return " ".join(value.split()) if isinstance(value, str) else ""
 
 
-def cmake_direct_dependencies(root: pathlib.Path) -> dict[str, list[str]]:
-    text = (root / "CMakeLists.txt").read_text(encoding="utf-8")
-    internal_to_public = {
-        "cxxlens_base": "cxxlens::base",
-        "cxxlens_kernel": "cxxlens::kernel",
-        "cxxlens_query": "cxxlens::query",
-        "cxxlens_cpp": "cxxlens::cpp",
-        "cxxlens_recipes": "cxxlens::recipes",
-        "cxxlens": "cxxlens::cxxlens",
-        "cxxlens_provider_sdk": "cxxlens::provider_sdk",
-    }
-    graph = {public: [] for public in internal_to_public.values()}
-    for body in re.findall(r"target_link_libraries\s*\((.*?)\)", text, re.DOTALL):
-        tokens = [token.strip('"') for token in re.findall(r'"[^"]*"|\S+', body)]
-        if not tokens or tokens[0] not in internal_to_public:
-            continue
-        target = internal_to_public[tokens[0]]
-        visibility = "PRIVATE"
-        dependencies: list[str] = []
-        for token in tokens[1:]:
-            if token in {"PUBLIC", "PRIVATE", "INTERFACE"}:
-                visibility = token
-            elif visibility in {"PUBLIC", "INTERFACE"} and token in graph:
-                dependencies.append(token)
-        if graph[target]:
-            fail(f"public target has multiple link declarations: {target}")
-        graph[target] = dependencies
-    return graph
+def validate_bounded_completion_contract(root: pathlib.Path) -> None:
+    """Keep the activated /goal contract aligned with completion-policy #291."""
+    goal = (root / AGENT_GOAL_PATH).read_text(encoding="utf-8")
+    for marker in BOUNDED_COMPLETION_GOAL_MARKERS:
+        if goal.count(f"`{marker}`") != 1:
+            _fail(f"bounded completion marker is missing or duplicated in goal: {marker}")
+    normalized_goal = re.sub(r"\s+", " ", goal)
+    for phrase in BOUNDED_COMPLETION_GOAL_TEXT:
+        if re.sub(r"\s+", " ", phrase) not in normalized_goal:
+            _fail(f"bounded completion contract text is missing from goal: {phrase}")
+    for pattern in LEGACY_GOAL_ISSUE_CLOSE_PATTERNS:
+        if pattern.search(goal):
+            _fail("legacy issue-close requirement remains in the activated goal contract")
 
 
-def validate_target_contract(root: pathlib.Path, manifest: dict[str, Any]) -> None:
-    expected = manifest["target_contract"]["direct_dependencies"]
-    bundle = load_document(root / RELEASE_BUNDLE)
-    declared = {
-        row["name"]: row["direct_dependencies"]
-        for row in bundle["distribution_surface"]["public_targets"]
-    }
-    if declared != expected:
-        fail(f"release target graph differs: expected={expected}, actual={declared}")
-    actual = cmake_direct_dependencies(root)
-    if actual != expected:
-        fail(f"CMake target graph differs: expected={expected}, actual={actual}")
+def _canonical_repo_path(value: str) -> bool:
+    if not value or value.startswith(('/', '\\')) or '\\' in value or value.endswith('/'):
+        return False
+    parts = value.split('/')
+    return all(part not in ('', '.', '..') and '\x00' not in part for part in parts)
 
-    catalog = load_document(root / PUBLIC_API)
-    packages = {row["id"]: row for row in catalog["packages"]}
-    author = packages.get("author-sdk")
-    if author is None or author["target"] != "cxxlens::provider_sdk":
-        fail("author SDK package binding is missing")
-    if author["link_dependencies"] != expected["cxxlens::provider_sdk"]:
-        fail("author SDK package dependencies differ from the target graph")
-    if "core-sdk" not in packages:
-        fail("core umbrella package is absent from the public API catalog")
 
-    umbrella = (root / "include/cxxlens/sdk.hpp").read_text(encoding="utf-8")
-    for header in (
-        "claim.hpp",
-        "common.hpp",
-        "incremental.hpp",
-        "provider.hpp",
-        "query.hpp",
-        "recipe.hpp",
-        "relation.hpp",
-        "store.hpp",
-        "testing.hpp",
+def _product_contract(manifest: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    product = manifest.get("product_direction")
+    if not isinstance(product, dict):
+        _fail("product direction is missing")
+    roadmap = product.get("roadmap")
+    agent = product.get("agent_context")
+    if not isinstance(roadmap, dict) or not isinstance(agent, dict):
+        _fail("demand closure or agent-context authority is missing")
+    families = roadmap.get("use_case_families")
+    if not isinstance(families, list):
+        _fail("use-case family inventory is missing")
+    matches = [row for row in families if isinstance(row, dict) and row.get("use_case_id") == USE_CASE_ID]
+    if len(matches) != 1:
+        _fail(f"exactly one admitted #261 use case is required: {USE_CASE_ID}")
+    packet = agent.get("first_packet")
+    if not isinstance(packet, dict):
+        _fail("the first #261 agent packet template is missing")
+    return matches[0], packet
+
+
+def validate_demand_closure(root: pathlib.Path, manifest: dict[str, Any]) -> None:
+    use_case, packet = _product_contract(manifest)
+    result_states = manifest["product_direction"]["result_contract"]["states"]
+    expected_path = [
+        "input.source-closure.v1",
+        "input.effective-invocation.v1",
+        "provider.clang22-materialization.v2_1",
+        "artifact.semantic-snapshot.v1",
+        "recipe.explain-translation-unit.v1",
+    ]
+    if use_case.get("id") != "repository-semantic-query":
+        _fail("#261 use-case family identifier differs")
+    if use_case.get("consumer") != "cxxmonster":
+        _fail("#261 flagship consumer must be cxxmonster")
+    if use_case.get("expected_result_states") != result_states:
+        _fail("#261 result states differ from the product result algebra")
+    capabilities = use_case.get("capability_path")
+    if not isinstance(capabilities, list) or [row.get("id") for row in capabilities if isinstance(row, dict)] != expected_path:
+        _fail("#261 capability path differs or is not dependency ordered")
+    if len({row["id"] for row in capabilities}) != len(capabilities):
+        _fail("#261 capability path contains duplicate IDs")
+    for row in capabilities:
+        identifier = row.get("id")
+        if not isinstance(identifier, str) or CANONICAL_ID.fullmatch(identifier) is None:
+            _fail(f"non-canonical capability ID: {identifier}")
+        dependencies = row.get("requires")
+        if not isinstance(dependencies, list):
+            _fail(f"capability dependencies are missing: {identifier}")
+        unknown = sorted(set(dependencies) - set(expected_path))
+        if unknown:
+            _fail(f"unknown #261 capability dependency: {identifier}:{unknown}")
+        if any(expected_path.index(dep) >= expected_path.index(identifier) for dep in dependencies):
+            _fail(f"cyclic or forward #261 capability dependency: {identifier}")
+    source_closure = capabilities[0]
+    if source_closure.get("disposition") != "blocked" or source_closure.get("owner_issue") != ISSUE_ID:
+        _fail("source-closure capability must remain blocked by #261")
+    if use_case.get("disposition") != "blocked" or use_case.get("tracking_issue") != ISSUE_ID:
+        _fail("#261 use case must remain explicitly blocked")
+    semantics = use_case.get("preserved_semantics")
+    required_semantics = manifest["product_direction"]["result_contract"]["preserved_semantics"]
+    if semantics != required_semantics:
+        _fail("#261 use case drops required partiality/evidence semantics")
+    gap = use_case.get("tracked_gap")
+    if not isinstance(gap, dict):
+        _fail("#261 tracked gap is missing")
+    if gap.get("reason_code") != "source-closure-unavailable" or gap.get("owner_issue") != ISSUE_ID:
+        _fail("#261 tracked-gap reason or owner differs")
+    plan = gap.get("completion_plan")
+    if not isinstance(plan, list) or len(plan) != 4 or len(set(plan)) != 4:
+        _fail("#261 completion plan must contain four ordered review units")
+    if gap.get("reevaluation_trigger") != "cxxmonster-self-repository-e2e-exact-sha":
+        _fail("#261 reevaluation trigger differs")
+
+    if packet.get("packet_id") != "agent-context.issue-261.explain-translation-unit.v1":
+        _fail("#261 packet ID differs")
+    if packet.get("issue") != ISSUE_ID or packet.get("use_case_id") != USE_CASE_ID:
+        _fail("#261 packet binding differs")
+    if packet.get("capability_path") != expected_path:
+        _fail("#261 packet capability path differs")
+    contract_ids = packet.get("exact_contract_ids")
+    if not isinstance(contract_ids, list) or len(contract_ids) != len(set(contract_ids)):
+        _fail("#261 packet contract IDs are absent or duplicated")
+    for identifier in contract_ids:
+        if not isinstance(identifier, str) or CANONICAL_ID.fullmatch(identifier) is None:
+            _fail(f"non-canonical #261 contract ID: {identifier}")
+    for key in ("authority_reading_set", "allowed_write_paths"):
+        values = packet.get(key)
+        if not isinstance(values, list) or not values:
+            _fail(f"#261 packet field is empty: {key}")
+        for value in values:
+            if not isinstance(value, str) or not _canonical_repo_path(value):
+                _fail(f"#261 packet path is not canonical: {key}:{value}")
+    for key in (
+        "required_evidence",
+        "known_design_feedback",
+        "forbidden_shortcuts",
+        "completion_commands",
+        "completion_plan",
     ):
-        if f"<cxxlens/sdk/{header}>" not in umbrella:
-            fail(f"high-level author SDK umbrella is missing {header}")
-
-
-def validate_gate_ownership(root: pathlib.Path, manifest: dict[str, Any]) -> None:
-    entries = {
-        row["id"]: row
-        for row in load_document(root / ACCEPTANCE)["entries"]
-    }
-    expected = manifest["gate_ownership"]
-    if entries["gate.foundation"]["owner_issue"] != expected["foundation"]:
-        fail("Foundation gate owner differs")
-    if entries["gate.g5"]["owner_issue"] != expected["g5"]:
-        fail("G5 gate owner differs")
-    if entries["gate.release"]["owner_issue"] != expected["release"]:
-        fail("release gate owner differs")
-    for identifier in ("gate.g5", "gate.release"):
-        if entries[identifier]["owner_issue"] != entries[identifier]["contract_issue"]:
-            fail(f"gate owner/contract issue differs: {identifier}")
-
-
-def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
-    workflow = (root / ".github/workflows/quality.yml").read_text(encoding="utf-8")
-    try:
-        workflow_document = yaml.safe_load(workflow)
-    except yaml.YAMLError as error:
-        fail(f"quality workflow YAML is invalid: {error}")
-    if not isinstance(workflow_document, dict) or not isinstance(
-        workflow_document.get("jobs"), dict
-    ):
-        fail("quality workflow jobs mapping is missing")
-    workflow_jobs = workflow_document["jobs"]
-    if workflow_document.get(True) != {"pull_request": None, "push": None}:
-        fail("quality workflow triggers must be unrestricted pull_request and push")
-    if workflow_document.get("env") != {
-        "CMAKE_GENERATOR": "Ninja",
-        "CMAKE_BUILD_PARALLEL_LEVEL": "${{ vars.CXXLENS_BUILD_JOBS || 4 }}",
-        "CTEST_PARALLEL_LEVEL": "${{ vars.CXXLENS_TEST_JOBS || 4 }}",
+        values = packet.get(key)
+        if not isinstance(values, list) or not values or len(values) != len(set(values)):
+            _fail(f"#261 packet list is absent or duplicated: {key}")
+    constructibility = packet.get("constructibility")
+    if constructibility != {
+        "disposition": "blocked",
+        "reason": "accepted-source-closure-authority-and-independent-review-required",
+        "gate_issue": "#276",
     }:
-        fail("quality workflow global environment differs")
-    if "defaults" in workflow_document:
-        fail("quality workflow must not define global run defaults")
-    if "branches: [main]" in workflow:
-        fail("pre-main exact-SHA validation requires push checks on non-main branches")
-    for job in (
+        _fail("#261 constructibility disposition differs")
+    binding = packet.get("binding")
+    if binding != {
+        "revision": "runtime-required",
+        "tree": "runtime-required",
+        "authority_digest": "runtime-derived",
+        "stale_policy": "reject",
+    }:
+        _fail("#261 packet runtime binding policy differs")
+
+
+def _workflow_jobs(document: dict[str, Any], label: str) -> dict[str, Any]:
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        _fail(f"{label} jobs mapping is missing")
+    return jobs
+
+
+def _job(document: dict[str, Any], name: str) -> dict[str, Any]:
+    job = _workflow_jobs(document, "quality workflow").get(name)
+    if not isinstance(job, dict):
+        _fail(f"required CI tier job is missing: {name}")
+    return job
+
+
+def _step(job: dict[str, Any], name: str) -> dict[str, Any]:
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        _fail(f"CI job steps are missing: {name}")
+    matches = [row for row in steps if isinstance(row, dict) and row.get("name") == name]
+    if len(matches) != 1:
+        _fail(f"CI step must occur exactly once: {name}")
+    return matches[0]
+
+
+_QUALITY_TRIGGER = """on:\n  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]\n  push:\n    branches:\n      - main\n"""
+_LEGACY_QUALITY_TRIGGER = """on:\n  pull_request:\n  push:\n"""
+_NIGHTLY_TRIGGER = """on:\n  workflow_call:\n  schedule:\n    - cron: \"17 18 * * *\"\n  workflow_dispatch:\n"""
+_LEGACY_NIGHTLY_TRIGGER = """on:\n  push:\n    branches:\n      - main\n  schedule:\n    - cron: \"17 18 * * *\"\n  workflow_dispatch:\n"""
+_NIGHTLY_CONCURRENCY = """concurrency:\n  group: nightly-quality-${{ github.sha }}\n  cancel-in-progress: false\n"""
+_LEGACY_NIGHTLY_CONCURRENCY = """concurrency:\n  group: nightly-quality-${{ github.event_name == 'schedule' && 'scheduled' || 'rolling-main' }}\n  cancel-in-progress: ${{ github.event_name != 'schedule' }}\n"""
+_NEW_RELEASE_NEEDS = "needs: [nightly-quality, g5-qualification, sqlite-store-v3-qualification]"
+_LEGACY_RELEASE_NEEDS = "needs: [g5-qualification, sqlite-store-v3-qualification]"
+
+_SETUP_DEVELOPER = """      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+"""
+_SETUP_STATIC_ANALYSIS = """      - uses: ./.github/actions/setup-ci
+        with:
+          profile: static-analysis
+"""
+_SETUP_NONE = """      - uses: ./.github/actions/setup-ci
+        with:
+          profile: none
+"""
+_SETUP_DEVELOPER_DOCUMENTATION_ONLY = """      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+          documentation: "true"
+          python-dependencies: "false"
+"""
+_LEGACY_PYTHON_SETUP = """      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12.11"
+      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+"""
+_LEGACY_DEVELOPER_SETUP = """      - name: Install exact Clang 22 toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+""" + _LEGACY_PYTHON_SETUP
+_LEGACY_STATIC_ANALYSIS_SETUP = """      - name: Install Clang tools
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile static-analysis
+""" + _LEGACY_PYTHON_SETUP
+_LEGACY_DEVELOPER_DOCUMENTATION_ONLY = """      - name: Install exact Clang 22 toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+      - name: Install exact Doxygen toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile documentation
+"""
+
+
+def _project_legacy_setup(text: str) -> str:
+    replacements = (
+        (_SETUP_DEVELOPER_DOCUMENTATION_ONLY, _LEGACY_DEVELOPER_DOCUMENTATION_ONLY),
+        (_SETUP_STATIC_ANALYSIS, _LEGACY_STATIC_ANALYSIS_SETUP),
+        (_SETUP_DEVELOPER, _LEGACY_DEVELOPER_SETUP),
+        (_SETUP_NONE, _LEGACY_PYTHON_SETUP),
+    )
+    for current, legacy in replacements:
+        text = text.replace(current, legacy)
+    if "./.github/actions/setup-ci" in text:
+        _fail("legacy setup projection left a common setup action reference")
+    return text
+
+_DIRECT_NIGHTLY_DOWNLOAD = """      - name: Download exact-main Nightly evidence\n        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8\n        with:\n          name: cxxlens-nightly-evidence-${{ github.sha }}\n          path: build/release-evaluation-nightly\n"""
+_LEGACY_NIGHTLY_LOOKUP_AND_DOWNLOAD = """      - name: Locate the exact-main Nightly evidence run\n        id: nightly-run\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: |\n          set -euo pipefail\n          run_id=\"\"\n          for attempt in $(seq 1 180); do\n            latest=\"$({\n              gh api --method GET \\\n                \"repos/${GITHUB_REPOSITORY}/actions/workflows/nightly.yml/runs\" \\\n                -f branch=main \\\n                -f head_sha=\"${GITHUB_SHA}\" \\\n                -f per_page=100 \\\n                --jq '([.workflow_runs[] | select((.event == \"push\" or .event == \"schedule\" or .event == \"workflow_dispatch\") and .head_branch == \"main\")] | sort_by(.created_at, .id) | reverse | .[0] | select(.) | [.id, .status, (.conclusion // \"\")] | @tsv) // empty'\n            })\"\n            if [[ -z \"${latest}\" ]]; then\n              sleep 30\n              continue\n            fi\n            IFS=$'\\t' read -r candidate status conclusion <<< \"${latest}\"\n            if [[ \"${status}\" != \"completed\" ]]; then\n              sleep 30\n              continue\n            fi\n            if [[ \"${conclusion}\" != \"success\" ]]; then\n              echo \"exact-main Nightly run ${candidate} completed with ${conclusion}\" >&2\n              exit 1\n            fi\n            run_id=\"${candidate}\"\n            break\n          done\n          if [[ -z \"${run_id}\" ]]; then\n            echo \"no successful exact-main Nightly run became available for ${GITHUB_SHA}\" >&2\n            exit 1\n          fi\n          echo \"run-id=${run_id}\" >> \"${GITHUB_OUTPUT}\"\n      - name: Download exact-main Nightly evidence\n        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8\n        with:\n          name: cxxlens-nightly-evidence-${{ github.sha }}\n          github-token: ${{ github.token }}\n          repository: ${{ github.repository }}\n          run-id: ${{ steps.nightly-run.outputs.run-id }}\n          path: build/release-evaluation-nightly\n"""
+
+
+def _validate_accelerated_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
+    quality_text = (root / QUALITY_PATH).read_text(encoding="utf-8")
+    nightly_text = (root / NIGHTLY_PATH).read_text(encoding="utf-8")
+    try:
+        quality = yaml.safe_load(quality_text)
+        nightly = yaml.safe_load(nightly_text)
+    except yaml.YAMLError as error:
+        _fail(f"accelerated workflow YAML is invalid: {error}")
+    if not isinstance(quality, dict) or not isinstance(nightly, dict):
+        _fail("accelerated workflow document is not a mapping")
+    expected_quality_trigger = {
+        "pull_request": {
+            "types": [
+                "opened",
+                "synchronize",
+                "reopened",
+                "ready_for_review",
+                "converted_to_draft",
+            ]
+        },
+        "push": {"branches": ["main"]},
+    }
+    if quality.get(True) != expected_quality_trigger:
+        _fail("quality workflow must use PR events and main-only push")
+    expected_nightly_trigger = {
+        "workflow_call": None,
+        "schedule": [{"cron": "17 18 * * *"}],
+        "workflow_dispatch": None,
+    }
+    if nightly.get(True) != expected_nightly_trigger:
+        _fail("Nightly must be reusable, scheduled, and manually dispatchable")
+    if nightly.get("concurrency") != {
+        "group": "nightly-quality-${{ github.sha }}",
+        "cancel-in-progress": False,
+    }:
+        _fail("Nightly must retain every exact-SHA stress run")
+    if nightly.get("env", {}).get("CXXLENS_CI_TIER") != "stress":
+        _fail("Nightly must declare the stress tier")
+    nightly_jobs = _workflow_jobs(nightly, "nightly workflow")
+    clean = nightly_jobs.get("clean-full")
+    if not isinstance(clean, dict) or "run_gate.py stress" not in nightly_text:
+        _fail("Nightly stress tier must retain the clean full gate")
+
+    jobs = _workflow_jobs(quality, "quality workflow")
+    for name in (
+        "fast-gate",
         "build-test",
+        "sqlite-store-v3-qualification",
         "quality-contracts",
+        "agent-context",
         "install-consumer",
         "gcc-public-headers",
         "quality-evidence",
+        "check-tier",
         "foundation-completion",
         "wave0-readiness",
         "g5-qualification",
+        "full-tier",
+        "nightly-quality",
         "release-evaluation",
         "release-qualification",
         "production-scope-closure",
     ):
-        if job not in workflow_jobs:
-            fail(f"required CI job is missing: {job}")
-    contexts = manifest["required_status_checks"]["contexts"]
-    if contexts != sorted(contexts):
-        fail("required status contexts must use canonical order")
-    callable_contract = manifest["public_callable_authority"]
+        if name not in jobs:
+            _fail(f"required accelerated CI job is missing: {name}")
+    merged_main_ci_jobs = manifest.get("merged_main_ci_jobs")
+    if not isinstance(merged_main_ci_jobs, list) or not all(
+        isinstance(job, str) and job for job in merged_main_ci_jobs
+    ):
+        _fail("merged-main CI job list is missing or malformed")
+    if "check-tier" in merged_main_ci_jobs:
+        _fail("merged-main CI job list must exclude PR-only check-tier")
+    wave0_report = _step(
+        _job(quality, "wave0-readiness"),
+        "Generate exact-SHA Wave 0 readiness baseline",
+    )
+    report_run = wave0_report.get("run")
+    if not isinstance(report_run, str):
+        _fail("Wave 0 readiness report command is missing")
+    ci_job_matches = re.findall(
+        r"--ci-job\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))", report_run
+    )
+    workflow_ci_jobs = [
+        next(value for value in match if value) for match in ci_job_matches
+    ]
+    if workflow_ci_jobs != merged_main_ci_jobs:
+        _fail(
+            "Wave 0 readiness workflow CI jobs differ from merged-main authority: "
+            f"{workflow_ci_jobs}"
+        )
+    fast = _job(quality, "fast-gate")
+    if _normalized_condition(fast.get("if")) != "github.event_name == 'pull_request' && github.event.pull_request.draft":
+        _fail("fast tier must run only for draft pull requests")
+    if "run_gate.py fast" not in quality_text:
+        _fail("fast tier does not execute run_gate.py fast")
+    ready_condition = "github.event_name != 'pull_request' || !github.event.pull_request.draft"
+    for name in (
+        "build-test",
+        "sqlite-store-v3-qualification",
+        "quality-contracts",
+        "agent-context",
+        "install-consumer",
+        "gcc-public-headers",
+        "quality-evidence",
+    ):
+        if _normalized_condition(_job(quality, name).get("if")) != ready_condition:
+            _fail(f"check/full tier routing differs: {name}")
+    quality_contracts = _job(quality, "quality-contracts")
+    quality_steps = quality_contracts.get("steps")
+    if not isinstance(quality_steps, list):
+        quality_steps = []
+    checkout_steps = [
+        step
+        for step in quality_steps
+        if isinstance(step, dict)
+        and isinstance(step.get("uses"), str)
+        and step["uses"].startswith("actions/checkout@")
+    ]
+    if (
+        len(checkout_steps) != 1
+        or not isinstance(checkout_steps[0].get("with"), dict)
+        or checkout_steps[0]["with"].get("fetch-depth") != 2
+    ):
+        _fail("quality-contracts public callable stable-ID check requires fetch-depth: 2")
+    check = _job(quality, "check-tier")
+    if _normalized_condition(check.get("if")) != "github.event_name == 'pull_request' && !github.event.pull_request.draft":
+        _fail("check tier must close only ready pull requests")
+    if check.get("needs") != [
+        "build-test",
+        "sqlite-store-v3-qualification",
+        "quality-contracts",
+        "agent-context",
+        "install-consumer",
+        "gcc-public-headers",
+        "quality-evidence",
+    ]:
+        _fail("check tier evidence closure differs")
+    required_contexts = manifest.get("required_status_checks", {}).get("contexts")
+    if not isinstance(required_contexts, list) or "check-tier" not in required_contexts:
+        _fail("check tier must be a required pull-request status context")
+    if "sqlite-store-v3-qualification" not in check["needs"]:
+        _fail("required check tier must depend on sqlite qualification")
+    full = _job(quality, "full-tier")
+    main_condition = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    if _normalized_condition(full.get("if")) != main_condition:
+        _fail("full tier must run only for merged main")
+    if full.get("needs") != ["g5-qualification", "sqlite-store-v3-qualification", "agent-context"]:
+        _fail("full tier evidence closure differs")
+    called = _job(quality, "nightly-quality")
+    if _normalized_condition(called.get("if")) != main_condition:
+        _fail("stress tier dispatch must run only for merged main")
+    if called.get("needs") != ["full-tier"] or called.get("uses") != "./.github/workflows/nightly.yml":
+        _fail("stress tier must be an exact-SHA reusable workflow dependency")
+
+    agent_job = _job(quality, "agent-context")
+    plan_step = _step(agent_job, "Generate exact-SHA #261 agent context")
+    run = plan_step.get("run")
     for marker in (
-        callable_contract["checker"],
-        callable_contract["report_filename"],
-        callable_contract["review_filename"],
+        "check_ng_api_development_readiness.py plan",
+        "--issue 261",
         '--expected-revision "${GITHUB_SHA}"',
-        "name: cxxlens-ng-public-callable-inventory-${{ github.sha }}",
+        '--expected-tree "${SOURCE_TREE}"',
+        PACKET_JSON_NAME,
+        PACKET_MARKDOWN_NAME,
     ):
-        if marker not in workflow:
-            fail(f"public callable workflow marker is missing: {marker}")
-    quality_job = re.search(
-        r"(?ms)^  quality-contracts:\n(?P<body>.*?)(?=^  [a-z0-9_-]+:\n|\Z)",
-        workflow,
+        if not isinstance(run, str) or marker not in run:
+            _fail(f"#261 agent-context generation marker is missing: {marker}")
+
+    evaluation = _job(quality, "release-evaluation")
+    if evaluation.get("needs") != [
+        "nightly-quality",
+        "g5-qualification",
+        "sqlite-store-v3-qualification",
+    ]:
+        _fail("release evaluation must depend on exact-SHA stress completion")
+    evaluation_body = json.dumps(evaluation, ensure_ascii=False, sort_keys=True)
+    for forbidden in ("sleep 30", "for attempt in", "gh api", "run-id", "nightly-run"):
+        if forbidden in evaluation_body:
+            _fail(f"release qualification polling is forbidden: {forbidden}")
+    download = _step(evaluation, "Download exact-main Nightly evidence")
+    if download != {
+        "name": "Download exact-main Nightly evidence",
+        "uses": "actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16",
+        "with": {
+            "name": "cxxlens-nightly-evidence-${{ github.sha }}",
+            "path": "build/release-evaluation-nightly",
+        },
+    }:
+        _fail("release evaluation must consume same-run exact-SHA Nightly evidence")
+
+    tiers = manifest.get("ci_tiers")
+    if not isinstance(tiers, dict) or tiers.get("owner_issue") != "#291":
+        _fail("CI tier authority is missing from readiness")
+    if list(tiers.get("tiers", {}).keys()) != ["fast", "check", "full", "stress"]:
+        _fail("CI tier authority must define fast/check/full/stress in order")
+    if tiers.get("qualification", {}).get("polling") != "forbidden":
+        _fail("CI authority must forbid qualification polling")
+
+
+def _validate_required_status_documentation(
+    root: pathlib.Path, manifest: dict[str, Any]
+) -> None:
+    path = root / BUILD_TEST_GUIDE_PATH
+    if not path.is_file():
+        _fail(f"required CI status documentation is missing: {BUILD_TEST_GUIDE_PATH}")
+    document = path.read_text(encoding="utf-8")
+    contexts = manifest.get("required_status_checks", {}).get("contexts")
+    if not isinstance(contexts, list) or not all(isinstance(value, str) for value in contexts):
+        _fail("readiness required status contexts are malformed")
+    expected = (
+        re.escape("production/readiness qualification が所有する required status check は")
+        + r"\s*"
+        + r"、\s*".join(re.escape(f"`{value}`") for value in contexts)
+        + r"\s*の exact set です。"
     )
-    if quality_job is None or "fetch-depth: 2" not in quality_job.group("body"):
-        fail("public callable stable-ID check requires parent history in CI")
-    if not re.search(
-        r"set -o pipefail\s+cmake --build --preset ci-quick --target cxxlens-quality\s+\\\s*2>&1 \| tee build/ci-quick/quality-production\.log",
-        quality_job.group("body"),
-    ):
-        fail("quality evidence pipeline must preserve cxxlens-quality failure status")
-    production_contract = manifest["production_scope_closure"]
-    for marker in (
-        production_contract["checker"],
-        "check_ng_release_qualification.py evaluate",
-        "check_ng_release_qualification.py report",
-        "--mode normal",
-        "name: cxxlens-ng-release-qualification-evaluation-${{ github.sha }}",
-        "name: cxxlens-ng-production-scope-closure-${{ github.sha }}",
-    ):
-        if marker not in workflow:
-            fail(f"production-scope workflow marker is missing: {marker}")
+    if re.search(expected, document) is None:
+        _fail("build/test guide required status checks differ from readiness authority")
 
-    def workflow_job(name: str) -> str:
-        match = re.search(
-            rf"(?ms)^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:|\Z)",
-            workflow,
-        )
-        if match is None:
-            fail(f"production-scope workflow job is missing: {name}")
-        return match.group("body")
 
-    def configured_job(name: str) -> dict[str, Any]:
-        job = workflow_jobs.get(name)
-        if not isinstance(job, dict):
-            fail(f"production-scope workflow job mapping is missing: {name}")
-        return job
-
-    def configured_step(job: dict[str, Any], name: str) -> dict[str, Any]:
-        steps = job.get("steps")
-        if not isinstance(steps, list):
-            fail(f"production-scope workflow steps are missing: {name}")
-        matches = [
-            step
-            for step in steps
-            if isinstance(step, dict) and step.get("name") == name
+def _legacy_projection(root: pathlib.Path, manifest: dict[str, Any]) -> None:
+    quality = _project_legacy_setup(
+        (root / QUALITY_PATH).read_text(encoding="utf-8")
+    )
+    nightly = _project_legacy_setup(
+        (root / NIGHTLY_PATH).read_text(encoding="utf-8")
+    )
+    if _QUALITY_TRIGGER not in quality or _NIGHTLY_TRIGGER not in nightly:
+        _fail("accelerated workflow trigger projection is unavailable")
+    quality = quality.replace(_QUALITY_TRIGGER, _LEGACY_QUALITY_TRIGGER, 1)
+    quality = quality.replace("fetch-depth: 0", "fetch-depth: 2")
+    quality = quality.replace(_NEW_RELEASE_NEEDS, _LEGACY_RELEASE_NEEDS, 1)
+    if _DIRECT_NIGHTLY_DOWNLOAD not in quality:
+        _fail("same-run Nightly download projection is unavailable")
+    quality = quality.replace(
+        _DIRECT_NIGHTLY_DOWNLOAD,
+        _LEGACY_NIGHTLY_LOOKUP_AND_DOWNLOAD,
+        1,
+    )
+    nightly = nightly.replace(_NIGHTLY_TRIGGER, _LEGACY_NIGHTLY_TRIGGER, 1)
+    nightly = nightly.replace(
+        _NIGHTLY_CONCURRENCY,
+        _LEGACY_NIGHTLY_CONCURRENCY,
+        1,
+    )
+    with tempfile.TemporaryDirectory() as temporary:
+        projected = pathlib.Path(temporary)
+        (projected / QUALITY_PATH).parent.mkdir(parents=True, exist_ok=True)
+        (projected / QUALITY_PATH).write_text(quality, encoding="utf-8")
+        (projected / NIGHTLY_PATH).write_text(nightly, encoding="utf-8")
+        legacy_manifest = copy.deepcopy(manifest)
+        legacy_manifest["required_status_checks"]["contexts"] = [
+            context
+            for context in legacy_manifest["required_status_checks"]["contexts"]
+            if context != "check-tier"
         ]
-        if len(matches) != 1:
-            fail(f"production-scope workflow step must occur exactly once: {name}")
-        return matches[0]
-
-    def require_action_step(
-        job: dict[str, Any], expected: dict[str, Any], name: str
-    ) -> int:
-        steps = job.get("steps")
-        if not isinstance(steps, list):
-            fail(f"production-scope workflow steps are missing: {name}")
-        indexes = [index for index, step in enumerate(steps) if step == expected]
-        if len(indexes) != 1:
-            fail(f"production-scope workflow action step differs: {name}")
-        return indexes[0]
-
-    def shell_commands(step: dict[str, Any], name: str) -> list[list[str]]:
-        run = step.get("run")
-        if not isinstance(run, str):
-            fail(f"production-scope workflow step lacks a run script: {name}")
-        commands: list[list[str]] = []
-        continued: list[str] = []
-        for raw_line in run.splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.endswith("\\"):
-                continued.append(line[:-1].rstrip())
-                continue
-            continued.append(line)
-            logical_line = " ".join(continued)
-            continued.clear()
-            try:
-                argv = shlex.split(logical_line, comments=True, posix=True)
-            except ValueError as error:
-                fail(f"production-scope workflow command is invalid in {name}: {error}")
-            if argv:
-                commands.append(argv)
-        if continued:
-            fail(f"production-scope workflow command has a dangling continuation: {name}")
-        return commands
-
-    def normalized_condition(value: Any) -> str:
-        return " ".join(value.split()) if isinstance(value, str) else ""
-
-    evaluation_config = configured_job("release-evaluation")
-    strict_config = configured_job("release-qualification")
-    terminal_config = configured_job("production-scope-closure")
-    expected_job_routing = (
-        (
-            "release-evaluation",
-            evaluation_config,
-            ["g5-qualification", "sqlite-store-v3-qualification"],
-            "github.event_name == 'push' && github.ref == 'refs/heads/main'",
-            {"if", "needs", "runs-on", "outputs", "steps"},
-        ),
-        (
-            "release-qualification",
-            strict_config,
-            ["release-evaluation"],
-            "github.event_name == 'push' && github.ref == 'refs/heads/main' && "
-            "needs.release-evaluation.outputs.qualification == 'qualified'",
-            {"if", "needs", "runs-on", "steps"},
-        ),
-        (
-            "production-scope-closure",
-            terminal_config,
-            ["release-evaluation", "release-qualification"],
-            "always() && github.event_name == 'push' && "
-            "github.ref == 'refs/heads/main'",
-            {"if", "needs", "runs-on", "steps"},
-        ),
-    )
-    for name, job, expected_needs, expected_condition, expected_keys in (
-        expected_job_routing
-    ):
-        if set(job) != expected_keys:
-            fail(f"production-scope job keys differ: {name}")
-        if job.get("runs-on") != "ubuntu-24.04":
-            fail(f"production-scope job runner differs: {name}")
-        if job.get("needs") != expected_needs:
-            fail(f"production-scope job needs differ: {name}")
-        if normalized_condition(job.get("if")) != expected_condition:
-            fail(f"production-scope job condition differs: {name}")
-    if evaluation_config.get("outputs") != {
-        "qualification": "${{ steps.evaluate.outputs.qualification }}"
-    }:
-        fail("release-evaluation qualification output binding differs")
-
-    download_action = (
-        "actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16"
-    )
-    upload_action = (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
-    )
-    evaluation_download_index = require_action_step(
-        evaluation_config,
-        {
-            "uses": download_action,
-            "with": {
-                "pattern": "cxxlens-*-${{ github.sha }}",
-                "path": "build/release-evaluation-input",
-            },
-        },
-        "release-evaluation evidence download",
-    )
-    nightly_download_index = require_action_step(
-        evaluation_config,
-        {
-            "name": "Download exact-main Nightly evidence",
-            "uses": download_action,
-            "with": {
-                "name": "cxxlens-nightly-evidence-${{ github.sha }}",
-                "github-token": "${{ github.token }}",
-                "repository": "${{ github.repository }}",
-                "run-id": "${{ steps.nightly-run.outputs.run-id }}",
-                "path": "build/release-evaluation-nightly",
-            },
-        },
-        "exact-main Nightly evidence download",
-    )
-    evaluation_upload_index = require_action_step(
-        evaluation_config,
-        {
-            "uses": upload_action,
-            "with": {
-                "name": (
-                    "cxxlens-ng-release-qualification-evaluation-${{ github.sha }}"
-                ),
-                "path": (
-                    "${{ runner.temp }}/cxxlens-ng-security-conformance-report.json\n"
-                    "${{ runner.temp }}/"
-                    "cxxlens-ng-release-qualification-evaluation-report.json\n"
-                ),
-                "if-no-files-found": "error",
-                "retention-days": 365,
-            },
-        },
-        "release-evaluation artifact upload",
-    )
-    strict_download_index = require_action_step(
-        strict_config,
-        {
-            "uses": download_action,
-            "with": {
-                "pattern": "cxxlens-*-${{ github.sha }}",
-                "path": "build/release-qualification-input",
-            },
-        },
-        "strict qualification evidence download",
-    )
-    strict_upload_index = require_action_step(
-        strict_config,
-        {
-            "uses": upload_action,
-            "with": {
-                "name": "cxxlens-ng-release-qualification-${{ github.sha }}",
-                "path": (
-                    "${{ runner.temp }}/cxxlens-ng-release-qualification-report.json"
-                ),
-                "if-no-files-found": "error",
-                "retention-days": 365,
-            },
-        },
-        "strict qualification artifact upload",
-    )
-    terminal_evaluation_download_index = require_action_step(
-        terminal_config,
-        {
-            "uses": download_action,
-            "with": {
-                "name": (
-                    "cxxlens-ng-release-qualification-evaluation-${{ github.sha }}"
-                ),
-                "path": "build/production-scope-input/evaluation",
-            },
-        },
-        "terminal evaluation artifact download",
-    )
-    terminal_gr_download_index = require_action_step(
-        terminal_config,
-        {
-            "if": (
-                "needs.release-evaluation.outputs.qualification == 'qualified'"
-            ),
-            "uses": download_action,
-            "with": {
-                "name": "cxxlens-ng-release-qualification-${{ github.sha }}",
-                "path": "build/production-scope-input/gr",
-            },
-        },
-        "qualified-only terminal GR artifact download",
-    )
-    terminal_upload_index = require_action_step(
-        terminal_config,
-        {
-            "uses": upload_action,
-            "with": {
-                "name": "cxxlens-ng-production-scope-closure-${{ github.sha }}",
-                "path": (
-                    "${{ runner.temp }}/"
-                    "cxxlens-ng-production-scope-closure-report.json"
-                ),
-                "if-no-files-found": "error",
-                "retention-days": 365,
-            },
-        },
-        "terminal production-scope artifact upload",
-    )
-
-    evaluation_job = workflow_job("release-evaluation")
-    strict_job = workflow_job("release-qualification")
-    terminal_job = workflow_job("production-scope-closure")
-    required_job_markers = {
-        "release-evaluation": (
-            "needs: [g5-qualification, sqlite-store-v3-qualification]",
-            "qualification: ${{ steps.evaluate.outputs.qualification }}",
-            '--github-output "${GITHUB_OUTPUT}"',
-        ),
-        "release-qualification": (
-            "needs: [release-evaluation]",
-            "needs.release-evaluation.outputs.qualification == 'qualified'",
-            "--evaluation ",
-        ),
-        "production-scope-closure": (
-            "always()",
-            "needs: [release-evaluation, release-qualification]",
-            '"${QUALIFICATION}" == "not-qualified"',
-            '"${STRICT_RESULT}" == "skipped"',
-            '"${QUALIFICATION}" == "qualified"',
-            '"${STRICT_RESULT}" == "success"',
-            "--mode normal",
-            "--mode final",
-            '--expected-revision "${GITHUB_SHA}"',
-        ),
-    }
-    for name, body in (
-        ("release-evaluation", evaluation_job),
-        ("release-qualification", strict_job),
-        ("production-scope-closure", terminal_job),
-    ):
-        for marker in required_job_markers[name]:
-            if marker not in body:
-                fail(
-                    "production-scope dependency matrix marker is missing from "
-                    f"{name}: {marker}"
-                )
-
-    evaluation_step = configured_step(
-        evaluation_config, "Evaluate exact-SHA distribution 1.0 qualification"
-    )
-    nightly_run_step = configured_step(
-        evaluation_config, "Locate the exact-main Nightly evidence run"
-    )
-    strict_step = configured_step(
-        strict_config, "Generate exact-SHA distribution 1.0 GR report"
-    )
-    dependency_step = configured_step(
-        terminal_config, "Validate qualification dependency results"
-    )
-    normal_step = configured_step(
-        terminal_config, "Generate classified production-scope report"
-    )
-    final_step = configured_step(
-        terminal_config, "Generate final production-scope report"
-    )
-    evaluation_steps = evaluation_config["steps"]
-    strict_steps = strict_config["steps"]
-    terminal_steps = terminal_config["steps"]
-    common_setup_steps = [
-        {
-            "uses": (
-                "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-            )
-        },
-        {
-            "uses": (
-                "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
-            ),
-            "with": {"python-version": "3.12.11"},
-        },
-        {
-            "run": (
-                "python -m pip install --require-hashes --only-binary=:all: "
-                "--requirement tools/quality/requirements.lock"
-            )
-        },
-    ]
-    if (
-        len(evaluation_steps) != 9
-        or evaluation_steps[:3] != common_setup_steps
-        or evaluation_steps.index(nightly_run_step) != 3
-        or nightly_download_index != 4
-        or evaluation_download_index != 5
-        or evaluation_steps.index(evaluation_step) != 6
-        or evaluation_upload_index != 7
-    ):
-        fail("release-evaluation workflow step order differs")
-    if (
-        len(strict_steps) != 6
-        or strict_steps[:3] != common_setup_steps
-        or strict_download_index != 3
-        or strict_steps.index(strict_step) != 4
-        or strict_upload_index != 5
-    ):
-        fail("strict release qualification workflow step order differs")
-    if (
-        len(terminal_steps) != 9
-        or terminal_steps.index(dependency_step) != 0
-        or terminal_steps[1:4] != common_setup_steps
-        or terminal_evaluation_download_index != 4
-        or terminal_gr_download_index != 5
-        or terminal_steps.index(normal_step) != 6
-        or terminal_steps.index(final_step) != 7
-        or terminal_upload_index != 8
-    ):
-        fail("terminal production-scope workflow step order differs")
-    for step, expected_keys, name in (
-        (
-            nightly_run_step,
-            {"name", "id", "env", "run"},
-            "exact-main Nightly evidence lookup",
-        ),
-        (evaluation_step, {"name", "id", "run"}, "release evaluation"),
-        (strict_step, {"name", "run"}, "strict release qualification"),
-        (
-            dependency_step,
-            {"name", "env", "run"},
-            "qualification dependency matrix",
-        ),
-        (normal_step, {"name", "if", "run"}, "normal production-scope routing"),
-        (final_step, {"name", "if", "run"}, "final production-scope routing"),
-    ):
-        if set(step) != expected_keys:
-            fail(f"{name} workflow step keys differ")
-    if evaluation_step.get("id") != "evaluate":
-        fail("release evaluation workflow step id differs")
-    if normalized_condition(normal_step.get("if")) != (
-        "needs.release-evaluation.outputs.qualification == 'not-qualified'"
-    ):
-        fail("normal production-scope routing has a different top-level condition")
-    if normalized_condition(final_step.get("if")) != (
-        "needs.release-evaluation.outputs.qualification == 'qualified'"
-    ):
-        fail("final production-scope routing has a different top-level condition")
-    if dependency_step.get("env") != {
-        "EVALUATION_RESULT": "${{ needs.release-evaluation.result }}",
-        "QUALIFICATION": "${{ needs.release-evaluation.outputs.qualification }}",
-        "STRICT_RESULT": "${{ needs.release-qualification.result }}",
-    }:
-        fail("qualification dependency matrix environment binding differs")
-
-    run_url = "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-    evaluation_report = (
-        "${RUNNER_TEMP}/cxxlens-ng-release-qualification-evaluation-report.json"
-    )
-    evaluation_artifact = (
-        "build/production-scope-input/evaluation/"
-        "cxxlens-ng-release-qualification-evaluation-report.json"
-    )
-    gr_artifact = (
-        "build/production-scope-input/gr/"
-        "cxxlens-ng-release-qualification-report.json"
-    )
-    expected_evaluation_commands = [
-        [
-            "python",
-            "tools/quality/check_ng_security_contract.py",
-            "report",
-            "--root",
-            ".",
-            "--output",
-            "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json",
-        ],
-        [
-            "python",
-            "tools/quality/check_ng_release_qualification.py",
-            "evaluate",
-            "--root",
-            ".",
-            "--evidence-dir",
-            "build/release-evaluation-input",
-            "--nightly-evidence-dir",
-            "build/release-evaluation-nightly",
-            "--security-report",
-            "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json",
-            "--output",
-            evaluation_report,
-            "--run-url",
-            run_url,
-            "--expected-revision",
-            "${GITHUB_SHA}",
-            "--github-output",
-            "${GITHUB_OUTPUT}",
-        ],
-    ]
-    expected_strict_commands = [[
-        "python",
-        "tools/quality/check_ng_release_qualification.py",
-        "report",
-        "--root",
-        ".",
-        "--evidence-dir",
-        "build/release-qualification-input",
-        "--nightly-evidence-dir",
-        "build/release-qualification-input",
-        "--security-report",
-        "build/release-qualification-input/"
-        "cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/"
-        "cxxlens-ng-security-conformance-report.json",
-        "--evaluation",
-        "build/release-qualification-input/"
-        "cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/"
-        "cxxlens-ng-release-qualification-evaluation-report.json",
-        "--output",
-        "${RUNNER_TEMP}/cxxlens-ng-release-qualification-report.json",
-        "--run-url",
-        run_url,
-        "--expected-revision",
-        "${GITHUB_SHA}",
-    ]]
-    expected_normal_commands = [[
-        "python",
-        "tools/quality/check_ng_production_scope_closure.py",
-        "--root",
-        ".",
-        "report",
-        "--mode",
-        "normal",
-        "--evaluation",
-        evaluation_artifact,
-        "--output",
-        "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json",
-        "--run-url",
-        run_url,
-        "--expected-revision",
-        "${GITHUB_SHA}",
-    ]]
-    expected_final_commands = [
-        [
-            "python",
-            "tools/quality/check_ng_release_qualification.py",
-            "verify-evaluation-binding",
-            "--root",
-            ".",
-            "--evaluation",
-            evaluation_artifact,
-            "--gr",
-            gr_artifact,
-        ],
-        [
-            "python",
-            "tools/quality/check_ng_production_scope_closure.py",
-            "--root",
-            ".",
-            "report",
-            "--mode",
-            "final",
-            "--evaluation",
-            evaluation_artifact,
-            "--gr",
-            gr_artifact,
-            "--output",
-            "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json",
-            "--run-url",
-            run_url,
-            "--expected-revision",
-            "${GITHUB_SHA}",
-        ],
-    ]
-    for step, name, expected_commands in (
-        (evaluation_step, "release evaluation", expected_evaluation_commands),
-        (strict_step, "strict release qualification", expected_strict_commands),
-        (normal_step, "normal production-scope routing", expected_normal_commands),
-        (final_step, "final production-scope routing", expected_final_commands),
-    ):
-        if shell_commands(step, name) != expected_commands:
-            fail(f"{name} command argv differ")
-
-    expected_dependency_lines = [
-        'if [[ "${EVALUATION_RESULT}" == "success" && '
-        '"${QUALIFICATION}" == "not-qualified" && '
-        '"${STRICT_RESULT}" == "skipped" ]]; then',
-        "exit 0",
-        "fi",
-        'if [[ "${EVALUATION_RESULT}" == "success" && '
-        '"${QUALIFICATION}" == "qualified" && '
-        '"${STRICT_RESULT}" == "success" ]]; then',
-        "exit 0",
-        "fi",
-        'echo "invalid qualification dependency matrix: '
-        'evaluation=${EVALUATION_RESULT}, qualification=${QUALIFICATION}, '
-        'strict=${STRICT_RESULT}" >&2',
-        "exit 1",
-    ]
-    dependency_run = dependency_step.get("run")
-    if not isinstance(dependency_run, str):
-        fail("qualification dependency matrix run script is missing")
-    actual_dependency_lines = [
-        line.strip()
-        for line in dependency_run.splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
-    if actual_dependency_lines != expected_dependency_lines:
-        fail("qualification dependency matrix script differs")
-    qualified_gr_download = re.compile(
-        r"(?ms)^      - if: needs\.release-evaluation\.outputs\.qualification "
-        r"== 'qualified'\n"
-        r"        uses: actions/download-artifact@.*?\n"
-        r"        with:\n"
-        r"          name: cxxlens-ng-release-qualification-\$\{\{ github\.sha \}\}\n"
-        r"          path: build/production-scope-input/gr(?:\n|$)"
-    )
-    if qualified_gr_download.search(terminal_job) is None:
-        fail("final production-scope routing lacks qualified-only GR download")
+        _baseline_validate_workflow(projected, legacy_manifest)
 
 
-def validate_public_callable_contract(
-    root: pathlib.Path, manifest: dict[str, Any]
-) -> None:
-    contract = manifest["public_callable_authority"]
-    expected_paths = {
-        "inventory": PUBLIC_CALLABLE_INVENTORY,
-        "inventory_schema": PUBLIC_CALLABLE_INVENTORY_SCHEMA,
-        "report_schema": PUBLIC_CALLABLE_REPORT_SCHEMA,
-        "checker": PUBLIC_CALLABLE_CHECKER,
-    }
-    for key, expected in expected_paths.items():
-        if pathlib.Path(contract[key]) != expected:
-            fail(f"public callable authority path differs: {key}")
-    for key in ("decision_adr", *expected_paths):
-        if not (root / contract[key]).is_file():
-            fail(f"public callable authority is missing: {contract[key]}")
-
-    inventory = load_document(root / contract["inventory"])
-    validate_schema(
-        inventory,
-        load_document(root / contract["inventory_schema"]),
-        "public callable inventory",
-    )
-    if inventory["inventory_digest"] != callable_inventory.inventory_digest(inventory):
-        fail("public callable inventory semantic digest differs")
-    extractor = (
-        f"{inventory['extractor']['engine']}-"
-        f"{inventory['extractor']['engine_version']}"
-    )
-    if extractor != contract["extractor"]:
-        fail("public callable extractor binding differs")
-    try:
-        jsonschema.Draft202012Validator.check_schema(
-            load_document(root / contract["report_schema"])
-        )
-    except jsonschema.SchemaError as error:
-        fail(f"public callable report schema is invalid: {error.message}")
-
-
-def validate_production_scope_contract(
-    root: pathlib.Path, manifest: dict[str, Any]
-) -> dict[str, Any]:
-    contract = manifest["production_scope_closure"]
-    expected_paths = {
-        "decision_adr": PRODUCTION_SCOPE_DECISION_ADR,
-        "manifest": PRODUCTION_SCOPE_MANIFEST,
-        "manifest_schema": PRODUCTION_SCOPE_MANIFEST_SCHEMA,
-        "report_schema": PRODUCTION_SCOPE_REPORT_SCHEMA,
-        "checker": PRODUCTION_SCOPE_CHECKER,
-    }
-    for key, expected in expected_paths.items():
-        if pathlib.Path(contract[key]) != expected:
-            fail(f"production-scope authority path differs: {key}")
-        if not (root / expected).is_file():
-            fail(f"production-scope authority is missing: {expected}")
-
-    bundle = load_document(root / RELEASE_BUNDLE)["production_scope_closure"]
-    expected_bundle = {
-        "contract": "cxxlens.ng-production-scope-closure.v1",
-        "authority": contract["manifest"],
-        "decision_adr": contract["decision_adr"],
-        "schema": contract["manifest_schema"],
-        "checker": contract["checker"],
-        "namespace_ids": list(production_scope.DOMAINS),
-        "report": {
-            "schema": contract["report_schema"],
-            "ci_job": contract["terminal_job"],
-            "artifact": "cxxlens-ng-production-scope-closure-${revision}",
-        },
-        "evaluation": {
-            "schema": (
-                "schemas/"
-                "cxxlens_ng_release_qualification_evaluation_report.schema.yaml"
-            ),
-            "ci_job": contract["release_evaluation_job"],
-            "artifact": (
-                "cxxlens-ng-release-qualification-evaluation-${revision}"
-            ),
-            "not_qualified_satisfies_gate_release": False,
-        },
-    }
-    if bundle != expected_bundle:
-        fail("Release Bundle production-scope binding differs from Wave 0")
-
-    try:
-        binding = production_scope.inventory_binding(root)
-    except production_scope.ContractError as error:
-        fail(f"production-scope inventory is invalid: {error}")
-    expected_keys = {
-        "manifest_path",
-        "manifest_digest",
-        "authority_census_digest",
-        "evidence_census_digest",
-        "classification_digest",
-        "evidence_tests",
-        "summary",
-        "closure_status",
-    }
-    if set(binding) != expected_keys:
-        fail("production-scope inventory binding shape differs")
-    return binding
-
-
-def validate_implementation_learning_contract(
-    root: pathlib.Path, manifest: dict[str, Any]
-) -> None:
-    contract = manifest["implementation_learning"]
-    expected_files = {
-        "handbook": IMPLEMENTATION_LEARNING_HANDBOOK,
-        "record_schema": DESIGN_FEEDBACK_SCHEMA,
-        "checker": DESIGN_FEEDBACK_CHECKER,
-        "issue_template": DESIGN_FEEDBACK_ISSUE_TEMPLATE,
-        "index": pathlib.Path(
-            "docs/development/implementation-learning/records/README.md"
-        ),
-        "decision_adr": pathlib.Path(
-            "docs/design/adr/0093-implementation-learning-design-feedback.md"
-        ),
-    }
-    for key, expected in expected_files.items():
-        if pathlib.Path(contract[key]) != expected:
-            fail(f"implementation-learning path differs: {key}")
-        if not (root / expected).is_file():
-            fail(f"implementation-learning asset is missing: {expected}")
-    for key in ("mental_models", "records"):
-        if not (root / contract[key]).is_dir():
-            fail(f"implementation-learning directory is missing: {contract[key]}")
-
-    checker = (root / contract["checker"]).read_text(encoding="utf-8")
-    for marker in ("issue-ready", "implementation_disposition", "resolution_refs"):
-        if marker not in checker:
-            fail(f"design-feedback checker marker is missing: {marker}")
-    handbook_path = contract["handbook"]
-    for path in (
-        root / "AGENTS.md",
-        root / "docs/development/agent-api-development-goal.md",
-    ):
-        if handbook_path not in path.read_text(encoding="utf-8"):
-            fail(f"implementation-learning handbook is not required by {path.name}")
-
-
-def validate_agent_authorization_contract(root: pathlib.Path) -> None:
-    decision = root / AUTHORIZATION_DECISION_ADR
-    if not decision.is_file():
-        fail(f"agent authorization decision ADR is missing: {AUTHORIZATION_DECISION_ADR}")
-    if "- Status: Accepted" not in decision.read_text(encoding="utf-8"):
-        fail("agent authorization decision ADR is not accepted")
-
-    documents = {
-        AGENT_CONTRACT: AUTHORIZATION_COMMON_MARKERS,
-        AGENT_GOAL_CONTRACT: AUTHORIZATION_GOAL_MARKERS,
-    }
-    for relative, markers in documents.items():
-        path = root / relative
-        if not path.is_file():
-            fail(f"agent authorization contract is missing: {relative}")
-        text = path.read_text(encoding="utf-8")
-        if len(AUTHORIZATION_POLICY_TOKEN.findall(text)) != 1:
-            fail(
-                "agent authorization policy ID must appear exactly once in "
-                f"{relative}"
-            )
-        for marker in markers:
-            if f"`{marker}`" not in text:
-                fail(
-                    f"agent authorization marker is missing from {relative}: {marker}"
-                )
-        if any(pattern.search(text) for pattern in LEGACY_DIRECT_MAIN_PATTERNS):
-            fail(f"legacy direct-main workflow is forbidden in {relative}")
-
-    goal = (root / AGENT_GOAL_CONTRACT).read_text(encoding="utf-8")
-    goal_example = re.compile(
-        rf"(?m)^/goal\s+{re.escape(AGENT_GOAL_CONTRACT.as_posix())}"
-        rf".*(?<![A-Za-z0-9_]){re.escape(AUTHORIZATION_POLICY_ID)}"
-        rf"(?![A-Za-z0-9_])"
-    )
-    if goal_example.search(goal) is None:
-        fail("short goal example does not bind the authorization policy ID")
+def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
+    _validate_accelerated_workflow(root, manifest)
+    _legacy_projection(root, manifest)
 
 
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
-    manifest = load_document(root / MANIFEST)
-    validate_schema(
-        manifest,
-        load_document(root / MANIFEST_SCHEMA),
-        "API development readiness manifest",
-    )
-    validate_target_contract(root, manifest)
-    public_header_inventory(root)
-    migration = (root / "tools/quality/check_ng_migration_completion.py").read_text(
-        encoding="utf-8"
-    )
-    if "ALLOWED_PUBLIC_HEADERS" in migration:
-        fail("migration checker still owns a public header allowlist")
-    validate_gate_ownership(root, manifest)
-    validate_public_callable_contract(root, manifest)
-    validate_production_scope_contract(root, manifest)
-    validate_implementation_learning_contract(root, manifest)
-    validate_agent_authorization_contract(root)
-    try:
-        jsonschema.Draft202012Validator.check_schema(
-            load_document(root / REPORT_SCHEMA)
-        )
-    except jsonschema.SchemaError as error:
-        fail(f"API development readiness report schema is invalid: {error.message}")
-    validate_workflow(root, manifest)
-    if len(manifest["api_unit_workflow"]["active_write_units"]) > 1:
-        fail("more than one API write unit is active")
-    if not (root / AGENT_GOAL_CONTRACT).is_file():
-        fail("agent API development execution contract is missing")
+    manifest = _baseline_validate_documents(root)
+    validate_bounded_completion_contract(root)
+    validate_demand_closure(root, manifest)
+    _validate_required_status_documentation(root, manifest)
     return manifest
 
 
-def git_output(root: pathlib.Path, *arguments: str) -> str:
-    completed = subprocess.run(
-        ["git", "-C", str(root), *arguments],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        fail(f"git {' '.join(arguments)} failed: {completed.stderr.strip()}")
-    return completed.stdout.strip()
-
-
-def current_git_state(root: pathlib.Path) -> dict[str, Any]:
+def authority_projection(manifest: dict[str, Any]) -> dict[str, Any]:
+    use_case, packet = _product_contract(manifest)
     return {
-        "revision": git_output(root, "rev-parse", "HEAD"),
-        "tree": git_output(root, "rev-parse", "HEAD^{tree}"),
-        "branch": git_output(root, "branch", "--show-current"),
-        "clean": git_output(root, "status", "--porcelain=v1") == "",
+        "product_contract": manifest["product_direction"]["contract"],
+        "result_contract": manifest["product_direction"]["result_contract"],
+        "use_case": use_case,
+        "packet_template": packet,
+        "ci_tiers": manifest["ci_tiers"],
     }
 
 
-def file_rows(paths: list[pathlib.Path], base: pathlib.Path) -> list[dict[str, str]]:
-    return [
-        {"path": path.relative_to(base).as_posix(), "digest": sha256(path)}
-        for path in sorted(set(paths))
-    ]
-
-
-def public_callable_evidence(
+def build_agent_context_packet(
     root: pathlib.Path,
     manifest: dict[str, Any],
-    evidence_dir: pathlib.Path,
-    git: dict[str, Any],
+    revision: str,
+    tree: str,
 ) -> dict[str, Any]:
-    contract = manifest["public_callable_authority"]
-    report_paths = sorted(evidence_dir.rglob(contract["report_filename"]))
-    review_paths = sorted(evidence_dir.rglob(contract["review_filename"]))
-    if len(report_paths) != 1 or len(review_paths) != 1:
-        fail(
-            "Wave 0 requires exactly one public callable JSON/Markdown evidence "
-            f"pair: reports={len(report_paths)}, reviews={len(review_paths)}"
+    if HEX40.fullmatch(revision) is None or HEX40.fullmatch(tree) is None:
+        _fail("agent context requires exact 40-hex revision and tree")
+    use_case, template = _product_contract(manifest)
+    packet = {
+        "schema": "cxxlens.agent-context.v1",
+        "packet_id": template["packet_id"],
+        "issue": template["issue"],
+        "use_case_id": template["use_case_id"],
+        "consumer": use_case["consumer"],
+        "goal": template["goal"],
+        "expected_result_states": use_case["expected_result_states"],
+        "capability_path": use_case["capability_path"],
+        "exact_contract_ids": template["exact_contract_ids"],
+        "authority_reading_set": template["authority_reading_set"],
+        "allowed_write_paths": template["allowed_write_paths"],
+        "required_evidence": template["required_evidence"],
+        "known_design_feedback": template["known_design_feedback"],
+        "constructibility": template["constructibility"],
+        "forbidden_shortcuts": template["forbidden_shortcuts"],
+        "completion_commands": template["completion_commands"],
+        "blocked_reason": use_case["tracked_gap"]["reason_code"],
+        "completion_plan": template["completion_plan"],
+        "binding": {
+            "revision": revision,
+            "tree": tree,
+            "manifest_path": MANIFEST_PATH.as_posix(),
+            "manifest_file_digest": _file_digest(root / MANIFEST_PATH),
+            "authority_projection_digest": _semantic_digest(authority_projection(manifest)),
+            "stale_policy": "reject",
+        },
+    }
+    packet["canonical_digest"] = _semantic_digest(packet)
+    return packet
+
+
+def validate_agent_context_packet(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    packet: dict[str, Any],
+    revision: str,
+    tree: str,
+) -> None:
+    expected = build_agent_context_packet(root, manifest, revision, tree)
+    if packet != expected:
+        _fail("agent-context packet is stale, malformed, or not machine-derived")
+
+
+def render_agent_context_markdown(packet: dict[str, Any]) -> str:
+    path = " -> ".join(row["id"] for row in packet["capability_path"])
+    evidence = "\n".join(f"- {value}" for value in packet["required_evidence"])
+    plan = "\n".join(
+        f"{index}. {value}" for index, value in enumerate(packet["completion_plan"], 1)
+    )
+    reads = "\n".join(f"- `{value}`" for value in packet["authority_reading_set"])
+    writes = "\n".join(f"- `{value}`" for value in packet["allowed_write_paths"])
+    contracts = "\n".join(f"- `{value}`" for value in packet["exact_contract_ids"])
+    feedback = "\n".join(f"- `{value}`" for value in packet["known_design_feedback"])
+    shortcuts = "\n".join(f"- `{value}`" for value in packet["forbidden_shortcuts"])
+    commands = "\n".join(f"- `{value}`" for value in packet["completion_commands"])
+    expected_states = ", ".join(f"`{value}`" for value in packet["expected_result_states"])
+    constructibility = json.dumps(
+        packet["constructibility"], ensure_ascii=False, sort_keys=True, indent=2
+    )
+    binding = json.dumps(packet["binding"], ensure_ascii=False, sort_keys=True, indent=2)
+    complete_packet = json.dumps(packet, ensure_ascii=False, sort_keys=True, indent=2)
+    return (
+        "# cxxlens issue #261 agent context\n\n"
+        f"- Schema: `{packet['schema']}`\n"
+        f"- Packet: `{packet['packet_id']}`\n"
+        f"- Issue: `{packet['issue']}`\n"
+        f"- Use case: `{packet['use_case_id']}`\n"
+        f"- Consumer: `{packet['consumer']}`\n"
+        f"- Goal: `{packet['goal']}`\n"
+        f"- Expected result states: {expected_states}\n"
+        f"- Revision: `{packet['binding']['revision']}`\n"
+        f"- Tree: `{packet['binding']['tree']}`\n"
+        f"- Authority digest: `{packet['binding']['authority_projection_digest']}`\n"
+        f"- Packet digest: `{packet['canonical_digest']}`\n"
+        f"- Blocked reason: `{packet['blocked_reason']}`\n\n"
+        "## Capability path\n\n"
+        f"`{path}`\n\n"
+        "## Exact contract IDs\n\n"
+        f"{contracts}\n\n"
+        "## Minimum authority reading set\n\n"
+        f"{reads}\n\n"
+        "## Allowed write paths\n\n"
+        f"{writes}\n\n"
+        "## Required evidence\n\n"
+        f"{evidence}\n\n"
+        "## Known design feedback\n\n"
+        f"{feedback}\n\n"
+        "## Constructibility\n\n"
+        "```json\n"
+        f"{constructibility}\n"
+        "```\n\n"
+        "## Forbidden shortcuts\n\n"
+        f"{shortcuts}\n\n"
+        "## Completion plan\n\n"
+        f"{plan}\n\n"
+        "## Completion commands\n\n"
+        f"{commands}\n\n"
+        "## Exact binding\n\n"
+        "```json\n"
+        f"{binding}\n"
+        "```\n\n"
+        "## Complete packet fields\n\n"
+        "The following canonical JSON block mirrors every field in the paired packet.\n\n"
+        "```json\n"
+        f"{complete_packet}\n"
+        "```\n"
+    )
+
+
+def _packet_paths(evidence_dir: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
+    json_paths = sorted(evidence_dir.rglob(PACKET_JSON_NAME))
+    markdown_paths = sorted(evidence_dir.rglob(PACKET_MARKDOWN_NAME))
+    if len(json_paths) != 1 or len(markdown_paths) != 1:
+        _fail(
+            "Wave 0 requires exactly one #261 agent-context JSON/Markdown pair: "
+            f"json={len(json_paths)}, markdown={len(markdown_paths)}"
         )
-    if report_paths[0].parent != review_paths[0].parent:
-        fail("public callable JSON/Markdown evidence is not from one artifact")
-
-    report_path = report_paths[0]
-    review_path = review_paths[0]
-    report = load_document(report_path)
-    validate_schema(
-        report,
-        load_document(root / contract["report_schema"]),
-        "public callable inventory report",
-    )
-    if report["git"] != git:
-        fail("public callable inventory report differs from Wave 0 git source")
-    if report["result"] != contract["required_result"]:
-        fail("public callable inventory report result differs")
-
-    inventory_path = root / contract["inventory"]
-    inventory = load_document(inventory_path)
-    validate_schema(
-        inventory,
-        load_document(root / contract["inventory_schema"]),
-        "public callable inventory",
-    )
-    semantic_digest = callable_inventory.inventory_digest(inventory)
-    if inventory["inventory_digest"] != semantic_digest:
-        fail("current public callable inventory semantic digest differs")
-    inventory_file_digest = sha256(inventory_path)
-    expected_inventory = {
-        "path": contract["inventory"],
-        "file_digest": inventory_file_digest,
-        "semantic_digest": semantic_digest,
-        "callable_count": len(inventory["callables"]),
-    }
-    if report["inventory"] != expected_inventory:
-        fail("public callable report inventory binding differs from current inventory")
-
-    callable_count = len(inventory["callables"])
-    if report["doxygen"]["count"] != callable_count:
-        fail("public callable Doxygen count differs from inventory callable count")
-    if report["review"]["path"] != contract["review_filename"]:
-        fail("public callable review filename differs")
-    review_digest = sha256(review_path)
-    if report["review"]["digest"] != review_digest:
-        fail("public callable review Markdown digest differs")
-    expected_markdown = callable_inventory.review_markdown(
-        inventory,
-        git,
-        report["run_url"],
-        report["doxygen"]["digest"],
-    )
-    if review_path.read_text(encoding="utf-8") != expected_markdown:
-        fail("public callable review Markdown differs from the current inventory")
-
-    return {
-        "path": report_path.relative_to(evidence_dir).as_posix(),
-        "report_digest": sha256(report_path),
-        "inventory_file_digest": inventory_file_digest,
-        "inventory_semantic_digest": semantic_digest,
-        "review_path": review_path.relative_to(evidence_dir).as_posix(),
-        "review_digest": review_digest,
-        "callable_count": callable_count,
-        "doxygen_count": report["doxygen"]["count"],
-        "result": report["result"],
-        "revision": report["git"]["revision"],
-        "tree": report["git"]["tree"],
-    }
+    if json_paths[0].parent != markdown_paths[0].parent:
+        _fail("#261 agent-context JSON and Markdown are not from one artifact")
+    return json_paths[0], markdown_paths[0]
 
 
 def build_report(
@@ -1219,206 +780,89 @@ def build_report(
     generated_at: str,
     expected_revision: str,
 ) -> dict[str, Any]:
-    git = current_git_state(root)
-    if git != {
-        "revision": expected_revision,
-        "tree": git["tree"],
-        "branch": "main",
-        "clean": True,
-    }:
-        fail(f"Wave 0 report requires exact clean main revision: {git}")
-    required_jobs = [
-        *manifest["required_status_checks"]["contexts"],
-        "foundation-completion",
-    ]
-    if sorted(ci_jobs) != sorted(required_jobs):
-        fail(f"Wave 0 CI job evidence differs: {ci_jobs}")
-
-    toolchains = sorted(evidence_dir.rglob("toolchain*.json"))
-    evidence = sorted(evidence_dir.rglob("*.evidence.json"))
-    install_manifests = sorted(evidence_dir.rglob("install-artifact-manifest.json"))
-    junit = sorted(evidence_dir.rglob("ctest-*.xml"))
-    foundation_paths = sorted(
-        evidence_dir.rglob("cxxlens-ng-foundation-completion-report.json")
-    )
-    if not toolchains or not evidence or len(install_manifests) < 2 or not junit:
-        fail("Wave 0 evidence bundle is incomplete")
-    if len(foundation_paths) != 1:
-        fail("Wave 0 requires exactly one Foundation completion report")
-    for path in toolchains:
-        document = load_document(path)
-        if document.get("source") != {
-            "revision": git["revision"],
-            "tree": git["tree"],
-        }:
-            fail(f"toolchain provenance source differs: {path}")
-
-    foundation_path = foundation_paths[0]
-    foundation = load_document(foundation_path)
-    if foundation.get("result") != "passed" or foundation.get("git") != git:
-        fail("Foundation completion report differs from Wave 0 source")
-
-    production_scope_binding = validate_production_scope_contract(root, manifest)
-    required_scope_tests = set(production_scope_binding["evidence_tests"])
-    passed_scope_tests: set[str] = set()
-    test_cases = 0
-    for path in junit:
-        root_element = ET.parse(path).getroot()
-        cases = root_element.findall(".//testcase")
-        test_cases += len(cases)
-        for case in cases:
-            name = case.get("name", "")
-            if name not in required_scope_tests:
-                continue
-            if any(case.find(tag) is not None for tag in ("failure", "error", "skipped")):
-                fail(f"production-scope evidence test did not pass: {name} in {path}")
-            passed_scope_tests.add(name)
-    if test_cases == 0:
-        fail("Wave 0 test inventory is empty")
-    missing_scope_tests = sorted(required_scope_tests - passed_scope_tests)
-    if missing_scope_tests:
-        fail(f"Wave 0 JUnit omits production-scope evidence tests: {missing_scope_tests}")
-
-    callable_binding = public_callable_evidence(
-        root, manifest, evidence_dir, git
-    )
-    public_headers, generated_headers = public_header_inventory(root)
-    authority_paths = [
-        root / MANIFEST,
-        root / RELEASE_BUNDLE,
-        root / PUBLIC_API,
-        root / RELATION_REGISTRY,
-        root / ACCEPTANCE,
-        root / AGENT_CONTRACT,
-        root / AGENT_GOAL_CONTRACT,
-        root / AUTHORIZATION_DECISION_ADR,
-        root / manifest["public_callable_authority"]["decision_adr"],
-        root / manifest["public_callable_authority"]["inventory"],
-        root / manifest["public_callable_authority"]["inventory_schema"],
-        root / manifest["public_callable_authority"]["report_schema"],
-        root / manifest["public_callable_authority"]["checker"],
-        root / manifest["production_scope_closure"]["decision_adr"],
-        root / manifest["production_scope_closure"]["manifest"],
-        root / manifest["production_scope_closure"]["manifest_schema"],
-        root / manifest["production_scope_closure"]["report_schema"],
-        root / manifest["production_scope_closure"]["checker"],
-    ]
-    learning = manifest["implementation_learning"]
-    authority_paths.extend(
-        root / learning[key]
-        for key in (
-            "decision_adr",
-            "handbook",
-            "record_schema",
-            "checker",
+    baseline_current_git_state = _baseline.current_git_state
+    _baseline.current_git_state = current_git_state
+    try:
+        report = _baseline_build_report(
+            root,
+            manifest,
+            evidence_dir,
+            run_url,
+            ci_jobs,
+            generated_at,
+            expected_revision,
         )
+    finally:
+        _baseline.current_git_state = baseline_current_git_state
+    json_path, markdown_path = _packet_paths(evidence_dir)
+    packet = json.loads(json_path.read_text(encoding="utf-8"))
+    git = report["git"]
+    validate_agent_context_packet(root, manifest, packet, git["revision"], git["tree"])
+    if markdown_path.read_text(encoding="utf-8") != render_agent_context_markdown(packet):
+        _fail("#261 agent-context Markdown differs from the canonical packet")
+    report["evidence_artifacts"].extend(
+        _baseline.file_rows([json_path, markdown_path], evidence_dir)
     )
-    implementation_learning_paths = [root / learning["issue_template"]]
-    implementation_learning_paths.extend(
-        path
-        for key in ("mental_models", "records")
-        for path in sorted((root / learning[key]).glob("*.md"))
+    report["evidence_artifacts"] = sorted(
+        {row["path"]: row for row in report["evidence_artifacts"]}.values(),
+        key=lambda row: row["path"],
     )
-    return {
-        "schema": "cxxlens.ng-api-development-readiness-report.v1",
-        "result": "passed",
-        "generated_at": generated_at,
-        "run_url": run_url,
-        "git": git,
-        "required_ci_jobs": required_jobs,
-        "branch_protection": {
-            "strict": manifest["required_status_checks"]["strict"],
-            "required_statuses": manifest["required_status_checks"]["contexts"],
-            "settings_evidence": "github-api-issue-168",
-        },
-        "authorities": file_rows(authority_paths, root),
-        "implementation_learning_assets": file_rows(
-            implementation_learning_paths, root
-        ),
-        "public_headers": file_rows([root / path for path in public_headers], root),
-        "generated_relation_headers": file_rows(
-            [root / path for path in generated_headers], root
-        ),
-        "toolchain_provenance": file_rows(toolchains, evidence_dir),
-        "evidence_artifacts": file_rows(evidence, evidence_dir),
-        "install_manifests": file_rows(install_manifests, evidence_dir),
-        "test_inventory": {
-            "junit_files": len(junit),
-            "test_cases": test_cases,
-            "production_scope_tests": sorted(required_scope_tests),
-        },
-        "foundation_completion": {
-            "path": foundation_path.relative_to(evidence_dir).as_posix(),
-            "digest": sha256(foundation_path),
-            "result": foundation["result"],
-            "revision": foundation["git"]["revision"],
-            "tree": foundation["git"]["tree"],
-        },
-        "public_callable_inventory": callable_binding,
-        "production_scope_inventory": production_scope_binding,
-    }
+    return report
+
+
+def _plan(arguments: list[str]) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("plan")
+    parser.add_argument("--root", type=pathlib.Path, default=ROOT)
+    parser.add_argument("--issue", type=int, required=True)
+    parser.add_argument("--expected-revision", required=True)
+    parser.add_argument("--expected-tree", required=True)
+    parser.add_argument("--output-json", type=pathlib.Path, required=True)
+    parser.add_argument("--output-markdown", type=pathlib.Path, required=True)
+    parsed = parser.parse_args(arguments)
+    root = parsed.root.resolve()
+    try:
+        if parsed.issue != 261:
+            _fail(f"unknown agent-context issue: {parsed.issue}")
+        manifest = validate_documents(root)
+        actual_revision = _baseline.git_output(root, "rev-parse", "HEAD")
+        actual_tree = _baseline.git_output(root, "rev-parse", "HEAD^{tree}")
+        if (parsed.expected_revision, parsed.expected_tree) != (actual_revision, actual_tree):
+            _fail("agent-context revision/tree binding is stale")
+        packet = build_agent_context_packet(
+            root, manifest, parsed.expected_revision, parsed.expected_tree
+        )
+        parsed.output_json.parent.mkdir(parents=True, exist_ok=True)
+        parsed.output_markdown.parent.mkdir(parents=True, exist_ok=True)
+        parsed.output_json.write_text(
+            json.dumps(packet, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        parsed.output_markdown.write_text(
+            render_agent_context_markdown(packet), encoding="utf-8"
+        )
+        print(f"wrote exact #261 agent context to {parsed.output_json}")
+        return 0
+    except (ReadinessError, OSError, json.JSONDecodeError, yaml.YAMLError) as error:
+        print(f"agent-context generation failed: {error}", file=sys.stderr)
+        return 1
+
+
+# Make the frozen baseline's internal global lookups use the composed contracts.
+def _current_git_state_for_baseline(root: pathlib.Path) -> dict[str, Any]:
+    return current_git_state(root)
+
+
+_baseline.validate_workflow = validate_workflow
+_baseline.validate_documents = validate_documents
+_baseline.build_report = build_report
+_baseline.current_git_state = _current_git_state_for_baseline
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("check", "report"))
-    parser.add_argument("--root", type=pathlib.Path, default=ROOT)
-    parser.add_argument("--output", type=pathlib.Path)
-    parser.add_argument("--evidence-dir", type=pathlib.Path)
-    parser.add_argument("--run-url")
-    parser.add_argument("--expected-revision")
-    parser.add_argument("--ci-job", action="append", default=[])
-    arguments = parser.parse_args()
-    root = arguments.root.resolve()
-    try:
-        manifest = validate_documents(root)
-        if arguments.command == "check":
-            print("API development Wave 0 readiness check passed")
-            return 0
-        if not all(
-            (
-                arguments.output,
-                arguments.evidence_dir,
-                arguments.run_url,
-                arguments.expected_revision,
-            )
-        ):
-            fail("report requires output, evidence-dir, run-url, and expected-revision")
-        generated_at = (
-            datetime.datetime.now(datetime.timezone.utc)
-            .replace(microsecond=0)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
-        report = build_report(
-            root,
-            manifest,
-            arguments.evidence_dir.resolve(),
-            arguments.run_url,
-            arguments.ci_job,
-            generated_at,
-            arguments.expected_revision,
-        )
-        validate_schema(
-            report,
-            load_document(root / REPORT_SCHEMA),
-            "API development readiness report",
-        )
-        arguments.output.write_text(
-            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        print(f"wrote Wave 0 readiness report to {arguments.output}")
-    except (
-        ReadinessError,
-        OSError,
-        json.JSONDecodeError,
-        yaml.YAMLError,
-        ET.ParseError,
-    ) as error:
-        print(f"API development readiness check failed: {error}", file=sys.stderr)
-        return 1
-    return 0
+    if len(sys.argv) > 1 and sys.argv[1] == "plan":
+        return _plan(sys.argv[1:])
+    return _baseline.main()
 
 
 if __name__ == "__main__":

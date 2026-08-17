@@ -124,6 +124,22 @@ namespace
 					backwards_result.error().code == "provider.heartbeat-clock-invalid",
 				"backwards provider heartbeat timestamp was accepted");
 
+		auto cross_direction_backwards = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
+		require(cross_direction_backwards.has_value(),
+				"cross-direction heartbeat state creation failed");
+		require(
+			cross_direction_backwards->accept(
+				heartbeat_sample(ng1_heartbeat_kind::probe, 0U, 10U, 10U), 0U, digest("staged")),
+			"cross-direction heartbeat setup failed");
+		auto cross_direction_result = cross_direction_backwards->accept(
+			heartbeat_sample(ng1_heartbeat_kind::ack, 0U, 9U, 11U), 0U, digest("staged"));
+		require(!cross_direction_result &&
+					cross_direction_result.error().code == "provider.heartbeat-clock-invalid",
+				"cross-direction backwards provider timestamp was accepted");
+		require(cross_direction_backwards->accept(
+					heartbeat_sample(ng1_heartbeat_kind::ack, 0U, 10U, 11U), 0U, digest("staged")),
+				"rejected cross-direction heartbeat mutated clock state");
+
 		auto future = ng1_heartbeat_state::create(heartbeat_binding(), 0U);
 		require(future.has_value(), "future heartbeat state creation failed");
 		auto future_result = future->accept(
@@ -193,6 +209,38 @@ namespace
 		auto future_result = future->observe(progress_sample(0U, 1U, 0U, 0U));
 		require(!future_result && future_result.error().code == "provider.heartbeat-clock-invalid",
 				"future provider progress timestamp was accepted");
+
+		auto backwards = ng1_progress_state::create("task:test", "dependency:test", 0U);
+		require(backwards.has_value(), "backwards progress state creation failed");
+		require(backwards->observe(progress_sample(0U, 10U, 10U, 0U)),
+				"backwards progress setup failed");
+		auto backwards_result = backwards->observe(progress_sample(1U, 9U, 11U, 1U));
+		require(!backwards_result &&
+					backwards_result.error().code == "provider.heartbeat-clock-invalid" &&
+					backwards_result.error().field == "monotonic_time_ns",
+				"backwards provider progress timestamp was not classified as a clock failure");
+		require(backwards->observe(progress_sample(1U, 10U, 11U, 1U)),
+				"rejected provider timestamp regression mutated progress state");
+
+		auto before_start = ng1_progress_state::create("task:test", "dependency:test", 10U);
+		require(before_start.has_value(), "before-start progress state creation failed");
+		auto before_start_result = before_start->observe(progress_sample(0U, 9U, 9U, 0U));
+		require(!before_start_result &&
+					before_start_result.error().code == "provider.heartbeat-clock-invalid" &&
+					before_start_result.error().field == "host_receipt_time_ns",
+				"progress receipt before task start was not classified as a clock failure");
+
+		auto receipt_backwards = ng1_progress_state::create("task:test", "dependency:test", 0U);
+		require(receipt_backwards.has_value(), "backwards receipt state creation failed");
+		require(receipt_backwards->observe(progress_sample(0U, 10U, 10U, 0U)),
+				"backwards receipt setup failed");
+		auto receipt_backwards_result = receipt_backwards->observe(progress_sample(1U, 9U, 9U, 1U));
+		require(!receipt_backwards_result &&
+					receipt_backwards_result.error().code == "provider.heartbeat-clock-invalid" &&
+					receipt_backwards_result.error().field == "host_receipt_time_ns",
+				"backwards host receipt was not classified as a clock failure");
+		require(receipt_backwards->observe(progress_sample(1U, 11U, 11U, 1U)),
+				"rejected host receipt regression mutated progress state");
 
 		auto initial_deadline = ng1_progress_state::create("task:test", "dependency:test", 0U);
 		require(initial_deadline.has_value(), "initial progress deadline state creation failed");
@@ -290,12 +338,13 @@ namespace
 	}
 
 	[[nodiscard]] ng1_resume_token make_resume_token(const ng1_resume_binding& binding,
-													 const std::uint64_t generation = 1U)
+													 const std::uint64_t generation = 1U,
+													 const std::uint64_t acknowledged_sequence = 4U)
 	{
 		ng1_resume_token token;
 		token.kind = ng1_resume_kind::accepted;
 		token.binding = binding;
-		token.highest_contiguous_acked_sequence = 4U;
+		token.highest_contiguous_acked_sequence = acknowledged_sequence;
 		token.staged_digest = digest("staged");
 		token.token_generation = generation;
 		const auto token_digest = ng1_resume_token_digest(token);
@@ -404,6 +453,54 @@ namespace
 		require(!foreign_result && foreign_result.error().code == "provider.resume-token-stale",
 				"foreign resume token was accepted");
 
+		auto foreign_group = binding;
+		foreign_group.dependency_group_id = "dependency:foreign";
+		auto foreign_group_result =
+			state->accept(make_resume_token(foreign_group, 2U),
+						  make_fsync_receipt(foreign_group, 4U, digest("staged"), 3U),
+						  false,
+						  false,
+						  4U);
+		require(!foreign_group_result &&
+					foreign_group_result.error().code == "provider.resume-token-stale",
+				"foreign dependency group resume token was accepted");
+
+		auto foreign_atomic_group = binding;
+		foreign_atomic_group.atomic_output_group_id = "atomic:foreign";
+		auto foreign_atomic_group_result =
+			state->accept(make_resume_token(foreign_atomic_group, 2U),
+						  make_fsync_receipt(foreign_atomic_group, 4U, digest("staged"), 3U),
+						  false,
+						  false,
+						  4U);
+		require(!foreign_atomic_group_result &&
+					foreign_atomic_group_result.error().code == "provider.resume-token-stale",
+				"foreign atomic output group resume token was accepted");
+
+		auto foreign_batch = binding;
+		foreign_batch.batch_id = "batch:foreign";
+		auto foreign_batch_result =
+			state->accept(make_resume_token(foreign_batch, 2U),
+						  make_fsync_receipt(foreign_batch, 4U, digest("staged"), 3U),
+						  false,
+						  false,
+						  4U);
+		require(!foreign_batch_result &&
+					foreign_batch_result.error().code == "provider.resume-token-stale",
+				"foreign batch resume token was accepted");
+
+		auto foreign_stream = binding;
+		++foreign_stream.stream_id;
+		auto foreign_stream_result =
+			state->accept(make_resume_token(foreign_stream, 2U),
+						  make_fsync_receipt(foreign_stream, 4U, digest("staged"), 3U),
+						  false,
+						  false,
+						  4U);
+		require(!foreign_stream_result &&
+					foreign_stream_result.error().code == "provider.resume-token-stale",
+				"foreign stream resume token was accepted");
+
 		auto mutated = make_resume_token(binding, 2U);
 		mutated.staged_digest = digest("mutated");
 		auto mutation_result = state->accept(
@@ -497,7 +594,7 @@ namespace
 					first_prefix_digest->starts_with("semantic-v2:sha256:"),
 				"spill prefix digest was not semantic-v2 typed");
 
-		auto receipt = state->observe_host_fsync(4U, digest("staged"), 1U);
+		auto receipt = state->observe_host_fsync(0U, digest("staged"), 1U);
 		require(receipt.has_value(), "host-observed spill fsync receipt construction failed");
 		require(receipt->validate(), "host-observed spill fsync receipt was invalid");
 		require(receipt->total_records == 1U && receipt->total_bytes == state->total_bytes() &&
@@ -506,8 +603,12 @@ namespace
 
 		auto resume = ng1_resume_state::create(resume_binding());
 		require(resume.has_value(), "resume state creation for spill bridge failed");
-		require(resume->accept(make_resume_token(resume_binding()), *receipt, false, false, 4U),
-				"durable resume did not consume the host-observed spill receipt");
+		require(
+			resume->accept(make_resume_token(resume_binding(), 1U, 0U), *receipt, false, false, 4U),
+			"durable resume did not consume the host-observed spill receipt");
+		auto forged_frontier = state->observe_host_fsync(1U, digest("staged"), 2U);
+		require(!forged_frontier && forged_frontier.error().code == "provider.spill-corrupt",
+				"spill ACK beyond the validated prefix was accepted");
 
 		auto bad_payload = first;
 		bad_payload.payload_bytes.push_back(std::byte{'!'});

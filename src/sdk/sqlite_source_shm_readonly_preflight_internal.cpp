@@ -2833,10 +2833,12 @@ namespace cxxlens::sdk
 			return false;
 		std::optional<std::size_t> first_page_zero;
 		std::size_t mapped_events{};
+		bool mapped_route_seen{};
 		for (std::size_t index{}; index < events.size(); ++index)
 		{
 			const auto& event = events[index];
-			if ((event.caller_extend != 0 && event.caller_extend != 1) ||
+			if (event.page < 0 || event.page_size <= 0 ||
+				(event.caller_extend != 0 && event.caller_extend != 1) ||
 				event.delegated_extend != 0 ||
 				event.pinned_underlying_vfs_identity != pinned_underlying_vfs_identity ||
 				event.pinned_underlying_vfs_app_data_identity !=
@@ -2853,27 +2855,34 @@ namespace cxxlens::sdk
 			// pointer returned by this map callback must be retained for the event;
 			// it is evidence only and never authority by itself.
 			if (event.native_mapping_nonnull != (event.native_mapping_identity != nullptr) ||
-				(event.returned_mapping_nonnull && event.native_mapping_identity == nullptr))
+				event.returned_mapping_nonnull != event.native_mapping_nonnull)
 				return false;
 			const auto cantinit = event.native_status == sqlite_readonly_cannot_initialize &&
+				event.returned_status == sqlite_readonly_cannot_initialize &&
+				!event.native_mapping_nonnull && !event.returned_mapping_nonnull;
+			const auto normalized_readonly_null = event.native_status == sqlite_readonly &&
 				event.returned_status == sqlite_readonly_cannot_initialize &&
 				!event.native_mapping_nonnull && !event.returned_mapping_nonnull;
 			const auto mapped = event.native_status == sqlite_readonly &&
 				event.returned_status == sqlite_readonly && event.native_mapping_nonnull &&
 				event.returned_mapping_nonnull;
-			if (!cantinit && !mapped)
+			if (!cantinit && !normalized_readonly_null && !mapped)
 				return false;
-			if (cantinit && event.page != 0)
+			if ((cantinit || normalized_readonly_null) && (mapped_route_seen || event.page != 0))
 				return false;
 			if (event.page == 0 && !first_page_zero)
 				first_page_zero = index;
 			if (mapped)
+			{
 				++mapped_events;
+				mapped_route_seen = true;
+			}
 		}
 		if (!first_page_zero || (cold_route && *first_page_zero != 0U))
 			return false;
 		const auto& first = events[*first_page_zero];
-		const auto first_cantinit = first.native_status == sqlite_readonly_cannot_initialize &&
+		const auto first_cantinit = (first.native_status == sqlite_readonly_cannot_initialize ||
+									 first.native_status == sqlite_readonly) &&
 			first.returned_status == sqlite_readonly_cannot_initialize &&
 			!first.native_mapping_nonnull && !first.returned_mapping_nonnull;
 		const auto first_mapped = first.native_status == sqlite_readonly &&

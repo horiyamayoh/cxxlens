@@ -20,6 +20,36 @@ import check_ng_production_scope_closure as scope  # noqa: E402
 
 
 class NgReleaseQualificationTests(unittest.TestCase):
+    def test_accelerated_nightly_download_binding_is_step_scoped(self) -> None:
+        steps = [
+            {
+                "name": "Download exact-main Nightly evidence",
+                "uses": "actions/download-artifact@" + "a" * 40,
+                "with": {
+                    "name": "cxxlens-nightly-evidence-${{ github.sha }}",
+                    "path": "build/release-evaluation-nightly",
+                },
+            },
+            {
+                "uses": "actions/download-artifact@" + "b" * 40,
+                "with": {"pattern": "cxxlens-*-${{ github.sha }}"},
+            },
+        ]
+        release.validate_accelerated_nightly_download_step(steps)
+
+        steps[0]["uses"] = "actions/upload-artifact@" + "a" * 40
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "pinned download-artifact"
+        ):
+            release.validate_accelerated_nightly_download_step(steps)
+
+        steps[0]["uses"] = "actions/download-artifact@" + "a" * 40
+        steps[0]["with"]["path"] = "build/wrong"
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "name/path binding"
+        ):
+            release.validate_accelerated_nightly_download_step(steps)
+
     def test_nightly_evidence_requires_exact_passed_aggregate(self) -> None:
         git = {
             "revision": "1" * 40,
@@ -1035,6 +1065,50 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     2,
                 )
 
+    def test_materialization_report_matrix_rejects_valid_compact_failure(self) -> None:
+        """A schema-valid failure response is never production qualification evidence."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            manifest, install_values, git, written = self.make_materialization_matrix(
+                evidence
+            )
+            report_path = written[("static", "memory")]
+            request_path = report_path.with_name(
+                manifest["materialization"]["request_filename"]
+            )
+            request_bytes = request_path.read_bytes()
+            request = release.load(request_path)
+            compact_failure = release.materialization.compact_failure_report(
+                request_bytes,
+                request=request,
+                phase="worker-launch",
+                code="materialization.worker-failure",
+            )
+            release.materialization.validate_report(
+                ROOT,
+                request,
+                compact_failure,
+                request_bytes=request_bytes,
+            )
+            self.assertEqual(compact_failure["response_kind"], "compact_failure")
+            self.assertEqual(compact_failure["result"], "failed")
+            self.write_materialization_report(
+                report_path,
+                compact_failure,
+                manifest,
+                actual_exit_status=1,
+                parsed_response_count=1,
+            )
+
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "materialization qualification contains a failed report",
+            ):
+                release.verify_materialization_reports(
+                    ROOT, manifest, evidence, install_values, git
+                )
+
     def test_release_rejects_catalog_local_selection_census_drift(self) -> None:
         mutations = (
             (
@@ -1164,6 +1238,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0206",
                     "DF-0207",
                     "DF-0208",
+                    "DF-0261",
                 ],
             },
         )

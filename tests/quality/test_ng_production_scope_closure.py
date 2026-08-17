@@ -237,6 +237,51 @@ class ProductionScopeClosureTest(unittest.TestCase):
             )
         )
 
+    def test_catalog_status_is_cross_bound_to_production_scope(self) -> None:
+        catalog = yaml.safe_load(
+            (ROOT / "schemas/cxxlens_ng_public_api_catalog.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        closure.validate_public_catalog_scope_traceability(
+            catalog, self.model.assignments
+        )
+
+        pending_key = closure.SurfaceKey(
+            "public.catalog-entry", "public.snapshot-store-sqlite-v3"
+        )
+        promoted = copy.deepcopy(self.model.assignments)
+        promoted[pending_key]["qualification"] = "qualified"
+        with self.assertRaisesRegex(
+            closure.ContractError,
+            "status is not traceable.*public.snapshot-store-sqlite-v3",
+        ):
+            closure.validate_public_catalog_scope_traceability(catalog, promoted)
+
+        implemented_gap = closure.SurfaceKey(
+            "public.catalog-entry", "public.incremental"
+        )
+        implemented_entry = next(
+            entry for entry in catalog["entries"] if entry["id"] == implemented_gap.id
+        )
+        self.assertEqual(implemented_entry["status"], "implemented")
+        self.assertEqual(
+            self.model.assignments[implemented_gap]["qualification"], "tracked-gap"
+        )
+
+    def test_catalog_entry_without_scope_assignment_is_rejected(self) -> None:
+        catalog = yaml.safe_load(
+            (ROOT / "schemas/cxxlens_ng_public_api_catalog.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        assignments = copy.deepcopy(self.model.assignments)
+        assignments.pop(closure.SurfaceKey("public.catalog-entry", "public.common"))
+        with self.assertRaisesRegex(
+            closure.ContractError, "no production-scope assignment.*public.common"
+        ):
+            closure.validate_public_catalog_scope_traceability(catalog, assignments)
+
     def test_known_gap_and_blocker_census_is_truthful(self) -> None:
         assignments = {assignment["id"]: assignment for assignment in self.model.manifest["assignments"]}
         self.assertEqual(len(assignments["scope.clang22-installed-adoption-gap"]["surfaces"]), 14)
@@ -266,7 +311,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "sanitizer.tsan",
             },
         )
-        self.assertEqual(self.model.blocking_feedback, ())
+        self.assertEqual(self.model.blocking_feedback, ("DF-0261",))
 
     def test_materialization_authority_is_bound_to_the_typed_census(self) -> None:
         temporary, root = self.clone_contract_root()

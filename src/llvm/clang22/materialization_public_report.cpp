@@ -1986,6 +1986,10 @@ namespace cxxlens::detail::clang22::materialization
 				capture.unresolved.size() > limits.max_side_channel_records ||
 				capture.evidence.size() > limits.max_side_channel_records)
 				return sdk::unexpected({"materialization.report-invalid", "task_results", "limit"});
+			if (auto sealed_leaf =
+					validate_detailed_task_report_sealed_transcript_leaf(capture, limits);
+				!sealed_leaf)
+				return sdk::unexpected(std::move(sealed_leaf.error()));
 			for (std::size_t index{}; index < capture.batches.size(); ++index)
 				if (capture.batches[index].descriptor_id != task_descriptor_ids[index])
 					return sdk::unexpected({"materialization.report-invalid",
@@ -3994,7 +3998,31 @@ namespace cxxlens::detail::clang22::materialization
 			if (admitted == nullptr || !admitted->as_array() || snapshot_manifest == nullptr)
 				return sdk::unexpected(
 					{"materialization.report-invalid", "semantic_verification", "authority-shape"});
-			json_value::array_type descriptors = *admitted->as_array();
+			json_value::array_type descriptors;
+			descriptors.reserve(admitted->as_array()->size());
+			for (const auto& admitted_descriptor : *admitted->as_array())
+			{
+				const auto* descriptor_id = admitted_descriptor.member("descriptor_id");
+				const auto* expected_digest =
+					admitted_descriptor.member("runtime_descriptor_digest");
+				if (descriptor_id == nullptr || expected_digest == nullptr ||
+					descriptor_id->as_string() == nullptr ||
+					expected_digest->as_string() == nullptr)
+					return sdk::unexpected({"materialization.report-invalid",
+											"semantic_verification",
+											"descriptor-inventory"});
+				auto actual_descriptor = handle.descriptor(*descriptor_id->as_string());
+				if (!actual_descriptor || actual_descriptor->id != *descriptor_id->as_string() ||
+					actual_descriptor->descriptor_digest != *expected_digest->as_string())
+					return sdk::unexpected({"materialization.report-invalid",
+											"semantic_verification",
+											"descriptor-inventory"});
+				descriptors.push_back(
+					make_object({{"descriptor_id", text_value(actual_descriptor->id)},
+								 {"runtime_descriptor_digest",
+								  text_value(actual_descriptor->descriptor_digest)}})
+						.value());
+			}
 			std::ranges::sort(descriptors,
 							  [](const json_value& left, const json_value& right)
 							  {
@@ -4469,9 +4497,14 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<json_value>
 		installation_json(const materialization_v2_1_tool_authority& tool,
+						  const materialization_v2_1_worker_authority& worker_authority,
 						  const materialization_occurrence_manifest& manifest,
 						  const materialization_occurrence_receipt& receipt)
 		{
+			auto request_binding = validate_materialization_public_report_occurrence_binding(
+				tool, worker_authority, manifest, receipt);
+			if (!request_binding)
+				return sdk::unexpected(std::move(request_binding.error()));
 			if (tool.occurrence_manifest_digest.empty() ||
 				receipt.schema != "rooted-occurrence-v1" || receipt.manifest_file_digest.empty() ||
 				tool.occurrence_manifest_digest != receipt.manifest_file_digest ||
@@ -4538,12 +4571,12 @@ namespace cxxlens::detail::clang22::materialization
 			};
 			auto materializer =
 				role_path("materializer-executable", "bin/cxxlens-clang22-materialize");
-			auto worker = role_path("worker-executable", "bin/cxxlens-clang-worker-22");
-			if (!materializer || !worker)
-				return sdk::unexpected(materializer ? std::move(worker.error())
+			auto worker_file = role_path("worker-executable", "bin/cxxlens-clang-worker-22");
+			if (!materializer || !worker_file)
+				return sdk::unexpected(materializer ? std::move(worker_file.error())
 													: std::move(materializer.error()));
 			measured.emplace("tool", std::move(*materializer));
-			measured.emplace("worker", std::move(*worker));
+			measured.emplace("worker", std::move(*worker_file));
 			return make_object({{"requested", make_object(std::move(requested)).value()},
 								{"measured", make_object(std::move(measured)).value()}});
 		}
@@ -4694,6 +4727,137 @@ namespace cxxlens::detail::clang22::materialization
 			 {"authority_digests", false}}};
 	} // namespace
 
+	sdk::result<void> validate_materialization_public_report_occurrence_binding(
+		const materialization_v2_1_tool_authority& tool,
+		const materialization_v2_1_worker_authority& worker,
+		const materialization_occurrence_manifest& occurrence_manifest,
+		const materialization_occurrence_receipt& occurrence_receipt)
+	{
+		if (tool.source_revision.empty() || tool.source_tree.empty() ||
+			tool.package_configuration.empty() || tool.occurrence_manifest_digest.empty() ||
+			tool.installed_executable_digest.empty() || worker.installed_binary_digest.empty())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "installation.request-binding", "missing"});
+		if (occurrence_manifest.source_revision.empty() ||
+			occurrence_manifest.source_tree.empty() ||
+			occurrence_manifest.package_configuration.empty() ||
+			occurrence_manifest.occurrence_payload_digest.empty() ||
+			occurrence_manifest.inventory_digest.empty() || occurrence_manifest.files.empty() ||
+			occurrence_receipt.schema != "rooted-occurrence-v1" ||
+			occurrence_receipt.manifest_file_digest.empty() ||
+			occurrence_receipt.occurrence_payload_digest.empty() ||
+			occurrence_receipt.inventory_digest.empty() ||
+			occurrence_receipt.prefix_device_inode_observation_digest.empty() ||
+			occurrence_receipt.files.size() != occurrence_manifest.files.size())
+			return sdk::unexpected(
+				{"materialization.report-invalid", "installation.occurrence", "incomplete"});
+		if (occurrence_receipt.occurrence_payload_digest !=
+				occurrence_manifest.occurrence_payload_digest ||
+			occurrence_receipt.inventory_digest != occurrence_manifest.inventory_digest)
+			return sdk::unexpected({"materialization.report-invalid",
+									"installation.occurrence",
+									"inventory-mismatch"});
+		for (std::size_t index{}; index < occurrence_manifest.files.size(); ++index)
+		{
+			const auto& manifest_file = occurrence_manifest.files[index];
+			if (manifest_file.role.empty() || manifest_file.path.empty() ||
+				manifest_file.digest.empty())
+				return sdk::unexpected(
+					{"materialization.report-invalid", "installation.measured.files", "missing"});
+			if (occurrence_receipt.files[index].authority != manifest_file)
+				return sdk::unexpected({"materialization.report-invalid",
+										"installation.measured.files",
+										"authority-binding"});
+		}
+
+		const auto compare_request_value = [](const std::string_view request_value,
+											  const std::string_view measured_value,
+											  const std::string_view field) -> sdk::result<void>
+		{
+			if (request_value != measured_value)
+				return sdk::unexpected({"materialization.report-invalid",
+										std::string{field},
+										"request-occurrence-mismatch"});
+			return {};
+		};
+
+		if (auto bound = compare_request_value(tool.source_revision,
+											   occurrence_manifest.source_revision,
+											   "installation.source_revision");
+			!bound)
+			return bound;
+		if (auto bound = compare_request_value(
+				tool.source_tree, occurrence_manifest.source_tree, "installation.source_tree");
+			!bound)
+			return bound;
+		if (auto bound = compare_request_value(tool.package_configuration,
+											   occurrence_manifest.package_configuration,
+											   "installation.configuration");
+			!bound)
+			return bound;
+		if (auto bound = compare_request_value(tool.occurrence_manifest_digest,
+											   occurrence_receipt.manifest_file_digest,
+											   "installation.occurrence_manifest_digest");
+			!bound)
+			return bound;
+
+		const auto role_digest = [&](const std::string_view role,
+									 const std::string_view required_path,
+									 const std::string_view field) -> sdk::result<std::string_view>
+		{
+			const materialization_occurrence_file* manifest_file{};
+			for (const auto& file : occurrence_manifest.files)
+				if (file.role == role)
+				{
+					if (manifest_file != nullptr)
+						return sdk::unexpected({"materialization.report-invalid",
+												std::string{field},
+												"duplicate-role"});
+					manifest_file = &file;
+				}
+			if (manifest_file == nullptr || manifest_file->digest.empty())
+				return sdk::unexpected(
+					{"materialization.report-invalid", std::string{field}, "missing-role"});
+			if (manifest_file->path != required_path)
+				return sdk::unexpected(
+					{"materialization.report-invalid", std::string{field}, "path"});
+
+			const materialization_measured_file* measured_file{};
+			for (const auto& file : occurrence_receipt.files)
+				if (file.authority.role == role)
+				{
+					if (measured_file != nullptr)
+						return sdk::unexpected({"materialization.report-invalid",
+												std::string{field},
+												"duplicate-measurement"});
+					measured_file = &file;
+				}
+			if (measured_file == nullptr || measured_file->authority.digest.empty() ||
+				measured_file->authority != *manifest_file)
+				return sdk::unexpected({"materialization.report-invalid",
+										std::string{field},
+										"manifest-occurrence-mismatch"});
+			return std::string_view{manifest_file->digest};
+		};
+
+		auto materializer = role_digest("materializer-executable",
+										"bin/cxxlens-clang22-materialize",
+										"installation.materializer");
+		if (!materializer)
+			return sdk::unexpected(std::move(materializer.error()));
+		if (auto bound = compare_request_value(
+				tool.installed_executable_digest, *materializer, "installation.materializer");
+			!bound)
+			return bound;
+
+		auto worker_digest =
+			role_digest("worker-executable", "bin/cxxlens-clang-worker-22", "installation.worker");
+		if (!worker_digest)
+			return sdk::unexpected(std::move(worker_digest.error()));
+		return compare_request_value(
+			worker.installed_binary_digest, *worker_digest, "installation.worker");
+	}
+
 	sdk::result<public_materialization_prepublication_projection>
 	prepare_public_materialization_prepublication_projection(
 		const validated_materialization_request_v2_1& request,
@@ -4709,6 +4873,13 @@ namespace cxxlens::detail::clang22::materialization
 				raw_input.observed_prefix_digest.empty())
 				return sdk::unexpected(
 					{"materialization.report-invalid", "prepublication", "input-boundary"});
+			auto occurrence_binding = validate_materialization_public_report_occurrence_binding(
+				request.request().tool(),
+				request.request().worker(),
+				occurrence_manifest,
+				occurrence_receipt);
+			if (!occurrence_binding)
+				return sdk::unexpected(std::move(occurrence_binding.error()));
 			if (occurrence_manifest.occurrence_payload_digest.empty() ||
 				occurrence_manifest.inventory_digest.empty() || occurrence_receipt.files.empty() ||
 				occurrence_receipt.occurrence_payload_digest !=
@@ -4989,7 +5160,7 @@ namespace cxxlens::detail::clang22::materialization
 		auto source = source_json(*input.occurrence_manifest);
 		auto bound_request = request_json(*input.request);
 		auto installation =
-			installation_json(tool, *input.occurrence_manifest, *input.occurrence_receipt);
+			installation_json(tool, worker, *input.occurrence_manifest, *input.occurrence_receipt);
 		auto provider = provider_json(tool, worker);
 		auto project = project_json(request);
 		if (!raw_input || !source || !bound_request || !installation || !provider || !project)
@@ -5162,5 +5333,44 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(
 				{"materialization.report-invalid", "report", "projection-bytes"});
 		return encoded;
+	}
+
+	sdk::result<std::unique_ptr<materialization_replayable_spool>>
+	stage_public_materialization_final_response(std::string response,
+												const std::size_t maximum_report_bytes)
+	{
+		if (maximum_report_bytes == 0U || response.empty() ||
+			response.size() > maximum_report_bytes || response.front() != '{' ||
+			response.back() != '}' || response.find('\n') != std::string::npos ||
+			response.find('\r') != std::string::npos)
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report", "final-response-boundary"});
+		try
+		{
+			auto storage = make_materialization_private_spool();
+			if (!storage)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-create"});
+			const auto bytes = std::as_bytes(std::span{response.data(), response.size()});
+			if (auto appended = (*storage)->append(bytes); !appended)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-append"});
+			if (auto sealed = (*storage)->seal(); !sealed)
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-seal"});
+			if (!(*storage)->sealed() || (*storage)->size_bytes() != response.size())
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-census"});
+			auto observed_digest = digest_materialization_spool(**storage);
+			if (!observed_digest || *observed_digest != sdk::content_digest(bytes))
+				return sdk::unexpected(
+					{"materialization.report-invalid", "report", "final-spool-digest"});
+			return std::move(*storage);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				{"materialization.report-invalid", "report", "final-spool-allocation"});
+		}
 	}
 } // namespace cxxlens::detail::clang22::materialization
