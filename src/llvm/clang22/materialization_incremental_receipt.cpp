@@ -371,6 +371,8 @@ namespace cxxlens::detail::clang22::materialization
 		/**
 		 * Re-encode the journal projection directly from its retained census.  The journal digest
 		 * is deliberately recomputed without materializing canonical_value objects for every task.
+		 * The complete source-private request binding is validated by the surrounding authority
+		 * paths and is intentionally not part of the accepted v1 four-field projection.
 		 */
 		class execution_journal_digest_builder final
 		{
@@ -2978,6 +2980,13 @@ namespace cxxlens::detail::clang22::materialization
 			journal.ordered_task_receipt_seal_digests.size() !=
 				static_cast<std::size_t>(journal.exact_task_count))
 			return sdk::unexpected(receipt_error("execution-journal", "task-census"));
+		if (journal.request_binding.materialization_request_id !=
+				journal.materialization_request_id ||
+			journal.request_binding.task_count != journal.exact_task_count)
+			return sdk::unexpected(receipt_error("execution-journal", "request-binding"));
+		auto binding_digest = seal_materialization_claim_request_binding(journal.request_binding);
+		if (!binding_digest || *binding_digest != journal.request_binding.canonical_binding_digest)
+			return sdk::unexpected(receipt_error("execution-journal", "request-binding"));
 		auto digest = execution_journal_digest_builder::build(
 			journal.materialization_request_id,
 			std::span<const std::string>{journal.canonical_task_ids},
@@ -2991,11 +3000,11 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<materialization_incremental_execution_journal_receipt>
 	seal_materialization_incremental_execution_journal(
-		std::string materialization_request_id,
+		materialization_claim_request_binding request_binding,
 		const std::span<const materialization_incremental_task_receipt> task_receipts)
 	{
 		return seal_materialization_incremental_execution_journal(
-			std::move(materialization_request_id),
+			std::move(request_binding),
 			task_receipts.size(),
 			[task_receipts](const std::size_t index)
 			{
@@ -3005,13 +3014,16 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<materialization_incremental_execution_journal_receipt>
 	seal_materialization_incremental_execution_journal(
-		std::string materialization_request_id,
+		materialization_claim_request_binding request_binding,
 		const std::size_t task_count,
 		const materialization_incremental_task_receipt_reader& task_receipt_at)
 	{
-		if (task_count == 0U || !sdk::validate_strong_id(materialization_request_id) ||
-			!task_receipt_at)
+		if (task_count == 0U || request_binding.task_count != task_count || !task_receipt_at)
 			return sdk::unexpected(receipt_error("execution-journal", "identity"));
+		auto binding_digest = seal_materialization_claim_request_binding(request_binding);
+		if (!binding_digest || *binding_digest != request_binding.canonical_binding_digest)
+			return sdk::unexpected(receipt_error("execution-journal", "request-binding"));
+		const auto request_id = request_binding.materialization_request_id;
 		if (task_count > std::numeric_limits<std::uint64_t>::max())
 			return sdk::unexpected(receipt_error("execution-journal", "length-overflow"));
 		std::vector<std::string> task_ids;
@@ -3021,8 +3033,7 @@ namespace cxxlens::detail::clang22::materialization
 		for (std::size_t index{}; index < task_count; ++index)
 		{
 			const auto* receipt = task_receipt_at(index);
-			if (receipt == nullptr ||
-				receipt->materialization_request_id != materialization_request_id ||
+			if (receipt == nullptr || receipt->materialization_request_id != request_id ||
 				receipt->canonical_task_ordinal != index || !receipt->successful_seal ||
 				!sdk::validate_strong_id(receipt->task_id))
 				return sdk::unexpected(receipt_error("execution-journal", "task-order"));
@@ -3033,13 +3044,14 @@ namespace cxxlens::detail::clang22::materialization
 			seals.push_back(receipt->pre_encoder_task_receipt_seal_digest);
 		}
 		auto digest =
-			execution_journal_digest_builder::build(materialization_request_id,
+			execution_journal_digest_builder::build(request_binding.materialization_request_id,
 													std::span<const std::string>{task_ids},
 													std::span<const std::string>{seals});
 		if (!digest)
 			return sdk::unexpected(std::move(digest.error()));
 		return materialization_incremental_execution_journal_receipt{
-			std::move(materialization_request_id),
+			std::move(request_binding),
+			request_id,
 			static_cast<std::uint64_t>(task_ids.size()),
 			std::move(task_ids),
 			std::move(seals),

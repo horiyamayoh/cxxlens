@@ -857,9 +857,12 @@ namespace cxxlens::detail::clang22::materialization
 			if (!ingress_result)
 				return sdk::unexpected(coordinator_error("receipt", ingress_result.error().detail));
 			census.execution_journal_receipt = ingress_result->journal;
+			auto request_binding = make_materialization_claim_request_binding(claim_authority);
+			if (!request_binding)
+				return sdk::unexpected(
+					coordinator_error("claim-stream", request_binding.error().detail));
 			auto claim_stream = materialization_claim_stream_source::begin(
-				request.identity().materialization_request_id,
-				task_count,
+				std::move(*request_binding),
 				ingress_result->journal,
 				std::move(ingress_result->claim_stream_tasks));
 			if (!claim_stream)
@@ -964,6 +967,8 @@ namespace cxxlens::detail::clang22::materialization
 		bool cleanup_failed{};
 		try
 		{
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(coordinator_error("request", "binding"));
 			if (auto valid = plan.validate(); !valid)
 				return sdk::unexpected(coordinator_error("plan", "plan-validation"));
 			if (request.tasks.empty() || bindings.size() != request.tasks.size())
@@ -1105,6 +1110,8 @@ namespace cxxlens::detail::clang22::materialization
 				if (!current || !current_task_index)
 					return sdk::unexpected(
 						coordinator_error("claim-source", "missing-current-task"));
+				if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+					return sdk::unexpected(coordinator_error("request", "binding"));
 				auto task_claims =
 					construct_materialization_bounded_task_claims(request,
 																  *current_task_index,
@@ -1121,6 +1128,8 @@ namespace cxxlens::detail::clang22::materialization
 					return {};
 				if (!current || !current_receipt || !ingress)
 					return sdk::unexpected(coordinator_error("ingress", "missing-current-task"));
+				if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+					return sdk::unexpected(coordinator_error("request", "binding"));
 				materialization_incremental_task_ingress task{std::move(*current),
 															  std::move(*current_receipt),
 															  std::move(current_partition_spools)};
@@ -1215,6 +1224,9 @@ namespace cxxlens::detail::clang22::materialization
 							if (auto valid = validate_reuse_partition_binding(partition); !valid)
 								return sdk::unexpected(std::move(valid.error()));
 						}
+						if (auto valid = validate_materialization_legacy_request_binding(request);
+							!valid)
+							return sdk::unexpected(coordinator_error("request", "binding"));
 						auto prior =
 							executor.load_reusable(task_index, request.tasks[task_index], *binding);
 						if (!prior)
@@ -1283,6 +1295,9 @@ namespace cxxlens::detail::clang22::materialization
 
 					if (executor.cancellation_requested())
 						return sdk::unexpected(coordinator_error("executor", "cancelled"));
+					if (auto valid = validate_materialization_legacy_request_binding(request);
+						!valid)
+						return sdk::unexpected(coordinator_error("request", "binding"));
 					auto executed =
 						executor.execute(task_index, request.tasks[task_index], *binding);
 					if (!executed)
@@ -1386,10 +1401,14 @@ namespace cxxlens::detail::clang22::materialization
 					census.actual_provider_executions ||
 				census.warm_zero != (census.actual_provider_executions == 0U))
 				return sdk::unexpected(coordinator_error("execution", "census-mismatch"));
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(coordinator_error("request", "binding"));
 			auto ingress_result = std::move(*ingress).finalize_with_claim_stream();
 			if (!ingress_result)
 				return sdk::unexpected(coordinator_error("receipt", ingress_result.error().detail));
 			census.execution_journal_receipt = ingress_result->journal;
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(coordinator_error("request", "binding"));
 			auto claim_stream = materialization_claim_stream_source::begin(
 				request, ingress_result->journal, std::move(ingress_result->claim_stream_tasks));
 			if (!claim_stream)

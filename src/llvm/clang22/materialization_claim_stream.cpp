@@ -11,6 +11,8 @@
 #include <string_view>
 #include <utility>
 
+#include "materialization_claims.hpp"
+
 namespace cxxlens::detail::clang22::materialization
 {
 	namespace
@@ -425,12 +427,14 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<void>
 		validate_journal(const validated_materialization_request& request,
-						 const std::string_view request_id,
+						 const materialization_claim_request_binding& request_binding,
 						 const materialization_incremental_execution_journal_receipt& journal,
 						 std::span<const materialization_claim_stream_task> tasks)
 		{
+			const auto& request_id = request_binding.materialization_request_id;
 			if (tasks.size() != request.tasks.size() ||
 				journal.materialization_request_id != request_id ||
+				journal.request_binding != request_binding ||
 				journal.exact_task_count != tasks.size() ||
 				journal.canonical_task_ids.size() != tasks.size() ||
 				journal.ordered_task_receipt_seal_digests.size() != tasks.size())
@@ -462,15 +466,17 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<void>
-		validate_v2_journal(const std::string_view request_id,
-							const std::uint64_t task_count,
+		validate_v2_journal(const materialization_claim_request_binding& request_binding,
 							const materialization_incremental_execution_journal_receipt& journal,
 							const std::span<const materialization_claim_stream_task> tasks)
 		{
+			const auto& request_id = request_binding.materialization_request_id;
+			const auto task_count = request_binding.task_count;
 			if (!sdk::validate_strong_id(request_id) || task_count == 0U ||
 				task_count > std::numeric_limits<std::size_t>::max() ||
 				tasks.size() != static_cast<std::size_t>(task_count) ||
 				journal.materialization_request_id != request_id ||
+				journal.request_binding != request_binding ||
 				journal.exact_task_count != task_count ||
 				journal.canonical_task_ids.size() != tasks.size() ||
 				journal.ordered_task_receipt_seal_digests.size() != tasks.size())
@@ -705,15 +711,19 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
-			auto request_id = materialization_incremental_request_id(request);
-			if (!request_id)
-				return sdk::unexpected(std::move(request_id.error()));
-			if (auto valid = validate_journal(request, *request_id, journal, tasks); !valid)
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			auto request_binding = make_materialization_claim_request_binding(request);
+			if (!request_binding)
+				return sdk::unexpected(std::move(request_binding.error()));
+			if (auto valid = validate_journal(request, *request_binding, journal, tasks); !valid)
 				return valid;
 			for (std::size_t index{}; index < tasks.size(); ++index)
 			{
 				materialization_claim_stream_source::task_state ignored;
-				if (auto valid = validate_task_streams(*request_id, tasks[index], ignored); !valid)
+				if (auto valid = validate_task_streams(
+						request_binding->materialization_request_id, tasks[index], ignored);
+					!valid)
 					return valid;
 			}
 			return {};
@@ -725,16 +735,14 @@ namespace cxxlens::detail::clang22::materialization
 	}
 
 	sdk::result<void> materialization_claim_stream_source::validate_external_task_receipts(
-		const std::string_view materialization_request_id,
-		const std::uint64_t task_count,
+		const materialization_claim_request_binding& request_binding,
 		const materialization_incremental_execution_journal_receipt& journal,
 		const std::span<materialization_claim_stream_task> tasks)
 	{
 		try
 		{
 			auto valid =
-				validate_v2_journal(materialization_request_id,
-									task_count,
+				validate_v2_journal(request_binding,
 									journal,
 									std::span<const materialization_claim_stream_task>{tasks});
 			if (!valid)
@@ -742,8 +750,8 @@ namespace cxxlens::detail::clang22::materialization
 			for (const auto& task : tasks)
 			{
 				materialization_claim_stream_source::task_state ignored;
-				if (auto stream_valid =
-						validate_task_streams(materialization_request_id, task, ignored);
+				if (auto stream_valid = validate_task_streams(
+						request_binding.materialization_request_id, task, ignored);
 					!stream_valid)
 					return stream_valid;
 			}
@@ -762,20 +770,23 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		try
 		{
-			auto request_id = materialization_incremental_request_id(request);
-			if (!request_id)
-				return sdk::unexpected(std::move(request_id.error()));
+			if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			auto request_binding = make_materialization_claim_request_binding(request);
+			if (!request_binding)
+				return sdk::unexpected(std::move(request_binding.error()));
 			if (auto valid =
 					validate_journal(request,
-									 *request_id,
+									 *request_binding,
 									 journal,
 									 std::span<const materialization_claim_stream_task>{tasks});
 				!valid)
 				return sdk::unexpected(std::move(valid.error()));
-			auto states = build_states(*request_id, tasks);
+			auto states = build_states(request_binding->materialization_request_id, tasks);
 			if (!states)
 				return sdk::unexpected(std::move(states.error()));
-			return materialization_claim_stream_source{std::move(*request_id), std::move(*states)};
+			return materialization_claim_stream_source{std::move(*request_binding),
+													   std::move(*states)};
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -784,24 +795,22 @@ namespace cxxlens::detail::clang22::materialization
 	}
 
 	sdk::result<materialization_claim_stream_source> materialization_claim_stream_source::begin(
-		std::string materialization_request_id,
-		const std::uint64_t task_count,
+		materialization_claim_request_binding request_binding,
 		const materialization_incremental_execution_journal_receipt& journal,
 		std::vector<materialization_claim_stream_task> tasks)
 	{
 		try
 		{
 			if (auto valid =
-					validate_v2_journal(materialization_request_id,
-										task_count,
+					validate_v2_journal(request_binding,
 										journal,
 										std::span<const materialization_claim_stream_task>{tasks});
 				!valid)
 				return sdk::unexpected(std::move(valid.error()));
-			auto states = build_states(materialization_request_id, tasks);
+			auto states = build_states(request_binding.materialization_request_id, tasks);
 			if (!states)
 				return sdk::unexpected(std::move(states.error()));
-			return materialization_claim_stream_source{std::move(materialization_request_id),
+			return materialization_claim_stream_source{std::move(request_binding),
 													   std::move(*states)};
 		}
 		catch (const std::bad_alloc&)

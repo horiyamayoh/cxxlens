@@ -166,12 +166,13 @@ namespace cxxlens::detail::clang22::materialization
 			std::uint64_t appended_claim_count{};
 		};
 
-		materialization_bounded_claim_source(materialization_claim_request_binding request_binding,
+		materialization_bounded_claim_source(const validated_materialization_request* request,
+											 materialization_claim_request_binding request_binding,
 											 const sdk::relation_engine& engine,
 											 std::uint64_t expected_task_count,
 											 std::function<sdk::result<std::string>(std::size_t)>
 												 selected_request_entry_binding_resolver)
-			: request_binding_{std::move(request_binding)},
+			: request_{request}, request_binding_{std::move(request_binding)},
 			  materialization_request_id_{request_binding_.materialization_request_id},
 			  engine_{&engine}, expected_task_count_{expected_task_count},
 			  selected_request_entry_binding_resolver_{
@@ -181,7 +182,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		/** Validate every retained coverage/guarantee field before opening exact publication. */
 		[[nodiscard]] sdk::result<bool> assess_exact_publication_state();
-
+		const validated_materialization_request* request_{};
 		materialization_claim_request_binding request_binding_;
 		std::string materialization_request_id_;
 		const sdk::relation_engine* engine_{};

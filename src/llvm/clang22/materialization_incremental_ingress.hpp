@@ -127,6 +127,7 @@ namespace cxxlens::detail::clang22::materialization
 
 	  private:
 		const validated_materialization_request* request_{};
+		materialization_claim_request_binding request_binding_;
 		std::string request_id_;
 		std::vector<std::vector<std::string>> expected_partition_ids_;
 		std::vector<materialization_claim_stream_task> claim_stream_tasks_;
@@ -141,7 +142,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		materialization_incremental_ingress(
 			const validated_materialization_request& request,
-			std::string request_id,
+			materialization_claim_request_binding request_binding,
 			std::vector<std::vector<std::string>> expected_partition_ids,
 			const materialization_producer_authority* producer_authority = nullptr,
 			const materialization_guarantee_authority* guarantee_authority = nullptr,
@@ -151,7 +152,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::size_t v2_task_count = 0U);
 
 		materialization_incremental_ingress(
-			std::string request_id,
+			materialization_claim_request_binding request_binding,
 			std::size_t task_count,
 			const validated_materialization_request_v2_1& request,
 			const materialization_v2_1_claim_authority& claim_authority,
