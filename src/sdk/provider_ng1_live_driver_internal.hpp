@@ -173,11 +173,13 @@ namespace cxxlens::sdk::provider::detail
 		/**
 		 * Synchronize a successfully completed process-port effect with the recovery matrix.
 		 *
+		 * A clean process completion leaves a running session available for the shared
+		 * `output-sealed` transition; it is not itself a worker lifecycle event.
 		 * A running worker is recorded as `worker_exit`; a completed kill/reap after a heartbeat or
 		 * progress failure is recorded as `worker-kill-confirmed`. Other states already own their
 		 * transition and must not receive a synthetic lifecycle event.
 		 */
-		[[nodiscard]] result<void> synchronize_process_outcome();
+		[[nodiscard]] result<void> synchronize_process_outcome(const process_output& output);
 		[[nodiscard]] result<ng1_live_frame_receipt> stamp_provider_frame(frame value);
 		[[nodiscard]] result<ng1_host_observation> current_observation() const;
 		[[nodiscard]] result<std::uint64_t> now_ns() const;

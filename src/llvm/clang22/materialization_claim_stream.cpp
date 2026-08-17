@@ -822,6 +822,8 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<void> materialization_claim_stream_source::replay(
 		const materialization_claim_stream_consumer& consumer)
 	{
+		if (replay_payloads_released_)
+			return sdk::unexpected(stream_error("replay", "payloads-released"));
 		if (!consumer)
 			return sdk::unexpected(stream_error("replay", "consumer"));
 		try
@@ -863,6 +865,19 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			return sdk::unexpected(stream_error("allocation", "unavailable"));
 		}
+	}
+
+	sdk::result<void>
+	materialization_claim_stream_source::release_replay_payloads_after_store_preparation()
+	{
+		if (replay_payloads_released_)
+			return sdk::unexpected(stream_error("replay", "payloads-already-released"));
+
+		replay_payloads_released_ = true;
+		for (auto& task : tasks_)
+			std::vector<std::unique_ptr<materialization_replayable_spool>>{}.swap(
+				task.partition_spools);
+		return {};
 	}
 
 	std::size_t materialization_claim_stream_source::partition_count() const noexcept

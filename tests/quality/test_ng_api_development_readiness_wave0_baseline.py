@@ -1042,10 +1042,7 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             evidence_dir = pathlib.Path(temporary)
             self.complete_evidence(evidence_dir, git_state)
-            required_jobs = [
-                *self.manifest["required_status_checks"]["contexts"],
-                "foundation-completion",
-            ]
+            required_jobs = self.manifest["merged_main_ci_jobs"]
             with mock.patch(
                 "check_ng_api_development_readiness.current_git_state",
                 return_value=git_state,
@@ -1066,6 +1063,9 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
                     / "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml"
                 ),
                 "API development readiness report test fixture",
+            )
+            self.assertEqual(
+                report["required_ci_jobs"], self.manifest["merged_main_ci_jobs"]
             )
             binding = report["public_callable_inventory"]
             scope_binding = report["production_scope_inventory"]
@@ -1155,10 +1155,7 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             text = junit.read_text(encoding="utf-8")
             text = text.replace(f'<testcase name="{required[0]}"/>', "", 1)
             junit.write_text(text, encoding="utf-8")
-            required_jobs = [
-                *self.manifest["required_status_checks"]["contexts"],
-                "foundation-completion",
-            ]
+            required_jobs = self.manifest["merged_main_ci_jobs"]
             with mock.patch(
                 "check_ng_api_development_readiness.current_git_state",
                 return_value=git_state,

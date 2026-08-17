@@ -27,6 +27,13 @@ namespace cxxlens::sdk::provider::detail
 				left.payload == right.payload && left.protocol_major == right.protocol_major &&
 				left.protocol_minor == right.protocol_minor && left.flags == right.flags;
 		}
+
+		[[nodiscard]] bool is_clean_process_completion(const process_output& output)
+		{
+			return output.status == process_status::exited && output.exit_code == 0 &&
+				output.termination_signal == 0 && output.failure_code.empty() &&
+				output.sandbox.validate().has_value();
+		}
 	} // namespace
 
 	result<ng1_live_session_driver>
@@ -140,8 +147,10 @@ namespace cxxlens::sdk::provider::detail
 		return {};
 	}
 
-	result<void> ng1_live_session_driver::synchronize_process_outcome()
+	result<void> ng1_live_session_driver::synchronize_process_outcome(const process_output& output)
 	{
+		if (session_.state() == ng1_recovery_state::running && is_clean_process_completion(output))
+			return {};
 		switch (session_.state())
 		{
 			case ng1_recovery_state::running:
@@ -298,7 +307,7 @@ namespace cxxlens::sdk::provider::detail
 		if (!output)
 			return cxxlens::sdk::unexpected(std::move(output.error()));
 		ended_ = true;
-		if (auto synchronized = synchronize_process_outcome(); !synchronized)
+		if (auto synchronized = synchronize_process_outcome(*output); !synchronized)
 			return cxxlens::sdk::unexpected(std::move(synchronized.error()));
 		return output;
 	}
@@ -311,7 +320,7 @@ namespace cxxlens::sdk::provider::detail
 		if (!output)
 			return cxxlens::sdk::unexpected(std::move(output.error()));
 		ended_ = true;
-		if (auto synchronized = synchronize_process_outcome(); !synchronized)
+		if (auto synchronized = synchronize_process_outcome(*output); !synchronized)
 			return cxxlens::sdk::unexpected(std::move(synchronized.error()));
 		return output;
 	}

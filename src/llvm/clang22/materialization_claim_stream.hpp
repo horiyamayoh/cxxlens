@@ -132,6 +132,15 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::result<void>
 		replay(const materialization_claim_stream_consumer& consumer);
 
+		/**
+		 * Release the replay payload/spool storage once Store preparation has succeeded.
+		 *
+		 * Task receipts, partition identities, and the request binding remain available for
+		 * post-preparation authority/report validation. This is a one-shot lifecycle transition;
+		 * replay after it is deliberately rejected rather than reconstructed from identity data.
+		 */
+		[[nodiscard]] sdk::result<void> release_replay_payloads_after_store_preparation();
+
 		[[nodiscard]] std::string_view materialization_request_id() const noexcept
 		{
 			return materialization_request_id_;
@@ -186,5 +195,6 @@ namespace cxxlens::detail::clang22::materialization
 		materialization_claim_request_binding request_binding_;
 		std::string materialization_request_id_;
 		std::vector<task_state> tasks_;
+		bool replay_payloads_released_{};
 	};
 } // namespace cxxlens::detail::clang22::materialization
