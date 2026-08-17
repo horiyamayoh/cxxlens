@@ -1,0 +1,36 @@
+name: Issue 261 request v2.2 checkpoint
+
+on:
+  push:
+    branches:
+      - agent/issue-261-source-closure-vfs-implementation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-261-request-v2-2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  request-v2-2:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+          documentation: "false"
+      - name: Compile and run request v2.2 tests
+        run: |
+          set -euo pipefail
+          clang++-22 -std=c++23 -Wall -Wextra -Wpedantic -Werror \
+            -Isrc \
+            src/llvm/clang22/source_closure.cpp \
+            src/llvm/clang22/provider_task_v4.cpp \
+            src/llvm/clang22/materialization_request_v2_2.cpp \
+            tests/adapter/clang22/materialization_request_v2_2_test.cpp \
+            -o "${RUNNER_TEMP}/cxxlens-request-v2-2-test"
+          "${RUNNER_TEMP}/cxxlens-request-v2-2-test"
+      - name: Verify branch diff hygiene
+        run: git diff --check HEAD^ HEAD
