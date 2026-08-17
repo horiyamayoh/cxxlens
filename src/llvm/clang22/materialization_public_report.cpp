@@ -5390,6 +5390,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::optional<json_value> span_validation;
 			std::optional<json_value> base_claims;
 			std::optional<json_value> side_channels;
+			std::optional<std::string> task_guarantee_digest;
 			if (has_task_reports)
 			{
 				task_report_source source = input.task_reports != nullptr
@@ -5414,6 +5415,7 @@ namespace cxxlens::detail::clang22::materialization
 				if (guarantee_digest == nullptr || guarantee_digest->as_string() == nullptr)
 					return sdk::unexpected(
 						{"materialization.report-invalid", "side_channels.guarantee", "digest"});
+				task_guarantee_digest = *guarantee_digest->as_string();
 				auto base = base_claims_json(
 					source, request, *guarantee_digest->as_string(), detailed_report_limits{});
 				if (!base)
@@ -5563,18 +5565,11 @@ namespace cxxlens::detail::clang22::materialization
 				capacity_request, claims, request.publication().selector, candidate_manifest);
 			if (!store)
 				return sdk::unexpected(std::move(store.error()));
-			if (!task_results || !side_channels)
+			if (!task_results || !side_channels || !task_guarantee_digest)
 				return sdk::unexpected({"materialization.report-invalid",
 										"report.capacity",
 										"task-authority-required"});
-			const auto* guarantee = side_channels->member("guarantee");
-			const auto* guarantee_digest =
-				guarantee == nullptr ? nullptr : guarantee->member("digest");
-			if (guarantee_digest == nullptr || guarantee_digest->as_string() == nullptr)
-				return sdk::unexpected(
-					{"materialization.report-invalid", "side_channels.guarantee", "digest"});
-			auto stages =
-				claim_stages_json(task_results->results, *store, *guarantee_digest->as_string());
+			auto stages = claim_stages_json(task_results->results, *store, *task_guarantee_digest);
 			if (!stages)
 				return sdk::unexpected(std::move(stages.error()));
 			auto provenance = provenance_json(*stages);
