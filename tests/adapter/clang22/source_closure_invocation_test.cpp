@@ -42,6 +42,7 @@ int main()
 		"-imacrosproject://generated/macros.hpp",
 		"-resource-dir=/opt/clang-22/lib/clang/22",
 		"--sysroot=/qualified/sysroot",
+		"--gcc-toolchain=/opt/clang-22",
 		"-isystem",
 		"/qualified/sysroot/usr/include",
 		"project://src/main.cpp",
@@ -65,6 +66,7 @@ int main()
 		"-imacros/__cxxlens_project__/generated/macros.hpp",
 		"-resource-dir=/opt/clang-22/lib/clang/22",
 		"--sysroot=/qualified/sysroot",
+		"--gcc-toolchain=/opt/clang-22",
 		"-isystem",
 		"/qualified/sysroot/usr/include",
 	};
@@ -87,9 +89,15 @@ int main()
 		"source-closure.ambient-fallback-denied");
 
 	auto unqualified_absolute = arguments;
-	unqualified_absolute[11] = "/usr/include";
+	unqualified_absolute[12] = "/usr/include";
 	expect_code(prepare_source_closure_invocation(
 		unqualified_absolute, "project://src/main.cpp", "project://src", roots),
+		"source-closure.toolchain-input-unqualified");
+
+	auto unqualified_gcc = arguments;
+	unqualified_gcc[9] = "--gcc-toolchain=/ambient/gcc";
+	expect_code(prepare_source_closure_invocation(
+		unqualified_gcc, "project://src/main.cpp", "project://src", roots),
 		"source-closure.toolchain-input-unqualified");
 
 	auto response_file = arguments;

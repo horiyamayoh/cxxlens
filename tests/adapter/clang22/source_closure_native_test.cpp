@@ -98,6 +98,8 @@ namespace
 			"-std=c++23",
 			"-nostdinc",
 			"-nostdinc++",
+			"-resource-dir=/usr/lib/llvm-22/lib/clang/22",
+			"--gcc-toolchain=/usr",
 			"-Iproject://include",
 			"project://src/main.cpp",
 		};
@@ -134,7 +136,7 @@ int main()
 		"project://src/main.cpp",
 		"project://src",
 		effective_arguments(),
-		{"/usr"},
+		{"/usr", "/lib", "/lib64"},
 	};
 	auto result = with_source_closure_translation_unit(input,
 		[&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit&)
@@ -145,6 +147,9 @@ int main()
 		});
 	if (!result && result.error().code == "native.unsupported-clang-major")
 		return 77;
+	if (!result)
+		std::cerr << "native source-closure parse failed: " << result.error().code << " / "
+				  << result.error().field << " / " << result.error().detail << '\n';
 	require(result.has_value(), "native source-closure parse failed");
 	require(callback_ran, "native source-closure callback was not executed");
 

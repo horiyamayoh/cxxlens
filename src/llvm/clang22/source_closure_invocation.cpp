@@ -41,6 +41,8 @@ namespace cxxlens::detail::clang22
 			{"-resource-dir", path_authority::qualified_only},
 			{"--sysroot", path_authority::qualified_only},
 			{"-isysroot", path_authority::qualified_only},
+			{"--gcc-toolchain", path_authority::qualified_only},
+			{"-gcc-toolchain", path_authority::qualified_only},
 		};
 
 		[[nodiscard]] sdk::error failure(std::string code,
@@ -206,6 +208,8 @@ namespace cxxlens::detail::clang22
 			constexpr joined_option joined[]{
 				{"-resource-dir=", "", path_authority::qualified_only},
 				{"--sysroot=", "", path_authority::qualified_only},
+				{"--gcc-toolchain=", "", path_authority::qualified_only},
+				{"-gcc-toolchain=", "", path_authority::qualified_only},
 				{"-isystem", "", path_authority::project_or_qualified},
 				{"-iquote", "", path_authority::project_or_qualified},
 				{"-idirafter", "", path_authority::project_or_qualified},
