@@ -11,6 +11,8 @@ permissions:
 jobs:
   checkpoint:
     runs-on: ubuntu-24.04
+    outputs:
+      mode: ${{ steps.checkpoint.outputs.mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -19,15 +21,28 @@ jobs:
         id: checkpoint
         run: |
           set -euo pipefail
+          shopt -s nullglob
           encoded=.github/issue261-next.patch.gz.b64
+          parts=(.github/issue261-next.patch.gz.part-*)
           expected_file=.github/issue261-next.patch.sha256
           message_file=.github/issue261-next.commit-message
-          if [[ -f "${encoded}" || -f "${expected_file}" || -f "${message_file}" ]]; then
-            test -f "${encoded}"
+          if [[ -f "${encoded}" || ${#parts[@]} -gt 0 || -f "${expected_file}" || -f "${message_file}" ]]; then
             test -f "${expected_file}"
             test -f "${message_file}"
+            if [[ -f "${encoded}" && ${#parts[@]} -gt 0 ]]; then
+              echo 'both monolithic and chunked checkpoint payloads are present' >&2
+              exit 2
+            fi
+            archive="${RUNNER_TEMP}/issue261-next.patch.gz"
+            if [[ ${#parts[@]} -gt 0 ]]; then
+              cat "${parts[@]}" > "${archive}"
+            else
+              test -f "${encoded}"
+              base64 --decode "${encoded}" > "${archive}"
+            fi
             patch="${RUNNER_TEMP}/issue261-next.patch"
-            base64 --decode "${encoded}" | gzip --decompress > "${patch}"
+            gzip --test "${archive}"
+            gzip --decompress --stdout "${archive}" > "${patch}"
             expected="$(tr -d '\r\n' < "${expected_file}")"
             [[ "${expected}" =~ ^[0-9a-f]{64}$ ]]
             printf '%s  %s\n' "${expected}" "${patch}" | sha256sum --check --status
@@ -37,7 +52,7 @@ jobs:
             fi
             git apply --check "${patch}"
             git apply "${patch}"
-            rm "${encoded}" "${expected_file}"
+            rm -f "${encoded}" "${parts[@]}" "${expected_file}"
             commit_message="${RUNNER_TEMP}/issue261-commit-message"
             cp "${message_file}" "${commit_message}"
             rm "${message_file}"
@@ -61,3 +76,29 @@ jobs:
           path: ${{ steps.checkpoint.outputs.archive }}
           if-no-files-found: error
           retention-days: 1
+
+  focused-clang22:
+    needs: checkpoint
+    if: needs.checkpoint.outputs.mode == 'export'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+          documentation: "false"
+      - name: Build and test the exact Clang 22 source-closure boundary
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset dev-clang -DCXXLENS_BUILD_QUALITY_TOOLS=OFF
+          cmake --build --preset dev-clang --target \
+            cxxlens-clang22-source-closure-native \
+            cxxlens-clang22-source-closure-invocation \
+            cxxlens-clang-worker-22 --parallel 4
+          ctest --preset dev-clang \
+            -R '^adapter\.clang22-source-closure($|-vfs$|-invocation$|-native$)' \
+            --output-on-failure
+          python3 tools/quality/check_documentation_consistency.py check --root .
+          python3 tools/quality/check_ng_design_feedback.py check --root .
+          python3 tools/quality/verify_checksums.py check --root .
