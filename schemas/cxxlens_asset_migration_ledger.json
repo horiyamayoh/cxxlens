@@ -1,5 +1,5 @@
 {
-  "asset_count": 703,
+  "asset_count": 706,
   "assets": [
     {
       "authority": "active",
@@ -3097,6 +3097,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/source_closure_vfs.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_vfs.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/unicode_nfc.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3882,6 +3896,13 @@
     {
       "authority": "active",
       "path": "tests/adapter/clang22/source_closure_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/source_closure_vfs_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4924,7 +4945,7 @@
     }
   ],
   "classifications": {
-    "active": 667,
+    "active": 670,
     "archived": 35,
     "generated": 1
   },
