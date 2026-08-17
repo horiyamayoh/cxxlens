@@ -896,6 +896,12 @@ def main() -> int:
             "materialization.request-invalid",
         ),
         (
+            "raw-nested-duplicate-member",
+            b'{"nested":{"member":1,"member":2}}',
+            "json-decode",
+            "materialization.request-invalid",
+        ),
+        (
             "raw-non-object",
             b"[]",
             "json-decode",
