@@ -1,0 +1,141 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml
+title: cxxlens installed Clang 22 materialization request v2.2
+type: object
+additionalProperties: false
+required:
+  - schema
+  - request_version
+  - request_id
+  - request_digest
+  - required_features
+  - source_closures
+  - tasks
+properties:
+  schema: {const: cxxlens.clang22-materialization-request.v2_2}
+  request_version: {const: 2.2.0}
+  request_id:
+    type: string
+    pattern: '^materialization-request:sha256:[0-9a-f]{64}$'
+  request_digest: {$ref: '#/$defs/digest'}
+  required_features:
+    const: [task-input-chunks-v1, task-source-closure-v1]
+  source_closures:
+    type: array
+    minItems: 1
+    maxItems: 1024
+    uniqueItems: true
+    items: {$ref: '#/$defs/source_closure'}
+  tasks:
+    type: array
+    minItems: 1
+    maxItems: 4096
+    uniqueItems: true
+    items: {$ref: '#/$defs/task'}
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  logical_path:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    x-cxxlens-max-utf8-bytes: 4096
+    pattern: '^(?:project|generated)://[^\u0000-\u001f\u007f\\]+$'
+  source_closure:
+    type: object
+    additionalProperties: false
+    required:
+      - snapshot_id
+      - snapshot_digest
+      - path_case_policy
+      - files
+      - blobs
+    properties:
+      snapshot_id:
+        type: string
+        pattern: '^source-closure:sha256:[0-9a-f]{64}$'
+      snapshot_digest: {$ref: '#/$defs/digest'}
+      path_case_policy: {const: unicode-simple-casefold-v1}
+      files:
+        type: array
+        minItems: 1
+        maxItems: 4096
+        uniqueItems: true
+        items: {$ref: '#/$defs/file'}
+      blobs:
+        type: array
+        minItems: 1
+        maxItems: 4096
+        uniqueItems: true
+        items: {$ref: '#/$defs/blob'}
+  file:
+    type: object
+    additionalProperties: false
+    required:
+      - logical_path
+      - content_digest
+      - size_bytes
+      - role
+      - provenance_digest
+    properties:
+      logical_path: {$ref: '#/$defs/logical_path'}
+      content_digest: {$ref: '#/$defs/digest'}
+      size_bytes:
+        type: integer
+        minimum: 0
+        maximum: 16777216
+      role:
+        enum:
+          - main-source
+          - project-header
+          - generated-header
+          - forced-include
+          - macro-file
+      provenance_digest: {$ref: '#/$defs/digest'}
+  blob:
+    type: object
+    additionalProperties: false
+    required: [content_digest, size_bytes, content_base64]
+    properties:
+      content_digest: {$ref: '#/$defs/digest'}
+      size_bytes:
+        type: integer
+        minimum: 0
+        maximum: 16777216
+      content_base64:
+        type: string
+        maxLength: 22369624
+        x-cxxlens-max-utf8-bytes: 22369624
+        x-cxxlens-base64-canonicality: rfc4648-standard-required-padding-zero-discarded-bits
+        pattern: '^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/][AQgw]==|[A-Za-z0-9+/]{2}[AEIMQUYcgkosw048]=)?$(?![\s\S])'
+  task:
+    type: object
+    additionalProperties: false
+    required:
+      - task_codec
+      - task_id
+      - source_closure_id
+      - main_logical_path
+      - logical_working_directory
+      - effective_argv
+    properties:
+      task_codec: {const: cxxlens.clang22.task.v4}
+      task_id:
+        type: string
+        pattern: '^task:semantic-v2:sha256:[0-9a-f]{64}$'
+      source_closure_id:
+        type: string
+        pattern: '^source-closure:sha256:[0-9a-f]{64}$'
+      main_logical_path: {$ref: '#/$defs/logical_path'}
+      logical_working_directory: {$ref: '#/$defs/logical_path'}
+      effective_argv:
+        type: array
+        minItems: 2
+        maxItems: 4096
+        items:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          x-cxxlens-max-utf8-bytes: 4096
+          pattern: '^[^\u0000]+$'
