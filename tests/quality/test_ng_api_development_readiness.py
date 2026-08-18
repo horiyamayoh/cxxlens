@@ -19,7 +19,7 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASELINE_PATH = "tests/quality/test_ng_api_development_readiness_wave0_baseline.py"
-BASELINE_DIGEST = "sha256:f07e3b5242f53f26633e62c253ad1e31c1e0b3441bbcfc9ae3aec9b6f3507485"
+BASELINE_DIGEST = "sha256:b78969ed7c6f2a59cfe1eb2f44dfb881091bf714a05871942f80af60fa736344"
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 import check_ng_api_development_readiness as readiness  # noqa: E402
