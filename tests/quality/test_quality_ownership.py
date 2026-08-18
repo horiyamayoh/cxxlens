@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import pathlib
 import shutil
 import sys
@@ -24,6 +25,7 @@ from check_quality_ownership import (  # noqa: E402
     canonical_digest,
     evidence_id,
     load_yaml,
+    normalized_path_digest,
     select_mode,
     validate_constructibility_projection,
     validate_evidence,
@@ -342,6 +344,48 @@ class QualityOwnershipTest(unittest.TestCase):
             ),
             4,
         )
+
+
+class NormalizedPathDigestTest(unittest.TestCase):
+    def test_root_relative_paths_digest_by_relative_posix_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / "a.txt").write_text("hello", encoding="utf-8")
+            digest = normalized_path_digest(root, ["a.txt"])
+            self.assertEqual(digest, canonical_digest([["a.txt", "file", hashlib.sha256(b"hello").hexdigest()]]))
+
+    def test_out_of_root_path_is_digested_instead_of_raising(self) -> None:
+        with tempfile.TemporaryDirectory() as root_dir, tempfile.TemporaryDirectory() as outside_dir:
+            root = pathlib.Path(root_dir)
+            outside = pathlib.Path(outside_dir) / "evidence.json"
+            outside.write_text("{}", encoding="utf-8")
+            digest = normalized_path_digest(root, [str(outside)])
+            self.assertEqual(
+                digest,
+                canonical_digest(
+                    [["absolute:" + outside.as_posix(), "file", hashlib.sha256(b"{}").hexdigest()]]
+                ),
+            )
+
+    def test_out_of_root_and_in_root_paths_cannot_collide(self) -> None:
+        # An out-of-root member is always tagged "absolute:/...", which can
+        # never equal a repository-relative posix path (those never start
+        # with "/"), so the two namespaces cannot be confused for each other.
+        with tempfile.TemporaryDirectory() as root_dir, tempfile.TemporaryDirectory() as outside_dir:
+            root = pathlib.Path(root_dir)
+            outside = pathlib.Path(outside_dir) / "shared-name.json"
+            outside.write_text("outside", encoding="utf-8")
+            (root / "shared-name.json").write_text("inside", encoding="utf-8")
+            outside_digest = normalized_path_digest(root, [str(outside)])
+            inside_digest = normalized_path_digest(root, ["shared-name.json"])
+            self.assertNotEqual(outside_digest, inside_digest)
+
+    def test_missing_out_of_root_path_still_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as root_dir, tempfile.TemporaryDirectory() as outside_dir:
+            root = pathlib.Path(root_dir)
+            missing = pathlib.Path(outside_dir) / "does-not-exist.json"
+            with self.assertRaisesRegex(QualityOwnershipError, "does not exist"):
+                normalized_path_digest(root, [str(missing)])
 
 
 class ConstructibilityGateProjectionTest(unittest.TestCase):

@@ -210,7 +210,15 @@ def normalized_path_digest(root: pathlib.Path, paths: list[str]) -> str:
                 if "__pycache__" not in path.parts and path.suffix != ".pyc"
             )
         for member in members:
-            relative = member.relative_to(root).as_posix()
+            try:
+                relative = member.relative_to(root).as_posix()
+            except ValueError:
+                # Some evidence (e.g. CI scale-run artifacts written under the
+                # runner's temp directory) legitimately lives outside the
+                # checkout root. Bind it by its absolute path instead of
+                # crashing; the "absolute:" tag keeps it unambiguous from a
+                # repository-relative entry (which never starts with "/").
+                relative = "absolute:" + member.as_posix()
             if member.is_symlink():
                 entries.append((relative, "symlink", os.readlink(member)))
             elif member.is_file():
