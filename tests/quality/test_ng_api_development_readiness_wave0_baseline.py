@@ -19,10 +19,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_ng_api_development_readiness import (  # noqa: E402
+    PACKET_JSON_NAME,
+    PACKET_MARKDOWN_NAME,
     ReadinessError,
+    build_agent_context_packet,
     build_report,
     load_document,
     public_callable_evidence,
+    render_agent_context_markdown,
     sha256,
     validate_documents,
     validate_schema,
@@ -43,6 +47,7 @@ REQUIRED_FILES = (
     "docs/design/adr/0095-production-scope-closure.md",
     "docs/design/adr/0096-clang22-installed-materialization-boundary.md",
     "docs/development/agent-api-development-goal.md",
+    "docs/development/build-and-test.md",
     "schemas/cxxlens_ng_acceptance_manifest.yaml",
     "schemas/cxxlens_ng_api_development_readiness.schema.yaml",
     "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml",
@@ -429,15 +434,19 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(ReadinessError, "repository consistency preflight"):
                 validate_documents(root)
 
-    def test_nightly_main_push_trigger_is_required(self) -> None:
+    def test_nightly_reusable_trigger_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             workflow = root / ".github/workflows/nightly.yml"
             text = workflow.read_text(encoding="utf-8")
-            push = "  push:\n    branches:\n      - main\n"
-            self.assertIn(push, text)
-            workflow.write_text(text.replace(push, "", 1), encoding="utf-8")
-            with self.assertRaisesRegex(ReadinessError, "main push, schedule, and manual"):
+            marker = "on:\n  workflow_call:\n"
+            self.assertIn(marker, text)
+            workflow.write_text(
+                text.replace(marker, "on:\n", 1), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                ReadinessError, "Nightly must be reusable, scheduled, and manually dispatchable"
+            ):
                 validate_documents(root)
 
     def test_nightly_rolling_concurrency_is_required(self) -> None:
@@ -445,24 +454,36 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             root = self.copied_root(temporary)
             workflow = root / ".github/workflows/nightly.yml"
             text = workflow.read_text(encoding="utf-8")
-            marker = "  cancel-in-progress: ${{ github.event_name != 'schedule' }}\n"
+            marker = "  cancel-in-progress: false\n"
             self.assertIn(marker, text)
             workflow.write_text(
-                text.replace(marker, "  cancel-in-progress: false\n", 1),
+                text.replace(
+                    marker,
+                    "  cancel-in-progress: ${{ github.event_name != 'schedule' }}\n",
+                    1,
+                ),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ReadinessError, "preserve scheduled evidence"):
+            with self.assertRaisesRegex(
+                ReadinessError, "Nightly must retain every exact-SHA stress run"
+            ):
                 validate_documents(root)
 
     def test_release_evaluation_waits_for_push_nightly(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             workflow = root / ".github/workflows/quality.yml"
-            text = workflow.read_text(encoding="utf-8")
-            marker = '.event == "push" or '
-            self.assertIn(marker, text)
-            workflow.write_text(text.replace(marker, "", 1), encoding="utf-8")
-            with self.assertRaisesRegex(ReadinessError, "wait for push qualification"):
+            workflow.write_text(
+                workflow.read_text(encoding="utf-8").replace(
+                    "needs: [nightly-quality, g5-qualification, sqlite-store-v3-qualification]",
+                    "needs: [g5-qualification, sqlite-store-v3-qualification]",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ReadinessError, "release evaluation must depend on exact-SHA stress completion"
+            ):
                 validate_documents(root)
 
     def test_missing_implementation_learning_handbook_is_rejected(self) -> None:
@@ -680,14 +701,14 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             workflow = root / ".github/workflows/quality.yml"
             workflow.write_text(
                 workflow.read_text(encoding="utf-8").replace(
-                    "needs: [g5-qualification, sqlite-store-v3-qualification]",
-                    "needs: [g5-qualification]",
+                    "needs: [nightly-quality, g5-qualification, sqlite-store-v3-qualification]",
+                    "needs: [nightly-quality, g5-qualification]",
                     1,
                 ),
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(
-                ReadinessError, "production-scope job needs differ: release-evaluation"
+                ReadinessError, "release evaluation must depend on exact-SHA stress completion"
             ):
                 validate_documents(root)
 
@@ -1005,7 +1026,9 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             text = workflow.read_text(encoding="utf-8")
             self.assertIn("  push:\n", text)
             workflow.write_text(text.replace("  push:\n", "", 1), encoding="utf-8")
-            with self.assertRaisesRegex(ReadinessError, "workflow triggers"):
+            with self.assertRaisesRegex(
+                ReadinessError, "quality workflow must use PR events and main-only push"
+            ):
                 validate_documents(root)
 
     def test_quality_evidence_pipeline_requires_pipefail(self) -> None:
@@ -1047,6 +1070,13 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
                 "check_ng_api_development_readiness.current_git_state",
                 return_value=git_state,
             ):
+                packet = build_agent_context_packet(
+                    ROOT, self.manifest, git_state["revision"], git_state["tree"]
+                )
+                self.write_json(evidence_dir / PACKET_JSON_NAME, packet)
+                (evidence_dir / PACKET_MARKDOWN_NAME).write_text(
+                    render_agent_context_markdown(packet), encoding="utf-8"
+                )
                 report = build_report(
                     ROOT,
                     self.manifest,

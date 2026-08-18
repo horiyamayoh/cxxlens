@@ -1032,6 +1032,7 @@ foreach(
         migration_completion
         foundation_completion
         api_development_readiness
+        api_development_readiness_wave0_baseline
         use_case_capability_catalog
         agent_context
         design_feedback
