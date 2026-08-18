@@ -4629,6 +4629,188 @@ namespace
 						partition_count_before_duplicate_after_relabel,
 				"bounded adoption staged a duplicate task window");
 	}
+
+	/**
+	 * DF-0200 D1 "production_path_comparison" activation evidence.
+	 *
+	 * tests/adapter/clang22/df_0200_claim_batch_corpus_test.cpp only exercises the independent
+	 * reference oracle (the public sdk::claim_batch::commit control flow) against a frozen corpus.
+	 * It never drives the actual bounded/incremental production path. This test feeds the same
+	 * sealed task results into both:
+	 *
+	 *   - the reference oracle, via the legacy all-task construct_materialization_claims wrapper,
+	 *     which is built directly on sdk::claim_batch::commit(); and
+	 *   - the real production adoption primitive, materialization_bounded_claim_source fed by
+	 *     construct_materialization_bounded_task_claims (which by its own doc comment "performs
+	 *     field/identity/reference/conflict validation without constructing or committing an
+	 *     sdk::claim_batch" -- i.e. genuinely independent verdict logic, per DF-0200 D1's
+	 *     "shared commit control flow or verdict logic is forbidden" rule); and additionally
+	 *   - the full v2.1 incremental coordinator (run_materialization_incremental_coordinator_v2_1),
+	 *     the scheduling layer that owns task reuse/recompute atop the same bounded source.
+	 *
+	 * Equivalence is checked at three independent levels (never digest-only, per D1): exact claim/
+	 * unresolved/conflict/differential census, an independently recomputed canonical content
+	 * digest, and a full byte-for-byte canonical content-encoding comparison.
+	 */
+	void check_production_path_claim_batch_equivalence(
+		const validated_materialization_request& request,
+		const materialization_producer_authority& producer,
+		const std::filesystem::path& root)
+	{
+		const materialization_guarantee_authority guarantee{
+			{}, {"clang22-parse", "query-parity", "store-reopen"}};
+		auto results = seal_all(request);
+		require(results.size() == request.tasks.size(),
+				"production-path comparison fixture task census mismatch");
+
+		// Reference oracle: the legacy all-task path, built directly on sdk::claim_batch::commit().
+		auto reference = construct_materialization_claims(request, results, producer, guarantee);
+		require(reference.has_value(),
+				"reference claim_batch::commit oracle failed: " +
+					(reference ? std::string{} : failure(reference.error())));
+		const auto& reference_batch = reference->final_claim_batch();
+		require(!reference_batch.claims.empty(),
+				"production-path comparison fixture had no claims");
+		require(reference_batch.conflicts.empty() &&
+					reference_batch.differential_disagreements.empty(),
+				"production-path comparison fixture unexpectedly produced conflicts/differentials");
+
+		// Production path: the real bounded/incremental adoption primitive.
+		auto production_source = materialization_bounded_claim_source::begin(request);
+		require(production_source.has_value(),
+				"production bounded source begin failed: " +
+					(production_source ? std::string{} : failure(production_source.error())));
+		for (std::size_t index{}; index < results.size(); ++index)
+		{
+			auto task = construct_materialization_bounded_task_claims(
+				request, index, results[index], producer, guarantee);
+			require(task.has_value(),
+					"production bounded task construction failed: " +
+						(task ? std::string{} : failure(task.error())));
+			require(production_source->consume_task(std::move(*task)).has_value(),
+					"production bounded task adoption failed");
+		}
+		auto sealed_production = std::move(*production_source).finalize();
+		require(sealed_production.has_value() && sealed_production->sealed(),
+				"production bounded source failed to seal: " +
+					(sealed_production ? std::string{} : failure(sealed_production.error())));
+
+		auto production_status = sealed_production->claim_batch_status();
+		require(production_status.has_value(),
+				"production bounded claim-batch status failed: " +
+					(production_status ? std::string{} : failure(production_status.error())));
+		require(production_status->claim_count == reference_batch.claims.size() &&
+					production_status->unresolved_count == reference_batch.unresolved.size() &&
+					production_status->conflict_count == reference_batch.conflicts.size() &&
+					production_status->differential_disagreement_count ==
+						reference_batch.differential_disagreements.size(),
+				"production bounded claim census diverged from the reference claim_batch::commit "
+				"oracle");
+
+		// Full-content equivalence, not digest-only: independently replay every production
+		// partition's claims/unresolved values and compare the canonical byte encoding directly
+		// against the reference oracle's own claims, plus an independently recomputed digest.
+		std::vector<sdk::claim> production_claims;
+		std::vector<sdk::unresolved_reference> production_unresolved;
+		auto replayed = sealed_production->replay(
+			[&](sdk::partition_draft draft) -> sdk::result<void>
+			{
+				for (auto& claim : draft.claims)
+					production_claims.push_back(std::move(claim));
+				for (auto& unresolved : draft.unresolved)
+					production_unresolved.push_back(std::move(unresolved));
+				return {};
+			});
+		require(replayed.has_value(),
+				"production bounded replay failed: " +
+					(replayed ? std::string{} : failure(replayed.error())));
+		require(production_claims.size() == reference_batch.claims.size() &&
+					production_unresolved.size() == reference_batch.unresolved.size(),
+				"production replay census diverged from the reference oracle");
+
+		auto reference_digest =
+			sdk::claim_batch_content_digest(reference_batch.claims,
+											reference_batch.unresolved,
+											reference_batch.conflicts,
+											reference_batch.differential_disagreements);
+		require(reference_digest.has_value(), "reference content digest computation failed");
+		auto production_digest =
+			sdk::claim_batch_content_digest(production_claims, production_unresolved, {}, {});
+		require(production_digest.has_value(), "production content digest computation failed");
+		require(*production_digest == *reference_digest,
+				"production bounded content digest diverged from the reference claim_batch::commit "
+				"oracle");
+
+		auto reference_encoding =
+			sdk::claim_batch_content_encoding(reference_batch.claims,
+											  reference_batch.unresolved,
+											  reference_batch.conflicts,
+											  reference_batch.differential_disagreements);
+		require(reference_encoding.has_value(), "reference content encoding failed");
+		auto production_encoding =
+			sdk::claim_batch_content_encoding(production_claims, production_unresolved, {}, {});
+		require(production_encoding.has_value(), "production content encoding failed");
+		require(*production_encoding == *reference_encoding,
+				"production bounded claim/unresolved content diverged byte-for-byte from the "
+				"reference claim_batch::commit oracle");
+
+		// Also drive the full v2.1 incremental coordinator -- the scheduling layer that owns task
+		// reuse/recompute atop the bounded source -- to confirm it does not distort the claim/
+		// unresolved/conflict/differential census the bounded source produces. The v2.1 fixture
+		// necessarily uses a distinct request identity and producer interface version (2.1.0 vs
+		// 2.0.0 above), so its claim content is not byte-comparable to the legacy reference; the
+		// coordinator path is instead independently cross-checked against the same reference
+		// census.
+		const materialization_guarantee_authority v2_1_guarantee{
+			{},
+			{"clang22.materialization-sealed.v1",
+			 "provider.transcript-sealed.v1",
+			 "sdk.claim-envelope-validated.v1"}};
+		auto accepted = validate_v2_1_request_fixture();
+		require(accepted.has_value(), "v2.1 production-path comparison request admission failed");
+		auto authority = make_materialization_v2_1_claim_authority(
+			*accepted, v2_1_producer_authority(root), v2_1_guarantee);
+		require(authority.has_value(),
+				"v2.1 production-path comparison claim authority failed: " +
+					(authority ? std::string{} : failure(authority.error())));
+		auto binding_set =
+			seal_materialization_incremental_selected_request_binding_set(*authority);
+		require(binding_set.has_value(), "v2.1 production-path comparison binding set failed");
+		auto v2_1_results = seal_all(request);
+		std::array<std::string, 2U> artifact_digests;
+		for (std::size_t index{}; index < v2_1_results.size() && index < artifact_digests.size();
+			 ++index)
+		{
+			auto digest = seal_materialization_incremental_artifact_digest(v2_1_results[index]);
+			require(digest.has_value(), "v2.1 production-path comparison artifact digest failed");
+			artifact_digests[index] = std::move(*digest);
+		}
+		auto fixture = make_v2_1_plan_fixture(*accepted, artifact_digests, false);
+		fixture_v2_1_executor executor{
+			*authority, *binding_set, std::move(v2_1_results), v2_1_receipt_mode::valid};
+		auto outcome = run_materialization_incremental_coordinator_v2_1(*accepted,
+																		fixture.plan,
+																		std::move(fixture.bindings),
+																		executor,
+																		*authority,
+																		*binding_set);
+		require(outcome.has_value(),
+				"v2.1 incremental coordinator production-path comparison failed: " +
+					(outcome ? std::string{} : failure(outcome.error())));
+		require(outcome->bounded_claim_source().sealed(),
+				"v2.1 incremental coordinator bounded source did not seal");
+		auto coordinator_status = outcome->bounded_claim_source().claim_batch_status();
+		require(coordinator_status.has_value(),
+				"v2.1 incremental coordinator claim-batch status failed: " +
+					(coordinator_status ? std::string{} : failure(coordinator_status.error())));
+		require(coordinator_status->claim_count == reference_batch.claims.size() &&
+					coordinator_status->unresolved_count == reference_batch.unresolved.size() &&
+					coordinator_status->conflict_count == reference_batch.conflicts.size() &&
+					coordinator_status->differential_disagreement_count ==
+						reference_batch.differential_disagreements.size(),
+				"v2.1 incremental coordinator claim census diverged from the reference "
+				"claim_batch::commit oracle");
+	}
 } // namespace
 
 int main(const int argc, char** argv)
@@ -4652,5 +4834,6 @@ int main(const int argc, char** argv)
 	check_bounded_conflict_fail_closed(request, producer);
 	check_bounded_soft_semantic_unresolved(request, producer);
 	check_bounded_adoption_fail_closed(request, producer);
+	check_production_path_claim_batch_equivalence(request, producer, root);
 	negative_authority_guarantee_order_and_coverage(request, std::move(producer));
 }
