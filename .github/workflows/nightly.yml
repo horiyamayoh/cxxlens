@@ -238,7 +238,7 @@ jobs:
               --toolchain-provenance "${toolchain}" \
               --checker tools/quality/check_ng_clang22_materialization_scale.py \
               --output "${report}" \
-              --evidence-output "${RUNNER_TEMP}/cxxlens-materialization-scale-ownership.json" \
+              --evidence-output "${RUNNER_TEMP}/cxxlens-materialization-scale-ownership.evidence.json" \
               > "${ownership_log}" 2>&1
             ownership_status=$?
           else
@@ -262,7 +262,7 @@ jobs:
             ${{ runner.temp }}/cxxlens-materialization-scale-provenance.log
             ${{ runner.temp }}/cxxlens-materialization-scale-ownership.log
             ${{ runner.temp }}/cxxlens-materialization-scale-toolchain.json
-            ${{ runner.temp }}/cxxlens-materialization-scale-ownership.json
+            ${{ runner.temp }}/cxxlens-materialization-scale-ownership.evidence.json
           if-no-files-found: warn
       - name: Enforce scale evidence result
         if: always()

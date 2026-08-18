@@ -376,11 +376,11 @@ class NgCiSupplyChainTest(unittest.TestCase):
         lock_path = ROOT / "tools/ci/llvm22-noble.lock.json"
         self.assertEqual(
             file_digest(lock_path),
-            "sha256:c9dcffa308fd36dfa26c5c0714cf2336abfc8f6eca650fcbb308f0e4e96f9e30",
+            "sha256:daf06ac0c6238d13093294a531c8efbf2aaf290c5c8faa9326243881509c79ee",
         )
         self.assertEqual(
             hash_files_digest(lock_path),
-            "742eb09c68a2fc01cb6efa21741e1ae1790cd30e46ee743358d3219221aac8be",
+            "c13b68ac2257ab3efc45fe0a0cec22801be30c1d53c94b61dcfa6adf35ed2090",
         )
         self.assertEqual(
             hash_files_digest(lock_path), github_hash_files_simulation(lock_path)
