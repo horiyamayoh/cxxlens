@@ -263,3 +263,120 @@ filesystem probes (finding 1), make `missing_failure()` enforcement
 unconditional and prove it with a test where Clang itself does not also fail
 (finding 2), and delete the dead task.v4/compiler_vfs/request-v2.2 files
 before any further qualification work.
+
+2026-08-19: Follow-up implementation addressing both blocking findings from
+the 2026-08-18 review, on branch `agent/issue-261-source-closure-vfs-v2`
+(built on current `main`). This entry describes an implementation increment,
+not a review verdict; the independent review this record already requires
+still has to happen before any acceptance boundary moves.
+
+Carried `source_closure.{hpp,cpp}` and `source_closure_vfs.{hpp,cpp}` over
+from `agent/issue-261-source-closure-vfs-implementation` (PR #353, tip
+`7a0717b`) byte-for-byte unchanged, plus the small `unicode_nfc.{hpp,cpp}`
+refactor that adds `nfc_casefold_utf8` (used by the case-collision check in
+`source_closure.cpp`). Both were already found sound by the prior review and
+remain so; nothing in either file changed. `source_closure_invocation.{hpp,cpp}`
+(the `qualified_read_roots` admitted-toolchain-root contract) was also
+carried over unchanged; it was already the correct single source of truth for
+finding 1's fix, not something needing new authority. `source_closure_native.
+{hpp,cpp}` (the Clang-facing bridge) was rewritten to fix both findings. The
+~10 dead-code files from finding 3 (`compiler_vfs.*`, `clang_compiler_vfs.*`,
+`provider_task_v4*.*`, `materialization_request_v2_2.*`) were not carried
+over at all -- `git grep` over `src/` and `tests/` on the new branch confirms
+nothing references them.
+
+Finding 1 fix (fail-closed VFS vs. Clang's own speculative toolchain
+probing): `closure_routing_file_system` still classifies every path into
+exactly the same three regions as before -- the closure's synthetic project
+root, the admitted qualified toolchain root(s), or neither -- reusing
+`source_closure_invocation.cpp`'s existing `qualified_read_roots` contract as
+the one source of truth for "the admitted toolchain" rather than inventing a
+second one. What changed is the "neither" case: it used to record a
+`policy_failure` that unconditionally aborted the whole task; it now answers
+with a plain `ENOENT` (`std::errc::no_such_file_or_directory`) to whatever
+asked, and touches no audit state at all. Real ambient content is
+structurally unreachable through that route (the real filesystem is never
+consulted for a denied path), so the fail-closed guarantee against ambient
+bytes holds by construction, not by an audit-and-abort step that can be
+bypassed or mis-ordered the way finding 2 showed the old audit-based approach
+could be. Reproduced the underlying problem concretely first: `strace -f -e
+trace=openat,newfstatat,access` on a bare `clang++-22 -std=c++23 -nostdinc
+-nostdinc++ --gcc-toolchain=/usr -resource-dir=<resource-dir> -c ...`
+invocation on the verification host shows the driver touching, among others,
+`/etc/os-release`, `/etc/lsb-release`, `/opt/rh`, and `/etc/env.d/gcc` -- all
+outside a `{"/usr","/lib","/lib64"}`-style allowlist -- purely as ordinary
+GCC-installation-candidate and distro-detection probing that Clang itself
+tolerates gracefully on ENOENT. The new `adapter.clang22-source-closure-native`
+test (scenario 4) admits *only* the exact LLVM/Clang 22 install root the
+adapter is itself linked against (resolved from `find_package(LLVM 22.1
+CONFIG)` by `tests/CMakeLists.txt`) as the qualified root -- no `/usr`, no
+`/etc`, nothing else ambient on the host -- and runs a real `clang++-22` with
+no `--gcc-toolchain` pinned, so the driver's own candidate search runs
+completely unconstrained. Temporarily reverting just this fix (restoring the
+old `deny()`/`policy_failure()` behavior while keeping everything else as-is)
+reproduces the failure concretely: the task now aborts with
+`source-closure.toolchain-input-unqualified / compiler-vfs / /opt/rh` on the
+very first, ordinary-success scenario, against this host's real toolchain
+layout. With the fix restored, all five scenarios in that test pass.
+
+Finding 2 fix (asymmetric fail-closed enforcement): the closure-completeness
+signal (`missing_failure()`, simplified to `missing_path()` now that
+`policy_failure()` no longer exists to be asymmetric with) is checked
+unconditionally in `with_source_closure_translation_unit`, immediately after
+the Clang run returns and regardless of what `outcome` says, rather than only
+inside a `!outcome` branch. A new scenario 3 in the same test exercises this
+directly: the closure omits a header that `main.cpp` only probes through `#if
+__has_include("optional_generated.hpp")`, a construct Clang tolerates without
+ever diagnosing an error. The test asserts `callback_ran` is `true` (proving
+Clang's own run independently reached `HandleTranslationUnit`, i.e. succeeded
+on its own terms) *and* that the overall result is still
+`source-closure.member-missing` -- the two signals are a genuine independent
+variable here, not coupled by construction the way the previously shipped
+negative case was. Reverting just the unconditional-check fix (gating the
+same check back inside `if (!outcome)`) reproduces the exact failure this
+finding described: the scenario reports a closure-incomplete `__has_include`
+probe parsing as successful. The original fatal-`#include` negative case
+(scenario 2) is kept as a baseline regression, but its old `!callback_ran`
+assertion was dropped: on this Clang 22 build, `HandleTranslationUnit` was
+observed to still run even after a fatal preprocessor "file not found" error
+(the AST consumer still gets invoked with whatever partially-parsed AST
+exists), so neither Clang's return code nor whether the callback fired is a
+reliable signal for closure completeness in general -- reinforcing that the
+explicit, unconditional `missing_failure()` check is the only thing that may
+be relied on, which is exactly what finding 2 was about.
+
+Also wired the sound units into the real build for the first time:
+`source_closure.cpp`, `source_closure_invocation.cpp`, and
+`source_closure_vfs.cpp` were added to `cxxlens_clang22_materialization_codecs`
+(top-level `CMakeLists.txt`) and its private sealed-worker mirror
+`cxxlens_clang22_worker_codecs_internal` (`cmake/CxxlensClangTargets.cmake`,
+required so the sealed `cxxlens-clang-worker-22` closure keeps resolving the
+symbols `source_closure_native.cpp` needs); `source_closure_native.cpp` was
+added to `cxxlens_clang22_worker_core` alongside `provider_worker.cpp`. Four
+tests are wired into `tests/CMakeLists.txt`: `adapter.clang22-source-closure`,
+`adapter.clang22-source-closure-vfs`, and
+`adapter.clang22-source-closure-invocation` (unchanged from the reviewed
+branch), and `adapter.clang22-source-closure-native` (rewritten; five
+scenarios covering ordinary success, a fatal missing include, the finding-2
+asymmetry, the finding-1 ambient-probing case, and an ambient-shadow-file
+regression). The native test resolves its compiler binary, resource
+directory, and admitted toolchain root from the same `find_package(LLVM 22.1
+CONFIG)` result the real adapter links against, rather than an assumed host
+path such as `/usr/bin/clang++-22`.
+
+Verification: `CXX=clang++-22 cmake --preset dev-clang -DLLVM_DIR=<llvm>/lib/
+cmake/llvm -DClang_DIR=<llvm>/lib/cmake/clang` against a real local LLVM/Clang
+22.1.0 install, a full `cmake --build build/dev-clang` (206 build steps, no
+errors, including the sealed `cxxlens-clang-worker-22` closure), and `ctest`
+for all 28 `clang22`-labeled tests plus the four new/changed ones run
+individually -- all pass. `quality.ownership`, `quality.ng-ci_supply_chain`,
+and `quality.ng-foundation_completion` (asset migration ledger and
+design-package checksum inventory regenerated for the new files) pass.
+
+This disposition still does not accept a source-closure identity, request
+version, wire feature, reuse/cache rule, production-facing compiler VFS
+wiring, or production qualification -- unit 2 (bounded transfer/capability
+contract) remains entirely unbuilt, and this unit is not wired into the real
+materializer's request/task processing path. The tracking issue #261 remains
+open and `implementation_disposition` remains `blocked`; this entry does not
+change that field. An independent reviewer is required before it can change.

@@ -872,6 +872,92 @@ set_tests_properties(
   adapter.clang22-unicode-nfc
   PROPERTIES LABELS "adapter;provider;clang22;materialization;unicode;security")
 
+cxxlens_add_test_executable(cxxlens-clang22-source-closure
+                            adapter/clang22/source_closure_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure
+         COMMAND cxxlens-clang22-source-closure)
+set_tests_properties(
+  adapter.clang22-source-closure
+  PROPERTIES LABELS
+             "adapter;provider;clang22;source-closure;security;identity;contract")
+
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-vfs
+                            adapter/clang22/source_closure_vfs_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-vfs
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure-vfs
+         COMMAND cxxlens-clang22-source-closure-vfs)
+set_tests_properties(
+  adapter.clang22-source-closure-vfs
+  PROPERTIES LABELS
+             "adapter;provider;clang22;source-closure;vfs;security;contract")
+
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-invocation
+                            adapter/clang22/source_closure_invocation_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-invocation
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure-invocation
+         COMMAND cxxlens-clang22-source-closure-invocation)
+set_tests_properties(
+  adapter.clang22-source-closure-invocation
+  PROPERTIES LABELS
+             "adapter;provider;clang22;source-closure;invocation;security;contract")
+
+# The native bridge test needs a real compiler binary/resource-dir/root, resolved from the
+# exact LLVM/Clang 22 package `find_package(LLVM 22.1 CONFIG)` locates for the real adapter
+# (CXXLENS_CLANG22_LIBRARY_DIRS, set by cxxlens_configure_clang22 in
+# cmake/CxxlensClangTargets.cmake) rather than an assumed host path such as /usr/bin/clang++-22.
+# This is the same "admitted toolchain root" the native bridge itself pins through
+# qualified_read_roots -- one source of truth, not a second ad hoc guess for the test.
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-native
+                            adapter/clang22/source_closure_native_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-native
+                      PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  # The worker-private provider SDK is a static closure.  Its provider.cpp
+  # references hidden transcript/runtime definitions that cannot be resolved
+  # from the public shared SDK.  Place the exact private runtime objects on the
+  # final native-fixture link after that closure, matching the sealed worker.
+  target_sources(
+    cxxlens-clang22-source-closure-native
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
+  list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_native_test_lib_dir)
+  get_filename_component(_cxxlens_native_test_llvm_root
+                         "${_cxxlens_native_test_lib_dir}" DIRECTORY)
+  find_program(
+    _cxxlens_native_test_clangxx
+    NAMES clang++-22 clang++
+    PATHS "${_cxxlens_native_test_llvm_root}/bin"
+    NO_DEFAULT_PATH NO_CACHE)
+  if(_cxxlens_native_test_clangxx)
+    execute_process(
+      COMMAND "${_cxxlens_native_test_clangxx}" -print-resource-dir
+      OUTPUT_VARIABLE _cxxlens_native_test_resource_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    target_compile_definitions(
+      cxxlens-clang22-source-closure-native
+      PRIVATE
+        CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_native_test_llvm_root}"
+        CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_native_test_clangxx}"
+        CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_native_test_resource_dir}")
+  endif()
+  unset(_cxxlens_native_test_lib_dir)
+  unset(_cxxlens_native_test_llvm_root)
+  unset(_cxxlens_native_test_clangxx)
+  unset(_cxxlens_native_test_resource_dir)
+endif()
+add_test(NAME adapter.clang22-source-closure-native
+         COMMAND cxxlens-clang22-source-closure-native)
+set_tests_properties(
+  adapter.clang22-source-closure-native
+  PROPERTIES LABELS
+             "adapter;provider;clang22;source-closure;vfs;native;security;contract"
+             SKIP_RETURN_CODE 77)
+
 cxxlens_add_test_executable(cxxlens-r2-vertical-slice
                             integration/r2_vertical_slice_test.cpp)
 target_link_libraries(cxxlens-r2-vertical-slice
@@ -1144,6 +1230,10 @@ add_dependencies(
   cxxlens-clang22-materialization-report
   cxxlens-clang22-observation-v2
   cxxlens-clang22-unicode-nfc
+  cxxlens-clang22-source-closure
+  cxxlens-clang22-source-closure-vfs
+  cxxlens-clang22-source-closure-invocation
+  cxxlens-clang22-source-closure-native
   cxxlens-r2-vertical-slice
   cxxlens-provider-process-fixture
   cxxlens-public-header-cxxlens

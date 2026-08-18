@@ -9,6 +9,7 @@
 #include <cxxlens/provider/clang22.hpp>
 
 #include "llvm/clang22/logical_path_segments.hpp"
+#include "llvm/clang22/provider_sdk_internal.hpp"
 
 #if CXXLENS_HAS_CLANG22
 #include <clang/AST/ASTConsumer.h>
@@ -169,6 +170,40 @@ namespace cxxlens::provider::clang22
 		return sdk::unexpected(native_error("native.unsupported-clang-major", "clang", "22"));
 #endif
 	}
+
+#if CXXLENS_HAS_CLANG22
+	sdk::result<void> detail::with_translation_unit_vfs(
+		const translation_unit_input& input,
+		std::string compiler_filename,
+		std::string tool_name,
+		std::vector<std::string> compiler_arguments,
+		llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> filesystem,
+		translation_unit_callback callback)
+	{
+		if (auto valid = input.validate(); !valid)
+			return valid;
+		if (!callback || !filesystem || compiler_filename.empty() || tool_name.empty() ||
+			compiler_filename.find('\0') != std::string::npos ||
+			tool_name.find('\0') != std::string::npos)
+			return sdk::unexpected(native_error("native.input-invalid", "closure-vfs"));
+		for (const auto& argument : compiler_arguments)
+			if (argument.empty() || argument.find('\0') != std::string::npos)
+				return sdk::unexpected(native_error("native.input-invalid", "argument"));
+
+		sdk::result<void> outcome{};
+		auto action = std::make_unique<callback_action>(callback, outcome);
+		const auto parsed = clang::tooling::runToolOnCodeWithArgs(
+			std::move(action),
+			input.source,
+			std::move(filesystem),
+			compiler_arguments,
+			compiler_filename,
+			tool_name);
+		if (!parsed && outcome)
+			return sdk::unexpected(native_error("native.parse-failed", input.logical_path));
+		return outcome;
+	}
+#endif
 
 	sdk::result<void> detached_source_span::validate() const
 	{

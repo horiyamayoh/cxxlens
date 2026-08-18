@@ -371,7 +371,9 @@ endif()
 add_library(
   cxxlens_clang22_materialization_codecs STATIC
   src/llvm/clang22/provider_task_v3.cpp src/llvm/clang22/observation_v2.cpp
-  src/llvm/clang22/unicode_nfc.cpp)
+  src/llvm/clang22/source_closure.cpp
+  src/llvm/clang22/source_closure_invocation.cpp
+  src/llvm/clang22/source_closure_vfs.cpp src/llvm/clang22/unicode_nfc.cpp)
 target_link_libraries(
   cxxlens_clang22_materialization_codecs
   PUBLIC cxxlens::provider_sdk
@@ -387,7 +389,9 @@ cxxlens_enable_sanitizers(cxxlens_clang22_materialization_codecs)
 # is linked only by provider-owned executables and source-private tests.
 add_library(
   cxxlens_clang22_worker_core STATIC
-  src/llvm/clang22/provider_worker.cpp src/llvm/clang22/materialization_io.cpp
+  src/llvm/clang22/provider_worker.cpp
+  src/llvm/clang22/source_closure_native.cpp
+  src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_task_spool.cpp)
 target_link_libraries(
   cxxlens_clang22_worker_core
