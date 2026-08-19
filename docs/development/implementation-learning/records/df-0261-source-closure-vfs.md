@@ -21,6 +21,7 @@ tracking_issue: '#261'
 implementation_issues:
   - '#261'
 resolution_refs:
+  - docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md
   - src/llvm/clang22/source_closure.hpp
   - src/llvm/clang22/source_closure.cpp
   - src/llvm/clang22/source_closure_vfs.hpp
@@ -619,3 +620,19 @@ found to have blocking defects), get it independently reviewed and accepted
 alongside this record, *then* the frontmatter status change above becomes
 legitimate. Units 2 and 4 remain entirely separate, larger pieces of work.
 Issue #261 remains open.
+
+2026-08-19 (ADR drafted): Wrote
+`docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md`,
+`Status: Proposed for independent review`. It is deliberately narrower than
+the rejected branch's draft of the same number: it formalizes only what is
+actually merged and twice-reviewed (closure identity, the three-region
+compiler VFS, member-aware missing-input enforcement, the `member-missing`
+semantics narrowing and why it's a diagnostic-granularity choice rather than
+a security weakening), and explicitly lists the wire/transport format
+(`request v2.2`, `task.v4`, capability negotiation), production wiring, and
+installed qualification as non-goals reserved for their own future ADR(s) --
+this record's units 2 and 4 are not addressed by ADR 0101 and remain
+unstarted. This ADR does not itself change this record's `status`/
+`implementation_disposition`; per its own "Acceptance gate" section, that
+requires an independent review binding this ADR, this record, and the exact
+reviewed revision together, which has not happened yet.

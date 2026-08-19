@@ -74,6 +74,7 @@
 | [0098](0098-explicit-static-relation-projection.md) | explicit generated relation static projection |
 | [0099](0099-provider-ng1-hardening.md) | provider NG1 hardening lifecycle and evidence |
 | [0100](0100-ng1-resume-provider-digest-grammar.md) | NG1 resume provider identity digest grammar |
+| [0101](0101-source-closure-identity-and-compiler-vfs.md) | source closure identity and read-only compiler VFS |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。
