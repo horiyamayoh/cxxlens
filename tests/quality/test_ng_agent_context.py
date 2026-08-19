@@ -76,15 +76,26 @@ class AgentContextTests(unittest.TestCase):
         self.assertEqual(packet["binding"]["worktree"], "clean")
         self.assertEqual(packet["binding"]["generator"], agent.GENERATOR_PATH.as_posix())
         self.assertEqual(packet["design_feedback_records"][0]["path"], agent.DF_0261_RECORD_PATH.as_posix())
-        self.assertEqual(packet["design_feedback_records"][0]["status"], "proposed")
-        self.assertEqual(packet["design_feedback_records"][0]["implementation_disposition"], "blocked")
-        self.assertEqual(packet["design_feedback_records"][0]["review_status"], "pending")
-        # resolution_refs accumulates real #261 evidence over time while the
-        # record stays proposed/blocked (see check_ng_design_feedback.py's own
-        # accepted-status gate), so bind against the record's live content
-        # rather than a point-in-time snapshot that legitimately goes stale.
+        # status / implementation_disposition / review_status / resolution_refs
+        # are DF-0261's live lifecycle fields, which legitimately advance over
+        # time (see check_ng_design_feedback.py's own acceptance gate) --
+        # DF-0261 itself moved from proposed/blocked/pending to
+        # accepted/may-proceed/complete via real, independently reviewed #261
+        # progress. Bind against the record's live content rather than a
+        # point-in-time snapshot that would otherwise go stale.
         live_metadata, _ = agent.design_feedback.split_front_matter(
             ROOT / agent.DF_0261_RECORD_PATH
+        )
+        self.assertEqual(
+            packet["design_feedback_records"][0]["status"], live_metadata["status"]
+        )
+        self.assertEqual(
+            packet["design_feedback_records"][0]["implementation_disposition"],
+            live_metadata["implementation_disposition"],
+        )
+        self.assertEqual(
+            packet["design_feedback_records"][0]["review_status"],
+            live_metadata["review"]["status"],
         )
         self.assertEqual(
             packet["design_feedback_records"][0]["resolution_refs"],
