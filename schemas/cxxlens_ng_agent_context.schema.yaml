@@ -306,9 +306,10 @@ $defs:
       path:
         const: docs/development/implementation-learning/records/df-0261-source-closure-vfs.md
       digest: {$ref: '#/$defs/digest'}
-      status: {const: proposed}
-      implementation_disposition: {const: blocked}
-      review_status: {const: pending}
+      status:
+        enum: [observed, investigating, proposed, accepted, rejected, deferred, superseded]
+      implementation_disposition: {enum: [blocked, may-proceed]}
+      review_status: {enum: [pending, complete, not-required]}
       resolution_refs:
         type: array
         uniqueItems: true
