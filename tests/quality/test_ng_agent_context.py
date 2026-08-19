@@ -527,39 +527,46 @@ class AgentContextTests(unittest.TestCase):
                         check=True,
                     )
 
-    def test_design_feedback_metadata_is_exactly_blocked_pending(self) -> None:
+    def test_design_feedback_metadata_binds_by_id_only(self) -> None:
         metadata, _ = agent.design_feedback.split_front_matter(
             ROOT / agent.DF_0261_RECORD_PATH
         )
-        for field, value in (
-            ("status", "accepted"),
-            ("implementation_disposition", "may-proceed"),
-        ):
-            mutated = copy.deepcopy(metadata)
-            mutated[field] = value
-            with self.subTest(field=field), self.assertRaisesRegex(
-                agent.AgentContextError, r"agent-context\.design-feedback-"
-            ):
-                agent.validate_design_feedback_metadata(mutated)
 
         mutated = copy.deepcopy(metadata)
-        mutated["review"]["status"] = "complete"
+        mutated["id"] = "DF-0001"
         with self.assertRaisesRegex(
             agent.AgentContextError,
-            r"agent-context\.design-feedback-review-status-mismatch",
+            r"agent-context\.design-feedback-record-id-mismatch",
         ):
             agent.validate_design_feedback_metadata(mutated)
 
-        # resolution_refs is deliberately NOT part of "exactly blocked/pending":
-        # a proposed/blocked record accumulating partial resolution evidence
-        # (as DF-0261 itself has, via real #261 commits) must keep validating
-        # cleanly. Only status/implementation_disposition/review.status gate
-        # whether the record is still a live blocker.
-        mutated = copy.deepcopy(metadata)
-        mutated["resolution_refs"] = ["docs/design/README.md"]
-        agent.validate_design_feedback_metadata(mutated)
-        mutated["resolution_refs"] = []
-        agent.validate_design_feedback_metadata(mutated)
+        # status / implementation_disposition / review.status / resolution_refs
+        # are deliberately NOT pinned: this function's job is to confirm the
+        # packet is bound to the right record (id == DF-0261), not to freeze
+        # that record's lifecycle stage. Whether #261's capability is still
+        # blocked is tracked separately via the packet's own
+        # constructibility.disposition and capability_path fields. DF-0261
+        # legitimately moved through proposed/blocked/pending,
+        # accepted/may-proceed/complete via real, independently reviewed
+        # #261 progress, and both stages -- along with accumulated
+        # resolution_refs -- must keep validating cleanly as long as the id
+        # matches.
+        for status, disposition, review_status, resolution_refs in (
+            ("proposed", "blocked", "pending", []),
+            ("proposed", "blocked", "pending", ["docs/design/README.md"]),
+            ("accepted", "may-proceed", "complete", ["docs/design/README.md"]),
+        ):
+            with self.subTest(
+                status=status,
+                implementation_disposition=disposition,
+                review_status=review_status,
+            ):
+                mutated = copy.deepcopy(metadata)
+                mutated["status"] = status
+                mutated["implementation_disposition"] = disposition
+                mutated["review"]["status"] = review_status
+                mutated["resolution_refs"] = resolution_refs
+                agent.validate_design_feedback_metadata(mutated)
 
     def test_machine_contract_and_witness_digest_drift_fail_closed(self) -> None:
         readiness = agent.load_yaml(ROOT / agent.READINESS_PATH)

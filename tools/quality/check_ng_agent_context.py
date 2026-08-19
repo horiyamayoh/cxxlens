@@ -432,21 +432,23 @@ def bind_authority_reading(
 def validate_design_feedback_metadata(metadata: dict[str, Any]) -> None:
     if metadata.get("id") != "DF-0261":
         fail("agent-context.design-feedback-record-id-mismatch")
-    if metadata.get("status") != "proposed":
-        fail("agent-context.design-feedback-status-mismatch")
-    if metadata.get("implementation_disposition") != "blocked":
-        fail("agent-context.design-feedback-disposition-mismatch")
-    review = metadata.get("review")
-    if not isinstance(review, dict) or review.get("status") != "pending":
-        fail("agent-context.design-feedback-review-status-mismatch")
-    # resolution_refs is deliberately not pinned to empty here. The design
-    # feedback schema and check_ng_design_feedback.py already own the real
-    # invariant -- resolution_refs may accumulate partial evidence while a
-    # record is still proposed/blocked, and only status == accepted (checked
-    # above as forbidden) requires and gates resolution_refs content. Pinning
-    # this to [] would just re-encode the exact snapshot observed when this
-    # packet's #261 use case was first templated, which real, independently
-    # reviewed #261 progress has since and legitimately grown past.
+    # status / implementation_disposition / review.status are deliberately not
+    # pinned to their original proposed/blocked/pending snapshot here. This
+    # function's job is to confirm the packet is bound to the *right* record,
+    # not to freeze that record's lifecycle stage -- the design feedback
+    # schema (cxxlens_ng_design_feedback_record.schema.yaml) already owns the
+    # real structural invariants for those fields (enum membership, review
+    # object shape), and check_ng_design_feedback.py owns the real acceptance
+    # gate (e.g. impact: security requiring an accepted-ADR resolution ref).
+    # Whether #261's *capability* is still blocked is tracked independently
+    # via the packet's own constructibility.disposition and capability_path
+    # entries, not by re-deriving it from this record's current status. DF-0261
+    # legitimately reached status: accepted / implementation_disposition:
+    # may-proceed / review.status: complete via real, independently reviewed
+    # #261 progress (see docs/design/adr/0101-source-closure-identity-and-
+    # compiler-vfs.md); pinning those fields here would just re-encode the
+    # exact snapshot observed when this packet's #261 use case was first
+    # templated.
 
 
 def bind_design_feedback(
