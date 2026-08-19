@@ -1,6 +1,6 @@
 # ADR 0101: Source closure identity and read-only compiler VFS
 
-- Status: Proposed for independent review
+- Status: Accepted
 - Date: 2026-08-19
 - Decision owner: repository owner
 - Decision issue: #261
@@ -229,24 +229,31 @@ This ADR does **not** define:
 
 ## Verification
 
-- `tests/adapter/clang22/source_closure_test.cpp`,
-  `source_closure_vfs_test.cpp`, `source_closure_invocation_test.cpp`,
-  `source_closure_native_test.cpp` (13 scenarios covering realistic
-  multi-directory project layouts, incomplete-closure diagnosis, the
-  claimed-but-unservable hard-failure invariant including when Clang itself
-  tolerates the absence, and the ambient-read barrier under an absolute
-  include of a file that genuinely exists on disk, relative traversal, and
-  the synthetic-root prefix boundary) -- all pass against a real local LLVM
-  22.1.0 / Clang 22 build.
+- `tests/adapter/clang22/source_closure_native_test.cpp` (13 scenarios
+  covering realistic multi-directory project layouts, incomplete-closure
+  diagnosis, the claimed-but-unservable hard-failure invariant including
+  when Clang itself tolerates the absence, and the ambient-read barrier
+  under an absolute include of a file that genuinely exists on disk,
+  relative traversal, and the synthetic-root prefix boundary), plus their
+  own separate coverage in `source_closure_test.cpp` (digest/order-
+  independence and blob-tamper detection), `source_closure_vfs_test.cpp`
+  (logical-path traversal, case-collision, and shadow-file resolution), and
+  `source_closure_invocation_test.cpp` (argument rewriting, response-file
+  and `-ivfsoverlay` rejection) -- all pass against a real local LLVM 22.1.0
+  / Clang 22 build.
 - Two independent adversarial review rounds against that same real build.
   Round 1 (on commit `c691fbf`) found and required fixing a genuine blocking
   defect: the fail-closed audit fired on Clang's own ordinary speculative
-  probing inside the project root, confirmed empirically via `strace` and by
-  reverting the fix and observing a complete closure fail materialization.
-  Round 2 (on commit `7cb7f98`) re-verified the fix -- reverting it again
-  reproduced the same failure -- and found no further functional defect,
-  only a documentation correction (the testing seam's build-gating claim,
-  addressed in commit `232a76d`).
+  probing inside the project root, confirmed empirically by compiling real
+  multi-directory closures with `clang++-22` and observing spurious
+  `member-missing` failures, and by reverting the fix and reproducing the
+  same failure. (A separate, earlier `strace` trace was used only to verify
+  the *outside*-project-root half of this fix, in the round of work that
+  produced `c691fbf` itself -- not part of round 1's own discovery of the
+  inside-project-root gap.) Round 2 (on commit `7cb7f98`) re-verified the
+  fix -- reverting it again reproduced the same failure -- and found no
+  further functional defect, only a documentation correction (the testing
+  seam's build-gating claim, addressed in commit `232a76d`).
 - Full `clang22`-labeled ctest sweep (28 tests) passes on exact `main`
   `e3fe17e`.
 
@@ -254,12 +261,26 @@ This ADR does **not** define:
 
 This ADR, DF-0261's record update in
 `docs/development/implementation-learning/records/df-0261-source-closure-vfs.md`,
-and an independent review binding this exact revision must all be accepted
-together before DF-0261's `status`/`implementation_disposition` frontmatter
-may change from `proposed`/`blocked`. `check_ng_design_feedback.py` enforces
-this mechanically for `impact: security` records: `status: accepted` requires
-a `resolution_refs` entry resolving to an accepted ADR and a `review.refs`
-entry bound to the tracking issue. Until that review completes, this ADR
-authorizes nothing beyond what is already independently reviewed and merged
-to `main`; it does not itself authorize wire-format work, production wiring,
-or any qualification claim.
+and an independent review binding this exact revision were required to all
+be accepted together before DF-0261's `status`/`implementation_disposition`
+frontmatter could change from `proposed`/`blocked`. `check_ng_design_feedback.py`
+enforces this mechanically for `impact: security` records: `status: accepted`
+requires (a) a `resolution_refs` entry resolving to an accepted ADR, (b) a
+`review.refs` entry that is specifically a
+`https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-<N>` URL (a
+local file reference does not satisfy this particular check, even though it
+is otherwise a valid `review.refs` entry), and (c) `review.author` and
+`review.reviewer` that differ case-insensitively, so the record cannot cite
+itself as its own independent review.
+
+That review pass completed 2026-08-19
+(<https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5346070745>),
+independently re-deriving every concrete claim in this ADR from the current
+source rather than trusting its prose, and found the document accurate
+(three minor wording issues, none of which misstated code behavior, fixed in
+the same revision this ADR was accepted at). This ADR is accepted **only**
+for what it actually defines -- closure identity and the read-only compiler
+VFS (units 1 and 3 of DF-0261's four-unit plan). It authorizes nothing beyond
+what is already independently reviewed and merged to `main`; it does not
+authorize wire-format work (unit 2), production wiring, or any qualification
+claim (unit 4).

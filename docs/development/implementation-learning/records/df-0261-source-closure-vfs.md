@@ -1,11 +1,11 @@
 ---
 id: DF-0261
 title: Bind materialization tasks to a digest-addressed source-closure VFS
-status: proposed
+status: accepted
 kind: missing-assumption
 impact: security
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - provider.clang22-source-closure-vfs
   - provider.materialization-source-snapshot
@@ -36,10 +36,11 @@ resolution_refs:
   - tests/adapter/clang22/source_closure_native_test.cpp
 review:
   mode: independent
-  status: pending
-  author: codex-agent-source-closure-preflight
-  reviewer: null
-  refs: []
+  status: complete
+  author: agent-issue-261-source-closure-vfs-v2
+  reviewer: agent-issue-261-adr-0101-accuracy-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5346070745
 created: '2026-08-16'
 ---
 
@@ -636,3 +637,26 @@ unstarted. This ADR does not itself change this record's `status`/
 `implementation_disposition`; per its own "Acceptance gate" section, that
 requires an independent review binding this ADR, this record, and the exact
 reviewed revision together, which has not happened yet.
+
+2026-08-19 (accepted): An independent review of ADR 0101's document accuracy
+(distinct from the two code-review rounds already covered in the ADR's own
+Verification section) re-derived every concrete claim in the ADR directly
+from current source rather than trusting its prose, built and ran the full
+`clang22`-labeled ctest suite (28/28) against a real local LLVM/Clang 22.1.0
+install to confirm the test-pass claims empirically, and found the document
+accurate with three minor wording issues (a misattributed verification
+method, an incomplete summary of the checker's acceptance conditions, and an
+ambiguous scenario-count attribution) -- none of which misstated code
+behavior or weakened the security argument. All three were fixed in ADR
+0101 in this same revision. Review posted at
+<https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5346070745>.
+
+This record's `status`/`implementation_disposition` frontmatter is updated
+to `accepted`/`may-proceed` on the strength of that review, together with
+the two prior code-review rounds. This acceptance covers **only** units 1
+(closure identity) and 3 (the read-only compiler VFS) -- the scope ADR 0101
+actually defines. Unit 2 (the versioned transfer/capability contract) and
+unit 4 (installed/relocated qualification) remain entirely unaddressed,
+unauthorized, and unstarted; this unit is still not wired into the
+materializer's real request/task processing path. Issue #261 remains open
+pending that remaining work.
