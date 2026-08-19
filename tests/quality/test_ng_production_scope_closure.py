@@ -311,7 +311,23 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "sanitizer.tsan",
             },
         )
-        self.assertEqual(self.model.blocking_feedback, ("DF-0261",))
+        # blocking_feedback legitimately shrinks as design-feedback records
+        # are accepted (DF-0261 moved to accepted/may-proceed via ADR-0101,
+        # independently reviewed #261 progress), so a hardcoded snapshot goes
+        # stale. Independently re-derive the expected set from the raw
+        # per-file records (not by calling applicable_feedback itself, which
+        # would make this tautological) so this still exercises the real
+        # filter predicate against live repo state.
+        raw_records = closure.load_feedback_records(ROOT)
+        expected_blocking = tuple(
+            sorted(
+                feedback_id
+                for feedback_id, record in raw_records.items()
+                if record.get("status") in closure.ACTIVE_BLOCKING_STATUSES
+                and record.get("implementation_disposition") == "blocked"
+            )
+        )
+        self.assertEqual(self.model.blocking_feedback, expected_blocking)
 
     def test_materialization_authority_is_bound_to_the_typed_census(self) -> None:
         temporary, root = self.clone_contract_root()
