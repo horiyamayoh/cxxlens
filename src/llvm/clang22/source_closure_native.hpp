@@ -71,8 +71,21 @@ namespace cxxlens::detail::clang22
 	 * the mounted filesystem while remaining claimed by the manifest. This manufactures the
 	 * genuinely-claimed-but-unservable state that the production path treats as a hard failure
 	 * but that a validated closure plus a successful mount cannot otherwise reach, so that the
-	 * unconditional enforcement of that invariant stays under test. Compiled only when
-	 * `BUILD_TESTING` is on; it is absent from installed/production builds.
+	 * unconditional enforcement of that invariant stays under test.
+	 *
+	 * Gating note: `BUILD_TESTING` is `ON` in every configure preset this repository currently
+	 * ships (including `install-check`, the preset used to build the "installed" materializer/
+	 * worker evidence elsewhere in this codebase) -- no preset or CI job sets it `OFF`. This seam
+	 * is therefore compiled into every build this repository's own tooling actually produces
+	 * today, not only literal test builds; do not rely on `BUILD_TESTING=OFF` as a real deployment
+	 * boundary. It stays inert in practice because (a) this declaration lives in a source-private
+	 * header under `src/`, never installed under `include/cxxlens/`, so it is not part of any
+	 * public API surface an external consumer can discover or link against, and (b) no production
+	 * call site invokes it -- this whole unit is not yet wired into the real materializer request/
+	 * task path (see the DF-0261 record). If this unit is wired into production, revisit this
+	 * seam's guard before that lands: either give the symbol explicit hidden visibility so it is
+	 * never exported from a shared build regardless of `BUILD_TESTING`, or split it into a
+	 * genuinely test-only translation unit that production linking never includes.
 	 */
 	[[nodiscard]] sdk::result<void> with_source_closure_translation_unit_withholding_member(
 		const source_closure_native_input& input,

@@ -502,3 +502,43 @@ this unit is still not wired into the materializer's request/task path, and
 the semantics change described above (`member-missing` no longer covering
 closure incompleteness) is itself a contract decision that the next
 independent review should weigh explicitly rather than inherit.
+
+2026-08-19 (second review pass): Independently re-verified commit `7cb7f98`
+against a real Clang 22 build -- all 13 `source-closure-native` scenarios pass,
+and the ambient-barrier cases (`D1`-`D3`) show genuine Clang "file not found"
+diagnostics rather than any hint of real ambient content, confirming the
+prior review's finding-1 fix now holds inside the project root as well as
+outside it. `classify()`/`note_closure_miss()` were read in full: a path is
+flagged `source-closure.member-missing` only when it matches
+`claimed_members_`, which is populated exclusively from the validated
+closure's own member set with no attacker-influenceable gap, so a genuinely
+claimed member cannot be misclassified as an ordinary miss.
+
+One correction to the prior entry's own verification claim: "a separate
+`BUILD_TESTING=OFF` Release configure/build confirms the testing seam is
+compiled out" is true only as an ad hoc manual configuration -- it does not
+describe how this repository actually builds. Every configure preset in
+`CMakePresets.json`, including `install-check` (the preset this codebase's own
+CI and prior sessions use to build "installed"/production materializer
+evidence), inherits `BUILD_TESTING: ON` from the shared `base` preset, and
+no preset or workflow in this repository ever sets it `OFF`. The testing seam
+(`with_source_closure_translation_unit_withholding_member`) is therefore
+compiled into every build this repository's tooling currently produces, not
+only literal test builds. This is not a live security hole today: its
+declaration lives in a source-private header never installed under
+`include/cxxlens/`, so it is outside any public API surface, and no
+production call site invokes it -- but the specific claim of "absence from
+production builds" needs correcting, since nothing in this repository
+currently builds that way. Corrected the doc comments in
+`source_closure_native.hpp` and `CMakeLists.txt` to state this accurately and
+to flag that the guard should be revisited (explicit hidden visibility, or a
+genuinely test-only translation unit) before this unit is wired into
+production, rather than relying on a `BUILD_TESTING=OFF` boundary that does
+not exist in practice. No functional code changed; rebuilt and reran the full
+`cxxlens-clang22-source-closure-native` suite after the edit, still 13/13.
+
+Still `proposed / blocked`. This closes out the two blocking findings from the
+first review; the remaining path to `accepted` is unit 2 (bounded transfer/
+capability contract) and the still-open `member-missing` semantics question
+noted above, both of which need their own independent review rather than
+inheriting this one's scope.

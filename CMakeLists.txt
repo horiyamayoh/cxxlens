@@ -410,8 +410,11 @@ cxxlens_configure_clang22(cxxlens_clang22_worker_core)
 if(BUILD_TESTING)
   # Exposes the source-closure member-withholding seam used to keep the
   # claimed-but-unservable invariant under test. PUBLIC because the declaration
-  # is guarded in source_closure_native.hpp, which the fixture includes. Absent
-  # from installed/production builds, which configure with BUILD_TESTING=OFF.
+  # is guarded in source_closure_native.hpp, which the fixture includes.
+  # BUILD_TESTING is ON in every preset this repository ships (including
+  # install-check), so this is compiled into every build produced today, not
+  # only literal test builds -- see the gating note in source_closure_native.hpp
+  # for why that is still safe and what to revisit before production wiring.
   target_compile_definitions(cxxlens_clang22_worker_core
                              PUBLIC CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING=1)
 endif()
