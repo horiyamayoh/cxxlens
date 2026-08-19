@@ -380,3 +380,125 @@ contract) remains entirely unbuilt, and this unit is not wired into the real
 materializer's request/task processing path. The tracking issue #261 remains
 open and `implementation_disposition` remains `blocked`; this entry does not
 change that field. An independent reviewer is required before it can change.
+
+2026-08-19 (second increment): Independent security review of the increment
+above (commit `c691fbf`) rejected it with two blocking findings. The review
+confirmed the ambient-read barrier itself holds under adversarial probing and
+that the closure identity/traversal/digest layer is intact, but found that the
+finding-1 fix had been applied only *outside* the synthetic project root while
+the identical conflation survived inside it. This entry records the repair.
+
+Blocking finding A -- the missing-member audit fired on any absent path under
+the synthetic root, not only on members the manifest actually claims.
+`closure_routing_file_system::classify()` routed purely by prefix, so every
+miss beneath `/__cxxlens_project__` was recorded and converted into
+`source-closure.member-missing`. The code comments justified this by asserting
+the manifest "already claims this member exists", which was simply false: the
+manifest claims things only about `closure.members`, and nothing compared the
+probed path against that set. Clang probes non-member paths inside the project
+namespace constantly, so the reviewer was able to show -- against real
+`clang++-22`, with a complete closure that Clang compiled successfully -- that
+all of the following failed the task spuriously: the includer-directory-first
+rule for a quoted `#include` (`project://src/answer.hpp` probed before the
+`-I` entry that holds the member), the same under `-iquote`, ordinary
+multi-`-I` search order, an `-I` naming a member-less directory, and
+`__has_include` in project code. The practical effect was that any project
+using the conventional `include/` + `src/` split -- precisely the "ordinary
+project whose main source includes a project header" this record exists to
+enable -- could not be materialized at all. This was fail-closed rather than a
+bypass, but it defeated the unit's purpose and made the
+`source-closure.member-missing` signal mean something other than its name,
+which is the kind of pressure that eventually gets a real signal relaxed.
+
+The fix makes the audit member-aware. `mount_native_vfs` now records the exact
+synthetic path of every closure member alongside the in-memory content, and a
+miss beneath the synthetic root consults that set: a claimed member that could
+not be served still records the determinate failure, while every other miss
+returns the same plain ENOENT the outside-root case already returned. The
+consequence worth stating plainly is that an *incomplete* closure is no longer
+reported as `member-missing` at all -- Clang emits its own ordinary
+file-not-found diagnostic and the task fails through `native.parse-failed`.
+`member-missing` is now reserved strictly for claimed-but-unservable members,
+which, given a validated closure and a successful mount, is a defence-in-depth
+invariant rather than a reachable state. Because that makes it unreachable
+through the public entry point, a testing-only withholding seam
+(`with_source_closure_translation_unit_withholding_member`, guarded by
+`CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING`, set only under `BUILD_TESTING`
+following the existing `CXXLENS_CLANG22_MATERIALIZATION_REPORT_TESTING`
+precedent) manufactures the state so the invariant stays under test. Verified
+by `nm` that the seam's symbol is present in the `BUILD_TESTING=ON` worker
+archive and absent from a `BUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release`
+build.
+
+Blocking finding B -- the previous increment's tests encoded the defective
+semantics. Its scenarios 2 and 3 both asserted `source-closure.member-missing`
+for probes of paths that were never closure members, so a correct
+implementation would have failed the suite; and all five scenarios used a
+single-directory `src/main.cpp` + `src/answer.hpp` layout, the one layout that
+happens to avoid the bug. The suite was reworked rather than extended. It now
+has thirteen scenarios in four groups: group A pins that ordinary layouts
+materialize (`include/` + `src/` with `-I`, the same with separate-token
+`-iquote`, an angle include resolved from the second of two `-I` entries, an
+`-I` naming a member-less directory, `__has_include` of an unclaimed path, and
+unconstrained driver toolchain probing); group B pins that an incomplete
+closure surfaces as `native.parse-failed` and specifically not as
+`member-missing`; group C uses the withholding seam to pin that a
+claimed-but-unservable member hard-fails both when Clang also fails and --
+the finding-2 regression from the first increment -- when Clang itself
+succeeds via `__has_include`, with `callback_ran` asserted to prove Clang's
+outcome is a genuine independent variable; group D pins the ambient-read
+barrier with cases the previous suite lacked, including an absolute `#include`
+of a file that genuinely exists on disk outside the admitted roots, relative
+traversal (`../../../../etc/passwd`), the `/__cxxlens_project__evil` prefix
+boundary, and a strengthened working-directory shadow test that now uses a
+`static_assert` on the header's value so compiling ambient bytes would fail
+the build rather than pass silently. Both regressions were reproduced against
+the real compiler before and after: reverting member-awareness makes scenario
+A1 fail with exactly `source-closure.member-missing / project://src/answer.hpp`
+on a complete closure, and re-gating the audit inside `!outcome` makes C2 fail.
+
+Medium finding -- callback-before-verdict ordering. Confirmed: the callback
+runs inside `runToolOnCodeWithArgs` and has therefore already executed, and
+may already have emitted output, on a call that ultimately returns a failure.
+This is safe for the current consumer (`provider_worker.cpp` discards its
+local batch on `!outcome`) and a successful callback never overrides a failed
+verdict, but the header documented the invariant as "reported unconditionally"
+without noting the ordering. `source_closure_native.hpp` now carries an
+explicit ordering contract: callers must treat all callback output as
+provisional until the function returns success.
+
+Also corrected in the same pass: the `qualified_read_roots` documentation
+claimed the roots were "the exact toolchain surface the materializer itself
+selected and pinned", which nothing in the code enforces -- it now says the
+roots are trusted verbatim, that selecting them is the caller's security
+responsibility, and that because reads beneath an admitted root are delegated
+to the real filesystem (which follows symlinks) an admitted root bounds names
+rather than bytes. `source_closure_invocation.hpp`'s claim that unqualified
+host paths "fail closed" was likewise too strong: `-F`, `-B`, `-iframework`,
+`-iwithprefix{,before}`, `-iwithsysroot`, `-isystem-after`,
+`-fcrash-diagnostics-dir=`, and `-Xclang -internal-isystem <dir>` pass through
+verbatim (verified by grep that none are in the recognized set), so the
+comment now states the recognized set is not exhaustive and that containment
+for the rest comes from the VFS denying those paths downstream, not from
+argument admission. A `source-closure.blob-missing` construction in
+`mount_native_vfs` that put the logical path in the `field` slot with an empty
+`detail`, unlike every other call site, was corrected. `working_directory_` is
+documented as single-thread-owned (contrasted with the mutex-protected audit),
+and `setCurrentWorkingDirectory` is noted to leave it unchanged on a rejected
+target rather than half-updated.
+
+Verification for this increment: full `cmake --build build/dev-clang` clean,
+including the sealed `cxxlens-clang-worker-22` closure; all 28
+`clang22`-labeled ctest tests pass, including the reworked
+`adapter.clang22-source-closure-native`; a separate `BUILD_TESTING=OFF`
+Release configure/build confirms the testing seam is compiled out. The
+specific behavioral claim the review asked to be confirmed holds: a real
+`include/` + `src/` project with `-I` now materializes successfully, while a
+genuinely-claimed-but-unservable member still hard-fails with
+`source-closure.member-missing`.
+
+Still `proposed / blocked`, unchanged by this entry. Unit 2 remains unbuilt,
+this unit is still not wired into the materializer's request/task path, and
+the semantics change described above (`member-missing` no longer covering
+closure incompleteness) is itself a contract decision that the next
+independent review should weigh explicitly rather than inherit.

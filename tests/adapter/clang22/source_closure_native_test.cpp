@@ -16,6 +16,7 @@ namespace
 	using cxxlens::detail::clang22::source_closure_file_input;
 	using cxxlens::detail::clang22::source_closure_native_input;
 	using cxxlens::detail::clang22::source_closure_role;
+	using cxxlens::detail::clang22::source_closure_snapshot;
 	using cxxlens::detail::clang22::with_source_closure_translation_unit;
 
 	void require(const bool condition, const std::string_view message)
@@ -94,13 +95,13 @@ namespace
 #if defined(CXXLENS_TEST_CLANGXX22_PATH)
 	// The compiler binary, resource directory, and admitted toolchain root are all resolved by
 	// CMake from the exact LLVM/Clang 22 package `find_package(LLVM 22.1 CONFIG)` locates and
-	// links the real adapter against (see tests/CMakeLists.txt). This is deliberately the same
-	// "explicit toolchain-root allowlist" concept `source_closure_invocation.cpp` already
-	// establishes via `qualified_read_roots` -- there is exactly one source of truth for what
-	// counts as "the admitted toolchain" here, not a second ad hoc one for this test.
-	[[nodiscard]] std::vector<std::string> baseline_arguments()
+	// links the real adapter against (see tests/CMakeLists.txt), rather than an assumed host
+	// path. The admitted root is deliberately only that install prefix -- never `/usr`, never
+	// `/etc`, nothing else ambient on the host.
+	[[nodiscard]] std::vector<std::string>
+	arguments_with(const std::vector<std::string>& extra)
 	{
-		return {
+		std::vector<std::string> arguments{
 			CXXLENS_TEST_CLANGXX22_PATH,
 			"-std=c++23",
 			"-nostdinc",
@@ -108,8 +109,103 @@ namespace
 #if defined(CXXLENS_TEST_CLANG22_RESOURCE_DIR)
 			"-resource-dir=" CXXLENS_TEST_CLANG22_RESOURCE_DIR,
 #endif
-			"project://src/main.cpp",
 		};
+		arguments.insert(arguments.end(), extra.begin(), extra.end());
+		arguments.push_back("project://src/main.cpp");
+		return arguments;
+	}
+
+	struct run_outcome
+	{
+		bool succeeded{};
+		bool callback_ran{};
+		std::string code;
+		std::string detail;
+	};
+
+	[[nodiscard]] source_closure_native_input
+	make_input(const source_closure_snapshot& closure, const std::vector<std::string>& extra)
+	{
+		return {
+			closure,
+			"project://src/main.cpp",
+			"project://src",
+			arguments_with(extra),
+			std::vector<std::string>{CXXLENS_TEST_CLANG22_ROOT},
+		};
+	}
+
+	[[nodiscard]] run_outcome run(const source_closure_snapshot& closure,
+							   const std::vector<std::string>& extra = {})
+	{
+		const auto input = make_input(closure, extra);
+		run_outcome outcome;
+		auto result = with_source_closure_translation_unit(input,
+			[&outcome](cxxlens::provider::clang22::borrowed_translation_unit&)
+				-> cxxlens::sdk::result<void>
+			{
+				outcome.callback_ran = true;
+				return {};
+			});
+		outcome.succeeded = result.has_value();
+		if (!result)
+		{
+			outcome.code = result.error().code;
+			outcome.detail = result.error().detail;
+		}
+		return outcome;
+	}
+
+	[[nodiscard]] run_outcome run_withholding(const source_closure_snapshot& closure,
+										   const std::string_view withheld,
+										   const std::vector<std::string>& extra = {})
+	{
+		const auto input = make_input(closure, extra);
+		run_outcome outcome;
+		auto result =
+			cxxlens::detail::clang22::with_source_closure_translation_unit_withholding_member(
+				input,
+				withheld,
+				[&outcome](cxxlens::provider::clang22::borrowed_translation_unit&)
+					-> cxxlens::sdk::result<void>
+				{
+					outcome.callback_ran = true;
+					return {};
+				});
+		outcome.succeeded = result.has_value();
+		if (!result)
+		{
+			outcome.code = result.error().code;
+			outcome.detail = result.error().detail;
+		}
+		return outcome;
+	}
+
+	void expect_success(const run_outcome& outcome, const std::string_view what)
+	{
+		if (!outcome.succeeded)
+			std::cerr << what << " unexpectedly failed: " << outcome.code << " / "
+					  << outcome.detail << '\n';
+		require(outcome.succeeded, what);
+		require(outcome.callback_ran, "callback did not run for a successful translation unit");
+	}
+
+	void expect_failure(const run_outcome& outcome,
+					const std::string_view expected_code,
+					const std::string_view what)
+	{
+		if (outcome.succeeded)
+			std::cerr << what << " unexpectedly succeeded\n";
+		require(!outcome.succeeded, what);
+		if (outcome.code != expected_code)
+			std::cerr << what << " returned " << outcome.code << " (expected " << expected_code
+					  << ") / " << outcome.detail << '\n';
+		require(outcome.code == expected_code, what);
+	}
+
+	[[nodiscard]] std::string header(std::string body)
+	{
+		return "#pragma once\n" + std::move(body);
 	}
 #endif
 } // namespace
@@ -120,19 +216,67 @@ int main()
 	std::cerr << "no local clang++ toolchain discovered for the source-closure native test\n";
 	return 77;
 #else
-	// The only qualified (admitted) toolchain root for every scenario below is the exact
-	// LLVM/Clang 22 install the adapter itself is linked against -- deliberately never `/usr`,
-	// never `/etc`, nothing else ambient on the host. Every scenario therefore also doubles as
-	// continuous coverage for issue #261 finding 1 (see the dedicated ambient-probing scenario
-	// below for the sharpest demonstration): if the VFS still hard-failed on Clang's own
-	// speculative toolchain probing outside the closure and this narrow root, every scenario in
-	// this file would fail, not just the one that names it.
-	const std::vector<std::string> qualified_toolchain_root{CXXLENS_TEST_CLANG22_ROOT};
+	// ---------------------------------------------------------------------------------------
+	// Group A -- ordinary project layouts must materialize.
+	//
+	// These are the layouts DF-0261 exists to enable. Each one makes Clang probe paths under the
+	// synthetic project root that are *not* closure members (the includer-directory-first rule
+	// for quoted includes, every `-I`/`-iquote` entry ahead of the one that hits, `-I`
+	// directories holding no members, and `__has_include`). A miss on any such non-member path
+	// must be an ordinary ENOENT, exactly like a miss outside the project root, because the
+	// closure never claimed it. Before the member-aware audit these all failed with a spurious
+	// `source-closure.member-missing` even though the closure was complete.
+	// ---------------------------------------------------------------------------------------
 
-	std::cerr << "[scenario 1] ordinary success\n";
-	// Scenario 1: ordinary success. A real multi-file project closure (main file including a
-	// header that itself includes a generated header) parses end to end and the callback
-	// observes a fully resolved translation unit.
+	std::cerr << "[A1] include/ + src/ split with -I\n";
+	{
+		auto closure = make_source_closure_snapshot({
+			file("project://src/main.cpp",
+				 source_closure_role::main,
+				 "#include \"answer.hpp\"\nint use_answer() { return answer(); }\n"),
+			file("project://include/answer.hpp",
+				 source_closure_role::header,
+				 header("inline int answer() { return 42; }\n")),
+		});
+		require(closure.has_value(), "include/src split fixture was rejected");
+		// Clang tries `/__cxxlens_project__/src/answer.hpp` first (includer directory) and only
+		// then the `-I` entry that actually holds the member.
+		expect_success(run(*closure, {"-Iproject://include"}),
+					"conventional include/ + src/ project with -I");
+	}
+
+	std::cerr << "[A2] include/ + src/ split with -iquote\n";
+	{
+		auto closure = make_source_closure_snapshot({
+			file("project://src/main.cpp",
+				 source_closure_role::main,
+				 "#include \"answer.hpp\"\nint use_answer() { return answer(); }\n"),
+			file("project://include/answer.hpp",
+				 source_closure_role::header,
+				 header("inline int answer() { return 42; }\n")),
+		});
+		require(closure.has_value(), "iquote fixture was rejected");
+		expect_success(run(*closure, {"-iquote", "project://include"}),
+					"conventional include/ + src/ project with separate-token -iquote");
+	}
+
+	std::cerr << "[A3] angle include across two -I entries\n";
+	{
+		auto closure = make_source_closure_snapshot({
+			file("project://src/main.cpp",
+				 source_closure_role::main,
+				 "#include <answer.hpp>\nint use_answer() { return answer(); }\n"),
+			file("project://second/answer.hpp",
+				 source_closure_role::header,
+				 header("inline int answer() { return 42; }\n")),
+		});
+		require(closure.has_value(), "multi -I fixture was rejected");
+		// `project://first` holds no members at all; it must be an ordinary search-order miss.
+		expect_success(run(*closure, {"-Iproject://first", "-Iproject://second"}),
+					"angle include resolved from the second of two -I entries");
+	}
+
+	std::cerr << "[A4] -I naming a directory with no members\n";
 	{
 		auto closure = make_source_closure_snapshot({
 			file("project://src/main.cpp",
@@ -140,136 +284,58 @@ int main()
 				 "#include \"answer.hpp\"\nint use_answer() { return answer(); }\n"),
 			file("project://src/answer.hpp",
 				 source_closure_role::header,
-				 "#pragma once\n#include \"nested/value.hpp\"\n"
-				 "inline int answer() { return nested_value; }\n"),
-			file("project://src/nested/value.hpp",
-				 source_closure_role::generated,
-				 "#pragma once\ninline constexpr int nested_value = 42;\n"),
+				 header("inline int answer() { return 42; }\n")),
 		});
-		require(closure.has_value(), "valid native source closure was rejected");
-
-		bool callback_ran{};
-		source_closure_native_input input{
-			*closure,
-			"project://src/main.cpp",
-			"project://src",
-			baseline_arguments(),
-			qualified_toolchain_root,
-		};
-		auto result = with_source_closure_translation_unit(input,
-			[&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit&)
-				-> cxxlens::sdk::result<void>
-			{
-				callback_ran = true;
-				return {};
-			});
-		if (!result)
-			std::cerr << "native source-closure parse failed: " << result.error().code << " / "
-					  << result.error().field << " / " << result.error().detail << '\n';
-		require(result.has_value(), "native source-closure parse failed");
-		require(callback_ran, "native source-closure callback was not executed");
+		require(closure.has_value(), "empty -I fixture was rejected");
+		expect_success(run(*closure, {"-Iproject://vendor/include"}),
+					"-I naming a member-less project directory");
 	}
 
-	std::cerr << "[scenario 2] fatal missing #include\n";
-	// Scenario 2 (baseline negative case): an ordinary, unconditional `#include` of an absent
-	// header is a fatal preprocessor error to Clang itself. This was the only negative case the
-	// previously shipped suite had, and it asserted the callback never ran on the theory that a
-	// fatal preprocessor error always prevents `HandleTranslationUnit` from being reached. That
-	// turns out not to hold in general (Clang 22 was observed to still reach the AST consumer
-	// here, presumably continuing with whatever partially-parsed AST it had). That is exactly
-	// why gating `missing_failure()` on `!outcome`/Clang's own pass-fail signal is unsound in
-	// general -- see finding 2 -- and why this suite does not assert anything about
-	// `callback_ran` for this scenario. What must hold, unconditionally, is that the closure-
-	// completeness check itself still reports the typed failure regardless of whatever Clang's
-	// own outcome or callback-execution behavior happened to be.
+	std::cerr << "[A5] __has_include probing a non-member\n";
 	{
-		auto missing = make_source_closure_snapshot({
-			file("project://src/main.cpp",
-				 source_closure_role::main,
-				 "#include \"answer.hpp\"\nint use_answer() { return answer(); }\n"),
-			file("project://src/answer.hpp",
-				 source_closure_role::header,
-				 "#pragma once\n#include \"nested/value.hpp\"\n"
-				 "inline int answer() { return nested_value; }\n"),
-		});
-		require(missing.has_value(), "missing-member fixture closure was rejected too early");
-
-		source_closure_native_input input{
-			*missing,
-			"project://src/main.cpp",
-			"project://src",
-			baseline_arguments(),
-			qualified_toolchain_root,
-		};
-		auto result = with_source_closure_translation_unit(input,
-			[](cxxlens::provider::clang22::borrowed_translation_unit&) -> cxxlens::sdk::result<void>
-			{
-				return {};
-			});
-		require(!result, "missing closure member unexpectedly parsed");
-		require(result.error().code == "source-closure.member-missing",
-				"missing closure member returned the wrong typed failure");
-	}
-
-	std::cerr << "[scenario 3] __has_include optional-probe asymmetry\n";
-	// Scenario 3 (issue #261 finding 2 -- asymmetric fail-closed enforcement): the closure omits
-	// a header that main.cpp only probes through `__has_include`, a construct Clang tolerates
-	// without ever diagnosing an error. Clang's own outcome is a genuine independent variable
-	// here: it succeeds on its own terms (`callback_ran` proves the callback executed, i.e. the
-	// translation unit reached `HandleTranslationUnit`). The closure is nonetheless incomplete
-	// relative to what the translation unit actually looked for, and `missing_failure()` must be
-	// checked unconditionally -- not only inside a `!outcome` branch -- for this to still fail
-	// the task. Before the fix, this scenario would have parsed "successfully".
-	{
-		auto optional_probe = make_source_closure_snapshot({
+		auto closure = make_source_closure_snapshot({
 			file("project://src/main.cpp",
 				 source_closure_role::main,
 				 "#include \"answer.hpp\"\n"
-				 "#if __has_include(\"optional_generated.hpp\")\n"
-				 "#include \"optional_generated.hpp\"\n"
+				 "#if __has_include(\"local_overrides.hpp\")\n"
+				 "#error the closure never claimed local_overrides.hpp\n"
 				 "#endif\n"
 				 "int use_answer() { return answer(); }\n"),
 			file("project://src/answer.hpp",
 				 source_closure_role::header,
-				 "#pragma once\ninline int answer() { return 42; }\n"),
+				 header("inline int answer() { return 42; }\n")),
 		});
-		require(optional_probe.has_value(),
-				"optional-probe fixture closure was rejected too early");
-
-		bool callback_ran{};
-		source_closure_native_input input{
-			*optional_probe,
-			"project://src/main.cpp",
-			"project://src",
-			baseline_arguments(),
-			qualified_toolchain_root,
-		};
-		auto result = with_source_closure_translation_unit(input,
-			[&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit&)
-				-> cxxlens::sdk::result<void>
-			{
-				callback_ran = true;
-				return {};
-			});
-		require(callback_ran,
-				"Clang's own run must independently reach the callback for this to be a real "
-				"asymmetry test, not a repeat of scenario 2");
-		require(!result,
-				"a closure-incomplete __has_include probe unexpectedly parsed as successful");
-		require(result.error().code == "source-closure.member-missing",
-				"optional-probe closure incompleteness returned the wrong typed failure");
+		require(closure.has_value(), "__has_include fixture was rejected");
+		// The `#error` also pins that the probe evaluates false rather than resolving to
+		// something ambient.
+		expect_success(run(*closure),
+					"__has_include probe of a path the closure never claimed");
 	}
 
-	std::cerr << "[scenario 4] ambient toolchain probing must not abort the task\n";
-	// Scenario 4 (issue #261 finding 1 -- fail-closed VFS vs. Clang's own speculative toolchain
-	// probing): no `--gcc-toolchain` is pinned, so Clang's driver is completely free to run its
-	// own distro/toolchain-dependent GCC-installation-candidate search and OS-release detection
-	// (confirmed by `strace`-ing a bare `clang++` invocation to land on paths such as
-	// `/usr/lib/gcc/<triple>/<ver>`, `/etc/os-release`, `/etc/lsb-release`, `/opt/rh`, and
-	// `/etc/env.d/gcc` -- see the disposition entry for the exact trace). None of those paths
-	// are under the closure or under the one admitted toolchain root, so every one of them must
-	// resolve as a plain "not found" here, exactly like an ordinary absent path, rather than
-	// aborting the whole task.
+	std::cerr << "[A6] driver toolchain probing outside the project root\n";
+	{
+		// No `--gcc-toolchain` is pinned, so the driver's own distro-dependent GCC-installation
+		// candidate search and OS-release detection run completely unconstrained. `strace` on a
+		// bare clang++-22 shows these landing on `/usr/lib/gcc/<triple>/<ver>`, `/etc/os-release`,
+		// `/etc/lsb-release`, `/opt/rh` and `/etc/env.d/gcc` -- none of which are the closure or
+		// the one admitted toolchain root.
+		auto closure = make_source_closure_snapshot({
+			file("project://src/main.cpp",
+				 source_closure_role::main,
+				 "#include \"answer.hpp\"\nint use_answer() { return answer(); }\n"),
+			file("project://src/answer.hpp",
+				 source_closure_role::header,
+				 header("inline int answer() { return 42; }\n")),
+		});
+		require(closure.has_value(), "toolchain-probing fixture was rejected");
+		expect_success(run(*closure), "unconstrained driver toolchain probing");
+	}
+
+	// ---------------------------------------------------------------------------------------
+	// Group B -- an incomplete closure is Clang's own error, not a member-missing verdict.
+	// ---------------------------------------------------------------------------------------
+
+	std::cerr << "[B1] incomplete closure reports Clang's own diagnostic\n";
 	{
 		auto closure = make_source_closure_snapshot({
 			file("project://src/main.cpp",
@@ -277,77 +343,168 @@ int main()
 				 "#include \"answer.hpp\"\nint use_answer() { return answer(); }\n"),
 			file("project://src/answer.hpp",
 				 source_closure_role::header,
-				 "#pragma once\ninline int answer() { return 42; }\n"),
+				 header("#include \"nested/value.hpp\"\n"
+						"inline int answer() { return nested_value; }\n")),
 		});
-		require(closure.has_value(), "ambient-probing fixture closure was rejected too early");
-
-		bool callback_ran{};
-		source_closure_native_input input{
-			*closure,
-			"project://src/main.cpp",
-			"project://src",
-			baseline_arguments(),
-			qualified_toolchain_root,
-		};
-		auto result = with_source_closure_translation_unit(input,
-			[&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit&)
-				-> cxxlens::sdk::result<void>
-			{
-				callback_ran = true;
-				return {};
-			});
-		if (!result)
-			std::cerr << "ambient-probing scenario unexpectedly failed: " << result.error().code
-					  << " / " << result.error().field << " / " << result.error().detail << '\n';
-		require(result.has_value(),
-				"Clang's own speculative toolchain probing outside the closure and the admitted "
-				"toolchain root incorrectly aborted the task");
-		require(callback_ran, "ambient-probing scenario callback was not executed");
+		require(closure.has_value(), "incomplete-closure fixture was rejected");
+		// `nested/value.hpp` is not a member and was never claimed, so the audit must stay
+		// silent; the task fails through Clang's ordinary file-not-found path instead. Asserting
+		// the *specific* code here is what stops a future change from quietly reclassifying
+		// unclaimed probes as member-missing again.
+		expect_failure(run(*closure),
+					"native.parse-failed",
+					"unconditionally including a path no member claims");
 	}
 
-	std::cerr << "[scenario 5] ambient shadow file must never be visible\n";
-	// Ambient-shadow regression (kept from the original suite): even with a permissive current
-	// working directory containing a shadow copy of a closure member, the closure's own
-	// authenticated bytes are what get compiled -- never the ambient file.
+	// ---------------------------------------------------------------------------------------
+	// Group C -- a member the manifest actually claims but that cannot be served is a hard,
+	// unconditional failure. A validated closure plus a successful mount cannot reach this state
+	// on its own, so the testing-only withholding seam manufactures it (see the header).
+	// ---------------------------------------------------------------------------------------
+
+	std::cerr << "[C1] claimed-but-unservable member, Clang also fails\n";
+	{
+		auto closure = make_source_closure_snapshot({
+			file("project://src/main.cpp",
+				 source_closure_role::main,
+				 "#include \"answer.hpp\"\nint use_answer() { return answer(); }\n"),
+			file("project://src/answer.hpp",
+				 source_closure_role::header,
+				 header("inline int answer() { return 42; }\n")),
+		});
+		require(closure.has_value(), "withholding fixture was rejected");
+		auto outcome = run_withholding(*closure, "project://src/answer.hpp");
+		expect_failure(outcome,
+					"source-closure.member-missing",
+					"an unservable claimed member on an ordinary include");
+		require(outcome.detail == "project://src/answer.hpp",
+				"member-missing failure did not name the claimed member");
+	}
+
+	std::cerr << "[C2] claimed-but-unservable member, Clang itself succeeds\n";
+	{
+		// This is the finding-2 regression: Clang tolerates the absence entirely (an
+		// `__has_include` guard, no diagnostic, translation unit completes), so its own outcome
+		// is a genuine independent variable. `callback_ran` below proves Clang reached
+		// `HandleTranslationUnit` and succeeded on its own terms. The task must still fail,
+		// which only holds because the audit is consulted unconditionally rather than inside a
+		// `!outcome` branch.
+		auto closure = make_source_closure_snapshot({
+			file("project://src/main.cpp",
+				 source_closure_role::main,
+				 "#include \"answer.hpp\"\n"
+				 "#if __has_include(\"generated.hpp\")\n"
+				 "#include \"generated.hpp\"\n"
+				 "#endif\n"
+				 "int use_answer() { return answer(); }\n"),
+			file("project://src/answer.hpp",
+				 source_closure_role::header,
+				 header("inline int answer() { return 42; }\n")),
+			file("project://src/generated.hpp",
+				 source_closure_role::generated,
+				 header("inline constexpr int generated_value = 7;\n")),
+		});
+		require(closure.has_value(), "optional-probe withholding fixture was rejected");
+		auto outcome = run_withholding(*closure, "project://src/generated.hpp");
+		require(outcome.callback_ran,
+				"Clang's own run must independently reach the callback for this to be a real "
+				"asymmetry test");
+		expect_failure(outcome,
+					"source-closure.member-missing",
+					"an unservable claimed member that Clang itself tolerates");
+		require(outcome.detail == "project://src/generated.hpp",
+				"member-missing failure did not name the claimed member");
+	}
+
+	// ---------------------------------------------------------------------------------------
+	// Group D -- the ambient-read barrier. Nothing outside the closure and the admitted
+	// toolchain root may ever be read, including files that genuinely exist on disk.
+	// ---------------------------------------------------------------------------------------
+
+	std::cerr << "[D1] absolute include of a real on-disk file outside admitted roots\n";
 	{
 		temporary_directory ambient;
-		std::filesystem::create_directories(ambient.path() / "src");
+		const auto ambient_header = ambient.path() / "ambient.hpp";
 		{
-			std::ofstream shadow{ambient.path() / "src/answer.hpp"};
-			shadow << "#error ambient shadow must never be visible\n";
+			std::ofstream shadow{ambient_header};
+			shadow << "#pragma once\ninline int answer() { return 1; }\n";
+		}
+		require(std::filesystem::exists(ambient_header),
+				"ambient fixture header was not created on the real filesystem");
+
+		// The file really exists and the path is spelled absolutely, so nothing but the routing
+		// policy prevents it from being read.
+		auto closure = make_source_closure_snapshot({
+			file("project://src/main.cpp",
+				 source_closure_role::main,
+				 "#include \"" + ambient_header.string() + "\"\n"
+				 "int use_answer() { return answer(); }\n"),
+		});
+		require(closure.has_value(), "absolute-ambient fixture was rejected");
+		expect_failure(run(*closure),
+					"native.parse-failed",
+					"absolute include of a real file outside the admitted roots");
+	}
+
+	std::cerr << "[D2] relative traversal out of the project root\n";
+	{
+		auto closure = make_source_closure_snapshot({
+			file("project://src/main.cpp",
+				 source_closure_role::main,
+				 "#include \"../../../../etc/passwd\"\nint use_answer() { return 0; }\n"),
+		});
+		require(closure.has_value(), "traversal fixture was rejected");
+		expect_failure(run(*closure),
+					"native.parse-failed",
+					"relative traversal escaping the synthetic project root");
+	}
+
+	std::cerr << "[D3] synthetic-root prefix boundary\n";
+	{
+		// `/__cxxlens_project__evil` shares a string prefix with the synthetic root but is not
+		// beneath it; it must route to the denied region, not the closure region.
+		auto closure = make_source_closure_snapshot({
+			file("project://src/main.cpp",
+				 source_closure_role::main,
+				 "#include \"/__cxxlens_project__evil/answer.hpp\"\n"
+				 "int use_answer() { return 0; }\n"),
+		});
+		require(closure.has_value(), "prefix-boundary fixture was rejected");
+		expect_failure(run(*closure),
+					"native.parse-failed",
+					"path sharing a prefix with the synthetic root but outside it");
+	}
+
+	std::cerr << "[D4] ambient shadow reachable through the process working directory\n";
+	{
+		// The mounted filesystem overrides getCurrentWorkingDirectory() to the synthetic project
+		// directory, so a CWD-relative lookup can never reach the real tree. Pin that: place a
+		// shadow at the process CWD under both the bare spelling and the synthetic layout, and
+		// confirm the closure's own authenticated bytes are what compile.
+		temporary_directory ambient;
+		std::filesystem::create_directories(ambient.path() / "src");
+		for (const auto& shadow_path :
+			 {ambient.path() / "answer.hpp", ambient.path() / "src/answer.hpp"})
+		{
+			std::ofstream shadow{shadow_path};
+			shadow << "#pragma once\ninline int answer() { return 1; }\n";
 		}
 		current_directory_guard cwd{ambient.path()};
 
 		auto closure = make_source_closure_snapshot({
 			file("project://src/main.cpp",
 				 source_closure_role::main,
-				 "#include \"answer.hpp\"\nint use_answer() { return answer(); }\n"),
+				 "#include \"answer.hpp\"\n"
+				 "static_assert(answer() == 42, \"ambient shadow bytes were compiled\");\n"
+				 "int use_answer() { return answer(); }\n"),
 			file("project://src/answer.hpp",
 				 source_closure_role::header,
-				 "#pragma once\ninline int answer() { return 42; }\n"),
+				 header("inline constexpr int answer() { return 42; }\n")),
 		});
-		require(closure.has_value(), "ambient-shadow fixture closure was rejected too early");
-
-		bool callback_ran{};
-		source_closure_native_input input{
-			*closure,
-			"project://src/main.cpp",
-			"project://src",
-			baseline_arguments(),
-			qualified_toolchain_root,
-		};
-		auto result = with_source_closure_translation_unit(input,
-			[&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit&)
-				-> cxxlens::sdk::result<void>
-			{
-				callback_ran = true;
-				return {};
-			});
-		if (!result)
-			std::cerr << "ambient-shadow scenario unexpectedly failed: " << result.error().code
-					  << " / " << result.error().field << " / " << result.error().detail << '\n';
-		require(result.has_value(), "ambient shadow scenario unexpectedly failed");
-		require(callback_ran, "ambient shadow scenario callback was not executed");
+		require(closure.has_value(), "ambient-shadow fixture was rejected");
+		// The static_assert is the real check: it fails to compile if the ambient `return 1;`
+		// definition were ever the one that got included.
+		expect_success(run(*closure), "ambient shadow at the process working directory");
 	}
 
 	return 0;

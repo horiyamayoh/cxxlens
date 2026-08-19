@@ -9,6 +9,7 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -36,12 +37,17 @@ namespace cxxlens::detail::clang22
 
 #if CXXLENS_HAS_CLANG22
 		/**
-		 * The only filesystem event that aborts the whole materialization task: the source
-		 * closure's own manifest claims a project/generated member exists at some logical path,
-		 * but the mounted filesystem could not actually serve it once Clang asked for it. Every
-		 * other filesystem event `closure_routing_file_system` sees is either real, admitted
-		 * content or an ordinary "not found" that Clang's own driver already tolerates (see the
-		 * region breakdown in source_closure_native.hpp).
+		 * Records the one filesystem event that aborts the whole materialization task: a member
+		 * the closure's manifest actually claims which the mounted filesystem could not serve.
+		 *
+		 * This is deliberately *not* "any miss beneath the synthetic project root". Clang probes
+		 * many non-member paths inside the project namespace even when the closure is complete
+		 * (the includer-directory-first rule for quoted includes, each `-I`/`-iquote` entry in
+		 * search order, `__has_include`, and `-I` directories that hold no members). Those are
+		 * optional/speculative lookups that Clang itself handles on ENOENT, exactly like the
+		 * driver's toolchain probing outside the project root; treating them as task failures
+		 * would make the ordinary `include/` + `src/` project layout unmaterializable and would
+		 * make `source-closure.member-missing` mean something other than what its name says.
 		 */
 		class native_vfs_audit final
 		{
@@ -89,14 +95,13 @@ namespace cxxlens::detail::clang22
 		 * routed into one of three disjoint regions:
 		 *
 		 *   - `route::closure` — beneath the closure's synthetic project root. Served from the
-		 *     authenticated in-memory closure content. A miss here is recorded by `audit_` and
-		 *     turns into an unconditional task failure (see `with_source_closure_translation_unit`
-		 *     below) because the closure manifest already claims this member exists.
-		 *   - `route::qualified` — beneath one of the admitted `qualified_roots_`, i.e. the exact
-		 *     toolchain surface (resource-dir, sysroot, ...) the materializer itself selected and
-		 *     pinned for this invocation. Delegated to the real filesystem: real content that
-		 *     exists is served, and an ordinary miss is reported exactly as the real filesystem
-		 *     reports it — no audit, no task-level effect.
+		 *     authenticated in-memory closure content. A miss here is an ordinary ENOENT unless
+		 *     the path is one of `claimed_members_`, in which case the closure claimed a member
+		 *     it could not serve and `audit_` records the determinate input failure.
+		 *   - `route::qualified` — beneath one of the admitted `qualified_roots_`. Delegated to
+		 *     the real filesystem: real content that exists is served, and an ordinary miss is
+		 *     reported exactly as the real filesystem reports it. Note that this delegation
+		 *     follows symlinks, so an admitted root bounds names rather than bytes.
 		 *   - `route::denied` — neither of the above. This is where Clang's own speculative,
 		 *     distro/toolchain-dependent driver probing lands (GCC installation candidates,
 		 *     `/etc/os-release`, and the like): no static allowlist can enumerate that candidate
@@ -113,11 +118,13 @@ namespace cxxlens::detail::clang22
 			closure_routing_file_system(
 				llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> qualified_filesystem,
 				llvm::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> closure_filesystem,
+				std::set<std::string, std::less<>> claimed_members,
 				std::vector<std::string> qualified_roots,
 				std::string working_directory,
 				std::shared_ptr<native_vfs_audit> audit)
 				: ProxyFileSystem{std::move(qualified_filesystem)},
 				  closure_filesystem_{std::move(closure_filesystem)},
+				  claimed_members_{std::move(claimed_members)},
 				  qualified_roots_{std::move(qualified_roots)},
 				  working_directory_{std::move(working_directory)},
 				  audit_{std::move(audit)}
@@ -135,7 +142,7 @@ namespace cxxlens::detail::clang22
 					{
 						auto result = closure_filesystem_->status(*normalized);
 						if (!result)
-							audit_->record_missing(logical_from_synthetic(*normalized));
+							return note_closure_miss(*normalized);
 						return result;
 					}
 					case route::qualified:
@@ -163,7 +170,7 @@ namespace cxxlens::detail::clang22
 					{
 						auto result = closure_filesystem_->openFileForRead(*normalized);
 						if (!result)
-							audit_->record_missing(logical_from_synthetic(*normalized));
+							return note_closure_miss(*normalized);
 						return result;
 					}
 					case route::qualified:
@@ -202,6 +209,12 @@ namespace cxxlens::detail::clang22
 				return working_directory_;
 			}
 
+			// Clang tooling drives one invocation from a single thread, so `working_directory_`
+			// is only ever mutated here and read by `normalize()` on that same thread; it is
+			// deliberately left unsynchronized while `audit_` (which LLVM may touch from a
+			// worker) is mutex-protected. On a rejected target the working directory is left
+			// unchanged rather than half-updated, so a denied chdir cannot silently repoint
+			// subsequent relative lookups.
 			std::error_code setCurrentWorkingDirectory(const llvm::Twine& path) override
 			{
 				auto normalized = normalize(path);
@@ -260,6 +273,19 @@ namespace cxxlens::detail::clang22
 				denied,
 			};
 
+			/**
+			 * Classify one miss beneath the synthetic project root. Only a path the manifest
+			 * actually claims is a determinate input failure; every other miss in this region is
+			 * ordinary speculative probing and gets the same plain ENOENT an absent path would
+			 * produce anywhere else.
+			 */
+			[[nodiscard]] std::error_code note_closure_miss(const std::string& path) const
+			{
+				if (claimed_members_.contains(path))
+					audit_->record_missing(logical_from_synthetic(path));
+				return enoent();
+			}
+
 			[[nodiscard]] llvm::ErrorOr<std::string> normalize(const llvm::Twine& path) const
 			{
 				const auto raw = path.str();
@@ -298,6 +324,7 @@ namespace cxxlens::detail::clang22
 			}
 
 			llvm::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> closure_filesystem_;
+			std::set<std::string, std::less<>> claimed_members_;
 			std::vector<std::string> qualified_roots_;
 			std::string working_directory_;
 			std::shared_ptr<native_vfs_audit> audit_;
@@ -309,24 +336,40 @@ namespace cxxlens::detail::clang22
 			std::shared_ptr<native_vfs_audit> audit;
 		};
 
+		/**
+		 * Build the compiler-facing filesystem for one invocation. Every closure member is both
+		 * added to the in-memory content and recorded as claimed, so the two stay in step by
+		 * construction: given a validated closure and a successful mount, a claimed member is
+		 * always servable and the audit is a defence-in-depth invariant rather than an expected
+		 * outcome. `withheld_logical_path`, used only by the testing seam, deliberately breaks
+		 * that correspondence for exactly one member so the invariant stays exercised.
+		 */
 		[[nodiscard]] sdk::result<native_vfs_mount> mount_native_vfs(
 			const source_closure_snapshot& closure,
-			const source_closure_invocation& invocation)
+			const source_closure_invocation& invocation,
+			const std::string_view withheld_logical_path = {})
 		{
 			if (auto valid = closure.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
 			auto memory = llvm::makeIntrusiveRefCnt<llvm::vfs::InMemoryFileSystem>();
+			std::set<std::string, std::less<>> claimed_members;
 			for (const auto& member : closure.members)
 			{
 				const auto* blob = closure.find_blob(member.content_digest);
 				if (blob == nullptr || !blob->content)
 					return sdk::unexpected(failure(
-						"source-closure.blob-missing", member.logical_path));
+						"source-closure.blob-missing",
+						"member.content-digest",
+						member.logical_path));
 				auto relative = source_closure_relative_path(member.logical_path);
 				if (!relative)
 					return sdk::unexpected(std::move(relative.error()));
 				const auto synthetic =
 					std::string{source_closure_vfs::synthetic_root()} + "/" + *relative;
+				claimed_members.insert(synthetic);
+				if (!withheld_logical_path.empty() &&
+					member.logical_path == withheld_logical_path)
+					continue;
 				if (!memory->addFile(
 						synthetic,
 						0,
@@ -334,7 +377,9 @@ namespace cxxlens::detail::clang22
 							llvm::StringRef{blob->content->data(), blob->content->size()},
 							synthetic)))
 					return sdk::unexpected(failure(
-						"source-closure.digest-mismatch", member.logical_path));
+						"source-closure.digest-mismatch",
+						"member.logical-path",
+						member.logical_path));
 			}
 			if (auto error = memory->setCurrentWorkingDirectory(invocation.working_directory))
 				return sdk::unexpected(failure(
@@ -346,72 +391,104 @@ namespace cxxlens::detail::clang22
 			auto routed = llvm::makeIntrusiveRefCnt<closure_routing_file_system>(
 				llvm::vfs::getRealFileSystem(),
 				memory,
+				std::move(claimed_members),
 				invocation.qualified_read_roots,
 				invocation.working_directory,
 				audit);
 			return native_vfs_mount{std::move(routed), std::move(audit)};
 		}
 #endif
+
+		[[nodiscard]] sdk::result<void> run_source_closure_translation_unit(
+			const source_closure_native_input& input,
+			[[maybe_unused]] const std::string_view withheld_logical_path,
+			provider::clang22::translation_unit_callback callback)
+		{
+			if (auto valid = input.closure.validate(); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			const auto* main = input.closure.find_member(input.main_logical_path);
+			if (main == nullptr || main->role != source_closure_role::main)
+				return sdk::unexpected(failure(
+					"source-closure.main-invalid", "main-logical-path", input.main_logical_path));
+			const auto* main_blob = input.closure.find_blob(main->content_digest);
+			if (main_blob == nullptr || !main_blob->content)
+				return sdk::unexpected(failure(
+					"source-closure.blob-missing", "main-logical-path", input.main_logical_path));
+			auto invocation = prepare_source_closure_invocation(
+				input.effective_arguments,
+				input.main_logical_path,
+				input.logical_working_directory,
+				input.qualified_read_roots);
+			if (!invocation)
+				return sdk::unexpected(std::move(invocation.error()));
+			if (!callback)
+				return sdk::unexpected(failure("native.input-invalid", "callback"));
+
+#if CXXLENS_HAS_CLANG22
+			auto mount = mount_native_vfs(input.closure, *invocation, withheld_logical_path);
+			if (!mount)
+				return sdk::unexpected(std::move(mount.error()));
+			provider::clang22::translation_unit_input native_input{
+				input.closure.snapshot_id,
+				main->file_id,
+				main->logical_path,
+				*main_blob->content,
+				input.effective_arguments,
+			};
+			auto outcome = provider::clang22::detail::with_translation_unit_vfs(
+				native_input,
+				invocation->compiler_filename,
+				invocation->tool_name,
+				invocation->compiler_arguments,
+				mount->filesystem,
+				std::move(callback));
+			// A member the closure actually claims but could not serve is a determinate input
+			// failure (the record's core invariant) and must fail the task even when Clang's own
+			// run reports success for the translation unit as a whole -- e.g. a `__has_include`
+			// guard, or any other construct that tolerates an absent file without diagnosing an
+			// error. This check is therefore unconditional, never gated on `!outcome`: gating it
+			// on Clang's own success/failure would let an unservable claimed member escape
+			// detection whenever Clang itself happens not to need it in order to succeed.
+			//
+			// Note this is specifically *not* the "closure is incomplete" case. A closure that
+			// simply lacks a header the source needs produces Clang's own ordinary file-not-found
+			// error and fails through `native.parse-failed`; the audit stays silent because the
+			// manifest never claimed the missing path in the first place.
+			if (const auto missing = mount->audit->missing_path())
+				return sdk::unexpected(
+					failure("source-closure.member-missing", "compiler-vfs", *missing));
+			return outcome;
+#else
+			(void)main_blob;
+			(void)callback;
+			return sdk::unexpected(failure(
+				"native.unsupported-clang-major", "clang", "22"));
+#endif
+		}
 	} // namespace
 
 	sdk::result<void> with_source_closure_translation_unit(
 		const source_closure_native_input& input,
 		provider::clang22::translation_unit_callback callback)
 	{
-		if (auto valid = input.closure.validate(); !valid)
-			return sdk::unexpected(std::move(valid.error()));
-		const auto* main = input.closure.find_member(input.main_logical_path);
-		if (main == nullptr || main->role != source_closure_role::main)
-			return sdk::unexpected(failure(
-				"source-closure.main-invalid", "main-logical-path", input.main_logical_path));
-		const auto* main_blob = input.closure.find_blob(main->content_digest);
-		if (main_blob == nullptr || !main_blob->content)
-			return sdk::unexpected(failure(
-				"source-closure.blob-missing", "main-logical-path", input.main_logical_path));
-		auto invocation = prepare_source_closure_invocation(
-			input.effective_arguments,
-			input.main_logical_path,
-			input.logical_working_directory,
-			input.qualified_read_roots);
-		if (!invocation)
-			return sdk::unexpected(std::move(invocation.error()));
-		if (!callback)
-			return sdk::unexpected(failure("native.input-invalid", "callback"));
-
-#if CXXLENS_HAS_CLANG22
-		auto mount = mount_native_vfs(input.closure, *invocation);
-		if (!mount)
-			return sdk::unexpected(std::move(mount.error()));
-		provider::clang22::translation_unit_input native_input{
-			input.closure.snapshot_id,
-			main->file_id,
-			main->logical_path,
-			*main_blob->content,
-			input.effective_arguments,
-		};
-		auto outcome = provider::clang22::detail::with_translation_unit_vfs(
-			native_input,
-			invocation->compiler_filename,
-			invocation->tool_name,
-			invocation->compiler_arguments,
-			mount->filesystem,
-			std::move(callback));
-		// A missing project/generated closure member is a determinate input failure (the
-		// record's core invariant) and must fail the task even when Clang's own run reports
-		// success for the translation unit as a whole — e.g. a `__has_include` guard, or any
-		// other construct that tolerates an absent file without diagnosing an error. This check
-		// is therefore unconditional, never gated on `!outcome`: gating it on Clang's own
-		// success/failure would let an incomplete closure escape detection whenever Clang
-		// itself happens not to need the missing member in order to succeed.
-		if (const auto missing = mount->audit->missing_path())
-			return sdk::unexpected(
-				failure("source-closure.member-missing", "compiler-vfs", *missing));
-		return outcome;
-#else
-		(void)main_blob;
-		(void)callback;
-		return sdk::unexpected(failure(
-			"native.unsupported-clang-major", "clang", "22"));
-#endif
+		return run_source_closure_translation_unit(input, {}, std::move(callback));
 	}
+
+#if defined(CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING) && \
+	CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING
+	sdk::result<void> with_source_closure_translation_unit_withholding_member(
+		const source_closure_native_input& input,
+		const std::string_view withheld_logical_path,
+		provider::clang22::translation_unit_callback callback)
+	{
+		if (withheld_logical_path.empty() ||
+			input.closure.find_member(withheld_logical_path) == nullptr)
+			return sdk::unexpected(failure(
+				"native.input-invalid",
+				"withheld-logical-path",
+				std::string{withheld_logical_path}));
+		return run_source_closure_translation_unit(
+			input, withheld_logical_path, std::move(callback));
+	}
+#endif
 } // namespace cxxlens::detail::clang22

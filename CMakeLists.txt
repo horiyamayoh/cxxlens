@@ -407,6 +407,14 @@ target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_worker_core)
 cxxlens_enable_sanitizers(cxxlens_clang22_worker_core)
 cxxlens_configure_clang22(cxxlens_clang22_worker_core)
+if(BUILD_TESTING)
+  # Exposes the source-closure member-withholding seam used to keep the
+  # claimed-but-unservable invariant under test. PUBLIC because the declaration
+  # is guarded in source_closure_native.hpp, which the fixture includes. Absent
+  # from installed/production builds, which configure with BUILD_TESTING=OFF.
+  target_compile_definitions(cxxlens_clang22_worker_core
+                             PUBLIC CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING=1)
+endif()
 # Keep the provider SDK runtime on the project-wide RTTI configuration. Its
 # context owns standard-library polymorphic state (including shared_ptr control
 # blocks), so compiling only this translation unit with an RTTI-disabled
