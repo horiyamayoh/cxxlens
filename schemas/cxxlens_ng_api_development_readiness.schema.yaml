@@ -347,6 +347,7 @@ properties:
           - AGENTS.md
           - docs/design/cxxlens_next_generation_integrated_design_ja.md
           - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+          - docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md
           - docs/development/implementation-learning/README.md
           - schemas/cxxlens_ng_clang22_materialization_contract.yaml
           - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
