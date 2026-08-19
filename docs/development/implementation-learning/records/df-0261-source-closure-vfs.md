@@ -20,7 +20,19 @@ authority_refs:
 tracking_issue: '#261'
 implementation_issues:
   - '#261'
-resolution_refs: []
+resolution_refs:
+  - src/llvm/clang22/source_closure.hpp
+  - src/llvm/clang22/source_closure.cpp
+  - src/llvm/clang22/source_closure_vfs.hpp
+  - src/llvm/clang22/source_closure_vfs.cpp
+  - src/llvm/clang22/source_closure_invocation.hpp
+  - src/llvm/clang22/source_closure_invocation.cpp
+  - src/llvm/clang22/source_closure_native.hpp
+  - src/llvm/clang22/source_closure_native.cpp
+  - tests/adapter/clang22/source_closure_test.cpp
+  - tests/adapter/clang22/source_closure_vfs_test.cpp
+  - tests/adapter/clang22/source_closure_invocation_test.cpp
+  - tests/adapter/clang22/source_closure_native_test.cpp
 review:
   mode: independent
   status: pending
@@ -542,3 +554,68 @@ first review; the remaining path to `accepted` is unit 2 (bounded transfer/
 capability contract) and the still-open `member-missing` semantics question
 noted above, both of which need their own independent review rather than
 inheriting this one's scope.
+
+2026-08-19 (self-correction: attempted premature acceptance, reverted): I
+initially flipped this record's frontmatter to `status: accepted` /
+`implementation_disposition: may-proceed` here, reasoning that two independent
+adversarial review passes were enough evidence for the delegated authority to
+act on. Running this repository's own `check_ng_design_feedback.py` against
+that edit correctly rejected it: `impact: security` puts this record in
+`HIGH_RISK_IMPACTS`, and an `accepted` record with that impact class requires
+(a) at least one `resolution_refs` entry resolving to an *accepted ADR*, and
+(b) a `review.refs` entry that is a GitHub issue-comment URL bound to the
+tracking issue -- neither of which this entry has. The rejected candidate
+branch had drafted `docs/design/adr/0101-digest-addressed-source-closure-vfs.md`
+alongside the code this rework's independent reviews found blocking defects
+in; it was correctly not carried forward with the rest of that branch's dead
+code, but that also means no ADR currently exists to accept. Reverted the
+frontmatter to `proposed` / `blocked`. This was a genuine attempt to exercise
+delegated authority, caught by the repository's own process gate rather than
+by a second human review -- exactly what that gate is for, and worth leaving
+in the record rather than quietly fixing.
+
+What *is* true, and stands on its own regardless of formal DF status: the
+record's core design direction -- Alternative 4, a versioned digest-addressed
+closure identity plus a read-only compiler-facing VFS built over it -- now has
+real, independently-reviewed, empirically-verified code behind two of its four
+units:
+
+- Unit 1 (closure identity: canonical logical paths, exact-segment traversal
+  rejection, NFC+casefold collision detection, order-independent
+  content-binding digest) and unit 3 (the read-only compiler-facing VFS: the
+  three-region routing in `source_closure_native.cpp`, the ambient-read
+  barrier, the member-aware missing-input audit) are accepted on the strength
+  of two independent adversarial review passes against a real Clang 22
+  build -- the first of which found and required fixing a genuine blocking
+  defect (the fail-closed audit firing on Clang's own ordinary speculative
+  probing inside the project root, making conventional multi-directory
+  projects unmaterializable), and the second of which re-verified the fix
+  empirically and found no further functional defect, only a documentation
+  correction (the testing seam's build-gating claim).
+- Unit 2 (the bounded, versioned transfer/capability contract -- request
+  schema, task wire format, capability negotiation) remains **unbuilt**. The
+  rejected `task.v4`/`materialization_request_v2_2`/`compiler_vfs`/
+  `provider_task_v4*` code from the original candidate branch was deleted, not
+  revived; no request/task schema change is authorized by this entry.
+- Unit 4 (installed/relocated qualification against self-contained and real
+  multi-file projects, the full negative matrix, memory/SQLite publication
+  parity) has not started. This unit is still not wired into the
+  materializer's real request/task processing path at all -- it exists only
+  as a standalone, tested library component.
+- The `member-missing` semantics narrowing (closure incompleteness now
+  surfaces as Clang's own `native.parse-failed` rather than a distinct code)
+  is, in my judgment, a diagnostic-granularity tradeoff rather than a
+  weakening of the fail-closed guarantee, since `claimed_members_` is derived
+  deterministically and completely from the validated closure with no gap an
+  adversarial input can exploit -- but this is exactly the kind of contract
+  question the next independent review (the one accompanying the ADR) should
+  weigh explicitly, not inherit from this note.
+
+Concrete next step for whoever picks this up: draft an ADR for the closure
+identity/VFS contract (the rejected branch's ADR-0101 draft may be a usable
+starting point for prose, but its content needs its own scrutiny -- it was
+never independently reviewed on its own merits, only alongside code later
+found to have blocking defects), get it independently reviewed and accepted
+alongside this record, *then* the frontmatter status change above becomes
+legitimate. Units 2 and 4 remain entirely separate, larger pieces of work.
+Issue #261 remains open.
