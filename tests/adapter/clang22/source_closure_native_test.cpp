@@ -19,7 +19,10 @@ namespace
 	using cxxlens::detail::clang22::source_closure_snapshot;
 	using cxxlens::detail::clang22::with_source_closure_translation_unit;
 
-	void require(const bool condition, const std::string_view message)
+	// Only called from main()'s CXXLENS_TEST_CLANGXX22_PATH branch below; when no local Clang
+	// toolchain is discovered (as in this repository's thread-sanitizer build, which does not
+	// link the full Clang libraries), that branch compiles out and this becomes unused.
+	[[maybe_unused]] void require(const bool condition, const std::string_view message)
 	{
 		if (!condition)
 		{
@@ -28,7 +31,8 @@ namespace
 		}
 	}
 
-	[[nodiscard]] source_closure_file_input
+	// Same rationale as require() above: only called from the guarded branch below.
+	[[nodiscard, maybe_unused]] source_closure_file_input
 	file(std::string path, source_closure_role role, std::string content)
 	{
 		return {
