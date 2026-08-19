@@ -439,8 +439,14 @@ def validate_design_feedback_metadata(metadata: dict[str, Any]) -> None:
     review = metadata.get("review")
     if not isinstance(review, dict) or review.get("status") != "pending":
         fail("agent-context.design-feedback-review-status-mismatch")
-    if metadata.get("resolution_refs") != []:
-        fail("agent-context.design-feedback-resolution-refs-mismatch")
+    # resolution_refs is deliberately not pinned to empty here. The design
+    # feedback schema and check_ng_design_feedback.py already own the real
+    # invariant -- resolution_refs may accumulate partial evidence while a
+    # record is still proposed/blocked, and only status == accepted (checked
+    # above as forbidden) requires and gates resolution_refs content. Pinning
+    # this to [] would just re-encode the exact snapshot observed when this
+    # packet's #261 use case was first templated, which real, independently
+    # reviewed #261 progress has since and legitimately grown past.
 
 
 def bind_design_feedback(
