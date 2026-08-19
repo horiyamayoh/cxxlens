@@ -1,9 +1,5 @@
 #include "source_closure_native.hpp"
 
-#include "provider_sdk_internal.hpp"
-#include "source_closure_invocation.hpp"
-#include "source_closure_vfs.hpp"
-
 #include <algorithm>
 #include <memory>
 #include <mutex>
@@ -15,6 +11,10 @@
 #include <system_error>
 #include <utility>
 #include <vector>
+
+#include "provider_sdk_internal.hpp"
+#include "source_closure_invocation.hpp"
+#include "source_closure_vfs.hpp"
 
 #if CXXLENS_HAS_CLANG22
 #include <llvm/ADT/IntrusiveRefCntPtr.h>
@@ -28,9 +28,8 @@ namespace cxxlens::detail::clang22
 {
 	namespace
 	{
-		[[nodiscard]] sdk::error failure(std::string code,
-									   std::string field,
-									   std::string detail = {})
+		[[nodiscard]] sdk::error
+		failure(std::string code, std::string field, std::string detail = {})
 		{
 			return {std::move(code), std::move(field), std::move(detail)};
 		}
@@ -71,7 +70,7 @@ namespace cxxlens::detail::clang22
 		};
 
 		[[nodiscard]] bool beneath(const std::string_view path,
-							   const std::string_view root) noexcept
+								   const std::string_view root) noexcept
 		{
 			return path == root ||
 				(path.size() > root.size() && path.starts_with(root) && path[root.size()] == '/');
@@ -126,8 +125,7 @@ namespace cxxlens::detail::clang22
 				  closure_filesystem_{std::move(closure_filesystem)},
 				  claimed_members_{std::move(claimed_members)},
 				  qualified_roots_{std::move(qualified_roots)},
-				  working_directory_{std::move(working_directory)},
-				  audit_{std::move(audit)}
+				  working_directory_{std::move(working_directory)}, audit_{std::move(audit)}
 			{
 			}
 
@@ -182,7 +180,7 @@ namespace cxxlens::detail::clang22
 			}
 
 			llvm::vfs::directory_iterator dir_begin(const llvm::Twine& path,
-													 std::error_code& error) override
+													std::error_code& error) override
 			{
 				auto normalized = normalize(path);
 				if (!normalized)
@@ -229,7 +227,7 @@ namespace cxxlens::detail::clang22
 			}
 
 			std::error_code getRealPath(const llvm::Twine& path,
-										 llvm::SmallVectorImpl<char>& output) override
+										llvm::SmallVectorImpl<char>& output) override
 			{
 				auto normalized = normalize(path);
 				if (!normalized)
@@ -303,8 +301,8 @@ namespace cxxlens::detail::clang22
 					normalized.append(raw);
 				}
 				llvm::sys::path::remove_dots(normalized, true, llvm::sys::path::Style::posix);
-				auto value = llvm::sys::path::convert_to_slash(
-					normalized, llvm::sys::path::Style::posix);
+				auto value =
+					llvm::sys::path::convert_to_slash(normalized, llvm::sys::path::Style::posix);
 				if (value.empty() || value.front() != '/')
 					return std::make_error_code(std::errc::invalid_argument);
 				return value;
@@ -315,10 +313,10 @@ namespace cxxlens::detail::clang22
 				if (beneath(path, source_closure_vfs::synthetic_root()))
 					return route::closure;
 				if (std::ranges::any_of(qualified_roots_,
-					[&path](const std::string& root)
-					{
-						return beneath(path, root);
-					}))
+										[&path](const std::string& root)
+										{
+											return beneath(path, root);
+										}))
 					return route::qualified;
 				return route::denied;
 			}
@@ -344,10 +342,10 @@ namespace cxxlens::detail::clang22
 		 * outcome. `withheld_logical_path`, used only by the testing seam, deliberately breaks
 		 * that correspondence for exactly one member so the invariant stays exercised.
 		 */
-		[[nodiscard]] sdk::result<native_vfs_mount> mount_native_vfs(
-			const source_closure_snapshot& closure,
-			const source_closure_invocation& invocation,
-			const std::string_view withheld_logical_path = {})
+		[[nodiscard]] sdk::result<native_vfs_mount>
+		mount_native_vfs(const source_closure_snapshot& closure,
+						 const source_closure_invocation& invocation,
+						 const std::string_view withheld_logical_path = {})
 		{
 			if (auto valid = closure.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
@@ -357,18 +355,16 @@ namespace cxxlens::detail::clang22
 			{
 				const auto* blob = closure.find_blob(member.content_digest);
 				if (blob == nullptr || !blob->content)
-					return sdk::unexpected(failure(
-						"source-closure.blob-missing",
-						"member.content-digest",
-						member.logical_path));
+					return sdk::unexpected(failure("source-closure.blob-missing",
+												   "member.content-digest",
+												   member.logical_path));
 				auto relative = source_closure_relative_path(member.logical_path);
 				if (!relative)
 					return sdk::unexpected(std::move(relative.error()));
 				const auto synthetic =
 					std::string{source_closure_vfs::synthetic_root()} + "/" + *relative;
 				claimed_members.insert(synthetic);
-				if (!withheld_logical_path.empty() &&
-					member.logical_path == withheld_logical_path)
+				if (!withheld_logical_path.empty() && member.logical_path == withheld_logical_path)
 					continue;
 				if (!memory->addFile(
 						synthetic,
@@ -376,16 +372,13 @@ namespace cxxlens::detail::clang22
 						llvm::MemoryBuffer::getMemBufferCopy(
 							llvm::StringRef{blob->content->data(), blob->content->size()},
 							synthetic)))
-					return sdk::unexpected(failure(
-						"source-closure.digest-mismatch",
-						"member.logical-path",
-						member.logical_path));
+					return sdk::unexpected(failure("source-closure.digest-mismatch",
+												   "member.logical-path",
+												   member.logical_path));
 			}
 			if (auto error = memory->setCurrentWorkingDirectory(invocation.working_directory))
-				return sdk::unexpected(failure(
-					"source-closure.path-invalid",
-					"working-directory",
-					error.message()));
+				return sdk::unexpected(
+					failure("source-closure.path-invalid", "working-directory", error.message()));
 
 			auto audit = std::make_shared<native_vfs_audit>();
 			auto routed = llvm::makeIntrusiveRefCnt<closure_routing_file_system>(
@@ -414,11 +407,10 @@ namespace cxxlens::detail::clang22
 			if (main_blob == nullptr || !main_blob->content)
 				return sdk::unexpected(failure(
 					"source-closure.blob-missing", "main-logical-path", input.main_logical_path));
-			auto invocation = prepare_source_closure_invocation(
-				input.effective_arguments,
-				input.main_logical_path,
-				input.logical_working_directory,
-				input.qualified_read_roots);
+			auto invocation = prepare_source_closure_invocation(input.effective_arguments,
+																input.main_logical_path,
+																input.logical_working_directory,
+																input.qualified_read_roots);
 			if (!invocation)
 				return sdk::unexpected(std::move(invocation.error()));
 			if (!callback)
@@ -435,13 +427,13 @@ namespace cxxlens::detail::clang22
 				*main_blob->content,
 				input.effective_arguments,
 			};
-			auto outcome = provider::clang22::detail::with_translation_unit_vfs(
-				native_input,
-				invocation->compiler_filename,
-				invocation->tool_name,
-				invocation->compiler_arguments,
-				mount->filesystem,
-				std::move(callback));
+			auto outcome =
+				provider::clang22::detail::with_translation_unit_vfs(native_input,
+																	 invocation->compiler_filename,
+																	 invocation->tool_name,
+																	 invocation->compiler_arguments,
+																	 mount->filesystem,
+																	 std::move(callback));
 			// A member the closure actually claims but could not serve is a determinate input
 			// failure (the record's core invariant) and must fail the task even when Clang's own
 			// run reports success for the translation unit as a whole -- e.g. a `__has_include`
@@ -461,21 +453,19 @@ namespace cxxlens::detail::clang22
 #else
 			(void)main_blob;
 			(void)callback;
-			return sdk::unexpected(failure(
-				"native.unsupported-clang-major", "clang", "22"));
+			return sdk::unexpected(failure("native.unsupported-clang-major", "clang", "22"));
 #endif
 		}
 	} // namespace
 
-	sdk::result<void> with_source_closure_translation_unit(
-		const source_closure_native_input& input,
-		provider::clang22::translation_unit_callback callback)
+	sdk::result<void>
+	with_source_closure_translation_unit(const source_closure_native_input& input,
+										 provider::clang22::translation_unit_callback callback)
 	{
 		return run_source_closure_translation_unit(input, {}, std::move(callback));
 	}
 
-#if defined(CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING) && \
-	CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING
+#if defined(CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING) && CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING
 	sdk::result<void> with_source_closure_translation_unit_withholding_member(
 		const source_closure_native_input& input,
 		const std::string_view withheld_logical_path,
@@ -483,10 +473,9 @@ namespace cxxlens::detail::clang22
 	{
 		if (withheld_logical_path.empty() ||
 			input.closure.find_member(withheld_logical_path) == nullptr)
-			return sdk::unexpected(failure(
-				"native.input-invalid",
-				"withheld-logical-path",
-				std::string{withheld_logical_path}));
+			return sdk::unexpected(failure("native.input-invalid",
+										   "withheld-logical-path",
+										   std::string{withheld_logical_path}));
 		return run_source_closure_translation_unit(
 			input, withheld_logical_path, std::move(callback));
 	}

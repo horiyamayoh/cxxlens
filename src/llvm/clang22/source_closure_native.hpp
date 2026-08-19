@@ -59,12 +59,11 @@ namespace cxxlens::detail::clang22
 	 * everything the callback emits as provisional until this function returns success, and must
 	 * discard it otherwise; a successful callback never overrides a failed verdict here.
 	 */
-	[[nodiscard]] sdk::result<void> with_source_closure_translation_unit(
-		const source_closure_native_input& input,
-		provider::clang22::translation_unit_callback callback);
+	[[nodiscard]] sdk::result<void>
+	with_source_closure_translation_unit(const source_closure_native_input& input,
+										 provider::clang22::translation_unit_callback callback);
 
-#if defined(CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING) && \
-	CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING
+#if defined(CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING) && CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING
 	/**
 	 * Testing-only seam: behave exactly like `with_source_closure_translation_unit`, except that
 	 * `withheld_logical_path` -- which must be a real member of `input.closure` -- is left out of

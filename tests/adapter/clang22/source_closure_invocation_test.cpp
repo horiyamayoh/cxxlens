@@ -19,9 +19,9 @@ namespace
 		}
 	}
 
-	void expect_code(const cxxlens::sdk::result<cxxlens::detail::clang22::source_closure_invocation>&
-					 result,
-				 const std::string_view code)
+	void expect_code(
+		const cxxlens::sdk::result<cxxlens::detail::clang22::source_closure_invocation>& result,
+		const std::string_view code)
 	{
 		require(!result, "invalid invocation unexpectedly succeeded");
 		require(result.error().code == code, "invalid invocation returned the wrong typed code");
@@ -79,64 +79,64 @@ int main()
 		"project://src",
 		std::vector<std::string>{"/qualified/sysroot", "/opt/clang-22"});
 	require(reordered_roots.has_value() &&
-			reordered_roots->qualified_read_roots == prepared->qualified_read_roots,
+				reordered_roots->qualified_read_roots == prepared->qualified_read_roots,
 			"qualified roots were not canonicalized independently of input order");
 
 	auto relative_include = arguments;
 	relative_include[2] = "-Iinclude";
 	expect_code(prepare_source_closure_invocation(
-		relative_include, "project://src/main.cpp", "project://src", roots),
-		"source-closure.ambient-fallback-denied");
+					relative_include, "project://src/main.cpp", "project://src", roots),
+				"source-closure.ambient-fallback-denied");
 
 	auto unqualified_absolute = arguments;
 	unqualified_absolute[12] = "/usr/include";
 	expect_code(prepare_source_closure_invocation(
-		unqualified_absolute, "project://src/main.cpp", "project://src", roots),
-		"source-closure.toolchain-input-unqualified");
+					unqualified_absolute, "project://src/main.cpp", "project://src", roots),
+				"source-closure.toolchain-input-unqualified");
 
 	auto unqualified_gcc = arguments;
 	unqualified_gcc[9] = "--gcc-toolchain=/ambient/gcc";
 	expect_code(prepare_source_closure_invocation(
-		unqualified_gcc, "project://src/main.cpp", "project://src", roots),
-		"source-closure.toolchain-input-unqualified");
+					unqualified_gcc, "project://src/main.cpp", "project://src", roots),
+				"source-closure.toolchain-input-unqualified");
 
 	auto response_file = arguments;
 	response_file.insert(response_file.end() - 1, "@ambient.rsp");
 	expect_code(prepare_source_closure_invocation(
-		response_file, "project://src/main.cpp", "project://src", roots),
-		"source-closure.ambient-fallback-denied");
+					response_file, "project://src/main.cpp", "project://src", roots),
+				"source-closure.ambient-fallback-denied");
 
 	auto overlay = arguments;
 	overlay.insert(overlay.end() - 1, "-ivfsoverlay");
 	overlay.insert(overlay.end() - 1, "/qualified/sysroot/overlay.yaml");
 	expect_code(prepare_source_closure_invocation(
-		overlay, "project://src/main.cpp", "project://src", roots),
-		"source-closure.toolchain-input-unqualified");
+					overlay, "project://src/main.cpp", "project://src", roots),
+				"source-closure.toolchain-input-unqualified");
 
 	auto module = arguments;
 	module.insert(module.end() - 1, "-fmodule-file=/qualified/sysroot/module.pcm");
-	expect_code(prepare_source_closure_invocation(
-		module, "project://src/main.cpp", "project://src", roots),
+	expect_code(
+		prepare_source_closure_invocation(module, "project://src/main.cpp", "project://src", roots),
 		"source-closure.toolchain-input-unqualified");
 
 	auto hidden_project_path = arguments;
 	hidden_project_path.insert(hidden_project_path.end() - 1,
-		"-DPROJECT_PATH=project://secret.hpp");
+							   "-DPROJECT_PATH=project://secret.hpp");
 	expect_code(prepare_source_closure_invocation(
-		hidden_project_path, "project://src/main.cpp", "project://src", roots),
-		"source-closure.path-invalid");
+					hidden_project_path, "project://src/main.cpp", "project://src", roots),
+				"source-closure.path-invalid");
 
 	auto wrong_main = arguments;
 	wrong_main.back() = "project://src/other.cpp";
 	expect_code(prepare_source_closure_invocation(
-		wrong_main, "project://src/main.cpp", "project://src", roots),
-		"source-closure.main-invalid");
+					wrong_main, "project://src/main.cpp", "project://src", roots),
+				"source-closure.main-invalid");
 
 	expect_code(prepare_source_closure_invocation(
-		arguments,
-		"project://src/main.cpp",
-		"project://src",
-		std::vector<std::string>{"/opt/clang-22", "/opt/clang-22"}),
-		"source-closure.toolchain-input-unqualified");
+					arguments,
+					"project://src/main.cpp",
+					"project://src",
+					std::vector<std::string>{"/opt/clang-22", "/opt/clang-22"}),
+				"source-closure.toolchain-input-unqualified");
 	return 0;
 }

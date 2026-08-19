@@ -28,9 +28,8 @@ namespace
 		}
 	}
 
-	[[nodiscard]] source_closure_file_input file(std::string path,
-											 source_closure_role role,
-											 std::string content)
+	[[nodiscard]] source_closure_file_input
+	file(std::string path, source_closure_role role, std::string content)
 	{
 		return {
 			std::move(path),
@@ -48,9 +47,10 @@ namespace
 			auto base = std::filesystem::temp_directory_path();
 			for (unsigned attempt = 0U; attempt < 100U; ++attempt)
 			{
-				path_ = base / ("cxxlens-source-closure-native-" +
-					std::to_string(static_cast<unsigned long long>(std::rand())) + "-" +
-					std::to_string(attempt));
+				path_ = base /
+					("cxxlens-source-closure-native-" +
+					 std::to_string(static_cast<unsigned long long>(std::rand())) + "-" +
+					 std::to_string(attempt));
 				std::error_code error;
 				if (std::filesystem::create_directory(path_, error))
 					return;
@@ -98,8 +98,7 @@ namespace
 	// links the real adapter against (see tests/CMakeLists.txt), rather than an assumed host
 	// path. The admitted root is deliberately only that install prefix -- never `/usr`, never
 	// `/etc`, nothing else ambient on the host.
-	[[nodiscard]] std::vector<std::string>
-	arguments_with(const std::vector<std::string>& extra)
+	[[nodiscard]] std::vector<std::string> arguments_with(const std::vector<std::string>& extra)
 	{
 		std::vector<std::string> arguments{
 			CXXLENS_TEST_CLANGXX22_PATH,
@@ -123,8 +122,8 @@ namespace
 		std::string detail;
 	};
 
-	[[nodiscard]] source_closure_native_input
-	make_input(const source_closure_snapshot& closure, const std::vector<std::string>& extra)
+	[[nodiscard]] source_closure_native_input make_input(const source_closure_snapshot& closure,
+														 const std::vector<std::string>& extra)
 	{
 		return {
 			closure,
@@ -136,11 +135,12 @@ namespace
 	}
 
 	[[nodiscard]] run_outcome run(const source_closure_snapshot& closure,
-							   const std::vector<std::string>& extra = {})
+								  const std::vector<std::string>& extra = {})
 	{
 		const auto input = make_input(closure, extra);
 		run_outcome outcome;
-		auto result = with_source_closure_translation_unit(input,
+		auto result = with_source_closure_translation_unit(
+			input,
 			[&outcome](cxxlens::provider::clang22::borrowed_translation_unit&)
 				-> cxxlens::sdk::result<void>
 			{
@@ -157,8 +157,8 @@ namespace
 	}
 
 	[[nodiscard]] run_outcome run_withholding(const source_closure_snapshot& closure,
-										   const std::string_view withheld,
-										   const std::vector<std::string>& extra = {})
+											  const std::string_view withheld,
+											  const std::vector<std::string>& extra = {})
 	{
 		const auto input = make_input(closure, extra);
 		run_outcome outcome;
@@ -184,15 +184,15 @@ namespace
 	void expect_success(const run_outcome& outcome, const std::string_view what)
 	{
 		if (!outcome.succeeded)
-			std::cerr << what << " unexpectedly failed: " << outcome.code << " / "
-					  << outcome.detail << '\n';
+			std::cerr << what << " unexpectedly failed: " << outcome.code << " / " << outcome.detail
+					  << '\n';
 		require(outcome.succeeded, what);
 		require(outcome.callback_ran, "callback did not run for a successful translation unit");
 	}
 
 	void expect_failure(const run_outcome& outcome,
-					const std::string_view expected_code,
-					const std::string_view what)
+						const std::string_view expected_code,
+						const std::string_view what)
 	{
 		if (outcome.succeeded)
 			std::cerr << what << " unexpectedly succeeded\n";
@@ -242,7 +242,7 @@ int main()
 		// Clang tries `/__cxxlens_project__/src/answer.hpp` first (includer directory) and only
 		// then the `-I` entry that actually holds the member.
 		expect_success(run(*closure, {"-Iproject://include"}),
-					"conventional include/ + src/ project with -I");
+					   "conventional include/ + src/ project with -I");
 	}
 
 	std::cerr << "[A2] include/ + src/ split with -iquote\n";
@@ -257,7 +257,7 @@ int main()
 		});
 		require(closure.has_value(), "iquote fixture was rejected");
 		expect_success(run(*closure, {"-iquote", "project://include"}),
-					"conventional include/ + src/ project with separate-token -iquote");
+					   "conventional include/ + src/ project with separate-token -iquote");
 	}
 
 	std::cerr << "[A3] angle include across two -I entries\n";
@@ -273,7 +273,7 @@ int main()
 		require(closure.has_value(), "multi -I fixture was rejected");
 		// `project://first` holds no members at all; it must be an ordinary search-order miss.
 		expect_success(run(*closure, {"-Iproject://first", "-Iproject://second"}),
-					"angle include resolved from the second of two -I entries");
+					   "angle include resolved from the second of two -I entries");
 	}
 
 	std::cerr << "[A4] -I naming a directory with no members\n";
@@ -288,7 +288,7 @@ int main()
 		});
 		require(closure.has_value(), "empty -I fixture was rejected");
 		expect_success(run(*closure, {"-Iproject://vendor/include"}),
-					"-I naming a member-less project directory");
+					   "-I naming a member-less project directory");
 	}
 
 	std::cerr << "[A5] __has_include probing a non-member\n";
@@ -308,8 +308,7 @@ int main()
 		require(closure.has_value(), "__has_include fixture was rejected");
 		// The `#error` also pins that the probe evaluates false rather than resolving to
 		// something ambient.
-		expect_success(run(*closure),
-					"__has_include probe of a path the closure never claimed");
+		expect_success(run(*closure), "__has_include probe of a path the closure never claimed");
 	}
 
 	std::cerr << "[A6] driver toolchain probing outside the project root\n";
@@ -352,8 +351,8 @@ int main()
 		// the *specific* code here is what stops a future change from quietly reclassifying
 		// unclaimed probes as member-missing again.
 		expect_failure(run(*closure),
-					"native.parse-failed",
-					"unconditionally including a path no member claims");
+					   "native.parse-failed",
+					   "unconditionally including a path no member claims");
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -375,8 +374,8 @@ int main()
 		require(closure.has_value(), "withholding fixture was rejected");
 		auto outcome = run_withholding(*closure, "project://src/answer.hpp");
 		expect_failure(outcome,
-					"source-closure.member-missing",
-					"an unservable claimed member on an ordinary include");
+					   "source-closure.member-missing",
+					   "an unservable claimed member on an ordinary include");
 		require(outcome.detail == "project://src/answer.hpp",
 				"member-missing failure did not name the claimed member");
 	}
@@ -410,8 +409,8 @@ int main()
 				"Clang's own run must independently reach the callback for this to be a real "
 				"asymmetry test");
 		expect_failure(outcome,
-					"source-closure.member-missing",
-					"an unservable claimed member that Clang itself tolerates");
+					   "source-closure.member-missing",
+					   "an unservable claimed member that Clang itself tolerates");
 		require(outcome.detail == "project://src/generated.hpp",
 				"member-missing failure did not name the claimed member");
 	}
@@ -437,13 +436,14 @@ int main()
 		auto closure = make_source_closure_snapshot({
 			file("project://src/main.cpp",
 				 source_closure_role::main,
-				 "#include \"" + ambient_header.string() + "\"\n"
-				 "int use_answer() { return answer(); }\n"),
+				 "#include \"" + ambient_header.string() +
+					 "\"\n"
+					 "int use_answer() { return answer(); }\n"),
 		});
 		require(closure.has_value(), "absolute-ambient fixture was rejected");
 		expect_failure(run(*closure),
-					"native.parse-failed",
-					"absolute include of a real file outside the admitted roots");
+					   "native.parse-failed",
+					   "absolute include of a real file outside the admitted roots");
 	}
 
 	std::cerr << "[D2] relative traversal out of the project root\n";
@@ -455,8 +455,8 @@ int main()
 		});
 		require(closure.has_value(), "traversal fixture was rejected");
 		expect_failure(run(*closure),
-					"native.parse-failed",
-					"relative traversal escaping the synthetic project root");
+					   "native.parse-failed",
+					   "relative traversal escaping the synthetic project root");
 	}
 
 	std::cerr << "[D3] synthetic-root prefix boundary\n";
@@ -471,8 +471,8 @@ int main()
 		});
 		require(closure.has_value(), "prefix-boundary fixture was rejected");
 		expect_failure(run(*closure),
-					"native.parse-failed",
-					"path sharing a prefix with the synthetic root but outside it");
+					   "native.parse-failed",
+					   "path sharing a prefix with the synthetic root but outside it");
 	}
 
 	std::cerr << "[D4] ambient shadow reachable through the process working directory\n";

@@ -32,11 +32,10 @@ namespace
 	}
 
 	[[nodiscard]] source_closure_file_input file(std::string logical_path,
-											 source_closure_role role,
-											 std::shared_ptr<const std::string> bytes)
+												 source_closure_role role,
+												 std::shared_ptr<const std::string> bytes)
 	{
-		return {
-			std::move(logical_path), role, source_closure_encoding::utf8, std::move(bytes)};
+		return {std::move(logical_path), role, source_closure_encoding::utf8, std::move(bytes)};
 	}
 
 	[[nodiscard]] source_closure_snapshot valid_snapshot()
@@ -53,8 +52,7 @@ namespace
 		return std::move(*closure);
 	}
 
-	void expect_failure(std::vector<source_closure_file_input> files,
-						const std::string_view code)
+	void expect_failure(std::vector<source_closure_file_input> files, const std::string_view code)
 	{
 		auto result = make_source_closure_snapshot(std::move(files));
 		require(!result, "invalid source closure was accepted");
@@ -77,12 +75,12 @@ int main()
 
 	auto mutable_bytes = std::make_shared<std::string>("int main() { return 0; }");
 	std::shared_ptr<const std::string> borrowed_mutable = mutable_bytes;
-	auto sealed_copy = make_source_closure_snapshot({file(
-		"project://src/sealed.cpp", source_closure_role::main, borrowed_mutable)});
+	auto sealed_copy = make_source_closure_snapshot(
+		{file("project://src/sealed.cpp", source_closure_role::main, borrowed_mutable)});
 	require(sealed_copy.has_value(), "mutable-alias fixture was rejected");
 	(*mutable_bytes)[0] = 'x';
 	require(sealed_copy->validate().has_value() &&
-			sealed_copy->blobs.front().content->front() == 'i',
+				sealed_copy->blobs.front().content->front() == 'i',
 			"source closure retained a caller-mutable byte alias");
 
 	auto reversed = make_source_closure_snapshot({
@@ -112,26 +110,22 @@ int main()
 	expect_failure(
 		{file("project://src/../main.cpp", source_closure_role::main, content("int main(){}"))},
 		"source-closure.path-invalid");
-	expect_failure(
-		{file("project://src/cafe\xcc\x81.cpp",
-			  source_closure_role::main,
-			  content("int main(){}"))},
-		"source-closure.path-not-nfc");
-	expect_failure(
-		{file("project://src/main.cpp", source_closure_role::header, content("header"))},
-		"source-closure.main-invalid");
-	expect_failure(
-		{file("project://src/a.cpp", source_closure_role::main, content("a")),
-		 file("project://src/b.cpp", source_closure_role::main, content("b"))},
-		"source-closure.main-invalid");
+	expect_failure({file("project://src/cafe\xcc\x81.cpp",
+						 source_closure_role::main,
+						 content("int main(){}"))},
+				   "source-closure.path-not-nfc");
+	expect_failure({file("project://src/main.cpp", source_closure_role::header, content("header"))},
+				   "source-closure.main-invalid");
+	expect_failure({file("project://src/a.cpp", source_closure_role::main, content("a")),
+					file("project://src/b.cpp", source_closure_role::main, content("b"))},
+				   "source-closure.main-invalid");
 
 	auto tampered_blob = valid_snapshot();
 	auto tampered_content = *tampered_blob.blobs.front().content;
 	tampered_content.front() = tampered_content.front() == 'x' ? 'y' : 'x';
 	tampered_blob.blobs.front().content = content(std::move(tampered_content));
 	auto tampered_result = tampered_blob.validate();
-	require(!tampered_result &&
-			tampered_result.error().code == "source-closure.digest-mismatch",
+	require(!tampered_result && tampered_result.error().code == "source-closure.digest-mismatch",
 			"blob byte mutation was not rejected");
 
 	auto size_mutation = valid_snapshot();
@@ -152,8 +146,8 @@ int main()
 		1U,
 		content("a"),
 	});
-	std::ranges::sort(orphan_blob.blobs, {},
-				  &cxxlens::detail::clang22::source_closure_blob::content_digest);
+	std::ranges::sort(
+		orphan_blob.blobs, {}, &cxxlens::detail::clang22::source_closure_blob::content_digest);
 	auto orphan_result = orphan_blob.validate();
 	require(!orphan_result && orphan_result.error().code == "source-closure.digest-mismatch",
 			"unreferenced authenticated blob was accepted");

@@ -1,8 +1,5 @@
 #include "source_closure_invocation.hpp"
 
-#include "source_closure.hpp"
-#include "source_closure_vfs.hpp"
-
 #include <algorithm>
 #include <cstddef>
 #include <ranges>
@@ -10,6 +7,9 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "source_closure.hpp"
+#include "source_closure_vfs.hpp"
 
 namespace cxxlens::detail::clang22
 {
@@ -45,9 +45,8 @@ namespace cxxlens::detail::clang22
 			{"-gcc-toolchain", path_authority::qualified_only},
 		};
 
-		[[nodiscard]] sdk::error failure(std::string code,
-									   std::string field,
-									   std::string detail = {})
+		[[nodiscard]] sdk::error
+		failure(std::string code, std::string field, std::string detail = {})
 		{
 			return {std::move(code), std::move(field), std::move(detail)};
 		}
@@ -55,10 +54,10 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] bool control_free(const std::string_view value) noexcept
 		{
 			return std::ranges::none_of(value,
-				[](const unsigned char character)
-				{
-					return character < 0x20U || character == 0x7fU;
-				});
+										[](const unsigned char character)
+										{
+											return character < 0x20U || character == 0x7fU;
+										});
 		}
 
 		[[nodiscard]] sdk::result<std::string>
@@ -67,10 +66,9 @@ namespace cxxlens::detail::clang22
 			if (value.empty() || value.size() > maximum_argument_bytes || value.front() != '/' ||
 				value.find('\0') != std::string_view::npos || value.contains('\\') ||
 				!control_free(value) || (value.size() > 1U && value.back() == '/'))
-				return sdk::unexpected(failure(
-					"source-closure.toolchain-input-unqualified",
-					"qualified-read-root",
-					std::string{value}));
+				return sdk::unexpected(failure("source-closure.toolchain-input-unqualified",
+											   "qualified-read-root",
+											   std::string{value}));
 
 			std::size_t begin{1U};
 			while (begin <= value.size())
@@ -79,10 +77,9 @@ namespace cxxlens::detail::clang22
 				const auto segment = value.substr(
 					begin, end == std::string_view::npos ? value.size() - begin : end - begin);
 				if (segment.empty() || segment == "." || segment == "..")
-					return sdk::unexpected(failure(
-						"source-closure.toolchain-input-unqualified",
-						"qualified-read-root",
-						std::string{value}));
+					return sdk::unexpected(failure("source-closure.toolchain-input-unqualified",
+												   "qualified-read-root",
+												   std::string{value}));
 				if (end == std::string_view::npos)
 					break;
 				begin = end + 1U;
@@ -91,7 +88,7 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] bool beneath_root(const std::string_view path,
-									 const std::string_view root) noexcept
+										const std::string_view root) noexcept
 		{
 			if (root == "/")
 				return path.starts_with('/');
@@ -100,26 +97,23 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] sdk::result<std::string>
-		qualified_path(const std::string_view value,
-					   const std::span<const std::string> roots)
+		qualified_path(const std::string_view value, const std::span<const std::string> roots)
 		{
 			auto canonical = canonical_qualified_root(value);
 			if (!canonical)
 				return sdk::unexpected(std::move(canonical.error()));
 			if (std::ranges::none_of(roots,
-				[&canonical](const std::string& root)
-				{
-					return beneath_root(*canonical, root);
-				}))
-				return sdk::unexpected(failure(
-					"source-closure.toolchain-input-unqualified",
-					"compiler-path",
-					std::move(*canonical)));
+									 [&canonical](const std::string& root)
+									 {
+										 return beneath_root(*canonical, root);
+									 }))
+				return sdk::unexpected(failure("source-closure.toolchain-input-unqualified",
+											   "compiler-path",
+											   std::move(*canonical)));
 			return canonical;
 		}
 
-		[[nodiscard]] sdk::result<std::string>
-		project_path(const std::string_view value)
+		[[nodiscard]] sdk::result<std::string> project_path(const std::string_view value)
 		{
 			auto relative = source_closure_relative_path(value);
 			if (!relative)
@@ -127,18 +121,17 @@ namespace cxxlens::detail::clang22
 			return std::string{source_closure_vfs::synthetic_root()} + "/" + *relative;
 		}
 
-		[[nodiscard]] sdk::result<std::string> rewrite_path(
-			const std::string_view value,
-			const path_authority authority,
-			const std::span<const std::string> qualified_roots)
+		[[nodiscard]] sdk::result<std::string>
+		rewrite_path(const std::string_view value,
+					 const path_authority authority,
+					 const std::span<const std::string> qualified_roots)
 		{
 			if (value.starts_with(project_prefix))
 			{
 				if (authority == path_authority::qualified_only)
-					return sdk::unexpected(failure(
-						"source-closure.toolchain-input-unqualified",
-						"compiler-path",
-						std::string{value}));
+					return sdk::unexpected(failure("source-closure.toolchain-input-unqualified",
+												   "compiler-path",
+												   std::string{value}));
 				return project_path(value);
 			}
 			if (!value.empty() && value.front() == '/')
@@ -161,10 +154,10 @@ namespace cxxlens::detail::clang22
 				"-fprebuilt-module-path=",
 			};
 			return std::ranges::any_of(prefixes,
-				[argument](const std::string_view prefix)
-				{
-					return argument.starts_with(prefix);
-				});
+									   [argument](const std::string_view prefix)
+									   {
+										   return argument.starts_with(prefix);
+									   });
 		}
 
 		[[nodiscard]] sdk::result<void> validate_argument(const std::string_view argument)
@@ -174,23 +167,21 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(failure(
 					"source-closure.path-invalid", "compiler-argument", std::string{argument}));
 			if (argument.front() == '@')
-				return sdk::unexpected(failure(
-					"source-closure.ambient-fallback-denied",
-					"response-file",
-					std::string{argument}));
+				return sdk::unexpected(failure("source-closure.ambient-fallback-denied",
+											   "response-file",
+											   std::string{argument}));
 			if (unsupported_path_option(argument))
-				return sdk::unexpected(failure(
-					"source-closure.toolchain-input-unqualified",
-					"unsupported-input-kind",
-					std::string{argument}));
+				return sdk::unexpected(failure("source-closure.toolchain-input-unqualified",
+											   "unsupported-input-kind",
+											   std::string{argument}));
 			return {};
 		}
 
 		[[nodiscard]] const separate_path_option*
 		find_separate_option(const std::string_view argument) noexcept
 		{
-			const auto found = std::ranges::find(
-				separate_options, argument, &separate_path_option::spelling);
+			const auto found =
+				std::ranges::find(separate_options, argument, &separate_path_option::spelling);
 			return found == std::end(separate_options) ? nullptr : &*found;
 		}
 
@@ -201,9 +192,9 @@ namespace cxxlens::detail::clang22
 			path_authority authority;
 		};
 
-		[[nodiscard]] sdk::result<std::string> rewrite_joined_option(
-			const std::string_view argument,
-			const std::span<const std::string> qualified_roots)
+		[[nodiscard]] sdk::result<std::string>
+		rewrite_joined_option(const std::string_view argument,
+							  const std::span<const std::string> qualified_roots)
 		{
 			constexpr joined_option joined[]{
 				{"-resource-dir=", "", path_authority::qualified_only},
@@ -235,15 +226,14 @@ namespace cxxlens::detail::clang22
 		}
 	} // namespace
 
-	sdk::result<source_closure_invocation> prepare_source_closure_invocation(
-		const std::span<const std::string> effective_arguments,
-		const std::string_view main_logical_path,
-		const std::string_view logical_working_directory,
-		const std::span<const std::string> qualified_read_roots)
+	sdk::result<source_closure_invocation>
+	prepare_source_closure_invocation(const std::span<const std::string> effective_arguments,
+									  const std::string_view main_logical_path,
+									  const std::string_view logical_working_directory,
+									  const std::span<const std::string> qualified_read_roots)
 	{
 		if (effective_arguments.size() < 2U || effective_arguments.size() > maximum_argument_count)
-			return sdk::unexpected(failure(
-				"source-closure.limit-exceeded", "effective-arguments"));
+			return sdk::unexpected(failure("source-closure.limit-exceeded", "effective-arguments"));
 
 		auto compiler_filename = project_path(main_logical_path);
 		if (!compiler_filename)
@@ -253,9 +243,7 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(std::move(working_directory.error()));
 		if (effective_arguments.back() != main_logical_path)
 			return sdk::unexpected(failure(
-				"source-closure.main-invalid",
-				"effective-arguments",
-				effective_arguments.back()));
+				"source-closure.main-invalid", "effective-arguments", effective_arguments.back()));
 
 		source_closure_invocation output;
 		output.compiler_filename = std::move(*compiler_filename);
@@ -271,13 +259,12 @@ namespace cxxlens::detail::clang22
 		std::ranges::sort(output.qualified_read_roots);
 		if (std::ranges::adjacent_find(output.qualified_read_roots) !=
 			output.qualified_read_roots.end())
-			return sdk::unexpected(failure(
-				"source-closure.toolchain-input-unqualified", "duplicate-qualified-root"));
+			return sdk::unexpected(
+				failure("source-closure.toolchain-input-unqualified", "duplicate-qualified-root"));
 
 		if (auto argv0 = validate_argument(effective_arguments.front()); !argv0)
 			return sdk::unexpected(std::move(argv0.error()));
-		auto tool_name = qualified_path(
-			effective_arguments.front(), output.qualified_read_roots);
+		auto tool_name = qualified_path(effective_arguments.front(), output.qualified_read_roots);
 		if (!tool_name)
 			return sdk::unexpected(std::move(tool_name.error()));
 		output.tool_name = std::move(*tool_name);
@@ -290,13 +277,13 @@ namespace cxxlens::detail::clang22
 			if (const auto* option = find_separate_option(argument); option != nullptr)
 			{
 				if (index + 2U >= effective_arguments.size())
-					return sdk::unexpected(failure(
-						"source-closure.path-invalid", "missing-option-value", argument));
+					return sdk::unexpected(
+						failure("source-closure.path-invalid", "missing-option-value", argument));
 				const auto& value = effective_arguments[++index];
 				if (auto valid = validate_argument(value); !valid)
 					return sdk::unexpected(std::move(valid.error()));
-				auto rewritten = rewrite_path(
-					value, option->authority, output.qualified_read_roots);
+				auto rewritten =
+					rewrite_path(value, option->authority, output.qualified_read_roots);
 				if (!rewritten)
 					return sdk::unexpected(std::move(rewritten.error()));
 				output.compiler_arguments.push_back(argument);

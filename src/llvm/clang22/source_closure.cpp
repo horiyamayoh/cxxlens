@@ -1,7 +1,5 @@
 #include "source_closure.hpp"
 
-#include "unicode_nfc.hpp"
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -12,6 +10,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "unicode_nfc.hpp"
 
 namespace cxxlens::detail::clang22
 {
@@ -25,9 +25,8 @@ namespace cxxlens::detail::clang22
 		constexpr std::string_view project_prefix{"project://"};
 		constexpr std::string_view closure_domain{"cxxlens.clang22.source-closure.v1"};
 
-		[[nodiscard]] sdk::error failure(std::string code,
-									   std::string field,
-									   std::string detail = {})
+		[[nodiscard]] sdk::error
+		failure(std::string code, std::string field, std::string detail = {})
 		{
 			return {std::move(code), std::move(field), std::move(detail)};
 		}
@@ -53,44 +52,46 @@ namespace cxxlens::detail::clang22
 			if (value.size() != 71U || !value.starts_with("sha256:"))
 				return false;
 			return std::ranges::all_of(value.substr(7U),
-				[](const char byte)
-				{
-					return (byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f');
-				});
+									   [](const char byte)
+									   {
+										   return (byte >= '0' && byte <= '9') ||
+											   (byte >= 'a' && byte <= 'f');
+									   });
 		}
 
 		[[nodiscard]] std::string_view role_name(const source_closure_role role) noexcept
 		{
 			switch (role)
 			{
-			case source_closure_role::main:
-				return "main";
-			case source_closure_role::header:
-				return "header";
-			case source_closure_role::generated:
-				return "generated";
-			case source_closure_role::forced_include:
-				return "forced-include";
-			case source_closure_role::macro_file:
-				return "macro-file";
+				case source_closure_role::main:
+					return "main";
+				case source_closure_role::header:
+					return "header";
+				case source_closure_role::generated:
+					return "generated";
+				case source_closure_role::forced_include:
+					return "forced-include";
+				case source_closure_role::macro_file:
+					return "macro-file";
 			}
 			return {};
 		}
 
-		[[nodiscard]] std::string_view encoding_name(const source_closure_encoding encoding) noexcept
+		[[nodiscard]] std::string_view
+		encoding_name(const source_closure_encoding encoding) noexcept
 		{
 			switch (encoding)
 			{
-			case source_closure_encoding::utf8:
-				return "utf8";
-			case source_closure_encoding::utf16le:
-				return "utf16le";
-			case source_closure_encoding::utf16be:
-				return "utf16be";
-			case source_closure_encoding::locale_dependent:
-				return "locale_dependent";
-			case source_closure_encoding::binary_or_unknown:
-				return "binary_or_unknown";
+				case source_closure_encoding::utf8:
+					return "utf8";
+				case source_closure_encoding::utf16le:
+					return "utf16le";
+				case source_closure_encoding::utf16be:
+					return "utf16be";
+				case source_closure_encoding::locale_dependent:
+					return "locale_dependent";
+				case source_closure_encoding::binary_or_unknown:
+					return "binary_or_unknown";
 			}
 			return {};
 		}
@@ -100,8 +101,8 @@ namespace cxxlens::detail::clang22
 		{
 			auto folded = nfc_casefold_utf8(logical_path);
 			if (!folded)
-				return sdk::unexpected(failure(
-					"source-closure.path-invalid", "logical-path", folded.error().detail));
+				return sdk::unexpected(
+					failure("source-closure.path-invalid", "logical-path", folded.error().detail));
 			return folded;
 		}
 
@@ -122,7 +123,8 @@ namespace cxxlens::detail::clang22
 					sdk::canonical_value::from_string(member.logical_path),
 					sdk::canonical_value::from_string(std::string{role_name(member.role)}),
 					sdk::canonical_value::from_string(std::string{encoding_name(member.encoding)}),
-					sdk::canonical_value::from_integer(static_cast<std::int64_t>(member.size_bytes)),
+					sdk::canonical_value::from_integer(
+						static_cast<std::int64_t>(member.size_bytes)),
 					sdk::canonical_value::from_string(member.content_digest),
 					sdk::canonical_value::from_boolean(member.read_only),
 				}));
@@ -166,28 +168,28 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(
 				failure("source-closure.path-invalid", "logical-path", std::string{logical_path}));
 		if (auto valid_utf8 = sdk::validate_utf8_text(logical_path); !valid_utf8)
-			return sdk::unexpected(failure(
-				"source-closure.path-invalid", "logical-path", valid_utf8.error().detail));
+			return sdk::unexpected(
+				failure("source-closure.path-invalid", "logical-path", valid_utf8.error().detail));
 		auto normalized = is_nfc_utf8(logical_path);
 		if (!normalized)
-			return sdk::unexpected(failure(
-				"source-closure.path-invalid", "logical-path", normalized.error().detail));
+			return sdk::unexpected(
+				failure("source-closure.path-invalid", "logical-path", normalized.error().detail));
 		if (!*normalized)
-			return sdk::unexpected(failure(
-				"source-closure.path-not-nfc", "logical-path", std::string{logical_path}));
+			return sdk::unexpected(
+				failure("source-closure.path-not-nfc", "logical-path", std::string{logical_path}));
 		if (std::ranges::any_of(logical_path,
-							   [](const unsigned char character)
-							   {
-								   return character < 0x20U || character == 0x7fU;
-							   }))
-			return sdk::unexpected(failure(
-				"source-closure.path-invalid", "logical-path", "control-character"));
+								[](const unsigned char character)
+								{
+									return character < 0x20U || character == 0x7fU;
+								}))
+			return sdk::unexpected(
+				failure("source-closure.path-invalid", "logical-path", "control-character"));
 
 		const auto relative = logical_path.substr(project_prefix.size());
 		if (relative.empty() || relative.front() == '/' || relative.back() == '/' ||
 			relative.contains('\\') || relative.contains('?') || relative.contains('#'))
-			return sdk::unexpected(failure(
-				"source-closure.path-invalid", "logical-path", std::string{logical_path}));
+			return sdk::unexpected(
+				failure("source-closure.path-invalid", "logical-path", std::string{logical_path}));
 
 		std::size_t begin{};
 		while (begin <= relative.size())
@@ -224,15 +226,15 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(
 				failure("source-closure.blob-missing", "blob.content", content_digest));
 		if (size_bytes > maximum_blob_bytes)
-			return sdk::unexpected(failure(
-				"source-closure.limit-exceeded", "blob.size-bytes", content_digest));
+			return sdk::unexpected(
+				failure("source-closure.limit-exceeded", "blob.size-bytes", content_digest));
 		if (size_bytes != content->size())
-			return sdk::unexpected(failure(
-				"source-closure.digest-mismatch", "blob.size-bytes", content_digest));
+			return sdk::unexpected(
+				failure("source-closure.digest-mismatch", "blob.size-bytes", content_digest));
 		const auto actual = sdk::content_digest(bytes(*content));
 		if (actual != content_digest)
-			return sdk::unexpected(failure(
-				"source-closure.digest-mismatch", "blob.content-digest", content_digest));
+			return sdk::unexpected(
+				failure("source-closure.digest-mismatch", "blob.content-digest", content_digest));
 		return {};
 	}
 
@@ -242,17 +244,17 @@ namespace cxxlens::detail::clang22
 		if (!expected_file)
 			return sdk::unexpected(std::move(expected_file.error()));
 		if (*expected_file != file_id)
-			return sdk::unexpected(failure(
-				"source-closure.digest-mismatch", "member.file-id", logical_path));
+			return sdk::unexpected(
+				failure("source-closure.digest-mismatch", "member.file-id", logical_path));
 		if (!valid_role(role) || !valid_encoding(encoding) || !read_only)
-			return sdk::unexpected(failure(
-				"source-closure.role-invalid", "member.metadata", logical_path));
+			return sdk::unexpected(
+				failure("source-closure.role-invalid", "member.metadata", logical_path));
 		if (size_bytes > maximum_blob_bytes)
-			return sdk::unexpected(failure(
-				"source-closure.limit-exceeded", "member.size-bytes", logical_path));
+			return sdk::unexpected(
+				failure("source-closure.limit-exceeded", "member.size-bytes", logical_path));
 		if (!valid_content_digest(content_digest))
-			return sdk::unexpected(failure(
-				"source-closure.digest-mismatch", "member.content-digest", logical_path));
+			return sdk::unexpected(
+				failure("source-closure.digest-mismatch", "member.content-digest", logical_path));
 		return {};
 	}
 
@@ -260,8 +262,7 @@ namespace cxxlens::detail::clang22
 	{
 		if (members.empty() || members.size() > maximum_members || blobs.empty() ||
 			blobs.size() > maximum_unique_blobs)
-			return sdk::unexpected(
-				failure("source-closure.limit-exceeded", "closure.census"));
+			return sdk::unexpected(failure("source-closure.limit-exceeded", "closure.census"));
 
 		std::uint64_t aggregate_bytes{};
 		std::string previous_digest;
@@ -270,12 +271,12 @@ namespace cxxlens::detail::clang22
 			if (auto valid = blob.validate(); !valid)
 				return valid;
 			if (!previous_digest.empty() && previous_digest >= blob.content_digest)
-				return sdk::unexpected(failure(
-					"source-closure.duplicate-member", "blob.order", blob.content_digest));
+				return sdk::unexpected(
+					failure("source-closure.duplicate-member", "blob.order", blob.content_digest));
 			previous_digest = blob.content_digest;
 			if (blob.size_bytes > maximum_unique_blob_bytes - aggregate_bytes)
-				return sdk::unexpected(failure(
-					"source-closure.limit-exceeded", "closure.unique-blob-bytes"));
+				return sdk::unexpected(
+					failure("source-closure.limit-exceeded", "closure.unique-blob-bytes"));
 			aggregate_bytes += blob.size_bytes;
 		}
 
@@ -288,11 +289,11 @@ namespace cxxlens::detail::clang22
 			if (auto valid = member.validate(); !valid)
 				return valid;
 			if (!previous_path.empty() && previous_path >= member.logical_path)
-				return sdk::unexpected(failure(
-					previous_path == member.logical_path ? "source-closure.duplicate-member"
-													 : "source-closure.path-collision",
-					"member.order",
-					member.logical_path));
+				return sdk::unexpected(failure(previous_path == member.logical_path
+												   ? "source-closure.duplicate-member"
+												   : "source-closure.path-collision",
+											   "member.order",
+											   member.logical_path));
 			previous_path = member.logical_path;
 
 			auto alias = portable_alias_key(member.logical_path);
@@ -301,10 +302,9 @@ namespace cxxlens::detail::clang22
 			auto [alias_entry, inserted] =
 				portable_aliases.try_emplace(std::move(*alias), member.logical_path);
 			if (!inserted)
-				return sdk::unexpected(failure(
-					"source-closure.case-collision",
-					"member.logical-path",
-					alias_entry->second + "|" + member.logical_path));
+				return sdk::unexpected(failure("source-closure.case-collision",
+											   "member.logical-path",
+											   alias_entry->second + "|" + member.logical_path));
 
 			const auto* blob = find_blob(member.content_digest);
 			if (blob == nullptr)
@@ -321,15 +321,14 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(failure(
 				"source-closure.main-invalid", "closure.main-count", std::to_string(main_count)));
 		if (blob_references.size() != blobs.size())
-			return sdk::unexpected(failure(
-				"source-closure.digest-mismatch", "closure.orphan-blob"));
+			return sdk::unexpected(
+				failure("source-closure.digest-mismatch", "closure.orphan-blob"));
 
 		auto expected_digest = compute_closure_digest(members, blobs);
 		if (!expected_digest)
 			return sdk::unexpected(std::move(expected_digest.error()));
 		if (*expected_digest != closure_digest || snapshot_id != "source-closure:" + closure_digest)
-			return sdk::unexpected(
-				failure("source-closure.digest-mismatch", "closure.identity"));
+			return sdk::unexpected(failure("source-closure.digest-mismatch", "closure.identity"));
 		return {};
 	}
 
@@ -347,7 +346,7 @@ namespace cxxlens::detail::clang22
 		const auto found = std::ranges::lower_bound(
 			blobs, content_digest_value, {}, &source_closure_blob::content_digest);
 		return found != blobs.end() && found->content_digest == content_digest_value ? &*found
-																						 : nullptr;
+																					 : nullptr;
 	}
 
 	sdk::result<source_closure_snapshot>
@@ -363,17 +362,17 @@ namespace cxxlens::detail::clang22
 		for (auto& file : files)
 		{
 			if (!file.content)
-				return sdk::unexpected(failure(
-					"source-closure.blob-missing", "file.content", file.logical_path));
+				return sdk::unexpected(
+					failure("source-closure.blob-missing", "file.content", file.logical_path));
 			auto file_id = source_closure_file_id(file.logical_path);
 			if (!file_id)
 				return sdk::unexpected(std::move(file_id.error()));
 			if (!valid_role(file.role) || !valid_encoding(file.encoding))
-				return sdk::unexpected(failure(
-					"source-closure.role-invalid", "file.metadata", file.logical_path));
+				return sdk::unexpected(
+					failure("source-closure.role-invalid", "file.metadata", file.logical_path));
 			if (file.content->size() > maximum_blob_bytes)
-				return sdk::unexpected(failure(
-					"source-closure.limit-exceeded", "file.size-bytes", file.logical_path));
+				return sdk::unexpected(
+					failure("source-closure.limit-exceeded", "file.size-bytes", file.logical_path));
 
 			const auto digest = sdk::content_digest(bytes(*file.content));
 			const auto size = static_cast<std::uint64_t>(file.content->size());
@@ -382,8 +381,8 @@ namespace cxxlens::detail::clang22
 				digest, source_closure_blob{digest, size, std::move(sealed_content)});
 			if (!inserted &&
 				(blob->second.size_bytes != size || *blob->second.content != *file.content))
-				return sdk::unexpected(failure(
-					"source-closure.digest-mismatch", "blob.conflicting-content", digest));
+				return sdk::unexpected(
+					failure("source-closure.digest-mismatch", "blob.conflicting-content", digest));
 			output.members.push_back({
 				std::move(*file_id),
 				std::move(file.logical_path),

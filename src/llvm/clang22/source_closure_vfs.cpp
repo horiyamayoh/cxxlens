@@ -1,7 +1,5 @@
 #include "source_closure_vfs.hpp"
 
-#include "unicode_nfc.hpp"
-
 #include <algorithm>
 #include <cstddef>
 #include <ranges>
@@ -9,23 +7,25 @@
 #include <utility>
 #include <vector>
 
+#include "unicode_nfc.hpp"
+
 namespace cxxlens::detail::clang22
 {
 	namespace
 	{
 		constexpr std::string_view project_prefix{"project://"};
 
-		[[nodiscard]] sdk::error failure(std::string code,
-									   std::string field,
-									   std::string detail = {})
+		[[nodiscard]] sdk::error
+		failure(std::string code, std::string field, std::string detail = {})
 		{
 			return {std::move(code), std::move(field), std::move(detail)};
 		}
 
 		[[nodiscard]] sdk::result<void> validate_include_spelling(const std::string_view value)
 		{
-			if (value.empty() || value.size() > 4096U || value.find('\0') != std::string_view::npos ||
-				value.contains('\\') || value.contains('?') || value.contains('#'))
+			if (value.empty() || value.size() > 4096U ||
+				value.find('\0') != std::string_view::npos || value.contains('\\') ||
+				value.contains('?') || value.contains('#'))
 				return sdk::unexpected(
 					failure("source-closure.path-invalid", "include-path", std::string{value}));
 			if (auto valid_utf8 = sdk::validate_utf8_text(value); !valid_utf8)
@@ -36,25 +36,25 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(failure(
 					"source-closure.path-invalid", "include-path", normalized.error().detail));
 			if (!*normalized)
-				return sdk::unexpected(failure(
-					"source-closure.path-not-nfc", "include-path", std::string{value}));
+				return sdk::unexpected(
+					failure("source-closure.path-not-nfc", "include-path", std::string{value}));
 			if (std::ranges::any_of(value,
-							   [](const unsigned char character)
-							   {
-								   return character < 0x20U || character == 0x7fU;
-							   }))
-				return sdk::unexpected(failure(
-					"source-closure.path-invalid", "include-path", "control-character"));
+									[](const unsigned char character)
+									{
+										return character < 0x20U || character == 0x7fU;
+									}))
+				return sdk::unexpected(
+					failure("source-closure.path-invalid", "include-path", "control-character"));
 			return {};
 		}
 
 		[[nodiscard]] sdk::result<std::vector<std::string>>
 		normalize_relative_segments(const std::string_view base_directory,
-							const std::string_view requested)
+									const std::string_view requested)
 		{
 			std::vector<std::string> segments;
 			auto append = [&segments](const std::string_view path,
-							 const bool allow_parent) -> sdk::result<void>
+									  const bool allow_parent) -> sdk::result<void>
 			{
 				std::size_t begin{};
 				while (begin <= path.size())
@@ -71,10 +71,9 @@ namespace cxxlens::detail::clang22
 					else if (segment == "..")
 					{
 						if (!allow_parent || segments.empty())
-							return sdk::unexpected(failure(
-								"source-closure.ambient-fallback-denied",
-								"include-path",
-								std::string{path}));
+							return sdk::unexpected(failure("source-closure.ambient-fallback-denied",
+														   "include-path",
+														   std::string{path}));
 						segments.pop_back();
 					}
 					else
@@ -114,8 +113,9 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] std::string parent_path(const std::string_view relative)
 		{
 			const auto separator = relative.rfind('/');
-			return separator == std::string_view::npos ? std::string{} :
-																			 std::string{relative.substr(0U, separator)};
+			return separator == std::string_view::npos
+				? std::string{}
+				: std::string{relative.substr(0U, separator)};
 		}
 	} // namespace
 
@@ -141,10 +141,9 @@ namespace cxxlens::detail::clang22
 			return std::string{compiler_path};
 		}
 		if (!compiler_path.starts_with(synthetic_root()))
-			return sdk::unexpected(failure(
-				"source-closure.toolchain-input-unqualified",
-				"compiler-path",
-				std::string{compiler_path}));
+			return sdk::unexpected(failure("source-closure.toolchain-input-unqualified",
+										   "compiler-path",
+										   std::string{compiler_path}));
 		const auto suffix = compiler_path.substr(synthetic_root().size());
 		if (suffix.empty() || suffix.front() != '/')
 			return sdk::unexpected(failure(
@@ -164,12 +163,12 @@ namespace cxxlens::detail::clang22
 	{
 		const auto* member = closure_.find_member(logical_path);
 		if (member == nullptr)
-			return sdk::unexpected(failure(
-				"source-closure.member-missing", "logical-path", std::move(logical_path)));
+			return sdk::unexpected(
+				failure("source-closure.member-missing", "logical-path", std::move(logical_path)));
 		const auto* blob = closure_.find_blob(member->content_digest);
 		if (blob == nullptr || !blob->content)
-			return sdk::unexpected(failure(
-				"source-closure.blob-missing", "logical-path", member->logical_path));
+			return sdk::unexpected(
+				failure("source-closure.blob-missing", "logical-path", member->logical_path));
 		auto relative = source_closure_relative_path(member->logical_path);
 		if (!relative)
 			return sdk::unexpected(std::move(relative.error()));
@@ -193,7 +192,7 @@ namespace cxxlens::detail::clang22
 
 	sdk::result<source_closure_vfs_file>
 	source_closure_vfs::open_relative(const std::string_view include_path,
-								  const std::string_view including_logical_path) const
+									  const std::string_view including_logical_path) const
 	{
 		if (auto valid = validate_include_spelling(include_path); !valid)
 			return sdk::unexpected(std::move(valid.error()));
@@ -204,10 +203,9 @@ namespace cxxlens::detail::clang22
 		if (include_path.starts_with(project_prefix) || include_path.starts_with(synthetic_root()))
 			return open(include_path);
 		if (include_path.front() == '/')
-			return sdk::unexpected(failure(
-				"source-closure.toolchain-input-unqualified",
-				"include-path",
-				std::string{include_path}));
+			return sdk::unexpected(failure("source-closure.toolchain-input-unqualified",
+										   "include-path",
+										   std::string{include_path}));
 
 		auto segments = normalize_relative_segments(parent_path(*including_relative), include_path);
 		if (!segments)
@@ -248,23 +246,23 @@ namespace cxxlens::detail::clang22
 			const auto separator = remainder.find('/');
 			const auto child = remainder.substr(
 				0U, separator == std::string_view::npos ? remainder.size() : separator);
-			const auto synthetic = std::string{synthetic_root()} + "/" + prefix + std::string{child};
+			const auto synthetic =
+				std::string{synthetic_root()} + "/" + prefix + std::string{child};
 			children.push_back(synthetic);
 		}
 		std::ranges::sort(children);
 		children.erase(std::unique(children.begin(), children.end()), children.end());
 		if (children.empty())
-			return sdk::unexpected(failure(
-				"source-closure.member-missing", "directory", std::string{compiler_path}));
+			return sdk::unexpected(
+				failure("source-closure.member-missing", "directory", std::string{compiler_path}));
 		return children;
 	}
 
 	sdk::result<void> source_closure_vfs::deny_write(const std::string_view compiler_path) const
 	{
-		return sdk::unexpected(failure(
-			"source-closure.ambient-fallback-denied",
-			"write-operation",
-			std::string{compiler_path}));
+		return sdk::unexpected(failure("source-closure.ambient-fallback-denied",
+									   "write-operation",
+									   std::string{compiler_path}));
 	}
 
 	const source_closure_snapshot& source_closure_vfs::closure() const noexcept

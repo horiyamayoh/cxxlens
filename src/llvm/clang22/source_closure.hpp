@@ -86,8 +86,7 @@ namespace cxxlens::detail::clang22
 	source_closure_relative_path(std::string_view logical_path);
 
 	/** Derive the canonical source.file identity for one admitted logical path. */
-	[[nodiscard]] sdk::result<std::string>
-	source_closure_file_id(std::string_view logical_path);
+	[[nodiscard]] sdk::result<std::string> source_closure_file_id(std::string_view logical_path);
 
 	/** Construct, sort, deduplicate, identify, and fully validate one source closure. */
 	[[nodiscard]] sdk::result<source_closure_snapshot>

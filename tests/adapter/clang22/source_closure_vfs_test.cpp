@@ -27,9 +27,8 @@ namespace
 		}
 	}
 
-	[[nodiscard]] source_closure_file_input file(std::string logical_path,
-											 source_closure_role role,
-											 std::string bytes)
+	[[nodiscard]] source_closure_file_input
+	file(std::string logical_path, source_closure_role role, std::string bytes)
 	{
 		return {
 			std::move(logical_path),
@@ -62,9 +61,9 @@ namespace
 		return std::move(*mounted);
 	}
 
-	void expect_code(const cxxlens::sdk::result<cxxlens::detail::clang22::source_closure_vfs_file>&
-					 result,
-				 const std::string_view code)
+	void expect_code(
+		const cxxlens::sdk::result<cxxlens::detail::clang22::source_closure_vfs_file>& result,
+		const std::string_view code)
 	{
 		require(!result, "VFS lookup unexpectedly succeeded");
 		require(result.error().code == code, "VFS lookup failed with the wrong typed code");
@@ -75,8 +74,8 @@ int main()
 {
 	auto vfs = mounted_vfs();
 	auto direct = vfs.open("project://src/include/answer.hpp");
-	require(direct.has_value() && *direct->content ==
-			"#pragma once\ninline int answer() { return 42; }\n",
+	require(direct.has_value() &&
+				*direct->content == "#pragma once\ninline int answer() { return 42; }\n",
 			"canonical project lookup returned the wrong immutable bytes");
 	require(direct->synthetic_path == "/__cxxlens_project__/src/include/answer.hpp",
 			"project lookup did not bind the synthetic compiler root");
@@ -88,8 +87,7 @@ int main()
 	auto quoted = vfs.open_relative("include/answer.hpp", "project://src/main.cpp");
 	require(quoted.has_value() && quoted->logical_path == "project://src/include/answer.hpp",
 			"quoted include did not resolve relative to the authenticated source");
-	auto nested =
-		vfs.open_relative("../../shared.hpp", "project://src/include/nested/inner.hpp");
+	auto nested = vfs.open_relative("../../shared.hpp", "project://src/include/nested/inner.hpp");
 	require(nested.has_value() && *nested->content == "closure-shared\n",
 			"bounded parent traversal did not resolve inside the closure root");
 
@@ -97,10 +95,8 @@ int main()
 				"source-closure.ambient-fallback-denied");
 	expect_code(vfs.open_relative("include/missing.hpp", "project://src/main.cpp"),
 				"source-closure.member-missing");
-	expect_code(vfs.open("/tmp/ambient.hpp"),
-				"source-closure.toolchain-input-unqualified");
-	expect_code(vfs.open("/__cxxlens_project__/src/../ambient.hpp"),
-				"source-closure.path-invalid");
+	expect_code(vfs.open("/tmp/ambient.hpp"), "source-closure.toolchain-input-unqualified");
+	expect_code(vfs.open("/__cxxlens_project__/src/../ambient.hpp"), "source-closure.path-invalid");
 
 	auto root_entries = vfs.list_directory(source_closure_vfs::synthetic_root());
 	require(root_entries.has_value() && root_entries->size() == 2U,
@@ -109,8 +105,7 @@ int main()
 	require(include_entries.has_value() && include_entries->size() == 2U,
 			"nested closure directory census was not canonical");
 	auto denied_write = vfs.deny_write("/__cxxlens_project__/src/main.cpp");
-	require(!denied_write && denied_write.error().code ==
-			"source-closure.ambient-fallback-denied",
+	require(!denied_write && denied_write.error().code == "source-closure.ambient-fallback-denied",
 			"write-like operation was not rejected");
 
 	const auto original_directory = std::filesystem::current_path();
@@ -128,7 +123,7 @@ int main()
 	std::filesystem::current_path(original_directory);
 	std::filesystem::remove_all(shadow_root, ignored);
 	require(shadow_resistant.has_value() &&
-			shadow_resistant->content->find("answer() { return 42; }") != std::string::npos,
+				shadow_resistant->content->find("answer() { return 42; }") != std::string::npos,
 			"ambient checkout bytes changed closure-backed lookup semantics");
 
 	auto invalid_closure = vfs.closure();

@@ -33,11 +33,11 @@ int main()
 	expect_normalized("project://\xea\xb0\x80.cpp", true);				// U+AC00
 	expect_normalized("project://\xe1\x84\x80\xe1\x85\xa1.cpp", false); // U+1100 U+1161
 
-	auto folded = cxxlens::detail::clang22::nfc_casefold_utf8("Stra\xc3\x9f" "e");
+	auto folded = cxxlens::detail::clang22::nfc_casefold_utf8("Stra\xc3\x9f"
+															  "e");
 	require(folded.has_value() && *folded == "strasse",
 			"Unicode default case folding did not expand sharp s");
-	auto folded_accent =
-		cxxlens::detail::clang22::nfc_casefold_utf8("CAF\xc3\x89.cpp");
+	auto folded_accent = cxxlens::detail::clang22::nfc_casefold_utf8("CAF\xc3\x89.cpp");
 	require(folded_accent.has_value() && *folded_accent == "caf\xc3\xa9.cpp",
 			"case folding did not preserve NFC composition");
 

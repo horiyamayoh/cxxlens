@@ -33,9 +33,9 @@ namespace cxxlens::detail::clang22
 	 * toolchain roots, and answers everything else with ENOENT. (The split `-Xclang -ivfsoverlay`
 	 * spelling is rejected here, since an overlay would otherwise redefine that very VFS.)
 	 */
-	[[nodiscard]] sdk::result<source_closure_invocation> prepare_source_closure_invocation(
-		std::span<const std::string> effective_arguments,
-		std::string_view main_logical_path,
-		std::string_view logical_working_directory,
-		std::span<const std::string> qualified_read_roots = {});
+	[[nodiscard]] sdk::result<source_closure_invocation>
+	prepare_source_closure_invocation(std::span<const std::string> effective_arguments,
+									  std::string_view main_logical_path,
+									  std::string_view logical_working_directory,
+									  std::span<const std::string> qualified_read_roots = {});
 } // namespace cxxlens::detail::clang22

@@ -172,13 +172,13 @@ namespace cxxlens::provider::clang22
 	}
 
 #if CXXLENS_HAS_CLANG22
-	sdk::result<void> detail::with_translation_unit_vfs(
-		const translation_unit_input& input,
-		std::string compiler_filename,
-		std::string tool_name,
-		std::vector<std::string> compiler_arguments,
-		llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> filesystem,
-		translation_unit_callback callback)
+	sdk::result<void>
+	detail::with_translation_unit_vfs(const translation_unit_input& input,
+									  std::string compiler_filename,
+									  std::string tool_name,
+									  std::vector<std::string> compiler_arguments,
+									  llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> filesystem,
+									  translation_unit_callback callback)
 	{
 		if (auto valid = input.validate(); !valid)
 			return valid;
@@ -192,13 +192,12 @@ namespace cxxlens::provider::clang22
 
 		sdk::result<void> outcome{};
 		auto action = std::make_unique<callback_action>(callback, outcome);
-		const auto parsed = clang::tooling::runToolOnCodeWithArgs(
-			std::move(action),
-			input.source,
-			std::move(filesystem),
-			compiler_arguments,
-			compiler_filename,
-			tool_name);
+		const auto parsed = clang::tooling::runToolOnCodeWithArgs(std::move(action),
+																  input.source,
+																  std::move(filesystem),
+																  compiler_arguments,
+																  compiler_filename,
+																  tool_name);
 		if (!parsed && outcome)
 			return sdk::unexpected(native_error("native.parse-failed", input.logical_path));
 		return outcome;

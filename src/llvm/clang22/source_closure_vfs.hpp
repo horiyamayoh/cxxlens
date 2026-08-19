@@ -1,11 +1,11 @@
 #pragma once
 
-#include "source_closure.hpp"
-
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "source_closure.hpp"
 
 namespace cxxlens::detail::clang22
 {
@@ -26,16 +26,14 @@ namespace cxxlens::detail::clang22
 	class source_closure_vfs
 	{
 	  public:
-		[[nodiscard]] static sdk::result<source_closure_vfs>
-		mount(source_closure_snapshot closure);
+		[[nodiscard]] static sdk::result<source_closure_vfs> mount(source_closure_snapshot closure);
 
 		/** Open one canonical `project://` or synthetic-root absolute compiler path. */
 		[[nodiscard]] sdk::result<source_closure_vfs_file>
 		open(std::string_view compiler_path) const;
 		/** Resolve one include spelling relative to an authenticated including file. */
 		[[nodiscard]] sdk::result<source_closure_vfs_file>
-		open_relative(std::string_view include_path,
-					  std::string_view including_logical_path) const;
+		open_relative(std::string_view include_path, std::string_view including_logical_path) const;
 		/** Return canonical synthetic children for one project directory. */
 		[[nodiscard]] sdk::result<std::vector<std::string>>
 		list_directory(std::string_view compiler_path) const;
@@ -51,8 +49,7 @@ namespace cxxlens::detail::clang22
 	  private:
 		explicit source_closure_vfs(source_closure_snapshot closure);
 
-		[[nodiscard]] sdk::result<std::string>
-		logical_path(std::string_view compiler_path) const;
+		[[nodiscard]] sdk::result<std::string> logical_path(std::string_view compiler_path) const;
 		[[nodiscard]] sdk::result<source_closure_vfs_file>
 		open_logical(std::string logical_path) const;
 
