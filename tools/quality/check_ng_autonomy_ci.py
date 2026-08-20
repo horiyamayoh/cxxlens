@@ -72,12 +72,14 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     if heavy.get("concurrency") != {"group": "autonomy-heavy-latest-main", "cancel-in-progress": True}:
         raise AutonomyCiError("heavy coalescing policy drift")
     heavy_text = (root / contract["heavy"]["workflow"]).read_text(encoding="utf-8")
-    for marker in ("classify-heavy", "superseded", "needs.freshness.outputs.disposition == 'current'", "run_gate.py full"):
+    for marker in ("classify-heavy", "superseded", "needs.freshness.outputs.disposition == 'current'", "run_gate.py full", "Reclassify freshness after full gate", "steps.postflight.outputs.disposition == 'current'"):
         if marker not in heavy_text:
             raise AutonomyCiError(f"heavy freshness marker missing: {marker}")
     nightly_on = triggers(nightly)
     if "schedule" not in nightly_on or "workflow_dispatch" not in nightly_on:
         raise AutonomyCiError("Nightly lacks schedule/dispatch latest-main entry")
+    if contract["nightly"].get("valid_events") != ["schedule", "workflow_dispatch"] or contract["nightly"].get("ineligible_events") != ["workflow_call"]:
+        raise AutonomyCiError("Nightly release event eligibility drift")
     release_on = triggers(release)
     if set(release_on) != {"workflow_dispatch"}:
         raise AutonomyCiError("release evaluation is not dispatch-only")

@@ -93,6 +93,57 @@ def manifest_digest(manifest: dict[str, Any]) -> str:
     return semantic_digest("cxxlens.source-closure-manifest.v1", manifest)
 
 
+def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
+    """Execute the semantic closure rules that JSON Schema cannot express."""
+    try:
+        jsonschema.Draft202012Validator(schema).validate(manifest)
+    except jsonschema.ValidationError as error:
+        raise SourceClosureTransportError(f"manifest schema invalid: {error.message}") from error
+    if manifest["closure_id"] != "source-closure:" + manifest["closure_digest"]:
+        raise SourceClosureTransportError("manifest closure ID/digest mismatch")
+    members = manifest["members"]
+    blobs = manifest["blobs"]
+    paths = [entry["logical_path"] for entry in members]
+    if paths != sorted(paths, key=lambda value: value.encode("utf-8")) or len(paths) != len(set(paths)):
+        raise SourceClosureTransportError("manifest member order or path uniqueness invalid")
+    folded = [unicodedata.normalize("NFC", value).casefold() for value in paths]
+    if any(unicodedata.normalize("NFC", value) != value for value in paths) or len(folded) != len(set(folded)):
+        raise SourceClosureTransportError("manifest NFC/casefold collision")
+    if sum(entry["role"] == "main" for entry in members) != 1:
+        raise SourceClosureTransportError("manifest must contain exactly one main")
+    blob_digests = [entry["content_digest"] for entry in blobs]
+    if blob_digests != sorted(blob_digests) or len(blob_digests) != len(set(blob_digests)):
+        raise SourceClosureTransportError("manifest blob order or uniqueness invalid")
+    by_digest = {entry["content_digest"]: entry for entry in blobs}
+    used: set[str] = set()
+    for member in members:
+        blob = by_digest.get(member["content_digest"])
+        if blob is None or blob["size_bytes"] != member["size_bytes"]:
+            raise SourceClosureTransportError("manifest member does not resolve to one equal-size blob")
+        used.add(member["content_digest"])
+    if used != set(by_digest):
+        raise SourceClosureTransportError("manifest contains orphan blob")
+    if sum(entry["size_bytes"] for entry in blobs) > 48 * 1024 * 1024:
+        raise SourceClosureTransportError("manifest aggregate unique blob bound exceeded")
+
+
+def validate_reject_control(control: dict[str, Any], contract: dict[str, Any]) -> None:
+    expected = set(contract["wire_controls"]["source_closure_reject"]["exact_fields"])
+    if set(control) != expected:
+        raise SourceClosureTransportError("reject control fields are not exact and closed")
+    phase = control.get("failure_phase")
+    row = contract["failure_phase_matrix"].get(phase)
+    if row is None or control.get("reason_code") not in row["allowed"]:
+        raise SourceClosureTransportError("reject reason is unavailable in failure phase")
+    counters = control.get("observed_counters")
+    if not isinstance(counters, dict) or set(counters) != set(row["counters"]):
+        raise SourceClosureTransportError("reject counters are not phase-authentic")
+    if not all(isinstance(value, int) and value >= 0 for value in counters.values()):
+        raise SourceClosureTransportError("reject counters are not bounded integers")
+    if phase == "before-manifest" and any("byte" in key for key in counters):
+        raise SourceClosureTransportError("before-manifest reject fabricates received bytes")
+
+
 def blob_receipts_digest(receipts: list[dict[str, Any]]) -> str:
     return semantic_digest("cxxlens.source-closure-blob-receipts.v1", receipts)
 
@@ -116,7 +167,7 @@ def request_v2_2_projection(request: dict[str, Any]) -> dict[str, Any]:
         "schema": request["schema"],
         "request_version": request["request_version"],
         "required_features": request["required_features"],
-        "base_request_v2_1": request["base_request_v2_1"],
+        "inherited_authority": {key: request[key] for key in ("materialization_request_id", "semantic_request_digest", "tool", "worker", "project", "registry", "engine", "interpretation_policy", "trust_policy", "group_topology", "tasks", "publication")},
         "source_closures": request["source_closures"],
         "task_extensions": [task_v4_projection(value) for value in request["task_extensions"]],
     }
@@ -151,7 +202,7 @@ def _validate_logical_path(value: Any) -> None:
 def validate_request_binding(request: dict[str, Any]) -> None:
     """Validate cross-document v2.2 relationships JSON Schema cannot express."""
 
-    base_tasks = request.get("base_request_v2_1", {}).get("tasks")
+    base_tasks = request.get("tasks")
     closures = request.get("source_closures")
     extensions = request.get("task_extensions")
     if not all(isinstance(value, list) for value in (base_tasks, closures, extensions)):
@@ -281,13 +332,15 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     if "content_base64" in request_text or "content_base64" in task_text:
         raise SourceClosureTransportError("request/task embeds closure blob bytes")
     request_required = set(request["required"])
-    if not {"base_request_v2_1", "source_closures", "task_extensions"}.issubset(
+    if not {"tasks", "source_closures", "task_extensions"}.issubset(
         request_required
     ):
         raise SourceClosureTransportError("request 2.2 projects away v2.1 authority")
-    base_ref = request["properties"]["base_request_v2_1"].get("$ref")
-    if base_ref != "cxxlens_ng_clang22_materialization_request.schema.yaml":
-        raise SourceClosureTransportError("request 2.2 does not bind the exact v2.1 schema")
+    if "base_request_v2_1" in request.get("properties", {}) or request["properties"]["tasks"].get("items", {}).get("$ref") != "#/$defs/base_task_without_source_bytes":
+        raise SourceClosureTransportError("request 2.2 nests an executable v2.1 request")
+    source_properties = request["$defs"]["base_task_without_source_bytes"]["properties"]["source"]["properties"]
+    if "content_base64" in source_properties or request["properties"]["worker"]["properties"]["protocol_minor"].get("const") != 2:
+        raise SourceClosureTransportError("request 2.2 source bytes or protocol authority drift")
     source_id_pattern = request["$defs"]["source_closure_id"].get("pattern")
     if source_id_pattern != r"^source-closure:semantic-v2:sha256:[0-9a-f]{64}$":
         raise SourceClosureTransportError("source closure ID grammar differs from ADR 0101")
@@ -394,6 +447,22 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         set(phase) != {"allowed", "counters"} for phase in matrix.values()
     ):
         raise SourceClosureTransportError("failure phase/field matrix is incomplete")
+    semantic = "semantic-v2:sha256:" + "1" * 64
+    content = "sha256:" + "2" * 64
+    validate_manifest({
+        "schema": "cxxlens.source-closure-manifest.v1",
+        "closure_id": "source-closure:" + semantic,
+        "closure_digest": semantic,
+        "members": [{"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}],
+        "blobs": [{"content_digest": content, "size_bytes": 1}],
+    }, manifest_schema)
+    for phase, row in matrix.items():
+        validate_reject_control({
+            "session_id": "session:witness", "task_id": "task:witness",
+            "failure_phase": phase, "reason_code": row["allowed"][0],
+            "observed_counters": {name: 0 for name in row["counters"]},
+            "cleanup_receipt": "cleanup:witness",
+        }, contract)
 
     maturity = contract["maturity"]
     review = contract["authority"]["review"]

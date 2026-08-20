@@ -61,9 +61,26 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         revision = _git(root, "rev-parse", "HEAD")
         tree = _git(root, "rev-parse", "HEAD^{tree}")
         worktree = "clean"
+    all_units = {candidate["id"]: candidate for owner in manifest["entries"] for candidate in owner["units"]}
+    pending = list(unit["depends_on"])
+    blocked_dependencies: list[str] = []
+    seen: set[str] = set()
+    while pending:
+        dependency = pending.pop()
+        if dependency in seen:
+            continue
+        seen.add(dependency)
+        dependency_unit = all_units[dependency]
+        if dependency_unit["state"] != "ready":
+            blocked_dependencies.append(f"dependency:{dependency}:{dependency_unit['state']}")
+        pending.extend(dependency_unit["depends_on"])
     state = unit["state"]
-    disposition = {"ready": "ready", "review-required": "stop-review-required", "blocked-by-authority": "stop-blocked-by-authority"}[state]
-    blockers = [] if state == "ready" else [state, *[f"dependency:{value}" for value in unit["depends_on"]]]
+    if state == "ready" and blocked_dependencies:
+        disposition = "stop-blocked-by-dependency"
+        blockers = sorted(blocked_dependencies)
+    else:
+        disposition = {"ready": "ready", "review-required": "stop-review-required", "blocked-by-authority": "stop-blocked-by-authority"}[state]
+        blockers = [] if state == "ready" else [state, *sorted(blocked_dependencies)]
     reading_paths = sorted(set(entry["authority_sources"] + unit["consumed_paths"]))
     reading_set = [{"path": value, "sha256": _file_digest(root / value)} for value in reading_paths]
     return {

@@ -16,6 +16,7 @@ heavy:
 nightly:
   workflow: .github/workflows/nightly.yml
   valid_events: [schedule, workflow_dispatch]
+  ineligible_events: [workflow_call]
   candidate: latest-origin-main-at-start
   evidence: [asan-ubsan, tsan, static-analysis, scale]
 release:

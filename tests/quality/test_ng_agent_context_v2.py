@@ -34,9 +34,10 @@ class AgentContextV2Test(unittest.TestCase):
         self.assertIn("blocked-by-authority", packet["blockers"])
         self.assertTrue(packet["completion_plan"])
 
-    def test_ready_unit_excludes_integration_owned_generated_surfaces(self) -> None:
+    def test_dependency_blocked_unit_excludes_integration_owned_generated_surfaces(self) -> None:
         packet = build(ROOT, "#277", "wu-277-context-v2", synthetic=True)
-        self.assertEqual(packet["execution_disposition"], "ready")
+        self.assertEqual(packet["execution_disposition"], "stop-blocked-by-dependency")
+        self.assertIn("dependency:wu-173-governance:review-required", packet["blockers"])
         self.assertNotIn("schemas/cxxlens_asset_migration_ledger.json", packet["allowed_write_paths"])
         self.assertIn("schemas/cxxlens_asset_migration_ledger.json", packet["integration_generated_surfaces"])
 

@@ -9,6 +9,6 @@ properties:
   document_version: {const: 1.0.0}
   fast: {type: object, required: [workflow, event, cancellation, artifact_binding, evidence]}
   heavy: {type: object, required: [workflow, trigger, coalescing, stale_disposition, cancellation, evidence]}
-  nightly: {type: object, required: [workflow, valid_events, candidate, evidence]}
+  nightly: {type: object, required: [workflow, valid_events, ineligible_events, candidate, evidence]}
   release: {type: object, required: [workflow, event, candidate_rule, cancellation, composition, current_capability, required_future_inputs]}
   legacy: {type: object, required: [workflow, evidence_disposition]}

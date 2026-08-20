@@ -53,7 +53,21 @@ class ConstructibilityTest(unittest.TestCase):
                 states = value["machines"]["store_candidate_report"]["report_states"]
                 states[2], states[3] = states[3], states[2]
             self.rewrite(root, mutate)
-            with self.assertRaisesRegex(ConstructibilityError, "tail is not reserved"):
+            with self.assertRaisesRegex(ConstructibilityError, "Store report states"):
+                validate(root)
+
+    def test_store_projection_sources_cannot_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["store_candidate_report"]["projections"].__setitem__("expected_source", "backend-staging-canonical-physical-order"))
+            with self.assertRaisesRegex(ConstructibilityError, "dual projection"):
+                validate(root)
+
+    def test_publication_unknown_cannot_be_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["store_candidate_report"]["publication_outcomes"].remove("publication-outcome-unknown"))
+            with self.assertRaisesRegex(ConstructibilityError, "publication outcomes"):
                 validate(root)
 
     def test_reader_without_predelegation_lease_is_rejected(self) -> None:
@@ -82,6 +96,34 @@ class ConstructibilityTest(unittest.TestCase):
             root = self.copied_root(temporary)
             self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"].__setitem__("fixture_partition_machine", {"F0": "only"}))
             with self.assertRaisesRegex(ConstructibilityError, "partition machine"):
+                validate(root)
+
+    def test_reader_writer_products_cannot_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["sqlite_read_mapping"]["reader_states"].__setitem__(6, "mapping-lease-promoted"))
+            with self.assertRaisesRegex(ConstructibilityError, "reader states"):
+                validate(root)
+
+    def test_unmap_failure_cannot_close(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["sqlite_read_mapping"]["teardown_transition_graph"].__setitem__("terminal-opaque-quarantine-zero-close", ["consume-distinct-close-owner-and-native-close-once"]))
+            with self.assertRaisesRegex(ConstructibilityError, "teardown transition graph"):
+                validate(root)
+
+    def test_fz_pre_coordination_wal_cannot_be_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FZ-pre"].__setitem__("transitions", ["pre-effect", "delete-WAL"]))
+            with self.assertRaisesRegex(ConstructibilityError, "partition machine"):
+                validate(root)
+
+    def test_production_predicate_cannot_be_weakened(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"].__setitem__("production_profile", "review-only"))
+            with self.assertRaisesRegex(ConstructibilityError, "production predicate"):
                 validate(root)
 
 

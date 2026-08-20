@@ -135,7 +135,7 @@ identity:
   semantic_digest_framing: [cxxlens-semantic-digest-v2, domain, canonical-projection-bytes]
   request_v2_2:
     domain: cxxlens.clang22.materialization-request.v2_2
-    projection: [schema, request_version, required_features, base_request_v2_1, source_closures, task_extensions-without-task_id-and-task_v4_digest]
+    projection: [schema, request_version, required_features, top-level-complete-v2-1-authority-without-source-bytes-and-with-protocol-1-2, source_closures, task_extensions-without-task_id-and-task_v4_digest]
     digest_field: request_digest-equals-semantic-digest-of-projection
     id_field: request_id-equals-materialization-request-colon-request_digest
   task_v4:
@@ -216,7 +216,7 @@ failures:
 failure_phase_matrix:
   before-manifest:
     allowed: [source-closure.required-feature-missing, source-closure.protocol-state-invalid, source-closure.task-binding-mismatch, source-closure.session-binding-mismatch, source-closure.limit-exceeded, source-closure.cancelled, source-closure.transfer-timeout]
-    counters: [received-control-bytes, received-payload-bytes]
+    counters: [observed-control-frame-count]
   manifest-streaming:
     allowed: [source-closure.protocol-state-invalid, source-closure.manifest-invalid, source-closure.chunk-order-invalid, source-closure.chunk-overlap, source-closure.chunk-gap, source-closure.digest-mismatch, source-closure.limit-exceeded, source-closure.task-binding-mismatch, source-closure.session-binding-mismatch, source-closure.cancelled, source-closure.transfer-timeout, source-closure.spool-io, source-closure.cleanup-failed]
     counters: [declared-manifest-bytes, received-manifest-bytes, next-chunk-index]

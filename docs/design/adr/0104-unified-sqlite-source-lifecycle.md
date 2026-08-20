@@ -51,12 +51,21 @@ distinct terminal values.
 
 ## #205 nested mapping subprotocol
 
-Writer and reader callbacks share the post-native validation states but have different authentic
-pre-delegation authority. A writer callback follows:
+Writer and reader callbacks have different authentic authority and different post-native products.
+A writer callback follows:
 
 `callback-admitted -> pre-callback-sequence-cut -> attempt-pin-held -> native-started`
 `-> native-outcome-captured -> pending-mapping-receipt -> identity-validated`
 `-> mapping-lease-promoted -> eager-use-owner-held -> handoff-sealed`.
+
+A reader callback follows:
+
+`reader-session-reserved -> writer-lease-page-support-pin-held -> native-started`
+`-> native-outcome-captured -> reader-attachment-candidate -> identity-and-effect-validated`
+`-> reader-attachment-group-promoted -> eager-session-owner-admitted -> reader-handoff-sealed`.
+
+A reader never enters `mapping-lease-promoted`, mints writer/page authority, or admits another page
+transitively. Its product is one reader attachment group/handoff plus the exact session owner.
 
 Before writer delegation there is only a callback-local attempt pin and writer cohort in-flight pin.
 There is no new registry lease or pending mapping. A reader callback, however, must first acquire a
@@ -90,9 +99,11 @@ The only teardown order is:
 2. revoke new mapping and use-owner admission;
 3. retain lifetime pins while all already admitted callbacks and eager-use owners drain;
 4. seal the complete member/use-owner census;
-5. delegate at most one authenticated native `xShmUnmap(deleteFlag=0)` and `xClose` for their distinct owners;
-6. capture their exact zero-effect outcomes, seal the callback-effect transcript, retire generation
-   and registry entries, then release pins/cleanup.
+5. delegate at most one authenticated native `xShmUnmap(deleteFlag=0)` and capture its outcome;
+6. only after confirmed `xShmUnmap == SQLITE_OK`, consume the distinct close owner and call `xClose`;
+7. after confirmed close, seal the callback-effect transcript, retire generation and registry
+   entries, then release pins/cleanup. Non-OK, throw, timeout, or indeterminate unmap installs a
+   terminal opaque quarantine and performs zero close, retry, or reconstructed cleanup.
 
 A native-started callback that returns after the cut remains an original-callback drain only. It
 cannot publish a mapping, successor, or fresh cleanup authority. Same-thread/reentrant retirement
@@ -123,7 +134,8 @@ The accepted DF-0202 fixture authority remains an executable closed partition, n
 
 - `F0 -> live-receipt -> fixture-normalizer`.
 - `FP/FH -> authenticated cleanup-or-recovery -> independently-revalidated F0 -> new-live-receipt`.
-- `FZ-pre -> coordination-WAL cleanup -> parent-sync -> independently-revalidated F0 -> new-live-receipt`.
+- `FZ-pre -> retain-and-revalidate-the-exact-size-zero-coordination-WAL -> new-live-receipt`; the
+  normalizer binds that same WAL as its coordination object and does not delete or reclassify it as F0.
 - `FI/FZ-post/FO -> independently-validated rollback-empty-fresh-anchor` only; none is a completed
   normalization edge and none may mint or reuse a live receipt.
 

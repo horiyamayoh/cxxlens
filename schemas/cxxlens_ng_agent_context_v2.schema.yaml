@@ -13,7 +13,7 @@ properties:
   conflict_class: {enum: [governance-global, provider-protocol, materialization-store, sqlite-lifecycle, qualification-global, agent-ux]}
   integration_owner: {type: string, pattern: '^#[1-9][0-9]*$'}
   risk: {enum: [local, contract, invariant, security, compatibility, irreversible, resource-bound]}
-  execution_disposition: {enum: [ready, stop-review-required, stop-blocked-by-authority]}
+  execution_disposition: {enum: [ready, stop-review-required, stop-blocked-by-authority, stop-blocked-by-dependency]}
   blockers: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
   dependencies: {type: array, uniqueItems: true, items: {type: string, pattern: '^wu-[1-9][0-9]*-[a-z0-9-]+$'}}
   authority:

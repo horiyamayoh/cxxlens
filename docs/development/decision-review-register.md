@@ -33,3 +33,5 @@ or normalized authority digests, self-review, accepted verdicts with P0/P1, miss
 connected verification, activation before acceptance, qualification before implementation, and
 replacement of a preserved WIP ref. Connected CI additionally authenticates GitHub comment bytes,
 author identity, and the named CI run; offline-only evidence cannot activate production support.
+The comment is canonical receipt JSON, so candidate, authority closure, isolated reviewer session,
+verdict, finding census, and qualification boundary cannot drift independently.

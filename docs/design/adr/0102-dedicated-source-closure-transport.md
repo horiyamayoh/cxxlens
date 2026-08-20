@@ -62,7 +62,7 @@ Field availability is phase-authentic:
 
 | Phase | Available authority | Forbidden claims |
 | --- | --- | --- |
-| before manifest | task/session, task-v4 digest, and expected closure/manifest identity | member/blob census or received bytes |
+| before manifest | task/session, task-v4 digest, expected closure/manifest identity, and bounded invalid-control frame count | member/blob census or received closure/payload bytes |
 | manifest streaming | declared manifest size, observed bytes, offset, streaming digest | member/blob authority or terminal digest |
 | manifest validated | closure/member/blob census and declared digests | blob bytes or terminal digest |
 | blob streaming | current blob ordinal, offset, observed bytes, streaming digest | later blobs or closure completeness |

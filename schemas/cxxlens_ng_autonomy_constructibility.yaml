@@ -26,13 +26,35 @@ machines:
     nesting: '#205-inside-#201-active-read-connection'
     no_effect_boundary: before-target-xOpen
     outer_states: [unresolved, runtime-vfs-filesystem-sealed, retained-parent-held, no-effect-boundary-armed, typed-family-census, active-read-connection-open, wal-lock-and-prefix-held, mapping-subprotocol-or-private-index, eager-decode, decoded-read-candidate-sealed, connection-revoking, connection-closed, zero-effect-callback-receipt-sealed, logical-read-receipt]
-    nested_states: [callback-admitted, pre-callback-sequence-cut, attempt-pin-held, native-started, native-outcome-captured, pending-mapping-receipt, identity-validated, mapping-lease-promoted, eager-use-owner-held, handoff-sealed]
+    writer_states: [callback-admitted, pre-callback-sequence-cut, attempt-pin-held, native-started, native-outcome-captured, pending-mapping-receipt, identity-validated, mapping-lease-promoted, eager-use-owner-held, writer-handoff-sealed]
+    reader_states: [reader-session-reserved, writer-lease-page-support-pin-held, native-started, native-outcome-captured, reader-attachment-candidate, identity-and-effect-validated, reader-attachment-group-promoted, eager-session-owner-admitted, reader-handoff-sealed]
+    reader_forbidden_products: [mapping-lease-promoted, writer-authority, transitive-page-authority]
     predelegation_authority: {writer: attempt-and-in-flight-pin-only, reader: fresh-active-writer-lease-page-support-pin-required-before-native}
     promotion_predicate: native-SQLITE_OK-nonnull-plus-full-identity-zero-effect-receipt-and-writer-gates
-    teardown_order: [hide-generation, seal-pre-callback-cut, revoke-admission, drain-callbacks-and-use-owners, seal-owner-census, native-unmap-deleteFlag-zero-then-close-once, capture-zero-effect-outcomes, retire-registry, release-pins]
+    teardown_transition_graph:
+      active: hide-generation
+      hide-generation: seal-pre-callback-cut
+      seal-pre-callback-cut: revoke-admission
+      revoke-admission: drain-callbacks-and-use-owners
+      drain-callbacks-and-use-owners: seal-owner-census
+      seal-owner-census: native-unmap-deleteFlag-zero
+      native-unmap-deleteFlag-zero: [unmap-confirmed-OK, terminal-opaque-quarantine-zero-close]
+      unmap-confirmed-OK: consume-distinct-close-owner-and-native-close-once
+      consume-distinct-close-owner-and-native-close-once: [close-confirmed, terminal-opaque-quarantine]
+      close-confirmed: seal-zero-effect-outcomes-retire-registry-release-pins
+      terminal-opaque-quarantine-zero-close: []
+      terminal-opaque-quarantine: []
     zero_effect_receipt: [initialize, create, write, truncate, extend, delete, resize]
     read_receipt_barrier: [connection-closed, zero-live-callbacks-leases-and-use-owners, zero-effect-callback-receipt-sealed]
-    fork_machine: {prepare: seal-admission-and-census, parent: revalidate-process-and-fork-generation, child: inherited-custody-quarantine-zero-native-cleanup-no-drain}
+    fork_transition_graph:
+      running: atfork-prepare-seal-admission-and-census
+      atfork-prepare-seal-admission-and-census: [parent-revalidate-process-and-fork-generation, child-transfer-all-inherited-custody]
+      parent-revalidate-process-and-fork-generation: running
+      child-transfer-all-inherited-custody: child-inherited-custody-quarantine
+      child-inherited-custody-quarantine: [child-exec, child-exit]
+      child-exec: []
+      child-exit: []
+    child_quarantine_forbidden: [SQLite-entry, native-unmap, native-close, retry, cleanup, owner-drain, authority-reconstruction]
     ambiguous_callback: permanent-quarantine-no-retry
   sqlite_normalization_effect:
     owner: '#202'
@@ -41,15 +63,14 @@ machines:
     entry: logical-read-receipt-exact-empty-after-connection-closed-zero-custody-zero-effect
     states: [receipt-revalidated, effect-profile-capability-sealed, exclusive-normalization-owner, pre-effect-sealed, effect-journal-open, permitted-callback-effects, file-and-parent-durable, confirmed-close, post-close-census, normalization-receipt, ordinary-fresh-init]
     fixture_partition_machine:
-      F0: live-receipt-to-fixture-normalizer
-      FP: cleanup-or-recovery-to-independently-revalidated-F0-new-live-receipt
-      FH: cleanup-or-recovery-to-independently-revalidated-F0-new-live-receipt
-      FZ-pre: coordination-WAL-cleanup-parent-sync-to-independently-revalidated-F0-new-live-receipt
-      FI: rollback-empty-fresh-anchor-only-never-completed-edge
-      FZ-post: rollback-empty-fresh-anchor-only-never-completed-edge
-      FO: rollback-empty-fresh-anchor-only-never-completed-edge
-    family_phase_machine: [pre-effect, effect-admitted, recoverable-interruption, recrash-classified, terminal-route]
-    recrash_entry: durable-bytes-through-same-seven-family-classifier-no-in-memory-resume
+      F0: {entry_guard: exact-pre-no-sidecar, transitions: [pre-effect, live-receipt, fixture-normalizer], terminal: normalization-receipt-or-recoverable-interruption}
+      FP: {entry_guard: exact-pre-nonhot-journal-prefix, transitions: [pre-effect, authenticated-cleanup-or-recovery, independently-revalidated-F0, new-live-receipt, fixture-normalizer], terminal: normalization-receipt-or-recoverable-interruption}
+      FH: {entry_guard: valid-hot-journal-with-exact-preimages, transitions: [pre-effect, authenticated-cleanup-or-recovery, independently-revalidated-F0, new-live-receipt, fixture-normalizer], terminal: normalization-receipt-or-recoverable-interruption}
+      FZ-pre: {entry_guard: exact-pre-or-valid-rollback-plus-size-zero-WAL, transitions: [pre-effect, retain-and-revalidate-exact-size-zero-coordination-WAL, new-live-receipt-bound-to-same-WAL, fixture-normalizer], terminal: normalization-receipt-or-recoverable-interruption}
+      FI: {entry_guard: journal-preimages-exact-pre-and-deterministic-post-plus-invalidated-journal, transitions: [pre-effect, independently-validated-rollback-empty-fresh-anchor], terminal: fresh-anchor-only-never-completed-edge}
+      FZ-post: {entry_guard: exact-post-plus-size-zero-WAL, transitions: [pre-effect, independently-validated-rollback-empty-fresh-anchor], terminal: fresh-anchor-only-never-completed-edge}
+      FO: {entry_guard: complete-valid-rollback-exact-empty-current-main-no-sidecar, transitions: [pre-effect, independently-validated-rollback-empty-fresh-anchor], terminal: fresh-anchor-only-never-completed-edge}
+    recrash_transition: any-recoverable-interruption-to-durable-bytes-through-same-seven-family-classifier
     production_profile: prohibited-until-tracked-harness-loaded-SQLite-DSO-callback-recrash-large-sector-rebind-parent-sync-canonical-report-distinct-implementation-review-and-explicit-accepted-profile
     canonical_user_source_activation: prohibited
     parent_sync_after_each_delete: required

@@ -1,35 +1,88 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.clang22-materialization-request.v2_2
-title: cxxlens installed Clang 22 materialization request v2.2 authority envelope
+title: cxxlens installed Clang 22 materialization request v2.2
 type: object
 additionalProperties: false
-required: [schema, request_version, request_id, request_digest, required_features, base_request_v2_1, source_closures, task_extensions]
+required: [schema, request_version, request_id, request_digest, required_features, materialization_request_id, semantic_request_digest, tool, worker, project, registry, engine, interpretation_policy, trust_policy, group_topology, tasks, source_closures, task_extensions, publication]
 properties:
   schema: {const: cxxlens.clang22-materialization-request.v2_2}
   request_version: {const: 2.2.0}
   request_id: {type: string, pattern: '^materialization-request:semantic-v2:sha256:[0-9a-f]{64}$'}
   request_digest: {$ref: '#/$defs/semantic_digest'}
   required_features: {const: [task-input-chunks-v1, task-source-closure-v1]}
-  base_request_v2_1:
-    $ref: cxxlens_ng_clang22_materialization_request.schema.yaml
-    description: Exact complete v2.1 authority; no tool, worker, trust, budget, catalog, topology, task, or publication field is projected away.
-  source_closures:
-    type: array
-    minItems: 1
-    maxItems: 4096
-    items: {$ref: '#/$defs/closure'}
-    x-cxxlens-unique-by: source_closure_id
-  task_extensions:
-    type: array
-    minItems: 1
-    maxItems: 4096
-    items: {$ref: cxxlens_ng_provider_task_v4.schema.yaml}
-    x-cxxlens-unique-by: task_id
-    x-cxxlens-exact-index-binding: base_request_v2_1.tasks
+  materialization_request_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/strong_id}
+  semantic_request_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/semantic_digest}
+  tool: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tool}
+  worker:
+    type: object
+    additionalProperties: false
+    required: [executable, provider_id, provider_version, installed_binary_digest, semantic_contract_digest, protocol_major, protocol_minor, required_features, sandbox_policy_digest]
+    properties:
+      executable: {const: cxxlens-clang-worker-22}
+      provider_id: {const: cxxlens.clang22.reference}
+      provider_version: {const: 1.0.0}
+      installed_binary_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
+      semantic_contract_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
+      protocol_major: {const: 1}
+      protocol_minor: {const: 2}
+      required_features: {const: [task-input-chunks-v1, task-source-closure-v1]}
+      sandbox_policy_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
+  project: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/project}
+  registry: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/registry}
+  engine: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/engine}
+  interpretation_policy: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/interpretation_policy}
+  trust_policy: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/trust_policy}
+  group_topology: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/group_topology}
+  tasks: {type: array, minItems: 1, maxItems: 4096, uniqueItems: true, items: {$ref: '#/$defs/base_task_without_source_bytes'}}
+  source_closures: {type: array, minItems: 1, maxItems: 4096, items: {$ref: '#/$defs/closure'}, x-cxxlens-unique-by: source_closure_id}
+  task_extensions: {type: array, minItems: 1, maxItems: 4096, items: {$ref: cxxlens_ng_provider_task_v4.schema.yaml}, x-cxxlens-unique-by: task_id, x-cxxlens-exact-index-binding: tasks}
+  publication: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/publication}
 $defs:
-  content_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   semantic_digest: {type: string, pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'}
   source_closure_id: {type: string, pattern: '^source-closure:semantic-v2:sha256:[0-9a-f]{64}$'}
+  base_task_without_source_bytes:
+    type: object
+    additionalProperties: false
+    required: [provider_task_id, provider_execution_id, task_input_digest, project_id, catalog_id, catalog_digest, selected_catalog_compile_unit_id, compile_unit_id, build_variant_id, toolchain_context_id, toolchain_digest, toolchain, variant, normalized_invocation_digest, environment_digest, language, working_directory, condition_universe_id, condition_id, interpretation_domain, source, effective_argv, requested_descriptor_ids, dependency_groups, budget, sandbox]
+    properties:
+      provider_task_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/provider_task_id}
+      provider_execution_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/provider_execution_id}
+      task_input_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/task_input_digest}
+      project_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/project_id}
+      catalog_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/catalog_id}
+      catalog_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/catalog_digest}
+      selected_catalog_compile_unit_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/selected_catalog_compile_unit_id}
+      compile_unit_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/compile_unit_id}
+      build_variant_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/build_variant_id}
+      toolchain_context_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/toolchain_context_id}
+      toolchain_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/toolchain_digest}
+      toolchain: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/toolchain}
+      variant: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/variant}
+      normalized_invocation_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/normalized_invocation_digest}
+      environment_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/environment_digest}
+      language: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/language}
+      working_directory: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/working_directory}
+      condition_universe_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/condition_universe_id}
+      condition_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/condition_id}
+      interpretation_domain: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/interpretation_domain}
+      source:
+        type: object
+        additionalProperties: false
+        required: [source_snapshot_id, file_id, logical_path, content_digest, size_bytes, encoding, line_index_id, read_only]
+        properties:
+          source_snapshot_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/strong_id}
+          file_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/file_id}
+          logical_path: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/logical_path}
+          content_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
+          size_bytes: {type: integer, minimum: 0, maximum: 16777216}
+          encoding: {enum: [utf8, utf16le, utf16be, locale_dependent, binary_or_unknown]}
+          line_index_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/line_index_id}
+          read_only: {const: true}
+      effective_argv: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/effective_argv}
+      requested_descriptor_ids: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/requested_descriptor_ids}
+      dependency_groups: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/dependency_groups}
+      budget: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/budget}
+      sandbox: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/sandbox}
   closure:
     type: object
     additionalProperties: false
@@ -41,4 +94,4 @@ $defs:
       member_count: {type: integer, minimum: 1, maximum: 4096}
       blob_count: {type: integer, minimum: 1, maximum: 4096}
       unique_blob_bytes: {type: integer, minimum: 0, maximum: 50331648}
-description: Semantic validation requires unique closure/task IDs, exact task-index parity with the nested v2.1 authority, source-closure ID/digest equality, and every task closure reference to resolve exactly once. Blob bytes are forbidden here.
+description: Complete v2.1 authority is projected at top level. Task source metadata is retained, content bytes are forbidden, protocol authority is 1.2, and v4 metadata binds closure transport.

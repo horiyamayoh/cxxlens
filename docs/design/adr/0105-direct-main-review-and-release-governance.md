@@ -61,6 +61,14 @@ identity separation, findings, activation and preserved WIP heads. Connected CI 
 comment bytes/author and the exact-candidate successful run. Offline-only evidence cannot activate
 production support.
 
+The authenticated comment body is the canonical JSON projection of receipt ID, decision/owner,
+candidate commit/tree/Git author, complete authority digest, author, isolated read-only Codex
+reviewer provenance and UUID session, verdict, P0/P1/P2 census, and qualification boundary. The
+connected checker requires byte equality with that projection; a REJECT body cannot be represented
+as an accepted receipt. The authority file set must exactly equal the decision register closure and
+the acceptance path set is checker-derived, never claimant-selected. The inferred acceptance must
+be the immediate direct-main child of the candidate on the ancestry path.
+
 ## Concurrency and WIP
 
 Before writing and before commit, record `main` SHA and check active conflict-class/path ownership.
@@ -75,6 +83,13 @@ schema, work-unit, receipt, documentation, checksum, and bounded fast-gate evide
 Fast run triggers `Autonomy heavy`; its concurrency group coalesces work, but the freshness job first
 compares the candidate with current `origin/main`. A stale candidate emits only a `superseded`
 report. Only the current candidate can run the full integration gate.
+
+Heavy re-fetches and reclassifies `origin/main` after the full gate and uploads a full artifact only
+if the candidate is still current; a main update during execution cannot promote stale evidence.
+An agent packet is executable only if its own state and every transitive dependency are `ready`.
+Otherwise it emits an actionable dependency-qualified stop disposition. A corrected candidate never
+rewrites a prior rejecting review to pending; it remains rejected until an authenticated Accepted
+receipt replaces that outcome.
 
 Nightly evidence is release-eligible only when entered by schedule or explicit dispatch and bound to
 latest main at start; legacy reusable invocations and the legacy Quality workflow remain compatibility
