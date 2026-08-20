@@ -2,10 +2,10 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.source-closure-transport.v1
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, versions, capability, message_registry, wire_controls, state_machine, phase_fields, limits, resource_policy, identity, request_task_binding, cache, compatibility, failures, failure_phase_matrix, protocol_activation, crash_effects, counterexamples, qualification]
+required: [schema, document_version, maturity, authority, review_findings, versions, capability, message_registry, wire_controls, state_machine, phase_fields, limits, resource_policy, identity, request_task_binding, cache, compatibility, failures, failure_phase_matrix, protocol_activation, crash_effects, counterexamples, qualification]
 properties:
   schema: {const: cxxlens.source-closure-transport.v1}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.1.0}
   maturity: {enum: [proposed, accepted]}
   authority:
     type: object
@@ -24,6 +24,16 @@ properties:
           reviewer: {type: [string, 'null']}
           ref: {type: [string, 'null']}
           exact_main_commit: {type: [string, 'null']}
+  review_findings:
+    type: object
+    additionalProperties: false
+    required: [status, exact_main_commit, ref, reviewer, required_resolutions]
+    properties:
+      status: {const: blocking}
+      exact_main_commit: {const: d7dfb7a2a5d2fe7e2fa247232be46da577166aa4}
+      ref: {const: 'https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358501463'}
+      reviewer: {const: codex-independent-reviewer/01a01fe3-fd16-7191-8275-275ba44196eb}
+      required_resolutions: {type: array, minItems: 5, maxItems: 5, uniqueItems: true}
   versions:
     const:
       provider_protocol: {legacy: 1.1, proposed: 1.2, downgrade: reject}
@@ -82,7 +92,7 @@ properties:
   state_machine: {type: object, required: [initial, success_path, repeated_blob_subpath, cancellation, replay, invalid_transition, pre_accept_liveness, terminal_precedence]}
   phase_fields: {type: object, required: [before-manifest, manifest-streaming, manifest-validated, blob-streaming, closure-sealed, acknowledged, rejected]}
   limits:
-    const: {maximum_members: 4096, maximum_unique_blobs: 4096, maximum_logical_path_utf8_bytes: 4096, maximum_blob_bytes: 16777216, maximum_unique_blob_bytes: 50331648, maximum_manifest_bytes: 20971520, maximum_manifest_chunks: 20, maximum_chunk_payload_bytes: 1048576, maximum_chunks_per_blob: 16, maximum_blob_chunk_frames: 4144, maximum_task_spool_bytes: 71303168, maximum_resident_transport_bytes: 1310720}
+    const: {maximum_members: 4096, maximum_unique_blobs: 4096, maximum_logical_path_utf8_bytes: 4096, maximum_blob_bytes: 16777216, maximum_unique_blob_bytes: 50331648, maximum_manifest_bytes: 41943040, maximum_manifest_chunks: 40, maximum_chunk_payload_bytes: 1048576, maximum_chunks_per_blob: 16, maximum_blob_chunk_frames: 4144, maximum_task_spool_bytes: 92274688, maximum_resident_transport_bytes: 1310720}
   resource_policy:
     const: {allocation: validate-count-length-offset-and-sum-before-allocation-or-write, spool: backend-owned-private-task-local-digest-bound, complete-memory-copy: forbidden, cleanup: reject-cancel-crash-recovery-or-task-terminal}
   identity:

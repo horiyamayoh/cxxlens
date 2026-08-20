@@ -35,7 +35,7 @@ decisions:
     choice: dedicated-manifest-blob-chunk-seal-ack-reject-transport
     rejected: [reuse-task-input-chunks-container, ambient-filesystem, physical-checkout, cross-task-cache-v1]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    review: {mode: independent, status: required, author: repository-owner, reviewer: codex-independent-reviewer, refs: ['https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358304579', 'https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358501463']}
     implementation_status: pending
     qualification_status: not-claimed
     activation: blocked-until-accepted-authority-and-independent-review

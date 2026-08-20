@@ -106,9 +106,9 @@ values are omitted rather than synthesized.
 - members and unique blobs: 4096 each;
 - logical path: 4096 UTF-8 bytes;
 - one blob: 16 MiB; aggregate unique blob content: 48 MiB;
-- manifest: 20 MiB in at most 20 one-MiB payload chunks; blob chunk payload: 1 MiB; at most 16 chunks
+- manifest: 40 MiB in at most 40 one-MiB payload chunks; blob chunk payload: 1 MiB; at most 16 chunks
   per blob and 4144 blob chunk frames per closure, covering the 4096-small-blob rounding case;
-- task-local spool: at most 68 MiB including manifest and content;
+- task-local spool: at most 88 MiB including manifest and content;
 - resident transport working set: at most one 1 MiB chunk plus 256 KiB of parser/digest state.
 
 Counts, lengths, offsets, and additions are checked before allocation or write. Before
@@ -123,10 +123,13 @@ Cross-task blob cache is excluded from v1. Every closure is transferred complete
 No cache capability may be advertised until a separate accepted ADR defines lifetime, eviction,
 restart, tenant/session binding, and negative replay behavior.
 
-Request 2.2 is an envelope over one byte-exact complete request 2.1 authority plus indexed task-v4
-closure extensions; it does not project away tool, worker, project, registry, engine, trust,
-sandbox, budget, topology, task, or publication fields. Protocol 1.1 peers continue request 2.1/task v3 only. Protocol 1.2 peers may use either legacy tasks
-or request 2.2/task v4, but v4 requires `task-source-closure-v1`. Unknown required message IDs and
+Request 2.2 is a full authority derived from request 2.1: all non-source authority remains, worker
+and trust protocol selections become 1.2, and task source bytes are replaced by task-v4 closure
+references. It never nests an executable 2.1 request and never carries `content_base64`. Protocol
+1.1 peers continue request 2.1/task v3 only. Protocol 1.2 accepts request 2.2/task v4 only, requires
+`task-source-closure-v1`, and transfers the canonical complete task-v4 metadata through the bounded
+task-input frames before closure frames so the provider independently recomputes its identity.
+Unknown required message IDs and
 attempted implicit downgrade fail closed. Message 23 remains heartbeat and IDs 24--29 cannot be
 allocated by NG1.
 

@@ -36,7 +36,6 @@ $defs:
       - {not: {pattern: '^project:///'}}
       - {not: {pattern: '/$'}}
       - {not: {pattern: '(^|/)\.{1,2}(/|$)'}}
-      - {not: {pattern: '//'}}
   member:
     type: object
     additionalProperties: false

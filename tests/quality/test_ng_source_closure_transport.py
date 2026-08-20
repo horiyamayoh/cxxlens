@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 
+import jsonschema
 import yaml
 
 
@@ -56,6 +57,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             "manifest_digest": "semantic-v2:sha256:" + "7" * 64,
         }
         extension = {
+            "schema": "cxxlens.clang22.task.v4",
             "base_task_index": 0,
             "base_provider_task_id": base_task_id,
             "base_task_v3_digest": content_projection_digest(base),
@@ -133,7 +135,34 @@ class SourceClosureTransportTest(unittest.TestCase):
         validate(ROOT)
 
     def test_adr_0101_identity_and_request_binding_are_constructible(self) -> None:
-        validate_request_binding(self.bound_request())
+        request = self.bound_request()
+        validate_request_binding(request)
+        task_schema = yaml.safe_load((ROOT / TASK).read_text(encoding="utf-8"))
+        jsonschema.Draft202012Validator(task_schema).validate(request["task_extensions"][0])
+
+    def test_manifest_schema_accepts_project_path_and_rejects_extra_field(self) -> None:
+        schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
+        semantic = "semantic-v2:sha256:" + "1" * 64
+        content = "sha256:" + "2" * 64
+        manifest = {
+            "schema": "cxxlens.source-closure-manifest.v1",
+            "closure_id": "source-closure:" + semantic,
+            "closure_digest": semantic,
+            "members": [{
+                "file_id": "file:sha256:" + "3" * 64,
+                "logical_path": "project://src/main.cpp",
+                "role": "main",
+                "encoding": "utf8",
+                "size_bytes": 1,
+                "content_digest": content,
+                "read_only": True,
+            }],
+            "blobs": [{"content_digest": content, "size_bytes": 1}],
+        }
+        jsonschema.Draft202012Validator(schema).validate(manifest)
+        manifest["rogue"] = True
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(schema).validate(manifest)
 
     def test_duplicate_and_dangling_relationships_are_rejected(self) -> None:
         request = self.bound_request()

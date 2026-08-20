@@ -44,5 +44,4 @@ $defs:
       - {not: {pattern: '^project:///'}}
       - {not: {pattern: '/$'}}
       - {not: {pattern: '(^|/)\.{1,2}(/|$)'}}
-      - {not: {pattern: '//'}}
 description: Semantic validation cross-binds this extension by base_task_index to the exact nested v2.1 task, preserves all v3 authority through base_task_v3_digest, verifies every open_task field against that task, and binds main/workdir to ADR 0101 canonical paths. Manifest and blob bytes are forbidden.

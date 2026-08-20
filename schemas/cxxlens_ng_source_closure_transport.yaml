@@ -1,11 +1,32 @@
 schema: cxxlens.source-closure-transport.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: proposed
 authority:
   adr: docs/design/adr/0102-dedicated-source-closure-transport.md
   identity_adr: docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md
   owner_issue: '#261'
   review: {status: required, reviewer: null, ref: null, exact_main_commit: null}
+review_findings:
+  status: blocking
+  exact_main_commit: d7dfb7a2a5d2fe7e2fa247232be46da577166aa4
+  ref: https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358501463
+  reviewer: codex-independent-reviewer/01a01fe3-fd16-7191-8275-275ba44196eb
+  required_resolutions:
+    - id: SC-R2-01
+      problem: request-v2-2-nests-protocol-1-1-and-source-bytes
+      decision: replace-with-full-v2-2-authority-derived-from-v2-1-minus-content-plus-protocol-1-2
+    - id: SC-R2-02
+      problem: provider-cannot-recompute-task-v4
+      decision: protocol-1-2-input-chunks-carry-canonical-complete-task-v4-metadata-before-closure-transfer
+    - id: SC-R2-03
+      problem: manifest-bound-excludes-valid-adr-0101-closure
+      decision: forty-mib-manifest-and-eighty-eight-mib-spool-with-constructibility-witness
+    - id: SC-R2-04
+      problem: phase-authentic-reject-is-declarative
+      decision: closed-control-schemas-plus-executable-reject-union-validator
+    - id: SC-R2-05
+      problem: review-reference-not-content-bound
+      decision: committed-review-receipt-binds-verdict-reviewer-session-exact-main-sha-and-comment-body-digest
 versions:
   provider_protocol: {legacy: 1.1, proposed: 1.2, downgrade: reject}
   request: {legacy: 2.1, proposed: 2.2}
@@ -96,12 +117,12 @@ limits:
   maximum_logical_path_utf8_bytes: 4096
   maximum_blob_bytes: 16777216
   maximum_unique_blob_bytes: 50331648
-  maximum_manifest_bytes: 20971520
-  maximum_manifest_chunks: 20
+  maximum_manifest_bytes: 41943040
+  maximum_manifest_chunks: 40
   maximum_chunk_payload_bytes: 1048576
   maximum_chunks_per_blob: 16
   maximum_blob_chunk_frames: 4144
-  maximum_task_spool_bytes: 71303168
+  maximum_task_spool_bytes: 92274688
   maximum_resident_transport_bytes: 1310720
 resource_policy:
   allocation: validate-count-length-offset-and-sum-before-allocation-or-write
@@ -219,8 +240,10 @@ protocol_activation:
   registry: exact-existing-1-through-23-plus-contract-24-through-29
   minor_profile:
     required_features: [task-input-chunks-v1, task-source-closure-v1]
-    exact_frame_pattern: [hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk-zero-or-more, source_closure_manifest-descriptor, source_closure_manifest-chunk-one-or-more, source_closure_blob-and-chunk-canonical-repeat, source_closure_seal, source_closure_ack-or-reject, credit, close]
+    exact_frame_pattern: [hello_ack, schema_negotiate, open_task-v4, input_descriptor-task-v4, input_chunk-task-v4-one-or-more, source_closure_manifest-descriptor, source_closure_manifest-chunk-one-or-more, source_closure_blob-and-chunk-canonical-repeat, source_closure_seal, source_closure_ack-or-reject, credit, close]
     capability_absence: reject-before-source-closure-bytes
+    legacy_v3_disposition: negotiate-protocol-1-1-never-use-1-2
+    task_v4_payload: canonical-complete-task-v4-metadata-no-source-bytes
     task_accepted_precondition: task-v4-and-manifest-and-all-blobs-and-transfer-seal-validated
     message_controls: schemas/cxxlens_ng_source_closure_transport.yaml#wire_controls
 crash_effects:
