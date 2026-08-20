@@ -1,0 +1,48 @@
+schema: cxxlens.ng-autonomy-constructibility.v1
+document_version: 1.0.0
+production_activation: prohibited
+machines:
+  source_closure:
+    owner: '#261'
+    authority: docs/design/adr/0102-dedicated-source-closure-transport.md
+    contract: schemas/cxxlens_ng_source_closure_transport.yaml
+    success_states: [task-v4-sealed, manifest-open, manifest-streaming, manifest-validated, blob-open, blob-streaming, blob-sealed, closure-sealed, closure-acknowledged, task-accepted]
+    message_ids: {heartbeat: 23, source_closure: [24, 25, 26, 27, 28, 29]}
+    bounds: {members: 4096, blobs: 4096, manifest_bytes: 41943040, spool_bytes: 92274688, resident_chunk_bytes: 1048576, resident_parser_bytes: 262144}
+    terminal_failures: [source-closure.rejected, source-closure.cancelled, provider.crash, provider.connection-lost]
+  store_candidate_report:
+    owner: '#200'
+    authority: docs/design/adr/0103-bounded-store-candidate-and-report.md
+    candidate_states: [idle, staging-session-open, appending, input-sealed, candidate-identity-sealed, independently-validating, validation-sealed, publication-attempt, publication-terminal]
+    report_states: [publication-independent-projection, projection-validated, maximum-tail-reserved, publication-attempt, exact-outcome-captured, outcome-tail-finalized, full-schema-validated, bottom-up-cross-binding-validated, stdout-published]
+    publication_outcomes: [not-attempted, rejected-stale, rejected-store-failure, publication-outcome-unknown, committed-unverified, committed-verified]
+    post_attempt_failure: exit-2-zero-authoritative-response-store-recovery-only
+    projections: {actual_source: backend-staging-canonical-physical-order, expected_source: immutable-sealed-task-plus-selected-request-and-journal, comparison: separate-cursors-full-record-byte-exact}
+    bounds: {tasks: 4096, scale_bytes: 536870912, source_window_bytes: 67108864, sort_arena_bytes: 8388608, comparator_cursor_count: 2, comparator_cursor_bytes_each: 32768, merge_fan_in: 16, merge_file_descriptors: 18, report_bytes: 1073741824}
+    representation: {logical_write: cxxlens.ng-snapshot-payload.v5, sqlite_physical: cxxlens.sqlite-semantic-store.v3, sqlite_version: 3.0.0, chunk_profile: cxxlens.sqlite-payload-chunks.v1, chunk_bytes: 8388608, legacy_read: [v1, v2, v3, v4]}
+  sqlite_read_mapping:
+    owners: ['#201', '#205']
+    authority: docs/design/adr/0104-unified-sqlite-source-lifecycle.md
+    nesting: '#205-inside-#201-active-read-connection'
+    no_effect_boundary: before-target-xOpen
+    outer_states: [unresolved, runtime-vfs-filesystem-sealed, retained-parent-held, no-effect-boundary-armed, typed-family-census, active-read-connection-open, wal-lock-and-prefix-held, mapping-subprotocol-or-private-index, eager-decode, logical-read-receipt, connection-revoking, connection-closed]
+    nested_states: [callback-admitted, pre-callback-sequence-cut, attempt-pin-held, native-started, native-outcome-captured, pending-mapping-receipt, identity-validated, mapping-lease-promoted, eager-use-owner-held, handoff-sealed]
+    predelegation_authority: attempt-and-in-flight-pin-only
+    promotion_predicate: native-SQLITE_OK-nonnull-plus-full-identity-and-writer-gates
+    teardown_order: [hide-generation, seal-pre-callback-cut, revoke-admission, drain-callbacks-and-use-owners, seal-owner-census, native-unmap-or-close-once, capture-outcome, retire-registry, release-pins]
+    ambiguous_callback: permanent-quarantine-no-retry
+  sqlite_normalization_effect:
+    owner: '#202'
+    authority: docs/design/adr/0104-unified-sqlite-source-lifecycle.md
+    separate_from_zero_effect_read: true
+    entry: logical-read-receipt-exact-empty
+    states: [receipt-revalidated, effect-profile-capability-sealed, exclusive-normalization-owner, pre-effect-sealed, effect-journal-open, permitted-callback-effects, file-and-parent-durable, confirmed-close, post-close-census, normalization-receipt, ordinary-fresh-init]
+    fixture_partitions: [F0, FZ-pre, FZ-post, FP, FH, FI, FO]
+    production_profile: independently-reviewed-receipt-required
+    canonical_user_source_activation: prohibited
+    parent_sync_after_each_delete: required
+counterexample_sets:
+  source_closure: [message-id-overlap, downgrade, ambient-filesystem, tamper, replay-across-task]
+  store_candidate_report: [second-full-graph, shared-projection-traversal, digest-only, compact-after-attempt, lost-publication-outcome-unknown, eager-sqlite-residency-claim]
+  sqlite_read_mapping: [first-map-mutation, predelegation-lease, ok-null, pointer-substitution, aba, fork, unload-before-revoke, callback-retry]
+  sqlite_normalization_effect: [physical-census-entry, fixture-production-promotion, missing-parent-sync, nonempty, sidecar-ambiguous]

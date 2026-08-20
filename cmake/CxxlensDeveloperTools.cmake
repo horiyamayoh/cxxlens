@@ -161,6 +161,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-ng-autonomy-constructibility-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_autonomy_constructibility.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-ng-source-closure-transport-check
   COMMAND
     "${Python3_EXECUTABLE}"

@@ -1,5 +1,5 @@
 {
-  "asset_count": 735,
+  "asset_count": 739,
   "assets": [
     {
       "authority": "active",
@@ -1901,6 +1901,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_autonomy_constructibility.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_autonomy_constructibility.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4287,6 +4301,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_autonomy_constructibility.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_ci_supply_chain.py",
       "removal_issue": null,
       "replacement": null,
@@ -4826,6 +4847,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_autonomy_constructibility.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_clang22_install_matrix.py",
       "removal_issue": null,
       "replacement": null,
@@ -5148,7 +5176,7 @@
     }
   ],
   "classifications": {
-    "active": 699,
+    "active": 703,
     "archived": 35,
     "generated": 1
   },
