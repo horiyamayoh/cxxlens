@@ -1,5 +1,5 @@
 {
-  "asset_count": 711,
+  "asset_count": 712,
   "assets": [
     {
       "authority": "active",
@@ -4378,6 +4378,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/unit/sdk/check_sdk_doctor_missing.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/unit/sdk/g5_runtime_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4980,7 +4987,7 @@
     }
   ],
   "classifications": {
-    "active": 675,
+    "active": 676,
     "archived": 35,
     "generated": 1
   },

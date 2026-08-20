@@ -984,6 +984,15 @@ add_test(
 set_tests_properties(link.provider-sdk-llvm-free
                      PROPERTIES LABELS "link;sdk;provider;llvm-free;acceptance")
 
+add_test(
+  NAME tool.sdk-doctor-missing
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_missing.py"
+    "$<TARGET_FILE:cxxlens-sdk-doctor>")
+set_tests_properties(tool.sdk-doctor-missing
+                     PROPERTIES LABELS "tool;sdk;doctor;acceptance")
+
 cxxlens_add_test_executable(cxxlens-public-header-cxxlens
                             public_headers/cxxlens_header_test.cpp)
 target_link_libraries(cxxlens-public-header-cxxlens PRIVATE cxxlens::cxxlens)
