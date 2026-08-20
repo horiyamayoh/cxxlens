@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -101,6 +103,48 @@ class WorkUnitTest(unittest.TestCase):
                             unit["depends_on"] = ["wu-173-governance"]
             self.rewrite(root, mutate)
             with self.assertRaisesRegex(WorkUnitError, "consumed product lacks dependency"):
+                validate(root)
+
+    def test_available_product_receipt_authenticates_exact_git_blobs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "receipt-test"], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.email", "receipt@test.invalid"], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "producer"], check=True)
+            commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+            tree = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD^{tree}"], text=True).strip()
+            artifact_path = "AGENTS.md"
+            evidence_path = "docs/design/adr/0105-direct-main-review-and-release-governance.md"
+
+            def committed_digest(path: str) -> str:
+                payload = subprocess.check_output(["git", "-C", str(root), "show", f"{commit}:{path}"])
+                return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+            def make_available(value) -> None:
+                value["product_receipts"]["sqlite.active-read-connection"] = {
+                    "contract": "cxxlens.sqlite-active-read-connection.v1",
+                    "receipt_profile": "exact-producer-commit-tree-artifact-and-evidence-digests",
+                    "status": "available",
+                    "producer_unit": "wu-201-zero-effect-active-read",
+                    "producer_commit": commit,
+                    "producer_tree": tree,
+                    "artifact_path": artifact_path,
+                    "artifact_digest": committed_digest(artifact_path),
+                    "evidence_path": evidence_path,
+                    "evidence_digest": committed_digest(evidence_path),
+                }
+
+            self.rewrite(root, make_available)
+            validate(root)
+            self.rewrite(
+                root,
+                lambda value: value["product_receipts"]["sqlite.active-read-connection"].update(
+                    {"evidence_digest": "sha256:" + "0" * 64}
+                ),
+            )
+            with self.assertRaisesRegex(WorkUnitError, "evidence digest mismatch"):
                 validate(root)
 
 

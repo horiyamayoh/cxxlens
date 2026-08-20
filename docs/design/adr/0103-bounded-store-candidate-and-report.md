@@ -62,7 +62,9 @@ performs bounded abort and records cleanup failure without replacing the origina
 ## Independent actual and expected projections
 
 The actual projection is produced only by replaying backend staging rows in canonical physical key
-order and decoding their exact framed bytes. The expected projection is produced before the first
+order and decoding their exact framed bytes. Cursor order must already equal the physical key
+derived from the closed record grammar and semantic key; a backend-supplied ordinal is never
+ordering authority, and the validator does not sort a cursor into compliance. The expected projection is produced before the first
 event encoder call from the immutable sealed task result plus the independently retained selected
 request and execution-journal receipts. It enumerates semantic keys, full claim projections,
 detached rows, annotations, coverage, unresolved records, partition censuses/completeness, closure

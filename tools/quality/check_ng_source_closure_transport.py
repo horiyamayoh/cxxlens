@@ -311,7 +311,8 @@ class TransferStateWitness:
     """Executable exact-binding witness for one manifest and its canonical blob stream."""
 
     def __init__(self, *, session_id: str, task_id: str, task_v4_digest: str,
-                 closure_id: str, closure_digest: str, manifest_digest: str) -> None:
+                 closure_id: str, closure_digest: str, manifest_digest: str,
+                 manifest_schema: dict[str, Any]) -> None:
         self.expected = {
             "session_id": session_id,
             "task_id": task_id,
@@ -320,10 +321,12 @@ class TransferStateWitness:
             "closure_digest": closure_digest,
             "manifest_digest": manifest_digest,
         }
+        self.manifest_schema = manifest_schema
         self.state = "task-v4-sealed"
         self.next_index = 0
         self.next_offset = 0
         self.declared_bytes = 0
+        self.declared_chunk_bytes = 0
         self.current_blob_ordinal = 0
         self.current_blob_digest: str | None = None
         self.declared_chunk_count = 0
@@ -354,7 +357,7 @@ class TransferStateWitness:
                 "blob-open": "blob-streaming",
                 "blob-streaming": "blob-streaming",
                 "blob-sealed": "blob-streaming",
-                "closure-sealed": "sealed",
+                "closure-sealed": "closure-sealed",
             }
             if control["failure_phase"] != phase_by_state.get(self.state):
                 raise SourceClosureTransportError("reject phase is not current-state authentic")
@@ -363,6 +366,7 @@ class TransferStateWitness:
         if name == "source_closure_manifest" and control["kind"] == "descriptor":
             self._bind(control, ("task_v4_digest", "closure_id", "closure_digest", "manifest_digest"))
             self.declared_bytes = control["total_bytes"]
+            self.declared_chunk_bytes = control["chunk_bytes"]
             self.declared_chunk_count = control["chunk_count"]
             self.manifest_bytes.clear()
             self.next_index = self.next_offset = 0
@@ -371,6 +375,9 @@ class TransferStateWitness:
             self._bind(control, ("manifest_digest",))
             if control["chunk_index"] != self.next_index or control["offset"] != self.next_offset:
                 raise SourceClosureTransportError("wire manifest chunk is not contiguous")
+            expected_bytes = min(self.declared_chunk_bytes, self.declared_bytes - self.next_offset)
+            if control["byte_count"] != expected_bytes:
+                raise SourceClosureTransportError("wire manifest chunk size differs from descriptor")
             self.next_index += 1
             self.next_offset += control["byte_count"]
             self.manifest_bytes.extend(payload)
@@ -387,6 +394,7 @@ class TransferStateWitness:
                     raise SourceClosureTransportError("wire manifest bytes are not canonical")
                 if not isinstance(parsed, dict) or set(parsed) != {"schema", "closure_id", "closure_digest", "members", "blobs"}:
                     raise SourceClosureTransportError("wire manifest shape is not exact")
+                validate_manifest(parsed, self.manifest_schema)
                 if (manifest_digest(parsed) != self.expected["manifest_digest"] or
                         parsed["closure_id"] != self.expected["closure_id"] or
                         parsed["closure_digest"] != self.expected["closure_digest"] or
@@ -409,6 +417,7 @@ class TransferStateWitness:
             self.current_blob_ordinal = control["blob_ordinal"]
             self.current_blob_digest = control["blob_digest"]
             self.declared_bytes = control["total_bytes"]
+            self.declared_chunk_bytes = control["chunk_bytes"]
             self.declared_chunk_count = control["chunk_count"]
             self.blob_bytes.clear()
             self.next_index = self.next_offset = 0
@@ -424,6 +433,9 @@ class TransferStateWitness:
                     control["chunk_index"] != self.next_index or
                     control["offset"] != self.next_offset):
                 raise SourceClosureTransportError("wire blob chunk binding/order mismatch")
+            expected_bytes = min(self.declared_chunk_bytes, self.declared_bytes - self.next_offset)
+            if control["byte_count"] != expected_bytes:
+                raise SourceClosureTransportError("wire blob chunk size differs from descriptor")
             self.next_index += 1
             self.next_offset += control["byte_count"]
             self.blob_bytes.extend(payload)
@@ -1030,6 +1042,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         closure_id="source-closure:" + semantic,
         closure_digest=semantic,
         manifest_digest=manifest_witness,
+        manifest_schema=manifest_schema,
     )
     for control_name, control_value, control_payload in controls_witness:
         transfer_witness.apply(control_name, control_value, control_payload, contract)

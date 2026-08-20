@@ -27,7 +27,7 @@ machines:
       committed-unverified: {response: safe-detailed-failure-or-none, exit: 1-or-2, recovery_authority: Store}
       committed-verified: {response: validated-success, exit: 0, recovery_authority: Store}
     post_attempt_failure: exit-2-zero-authoritative-response-store-recovery-only
-    projections: {actual_source: backend-staging-canonical-physical-order, expected_source: immutable-sealed-task-plus-selected-request-and-journal, comparison: separate-cursors-full-record-byte-exact, record_grammar: [partition-begin, semantic-key, claim-full-projection, detached-row, claim-annotation, coverage, unresolved, closure-binding, provenance, guarantee, partition-census, partition-end, global-identity]}
+    projections: {actual_source: backend-staging-canonical-physical-order, order_authentication: derived-physical-key-equals-cursor-order-no-backend-ordinal, expected_source: immutable-sealed-task-plus-selected-request-and-journal, comparison: separate-cursors-full-record-byte-exact, record_grammar: [partition-begin, semantic-key, claim-full-projection, detached-row, claim-annotation, coverage, unresolved, closure-binding, provenance, guarantee, partition-census, partition-end, global-identity]}
     retention_roles: [one-immutable-final-payload-or-none, one-task-source-output-window, one-sort-arena, two-comparator-cursors, one-backend-cursor, fixed-codec-hash-and-counter-state, no-second-complete-graph, no-second-final-payload]
     bounds: {tasks: 4096, scale_bytes: 536870912, source_window_bytes: 67108864, sort_arena_bytes: 8388608, comparator_cursor_count: 2, comparator_cursor_bytes_each: 32768, backend_cursor_bytes: 1048576, codec_hash_state_bytes: 65536, record_buffer_bytes: 1048576, counter_state_bytes: 4096, resident_window_limit_bytes: 77729792, merge_fan_in: 16, merge_file_descriptors: 18, report_tail_global_projection_bytes: 10420985, report_tail_task_metadata_bytes: 8463179, report_tail_sdk_records_bytes: 8388608, report_tail_diagnostics_bytes: 1048576, report_tail_framing_bytes: 198, report_tail_reservation_bytes: 28321546, report_bytes: 1073741824, counter_max: 18446744073709551615, accumulator_max: 340282366920938463463374607431768211455}
     representation: {logical_write: cxxlens.ng-snapshot-payload.v5, sqlite_physical: cxxlens.sqlite-semantic-store.v3, sqlite_version: 3.0.0, chunk_profile: cxxlens.sqlite-payload-chunks.v1, chunk_bytes: 8388608, legacy_read: [v1, v2, v3, v4]}
@@ -83,6 +83,7 @@ machines:
       forbidden: reader-retirement-claims-independent-writer-retirement
     outer_custody_kinds: [connection, callback-attempt, reservation, mapping-lease, reader-attachment, use-owner, cleanup-owner, close-owner, uncertainty-owner]
     outer_join_terminal_profiles: {retired: authenticated-terminal-receipt, quarantined: permanent-tombstone-with-retained-custody, enrollment: atomically-sealed-before-join, duplicate_or_late: reject}
+    outer_join_receipt_profile: {enrollment_key: kind-plus-instance-id, enrollment_binding: sha256-kind-instance-outer-connection-generation, terminal_binding: sha256-enrollment-digest-terminal-outcome, join_predicate: exact-enrolled-instance-set-equals-authenticated-terminal-receipt-set}
     zero_effect_receipt: [initialize, create, write, truncate, extend, delete, resize]
     read_receipt_barrier: [outer-custody-join-sealed, connection-closed, outer-scoped-zero-live-callbacks-leases-and-use-owners, zero-effect-callback-receipt-sealed]
     fork_transition_graph:
@@ -97,12 +98,13 @@ machines:
     ambiguous_callback: permanent-quarantine-no-retry
     revocation_events:
       aba: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
-      vfs-unload-request: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: unload-permitted-after-outer-custody-join}
+      vfs-unload-request: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: vfs-unloaded}
       file-replacement: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
       directory-replacement: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
       watch-loss-or-overflow: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
       wal-reset-or-resize: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
       ambiguous-callback: {outer: connection-revoking, writer: terminal-opaque-quarantine, reader: reader-terminal-opaque-quarantine, terminal: outer-custody-join-pending}
+    unload_transition_graph: {vfs-unload-request: connection-revoking, connection-revoking: outer-custody-join-pending, outer-custody-join-pending: outer-custody-join-sealed, outer-custody-join-sealed: unload-permitted, unload-permitted: vfs-unloaded, vfs-unloaded: []}
     production_activation_predicate: [accepted-independent-review, exact-static-shared-runtime-vfs-sqlite-dso-source-id-hash-build-toolchain-identity, two-live-store-cas, materialization-race, cross-process-race, cantinit-readonly-negative, pending-only-state-rejection, four-extend-pairs, simultaneous-first-writer-join-and-mismatch, w2-retirement-ordering, new-page-size-update, duplicate-fd-lock-loss, native-close-pinning, timeout-and-unknown-outcomes, same-page-successor, different-page-successor-rejection, fork-aba-unload-replacement, connected-main-ci-and-platform-qualification]
   sqlite_normalization_effect:
     owner: '#202'

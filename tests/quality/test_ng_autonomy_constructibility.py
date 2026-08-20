@@ -207,6 +207,28 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "retirement join"):
                 validate(root)
 
+    def test_outer_join_receipts_and_unload_edge_are_authenticated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"][
+                    "outer_join_receipt_profile"
+                ].update({"join_predicate": "one-row-per-kind"}),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "outer join receipt profile"):
+                validate(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"][
+                    "unload_transition_graph"
+                ].__setitem__("connection-revoking", "unload-permitted"),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "unload transition graph"):
+                validate(root)
+
     def test_revocation_event_cannot_jump_to_success(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

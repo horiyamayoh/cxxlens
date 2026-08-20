@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import pathlib
+import subprocess
 import sys
 from typing import Any
 
@@ -87,6 +88,39 @@ def _transitive_dependencies(identifier: str, units: dict[str, dict[str, Any]]) 
     return result
 
 
+def _git_bytes(root: pathlib.Path, *args: str) -> bytes:
+    result = subprocess.run(
+        ["git", "-C", str(root), *args],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise WorkUnitError(f"product receipt git object unavailable: {detail}")
+    return result.stdout
+
+
+def _authenticate_available_receipt(
+    root: pathlib.Path,
+    product: str,
+    receipt: dict[str, Any],
+    producer_id: str,
+) -> None:
+    if receipt["producer_unit"] != producer_id:
+        raise WorkUnitError(f"product receipt producer mismatch: {product}")
+    commit = receipt["producer_commit"]
+    tree = _git_bytes(root, "rev-parse", f"{commit}^{{tree}}").decode("ascii").strip()
+    if tree != receipt["producer_tree"]:
+        raise WorkUnitError(f"product receipt tree mismatch: {product}")
+    for role in ("artifact", "evidence"):
+        path = receipt[f"{role}_path"]
+        payload = _git_bytes(root, "show", f"{commit}:{path}")
+        digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+        if digest != receipt[f"{role}_digest"]:
+            raise WorkUnitError(f"product receipt {role} digest mismatch: {product}")
+
+
 def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str, Any]:
     manifest = load(root / MANIFEST)
     schema = load(root / SCHEMA)
@@ -145,12 +179,12 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
     if set(manifest["product_receipts"]) != set(product_owners):
         raise WorkUnitError("product receipt inventory differs from product owners")
     for product, receipt in manifest["product_receipts"].items():
-        if receipt != {
-            "contract": "cxxlens." + product.replace(".", "-") + ".v1",
-            "receipt_profile": "exact-producer-commit-tree-artifact-and-evidence-digests",
-            "status": "pending",
-        }:
+        expected_contract = "cxxlens." + product.replace(".", "-") + ".v1"
+        if (receipt["contract"] != expected_contract or
+                receipt["receipt_profile"] != "exact-producer-commit-tree-artifact-and-evidence-digests"):
             raise WorkUnitError(f"product receipt contract drift: {product}")
+        if receipt["status"] == "available":
+            _authenticate_available_receipt(root, product, receipt, product_owners[product])
 
     identifiers = sorted(units)
     for index, left_id in enumerate(identifiers):

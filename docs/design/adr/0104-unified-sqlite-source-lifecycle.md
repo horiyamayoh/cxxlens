@@ -124,7 +124,12 @@ outer connection. It enters `outer-custody-join-pending`, compares the exact out
 with the retired-writer set and the exact outer-owned reader set with the retired-reader set, and
 only then seals `outer-custody-join-sealed`. Unrelated live writers are explicitly outside that
 census; a missing writer terminal or reader terminal blocks the join, and reader retirement alone
-cannot satisfy it.
+cannot satisfy it. Enrollment is an atomically sealed set of `(custody kind, instance ID,
+outer-generation digest)` records. The join requires an authenticated terminal receipt for every
+enrolled instance, rejects omitted additional instances and fabricated or duplicate receipts, and
+does not reduce the census to one row per custody kind. VFS unload has an executable causal path
+`request -> revoke -> join-pending -> join-sealed -> unload-permitted -> unloaded`; no declarative
+terminal label can bypass that path.
 
 Fork is not an ordinary drain. `pthread_atfork` prepare seals admission and records the complete
 custody census; the parent handler revalidates process/fork generation before resuming. The child

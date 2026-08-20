@@ -100,6 +100,11 @@ Otherwise it emits an actionable dependency-qualified stop disposition. A correc
 rewrites a prior rejecting review to pending; it remains rejected until an authenticated Accepted
 receipt replaces that outcome.
 
+An owned product starts with an exact `pending` receipt. It becomes `available` only when the receipt
+names its unique producer work unit and a Git commit/tree pair whose committed artifact and evidence
+bytes reproduce both recorded SHA-256 digests. The checker resolves the tree and blobs from Git; a
+status flag, worktree bytes, or unauthenticated producer claim cannot unblock a consuming unit.
+
 Nightly evidence is release-eligible only when entered by schedule or explicit dispatch and bound to
 latest main at start; legacy reusable invocations and the legacy Quality workflow remain compatibility
 evidence, not inputs to the autonomy release authority. Release evaluation is non-cancelled,

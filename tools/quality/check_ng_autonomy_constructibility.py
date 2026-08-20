@@ -97,26 +97,38 @@ def execute_store_symbolic_witness(store: dict[str, Any]) -> None:
 
     expected_records = build_expected_projection(immutable_input)
     backend_rows = [
-        {"ordinal": 0, "kind": "partition-begin", "key": "p0", "payload": b"begin"},
-        {"ordinal": 1, "kind": "semantic-key", "key": "p0/key", "payload": b"semantic-key"},
-        {"ordinal": 2, "kind": "claim-full-projection", "key": "p0/claim", "payload": b"claim"},
-        {"ordinal": 3, "kind": "detached-row", "key": "p0/row", "payload": b"row"},
-        {"ordinal": 4, "kind": "claim-annotation", "key": "p0/annotation", "payload": b"annotation"},
-        {"ordinal": 5, "kind": "coverage", "key": "p0/coverage", "payload": b"coverage"},
-        {"ordinal": 6, "kind": "unresolved", "key": "p0/unresolved", "payload": b"unresolved"},
-        {"ordinal": 7, "kind": "closure-binding", "key": "p0/closure", "payload": b"closure"},
-        {"ordinal": 8, "kind": "provenance", "key": "p0/provenance", "payload": b"provenance"},
-        {"ordinal": 9, "kind": "guarantee", "key": "p0/guarantee", "payload": b"guarantee"},
-        {"ordinal": 10, "kind": "partition-census", "key": "p0/census", "payload": b"census"},
-        {"ordinal": 11, "kind": "partition-end", "key": "p0", "payload": b"end"},
-        {"ordinal": 12, "kind": "global-identity", "key": "snapshot", "payload": b"identity"},
+        {"kind": "partition-begin", "key": "p0", "payload": b"begin"},
+        {"kind": "semantic-key", "key": "p0/key", "payload": b"semantic-key"},
+        {"kind": "claim-full-projection", "key": "p0/claim", "payload": b"claim"},
+        {"kind": "detached-row", "key": "p0/row", "payload": b"row"},
+        {"kind": "claim-annotation", "key": "p0/annotation", "payload": b"annotation"},
+        {"kind": "coverage", "key": "p0/coverage", "payload": b"coverage"},
+        {"kind": "unresolved", "key": "p0/unresolved", "payload": b"unresolved"},
+        {"kind": "closure-binding", "key": "p0/closure", "payload": b"closure"},
+        {"kind": "provenance", "key": "p0/provenance", "payload": b"provenance"},
+        {"kind": "guarantee", "key": "p0/guarantee", "payload": b"guarantee"},
+        {"kind": "partition-census", "key": "p0/census", "payload": b"census"},
+        {"kind": "partition-end", "key": "p0", "payload": b"end"},
+        {"kind": "global-identity", "key": "snapshot", "payload": b"identity"},
     ]
 
     def build_actual_projection(rows: list[dict[str, Any]]) -> list[tuple[str, str, bytes]]:
-        return [
-            (row["kind"], row["key"], row["payload"])
-            for row in sorted(rows, key=lambda row: row["ordinal"])
-        ]
+        grammar = store["projections"]["record_grammar"]
+        rank = {kind: index for index, kind in enumerate(grammar)}
+        try:
+            physical_keys = []
+            for row in rows:
+                key = row["key"].encode("utf-8")
+                if row["kind"] == "global-identity":
+                    physical_keys.append((1, b"", rank[row["kind"]], key))
+                else:
+                    partition = row["key"].split("/", 1)[0].encode("utf-8")
+                    physical_keys.append((0, partition, rank[row["kind"]], key))
+        except (KeyError, UnicodeEncodeError) as error:
+            raise ConstructibilityError("Store backend row has no canonical physical key") from error
+        if physical_keys != sorted(physical_keys) or len(physical_keys) != len(set(physical_keys)):
+            raise ConstructibilityError("Store backend cursor is not in canonical derived physical-key order")
+        return [(row["kind"], row["key"], row["payload"]) for row in rows]
 
     actual_records = build_actual_projection(backend_rows)
 
@@ -143,6 +155,12 @@ def execute_store_symbolic_witness(store: dict[str, Any]) -> None:
     ]
     if any(projections_equal(candidate, expected_records) for candidate in adversarial_actuals):
         raise ConstructibilityError("Store symbolic projection counterexample accepted")
+    for physical_rows in (list(reversed(backend_rows)), [backend_rows[1], backend_rows[0], *backend_rows[2:]]):
+        try:
+            build_actual_projection(physical_rows)
+        except ConstructibilityError:
+            continue
+        raise ConstructibilityError("Store reordered physical backend rows were accepted")
 
     expected_policy = {
         "not-attempted": {"response": "typed-failure", "exit": 1, "recovery_authority": "none"},
@@ -308,7 +326,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     require_exact(store["publication_outcomes"], ["not-attempted", "rejected-stale", "rejected-store-failure", "publication-outcome-unknown", "committed-unverified", "committed-verified"], "Store publication outcomes")
     require_exact(store["candidate_transition_graph"], {"idle": "staging-session-open", "staging-session-open": "appending", "appending": "input-sealed", "input-sealed": "candidate-identity-sealed", "candidate-identity-sealed": "independently-validating", "independently-validating": "validation-sealed", "validation-sealed": ["not-attempted", "publication-attempt"], "publication-attempt": "publication-terminal", "publication-terminal": ["rejected-stale", "rejected-store-failure", "publication-outcome-unknown", "committed-unverified", "committed-verified"]}, "Store candidate transition graph")
     require_exact(store["report_transition_graph"], {"publication-independent-projection": "projection-validated", "projection-validated": "maximum-tail-reserved", "maximum-tail-reserved": "publication-decision", "publication-decision": ["outcome-not-attempted", "publication-attempt"], "publication-attempt": "exact-outcome-captured", "exact-outcome-captured": ["outcome-rejected-stale", "outcome-rejected-store-failure", "outcome-publication-outcome-unknown", "outcome-committed-unverified", "outcome-committed-verified"], "outcome-not-attempted": "outcome-tail-finalized", "outcome-rejected-stale": "outcome-tail-finalized", "outcome-rejected-store-failure": "outcome-tail-finalized", "outcome-publication-outcome-unknown": "outcome-tail-finalized", "outcome-committed-unverified": "outcome-tail-finalized", "outcome-committed-verified": "outcome-tail-finalized", "outcome-tail-finalized": "full-schema-validated", "full-schema-validated": "bottom-up-cross-binding-validated", "bottom-up-cross-binding-validated": "stdout-published", "stdout-published": []}, "Store report transition graph")
-    require_exact(store["projections"], {"actual_source": "backend-staging-canonical-physical-order", "expected_source": "immutable-sealed-task-plus-selected-request-and-journal", "comparison": "separate-cursors-full-record-byte-exact", "record_grammar": ["partition-begin", "semantic-key", "claim-full-projection", "detached-row", "claim-annotation", "coverage", "unresolved", "closure-binding", "provenance", "guarantee", "partition-census", "partition-end", "global-identity"]}, "dual projection")
+    require_exact(store["projections"], {"actual_source": "backend-staging-canonical-physical-order", "order_authentication": "derived-physical-key-equals-cursor-order-no-backend-ordinal", "expected_source": "immutable-sealed-task-plus-selected-request-and-journal", "comparison": "separate-cursors-full-record-byte-exact", "record_grammar": ["partition-begin", "semantic-key", "claim-full-projection", "detached-row", "claim-annotation", "coverage", "unresolved", "closure-binding", "provenance", "guarantee", "partition-census", "partition-end", "global-identity"]}, "dual projection")
     require_exact(store["retention_roles"], ["one-immutable-final-payload-or-none", "one-task-source-output-window", "one-sort-arena", "two-comparator-cursors", "one-backend-cursor", "fixed-codec-hash-and-counter-state", "no-second-complete-graph", "no-second-final-payload"], "Store retention role census")
     require_exact(store["bounds"], {"tasks": 4096, "scale_bytes": 512 * 1024 * 1024, "source_window_bytes": 64 * 1024 * 1024, "sort_arena_bytes": 8 * 1024 * 1024, "comparator_cursor_count": 2, "comparator_cursor_bytes_each": 32 * 1024, "backend_cursor_bytes": 1024 * 1024, "codec_hash_state_bytes": 64 * 1024, "record_buffer_bytes": 1024 * 1024, "counter_state_bytes": 4096, "resident_window_limit_bytes": 77729792, "merge_fan_in": 16, "merge_file_descriptors": 18, "report_tail_global_projection_bytes": 10420985, "report_tail_task_metadata_bytes": 8463179, "report_tail_sdk_records_bytes": 8 * 1024 * 1024, "report_tail_diagnostics_bytes": 1024 * 1024, "report_tail_framing_bytes": 198, "report_tail_reservation_bytes": 28321546, "report_bytes": 1024 * 1024 * 1024, "counter_max": (1 << 64) - 1, "accumulator_max": (1 << 128) - 1}, "DF-0200 numeric bounds")
     require_exact(store["representation"], {"logical_write": "cxxlens.ng-snapshot-payload.v5", "sqlite_physical": "cxxlens.sqlite-semantic-store.v3", "sqlite_version": "3.0.0", "chunk_profile": "cxxlens.sqlite-payload-chunks.v1", "chunk_bytes": 8 * 1024 * 1024, "legacy_read": ["v1", "v2", "v3", "v4"]}, "Store exact representation")
@@ -353,24 +371,53 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     custody_kinds = ["connection", "callback-attempt", "reservation", "mapping-lease", "reader-attachment", "use-owner", "cleanup-owner", "close-owner", "uncertainty-owner"]
     require_exact(mapping["outer_custody_kinds"], custody_kinds, "SQLite outer custody kinds")
     require_exact(mapping["outer_join_terminal_profiles"], {"retired": "authenticated-terminal-receipt", "quarantined": "permanent-tombstone-with-retained-custody", "enrollment": "atomically-sealed-before-join", "duplicate_or_late": "reject"}, "SQLite outer join profiles")
+    require_exact(mapping["outer_join_receipt_profile"], {"enrollment_key": "kind-plus-instance-id", "enrollment_binding": "sha256-kind-instance-outer-connection-generation", "terminal_binding": "sha256-enrollment-digest-terminal-outcome", "join_predicate": "exact-enrolled-instance-set-equals-authenticated-terminal-receipt-set"}, "SQLite outer join receipt profile")
 
-    def seals_outer_join(rows: list[tuple[str, str, str]], *, enrollment_sealed: bool) -> bool:
-        keys = [(kind, identifier) for kind, identifier, _ in rows]
-        return (
-            enrollment_sealed
-            and len(keys) == len(set(keys))
-            and set(kind for kind, _, _ in rows) == set(custody_kinds)
-            and all(terminal in {"retired", "quarantined"} for _, _, terminal in rows)
-        )
+    def enrollment_digest(kind: str, identifier: str) -> str:
+        body = b"cxxlens.sqlite-outer-custody-enrollment.v1\0" + kind.encode() + b"\0" + identifier.encode() + b"\0outer-generation-7"
+        return "sha256:" + hashlib.sha256(body).hexdigest()
 
-    complete_custody = [(kind, f"owner-{index}", "retired") for index, kind in enumerate(custody_kinds)]
-    if not seals_outer_join(complete_custody, enrollment_sealed=True):
+    def terminal_digest(enrollment: str, terminal: str) -> str:
+        body = b"cxxlens.sqlite-outer-custody-terminal.v1\0" + enrollment.encode() + b"\0" + terminal.encode()
+        return "sha256:" + hashlib.sha256(body).hexdigest()
+
+    def seals_outer_join(enrolled: list[dict[str, str]], receipts: list[dict[str, str]], *, enrollment_sealed: bool) -> bool:
+        enrolled_by_key = {(row["kind"], row["identifier"]): row for row in enrolled}
+        receipt_by_key = {(row["kind"], row["identifier"]): row for row in receipts}
+        if (not enrollment_sealed or len(enrolled_by_key) != len(enrolled) or
+                len(receipt_by_key) != len(receipts) or set(enrolled_by_key) != set(receipt_by_key) or
+                set(row["kind"] for row in enrolled) != set(custody_kinds)):
+            return False
+        for key, enrollment in enrolled_by_key.items():
+            receipt = receipt_by_key[key]
+            expected_enrollment = enrollment_digest(*key)
+            if (enrollment["enrollment_digest"] != expected_enrollment or
+                    receipt["enrollment_digest"] != expected_enrollment or
+                    receipt["terminal"] not in {"retired", "quarantined"} or
+                    receipt["receipt_digest"] != terminal_digest(expected_enrollment, receipt["terminal"])):
+                return False
+        return True
+
+    enrolled = [
+        {"kind": kind, "identifier": f"owner-{index}", "enrollment_digest": enrollment_digest(kind, f"owner-{index}")}
+        for index, kind in enumerate(custody_kinds)
+    ]
+    enrolled.append({"kind": "mapping-lease", "identifier": "owner-extra", "enrollment_digest": enrollment_digest("mapping-lease", "owner-extra")})
+    complete_custody = [
+        {**row, "terminal": "retired", "receipt_digest": terminal_digest(row["enrollment_digest"], "retired")}
+        for row in enrolled
+    ]
+    if not seals_outer_join(enrolled, complete_custody, enrollment_sealed=True):
         raise ConstructibilityError("SQLite outer custody join rejected complete authenticated census")
-    if seals_outer_join(complete_custody[:-1], enrollment_sealed=True):
-        raise ConstructibilityError("SQLite outer custody join accepted omitted custody kind")
-    if seals_outer_join([*complete_custody, complete_custody[0]], enrollment_sealed=True):
+    if seals_outer_join(enrolled, complete_custody[:-1], enrollment_sealed=True):
+        raise ConstructibilityError("SQLite outer custody join accepted omitted enrolled instance")
+    if seals_outer_join(enrolled, [*complete_custody, complete_custody[0]], enrollment_sealed=True):
         raise ConstructibilityError("SQLite outer custody join accepted duplicate custody")
-    if seals_outer_join(complete_custody, enrollment_sealed=False):
+    tampered = [dict(row) for row in complete_custody]
+    tampered[0]["receipt_digest"] = "sha256:" + "0" * 64
+    if seals_outer_join(enrolled, tampered, enrollment_sealed=True):
+        raise ConstructibilityError("SQLite outer custody join accepted unauthenticated terminal")
+    if seals_outer_join(enrolled, complete_custody, enrollment_sealed=False):
         raise ConstructibilityError("SQLite outer custody join accepted late enrollment window")
     require_exact(mapping["zero_effect_receipt"], ["initialize", "create", "write", "truncate", "extend", "delete", "resize"], "SQLite zero-effect receipt")
     require_exact(mapping["read_receipt_barrier"], ["outer-custody-join-sealed", "connection-closed", "outer-scoped-zero-live-callbacks-leases-and-use-owners", "zero-effect-callback-receipt-sealed"], "SQLite read receipt barrier")
@@ -382,7 +429,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     ordinary_revoke = {"outer": "connection-revoking", "writer": "hide-generation", "reader": "hide-reader-generation", "terminal": "outer-custody-join-pending"}
     expected_revocations = {
         "aba": ordinary_revoke,
-        "vfs-unload-request": {**ordinary_revoke, "terminal": "unload-permitted-after-outer-custody-join"},
+        "vfs-unload-request": {**ordinary_revoke, "terminal": "vfs-unloaded"},
         "file-replacement": ordinary_revoke,
         "directory-replacement": ordinary_revoke,
         "watch-loss-or-overflow": ordinary_revoke,
@@ -393,8 +440,11 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     for event, targets in mapping["revocation_events"].items():
         if targets["outer"] != "connection-revoking" or targets["writer"] not in teardown or targets["reader"] not in reader_teardown:
             raise ConstructibilityError(f"SQLite revocation fanout is not executable: {event}")
-        if event == "vfs-unload-request" and targets["terminal"] != "unload-permitted-after-outer-custody-join":
-            raise ConstructibilityError("SQLite unload can precede outer custody join")
+    unload_graph = mapping["unload_transition_graph"]
+    require_exact(unload_graph, {"vfs-unload-request": "connection-revoking", "connection-revoking": "outer-custody-join-pending", "outer-custody-join-pending": "outer-custody-join-sealed", "outer-custody-join-sealed": "unload-permitted", "unload-permitted": "vfs-unloaded", "vfs-unloaded": []}, "SQLite unload transition graph")
+    validate_closed_graph(unload_graph, "vfs-unload-request")
+    if list(unload_graph).index("outer-custody-join-sealed") >= list(unload_graph).index("unload-permitted"):
+        raise ConstructibilityError("SQLite unload can precede outer custody join")
     require_exact(mapping["production_activation_predicate"], ["accepted-independent-review", "exact-static-shared-runtime-vfs-sqlite-dso-source-id-hash-build-toolchain-identity", "two-live-store-cas", "materialization-race", "cross-process-race", "cantinit-readonly-negative", "pending-only-state-rejection", "four-extend-pairs", "simultaneous-first-writer-join-and-mismatch", "w2-retirement-ordering", "new-page-size-update", "duplicate-fd-lock-loss", "native-close-pinning", "timeout-and-unknown-outcomes", "same-page-successor", "different-page-successor-rejection", "fork-aba-unload-replacement", "connected-main-ci-and-platform-qualification"], "mapping production predicate")
 
     effect = machines["sqlite_normalization_effect"]

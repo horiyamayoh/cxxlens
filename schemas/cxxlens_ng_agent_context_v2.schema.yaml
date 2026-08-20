@@ -21,10 +21,25 @@ properties:
   required_product_receipts:
     type: object
     additionalProperties:
-      type: object
-      additionalProperties: false
-      required: [contract, receipt_profile, status]
-      properties: {contract: {$ref: '#/$defs/product'}, receipt_profile: {const: exact-producer-commit-tree-artifact-and-evidence-digests}, status: {const: pending}}
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [contract, receipt_profile, status]
+          properties: {contract: {$ref: '#/$defs/product'}, receipt_profile: {const: exact-producer-commit-tree-artifact-and-evidence-digests}, status: {const: pending}}
+        - type: object
+          additionalProperties: false
+          required: [contract, receipt_profile, status, producer_unit, producer_commit, producer_tree, artifact_path, artifact_digest, evidence_path, evidence_digest]
+          properties:
+            contract: {$ref: '#/$defs/product'}
+            receipt_profile: {const: exact-producer-commit-tree-artifact-and-evidence-digests}
+            status: {const: available}
+            producer_unit: {type: string, pattern: '^wu-[1-9][0-9]*-[a-z0-9-]+$'}
+            producer_commit: {type: string, pattern: '^[0-9a-f]{40}$'}
+            producer_tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+            artifact_path: {$ref: '#/$defs/path'}
+            artifact_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+            evidence_path: {$ref: '#/$defs/path'}
+            evidence_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   authority:
     type: object
     additionalProperties: false
