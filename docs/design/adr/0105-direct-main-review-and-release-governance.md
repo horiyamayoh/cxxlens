@@ -54,7 +54,9 @@ The v2 register keeps `decision_status`, `authority_status`, `review.outcome`,
 and is never rewritten to pending. Receipt v1 binds candidate commit/tree, the sorted authority
 path/blob projection and canonical digest, owner issue, comment URL/body digest, distinct
 author/reviewer/session, verdict and P0/P1/P2 census, connected run, and the status-only acceptance
-path allowlist. Offline checking verifies Git identity, authority blobs, ancestry, allowlisted paths,
+path allowlist. The acceptance SHA is not self-embedded; the checker deterministically selects the
+first descendant commit whose receipt registry contains the receipt ID, then verifies its diff.
+Offline checking verifies Git identity, authority blobs, ancestry, allowlisted paths,
 identity separation, findings, activation and preserved WIP heads. Connected CI verifies GitHub
 comment bytes/author and the exact-candidate successful run. Offline-only evidence cannot activate
 production support.

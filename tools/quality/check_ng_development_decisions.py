@@ -10,6 +10,8 @@ import pathlib
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from typing import Any
 
 import jsonschema
@@ -21,6 +23,7 @@ REGISTER = pathlib.Path("schemas/cxxlens_ng_development_decision_register.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_development_decision_register.schema.yaml")
 RECEIPTS = pathlib.Path("schemas/cxxlens_ng_development_review_receipts.yaml")
 RECEIPT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_development_review_receipts.schema.yaml")
+WIP_INVENTORY = pathlib.Path("schemas/cxxlens_ng_wip_inventory.yaml")
 HIGH_RISK = {"contract", "invariant", "security", "compatibility", "irreversible", "resource-bound"}
 REVIEW_REF = re.compile(r"^https://github\.com/horiyamayoh/cxxlens/issues/([1-9][0-9]*)#issuecomment-([1-9][0-9]*)$")
 
@@ -104,14 +107,65 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
     acceptance = receipt["acceptance"]
     if acceptance["status"] != "committed":
         return
-    commit = acceptance["commit"]
     candidate = receipt["candidate_commit"]
-    if not commit or _git(root, "merge-base", candidate, commit) != candidate:
+    if acceptance["derivation"] != "first-descendant-containing-receipt":
+        raise DecisionRegisterError(f"committed acceptance lacks deterministic derivation: {receipt['id']}")
+    if _git(root, "merge-base", candidate, "HEAD") != candidate:
         raise DecisionRegisterError(f"acceptance does not descend from candidate: {receipt['id']}")
+    commits = _git(root, "log", "--reverse", "--format=%H", f"{candidate}..HEAD", "--", str(RECEIPTS)).splitlines()
+    commit = None
+    for possible in commits:
+        document = yaml.load(_git(root, "show", f"{possible}:{RECEIPTS}"), Loader=UniqueKeyLoader)
+        if any(entry.get("id") == receipt["id"] for entry in document.get("receipts", [])):
+            commit = possible
+            break
+    if commit is None:
+        raise DecisionRegisterError(f"acceptance receipt has no descendant commit: {receipt['id']}")
     changed = set(_git(root, "diff", "--name-only", candidate, commit).splitlines())
     allowed = set(acceptance["allowed_changed_paths"])
     if not changed or not changed <= allowed:
         raise DecisionRegisterError(f"acceptance commit is not status/receipt-only: {receipt['id']}")
+
+
+def _github_json(url: str, token: str) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}", "X-GitHub-Api-Version": "2022-11-28"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            value = json.load(response)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
+        raise DecisionRegisterError(f"connected GitHub verification unavailable: {error}") from error
+    if not isinstance(value, dict):
+        raise DecisionRegisterError("connected GitHub response is not an object")
+    return value
+
+
+def verify_connected(root: pathlib.Path, token: str) -> None:
+    if not token:
+        raise DecisionRegisterError("connected GitHub verification requires a token")
+    validate(root)
+    document = _load(root / RECEIPTS)
+    for receipt in document["receipts"]:
+        connected = receipt["connected_verification"]
+        if connected["status"] != "verified":
+            continue
+        match = REVIEW_REF.fullmatch(receipt["comment_url"])
+        if match is None or f"#{match.group(1)}" != receipt["owner_issue"]:
+            raise DecisionRegisterError(f"review comment belongs to a foreign issue: {receipt['id']}")
+        comment = _github_json(f"https://api.github.com/repos/horiyamayoh/cxxlens/issues/comments/{match.group(2)}", token)
+        body = comment.get("body")
+        if not isinstance(body, str) or "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest() != receipt["comment_body_sha256"]:
+            raise DecisionRegisterError(f"GitHub review comment body mismatch: {receipt['id']}")
+        if comment.get("html_url") != receipt["comment_url"] or comment.get("user", {}).get("login") != receipt["comment_author_login"]:
+            raise DecisionRegisterError(f"GitHub review comment identity mismatch: {receipt['id']}")
+        run = _github_json(f"https://api.github.com/repos/horiyamayoh/cxxlens/actions/runs/{connected['run_id']}", token)
+        if (run.get("id") != connected["run_id"] or run.get("html_url") != connected["run_url"] or
+                run.get("head_sha") != receipt["candidate_commit"] or run.get("head_sha") != connected["run_commit"] or
+                run.get("name") != connected["workflow_name"] or run.get("event") != connected["event"] or
+                run.get("conclusion") != "success"):
+            raise DecisionRegisterError(f"connected CI run mismatch: {receipt['id']}")
 
 
 def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
@@ -202,19 +256,28 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
     if len(wip_refs) != len(set(wip_refs)):
         raise DecisionRegisterError("duplicate preserved WIP refs")
     if verify_git:
+        inventory = _load(root / WIP_INVENTORY)
+        inventoried = {entry["ref"]: entry["head"] for entry in inventory.get("refs", [])}
         for entry in register["preserved_wip"]:
-            if _git(root, "rev-parse", entry["ref"]) != entry["exact_head"]:
+            result = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", entry["ref"]], capture_output=True, text=True)
+            actual = result.stdout.strip() if result.returncode == 0 else inventoried.get(entry["ref"])
+            if actual != entry["exact_head"]:
                 raise DecisionRegisterError(f"preserved WIP head replaced: {entry['ref']}")
     return register
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("check",))
+    parser.add_argument("command", choices=("check", "verify-connected"))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
+    parser.add_argument("--github-token", default=None)
     args = parser.parse_args()
     try:
-        validate(args.root.resolve())
+        if args.command == "verify-connected":
+            import os
+            verify_connected(args.root.resolve(), args.github_token or os.environ.get("GITHUB_TOKEN", ""))
+        else:
+            validate(args.root.resolve())
     except DecisionRegisterError as error:
         print(f"development-decision-register: {error}", file=sys.stderr)
         return 1

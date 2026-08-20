@@ -9,7 +9,7 @@ entries:
     conflict_class: governance-global
     integration_owner: '#173'
     authority_sources: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_development_decision_register.yaml]
-    authority_digest: sha256:6e17d9aca70e698c3bd79c9f5b5cbdd9ee5c1bdc5a990c883f94fc6c11e5c850
+    authority_digest: sha256:be41dc26ee82db2dd25608f6a4c6d7ab0b1c74655f142218b12ed2ab63ba1654
     completion_class: autonomy-readiness
     residual_qualification: '#173 remains open for aggregate release; production qualification not claimed'
     units:
@@ -28,7 +28,7 @@ entries:
     conflict_class: provider-protocol
     integration_owner: '#261'
     authority_sources: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:ca072da9271fed5edce6d260c4a3b84f451a67a0f466fac0bbdf3adba388ceb8
+    authority_digest: sha256:60c8b5fe226f433e5a1bf966406a6dff2684a2369dad8627f098fe163a86f143
     completion_class: bounded-implementation
     residual_qualification: installed static/shared and cxxmonster E2E remain explicit later evidence
     units:
@@ -47,7 +47,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:988eb6050dceee2c6e6013e2c9a20e0be4f77dfb220c9cfaed52109b48471bb5
+    authority_digest: sha256:5540a9f2fee383cdab1410747fcc650524fc525a7c63f245c8cdfe3916f73eff
     completion_class: bounded-implementation
     residual_qualification: platform native SQLite tuples remain with integration and release gates
     units:
@@ -66,7 +66,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:988eb6050dceee2c6e6013e2c9a20e0be4f77dfb220c9cfaed52109b48471bb5
+    authority_digest: sha256:5540a9f2fee383cdab1410747fcc650524fc525a7c63f245c8cdfe3916f73eff
     completion_class: bounded-implementation
     residual_qualification: multi-Store and platform qualification remain separate
     units:
@@ -85,7 +85,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, docs/development/implementation-learning/records/df-0202-sqlite-exact-empty-wal-normalization.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:ca0d41383c4ce9457391cd8cb6c835f7be179e0b1df25a56c47efcda39ce45f5
+    authority_digest: sha256:caf4c94cbb8f9258780b1651b038c1fa5cb441fb3a67e817922d87fff265c6ca
     completion_class: bounded-implementation
     residual_qualification: production canonical and user-source activation remains prohibited pending separate review
     units:
@@ -104,7 +104,7 @@ entries:
     conflict_class: materialization-store
     integration_owner: '#200'
     authority_sources: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:b3f6ae3847d780a5196ddea4a7ebce94ef9b4a9a03f8fce9f1c5a8555b1e11ad
+    authority_digest: sha256:bdbfcbcb70b261cd5c5493a8e7f95ed4e06ea3fc9c994b9674e45f6b7d9fff0b
     completion_class: bounded-implementation
     residual_qualification: scale parity and SQLite lazy-read residency are tracked separately
     units:

@@ -20,6 +20,8 @@ Accepted authority references a receipt in
 tree, authority blobs and normalized digest, owner issue and canonical comment body, distinct
 author/reviewer/session, verdict and P0/P1/P2 census, and an exact-candidate connected CI run. The
 acceptance commit may change only declared status/receipt paths and must descend from the candidate.
+To avoid a self-referential commit hash, it is derived as the first descendant commit whose receipt
+registry contains that receipt ID.
 
 Delivery uses atomic fast-forward commits on `main`. A pull request can remain useful review or
 external-contribution evidence, but its existence, review state, or branch status is not correctness

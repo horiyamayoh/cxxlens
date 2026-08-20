@@ -27,15 +27,21 @@ The no-effect boundary begins before target `xOpen`, not after census:
 `unresolved -> runtime-vfs-filesystem-sealed -> retained-parent-held`
 `-> no-effect-boundary-armed -> typed-family-census -> active-read-connection-open`
 `-> wal-lock-and-prefix-held -> mapping-subprotocol-or-private-index`
-`-> eager-decode -> logical-read-receipt -> connection-revoking -> connection-closed`.
+`-> eager-decode -> decoded-read-candidate-sealed -> connection-revoking -> connection-closed`
+`-> zero-effect-callback-receipt-sealed -> logical-read-receipt`.
 
-From `no-effect-boundary-armed` through `logical-read-receipt`, the target family cannot be created,
+From `no-effect-boundary-armed` through `logical-read-receipt`, including every map, unmap, and
+close callback, the target family cannot be created,
 deleted, truncated, resized, renamed, or written. Census uses retained-parent, no-follow typed
 enumeration/open/stat and never re-resolves a host path. Cold active-WAL reading may receive authentic
 `SQLITE_READONLY_CANTINIT/null` and build SQLite's private heap WAL index under `WAL_READ_LOCK(0)`.
 Native `SQLITE_OK`, including null, is fail-closed unless the nested #205 callback path validates.
 Decode is eager and complete while connection, locks, held objects, namespace epoch, and all use
-owners remain pinned. Only then can #201 seal a logical read receipt.
+owners remain pinned. Decode first seals a non-public candidate. The connection then revokes and
+drains all custody, calls authenticated `xShmUnmap(deleteFlag=0)` and `xClose`, and seals an exact
+zero-create/write/truncate/extend/delete/resize callback-effect transcript. Only after connection
+closure, zero live callbacks/leases/use owners, and that zero-effect receipt can #201 seal the
+logical read receipt.
 
 The receipt binds runtime image/source ID/build options, VFS callbacks/app-data, filesystem/mount,
 retained parent, main/WAL/SHM/journal object and directory-entry identities, pre-`xOpen` namespace
@@ -45,17 +51,22 @@ distinct terminal values.
 
 ## #205 nested mapping subprotocol
 
-Each writer or reader `xShmMap` callback follows:
+Writer and reader callbacks share the post-native validation states but have different authentic
+pre-delegation authority. A writer callback follows:
 
 `callback-admitted -> pre-callback-sequence-cut -> attempt-pin-held -> native-started`
 `-> native-outcome-captured -> pending-mapping-receipt -> identity-validated`
 `-> mapping-lease-promoted -> eager-use-owner-held -> handoff-sealed`.
 
-Before delegation there is only a callback-local attempt pin and writer/reader cohort in-flight pin.
-There is no registry lease or pending mapping. Exact native `SQLITE_OK` with a non-null pointer makes
+Before writer delegation there is only a callback-local attempt pin and writer cohort in-flight pin.
+There is no new registry lease or pending mapping. A reader callback, however, must first acquire a
+fresh, page/range-specific pre-delegation pin from an already-live authenticated local writer mapping
+lease and its sealed page-support receipt. Absence, retirement, ambiguity, or cross-process ownership
+rejects the reader before native entry. Exact native `SQLITE_OK` with a non-null pointer makes
 a non-authoritative pending receipt. Promotion occurs only after page, size, pointer, extend pair,
 mapping generation, process instance, PID/fork generation, runtime/VFS/filesystem/file-family,
-SHM object/entry/mount, namespace watch, and all current Store writer gates validate. Simultaneous
+SHM object/entry/mount, namespace watch, the exact zero-effect callback receipt, and all current Store
+writer gates validate. Simultaneous
 first writers may install or join one exact generation only through CAS on the complete key.
 
 The production exception can translate exactly one promoted native `SQLITE_OK/non-null` to
@@ -79,29 +90,46 @@ The only teardown order is:
 2. revoke new mapping and use-owner admission;
 3. retain lifetime pins while all already admitted callbacks and eager-use owners drain;
 4. seal the complete member/use-owner census;
-5. delegate at most one authenticated native unmap/close for its owner;
-6. capture the exact outcome, retire generation and registry entries, then release pins/cleanup.
+5. delegate at most one authenticated native `xShmUnmap(deleteFlag=0)` and `xClose` for their distinct owners;
+6. capture their exact zero-effect outcomes, seal the callback-effect transcript, retire generation
+   and registry entries, then release pins/cleanup.
 
 A native-started callback that returns after the cut remains an original-callback drain only. It
 cannot publish a mapping, successor, or fresh cleanup authority. Same-thread/reentrant retirement
 returns the exact outer `SQLITE_IOERR` and permanently quarantines the handle/lease. Unknown callback,
 unmap, close, unload, or cleanup outcome also creates a permanent non-reusable quarantine tombstone;
-there is no retry or reconstruction. Revoke always precedes cleanup and VFS unload.
+there is no retry or reconstruction. Revoke always precedes cleanup and VFS unload. Every callback
+receipt proves zero initialize/create, write, truncate, extend, delete, and resize effect; identity
+continuity alone is never such proof.
+
+Fork is not an ordinary drain. `pthread_atfork` prepare seals admission and records the complete
+custody census; the parent handler revalidates process/fork generation before resuming. The child
+handler atomically moves all inherited connection, callback, mapping, cleanup, and lifetime custody
+to `child-inherited-custody-quarantine`. That child terminal permits no SQLite entry, native unmap,
+close, retry, cleanup, or authority reconstruction; vanished parent-thread owners are never awaited.
+Only child process exit/exec may discard the private inherited address-space copy.
 
 ## #202 independently reviewed effect profile
 
-The effect machine is not entered by raw census. Its sole entry is:
+The effect machine is not entered by raw census or a decoded candidate. Its sole entry is:
 
-`logical-read-receipt(exact-empty) -> receipt-revalidated -> effect-profile-capability-sealed`
+`logical-read-receipt(exact-empty, connection-closed, zero-live-custody, zero-effect-receipt)`
+`-> receipt-revalidated -> effect-profile-capability-sealed`
 `-> exclusive-normalization-owner -> pre-effect-sealed -> effect-journal-open`
 `-> permitted-callback-effects -> file-and-parent-durable -> confirmed-close`
 `-> post-close-census -> normalization-receipt -> ordinary-fresh-init`.
 
-The accepted DF-0202 fixture authority and its closed `F0`, `FZ-pre`, `FZ-post`, `FP`, `FH`, `FI`,
-and `FO` partitions remain exact; this ADR does not merge, rename, or broaden them. `F0/FP/FH/FZ-pre`
-may reach the fixture normalizer only through their required cleanup/recovery. `FO/FI/FZ-post` may
-reach only an independently validated rollback-empty fresh anchor. No path infers cold operation
-history, a completed edge, or success.
+The accepted DF-0202 fixture authority remains an executable closed partition, not a label census:
+
+- `F0 -> live-receipt -> fixture-normalizer`.
+- `FP/FH -> authenticated cleanup-or-recovery -> independently-revalidated F0 -> new-live-receipt`.
+- `FZ-pre -> coordination-WAL cleanup -> parent-sync -> independently-revalidated F0 -> new-live-receipt`.
+- `FI/FZ-post/FO -> independently-validated rollback-empty-fresh-anchor` only; none is a completed
+  normalization edge and none may mint or reuse a live receipt.
+
+Each family has `pre-effect`, `effect-admitted`, `recoverable-interruption`, `recrash-classified`, and
+its listed terminal route. A recrash re-enters the same seven-family classifier from durable bytes;
+it cannot resume from in-memory phase, merge families, or cross-route to success.
 
 Eligibility binds the original accepted-empty recovery receipt, same main object/entry, continuous
 namespace epoch, exclusive lock, exact pre-main bytes, VFS/runtime/device/build profile, sidecar
@@ -125,7 +153,8 @@ fresh initialization, never Store/public success. Fixture-only capability cannot
 | callback attempt | callback cut, attempt/in-flight pin, requested page/size/extend | registry lease |
 | native outcome | exact return and pointer | promoted mapping or database validity |
 | promoted lease | full mapping/process/runtime/file-family identity and generation | logical read success or CAS |
-| eager decode | locks, mapping/private-index receipts, decoded values | read receipt before complete decode |
+| eager decode | locks, mapping/private-index receipts, decoded values | public read receipt or effect entry |
+| closed read candidate | decoded candidate, closed connection, zero live custody, exact zero-effect callback receipt | normalization before all four predicates |
 | effect pre-seal | exact-empty logical receipt and profile capability | post-effect identity or fresh success |
 | terminal/quarantine | original outcome, full owner census, cleanup evidence | values from an unentered later phase |
 
@@ -136,7 +165,7 @@ fresh initialization, never Store/public success. Fixture-only capability cannot
 | before/inside #201 read or map | source unchanged | revoke, drain, unmap/close, typed fail-closed |
 | callback returns after cut | source unchanged by reader | original drain only; permanent quarantine on ambiguity |
 | fork/PID reuse/VFS unload/replacement/ABA | source unchanged by reader | hide/revoke before cleanup; no successor until census drains |
-| before #202 effect | source unchanged | release exclusive owner; discard receipt |
+| before #202 effect | source unchanged and #201 connection closed | release exclusive owner; discard receipt |
 | during fixture normalization | exact DF-0202 old or journaled recoverable state | follow F0/FZ-pre/FZ-post/FP/FH/FI/FO matrix; no blind retry |
 | after durable normalization before fresh init | durable exact-empty rollback state | consume same receipt once or reclassify |
 | during fresh init | existing atomic Store initialization states | existing recovery; no intermediate public success |
@@ -144,14 +173,21 @@ fresh initialization, never Store/public success. Fixture-only capability cannot
 
 ## Counterexamples and acceptance
 
-Reject first-map mutation, census-selected normalization, pre-delegation lease, `OK+null`, different
-pointer, incomplete member/use-owner census, stale/ABA/fork/PID/VFS lease, unload before revoke,
-callback retry, inferred cleanup, cross-branch fallback, fixture-to-production promotion, missing
+Reject first-map mutation, census-selected normalization, writer pre-delegation lease, reader native
+entry without a fresh authenticated writer-lease pin, `OK+null`, different pointer, incomplete
+member/use-owner census, stale/ABA/fork/PID/VFS lease, unload before revoke, callback effect without
+an exact zero-effect receipt, nonzero unmap delete flag, callback retry, ordinary-drain fork handling,
+#202 entry before connection-close/zero-custody, inferred cleanup, cross-branch fallback,
+fixture-to-production promotion, missing
 parent fsync, non-empty normalization, sidecar ambiguity, and CAS reclassification.
 
 The constructibility witness must cover cold active-WAL read, private-index fallback, nested native
 mapping success/failure, multi-page attachment, two-live-Store CAS, all revoke/unload/fork/ABA and late
-callback cuts, and every DF-0202 callback/recrash partition. #201/#205 may be accepted together only
+callback cuts, and every executable DF-0202 callback/recrash partition. Future production activation
+additionally requires the repository-tracked harness, exact loaded SQLite DSO identity,
+callback/recrash, large-sector, rebind and parent-sync matrices, canonical report digest, a distinct
+exact-implementation review, and an explicit Accepted profile replacing the prohibition. Review
+receipt alone is insufficient. #201/#205 may be accepted together only
 after an exact-candidate P0/P1-zero review. #202 requires a distinct later review receipt and remains
 production-inactive even if #201/#205 are accepted.
 

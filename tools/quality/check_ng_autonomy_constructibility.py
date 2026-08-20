@@ -73,14 +73,18 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     mapping = machines["sqlite_read_mapping"]
     require_exact(mapping["nesting"], "#205-inside-#201-active-read-connection", "SQLite nesting")
     require_exact(mapping["no_effect_boundary"], "before-target-xOpen", "SQLite no-effect boundary")
-    require_exact(mapping["predelegation_authority"], "attempt-and-in-flight-pin-only", "predelegation authority")
-    require_exact(mapping["teardown_order"], ["hide-generation", "seal-pre-callback-cut", "revoke-admission", "drain-callbacks-and-use-owners", "seal-owner-census", "native-unmap-or-close-once", "capture-outcome", "retire-registry", "release-pins"], "SQLite teardown order")
+    require_exact(mapping["predelegation_authority"], {"writer": "attempt-and-in-flight-pin-only", "reader": "fresh-active-writer-lease-page-support-pin-required-before-native"}, "predelegation authority")
+    require_exact(mapping["teardown_order"], ["hide-generation", "seal-pre-callback-cut", "revoke-admission", "drain-callbacks-and-use-owners", "seal-owner-census", "native-unmap-deleteFlag-zero-then-close-once", "capture-zero-effect-outcomes", "retire-registry", "release-pins"], "SQLite teardown order")
+    require_exact(mapping["zero_effect_receipt"], ["initialize", "create", "write", "truncate", "extend", "delete", "resize"], "SQLite zero-effect receipt")
+    require_exact(mapping["read_receipt_barrier"], ["connection-closed", "zero-live-callbacks-leases-and-use-owners", "zero-effect-callback-receipt-sealed"], "SQLite read receipt barrier")
+    require_exact(mapping["fork_machine"], {"prepare": "seal-admission-and-census", "parent": "revalidate-process-and-fork-generation", "child": "inherited-custody-quarantine-zero-native-cleanup-no-drain"}, "SQLite fork machine")
     require_exact(mapping["ambiguous_callback"], "permanent-quarantine-no-retry", "ambiguous callback")
 
     effect = machines["sqlite_normalization_effect"]
     require_exact(effect["separate_from_zero_effect_read"], True, "normalization isolation")
-    require_exact(effect["entry"], "logical-read-receipt-exact-empty", "normalization entry")
-    require_exact(effect["fixture_partitions"], ["F0", "FZ-pre", "FZ-post", "FP", "FH", "FI", "FO"], "DF-0202 partition")
+    require_exact(effect["entry"], "logical-read-receipt-exact-empty-after-connection-closed-zero-custody-zero-effect", "normalization entry")
+    require_exact(effect["fixture_partition_machine"], {"F0": "live-receipt-to-fixture-normalizer", "FP": "cleanup-or-recovery-to-independently-revalidated-F0-new-live-receipt", "FH": "cleanup-or-recovery-to-independently-revalidated-F0-new-live-receipt", "FZ-pre": "coordination-WAL-cleanup-parent-sync-to-independently-revalidated-F0-new-live-receipt", "FI": "rollback-empty-fresh-anchor-only-never-completed-edge", "FZ-post": "rollback-empty-fresh-anchor-only-never-completed-edge", "FO": "rollback-empty-fresh-anchor-only-never-completed-edge"}, "DF-0202 partition machine")
+    require_exact(effect["family_phase_machine"], ["pre-effect", "effect-admitted", "recoverable-interruption", "recrash-classified", "terminal-route"], "DF-0202 family phases")
     require_exact(effect["canonical_user_source_activation"], "prohibited", "production normalization activation")
     require_exact(effect["parent_sync_after_each_delete"], "required", "normalization parent sync")
     return model

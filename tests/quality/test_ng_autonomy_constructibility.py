@@ -56,10 +56,10 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "tail is not reserved"):
                 validate(root)
 
-    def test_predelegation_lease_is_rejected(self) -> None:
+    def test_reader_without_predelegation_lease_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
-            self.rewrite(root, lambda value: value["machines"]["sqlite_read_mapping"].__setitem__("predelegation_authority", "lease"))
+            self.rewrite(root, lambda value: value["machines"]["sqlite_read_mapping"]["predelegation_authority"].__setitem__("reader", "post-native"))
             with self.assertRaisesRegex(ConstructibilityError, "predelegation authority"):
                 validate(root)
 
@@ -68,6 +68,20 @@ class ConstructibilityTest(unittest.TestCase):
             root = self.copied_root(temporary)
             self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"].__setitem__("entry", "physical-census"))
             with self.assertRaisesRegex(ConstructibilityError, "normalization entry"):
+                validate(root)
+
+    def test_missing_zero_effect_barrier_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["sqlite_read_mapping"].__setitem__("read_receipt_barrier", ["connection-closed"]))
+            with self.assertRaisesRegex(ConstructibilityError, "read receipt barrier"):
+                validate(root)
+
+    def test_flat_partition_census_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"].__setitem__("fixture_partition_machine", {"F0": "only"}))
+            with self.assertRaisesRegex(ConstructibilityError, "partition machine"):
                 validate(root)
 
 

@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  issues: read
 
 jobs:
   exact-sha-fast:
@@ -24,8 +26,11 @@ jobs:
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           test "$(git status --porcelain=v1 --untracked-files=all)" = ""
       - name: Validate autonomy authority and negative corpus
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 tools/quality/check_ng_development_decisions.py check --root .
+          python3 tools/quality/check_ng_development_decisions.py verify-connected --root .
           python3 tools/quality/check_ng_work_units.py check --root .
           python3 tools/quality/check_ng_autonomy_constructibility.py check --root .
           python3 tools/quality/check_ng_wip_inventory.py check --root .
