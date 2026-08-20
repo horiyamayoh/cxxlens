@@ -28,6 +28,9 @@ WORKFLOWS = (
     pathlib.Path(".github/workflows/quality.yml"),
     pathlib.Path(".github/workflows/nightly.yml"),
     pathlib.Path(".github/workflows/pr-integration.yml"),
+    pathlib.Path(".github/workflows/autonomy-fast.yml"),
+    pathlib.Path(".github/workflows/autonomy-heavy.yml"),
+    pathlib.Path(".github/workflows/autonomy-release-evaluation.yml"),
 )
 REQUIREMENT = re.compile(
     r"^([A-Za-z0-9_.-]+)==([^\s]+)\s+--hash=sha256:([0-9a-f]{64})$"

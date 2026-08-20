@@ -1,0 +1,31 @@
+schema: cxxlens.ng-autonomy-ci.v1
+document_version: 1.0.0
+fast:
+  workflow: .github/workflows/autonomy-fast.yml
+  event: every-main-commit
+  cancellation: forbidden
+  artifact_binding: exact-sha
+  evidence: [authority, schema, checksum, documentation, work-unit, review-receipt, changed-scope-fast]
+heavy:
+  workflow: .github/workflows/autonomy-heavy.yml
+  trigger: successful-autonomy-fast
+  coalescing: latest-origin-main-only
+  stale_disposition: superseded-report-only
+  cancellation: prior-heavy-only
+  evidence: [full, static-shared-install, sqlite-g5-integration]
+nightly:
+  workflow: .github/workflows/nightly.yml
+  valid_events: [schedule, workflow_dispatch]
+  candidate: latest-origin-main-at-start
+  evidence: [asan-ubsan, tsan, static-analysis, scale]
+release:
+  workflow: .github/workflows/autonomy-release-evaluation.yml
+  event: workflow_dispatch-only
+  candidate_rule: candidate-equals-current-origin-main
+  cancellation: forbidden
+  composition: {aggregate_decision: '#173', gr_execution_contract: '#167', scope_closure_contract: '#179'}
+  current_capability: not-qualified-evaluation-only-no-gr
+  required_future_inputs: [exact-successful-heavy, exact-successful-nightly, authenticated-gr-report, authenticated-terminal-scope-report]
+legacy:
+  workflow: .github/workflows/quality.yml
+  evidence_disposition: compatibility-only-not-autonomy-release-input

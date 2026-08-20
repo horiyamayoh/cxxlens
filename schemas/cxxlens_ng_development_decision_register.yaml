@@ -30,7 +30,7 @@ decisions:
     implementation_status: partial
     qualification_status: not-claimed
     activation: active-by-workflow-amendment
-    authority_refs: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md]
+    authority_refs: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_autonomy_ci.yaml]
   - id: decision.release.composed-authority
     title: Compose aggregate decision, GR execution, and terminal scope closure
     owner_issues: ['#173', '#167', '#179']
@@ -44,7 +44,7 @@ decisions:
     implementation_status: partial
     qualification_status: not-claimed
     activation: blocked-until-accepted-review
-    authority_refs: [docs/design/adr/0095-production-scope-closure.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_release_qualification.yaml]
+    authority_refs: [docs/design/adr/0095-production-scope-closure.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_release_qualification.yaml, schemas/cxxlens_ng_autonomy_ci.yaml]
   - id: decision.source-closure.dedicated-transport
     title: Add request 2.2 task v4 and dedicated source-closure transport
     owner_issues: ['#261']

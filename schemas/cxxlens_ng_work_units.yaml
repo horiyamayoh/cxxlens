@@ -9,7 +9,7 @@ entries:
     conflict_class: governance-global
     integration_owner: '#173'
     authority_sources: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_development_decision_register.yaml]
-    authority_digest: sha256:a62a8d316ebeae5250c3efba8ed9f5585133bda8784997e8ab5fd4354dec5167
+    authority_digest: sha256:6e17d9aca70e698c3bd79c9f5b5cbdd9ee5c1bdc5a990c883f94fc6c11e5c850
     completion_class: autonomy-readiness
     residual_qualification: '#173 remains open for aggregate release; production qualification not claimed'
     units:
@@ -18,7 +18,7 @@ entries:
         state: ready
         depends_on: []
         serialized_with: []
-        owned_paths: [docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_wip_inventory.yaml, schemas/cxxlens_ng_wip_inventory.schema.yaml, schemas/cxxlens_ng_work_units.yaml, schemas/cxxlens_ng_work_units.schema.yaml, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_wip_inventory.py, tools/quality/check_ng_work_units.py, tests/quality/test_ng_development_decisions.py, tests/quality/test_ng_wip_inventory.py, tests/quality/test_ng_work_units.py]
+        owned_paths: [.github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_autonomy_ci.schema.yaml, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_wip_inventory.yaml, schemas/cxxlens_ng_wip_inventory.schema.yaml, schemas/cxxlens_ng_work_units.yaml, schemas/cxxlens_ng_work_units.schema.yaml, tools/quality/check_ng_autonomy_ci.py, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_wip_inventory.py, tools/quality/check_ng_work_units.py, tests/quality/test_ng_autonomy_ci.py, tests/quality/test_ng_development_decisions.py, tests/quality/test_ng_wip_inventory.py, tests/quality/test_ng_work_units.py]
         consumed_paths: [schemas/cxxlens_ng_release_qualification.yaml]
         generated_surfaces: [docs/design/SHA256SUMS, schemas/cxxlens_asset_migration_ledger.json]
         forbidden_shortcuts: [self-review, accepted-with-p1, stale-ci-promotion, branch-or-pr-as-correctness-authority]

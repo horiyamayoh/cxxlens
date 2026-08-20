@@ -1,6 +1,6 @@
 schema: cxxlens.ng-ci-supply-chain-contract.v1
 kind: ci-supply-chain-contract
-document_version: 1.6.0
+document_version: 1.7.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -21,7 +21,7 @@ dependency_lock:
   transitive: exact-version-and-sha256
   distributions: binary-only
 workflow:
-  files: [.github/workflows/quality.yml, .github/workflows/nightly.yml]
+  files: [.github/workflows/quality.yml, .github/workflows/nightly.yml, .github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml]
   action_revision: full-commit-sha
   local_workflow_digest: sha256-from-supply-chain-lock
   runner_label: ubuntu-24.04

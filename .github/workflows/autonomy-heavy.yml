@@ -1,0 +1,81 @@
+name: Autonomy heavy
+
+on:
+  workflow_run:
+    workflows: ["Autonomy fast"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact successful Autonomy fast main SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: autonomy-heavy-latest-main
+  cancel-in-progress: true
+
+jobs:
+  freshness:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    outputs:
+      disposition: ${{ steps.classify.outputs.disposition }}
+      candidate_sha: ${{ steps.classify.outputs.candidate_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - id: classify
+        name: Classify exact candidate freshness
+        # A stale candidate produces only the uploaded superseded freshness report.
+        env:
+          EVENT_CANDIDATE: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_CANDIDATE: ${{ inputs.candidate_sha }}
+        run: |
+          python3 tools/quality/check_ng_autonomy_ci.py classify-heavy \
+            --candidate "${EVENT_CANDIDATE:-${DISPATCH_CANDIDATE}}" \
+            --github-output "${GITHUB_OUTPUT}" \
+            --report "${RUNNER_TEMP}/cxxlens-autonomy-heavy-freshness.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-autonomy-heavy-freshness-${{ steps.classify.outputs.candidate_sha }}
+          path: ${{ runner.temp }}/cxxlens-autonomy-heavy-freshness.json
+          if-no-files-found: error
+
+  exact-latest-heavy:
+    needs: freshness
+    if: needs.freshness.outputs.disposition == 'current'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ needs.freshness.outputs.candidate_sha }}
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+      - name: Run coalesced full integration gate
+        env:
+          CXX: clang++-22
+          CXXLENS_CI_TIER: full
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ needs.freshness.outputs.candidate_sha }}"
+          python3 tools/quality/run_gate.py full \
+            --preset ci-quick \
+            --configure \
+            --cmake-arg=-DCXXLENS_CLANG_ADAPTER=ON \
+            --report "${RUNNER_TEMP}/cxxlens-autonomy-heavy.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-autonomy-heavy-${{ needs.freshness.outputs.candidate_sha }}
+          path: |
+            ${{ runner.temp }}/cxxlens-autonomy-heavy.json
+            ${{ runner.temp }}/cxxlens-autonomy-heavy.junit.xml
+          if-no-files-found: error

@@ -1,5 +1,5 @@
 {
-  "asset_count": 743,
+  "asset_count": 750,
   "assets": [
     {
       "authority": "active",
@@ -46,6 +46,27 @@
     {
       "authority": "active",
       "path": ".github/dependabot.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/autonomy-fast.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/autonomy-heavy.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/autonomy-release-evaluation.yml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1901,6 +1922,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_autonomy_ci.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_autonomy_ci.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4315,6 +4350,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_autonomy_ci.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_autonomy_constructibility.py",
       "removal_issue": null,
       "replacement": null,
@@ -4868,6 +4910,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_autonomy_ci.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_autonomy_constructibility.py",
       "removal_issue": null,
       "replacement": null,
@@ -5204,7 +5253,7 @@
     }
   ],
   "classifications": {
-    "active": 707,
+    "active": 714,
     "archived": 35,
     "generated": 1
   },

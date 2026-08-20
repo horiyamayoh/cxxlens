@@ -66,6 +66,21 @@ Unverified WIP branches, worktrees, and PRs retain exact-head provenance and are
 because a different decision won. Reuse requires a fresh diff against accepted authority and focused
 evidence; green historical CI alone is insufficient.
 
+## CI freshness and release composition
+
+`Autonomy fast` runs for every main SHA without cancellation and preserves exact-SHA authority,
+schema, work-unit, receipt, documentation, checksum, and bounded fast-gate evidence. A successful
+Fast run triggers `Autonomy heavy`; its concurrency group coalesces work, but the freshness job first
+compares the candidate with current `origin/main`. A stale candidate emits only a `superseded`
+report. Only the current candidate can run the full integration gate.
+
+Nightly evidence is release-eligible only when entered by schedule or explicit dispatch and bound to
+latest main at start; legacy reusable invocations and the legacy Quality workflow remain compatibility
+evidence, not inputs to the autonomy release authority. Release evaluation is non-cancelled,
+dispatch-only, and requires `candidate_sha == current origin/main`. Its current implementation emits
+only `not-qualified` and never GR. Future qualified evaluation must authenticate exact successful
+Heavy and Nightly, #167 GR execution, and #179 terminal scope closure before #173 aggregates them.
+
 ## Failure and recovery matrix
 
 | Failure | Repository effect | Required action |
