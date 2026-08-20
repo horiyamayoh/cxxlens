@@ -48,6 +48,13 @@ properties:
               serialized_with: {type: array, uniqueItems: true, items: {$ref: '#/$defs/unit'}}
               owned_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
               consumed_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
+              product_receipt_surfaces:
+                type: object
+                additionalProperties:
+                  type: object
+                  additionalProperties: false
+                  required: [artifact_path, evidence_path]
+                  properties: {artifact_path: {$ref: '#/$defs/path'}, evidence_path: {$ref: '#/$defs/path'}}
               owned_paths: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/path'}}
               consumed_paths: {type: array, uniqueItems: true, items: {$ref: '#/$defs/path'}}
               generated_surfaces: {type: array, uniqueItems: true, items: {$ref: '#/$defs/path'}}

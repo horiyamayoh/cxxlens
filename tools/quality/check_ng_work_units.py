@@ -106,13 +106,24 @@ def _authenticate_available_receipt(
     product: str,
     receipt: dict[str, Any],
     producer_id: str,
+    producer: dict[str, Any],
 ) -> None:
     if receipt["producer_unit"] != producer_id:
         raise WorkUnitError(f"product receipt producer mismatch: {product}")
     commit = receipt["producer_commit"]
+    if _git_bytes(root, "cat-file", "-t", commit) != b"commit\n":
+        raise WorkUnitError(f"product receipt producer is not a commit: {product}")
     tree = _git_bytes(root, "rev-parse", f"{commit}^{{tree}}").decode("ascii").strip()
     if tree != receipt["producer_tree"]:
         raise WorkUnitError(f"product receipt tree mismatch: {product}")
+    surfaces = producer.get("product_receipt_surfaces", {}).get(product)
+    if surfaces is None or surfaces != {
+        "artifact_path": receipt["artifact_path"],
+        "evidence_path": receipt["evidence_path"],
+    }:
+        raise WorkUnitError(f"product receipt surface mismatch: {product}")
+    if not all(path in producer["owned_paths"] for path in surfaces.values()):
+        raise WorkUnitError(f"product receipt surface is not producer-owned: {product}")
     for role in ("artifact", "evidence"):
         path = receipt[f"{role}_path"]
         payload = _git_bytes(root, "show", f"{commit}:{path}")
@@ -160,6 +171,8 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
                 if product in product_owners:
                     raise WorkUnitError(f"duplicate product owner: {product}")
                 product_owners[product] = identifier
+            if set(unit.get("product_receipt_surfaces", {})) != set(unit["owned_products"]):
+                raise WorkUnitError(f"product receipt surface census mismatch: {identifier}")
             for generated in unit["generated_surfaces"]:
                 if any(path_conflicts(generated, owned) for owned in unit["owned_paths"]):
                     raise WorkUnitError(f"generated surface must remain integration-owned: {identifier}:{generated}")
@@ -184,7 +197,8 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
                 receipt["receipt_profile"] != "exact-producer-commit-tree-artifact-and-evidence-digests"):
             raise WorkUnitError(f"product receipt contract drift: {product}")
         if receipt["status"] == "available":
-            _authenticate_available_receipt(root, product, receipt, product_owners[product])
+            producer_id = product_owners[product]
+            _authenticate_available_receipt(root, product, receipt, producer_id, units[producer_id])
 
     identifiers = sorted(units)
     for index, left_id in enumerate(identifiers):

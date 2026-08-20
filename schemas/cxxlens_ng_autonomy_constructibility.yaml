@@ -83,7 +83,7 @@ machines:
       forbidden: reader-retirement-claims-independent-writer-retirement
     outer_custody_kinds: [connection, callback-attempt, reservation, mapping-lease, reader-attachment, use-owner, cleanup-owner, close-owner, uncertainty-owner]
     outer_join_terminal_profiles: {retired: authenticated-terminal-receipt, quarantined: permanent-tombstone-with-retained-custody, enrollment: atomically-sealed-before-join, duplicate_or_late: reject}
-    outer_join_receipt_profile: {enrollment_key: kind-plus-instance-id, enrollment_binding: sha256-kind-instance-outer-connection-generation, terminal_binding: sha256-enrollment-digest-terminal-outcome, join_predicate: exact-enrolled-instance-set-equals-authenticated-terminal-receipt-set}
+    outer_join_receipt_profile: {enrollment_key: kind-plus-instance-id, enrollment_binding: sha256-kind-instance-outer-connection-generation, terminal_binding: issuer-minted-nonserializable-capability-plus-enrollment-and-terminal, join_predicate: exact-enrolled-instance-set-equals-issuer-authenticated-terminal-receipt-set}
     zero_effect_receipt: [initialize, create, write, truncate, extend, delete, resize]
     read_receipt_barrier: [outer-custody-join-sealed, connection-closed, outer-scoped-zero-live-callbacks-leases-and-use-owners, zero-effect-callback-receipt-sealed]
     fork_transition_graph:
@@ -97,13 +97,13 @@ machines:
     child_quarantine_forbidden: [SQLite-entry, native-unmap, native-close, retry, cleanup, owner-drain, authority-reconstruction]
     ambiguous_callback: permanent-quarantine-no-retry
     revocation_events:
-      aba: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
-      vfs-unload-request: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: vfs-unloaded}
-      file-replacement: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
-      directory-replacement: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
-      watch-loss-or-overflow: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
-      wal-reset-or-resize: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, terminal: outer-custody-join-pending}
-      ambiguous-callback: {outer: connection-revoking, writer: terminal-opaque-quarantine, reader: reader-terminal-opaque-quarantine, terminal: outer-custody-join-pending}
+      aba: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, continuation: outer-custody-join-pending}
+      vfs-unload-request: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, continuation: vfs-unload-request}
+      file-replacement: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, continuation: outer-custody-join-pending}
+      directory-replacement: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, continuation: outer-custody-join-pending}
+      watch-loss-or-overflow: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, continuation: outer-custody-join-pending}
+      wal-reset-or-resize: {outer: connection-revoking, writer: hide-generation, reader: hide-reader-generation, continuation: outer-custody-join-pending}
+      ambiguous-callback: {outer: connection-revoking, writer: terminal-opaque-quarantine, reader: reader-terminal-opaque-quarantine, continuation: outer-custody-join-pending}
     unload_transition_graph: {vfs-unload-request: connection-revoking, connection-revoking: outer-custody-join-pending, outer-custody-join-pending: outer-custody-join-sealed, outer-custody-join-sealed: unload-permitted, unload-permitted: vfs-unloaded, vfs-unloaded: []}
     production_activation_predicate: [accepted-independent-review, exact-static-shared-runtime-vfs-sqlite-dso-source-id-hash-build-toolchain-identity, two-live-store-cas, materialization-race, cross-process-race, cantinit-readonly-negative, pending-only-state-rejection, four-extend-pairs, simultaneous-first-writer-join-and-mismatch, w2-retirement-ordering, new-page-size-update, duplicate-fd-lock-loss, native-close-pinning, timeout-and-unknown-outcomes, same-page-successor, different-page-successor-rejection, fork-aba-unload-replacement, connected-main-ci-and-platform-qualification]
   sqlite_normalization_effect:

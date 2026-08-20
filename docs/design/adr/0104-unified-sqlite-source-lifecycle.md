@@ -126,7 +126,9 @@ only then seals `outer-custody-join-sealed`. Unrelated live writers are explicit
 census; a missing writer terminal or reader terminal blocks the join, and reader retirement alone
 cannot satisfy it. Enrollment is an atomically sealed set of `(custody kind, instance ID,
 outer-generation digest)` records. The join requires an authenticated terminal receipt for every
-enrolled instance, rejects omitted additional instances and fabricated or duplicate receipts, and
+enrolled instance. A terminal receipt is a nonserializable capability minted only by the lifecycle
+issuer when that exact enrolled instance reaches `retired` or permanent `quarantined`; a digest over
+public enrollment fields is not authentication. The join rejects omitted additional instances and fabricated or duplicate receipts, and
 does not reduce the census to one row per custody kind. VFS unload has an executable causal path
 `request -> revoke -> join-pending -> join-sealed -> unload-permitted -> unloaded`; no declarative
 terminal label can bypass that path.

@@ -228,6 +228,16 @@ class ConstructibilityTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(ConstructibilityError, "unload transition graph"):
                 validate(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"][
+                    "revocation_events"
+                ]["vfs-unload-request"].update({"continuation": "vfs-unloaded"}),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "revocation event"):
+                validate(root)
 
     def test_revocation_event_cannot_jump_to_success(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -161,6 +161,22 @@ def execute_store_symbolic_witness(store: dict[str, Any]) -> None:
         except ConstructibilityError:
             continue
         raise ConstructibilityError("Store reordered physical backend rows were accepted")
+    multi_partition_rows = [
+        {"kind": "partition-begin", "key": "p0", "payload": b"begin", "ordinal": 99},
+        {"kind": "partition-end", "key": "p0", "payload": b"end", "ordinal": 0},
+        {"kind": "partition-begin", "key": "p1", "payload": b"begin", "ordinal": 98},
+        {"kind": "partition-end", "key": "p1", "payload": b"end", "ordinal": 1},
+    ]
+    build_actual_projection(multi_partition_rows)
+    rank_first_cross_partition = [
+        multi_partition_rows[0], multi_partition_rows[2], multi_partition_rows[1], multi_partition_rows[3]
+    ]
+    try:
+        build_actual_projection(rank_first_cross_partition)
+    except ConstructibilityError:
+        pass
+    else:
+        raise ConstructibilityError("Store rank-first cross-partition cursor was accepted")
 
     expected_policy = {
         "not-attempted": {"response": "typed-failure", "exit": 1, "recovery_authority": "none"},
@@ -371,19 +387,27 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     custody_kinds = ["connection", "callback-attempt", "reservation", "mapping-lease", "reader-attachment", "use-owner", "cleanup-owner", "close-owner", "uncertainty-owner"]
     require_exact(mapping["outer_custody_kinds"], custody_kinds, "SQLite outer custody kinds")
     require_exact(mapping["outer_join_terminal_profiles"], {"retired": "authenticated-terminal-receipt", "quarantined": "permanent-tombstone-with-retained-custody", "enrollment": "atomically-sealed-before-join", "duplicate_or_late": "reject"}, "SQLite outer join profiles")
-    require_exact(mapping["outer_join_receipt_profile"], {"enrollment_key": "kind-plus-instance-id", "enrollment_binding": "sha256-kind-instance-outer-connection-generation", "terminal_binding": "sha256-enrollment-digest-terminal-outcome", "join_predicate": "exact-enrolled-instance-set-equals-authenticated-terminal-receipt-set"}, "SQLite outer join receipt profile")
+    require_exact(mapping["outer_join_receipt_profile"], {"enrollment_key": "kind-plus-instance-id", "enrollment_binding": "sha256-kind-instance-outer-connection-generation", "terminal_binding": "issuer-minted-nonserializable-capability-plus-enrollment-and-terminal", "join_predicate": "exact-enrolled-instance-set-equals-issuer-authenticated-terminal-receipt-set"}, "SQLite outer join receipt profile")
 
     def enrollment_digest(kind: str, identifier: str) -> str:
         body = b"cxxlens.sqlite-outer-custody-enrollment.v1\0" + kind.encode() + b"\0" + identifier.encode() + b"\0outer-generation-7"
         return "sha256:" + hashlib.sha256(body).hexdigest()
 
-    def terminal_digest(enrollment: str, terminal: str) -> str:
-        body = b"cxxlens.sqlite-outer-custody-terminal.v1\0" + enrollment.encode() + b"\0" + terminal.encode()
-        return "sha256:" + hashlib.sha256(body).hexdigest()
+    minted_receipts: dict[object, tuple[str, str, str, str]] = {}
 
-    def seals_outer_join(enrolled: list[dict[str, str]], receipts: list[dict[str, str]], *, enrollment_sealed: bool) -> bool:
+    def mint_terminal_receipt(enrollment: dict[str, str], terminal: str) -> object:
+        if terminal not in {"retired", "quarantined"}:
+            raise ConstructibilityError("SQLite terminal issuer received unknown terminal")
+        capability = object()
+        minted_receipts[capability] = (enrollment["kind"], enrollment["identifier"], enrollment["enrollment_digest"], terminal)
+        return capability
+
+    def seals_outer_join(enrolled: list[dict[str, str]], receipts: list[object], *, enrollment_sealed: bool) -> bool:
         enrolled_by_key = {(row["kind"], row["identifier"]): row for row in enrolled}
-        receipt_by_key = {(row["kind"], row["identifier"]): row for row in receipts}
+        authenticated = [minted_receipts.get(receipt) for receipt in receipts]
+        if any(row is None for row in authenticated):
+            return False
+        receipt_by_key = {(row[0], row[1]): row for row in authenticated if row is not None}
         if (not enrollment_sealed or len(enrolled_by_key) != len(enrolled) or
                 len(receipt_by_key) != len(receipts) or set(enrolled_by_key) != set(receipt_by_key) or
                 set(row["kind"] for row in enrolled) != set(custody_kinds)):
@@ -392,9 +416,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
             receipt = receipt_by_key[key]
             expected_enrollment = enrollment_digest(*key)
             if (enrollment["enrollment_digest"] != expected_enrollment or
-                    receipt["enrollment_digest"] != expected_enrollment or
-                    receipt["terminal"] not in {"retired", "quarantined"} or
-                    receipt["receipt_digest"] != terminal_digest(expected_enrollment, receipt["terminal"])):
+                    receipt[2] != expected_enrollment or receipt[3] not in {"retired", "quarantined"}):
                 return False
         return True
 
@@ -403,20 +425,19 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         for index, kind in enumerate(custody_kinds)
     ]
     enrolled.append({"kind": "mapping-lease", "identifier": "owner-extra", "enrollment_digest": enrollment_digest("mapping-lease", "owner-extra")})
-    complete_custody = [
-        {**row, "terminal": "retired", "receipt_digest": terminal_digest(row["enrollment_digest"], "retired")}
-        for row in enrolled
-    ]
+    complete_custody = [mint_terminal_receipt(row, "retired") for row in enrolled]
     if not seals_outer_join(enrolled, complete_custody, enrollment_sealed=True):
         raise ConstructibilityError("SQLite outer custody join rejected complete authenticated census")
     if seals_outer_join(enrolled, complete_custody[:-1], enrollment_sealed=True):
         raise ConstructibilityError("SQLite outer custody join accepted omitted enrolled instance")
     if seals_outer_join(enrolled, [*complete_custody, complete_custody[0]], enrollment_sealed=True):
         raise ConstructibilityError("SQLite outer custody join accepted duplicate custody")
-    tampered = [dict(row) for row in complete_custody]
-    tampered[0]["receipt_digest"] = "sha256:" + "0" * 64
-    if seals_outer_join(enrolled, tampered, enrollment_sealed=True):
-        raise ConstructibilityError("SQLite outer custody join accepted unauthenticated terminal")
+    fabricated_public_hash_receipt = (
+        enrolled[0]["kind"], enrolled[0]["identifier"], enrolled[0]["enrollment_digest"],
+        "retired", "sha256:" + hashlib.sha256(enrolled[0]["enrollment_digest"].encode()).hexdigest(),
+    )
+    if seals_outer_join(enrolled, [fabricated_public_hash_receipt, *complete_custody[1:]], enrollment_sealed=True):
+        raise ConstructibilityError("SQLite outer custody join accepted non-issued terminal")
     if seals_outer_join(enrolled, complete_custody, enrollment_sealed=False):
         raise ConstructibilityError("SQLite outer custody join accepted late enrollment window")
     require_exact(mapping["zero_effect_receipt"], ["initialize", "create", "write", "truncate", "extend", "delete", "resize"], "SQLite zero-effect receipt")
@@ -426,15 +447,15 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     validate_closed_graph(fork_graph, "running")
     require_exact(mapping["child_quarantine_forbidden"], ["SQLite-entry", "native-unmap", "native-close", "retry", "cleanup", "owner-drain", "authority-reconstruction"], "SQLite child quarantine")
     require_exact(mapping["ambiguous_callback"], "permanent-quarantine-no-retry", "ambiguous callback")
-    ordinary_revoke = {"outer": "connection-revoking", "writer": "hide-generation", "reader": "hide-reader-generation", "terminal": "outer-custody-join-pending"}
+    ordinary_revoke = {"outer": "connection-revoking", "writer": "hide-generation", "reader": "hide-reader-generation", "continuation": "outer-custody-join-pending"}
     expected_revocations = {
         "aba": ordinary_revoke,
-        "vfs-unload-request": {**ordinary_revoke, "terminal": "vfs-unloaded"},
+        "vfs-unload-request": {**ordinary_revoke, "continuation": "vfs-unload-request"},
         "file-replacement": ordinary_revoke,
         "directory-replacement": ordinary_revoke,
         "watch-loss-or-overflow": ordinary_revoke,
         "wal-reset-or-resize": ordinary_revoke,
-        "ambiguous-callback": {"outer": "connection-revoking", "writer": "terminal-opaque-quarantine", "reader": "reader-terminal-opaque-quarantine", "terminal": "outer-custody-join-pending"},
+        "ambiguous-callback": {"outer": "connection-revoking", "writer": "terminal-opaque-quarantine", "reader": "reader-terminal-opaque-quarantine", "continuation": "outer-custody-join-pending"},
     }
     require_exact(mapping["revocation_events"], expected_revocations, "SQLite revocation event edges")
     for event, targets in mapping["revocation_events"].items():
@@ -443,8 +464,12 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     unload_graph = mapping["unload_transition_graph"]
     require_exact(unload_graph, {"vfs-unload-request": "connection-revoking", "connection-revoking": "outer-custody-join-pending", "outer-custody-join-pending": "outer-custody-join-sealed", "outer-custody-join-sealed": "unload-permitted", "unload-permitted": "vfs-unloaded", "vfs-unloaded": []}, "SQLite unload transition graph")
     validate_closed_graph(unload_graph, "vfs-unload-request")
-    if list(unload_graph).index("outer-custody-join-sealed") >= list(unload_graph).index("unload-permitted"):
-        raise ConstructibilityError("SQLite unload can precede outer custody join")
+    unload_event = mapping["revocation_events"]["vfs-unload-request"]
+    if unload_event["continuation"] not in unload_graph or unload_graph[unload_event["continuation"]] != unload_event["outer"]:
+        raise ConstructibilityError("SQLite unload revocation is not coupled to unload graph")
+    for event, targets in mapping["revocation_events"].items():
+        if event != "vfs-unload-request" and targets["continuation"] != "outer-custody-join-pending":
+            raise ConstructibilityError(f"SQLite revocation continuation is not join-bound: {event}")
     require_exact(mapping["production_activation_predicate"], ["accepted-independent-review", "exact-static-shared-runtime-vfs-sqlite-dso-source-id-hash-build-toolchain-identity", "two-live-store-cas", "materialization-race", "cross-process-race", "cantinit-readonly-negative", "pending-only-state-rejection", "four-extend-pairs", "simultaneous-first-writer-join-and-mismatch", "w2-retirement-ordering", "new-page-size-update", "duplicate-fd-lock-loss", "native-close-pinning", "timeout-and-unknown-outcomes", "same-page-successor", "different-page-successor-rejection", "fork-aba-unload-replacement", "connected-main-ci-and-platform-qualification"], "mapping production predicate")
 
     effect = machines["sqlite_normalization_effect"]

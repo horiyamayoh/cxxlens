@@ -108,6 +108,12 @@ class WorkUnitTest(unittest.TestCase):
     def test_available_product_receipt_authenticates_exact_git_blobs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
+            artifact_path = "docs/development/work-unit-products/sqlite-active-read-connection.json"
+            evidence_path = "docs/development/work-unit-evidence/sqlite-active-read-connection.json"
+            for path, payload in ((artifact_path, '{"product":"active-read"}\n'), (evidence_path, '{"evidence":"focused-pass"}\n')):
+                destination = root / path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(payload, encoding="utf-8")
             subprocess.run(["git", "init", "-q", str(root)], check=True)
             subprocess.run(["git", "-C", str(root), "config", "user.name", "receipt-test"], check=True)
             subprocess.run(["git", "-C", str(root), "config", "user.email", "receipt@test.invalid"], check=True)
@@ -115,9 +121,6 @@ class WorkUnitTest(unittest.TestCase):
             subprocess.run(["git", "-C", str(root), "commit", "-qm", "producer"], check=True)
             commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
             tree = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD^{tree}"], text=True).strip()
-            artifact_path = "AGENTS.md"
-            evidence_path = "docs/design/adr/0105-direct-main-review-and-release-governance.md"
-
             def committed_digest(path: str) -> str:
                 payload = subprocess.check_output(["git", "-C", str(root), "show", f"{commit}:{path}"])
                 return "sha256:" + hashlib.sha256(payload).hexdigest()
@@ -138,6 +141,42 @@ class WorkUnitTest(unittest.TestCase):
 
             self.rewrite(root, make_available)
             validate(root)
+            self.rewrite(
+                root,
+                lambda value: value["product_receipts"]["sqlite.active-read-connection"].update(
+                    {"producer_commit": tree}
+                ),
+            )
+            with self.assertRaisesRegex(WorkUnitError, "not a commit"):
+                validate(root)
+            self.rewrite(root, make_available)
+            self.rewrite(
+                root,
+                lambda value: value["product_receipts"]["sqlite.active-read-connection"].update(
+                    {"producer_unit": "wu-205-nested-mapping-lease"}
+                ),
+            )
+            with self.assertRaisesRegex(WorkUnitError, "producer mismatch"):
+                validate(root)
+            self.rewrite(root, make_available)
+            self.rewrite(
+                root,
+                lambda value: value["product_receipts"]["sqlite.active-read-connection"].update(
+                    {"producer_tree": "0" * 40}
+                ),
+            )
+            with self.assertRaisesRegex(WorkUnitError, "tree mismatch"):
+                validate(root)
+            self.rewrite(root, make_available)
+            self.rewrite(
+                root,
+                lambda value: value["product_receipts"]["sqlite.active-read-connection"].update(
+                    {"artifact_path": "AGENTS.md", "artifact_digest": committed_digest("AGENTS.md")}
+                ),
+            )
+            with self.assertRaisesRegex(WorkUnitError, "surface mismatch"):
+                validate(root)
+            self.rewrite(root, make_available)
             self.rewrite(
                 root,
                 lambda value: value["product_receipts"]["sqlite.active-read-connection"].update(
