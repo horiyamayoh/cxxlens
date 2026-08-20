@@ -106,4 +106,26 @@ silent bulk-path use, non-v5 production writes, failure reclassification, and cl
 Acceptance requires an exact-main independent counterexample review covering the 4,096-task/512-MiB
 witness, memory/SQLite parity, byte-exact tamper rejection, every crash/effect boundary, and a
 checker that detects production calls into the bulk path. Implementation and release qualification
-remain separate; #173 alone owns the final distribution claim.
+remain separate. #173 tracks the aggregate distribution decision, while the existing formal release
+gate and terminal production-scope closure retain their accepted owners until coordinated authority
+amendments are accepted.
+
+## Independent review disposition
+
+The review of exact commit `c69d9be74f3e4b2b42c455a7cd4bfeb30591b9e1` rejected acceptance with
+seven P1 findings. The next revision must resolve all of the following before another acceptance
+review:
+
+- make report failure phase-authentic without adding a post-publication Store outcome that conflicts
+  with ADR 0096;
+- scope SQLite `O(W)` to the prepublication construction path or separately authorize and prove lazy
+  query handles;
+- distinguish staging-session identity from candidate identity and reserve report production before
+  publication if report completeness is part of success;
+- define independently derived actual and expected projections so comparison cannot be tautological;
+- preserve `publication_outcome_unknown` across ambiguous commit outcomes;
+- bind exact numeric resource limits from DF-0200; and
+- name the exact v5 representation, physical matrix, contract IDs, and checker bindings.
+
+The owner decision remains selected, but this ADR remains Proposed and implementation/production
+activation must not treat the review reference as acceptance.

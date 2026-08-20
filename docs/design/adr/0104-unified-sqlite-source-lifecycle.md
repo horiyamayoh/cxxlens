@@ -130,4 +130,24 @@ effect, post-close-only proof, CAS weakening, cleanup-as-success, and cross-bran
 Acceptance requires one exact-main independent review of this combined machine and its minimal
 witnesses: cold active-WAL read, exact-empty normalization/recrash at every barrier, two live Stores
 with CAS win/loss, and lease revoke/unload/fork/ABA. Source activation remains fail-closed until
-contract/schema/source/checker agree. Platform and release qualification remain #173-owned.
+contract/schema/source/checker agree. #173 tracks the aggregate qualification gap; formal release and
+terminal production-scope evidence retain their accepted owners until coordinated amendments are
+accepted.
+
+## Independent review disposition
+
+The review of exact commit `75b233e3c3dcf1e2c636b06313e7511bbb86c54c` rejected acceptance with
+five P1 findings. The current branch list is not constructible and must be replaced by an ordered,
+nested machine:
+
+1. #201 owns the effect-free active-read connection and eager-decode receipt.
+2. #205 is an authenticated same-process mapping subprotocol inside #201, not a sibling terminal
+   branch. Pre-delegation custody is an attempt/in-flight pin, never a registry lease.
+3. #202 eligibility is evaluated only after a phase-authentic logical exact-empty proof exists; a
+   physical census cannot select this branch.
+
+The redraft must also preserve DF-0202's closed crash partition and restricted fixture authorization,
+move the no-effect boundary before target `xOpen` delegation, and specify lifetime pins,
+pre-callback sequence cuts, complete use-owner census, revoke-before-cleanup, and permanent quarantine
+for ambiguous callbacks. ADR 0013, ADR 0097, and accepted DF records remain controlling. Production
+activation remains fail-closed.

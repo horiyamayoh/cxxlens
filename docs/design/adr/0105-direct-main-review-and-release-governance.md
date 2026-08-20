@@ -83,4 +83,24 @@ because aggregate release remains blocked.
 
 Acceptance requires negative tests for stale base, wrong tree/SHA/comment digest, reviewer equality,
 missing connected verification, unknown decision state, evidence-class promotion, and release owner
-drift. #173 remains the sole distribution 1.0 release authority.
+drift. The proposed role allocation must explicitly compose #173 aggregate tracking with the existing
+#167 release gate and #179 terminal production-scope closure, or amend all three authorities together.
+
+## Independent review disposition
+
+The review of exact commit `ac68aa78a3aaa91e6e33e73b40e55a8da827b16e` rejected this ADR's evidence
+mechanics with four P1 findings. Direct-to-main delivery remains active under `AGENTS.md`; the
+rejection applies to the proposed review receipt and release-role model.
+
+Before another acceptance review, the authority must:
+
+- implement a non-forgeable receipt binding exact commit/tree, canonical comment-body digest,
+  verdict, and unresolved P0/P1 census, plus connected verification;
+- reconcile roles with accepted contracts that currently assign `gate.release` to #167 and terminal
+  production-scope closure to #179; until coordinated amendments are accepted, #173 is an aggregate
+  tracker and cross-cutting gap owner, not the sole formal release authority;
+- pin preserved WIP identities and heads in machine authority so replacement or deletion fails; and
+- represent leaf/integration/platform/release evidence classes and reject promotion, stale bases,
+  wrong receipts, missing connected verification, and owner drift.
+
+This ADR remains Proposed, while the direct-to-main amendment in `AGENTS.md` remains controlling.

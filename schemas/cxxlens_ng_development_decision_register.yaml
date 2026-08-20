@@ -22,7 +22,7 @@ decisions:
     choice: main-atomic-commit-post-update-ci
     rejected: [mandatory-feature-branch, mandatory-pull-request, history-rewrite]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    review: {mode: independent, status: required, author: repository-owner, reviewer: codex-independent-reviewer, refs: ['https://github.com/horiyamayoh/cxxlens/issues/173#issuecomment-5358694999']}
     implementation_status: partial
     qualification_status: not-claimed
     activation: active
@@ -48,7 +48,7 @@ decisions:
     choice: sqlite-o-w-memory-f-plus-o-w-with-independent-byte-exact-dual-projection
     rejected: [aggregate-resident-claim-batch, digest-only-validation, second-complete-validator-graph, complete-report-dom]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    review: {mode: independent, status: required, author: repository-owner, reviewer: codex-independent-reviewer, refs: ['https://github.com/horiyamayoh/cxxlens/issues/200#issuecomment-5358662966']}
     implementation_status: partial
     qualification_status: not-claimed
     activation: blocked-until-accepted-authority-and-independent-review
@@ -61,7 +61,7 @@ decisions:
     choice: zero-mutation-read-then-exact-empty-normalization-then-authenticated-lease-projection
     rejected: [raw-native-ok-projection, post-close-endpoint-proof, untyped-path-authority, silent-recovery-fallback]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    review: {mode: independent, status: required, author: repository-owner, reviewer: codex-independent-reviewer, refs: ['https://github.com/horiyamayoh/cxxlens/issues/201#issuecomment-5358695491', 'https://github.com/horiyamayoh/cxxlens/issues/202#issuecomment-5358695055', 'https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5358694968']}
     implementation_status: partial
     qualification_status: not-claimed
     activation: blocked-until-accepted-authority-and-independent-review
