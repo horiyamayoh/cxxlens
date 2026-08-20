@@ -1,5 +1,5 @@
 {
-  "asset_count": 722,
+  "asset_count": 723,
   "assets": [
     {
       "authority": "active",
@@ -2607,6 +2607,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_source_closure_transport.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -5057,7 +5064,7 @@
     }
   ],
   "classifications": {
-    "active": 686,
+    "active": 687,
     "archived": 35,
     "generated": 1
   },

@@ -43,7 +43,7 @@ wire_controls:
       blob_digest: content-sha256-digest
       transfer_digest: semantic-v2-digest
       counts-offsets-and-sizes: uint64
-      ordered_blob_receipts: canonical-array
+      blob_receipts_digest: semantic-v2-digest
       observed_counters: canonical-closed-map
       receipts-and-cleanup-owner: typed-id-or-semantic-v2-digest
   source_closure_manifest:
@@ -56,7 +56,7 @@ wire_controls:
     exact_fields: [session_id, task_id, blob_ordinal, blob_digest, chunk_index, offset, byte_count]
     payload: exact-byte-count-frame-digest
   source_closure_seal:
-    exact_fields: [session_id, task_id, task_v4_digest, manifest_digest, ordered_blob_receipts, total_bytes, closure_digest, transfer_digest]
+    exact_fields: [session_id, task_id, task_v4_digest, manifest_digest, blob_receipts_digest, blob_count, total_bytes, closure_digest, transfer_digest]
     payload: empty
   source_closure_ack:
     exact_fields: [session_id, task_id, closure_digest, transfer_digest, spool_receipt, cleanup_owner]
@@ -87,7 +87,7 @@ phase_fields:
   manifest-streaming: [declared-manifest-bytes, observed-bytes, next-offset, next-chunk-index, streaming-digest]
   manifest-validated: [closure-id, closure-digest, manifest-digest, member-count, blob-count, total-blob-bytes]
   blob-streaming: [blob-ordinal, blob-digest, declared-bytes, observed-bytes, next-offset, next-chunk-index]
-  closure-sealed: [recomputed-manifest-digest, ordered-blob-receipts, transfer-digest]
+  closure-sealed: [recomputed-manifest-digest, blob-receipts-digest, blob-count, total-bytes, transfer-digest]
   acknowledged: [task-local-spool-receipt, cleanup-owner]
   rejected: [failure-phase, reason-code, observed-counters, cleanup-receipt]
 limits:
@@ -109,10 +109,45 @@ resource_policy:
   complete-memory-copy: forbidden
   cleanup: reject-cancel-crash-recovery-or-task-terminal
 identity:
+  projection_codec: canonical-json-utf8-sorted-keys-no-whitespace
+  semantic_digest_codec: cxxlens-canonical-binary-v1
+  semantic_digest_framing: [cxxlens-semantic-digest-v2, domain, canonical-projection-bytes]
+  request_v2_2:
+    domain: cxxlens.clang22.materialization-request.v2_2
+    projection: [schema, request_version, required_features, base_request_v2_1, source_closures, task_extensions-without-task_id-and-task_v4_digest]
+    digest_field: request_digest-equals-semantic-digest-of-projection
+    id_field: request_id-equals-materialization-request-colon-request_digest
+  task_v4:
+    base_task_projection: canonical-complete-base-request-v2_1-task-object
+    base_task_v3_digest: sha256-of-canonical-base-task-projection
+    domain: cxxlens.clang22.task.v4
+    projection: [schema, base_task_index, base_provider_task_id, base_task_v3_digest, open_task, source_closure, main_logical_path, logical_working_directory]
+    digest_field: task_v4_digest-equals-semantic-digest-of-projection
+    id_field: task_id-equals-task-colon-task_v4_digest
+  manifest:
+    schema: cxxlens.source-closure-manifest.v1
+    exact_fields: [schema, closure_id, closure_digest, members, blobs]
+    member_exact_fields: [file_id, logical_path, role, encoding, size_bytes, content_digest, read_only]
+    member_order: logical_path-utf8-byte-order
+    member_role_enum: [main, header, generated, forced-include, macro-file]
+    member_encoding_enum: [utf8, utf16le, utf16be, locale_dependent, binary_or_unknown]
+    blob_exact_fields: [content_digest, size_bytes]
+    blob_order: content_digest-byte-order
+    domain: cxxlens.source-closure-manifest.v1
+    digest: semantic-digest-of-canonical-complete-manifest
+  blob_receipts:
+    domain: cxxlens.source-closure-blob-receipts.v1
+    item_exact_fields: [blob_ordinal, blob_digest, size_bytes]
+    order: exact-manifest-blob-order
+    digest: semantic-digest-of-canonical-complete-receipt-array-streamed
+  transfer:
+    domain: cxxlens.source-closure-transfer.v1
+    projection: [session_id, task_id, task_v4_digest, manifest_digest, blob_receipts_digest, blob_count, total_bytes, closure_digest]
+    digest: semantic-digest-of-canonical-projection
   manifest_order: adr-0101-canonical-member-and-blob-order
   blob_order: exact-manifest-order
   chunk_order: contiguous-index-and-offset-from-zero
-  seal_fields: [session-id, task-id, task-v4-digest, manifest-digest, ordered-blob-digests-and-sizes, total-bytes, closure-digest]
+  seal_fields: [session-id, task-id, task-v4-digest, manifest-digest, blob-receipts-digest, blob-count, total-bytes, closure-digest]
   ambient_filesystem: forbidden
 request_task_binding:
   request_shape: exact-v2-1-authority-envelope-plus-closure-extensions
@@ -157,6 +192,37 @@ failures:
   - source-closure.spool-io
   - source-closure.cleanup-failed
   - source-closure.ambient-fallback-denied
+failure_phase_matrix:
+  before-manifest:
+    allowed: [source-closure.required-feature-missing, source-closure.protocol-state-invalid, source-closure.task-binding-mismatch, source-closure.session-binding-mismatch, source-closure.limit-exceeded, source-closure.cancelled, source-closure.transfer-timeout]
+    counters: [received-control-bytes, received-payload-bytes]
+  manifest-streaming:
+    allowed: [source-closure.protocol-state-invalid, source-closure.manifest-invalid, source-closure.chunk-order-invalid, source-closure.chunk-overlap, source-closure.chunk-gap, source-closure.digest-mismatch, source-closure.limit-exceeded, source-closure.task-binding-mismatch, source-closure.session-binding-mismatch, source-closure.cancelled, source-closure.transfer-timeout, source-closure.spool-io, source-closure.cleanup-failed]
+    counters: [declared-manifest-bytes, received-manifest-bytes, next-chunk-index]
+  manifest-validated:
+    allowed: [source-closure.protocol-state-invalid, source-closure.blob-order-invalid, source-closure.limit-exceeded, source-closure.task-binding-mismatch, source-closure.session-binding-mismatch, source-closure.cancelled, source-closure.transfer-timeout, source-closure.spool-io, source-closure.cleanup-failed]
+    counters: [member-count, blob-count, total-blob-bytes]
+  blob-streaming:
+    allowed: [source-closure.protocol-state-invalid, source-closure.blob-order-invalid, source-closure.chunk-order-invalid, source-closure.chunk-overlap, source-closure.chunk-gap, source-closure.digest-mismatch, source-closure.limit-exceeded, source-closure.task-binding-mismatch, source-closure.session-binding-mismatch, source-closure.cancelled, source-closure.transfer-timeout, source-closure.spool-io, source-closure.cleanup-failed]
+    counters: [blob-ordinal, declared-blob-bytes, received-blob-bytes, next-chunk-index]
+  closure-sealed:
+    allowed: [source-closure.protocol-state-invalid, source-closure.digest-mismatch, source-closure.task-binding-mismatch, source-closure.session-binding-mismatch, source-closure.replay-invalid, source-closure.cancelled, source-closure.transfer-timeout, source-closure.cleanup-failed]
+    counters: [blob-count, total-bytes]
+  acknowledged:
+    allowed: [source-closure.protocol-state-invalid, source-closure.task-binding-mismatch, source-closure.session-binding-mismatch, source-closure.replay-invalid, source-closure.cancelled, source-closure.cleanup-failed]
+    counters: [blob-count, total-bytes]
+  local-only:
+    allowed: [source-closure.ambient-fallback-denied]
+    counters: []
+protocol_activation:
+  current: 1.2.0
+  registry: exact-existing-1-through-23-plus-contract-24-through-29
+  minor_profile:
+    required_features: [task-input-chunks-v1, task-source-closure-v1]
+    exact_frame_pattern: [hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk-zero-or-more, source_closure_manifest-descriptor, source_closure_manifest-chunk-one-or-more, source_closure_blob-and-chunk-canonical-repeat, source_closure_seal, source_closure_ack-or-reject, credit, close]
+    capability_absence: reject-before-source-closure-bytes
+    task_accepted_precondition: task-v4-and-manifest-and-all-blobs-and-transfer-seal-validated
+    message_controls: schemas/cxxlens_ng_source_closure_transport.yaml#wire_controls
 crash_effects:
   before-manifest: {effect: none, recovery: reject-without-spool}
   unsealed-transfer: {effect: private-unsealed-spool, recovery: remove-and-full-replay}

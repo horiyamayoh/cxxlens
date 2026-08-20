@@ -75,6 +75,7 @@ PACKAGE_PATHS = (
     "schemas/cxxlens_ng_provider_task_v4.schema.yaml",
     "schemas/cxxlens_ng_source_closure_transport.yaml",
     "schemas/cxxlens_ng_source_closure_transport.schema.yaml",
+    "schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml",
     "schemas/cxxlens_ng_provider_conformance_vectors.yaml",
     "schemas/cxxlens_ng_provider_conformance_vectors.schema.yaml",
     "schemas/cxxlens_ng_provider_conformance_report.schema.yaml",

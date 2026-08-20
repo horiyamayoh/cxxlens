@@ -84,12 +84,22 @@ fields are unavailable until the complete canonical manifest is revalidated. Blo
 must follow manifest blob order; chunks are contiguous from offset zero with monotonically
 increasing indices. Each frame payload has the existing frame SHA-256, each completed blob is
 recomputed against its manifest digest, and the seal binds task ID, task-v4 digest, manifest digest,
-session ID, ordered blob digests/sizes, total bytes, and closure digest. These are independent projections; a
+session ID, the streaming digest of the canonical ordered blob-receipt array, blob count, total bytes,
+and closure digest. The complete receipt array is never placed in message 27; its single semantic
+digest keeps the terminal control below 64 KiB even for 4096 blobs. These are independent projections; a
 matching frame checksum cannot substitute for blob or closure validation.
 
 The worker uses only the validated task-local spool to construct ADR 0101 values and mount its VFS.
 Ambient filesystem content, a physical checkout, process CWD, or an unqualified system path cannot
 satisfy a closure member.
+
+The manifest is the closed `cxxlens.source-closure-manifest.v1` object defined by
+`schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml`. Request 2.2, task v4, manifest,
+blob-receipt, and transfer identities use the exact domains and projections in the machine contract.
+Projection objects use sorted-key, no-whitespace UTF-8 canonical JSON; semantic digests wrap those
+bytes with the repository `cxxlens-semantic-digest-v2` canonical-binary framing. Reject reasons and
+the only counters available at each failure phase are fixed by `failure_phase_matrix`; later-phase
+values are omitted rather than synthesized.
 
 ### Bounds
 

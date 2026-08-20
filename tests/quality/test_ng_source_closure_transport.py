@@ -19,12 +19,20 @@ from check_ng_source_closure_transport import (  # noqa: E402
     ADR,
     CONTRACT,
     PROTOCOL,
+    PROTOCOL_SCHEMA,
     REQUEST,
     SCHEMA,
     TASK,
+    MANIFEST_SCHEMA,
     SourceClosureTransportError,
+    blob_receipts_digest,
+    content_projection_digest,
+    request_v2_2_projection,
+    semantic_digest,
+    task_v4_projection,
     validate,
     validate_request_binding,
+    transfer_digest,
 )
 
 
@@ -33,10 +41,10 @@ class SourceClosureTransportTest(unittest.TestCase):
     def bound_request() -> dict:
         semantic = "semantic-v2:sha256:" + "1" * 64
         content = "sha256:" + "2" * 64
-        task_id = "task:semantic-v2:sha256:" + "3" * 64
+        base_task_id = "task:semantic-v2:sha256:" + "3" * 64
         closure_id = "source-closure:" + semantic
         base = {
-            "provider_task_id": task_id,
+            "provider_task_id": base_task_id,
             "task_input_digest": content,
             "normalized_invocation_digest": "sha256:" + "4" * 64,
             "toolchain_digest": "sha256:" + "5" * 64,
@@ -47,33 +55,45 @@ class SourceClosureTransportTest(unittest.TestCase):
             "source_closure_digest": semantic,
             "manifest_digest": "semantic-v2:sha256:" + "7" * 64,
         }
-        return {
+        extension = {
+            "base_task_index": 0,
+            "base_provider_task_id": base_task_id,
+            "base_task_v3_digest": content_projection_digest(base),
+            "open_task": {
+                field: base[field]
+                for field in (
+                    "task_input_digest",
+                    "normalized_invocation_digest",
+                    "toolchain_digest",
+                    "environment_digest",
+                )
+            },
+            "source_closure": {
+                "id": closure_id,
+                "digest": semantic,
+                "manifest_digest": closure["manifest_digest"],
+            },
+            "main_logical_path": "project://src/main.cpp",
+            "logical_working_directory": "project://src",
+        }
+        extension["task_v4_digest"] = semantic_digest(
+            "cxxlens.clang22.task.v4", task_v4_projection(extension)
+        )
+        extension["task_id"] = "task:" + extension["task_v4_digest"]
+        request = {
+            "schema": "cxxlens.clang22-materialization-request.v2_2",
+            "request_version": "2.2.0",
+            "required_features": ["task-input-chunks-v1", "task-source-closure-v1"],
             "base_request_v2_1": {"tasks": [base]},
             "source_closures": [closure],
-            "task_extensions": [
-                {
-                    "task_id": task_id,
-                    "base_task_index": 0,
-                    "base_task_v3_digest": content,
-                    "open_task": {
-                        field: base[field]
-                        for field in (
-                            "task_input_digest",
-                            "normalized_invocation_digest",
-                            "toolchain_digest",
-                            "environment_digest",
-                        )
-                    },
-                    "source_closure": {
-                        "id": closure_id,
-                        "digest": semantic,
-                        "manifest_digest": closure["manifest_digest"],
-                    },
-                    "main_logical_path": "project://src/main.cpp",
-                    "logical_working_directory": "project://src",
-                }
-            ],
+            "task_extensions": [extension],
         }
+        request["request_digest"] = semantic_digest(
+            "cxxlens.clang22.materialization-request.v2_2",
+            request_v2_2_projection(request),
+        )
+        request["request_id"] = "materialization-request:" + request["request_digest"]
+        return request
 
     def copied_root(self, temporary: str) -> pathlib.Path:
         root = pathlib.Path(temporary)
@@ -81,12 +101,22 @@ class SourceClosureTransportTest(unittest.TestCase):
             pathlib.Path(path)
             for path in (
                 "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
+                "schemas/cxxlens_ng_provider_protocol.schema.yaml",
                 "src/llvm/clang22/provider_task_v3.hpp",
                 "src/llvm/clang22/provider_task_v3.cpp",
                 "src/llvm/clang22/materialization_request_v2_1.cpp",
             )
         )
-        for relative in (ADR, CONTRACT, PROTOCOL, REQUEST, SCHEMA, TASK, *legacy):
+        for relative in (
+            ADR,
+            CONTRACT,
+            PROTOCOL,
+            REQUEST,
+            SCHEMA,
+            TASK,
+            MANIFEST_SCHEMA,
+            *legacy,
+        ):
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, destination)
@@ -110,6 +140,18 @@ class SourceClosureTransportTest(unittest.TestCase):
         request["source_closures"].append(dict(request["source_closures"][0]))
         with self.assertRaisesRegex(SourceClosureTransportError, "duplicate"):
             validate_request_binding(request)
+
+    def test_request_and_task_semantic_identity_tamper_is_rejected(self) -> None:
+        request = self.bound_request()
+        request["request_digest"] = "semantic-v2:sha256:" + "9" * 64
+        with self.assertRaisesRegex(SourceClosureTransportError, "request v2.2"):
+            validate_request_binding(request)
+        request = self.bound_request()
+        request["task_extensions"][0]["task_v4_digest"] = (
+            "semantic-v2:sha256:" + "9" * 64
+        )
+        with self.assertRaisesRegex(SourceClosureTransportError, "task v4"):
+            validate_request_binding(request)
         request = self.bound_request()
         request["task_extensions"][0]["source_closure"]["id"] = (
             "source-closure:semantic-v2:sha256:" + "9" * 64
@@ -128,6 +170,30 @@ class SourceClosureTransportTest(unittest.TestCase):
         request["task_extensions"][0]["main_logical_path"] = "project://" + "é" * 4090
         with self.assertRaisesRegex(SourceClosureTransportError, "UTF-8"):
             validate_request_binding(request)
+
+    def test_bounded_terminal_seal_uses_one_digest_for_4096_blobs(self) -> None:
+        receipts = [
+            {
+                "blob_ordinal": index,
+                "blob_digest": "sha256:" + f"{index:064x}",
+                "size_bytes": 1,
+            }
+            for index in range(4096)
+        ]
+        request = self.bound_request()
+        receipts_digest = blob_receipts_digest(receipts)
+        projection = {
+            "session_id": "session:1",
+            "task_id": request["task_extensions"][0]["task_id"],
+            "task_v4_digest": request["task_extensions"][0]["task_v4_digest"],
+            "manifest_digest": "semantic-v2:sha256:" + "7" * 64,
+            "blob_receipts_digest": receipts_digest,
+            "blob_count": 4096,
+            "total_bytes": 4096,
+            "closure_digest": "semantic-v2:sha256:" + "1" * 64,
+        }
+        self.assertRegex(receipts_digest, r"^semantic-v2:sha256:[0-9a-f]{64}$")
+        self.assertRegex(transfer_digest(projection), r"^semantic-v2:sha256:[0-9a-f]{64}$")
 
     def test_message_collision_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -207,7 +273,7 @@ class SourceClosureTransportTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(SourceClosureTransportError, "atomically active"):
+            with self.assertRaisesRegex(SourceClosureTransportError, "reviewed exact main commit"):
                 validate(root)
 
     def test_cross_task_cache_activation_is_rejected(self) -> None:
