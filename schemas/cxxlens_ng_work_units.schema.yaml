@@ -35,13 +35,15 @@ properties:
           items:
             type: object
             additionalProperties: false
-            required: [id, risk, state, depends_on, serialized_with, owned_paths, consumed_paths, generated_surfaces, forbidden_shortcuts, evidence_commands, completion_plan]
+            required: [id, risk, state, depends_on, serialized_with, owned_products, consumed_products, owned_paths, consumed_paths, generated_surfaces, forbidden_shortcuts, evidence_commands, completion_plan]
             properties:
               id: {type: string, pattern: '^wu-[1-9][0-9]*-[a-z0-9-]+$'}
               risk: {enum: [local, contract, invariant, security, compatibility, irreversible, resource-bound]}
               state: {enum: [ready, review-required, blocked-by-authority]}
               depends_on: {type: array, uniqueItems: true, items: {$ref: '#/$defs/unit'}}
               serialized_with: {type: array, uniqueItems: true, items: {$ref: '#/$defs/unit'}}
+              owned_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
+              consumed_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
               owned_paths: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/path'}}
               consumed_paths: {type: array, uniqueItems: true, items: {$ref: '#/$defs/path'}}
               generated_surfaces: {type: array, uniqueItems: true, items: {$ref: '#/$defs/path'}}
@@ -51,5 +53,6 @@ properties:
 $defs:
   issue: {type: string, pattern: '^#[1-9][0-9]*$'}
   unit: {type: string, pattern: '^wu-[1-9][0-9]*-[a-z0-9-]+$'}
+  product: {type: string, pattern: '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$'}
   digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   path: {type: string, pattern: '^(?!/)(?!.*\.\.)(?!.*\\).+'}

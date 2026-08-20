@@ -116,6 +116,19 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     refresh = step_by(freshness, name="Refresh current main authority")
     if refresh.get("run") != "git fetch --no-tags origin main":
         raise AutonomyCiError("heavy preflight main refresh drift")
+    authenticate = step_by(freshness, name="Authenticate canonical fast workflow")
+    if authenticate.get("env") != {
+        "GH_TOKEN": "${{ github.token }}",
+        "EVENT_WORKFLOW_ID": "${{ github.event.workflow_run.workflow_id }}",
+    } or not all(
+        marker in authenticate.get("run", "")
+        for marker in (
+            "actions/workflows/autonomy-fast.yml",
+            "--jq .id",
+            'test "${EVENT_WORKFLOW_ID}" = "${expected_id}"',
+        )
+    ):
+        raise AutonomyCiError("heavy canonical fast workflow authentication drift")
     classify = step_by(freshness, identifier="classify")
     if classify.get("env") != {"EVENT_CANDIDATE": "${{ github.event.workflow_run.head_sha }}"} or "classify-heavy" not in classify.get("run", "") or "DISPATCH" in classify.get("run", ""):
         raise AutonomyCiError("heavy freshness classifier structure drift")

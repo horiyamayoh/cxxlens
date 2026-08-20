@@ -187,12 +187,34 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
             if set(entry.get("authority_sources", [])).intersection(authority_paths):
                 entry.pop("authority_digest", None)
         return result
+
+    def receipt_registry_transition(
+        before_value: dict[str, Any], after_value: dict[str, Any]
+    ) -> bool:
+        expected = json.loads(json.dumps(before_value))
+        if any(
+            existing.get("id") == receipt["id"]
+            for existing in expected.get("receipts", [])
+        ):
+            return False
+        expected.get("receipts", []).append(receipt)
+        return expected == after_value
+
     authority_paths = {item["path"] for item in receipt["authority_files"]}
     for path in changed:
-        if path == str(RECEIPTS) or path == "docs/design/SHA256SUMS":
+        if path == "docs/design/SHA256SUMS":
             continue
         before = _git(root, "show", f"{candidate}:{path}")
         after = _git(root, "show", f"{commit}:{path}")
+        if path == str(RECEIPTS):
+            if not receipt_registry_transition(
+                yaml.load(before, Loader=UniqueKeyLoader),
+                yaml.load(after, Loader=UniqueKeyLoader),
+            ):
+                raise DecisionRegisterError(
+                    f"acceptance rewrites review receipt history: {receipt['id']}"
+                )
+            continue
         if path == str(REGISTER):
             if not register_transition(yaml.load(before, Loader=UniqueKeyLoader), yaml.load(after, Loader=UniqueKeyLoader)):
                 raise DecisionRegisterError(f"acceptance changes decision semantics: {receipt['id']}")
@@ -253,43 +275,62 @@ def canonical_review_comment(receipt: dict[str, Any]) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _verify_connected_receipt(receipt: dict[str, Any], token: str) -> None:
+    connected = receipt["connected_verification"]
+    match = REVIEW_REF.fullmatch(receipt["comment_url"])
+    if match is None or f"#{match.group(1)}" != receipt["owner_issue"]:
+        raise DecisionRegisterError(f"review comment belongs to a foreign issue: {receipt['id']}")
+    comment = _github_json(
+        f"https://api.github.com/repos/horiyamayoh/cxxlens/issues/comments/{match.group(2)}",
+        token,
+    )
+    body = comment.get("body")
+    if not isinstance(body, str) or body != canonical_review_comment(receipt) or "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest() != receipt["comment_body_sha256"]:
+        raise DecisionRegisterError(f"GitHub review comment body mismatch: {receipt['id']}")
+    if comment.get("html_url") != receipt["comment_url"] or comment.get("user", {}).get("login") != receipt["comment_author_login"] or receipt["comment_author_login"] != receipt["reviewer_github_login"]:
+        raise DecisionRegisterError(f"GitHub review comment identity mismatch: {receipt['id']}")
+    candidate = _github_json(
+        "https://api.github.com/repos/horiyamayoh/cxxlens/commits/"
+        f"{receipt['candidate_commit']}",
+        token,
+    )
+    candidate_author = candidate.get("author", {}).get("login")
+    candidate_committer = candidate.get("committer", {}).get("login")
+    if (
+        candidate.get("sha") != receipt["candidate_commit"]
+        or candidate_author != receipt["candidate_github_login"]
+        or receipt["reviewer_github_login"] in {candidate_author, candidate_committer}
+    ):
+        raise DecisionRegisterError(f"GitHub candidate identity mismatch: {receipt['id']}")
+    run = _github_json(f"https://api.github.com/repos/horiyamayoh/cxxlens/actions/runs/{connected['run_id']}", token)
+    if (run.get("id") != connected["run_id"] or run.get("html_url") != connected["run_url"] or
+            run.get("head_sha") != receipt["candidate_commit"] or run.get("head_sha") != connected["run_commit"] or
+            run.get("workflow_id") != connected["workflow_id"] or
+            run.get("name") != connected["workflow_name"] or run.get("event") != connected["event"] or
+            run.get("conclusion") != "success"):
+        raise DecisionRegisterError(f"connected CI run mismatch: {receipt['id']}")
+    workflow = _github_json(
+        "https://api.github.com/repos/horiyamayoh/cxxlens/actions/workflows/"
+        f"{connected['workflow_id']}",
+        token,
+    )
+    if (
+        workflow.get("id") != connected["workflow_id"]
+        or workflow.get("name") != connected["workflow_name"]
+        or workflow.get("path") != connected["workflow_path"]
+        or workflow.get("state") != "active"
+    ):
+        raise DecisionRegisterError(f"connected CI workflow identity mismatch: {receipt['id']}")
+
+
 def verify_connected(root: pathlib.Path, token: str) -> None:
     if not token:
         raise DecisionRegisterError("connected GitHub verification requires a token")
     validate(root)
     document = _load(root / RECEIPTS)
     for receipt in document["receipts"]:
-        connected = receipt["connected_verification"]
-        if connected["status"] != "verified":
-            continue
-        match = REVIEW_REF.fullmatch(receipt["comment_url"])
-        if match is None or f"#{match.group(1)}" != receipt["owner_issue"]:
-            raise DecisionRegisterError(f"review comment belongs to a foreign issue: {receipt['id']}")
-        comment = _github_json(f"https://api.github.com/repos/horiyamayoh/cxxlens/issues/comments/{match.group(2)}", token)
-        body = comment.get("body")
-        if not isinstance(body, str) or body != canonical_review_comment(receipt) or "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest() != receipt["comment_body_sha256"]:
-            raise DecisionRegisterError(f"GitHub review comment body mismatch: {receipt['id']}")
-        if comment.get("html_url") != receipt["comment_url"] or comment.get("user", {}).get("login") != receipt["comment_author_login"] or receipt["comment_author_login"] != receipt["reviewer_github_login"]:
-            raise DecisionRegisterError(f"GitHub review comment identity mismatch: {receipt['id']}")
-        run = _github_json(f"https://api.github.com/repos/horiyamayoh/cxxlens/actions/runs/{connected['run_id']}", token)
-        if (run.get("id") != connected["run_id"] or run.get("html_url") != connected["run_url"] or
-                run.get("head_sha") != receipt["candidate_commit"] or run.get("head_sha") != connected["run_commit"] or
-                run.get("workflow_id") != connected["workflow_id"] or
-                run.get("name") != connected["workflow_name"] or run.get("event") != connected["event"] or
-                run.get("conclusion") != "success"):
-            raise DecisionRegisterError(f"connected CI run mismatch: {receipt['id']}")
-        workflow = _github_json(
-            "https://api.github.com/repos/horiyamayoh/cxxlens/actions/workflows/"
-            f"{connected['workflow_id']}",
-            token,
-        )
-        if (
-            workflow.get("id") != connected["workflow_id"]
-            or workflow.get("name") != connected["workflow_name"]
-            or workflow.get("path") != connected["workflow_path"]
-            or workflow.get("state") != "active"
-        ):
-            raise DecisionRegisterError(f"connected CI workflow identity mismatch: {receipt['id']}")
+        if receipt["connected_verification"]["status"] == "verified":
+            _verify_connected_receipt(receipt, token)
 
 
 def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:

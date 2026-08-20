@@ -59,6 +59,7 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         status = _git(root, "status", "--porcelain=v1", "--untracked-files=all")
         if status:
             raise AgentContextV2Error("dirty worktree cannot produce an execution packet")
+        _git(root, "fetch", "--no-tags", "origin", "main")
         revision = _git(root, "rev-parse", "HEAD")
         origin_main = _git(root, "rev-parse", "origin/main")
         if revision != origin_main:
@@ -109,6 +110,8 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         "execution_disposition": disposition,
         "blockers": blockers,
         "dependencies": unit["depends_on"],
+        "owned_products": unit["owned_products"],
+        "consumed_products": unit["consumed_products"],
         "authority": {
             "revision": revision,
             "tree": tree,

@@ -68,6 +68,12 @@ wire_controls:
       blob_receipts_digest: semantic-v2-digest
       observed_counters: canonical-closed-map
       receipts-and-cleanup-owner: typed-id-or-semantic-v2-digest
+    id_grammar:
+      session_id: 'provider-session:sha256:<64-lower-hex>'
+      task_id: 'task:semantic-v2:sha256:<64-lower-hex>'
+      spool_receipt: 'spool-receipt:semantic-v2:sha256:<64-lower-hex>'
+      cleanup_owner: 'cleanup-owner:semantic-v2:sha256:<64-lower-hex>'
+      cleanup_receipt: 'cleanup-receipt:semantic-v2:sha256:<64-lower-hex>'
   source_closure_manifest:
     descriptor: {kind: descriptor, exact_fields: [kind, session_id, task_id, task_v4_digest, closure_id, closure_digest, manifest_digest, total_bytes, chunk_bytes, chunk_count], payload: empty}
     chunk: {kind: chunk, exact_fields: [kind, session_id, task_id, manifest_digest, chunk_index, offset, byte_count], payload: exact-byte-count-frame-digest}

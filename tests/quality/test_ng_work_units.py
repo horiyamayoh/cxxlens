@@ -80,6 +80,29 @@ class WorkUnitTest(unittest.TestCase):
             with self.assertRaisesRegex(WorkUnitError, "asymmetric serialization"):
                 validate(root)
 
+    def test_sqlite_product_must_have_one_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            def mutate(value) -> None:
+                value["entries"][3]["units"][0]["owned_products"].append(
+                    "sqlite.active-read-connection"
+                )
+            self.rewrite(root, mutate)
+            with self.assertRaisesRegex(WorkUnitError, "duplicate product owner"):
+                validate(root)
+
+    def test_consumed_product_requires_transitive_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            def mutate(value) -> None:
+                for entry in value["entries"]:
+                    for unit in entry["units"]:
+                        if unit["id"] == "wu-202-normalization-effect":
+                            unit["depends_on"] = ["wu-173-governance"]
+            self.rewrite(root, mutate)
+            with self.assertRaisesRegex(WorkUnitError, "consumed product lacks dependency"):
+                validate(root)
+
 
 if __name__ == "__main__":
     unittest.main()

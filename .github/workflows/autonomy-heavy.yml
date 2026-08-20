@@ -27,6 +27,13 @@ jobs:
           fetch-depth: 0
       - name: Refresh current main authority
         run: git fetch --no-tags origin main
+      - name: Authenticate canonical fast workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+        run: |
+          expected_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomy-fast.yml" --jq .id)"
+          test "${EVENT_WORKFLOW_ID}" = "${expected_id}"
       - id: classify
         name: Classify exact candidate freshness
         # A stale candidate produces only the uploaded superseded freshness report.

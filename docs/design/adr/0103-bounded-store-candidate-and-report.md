@@ -75,8 +75,11 @@ duplicate/conflicting claims, detached rows, or coverage/unresolved/provenance/g
 
 ## Exact bounds
 
-`W` is one task/source/output-validation window plus one actual and one expected record, fixed
-codec/hash state, two comparator cursors, one bounded sort arena, backend cursor state, and counters.
+`W` is the exact checked sum of a 64 MiB source/output-validation window, an 8 MiB sort arena, two
+32 KiB comparator cursors, a 1 MiB backend cursor, 64 KiB codec/hash state, a 1 MiB record buffer,
+and 4 KiB counter state: `77,729,792` resident bytes. No omitted allocator, backend cursor, codec, or
+counter state may be treated as zero-cost evidence. The maximum reserved report tail is exactly
+`67,109,062` bytes: the 64 MiB source window plus the 86-byte stream header and 112-byte trailer.
 The exact DF-0200 limits are:
 
 - 4,096 tasks and a 512 MiB aggregate scale witness;
@@ -87,6 +90,8 @@ The exact DF-0200 limits are:
 - merge fan-in 16 inputs plus one output and one metadata descriptor, exactly 18 FDs;
 - maximum authoritative report bytes 1 GiB;
 - materializer source/output validation window 64 MiB, as fixed by the machine contract.
+- all 18 merge descriptors have an explicit acquisition census and are released on every terminal;
+  checked u64 counters and u128 aggregate arithmetic reject overflow before allocation or I/O.
 
 Record length, segment/spool capacity, offsets, counters, report reservation, and additions are
 checked before allocation/I/O. SQLite candidate/adoption/report peak retention is `O(W)`, independent

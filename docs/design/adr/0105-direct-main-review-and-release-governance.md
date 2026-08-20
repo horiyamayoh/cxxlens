@@ -57,9 +57,12 @@ path/blob projection and canonical digest, owner issue, comment URL/body digest,
 author/reviewer/session, verdict and P0/P1/P2 census, connected run, and the status-only acceptance
 path allowlist. The acceptance SHA is not self-embedded; the checker deterministically selects the
 first descendant commit whose receipt registry contains the receipt ID, then verifies its diff.
-Offline checking verifies Git identity, authority blobs, ancestry, allowlisted paths,
+The receipt registry is append-only: an acceptance commit may add exactly the selected receipt and
+must preserve every earlier receipt byte-for-byte. Offline checking verifies Git identity, authority blobs, ancestry, allowlisted paths,
 identity separation, findings, activation and preserved WIP heads. Connected CI verifies GitHub
-comment bytes/author and the exact-candidate successful run. A run name is not authority: the
+comment bytes/author and the exact-candidate successful run. It fetches the candidate commit from
+GitHub, binds the claimed candidate login to the authenticated commit author, and requires the
+reviewer login to differ from both authenticated author and committer. A run name is not authority: the
 connected checker resolves the immutable workflow ID and requires the active workflow path
 `.github/workflows/autonomy-fast.yml`. Offline-only evidence cannot activate production support.
 
@@ -87,9 +90,11 @@ Fast run triggers `Autonomy heavy`; its concurrency group coalesces work, but th
 compares the candidate with current `origin/main`. A stale candidate emits only a `superseded`
 report. Only the current candidate can run the full integration gate.
 
-Heavy re-fetches and reclassifies `origin/main` after the full gate and uploads a full artifact only
+Heavy first authenticates the triggering workflow's immutable GitHub workflow ID against
+`.github/workflows/autonomy-fast.yml`; a duplicate display name is not authority. Heavy re-fetches and reclassifies `origin/main` after the full gate and uploads a full artifact only
 if the candidate is still current; a main update during execution cannot promote stale evidence.
-An agent packet is executable only if its own state and every transitive dependency are `ready`.
+Before producing a non-synthetic agent packet, the generator fetches `origin/main` and requires a
+clean local HEAD equal to that refreshed ref. An agent packet is executable only if its own state and every transitive dependency are `ready`.
 Otherwise it emits an actionable dependency-qualified stop disposition. A corrected candidate never
 rewrites a prior rejecting review to pending; it remains rejected until an authenticated Accepted
 receipt replaces that outcome.

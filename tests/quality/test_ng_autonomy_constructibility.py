@@ -94,6 +94,50 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "numeric bounds|bounded-window"):
                 validate(root)
 
+    def test_store_candidate_graph_and_attempt_coupling_cannot_collapse(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["store_candidate_report"][
+                    "candidate_transition_graph"
+                ].__setitem__("validation-sealed", "committed-verified"),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "candidate transition graph"):
+                validate(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["store_candidate_report"][
+                    "attempt_coupling"
+                ].update({"attempt_count": 2}),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "attempt coupling"):
+                validate(root)
+
+    def test_store_full_record_grammar_and_component_census_are_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["store_candidate_report"][
+                    "projections"
+                ]["record_grammar"].remove("unresolved"),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "dual projection"):
+                validate(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["store_candidate_report"][
+                    "bounds"
+                ].update({"backend_cursor_bytes": 0}),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "numeric bounds"):
+                validate(root)
+
     def test_reader_without_predelegation_lease_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -141,6 +185,40 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "retirement join"):
                 validate(root)
 
+    def test_outer_join_pending_edge_and_censuses_cannot_be_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"][
+                    "outer_transition_graph"
+                ].__setitem__("connection-revoking", "outer-custody-join-sealed"),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "outer transition graph"):
+                validate(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"][
+                    "retirement_join"
+                ].update({"writer_census": "reader-census-only"}),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "retirement join"):
+                validate(root)
+
+    def test_revocation_event_cannot_jump_to_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"][
+                    "revocation_events"
+                ].update({"aba": "close-confirmed"}),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "revocation event"):
+                validate(root)
+
     def test_unmap_failure_cannot_close(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -186,6 +264,18 @@ class ConstructibilityTest(unittest.TestCase):
             root = self.copied_root(temporary)
             self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FP"]["recrash_graph"].remove("recoverable-interruption-to-recrash-classified"))
             with self.assertRaisesRegex(ConstructibilityError, "FP recrash graph|schema validation"):
+                validate(root)
+
+    def test_effect_interruption_must_cold_reclassify_without_success_edge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_normalization_effect"][
+                    "transition_graph"
+                ].__setitem__("recoverable-interruption", "normalization-receipt"),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "normalization transition graph"):
                 validate(root)
 
     def test_mapping_activation_matrix_cannot_be_shortened(self) -> None:

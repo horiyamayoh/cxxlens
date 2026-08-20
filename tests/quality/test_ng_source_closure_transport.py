@@ -26,6 +26,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     TASK,
     MANIFEST_SCHEMA,
     SourceClosureTransportError,
+    TransferStateWitness,
     blob_receipts_digest,
     closure_digest,
     complete_request_witness,
@@ -42,6 +43,11 @@ from check_ng_source_closure_transport import (  # noqa: E402
     validate_request_binding,
     transfer_digest,
 )
+
+SEMANTIC = "semantic-v2:sha256:" + "1" * 64
+SESSION_ID = "provider-session:sha256:" + "2" * 64
+TASK_ID = "task:" + SEMANTIC
+CLEANUP_RECEIPT = "cleanup-receipt:" + SEMANTIC
 
 
 class SourceClosureTransportTest(unittest.TestCase):
@@ -300,7 +306,7 @@ class SourceClosureTransportTest(unittest.TestCase):
 
     def test_reject_fields_and_phase_are_executable(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
-        control = {"session_id": "s", "task_id": "t", "failure_phase": "before-manifest", "reason_code": "source-closure.protocol-state-invalid", "observed_counters": {"observed-control-frame-count": 1}, "cleanup_receipt": "c"}
+        control = {"session_id": SESSION_ID, "task_id": TASK_ID, "failure_phase": "before-manifest", "reason_code": "source-closure.protocol-state-invalid", "observed_counters": {"observed-control-frame-count": 1}, "cleanup_receipt": CLEANUP_RECEIPT}
         validate_reject_control(control, contract)
         control["observed_counters"] = {"received-payload-bytes": 1}
         with self.assertRaisesRegex(SourceClosureTransportError, "phase-authentic|bytes"):
@@ -315,7 +321,7 @@ class SourceClosureTransportTest(unittest.TestCase):
     def test_nonreject_wire_controls_are_closed_typed_and_state_bound(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         semantic = "semantic-v2:sha256:" + "1" * 64
-        control = {"kind": "chunk", "session_id": "s", "task_id": "t", "manifest_digest": semantic, "chunk_index": 0, "offset": 0, "byte_count": 1}
+        control = {"kind": "chunk", "session_id": SESSION_ID, "task_id": TASK_ID, "manifest_digest": semantic, "chunk_index": 0, "offset": 0, "byte_count": 1}
         validate_wire_control("source_closure_manifest", control, b"x", "manifest-open", contract)
         with self.assertRaisesRegex(SourceClosureTransportError, "illegal"):
             validate_wire_control("source_closure_manifest", control, b"x", "task-v4-sealed", contract)
@@ -330,13 +336,13 @@ class SourceClosureTransportTest(unittest.TestCase):
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         semantic = "semantic-v2:sha256:" + "1" * 64
         content = "sha256:" + "2" * 64
-        blob = {"session_id": "s", "task_id": "t", "closure_digest": semantic, "blob_ordinal": 0, "blob_digest": content, "total_bytes": 16777217, "chunk_bytes": 1048576, "chunk_count": 17}
+        blob = {"session_id": SESSION_ID, "task_id": TASK_ID, "closure_digest": semantic, "blob_ordinal": 0, "blob_digest": content, "total_bytes": 16777217, "chunk_bytes": 1048576, "chunk_count": 17}
         with self.assertRaisesRegex(SourceClosureTransportError, "byte bound"):
             validate_wire_control("source_closure_blob", blob, b"", "manifest-validated", contract)
         blob.update({"total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1})
         with self.assertRaisesRegex(SourceClosureTransportError, "byte string"):
             validate_wire_control("source_closure_blob", blob, "", "manifest-validated", contract)
-        descriptor = {"kind": "descriptor", "session_id": "s", "task_id": "t", "task_v4_digest": semantic, "closure_id": "x", "closure_digest": semantic, "manifest_digest": semantic, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}
+        descriptor = {"kind": "descriptor", "session_id": SESSION_ID, "task_id": TASK_ID, "task_v4_digest": semantic, "closure_id": "x", "closure_digest": semantic, "manifest_digest": semantic, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}
         with self.assertRaisesRegex(SourceClosureTransportError, "source closure ID"):
             validate_wire_control("source_closure_manifest", descriptor, b"", "task-v4-sealed", contract)
 
@@ -344,7 +350,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         semantic = "semantic-v2:sha256:" + "1" * 64
         content = "sha256:" + "2" * 64
-        blob = {"session_id": "s", "task_id": "t", "closure_digest": semantic, "blob_ordinal": 0, "blob_digest": content, "total_bytes": 0, "chunk_bytes": 1048576, "chunk_count": 0}
+        blob = {"session_id": SESSION_ID, "task_id": TASK_ID, "closure_digest": semantic, "blob_ordinal": 0, "blob_digest": content, "total_bytes": 0, "chunk_bytes": 1048576, "chunk_count": 0}
         validate_wire_control("source_closure_blob", blob, b"", "manifest-validated", contract)
 
     def test_trust_policy_digest_and_worker_parity_are_enforced(self) -> None:
@@ -432,8 +438,53 @@ class SourceClosureTransportTest(unittest.TestCase):
             "observed_counters": {"observed-control-frame-count": 0},
             "cleanup_receipt": ["fabricated"],
         }
-        with self.assertRaisesRegex(SourceClosureTransportError, "bounded typed ID"):
+        with self.assertRaisesRegex(SourceClosureTransportError, "typed ID"):
             validate_reject_control(control, contract)
+
+    def test_transfer_state_witness_rejects_foreign_gap_and_zero_manifest(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        witness = TransferStateWitness(
+            session_id=SESSION_ID,
+            task_id=TASK_ID,
+            task_v4_digest=SEMANTIC,
+            closure_id="source-closure:" + SEMANTIC,
+            closure_digest=SEMANTIC,
+            manifest_digest=SEMANTIC,
+        )
+        descriptor = {
+            "kind": "descriptor", "session_id": SESSION_ID, "task_id": TASK_ID,
+            "task_v4_digest": SEMANTIC, "closure_id": "source-closure:" + SEMANTIC,
+            "closure_digest": SEMANTIC, "manifest_digest": SEMANTIC,
+            "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1,
+        }
+        witness.apply("source_closure_manifest", descriptor, b"", contract)
+        chunk = {
+            "kind": "chunk", "session_id": SESSION_ID, "task_id": TASK_ID,
+            "manifest_digest": SEMANTIC, "chunk_index": 9, "offset": 9,
+            "byte_count": 1,
+        }
+        with self.assertRaisesRegex(SourceClosureTransportError, "contiguous"):
+            witness.apply("source_closure_manifest", chunk, b"x", contract)
+        chunk.update({"chunk_index": 0, "offset": 0, "session_id": "provider-session:sha256:" + "9" * 64})
+        with self.assertRaisesRegex(SourceClosureTransportError, "binding"):
+            witness.apply("source_closure_manifest", chunk, b"x", contract)
+        descriptor.update({"total_bytes": 0, "chunk_count": 0})
+        with self.assertRaisesRegex(SourceClosureTransportError, "one or more"):
+            validate_wire_control(
+                "source_closure_manifest", descriptor, b"", "task-v4-sealed", contract
+            )
+
+    def test_manifest_main_metadata_must_equal_base_source(self) -> None:
+        request = self.bound_request()
+        manifest = self.bind_manifest(request)
+        request["tasks"][0]["source"]["content_digest"] = "sha256:" + "e" * 64
+        request["tasks"][0]["task_input_digest"] = "sha256:" + "d" * 64
+        extension = request["task_extensions"][0]
+        extension["base_task_v3_digest"] = content_projection_digest(request["tasks"][0])
+        extension["open_task"]["task_input_digest"] = request["tasks"][0]["task_input_digest"]
+        self.reseal_request(request)
+        with self.assertRaisesRegex(SourceClosureTransportError, "main source"):
+            validate_request_binding(request, [manifest])
 
     def test_bounded_terminal_seal_uses_one_digest_for_4096_blobs(self) -> None:
         receipts = [

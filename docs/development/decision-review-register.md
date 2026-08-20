@@ -22,7 +22,10 @@ candidate/reviewer GitHub logins plus reviewer identity/session, verdict and P0/
 exact-candidate connected CI run bound to the immutable active workflow ID/path. The
 acceptance commit may change only declared status/receipt paths and must descend from the candidate.
 To avoid a self-referential commit hash, it is derived as the first descendant commit whose receipt
-registry contains that receipt ID.
+registry contains that receipt ID. The registry transition is append-only: the selected receipt is
+added exactly once and every existing receipt must remain byte-identical. Connected verification
+binds the claimed candidate GitHub login to the authenticated candidate commit author and requires
+the reviewer login to differ from both authenticated author and committer.
 
 Delivery uses atomic fast-forward commits on `main`. A pull request can remain useful review or
 external-contribution evidence, but its existence, review state, or branch status is not correctness
@@ -34,6 +37,8 @@ or normalized authority digests, self-review, accepted verdicts with P0/P1, miss
 connected verification, activation before acceptance, qualification before implementation, and
 replacement of a preserved WIP ref. Connected CI additionally authenticates GitHub comment bytes,
 author identity, and the named CI run plus active workflow object; a spoofed workflow name is not
-authority. Offline-only evidence cannot activate production support.
+authority. Heavy also authenticates the triggering workflow ID, and non-synthetic context generation
+fetches `origin/main` before checking an exact clean HEAD. Offline-only evidence cannot activate
+production support.
 The comment is canonical receipt JSON, so candidate, authority closure, isolated reviewer session,
 verdict, finding census, and qualification boundary cannot drift independently.

@@ -210,11 +210,7 @@ def validate_reject_control(control: dict[str, Any], contract: dict[str, Any]) -
     if set(control) != expected:
         raise SourceClosureTransportError("reject control fields are not exact and closed")
     for field in ("session_id", "task_id", "cleanup_receipt"):
-        value = control.get(field)
-        if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096:
-            raise SourceClosureTransportError(
-                f"reject control {field} is not a bounded typed ID"
-            )
+        validate_wire_id(field, control.get(field))
     phase = control.get("failure_phase")
     row = contract["failure_phase_matrix"].get(phase)
     if row is None or control.get("reason_code") not in row["allowed"]:
@@ -226,6 +222,21 @@ def validate_reject_control(control: dict[str, Any], contract: dict[str, Any]) -
         raise SourceClosureTransportError("reject counters are not uint64 integers")
     if phase == "before-manifest" and any("byte" in key for key in counters):
         raise SourceClosureTransportError("before-manifest reject fabricates received bytes")
+
+
+WIRE_ID_PATTERNS = {
+    "session_id": re.compile(r"^provider-session:sha256:[0-9a-f]{64}$"),
+    "task_id": re.compile(r"^task:semantic-v2:sha256:[0-9a-f]{64}$"),
+    "spool_receipt": re.compile(r"^spool-receipt:semantic-v2:sha256:[0-9a-f]{64}$"),
+    "cleanup_owner": re.compile(r"^cleanup-owner:semantic-v2:sha256:[0-9a-f]{64}$"),
+    "cleanup_receipt": re.compile(r"^cleanup-receipt:semantic-v2:sha256:[0-9a-f]{64}$"),
+}
+
+
+def validate_wire_id(field: str, value: Any) -> None:
+    pattern = WIRE_ID_PATTERNS[field]
+    if not isinstance(value, str) or pattern.fullmatch(value) is None:
+        raise SourceClosureTransportError(f"wire control {field} is not a typed ID")
 
 
 def validate_wire_control(
@@ -274,8 +285,7 @@ def validate_wire_control(
             if not isinstance(value, str) or not re.fullmatch(r"source-closure:semantic-v2:sha256:[0-9a-f]{64}", value):
                 raise SourceClosureTransportError("wire control closure_id is not a source closure ID")
         elif field in {"session_id", "task_id", "spool_receipt", "cleanup_owner"}:
-            if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096:
-                raise SourceClosureTransportError(f"wire control {field} is not a bounded typed ID")
+            validate_wire_id(field, value)
     if spec["payload"] == "empty" and payload:
         raise SourceClosureTransportError("wire control payload must be empty")
     if spec["payload"] == "exact-byte-count-frame-digest":
@@ -290,9 +300,96 @@ def validate_wire_control(
         maximum_bytes = contract["limits"]["maximum_manifest_bytes"] if name == "source_closure_manifest" else contract["limits"]["maximum_blob_bytes"]
         if control["total_bytes"] > maximum_bytes:
             raise SourceClosureTransportError("wire descriptor total byte bound exceeded")
+        if name == "source_closure_manifest" and control["total_bytes"] == 0:
+            raise SourceClosureTransportError("wire manifest requires one or more chunks")
         expected_count = 0 if control["total_bytes"] == 0 else (control["total_bytes"] + control["chunk_bytes"] - 1) // control["chunk_bytes"]
         if control["chunk_count"] != expected_count or control["chunk_count"] > maximum_count:
             raise SourceClosureTransportError("wire descriptor chunk count invalid")
+
+
+class TransferStateWitness:
+    """Executable exact-binding witness for one manifest and its canonical blob stream."""
+
+    def __init__(self, *, session_id: str, task_id: str, task_v4_digest: str,
+                 closure_id: str, closure_digest: str, manifest_digest: str) -> None:
+        self.expected = {
+            "session_id": session_id,
+            "task_id": task_id,
+            "task_v4_digest": task_v4_digest,
+            "closure_id": closure_id,
+            "closure_digest": closure_digest,
+            "manifest_digest": manifest_digest,
+        }
+        self.state = "task-v4-sealed"
+        self.next_index = 0
+        self.next_offset = 0
+        self.declared_bytes = 0
+        self.current_blob_ordinal = 0
+        self.current_blob_digest: str | None = None
+        self.completed_blobs = 0
+        self.total_blob_bytes = 0
+        self.transfer_digest: str | None = None
+
+    def _bind(self, control: dict[str, Any], fields: tuple[str, ...]) -> None:
+        if any(control.get(field) != self.expected[field] for field in fields):
+            raise SourceClosureTransportError("wire state witness identity binding mismatch")
+
+    def apply(self, name: str, control: dict[str, Any], payload: bytes,
+              contract: dict[str, Any]) -> None:
+        validate_wire_control(name, control, payload, self.state, contract)
+        self._bind(control, tuple(field for field in ("session_id", "task_id") if field in control))
+        if name == "source_closure_manifest" and control["kind"] == "descriptor":
+            self._bind(control, ("task_v4_digest", "closure_id", "closure_digest", "manifest_digest"))
+            self.declared_bytes = control["total_bytes"]
+            self.next_index = self.next_offset = 0
+            self.state = "manifest-open"
+        elif name == "source_closure_manifest":
+            self._bind(control, ("manifest_digest",))
+            if control["chunk_index"] != self.next_index or control["offset"] != self.next_offset:
+                raise SourceClosureTransportError("wire manifest chunk is not contiguous")
+            self.next_index += 1
+            self.next_offset += control["byte_count"]
+            if self.next_offset > self.declared_bytes:
+                raise SourceClosureTransportError("wire manifest chunk exceeds declaration")
+            self.state = "manifest-validated" if self.next_offset == self.declared_bytes else "manifest-streaming"
+        elif name == "source_closure_blob":
+            self._bind(control, ("closure_digest",))
+            if control["blob_ordinal"] != self.completed_blobs:
+                raise SourceClosureTransportError("wire blob order is not canonical")
+            self.current_blob_ordinal = control["blob_ordinal"]
+            self.current_blob_digest = control["blob_digest"]
+            self.declared_bytes = control["total_bytes"]
+            self.next_index = self.next_offset = 0
+            self.state = "blob-sealed" if self.declared_bytes == 0 else "blob-open"
+            if self.declared_bytes == 0:
+                self.completed_blobs += 1
+        elif name == "source_closure_chunk":
+            if (control["blob_ordinal"] != self.current_blob_ordinal or
+                    control["blob_digest"] != self.current_blob_digest or
+                    control["chunk_index"] != self.next_index or
+                    control["offset"] != self.next_offset):
+                raise SourceClosureTransportError("wire blob chunk binding/order mismatch")
+            self.next_index += 1
+            self.next_offset += control["byte_count"]
+            if self.next_offset > self.declared_bytes:
+                raise SourceClosureTransportError("wire blob chunk exceeds declaration")
+            if self.next_offset == self.declared_bytes:
+                self.completed_blobs += 1
+                self.total_blob_bytes += self.declared_bytes
+                self.state = "blob-sealed"
+            else:
+                self.state = "blob-streaming"
+        elif name == "source_closure_seal":
+            self._bind(control, ("task_v4_digest", "manifest_digest", "closure_digest"))
+            if control["blob_count"] != self.completed_blobs or control["total_bytes"] != self.total_blob_bytes:
+                raise SourceClosureTransportError("wire seal census mismatch")
+            self.transfer_digest = control["transfer_digest"]
+            self.state = "closure-sealed"
+        elif name == "source_closure_ack":
+            self._bind(control, ("closure_digest",))
+            if control["transfer_digest"] != self.transfer_digest:
+                raise SourceClosureTransportError("wire ack transfer binding mismatch")
+            self.state = "closure-acknowledged"
 
 
 def blob_receipts_digest(receipts: list[dict[str, Any]]) -> str:
@@ -470,12 +567,25 @@ def validate_request_binding(
         ) or reference.get("manifest_digest") != closure.get("manifest_digest"):
             raise SourceClosureTransportError("task v4 closure reference does not resolve exactly")
         manifest_main = [
-            member["logical_path"]
+            member
             for member in manifest_by_id[reference["id"]]["members"]
             if member["role"] == "main"
         ]
-        if manifest_main != [extension.get("main_logical_path")]:
-            raise SourceClosureTransportError("task v4 manifest main path binding mismatch")
+        base_source = base.get("source", {})
+        if len(manifest_main) != 1 or {
+            field: manifest_main[0].get(field)
+            for field in (
+                "file_id", "logical_path", "content_digest", "size_bytes",
+                "encoding", "read_only",
+            )
+        } != {
+            field: base_source.get(field)
+            for field in (
+                "file_id", "logical_path", "content_digest", "size_bytes",
+                "encoding", "read_only",
+            )
+        }:
+            raise SourceClosureTransportError("task v4 manifest main source binding mismatch")
         expected_task_digest = semantic_digest(
             "cxxlens.clang22.task.v4", task_v4_projection(extension)
         )
@@ -802,22 +912,34 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     }, manifest_schema)
     semantic_witness = "semantic-v2:sha256:" + "1" * 64
     content_witness = "sha256:" + "2" * 64
+    session_witness = "provider-session:sha256:" + "3" * 64
+    task_witness = "task:" + semantic_witness
     controls_witness = [
-        ("source_closure_manifest", {"kind": "descriptor", "session_id": "session:witness", "task_id": "task:witness", "task_v4_digest": semantic_witness, "closure_id": "source-closure:" + semantic_witness, "closure_digest": semantic_witness, "manifest_digest": semantic_witness, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}, b"", "task-v4-sealed"),
-        ("source_closure_manifest", {"kind": "chunk", "session_id": "session:witness", "task_id": "task:witness", "manifest_digest": semantic_witness, "chunk_index": 0, "offset": 0, "byte_count": 1}, b"x", "manifest-open"),
-        ("source_closure_blob", {"session_id": "session:witness", "task_id": "task:witness", "closure_digest": semantic_witness, "blob_ordinal": 0, "blob_digest": content_witness, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}, b"", "manifest-validated"),
-        ("source_closure_chunk", {"session_id": "session:witness", "task_id": "task:witness", "blob_ordinal": 0, "blob_digest": content_witness, "chunk_index": 0, "offset": 0, "byte_count": 1}, b"x", "blob-open"),
-        ("source_closure_seal", {"session_id": "session:witness", "task_id": "task:witness", "task_v4_digest": semantic_witness, "manifest_digest": semantic_witness, "blob_receipts_digest": semantic_witness, "blob_count": 1, "total_bytes": 1, "closure_digest": semantic_witness, "transfer_digest": semantic_witness}, b"", "blob-sealed"),
-        ("source_closure_ack", {"session_id": "session:witness", "task_id": "task:witness", "closure_digest": semantic_witness, "transfer_digest": semantic_witness, "spool_receipt": "spool:witness", "cleanup_owner": "cleanup:witness"}, b"", "closure-sealed"),
+        ("source_closure_manifest", {"kind": "descriptor", "session_id": session_witness, "task_id": task_witness, "task_v4_digest": semantic_witness, "closure_id": "source-closure:" + semantic_witness, "closure_digest": semantic_witness, "manifest_digest": semantic_witness, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}, b""),
+        ("source_closure_manifest", {"kind": "chunk", "session_id": session_witness, "task_id": task_witness, "manifest_digest": semantic_witness, "chunk_index": 0, "offset": 0, "byte_count": 1}, b"x"),
+        ("source_closure_blob", {"session_id": session_witness, "task_id": task_witness, "closure_digest": semantic_witness, "blob_ordinal": 0, "blob_digest": content_witness, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}, b""),
+        ("source_closure_chunk", {"session_id": session_witness, "task_id": task_witness, "blob_ordinal": 0, "blob_digest": content_witness, "chunk_index": 0, "offset": 0, "byte_count": 1}, b"x"),
+        ("source_closure_seal", {"session_id": session_witness, "task_id": task_witness, "task_v4_digest": semantic_witness, "manifest_digest": semantic_witness, "blob_receipts_digest": semantic_witness, "blob_count": 1, "total_bytes": 1, "closure_digest": semantic_witness, "transfer_digest": semantic_witness}, b""),
+        ("source_closure_ack", {"session_id": session_witness, "task_id": task_witness, "closure_digest": semantic_witness, "transfer_digest": semantic_witness, "spool_receipt": "spool-receipt:" + semantic_witness, "cleanup_owner": "cleanup-owner:" + semantic_witness}, b""),
     ]
-    for control_name, control_value, control_payload, control_state in controls_witness:
-        validate_wire_control(control_name, control_value, control_payload, control_state, contract)
+    transfer_witness = TransferStateWitness(
+        session_id=session_witness,
+        task_id=task_witness,
+        task_v4_digest=semantic_witness,
+        closure_id="source-closure:" + semantic_witness,
+        closure_digest=semantic_witness,
+        manifest_digest=semantic_witness,
+    )
+    for control_name, control_value, control_payload in controls_witness:
+        transfer_witness.apply(control_name, control_value, control_payload, contract)
+    if transfer_witness.state != "closure-acknowledged":
+        raise SourceClosureTransportError("wire state witness did not reach exact terminal")
     for phase, row in matrix.items():
         validate_reject_control({
-            "session_id": "session:witness", "task_id": "task:witness",
+            "session_id": session_witness, "task_id": task_witness,
             "failure_phase": phase, "reason_code": row["allowed"][0],
             "observed_counters": {name: 0 for name in row["counters"]},
-            "cleanup_receipt": "cleanup:witness",
+            "cleanup_receipt": "cleanup-receipt:" + semantic_witness,
         }, contract)
 
     maturity = contract["maturity"]
@@ -898,6 +1020,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         current_comparable.pop("authority")
         reviewed_comparable.pop("maturity")
         current_comparable.pop("maturity")
+        reviewed_comparable.pop("review_findings")
+        current_comparable.pop("review_findings")
         if reviewed_comparable != current_comparable:
             raise SourceClosureTransportError("accepted semantics differ from reviewed Proposed commit")
         registry = {

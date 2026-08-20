@@ -77,6 +77,12 @@ until task v4, manifest, all blobs, and the terminal seal validate.
 
 Every message uses deterministic closed-map CBOR, the exact open-task stream, a contiguous shared
 session sequence, zero flags, and the exact control/payload fields in the machine contract. The
+control identities are typed, not free text: session is
+`provider-session:sha256:<64-lower-hex>`, task is
+`task:semantic-v2:sha256:<64-lower-hex>`, and spool/cleanup owner/cleanup receipt use their exact
+`semantic-v2` domains from the contract. The executable transfer witness rejects a foreign identity,
+non-contiguous manifest/blob index or offset, non-canonical blob ordinal, incomplete seal census, or
+ack not bound to the recomputed terminal digest. The
 manifest `kind` field is the descriptor/chunk discriminant. The manifest is first and its canonical
 member/blob order is the ADR 0101 order. Message 24 first
 declares its total length and digest, then repeats with contiguous chunks of at most 1 MiB; semantic
@@ -129,6 +135,9 @@ references. It never nests an executable 2.1 request and never carries `content_
 1.1 peers continue request 2.1/task v3 only. Protocol 1.2 accepts request 2.2/task v4 only, requires
 `task-source-closure-v1`, and transfers the canonical complete task-v4 metadata through the bounded
 task-input frames before closure frames so the provider independently recomputes its identity.
+The main-source manifest member is cross-bound byte-for-byte to task v4's file ID, logical path,
+content digest, byte size, encoding, and read-only flag; path agreement alone cannot reseal divergent
+metadata.
 Unknown required message IDs and
 attempted implicit downgrade fail closed. Message 23 remains heartbeat and IDs 24--29 cannot be
 allocated by NG1.

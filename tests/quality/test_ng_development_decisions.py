@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import yaml
 
@@ -25,6 +26,7 @@ from check_ng_development_decisions import (  # noqa: E402
     SCHEMA,
     authority_digest,
     canonical_review_comment,
+    _verify_connected_receipt,
     validate,
 )
 
@@ -149,6 +151,53 @@ class DevelopmentDecisionTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(DecisionRegisterError, "GitHub identities"):
                 validate(root, verify_git=False)
+
+    def test_connected_verifier_authenticates_candidate_and_workflow_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _, receipt = self.accepted_receipt_root(temporary)
+            body = canonical_review_comment(receipt)
+            receipt["comment_body_sha256"] = "sha256:" + hashlib.sha256(
+                body.encode("utf-8")
+            ).hexdigest()
+            responses = [
+                {
+                    "body": body,
+                    "html_url": receipt["comment_url"],
+                    "user": {"login": receipt["reviewer_github_login"]},
+                },
+                {
+                    "sha": receipt["candidate_commit"],
+                    "author": {"login": receipt["candidate_github_login"]},
+                    "committer": {"login": receipt["candidate_github_login"]},
+                },
+                {
+                    "id": 1,
+                    "html_url": receipt["connected_verification"]["run_url"],
+                    "head_sha": receipt["candidate_commit"],
+                    "workflow_id": 1,
+                    "name": "Autonomy fast",
+                    "event": "push",
+                    "conclusion": "success",
+                },
+                {
+                    "id": 1,
+                    "name": "Autonomy fast",
+                    "path": ".github/workflows/autonomy-fast.yml",
+                    "state": "active",
+                },
+            ]
+            with mock.patch(
+                "check_ng_development_decisions._github_json",
+                side_effect=responses,
+            ):
+                _verify_connected_receipt(receipt, "token")
+            responses[1]["author"]["login"] = "forged-candidate"
+            with mock.patch(
+                "check_ng_development_decisions._github_json",
+                side_effect=responses,
+            ):
+                with self.assertRaisesRegex(DecisionRegisterError, "candidate identity"):
+                    _verify_connected_receipt(receipt, "token")
 
 
 if __name__ == "__main__":

@@ -18,6 +18,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = pathlib.Path("schemas/cxxlens_ng_work_units.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_work_units.schema.yaml")
 EXPECTED_ISSUES = {"#173", "#183", "#185", "#200", "#201", "#202", "#205", "#261", "#277"}
+REQUIRED_SQLITE_PRODUCTS = {
+    "sqlite.active-read-connection",
+    "sqlite.nested-mapping-terminal",
+    "sqlite.logical-read-receipt",
+}
 
 
 class WorkUnitError(ValueError):
@@ -104,6 +109,7 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
 
     units: dict[str, dict[str, Any]] = {}
     unit_issue: dict[str, str] = {}
+    product_owners: dict[str, str] = {}
     for entry in entries:
         actual_digest = canonical_digest(root, entry["authority_sources"])
         if not allow_placeholder and actual_digest != entry["authority_digest"]:
@@ -116,6 +122,10 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
                 raise WorkUnitError(f"unit/issue mismatch: {identifier}")
             units[identifier] = unit
             unit_issue[identifier] = entry["issue"]
+            for product in unit["owned_products"]:
+                if product in product_owners:
+                    raise WorkUnitError(f"duplicate product owner: {product}")
+                product_owners[product] = identifier
             for generated in unit["generated_surfaces"]:
                 if any(path_conflicts(generated, owned) for owned in unit["owned_paths"]):
                     raise WorkUnitError(f"generated surface must remain integration-owned: {identifier}:{generated}")
@@ -130,6 +140,8 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
             if identifier not in units[peer]["serialized_with"]:
                 raise WorkUnitError(f"asymmetric serialization: {identifier}:{peer}")
     _acyclic(units)
+    if not REQUIRED_SQLITE_PRODUCTS.issubset(product_owners):
+        raise WorkUnitError("required SQLite product owner is missing")
 
     identifiers = sorted(units)
     for index, left_id in enumerate(identifiers):
@@ -141,6 +153,12 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
                 raise WorkUnitError(f"undeclared owned-path overlap: {left_id}:{right_id}")
     for consumer_id, consumer in units.items():
         dependencies = _transitive_dependencies(consumer_id, units)
+        for product in consumer["consumed_products"]:
+            producer_id = product_owners.get(product)
+            if producer_id is None:
+                raise WorkUnitError(f"consumed product has no owner: {consumer_id}:{product}")
+            if producer_id not in dependencies:
+                raise WorkUnitError(f"consumed product lacks dependency: {consumer_id}:{producer_id}")
         for producer_id, producer in units.items():
             if consumer_id == producer_id:
                 continue

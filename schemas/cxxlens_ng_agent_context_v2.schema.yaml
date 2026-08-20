@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-agent-context.v2
 title: cxxlens exact work-unit agent context v2
 type: object
 additionalProperties: false
-required: [schema, document_version, role, issue, unit_id, conflict_class, integration_owner, risk, execution_disposition, blockers, dependencies, authority, reading_set, allowed_write_paths, integration_generated_surfaces, forbidden_shortcuts, completion_class, evidence_commands, completion_plan, residual_qualification]
+required: [schema, document_version, role, issue, unit_id, conflict_class, integration_owner, risk, execution_disposition, blockers, dependencies, owned_products, consumed_products, authority, reading_set, allowed_write_paths, integration_generated_surfaces, forbidden_shortcuts, completion_class, evidence_commands, completion_plan, residual_qualification]
 properties:
   schema: {const: cxxlens.ng-agent-context.v2}
   document_version: {const: 2.0.0}
@@ -16,6 +16,8 @@ properties:
   execution_disposition: {enum: [ready, stop-review-required, stop-blocked-by-authority, stop-blocked-by-dependency]}
   blockers: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
   dependencies: {type: array, uniqueItems: true, items: {type: string, pattern: '^wu-[1-9][0-9]*-[a-z0-9-]+$'}}
+  owned_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
+  consumed_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
   authority:
     type: object
     additionalProperties: false
@@ -46,3 +48,4 @@ $defs:
   hex40: {type: string, pattern: '^[0-9a-f]{40}$'}
   digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   path: {type: string, pattern: '^(?!/)(?!.*\.\.)(?!.*\\).+'}
+  product: {type: string, pattern: '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$'}

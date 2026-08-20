@@ -34,6 +34,7 @@ class AgentContextV2Test(unittest.TestCase):
         self.assertEqual(packet["execution_disposition"], "stop-blocked-by-authority")
         self.assertIn("blocked-by-authority", packet["blockers"])
         self.assertTrue(packet["completion_plan"])
+        self.assertEqual(packet["consumed_products"], ["sqlite.logical-read-receipt"])
 
     def test_dependency_blocked_unit_excludes_integration_owned_generated_surfaces(self) -> None:
         packet = build(ROOT, "#277", "wu-277-context-v2", synthetic=True)
@@ -56,6 +57,7 @@ class AgentContextV2Test(unittest.TestCase):
         entry, unit = _select(manifest, "#173", "wu-173-governance")
         responses = {
             ("status", "--porcelain=v1", "--untracked-files=all"): "",
+            ("fetch", "--no-tags", "origin", "main"): "",
             ("rev-parse", "HEAD"): "0" * 40,
             ("rev-parse", "origin/main"): "1" * 40,
         }

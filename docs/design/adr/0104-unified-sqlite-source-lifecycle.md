@@ -28,7 +28,7 @@ The no-effect boundary begins before target `xOpen`, not after census:
 `-> no-effect-boundary-armed -> typed-family-census -> active-read-connection-open`
 `-> wal-lock-and-prefix-held -> mapping-subprotocol-or-private-index`
 `-> eager-decode -> decoded-read-candidate-sealed -> connection-revoking`
-`-> outer-custody-join-sealed -> connection-closed`
+`-> outer-custody-join-pending -> outer-custody-join-sealed -> connection-closed`
 `-> zero-effect-callback-receipt-sealed -> logical-read-receipt`.
 
 From `no-effect-boundary-armed` through `logical-read-receipt`, including every map, unmap, and
@@ -120,8 +120,11 @@ census, perform one authenticated `xShmUnmap(0)`, consume its distinct close own
 callback-effect transcript, and cleanup acknowledgement, then release the page-support pin and seal
 only `reader-retired`. It never retires or makes a claim about an independently live writer attachment.
 The outer connection separately joins all reader terminals with all writer terminals owned by that
-outer connection; only this scoped census seals `outer-custody-join-sealed`. Unrelated live writers do
-not block it, and reader retirement alone cannot satisfy it.
+outer connection. It enters `outer-custody-join-pending`, compares the exact outer-owned writer set
+with the retired-writer set and the exact outer-owned reader set with the retired-reader set, and
+only then seals `outer-custody-join-sealed`. Unrelated live writers are explicitly outside that
+census; a missing writer terminal or reader terminal blocks the join, and reader retirement alone
+cannot satisfy it.
 
 Fork is not an ordinary drain. `pthread_atfork` prepare seals admission and records the complete
 custody census; the parent handler revalidates process/fork generation before resuming. The child
@@ -144,10 +147,14 @@ The accepted DF-0202 fixture authority remains an executable closed partition, n
 
 - `F0 -> live-receipt -> fixture-normalizer`.
 - `FP/FH -> authenticated cleanup-or-recovery -> independently-revalidated F0 -> new-live-receipt`.
-- `FZ-pre -> retain-and-revalidate-the-exact-size-zero-coordination-WAL -> authenticated delete`
-  `-> retained-parent fsync -> independently-revalidated F0 -> new-live-receipt -> fixture-normalizer`.
-  Deletion and parent durability dominate journal creation; a crash before the fresh F0 receipt is
-  cold-reclassified and cannot continue the original FZ-pre edge.
+- `FZ-pre -> retain-and-revalidate-the-exact-size-zero-coordination-WAL`
+  `-> fixture-normalizer-with-same-coordination-WAL -> post-main-sealed`
+  `-> authenticated-coordination-WAL-delete -> retained-parent fsync`
+  `-> confirmed-close -> post-close-census -> normalization-receipt`.
+  The coordination WAL is retained through the same normalizer coordination object; deletion is
+  permitted only after the post-main seal. A crash or indeterminate effect enters
+  `recoverable-interruption`, is cold-reclassified through the seven-family classifier, and cannot
+  continue or mint the original FZ-pre receipt.
 - `FI/FZ-post/FO -> independently-validated rollback-empty-fresh-anchor` only; none is a completed
   normalization edge and none may mint or reuse a live receipt.
 
