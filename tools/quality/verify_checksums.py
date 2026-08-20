@@ -41,6 +41,7 @@ PACKAGE_PATHS = (
     "docs/design/adr/0100-ng1-resume-provider-digest-grammar.md",
     "docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md",
     "docs/design/adr/0102-dedicated-source-closure-transport.md",
+    "docs/design/adr/0103-bounded-store-candidate-and-report.md",
     "docs/design/catalogs/README.md",
     "schemas/cxxlens_ng_claim_envelope.schema.yaml",
     "schemas/cxxlens_ng_relation_registry.yaml",

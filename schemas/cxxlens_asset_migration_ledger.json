@@ -1,5 +1,5 @@
 {
-  "asset_count": 723,
+  "asset_count": 724,
   "assets": [
     {
       "authority": "active",
@@ -1194,6 +1194,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0102-dedicated-source-closure-transport.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0103-bounded-store-candidate-and-report.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -5064,7 +5071,7 @@
     }
   ],
   "classifications": {
-    "active": 687,
+    "active": 688,
     "archived": 35,
     "generated": 1
   },

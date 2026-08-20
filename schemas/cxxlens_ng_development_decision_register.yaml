@@ -52,7 +52,7 @@ decisions:
     implementation_status: partial
     qualification_status: not-claimed
     activation: blocked-until-accepted-authority-and-independent-review
-    authority_refs: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md]
+    authority_refs: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md]
   - id: decision.sqlite.unified-lifecycle
     title: Integrate readonly recovery normalization and same-process mapping leases
     owner_issues: ['#201', '#202', '#205']
