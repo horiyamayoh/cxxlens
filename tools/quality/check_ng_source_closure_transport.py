@@ -59,11 +59,23 @@ def _length(value: int) -> bytes:
 
 def _canonical_string(value: str) -> bytes:
     encoded = value.encode("utf-8")
-    return b"\x03" + _length(len(encoded)) + encoded
+    return b"\x04" + _length(len(encoded)) + encoded
 
 
 def _canonical_bytes(value: bytes) -> bytes:
-    return b"\x04" + _length(len(value)) + value
+    return b"\x03" + _length(len(value)) + value
+
+
+def _canonical_boolean(value: bool) -> bytes:
+    return b"\x01" + (b"\x01" if value else b"\x00")
+
+
+def _canonical_integer(value: int) -> bytes:
+    if type(value) is not int or value < -(1 << 63) or value > (1 << 63) - 1:
+        raise SourceClosureTransportError("canonical integer is outside signed 64-bit range")
+    magnitude = abs(value)
+    width = max(1, (magnitude.bit_length() + 7) // 8)
+    return b"\x02" + (b"\x01" if value < 0 else b"\x00") + _length(width) + magnitude.to_bytes(width, "big")
 
 
 def _canonical_tuple(values: list[bytes]) -> bytes:
@@ -75,11 +87,15 @@ def _canonical_tuple(values: list[bytes]) -> bytes:
 
 
 def semantic_digest(domain: str, projection: Any) -> str:
+    return semantic_digest_bytes(domain, canonical_json(projection))
+
+
+def semantic_digest_bytes(domain: str, projection: bytes) -> str:
     framed = _canonical_tuple(
         [
             _canonical_string("cxxlens-semantic-digest-v2"),
             _canonical_string(domain),
-            _canonical_bytes(canonical_json(projection)),
+            _canonical_bytes(projection),
         ]
     )
     return "semantic-v2:sha256:" + hashlib.sha256(framed).hexdigest()
@@ -91,6 +107,35 @@ def content_projection_digest(projection: Any) -> str:
 
 def manifest_digest(manifest: dict[str, Any]) -> str:
     return semantic_digest("cxxlens.source-closure-manifest.v1", manifest)
+
+
+def closure_digest(members: list[dict[str, Any]], blobs: list[dict[str, Any]]) -> str:
+    """Reproduce ADR 0101 / source_closure.cpp byte-for-byte."""
+    encoded_members = []
+    for member in members:
+        encoded_members.append(_canonical_tuple([
+            _canonical_string(member["file_id"]),
+            _canonical_string(member["logical_path"]),
+            _canonical_string(member["role"]),
+            _canonical_string(member["encoding"]),
+            _canonical_integer(member["size_bytes"]),
+            _canonical_string(member["content_digest"]),
+            _canonical_boolean(member["read_only"]),
+        ]))
+    encoded_blobs = [
+        _canonical_tuple([
+            _canonical_string(blob["content_digest"]),
+            _canonical_integer(blob["size_bytes"]),
+        ])
+        for blob in blobs
+    ]
+    projection = _canonical_tuple([
+        _canonical_string("cxxlens.source-closure.v1"),
+        _canonical_string("unicode-default-casefold-then-nfc"),
+        _canonical_tuple(encoded_members),
+        _canonical_tuple(encoded_blobs),
+    ])
+    return semantic_digest_bytes("cxxlens.source-closure.v1", projection)
 
 
 def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
@@ -125,6 +170,8 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         raise SourceClosureTransportError("manifest contains orphan blob")
     if sum(entry["size_bytes"] for entry in blobs) > 48 * 1024 * 1024:
         raise SourceClosureTransportError("manifest aggregate unique blob bound exceeded")
+    if manifest["closure_digest"] != closure_digest(members, blobs):
+        raise SourceClosureTransportError("manifest ADR 0101 closure digest mismatch")
 
 
 def validate_reject_control(control: dict[str, Any], contract: dict[str, Any]) -> None:
@@ -138,10 +185,66 @@ def validate_reject_control(control: dict[str, Any], contract: dict[str, Any]) -
     counters = control.get("observed_counters")
     if not isinstance(counters, dict) or set(counters) != set(row["counters"]):
         raise SourceClosureTransportError("reject counters are not phase-authentic")
-    if not all(isinstance(value, int) and value >= 0 for value in counters.values()):
-        raise SourceClosureTransportError("reject counters are not bounded integers")
+    if not all(type(value) is int and 0 <= value <= (1 << 64) - 1 for value in counters.values()):
+        raise SourceClosureTransportError("reject counters are not uint64 integers")
     if phase == "before-manifest" and any("byte" in key for key in counters):
         raise SourceClosureTransportError("before-manifest reject fabricates received bytes")
+
+
+def validate_wire_control(
+    name: str,
+    control: dict[str, Any],
+    payload: bytes,
+    state: str,
+    contract: dict[str, Any],
+) -> None:
+    """Validate one non-reject control before allocation, I/O, or state mutation."""
+    controls = contract["wire_controls"]
+    if name == "source_closure_reject":
+        if payload:
+            raise SourceClosureTransportError("reject control payload must be empty")
+        validate_reject_control(control, contract)
+        return
+    spec = controls.get(name)
+    if name == "source_closure_manifest":
+        if not isinstance(control, dict) or control.get("kind") not in {"descriptor", "chunk"}:
+            raise SourceClosureTransportError("manifest control discriminant invalid")
+        spec = spec[control["kind"]]
+    if not isinstance(spec, dict) or not isinstance(control, dict) or set(control) != set(spec["exact_fields"]):
+        raise SourceClosureTransportError("wire control fields are not exact and closed")
+
+    legal_states = {
+        ("source_closure_manifest", "descriptor"): {"task-v4-sealed"},
+        ("source_closure_manifest", "chunk"): {"manifest-open", "manifest-streaming"},
+        ("source_closure_blob", None): {"manifest-validated", "blob-sealed"},
+        ("source_closure_chunk", None): {"blob-open", "blob-streaming"},
+        ("source_closure_seal", None): {"blob-sealed"},
+        ("source_closure_ack", None): {"closure-sealed"},
+    }
+    if state not in legal_states[(name, control.get("kind"))]:
+        raise SourceClosureTransportError("wire control is illegal in current state")
+    for field, value in control.items():
+        if field in {"total_bytes", "chunk_bytes", "chunk_count", "chunk_index", "offset", "byte_count", "blob_ordinal", "blob_count"}:
+            if type(value) is not int or not 0 <= value <= (1 << 64) - 1:
+                raise SourceClosureTransportError(f"wire control {field} is not uint64")
+        elif field.endswith("digest"):
+            prefix = "sha256:" if field == "blob_digest" else "semantic-v2:sha256:"
+            if not isinstance(value, str) or not re.fullmatch(re.escape(prefix) + r"[0-9a-f]{64}", value):
+                raise SourceClosureTransportError(f"wire control {field} is not a typed digest")
+        elif field in {"session_id", "task_id", "closure_id", "spool_receipt", "cleanup_owner"}:
+            if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096:
+                raise SourceClosureTransportError(f"wire control {field} is not a bounded typed ID")
+    if spec["payload"] == "empty" and payload:
+        raise SourceClosureTransportError("wire control payload must be empty")
+    if spec["payload"] == "exact-byte-count-frame-digest":
+        if len(payload) != control["byte_count"] or not payload:
+            raise SourceClosureTransportError("wire chunk payload byte count mismatch")
+        if control["byte_count"] > contract["limits"]["maximum_chunk_payload_bytes"]:
+            raise SourceClosureTransportError("wire chunk payload exceeds bound")
+    if "chunk_bytes" in control and not 0 < control["chunk_bytes"] <= contract["limits"]["maximum_chunk_payload_bytes"]:
+        raise SourceClosureTransportError("wire descriptor chunk bound invalid")
+    if "chunk_count" in control and (control["chunk_count"] == 0 or control["chunk_count"] > contract["limits"]["maximum_blob_chunk_frames"]):
+        raise SourceClosureTransportError("wire descriptor chunk count invalid")
 
 
 def blob_receipts_digest(receipts: list[dict[str, Any]]) -> str:
@@ -327,6 +430,11 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "task-source-closure-v1",
     ]:
         raise SourceClosureTransportError("request 2.2 omits exact source-closure capability")
+    trust = request["properties"]["trust_policy"]["properties"]
+    if trust["protocol_minor"].get("const") != 2 or trust["required_features"].get("const") != [
+        "task-input-chunks-v1", "task-source-closure-v1"
+    ]:
+        raise SourceClosureTransportError("request 2.2 trust policy retains protocol 1.1 authority")
     request_text = (root / REQUEST).read_text(encoding="utf-8")
     task_text = (root / TASK).read_text(encoding="utf-8")
     if "content_base64" in request_text or "content_base64" in task_text:
@@ -447,15 +555,29 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         set(phase) != {"allowed", "counters"} for phase in matrix.values()
     ):
         raise SourceClosureTransportError("failure phase/field matrix is incomplete")
-    semantic = "semantic-v2:sha256:" + "1" * 64
     content = "sha256:" + "2" * 64
+    witness_members = [{"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
+    witness_blobs = [{"content_digest": content, "size_bytes": 1}]
+    semantic = closure_digest(witness_members, witness_blobs)
     validate_manifest({
         "schema": "cxxlens.source-closure-manifest.v1",
         "closure_id": "source-closure:" + semantic,
         "closure_digest": semantic,
-        "members": [{"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}],
-        "blobs": [{"content_digest": content, "size_bytes": 1}],
+        "members": witness_members,
+        "blobs": witness_blobs,
     }, manifest_schema)
+    semantic_witness = "semantic-v2:sha256:" + "1" * 64
+    content_witness = "sha256:" + "2" * 64
+    controls_witness = [
+        ("source_closure_manifest", {"kind": "descriptor", "session_id": "session:witness", "task_id": "task:witness", "task_v4_digest": semantic_witness, "closure_id": "source-closure:" + semantic_witness, "closure_digest": semantic_witness, "manifest_digest": semantic_witness, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}, b"", "task-v4-sealed"),
+        ("source_closure_manifest", {"kind": "chunk", "session_id": "session:witness", "task_id": "task:witness", "manifest_digest": semantic_witness, "chunk_index": 0, "offset": 0, "byte_count": 1}, b"x", "manifest-open"),
+        ("source_closure_blob", {"session_id": "session:witness", "task_id": "task:witness", "closure_digest": semantic_witness, "blob_ordinal": 0, "blob_digest": content_witness, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}, b"", "manifest-validated"),
+        ("source_closure_chunk", {"session_id": "session:witness", "task_id": "task:witness", "blob_ordinal": 0, "blob_digest": content_witness, "chunk_index": 0, "offset": 0, "byte_count": 1}, b"x", "blob-open"),
+        ("source_closure_seal", {"session_id": "session:witness", "task_id": "task:witness", "task_v4_digest": semantic_witness, "manifest_digest": semantic_witness, "blob_receipts_digest": semantic_witness, "blob_count": 1, "total_bytes": 1, "closure_digest": semantic_witness, "transfer_digest": semantic_witness}, b"", "blob-sealed"),
+        ("source_closure_ack", {"session_id": "session:witness", "task_id": "task:witness", "closure_digest": semantic_witness, "transfer_digest": semantic_witness, "spool_receipt": "spool:witness", "cleanup_owner": "cleanup:witness"}, b"", "closure-sealed"),
+    ]
+    for control_name, control_value, control_payload, control_state in controls_witness:
+        validate_wire_control(control_name, control_value, control_payload, control_state, contract)
     for phase, row in matrix.items():
         validate_reject_control({
             "session_id": "session:witness", "task_id": "task:witness",

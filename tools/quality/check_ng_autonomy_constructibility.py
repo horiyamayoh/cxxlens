@@ -83,27 +83,38 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     require_exact(mapping["promotion_predicate"], "native-SQLITE_OK-nonnull-plus-full-identity-zero-effect-receipt-and-writer-gates", "SQLite promotion predicate")
     teardown = mapping["teardown_transition_graph"]
     require_exact(teardown, {"active": "hide-generation", "hide-generation": "seal-pre-callback-cut", "seal-pre-callback-cut": "revoke-admission", "revoke-admission": "drain-callbacks-and-use-owners", "drain-callbacks-and-use-owners": "seal-owner-census", "seal-owner-census": "native-unmap-deleteFlag-zero", "native-unmap-deleteFlag-zero": ["unmap-confirmed-OK", "terminal-opaque-quarantine-zero-close"], "unmap-confirmed-OK": "consume-distinct-close-owner-and-native-close-once", "consume-distinct-close-owner-and-native-close-once": ["close-confirmed", "terminal-opaque-quarantine"], "close-confirmed": "seal-zero-effect-outcomes-retire-registry-release-pins", "terminal-opaque-quarantine-zero-close": [], "terminal-opaque-quarantine": []}, "SQLite teardown transition graph")
+    require_exact(mapping["reader_teardown_transition_graph"], {"reader-handoff-sealed": "reader-session-revoking", "reader-session-revoking": "hide-reader-generation", "hide-reader-generation": "drain-reader-sessions", "drain-reader-sessions": "native-reader-unmap-deleteFlag-zero", "native-reader-unmap-deleteFlag-zero": ["reader-unmap-confirmed-OK", "reader-terminal-opaque-quarantine"], "reader-unmap-confirmed-OK": "retire-reader-attachment-group-and-release-page-support-pin", "retire-reader-attachment-group-and-release-page-support-pin": "reader-retired", "reader-retired": [], "reader-terminal-opaque-quarantine": []}, "SQLite reader teardown transition graph")
     require_exact(mapping["zero_effect_receipt"], ["initialize", "create", "write", "truncate", "extend", "delete", "resize"], "SQLite zero-effect receipt")
     require_exact(mapping["read_receipt_barrier"], ["connection-closed", "zero-live-callbacks-leases-and-use-owners", "zero-effect-callback-receipt-sealed"], "SQLite read receipt barrier")
     require_exact(mapping["fork_transition_graph"], {"running": "atfork-prepare-seal-admission-and-census", "atfork-prepare-seal-admission-and-census": ["parent-revalidate-process-and-fork-generation", "child-transfer-all-inherited-custody"], "parent-revalidate-process-and-fork-generation": "running", "child-transfer-all-inherited-custody": "child-inherited-custody-quarantine", "child-inherited-custody-quarantine": ["child-exec", "child-exit"], "child-exec": [], "child-exit": []}, "SQLite fork transition graph")
     require_exact(mapping["child_quarantine_forbidden"], ["SQLite-entry", "native-unmap", "native-close", "retry", "cleanup", "owner-drain", "authority-reconstruction"], "SQLite child quarantine")
     require_exact(mapping["ambiguous_callback"], "permanent-quarantine-no-retry", "ambiguous callback")
+    require_exact(mapping["production_activation_predicate"], ["accepted-independent-review", "exact-static-shared-runtime-vfs-sqlite-dso-identity", "two-live-store-cas", "materialization-race", "cross-process-race", "cantinit-readonly-negative", "reader-writer-mapping-lifecycle-matrix", "fork-aba-unload-replacement", "connected-main-ci-and-platform-qualification"], "mapping production predicate")
 
     effect = machines["sqlite_normalization_effect"]
     require_exact(effect["separate_from_zero_effect_read"], True, "normalization isolation")
     require_exact(effect["entry"], "logical-read-receipt-exact-empty-after-connection-closed-zero-custody-zero-effect", "normalization entry")
     partitions = effect["fixture_partition_machine"]
-    require_exact(partitions, {
-        "F0": {"entry_guard": "exact-pre-no-sidecar", "transitions": ["pre-effect", "live-receipt", "fixture-normalizer"], "terminal": "normalization-receipt-or-recoverable-interruption"},
-        "FP": {"entry_guard": "exact-pre-nonhot-journal-prefix", "transitions": ["pre-effect", "authenticated-cleanup-or-recovery", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer"], "terminal": "normalization-receipt-or-recoverable-interruption"},
-        "FH": {"entry_guard": "valid-hot-journal-with-exact-preimages", "transitions": ["pre-effect", "authenticated-cleanup-or-recovery", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer"], "terminal": "normalization-receipt-or-recoverable-interruption"},
-        "FZ-pre": {"entry_guard": "exact-pre-or-valid-rollback-plus-size-zero-WAL", "transitions": ["pre-effect", "retain-and-revalidate-exact-size-zero-coordination-WAL", "new-live-receipt-bound-to-same-WAL", "fixture-normalizer"], "terminal": "normalization-receipt-or-recoverable-interruption"},
-        "FI": {"entry_guard": "journal-preimages-exact-pre-and-deterministic-post-plus-invalidated-journal", "transitions": ["pre-effect", "independently-validated-rollback-empty-fresh-anchor"], "terminal": "fresh-anchor-only-never-completed-edge"},
-        "FZ-post": {"entry_guard": "exact-post-plus-size-zero-WAL", "transitions": ["pre-effect", "independently-validated-rollback-empty-fresh-anchor"], "terminal": "fresh-anchor-only-never-completed-edge"},
-        "FO": {"entry_guard": "complete-valid-rollback-exact-empty-current-main-no-sidecar", "transitions": ["pre-effect", "independently-validated-rollback-empty-fresh-anchor"], "terminal": "fresh-anchor-only-never-completed-edge"},
-    }, "DF-0202 partition machine")
+    expected_guards = {"F0": "exact-pre-no-sidecar", "FP": "exact-pre-nonhot-journal-prefix", "FH": "valid-hot-journal-with-exact-preimages", "FZ-pre": "exact-pre-plus-size-zero-WAL", "FI": "journal-preimages-exact-pre-and-deterministic-post-plus-invalidated-journal", "FZ-post": "exact-post-plus-size-zero-WAL", "FO": "complete-valid-rollback-exact-empty-current-main-no-sidecar"}
+    expected_routes = {
+        "F0": ["live-receipt", "fixture-normalizer"],
+        "FP": ["authenticated-cleanup-or-recovery", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer"],
+        "FH": ["authenticated-cleanup-or-recovery", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer"],
+        "FZ-pre": ["retain-and-revalidate-exact-size-zero-coordination-WAL", "new-live-receipt-bound-to-same-WAL", "fixture-normalizer", "authenticated-coordination-WAL-delete", "retained-parent-fsync"],
+        "FI": ["independently-validated-rollback-empty-fresh-anchor"],
+        "FZ-post": ["authenticated-size-zero-WAL-delete", "retained-parent-fsync", "independently-validated-rollback-empty-fresh-anchor"],
+        "FO": ["independently-validated-rollback-empty-fresh-anchor"],
+    }
+    if set(partitions) != set(expected_guards):
+        raise ConstructibilityError("constructibility drift: DF-0202 partition machine")
+    for family, row in partitions.items():
+        terminal = "normalization-receipt-or-recoverable-interruption" if family in {"F0", "FP", "FH", "FZ-pre"} else "fresh-anchor-only-never-completed-edge"
+        require_exact(row["entry_guard"], expected_guards[family], f"{family} entry guard")
+        require_exact(row["route"], expected_routes[family], f"{family} route")
+        require_exact(row["lifecycle"], ["pre-effect", "effect-admitted", "recoverable-interruption", "recrash-classified", terminal], f"{family} recrash lifecycle")
+        require_exact(row["terminal"], terminal, f"{family} terminal")
     require_exact(effect["recrash_transition"], "any-recoverable-interruption-to-durable-bytes-through-same-seven-family-classifier", "DF-0202 recrash transition")
-    require_exact(effect["production_profile"], "prohibited-until-tracked-harness-loaded-SQLite-DSO-callback-recrash-large-sector-rebind-parent-sync-canonical-report-distinct-implementation-review-and-explicit-accepted-profile", "normalization production predicate")
+    require_exact(effect["production_activation_predicate"], ["tracked-exact-harness", "static-shared-loaded-sqlite-dso-identity", "runtime-vfs-device-filesystem-profile", "all-callback-boundaries", "parameterized-sector-page-record-set", "authenticated-coordination-wal-delete", "parent-sync-after-each-delete", "rebind-at-unlink", "seven-family-recrash-idempotence", "post-normalization-fresh-transition", "canonical-report-digest", "distinct-implementation-review", "explicit-accepted-effect-profile", "connected-main-ci-and-platform-qualification"], "normalization production predicate")
     require_exact(effect["canonical_user_source_activation"], "prohibited", "production normalization activation")
     require_exact(effect["parent_sync_after_each_delete"], "required", "normalization parent sync")
     return model

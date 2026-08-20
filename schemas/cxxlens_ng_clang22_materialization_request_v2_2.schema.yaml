@@ -31,7 +31,34 @@ properties:
   registry: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/registry}
   engine: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/engine}
   interpretation_policy: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/interpretation_policy}
-  trust_policy: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/trust_policy}
+  trust_policy:
+    type: object
+    additionalProperties: false
+    required: [policy_id, execution_profile, provider_id, provider_version, semantic_contract_digest, protocol_major, protocol_minor, required_features, required_qualification, worker_sandbox_policy_digest, task_sandbox_requirements, trust_policy_digest]
+    properties:
+      policy_id: {const: cxxlens.clang22-installed-native-worker-trust.v1}
+      execution_profile: {const: trust.native-worker}
+      provider_id: {const: cxxlens.clang22.reference}
+      provider_version: {const: 1.0.0}
+      semantic_contract_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
+      protocol_major: {const: 1}
+      protocol_minor: {const: 2}
+      required_features: {const: [task-input-chunks-v1, task-source-closure-v1]}
+      required_qualification: {const: canonical-semantic-qualified}
+      worker_sandbox_policy_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
+      task_sandbox_requirements:
+        type: array
+        minItems: 1
+        maxItems: 4096
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [minimum, policy_digest]
+          properties:
+            minimum: {enum: [enforced, certified]}
+            policy_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
+      trust_policy_digest: {$ref: '#/$defs/semantic_digest'}
   group_topology: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/group_topology}
   tasks: {type: array, minItems: 1, maxItems: 4096, uniqueItems: true, items: {$ref: '#/$defs/base_task_without_source_bytes'}}
   source_closures: {type: array, minItems: 1, maxItems: 4096, items: {$ref: '#/$defs/closure'}, x-cxxlens-unique-by: source_closure_id}

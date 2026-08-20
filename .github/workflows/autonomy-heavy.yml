@@ -4,12 +4,6 @@ on:
   workflow_run:
     workflows: ["Autonomy fast"]
     types: [completed]
-  workflow_dispatch:
-    inputs:
-      candidate_sha:
-        description: Exact successful Autonomy fast main SHA
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -21,7 +15,7 @@ concurrency:
 
 jobs:
   freshness:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-24.04
     outputs:
       disposition: ${{ steps.classify.outputs.disposition }}
@@ -36,10 +30,9 @@ jobs:
         # A stale candidate produces only the uploaded superseded freshness report.
         env:
           EVENT_CANDIDATE: ${{ github.event.workflow_run.head_sha }}
-          DISPATCH_CANDIDATE: ${{ inputs.candidate_sha }}
         run: |
           python3 tools/quality/check_ng_autonomy_ci.py classify-heavy \
-            --candidate "${EVENT_CANDIDATE:-${DISPATCH_CANDIDATE}}" \
+            --candidate "${EVENT_CANDIDATE}" \
             --github-output "${GITHUB_OUTPUT}" \
             --report "${RUNNER_TEMP}/cxxlens-autonomy-heavy-freshness.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
@@ -84,7 +77,9 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         if: success() && steps.postflight.outputs.disposition == 'current'
         with:
-          name: cxxlens-autonomy-heavy-${{ needs.freshness.outputs.candidate_sha }}
+          # The upload is provisional. A consumer must reauthenticate candidate_sha
+          # against current origin/main; artifact existence is never authority.
+          name: cxxlens-autonomy-heavy-provisional-${{ needs.freshness.outputs.candidate_sha }}
           path: |
             ${{ runner.temp }}/cxxlens-autonomy-heavy.json
             ${{ runner.temp }}/cxxlens-autonomy-heavy.junit.xml

@@ -67,19 +67,35 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     if "concurrency" in fast:
         raise AutonomyCiError("fast workflow may not cancel or coalesce commits")
     heavy_on = triggers(heavy)
-    if heavy_on.get("workflow_run", {}).get("workflows") != ["Autonomy fast"]:
+    if set(heavy_on) != {"workflow_run"} or heavy_on.get("workflow_run", {}).get("workflows") != ["Autonomy fast"]:
         raise AutonomyCiError("heavy workflow is not connected to Autonomy fast")
     if heavy.get("concurrency") != {"group": "autonomy-heavy-latest-main", "cancel-in-progress": True}:
         raise AutonomyCiError("heavy coalescing policy drift")
     heavy_text = (root / contract["heavy"]["workflow"]).read_text(encoding="utf-8")
-    for marker in ("classify-heavy", "superseded", "needs.freshness.outputs.disposition == 'current'", "run_gate.py full", "Reclassify freshness after full gate", "steps.postflight.outputs.disposition == 'current'"):
+    for marker in ("classify-heavy", "superseded", "needs.freshness.outputs.disposition == 'current'", "run_gate.py full", "Reclassify freshness after full gate", "steps.postflight.outputs.disposition == 'current'", "provisional", "artifact existence is never authority"):
         if marker not in heavy_text:
             raise AutonomyCiError(f"heavy freshness marker missing: {marker}")
+    if contract["heavy"].get("artifact_authority") != "provisional-consumer-reauthenticates-current-origin-main":
+        raise AutonomyCiError("heavy artifact is incorrectly authoritative")
     nightly_on = triggers(nightly)
     if "schedule" not in nightly_on or "workflow_dispatch" not in nightly_on:
         raise AutonomyCiError("Nightly lacks schedule/dispatch latest-main entry")
     if contract["nightly"].get("valid_events") != ["schedule", "workflow_dispatch"] or contract["nightly"].get("ineligible_events") != ["workflow_call"]:
         raise AutonomyCiError("Nightly release event eligibility drift")
+    latest = nightly.get("jobs", {}).get("latest-main", {})
+    if latest.get("if") != "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'":
+        raise AutonomyCiError("Nightly does not reject ineligible workflow_call evidence")
+    latest_text = json.dumps(latest, sort_keys=True)
+    if "ref: main" not in (root / contract["nightly"]["workflow"]).read_text(encoding="utf-8") or "git rev-parse origin/main" not in latest_text:
+        raise AutonomyCiError("Nightly latest-main binding missing")
+    candidate_expression = "${{ needs.latest-main.outputs.candidate_sha }}"
+    for name, job in nightly.get("jobs", {}).items():
+        if name == "latest-main":
+            continue
+        needs = job.get("needs", [])
+        needs = [needs] if isinstance(needs, str) else needs
+        if "latest-main" not in needs or candidate_expression not in json.dumps(job, sort_keys=True):
+            raise AutonomyCiError(f"Nightly job is not exact-candidate bound: {name}")
     release_on = triggers(release)
     if set(release_on) != {"workflow_dispatch"}:
         raise AutonomyCiError("release evaluation is not dispatch-only")

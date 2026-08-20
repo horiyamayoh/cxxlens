@@ -18,6 +18,7 @@ import check_ng_work_units as work_units
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_agent_context_v2.schema.yaml")
+DECISIONS = pathlib.Path("schemas/cxxlens_ng_development_decision_register.yaml")
 
 
 class AgentContextV2Error(ValueError):
@@ -75,13 +76,17 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
             blocked_dependencies.append(f"dependency:{dependency}:{dependency_unit['state']}")
         pending.extend(dependency_unit["depends_on"])
     state = unit["state"]
-    if state == "ready" and blocked_dependencies:
+    decision_register = work_units.load(root / DECISIONS)
+    authority_set = set(entry["authority_sources"])
+    relevant_decisions = [decision for decision in decision_register["decisions"] if entry["issue"] in decision["owner_issues"] and authority_set.intersection(decision["authority_refs"])]
+    authority_blockers = [f"decision:{decision['id']}:{decision['authority_status']}:{decision['review']['outcome']}" for decision in relevant_decisions if unit["risk"] in {"contract", "security", "irreversible", "resource-bound"} and (decision["authority_status"] != "accepted" or decision["review"]["outcome"] != "accepted")]
+    if state == "ready" and (blocked_dependencies or authority_blockers):
         disposition = "stop-blocked-by-dependency"
-        blockers = sorted(blocked_dependencies)
+        blockers = sorted([*blocked_dependencies, *authority_blockers])
     else:
         disposition = {"ready": "ready", "review-required": "stop-review-required", "blocked-by-authority": "stop-blocked-by-authority"}[state]
         blockers = [] if state == "ready" else [state, *sorted(blocked_dependencies)]
-    reading_paths = sorted(set(entry["authority_sources"] + unit["consumed_paths"]))
+    reading_paths = sorted(set(entry["authority_sources"] + unit["consumed_paths"] + [str(DECISIONS)]))
     reading_set = [{"path": value, "sha256": _file_digest(root / value)} for value in reading_paths]
     return {
         "schema": "cxxlens.ng-agent-context.v2",

@@ -14,7 +14,7 @@ properties:
     items:
       type: object
       additionalProperties: false
-      required: [id, decision_id, owner_issue, candidate_commit, candidate_tree, candidate_git_author_email, authority_files, authority_digest, comment_url, comment_body_sha256, comment_author_login, author, reviewer, reviewer_provenance, reviewer_session, verdict, findings, connected_verification, acceptance]
+      required: [id, decision_id, owner_issue, candidate_commit, candidate_tree, candidate_git_author_email, authority_files, authority_digest, comment_url, comment_body_sha256, comment_author_login, author, reviewer, reviewer_provenance, reviewer_session, reviewer_invocation, review_output_sha256, verdict, findings, finding_ids, verification_limits, connected_verification, acceptance]
       properties:
         id: {type: string, pattern: '^review-receipt\.[a-z0-9.-]+\.v[0-9]+$'}
         decision_id: {type: string, pattern: '^decision\.[a-z][a-z0-9.-]+$'}
@@ -39,12 +39,16 @@ properties:
         reviewer: {type: string, pattern: '^codex-independent-[a-z0-9-]+$'}
         reviewer_provenance: {const: isolated-read-only-codex-exec}
         reviewer_session: {type: string, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'}
+        reviewer_invocation: {const: codex-exec-ephemeral-sandbox-read-only}
+        review_output_sha256: {$ref: '#/$defs/digest'}
         verdict: {enum: [accepted, rejected]}
         findings:
           type: object
           additionalProperties: false
           required: [p0, p1, p2]
           properties: {p0: {type: integer, minimum: 0}, p1: {type: integer, minimum: 0}, p2: {type: integer, minimum: 0}}
+        finding_ids: {type: array, uniqueItems: true, items: {type: string, pattern: '^[A-Z][A-Z0-9-]+$'}}
+        verification_limits: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
         connected_verification:
           type: object
           additionalProperties: false

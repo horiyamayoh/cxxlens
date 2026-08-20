@@ -104,7 +104,7 @@ state_machine:
     cancel_then_valid_reject: cancelled
     cancel_then_connection-loss: provider.crash-with-cancel-observed
 phase_fields:
-  before-manifest: [session-id, task-id, task-v4-digest, expected-closure-id, expected-closure-digest, expected-manifest-digest]
+  before-manifest: [session-id, task-id, task-v4-digest, expected-closure-id, expected-closure-digest, expected-manifest-digest, observed-control-frame-count]
   manifest-streaming: [declared-manifest-bytes, observed-bytes, next-offset, next-chunk-index, streaming-digest]
   manifest-validated: [closure-id, closure-digest, manifest-digest, member-count, blob-count, total-blob-bytes]
   blob-streaming: [blob-ordinal, blob-digest, declared-bytes, observed-bytes, next-offset, next-chunk-index]
@@ -139,8 +139,9 @@ identity:
     digest_field: request_digest-equals-semantic-digest-of-projection
     id_field: request_id-equals-materialization-request-colon-request_digest
   task_v4:
-    base_task_projection: canonical-complete-base-request-v2_1-task-object
+    base_task_projection: canonical-complete-request-v2_2-base-task-with-source-metadata-and-no-source-bytes
     base_task_v3_digest: sha256-of-canonical-base-task-projection
+    compatibility_disposition: field-name-retained-but-digest-intentionally-differs-from-legacy-v3-task
     domain: cxxlens.clang22.task.v4
     projection: [schema, base_task_index, base_provider_task_id, base_task_v3_digest, open_task, source_closure, main_logical_path, logical_working_directory]
     digest_field: task_v4_digest-equals-semantic-digest-of-projection
@@ -176,7 +177,7 @@ request_task_binding:
   closure_ids: unique
   task_ids: unique-and-exact-index-parity-with-base-v2-1-tasks
   task_reference: resolves-exactly-one-request-closure
-  base_task_v3_digest: recompute-from-exact-base-task-before-v4-identity
+  base_task_v3_digest: recompute-from-complete-v2-2-base-task-projection-before-v4-identity-not-legacy-v3-digest
   open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests
   logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation
   blob_bytes_in_request_or_task: forbidden

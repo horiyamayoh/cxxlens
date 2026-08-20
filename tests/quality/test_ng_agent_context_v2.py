@@ -41,6 +41,15 @@ class AgentContextV2Test(unittest.TestCase):
         self.assertNotIn("schemas/cxxlens_asset_migration_ledger.json", packet["allowed_write_paths"])
         self.assertIn("schemas/cxxlens_asset_migration_ledger.json", packet["integration_generated_surfaces"])
 
+    def test_ready_state_cannot_override_rejected_governance_authority(self) -> None:
+        manifest = work_units.validate(ROOT)
+        entry, unit = _select(manifest, "#173", "wu-173-governance")
+        unit["state"] = "ready"
+        from check_ng_agent_context_v2 import _packet
+        packet = _packet(ROOT, manifest, entry, unit, synthetic=True)
+        self.assertEqual(packet["execution_disposition"], "stop-blocked-by-dependency")
+        self.assertTrue(any(value.startswith("decision:decision.delivery.direct-main:proposed:rejected") for value in packet["blockers"]))
+
 
 if __name__ == "__main__":
     unittest.main()

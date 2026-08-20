@@ -95,7 +95,7 @@ class ConstructibilityTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"].__setitem__("fixture_partition_machine", {"F0": "only"}))
-            with self.assertRaisesRegex(ConstructibilityError, "partition machine"):
+            with self.assertRaisesRegex(ConstructibilityError, "partition machine|schema validation"):
                 validate(root)
 
     def test_reader_writer_products_cannot_merge(self) -> None:
@@ -115,15 +115,36 @@ class ConstructibilityTest(unittest.TestCase):
     def test_fz_pre_coordination_wal_cannot_be_deleted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
-            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FZ-pre"].__setitem__("transitions", ["pre-effect", "delete-WAL"]))
-            with self.assertRaisesRegex(ConstructibilityError, "partition machine"):
+            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FZ-pre"].__setitem__("route", ["delete-WAL"]))
+            with self.assertRaisesRegex(ConstructibilityError, "FZ-pre route"):
                 validate(root)
 
     def test_production_predicate_cannot_be_weakened(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
-            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"].__setitem__("production_profile", "review-only"))
+            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"].__setitem__("production_activation_predicate", ["review-only"]))
             with self.assertRaisesRegex(ConstructibilityError, "production predicate"):
+                validate(root)
+
+    def test_reader_cleanup_path_cannot_be_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["sqlite_read_mapping"].pop("reader_teardown_transition_graph"))
+            with self.assertRaises((ConstructibilityError,)):
+                validate(root)
+
+    def test_family_recrash_stage_cannot_be_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FP"]["lifecycle"].remove("recrash-classified"))
+            with self.assertRaisesRegex(ConstructibilityError, "FP recrash lifecycle|schema validation"):
+                validate(root)
+
+    def test_mapping_activation_matrix_cannot_be_shortened(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(root, lambda value: value["machines"]["sqlite_read_mapping"]["production_activation_predicate"].remove("two-live-store-cas"))
+            with self.assertRaisesRegex(ConstructibilityError, "mapping production predicate"):
                 validate(root)
 
 

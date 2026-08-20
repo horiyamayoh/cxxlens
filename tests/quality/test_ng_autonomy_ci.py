@@ -52,6 +52,17 @@ class AutonomyCiTest(unittest.TestCase):
             with self.assertRaisesRegex(AutonomyCiError, "heavy coalescing"):
                 validate(root)
 
+    def test_heavy_manual_dispatch_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-heavy.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            trigger_key = True if True in value else "on"
+            value[trigger_key]["workflow_dispatch"] = {}
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "connected to Autonomy fast"):
+                validate(root)
+
     def test_release_push_trigger_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -61,6 +72,16 @@ class AutonomyCiTest(unittest.TestCase):
             value[trigger_key]["push"] = {"branches": ["main"]}
             path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
             with self.assertRaisesRegex(AutonomyCiError, "dispatch-only"):
+                validate(root)
+
+    def test_nightly_unpinned_job_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/nightly.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            value["jobs"]["sanitizers"].pop("needs")
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "exact-candidate bound"):
                 validate(root)
 
     def test_release_role_drift_is_rejected(self) -> None:

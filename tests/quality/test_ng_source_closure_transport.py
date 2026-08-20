@@ -27,6 +27,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     MANIFEST_SCHEMA,
     SourceClosureTransportError,
     blob_receipts_digest,
+    closure_digest,
     content_projection_digest,
     request_v2_2_projection,
     semantic_digest,
@@ -34,6 +35,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     validate,
     validate_manifest,
     validate_reject_control,
+    validate_wire_control,
     validate_request_binding,
     transfer_digest,
 )
@@ -172,9 +174,11 @@ class SourceClosureTransportTest(unittest.TestCase):
 
     def test_manifest_semantic_tamper_and_orphan_are_rejected(self) -> None:
         schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
-        semantic = "semantic-v2:sha256:" + "1" * 64
         content = "sha256:" + "2" * 64
-        manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + semantic, "closure_digest": semantic, "members": [{"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}], "blobs": [{"content_digest": content, "size_bytes": 1}]}
+        members = [{"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
+        blobs = [{"content_digest": content, "size_bytes": 1}]
+        semantic = closure_digest(members, blobs)
+        manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + semantic, "closure_digest": semantic, "members": members, "blobs": blobs}
         validate_manifest(manifest, schema)
         manifest["members"][0]["role"] = "header"
         with self.assertRaisesRegex(SourceClosureTransportError, "exactly one main"):
@@ -184,6 +188,21 @@ class SourceClosureTransportTest(unittest.TestCase):
         with self.assertRaisesRegex(SourceClosureTransportError, "orphan"):
             validate_manifest(manifest, schema)
 
+    def test_manifest_role_tamper_with_main_preserved_is_digest_rejected(self) -> None:
+        schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
+        content = "sha256:" + "2" * 64
+        members = [
+            {"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True},
+            {"file_id": "file:sha256:" + "4" * 64, "logical_path": "project://src/z.hpp", "role": "header", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True},
+        ]
+        blobs = [{"content_digest": content, "size_bytes": 1}]
+        digest = closure_digest(members, blobs)
+        manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + digest, "closure_digest": digest, "members": members, "blobs": blobs}
+        validate_manifest(manifest, schema)
+        manifest["members"][1]["role"] = "forced-include"
+        with self.assertRaisesRegex(SourceClosureTransportError, "closure digest"):
+            validate_manifest(manifest, schema)
+
     def test_reject_fields_and_phase_are_executable(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         control = {"session_id": "s", "task_id": "t", "failure_phase": "before-manifest", "reason_code": "source-closure.protocol-state-invalid", "observed_counters": {"observed-control-frame-count": 1}, "cleanup_receipt": "c"}
@@ -191,6 +210,26 @@ class SourceClosureTransportTest(unittest.TestCase):
         control["observed_counters"] = {"received-payload-bytes": 1}
         with self.assertRaisesRegex(SourceClosureTransportError, "phase-authentic|bytes"):
             validate_reject_control(control, contract)
+        control["observed_counters"] = {"observed-control-frame-count": True}
+        with self.assertRaisesRegex(SourceClosureTransportError, "uint64"):
+            validate_reject_control(control, contract)
+        control["observed_counters"] = {"observed-control-frame-count": 1 << 80}
+        with self.assertRaisesRegex(SourceClosureTransportError, "uint64"):
+            validate_reject_control(control, contract)
+
+    def test_nonreject_wire_controls_are_closed_typed_and_state_bound(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        semantic = "semantic-v2:sha256:" + "1" * 64
+        control = {"kind": "chunk", "session_id": "s", "task_id": "t", "manifest_digest": semantic, "chunk_index": 0, "offset": 0, "byte_count": 1}
+        validate_wire_control("source_closure_manifest", control, b"x", "manifest-open", contract)
+        with self.assertRaisesRegex(SourceClosureTransportError, "illegal"):
+            validate_wire_control("source_closure_manifest", control, b"x", "task-v4-sealed", contract)
+        control["byte_count"] = True
+        with self.assertRaisesRegex(SourceClosureTransportError, "uint64"):
+            validate_wire_control("source_closure_manifest", control, b"x", "manifest-open", contract)
+        control["byte_count"] = 2
+        with self.assertRaisesRegex(SourceClosureTransportError, "byte count"):
+            validate_wire_control("source_closure_manifest", control, b"x", "manifest-open", contract)
 
     def test_duplicate_and_dangling_relationships_are_rejected(self) -> None:
         request = self.bound_request()

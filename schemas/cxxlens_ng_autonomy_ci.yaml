@@ -12,6 +12,7 @@ heavy:
   coalescing: latest-origin-main-only
   stale_disposition: superseded-report-only
   cancellation: prior-heavy-only
+  artifact_authority: provisional-consumer-reauthenticates-current-origin-main
   evidence: [full, static-shared-install, sqlite-g5-integration]
 nightly:
   workflow: .github/workflows/nightly.yml

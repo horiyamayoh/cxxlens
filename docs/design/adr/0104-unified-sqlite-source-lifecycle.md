@@ -135,7 +135,9 @@ The accepted DF-0202 fixture authority remains an executable closed partition, n
 - `F0 -> live-receipt -> fixture-normalizer`.
 - `FP/FH -> authenticated cleanup-or-recovery -> independently-revalidated F0 -> new-live-receipt`.
 - `FZ-pre -> retain-and-revalidate-the-exact-size-zero-coordination-WAL -> new-live-receipt`; the
-  normalizer binds that same WAL as its coordination object and does not delete or reclassify it as F0.
+  normalizer binds that same WAL as its coordination object. Its authenticated terminal cleanup
+  deletes that coordination WAL and separately fsyncs the retained parent before handoff; it never
+  reclassifies the entry as F0 or admits rollback/post-form bytes through the FZ-pre guard.
 - `FI/FZ-post/FO -> independently-validated rollback-empty-fresh-anchor` only; none is a completed
   normalization edge and none may mint or reuse a live receipt.
 

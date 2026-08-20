@@ -114,7 +114,7 @@ properties:
       seal_fields: {const: [session-id, task-id, task-v4-digest, manifest-digest, blob-receipts-digest, blob-count, total-bytes, closure-digest]}
       ambient_filesystem: {const: forbidden}
   request_task_binding:
-    const: {request_shape: exact-v2-1-authority-envelope-plus-closure-extensions, closure_identity: source-closure-id-equals-source-closure-prefix-plus-semantic-closure-digest, closure_ids: unique, task_ids: unique-and-exact-index-parity-with-base-v2-1-tasks, task_reference: resolves-exactly-one-request-closure, base_task_v3_digest: recompute-from-exact-base-task-before-v4-identity, open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests, logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation, blob_bytes_in_request_or_task: forbidden}
+    const: {request_shape: exact-v2-1-authority-envelope-plus-closure-extensions, closure_identity: source-closure-id-equals-source-closure-prefix-plus-semantic-closure-digest, closure_ids: unique, task_ids: unique-and-exact-index-parity-with-base-v2-1-tasks, task_reference: resolves-exactly-one-request-closure, base_task_v3_digest: recompute-from-complete-v2-2-base-task-projection-before-v4-identity-not-legacy-v3-digest, open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests, logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation, blob_bytes_in_request_or_task: forbidden}
   cache:
     const: {cross_task_v1: forbidden, transfer: complete-per-task, future_activation: separate-accepted-capability-and-adr}
   compatibility:

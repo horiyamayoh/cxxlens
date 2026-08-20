@@ -125,10 +125,34 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
         raise DecisionRegisterError(f"acceptance receipt has no descendant commit: {receipt['id']}")
     if _git(root, "rev-parse", f"{commit}^") != candidate:
         raise DecisionRegisterError(f"acceptance is not the immediate direct-main child: {receipt['id']}")
+    if len(_git(root, "rev-list", "--parents", "-n", "1", commit).split()) != 2:
+        raise DecisionRegisterError(f"acceptance commit is not single-parent: {receipt['id']}")
     changed = set(_git(root, "diff", "--name-only", candidate, commit).splitlines())
     allowed = set(acceptance["allowed_changed_paths"])
     if not changed or not changed <= allowed:
         raise DecisionRegisterError(f"acceptance commit is not status/receipt-only: {receipt['id']}")
+    status_keys = {"maturity", "status", "authority_status", "outcome", "reviewer", "ref", "exact_main_commit", "receipt_ids", "references", "activation"}
+    def scrub(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: scrub(item) for key, item in value.items() if key not in status_keys}
+        if isinstance(value, list):
+            return [scrub(item) for item in value]
+        return value
+    infrastructure = {str(REGISTER), str(RECEIPTS), "docs/design/SHA256SUMS", "schemas/cxxlens_ng_work_units.yaml"}
+    authority_paths = {item["path"] for item in receipt["authority_files"]}
+    for path in changed - infrastructure:
+        if path not in authority_paths:
+            raise DecisionRegisterError(f"acceptance changes non-authority path: {receipt['id']}:{path}")
+        before = _git(root, "show", f"{candidate}:{path}")
+        after = _git(root, "show", f"{commit}:{path}")
+        if path.endswith((".yaml", ".yml")):
+            if scrub(yaml.load(before, Loader=UniqueKeyLoader)) != scrub(yaml.load(after, Loader=UniqueKeyLoader)):
+                raise DecisionRegisterError(f"acceptance changes authority semantics: {receipt['id']}:{path}")
+        else:
+            before_lines = [line for line in before.splitlines() if not line.startswith(("- Status:", "- Review:"))]
+            after_lines = [line for line in after.splitlines() if not line.startswith(("- Status:", "- Review:"))]
+            if before_lines != after_lines:
+                raise DecisionRegisterError(f"acceptance changes authority prose: {receipt['id']}:{path}")
 
 
 def _github_json(url: str, token: str) -> dict[str, Any]:
@@ -154,8 +178,11 @@ def canonical_review_comment(receipt: dict[str, Any]) -> str:
         "candidate_tree": receipt["candidate_tree"], "candidate_git_author_email": receipt["candidate_git_author_email"],
         "authority_digest": receipt["authority_digest"], "author": receipt["author"],
         "reviewer": receipt["reviewer"], "reviewer_provenance": receipt["reviewer_provenance"],
-        "reviewer_session": receipt["reviewer_session"], "verdict": receipt["verdict"],
-        "findings": receipt["findings"], "qualification": "production qualification not claimed",
+        "reviewer_session": receipt["reviewer_session"], "reviewer_invocation": receipt["reviewer_invocation"],
+        "review_output_sha256": receipt["review_output_sha256"], "verdict": receipt["verdict"],
+        "findings": receipt["findings"], "finding_ids": receipt["finding_ids"],
+        "verification_limits": receipt["verification_limits"],
+        "qualification": "production qualification not claimed",
     }
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -233,6 +260,15 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
             if not (root / reference).is_file():
                 raise DecisionRegisterError(f"decision authority does not exist: {entry['id']}:{reference}")
         review = entry["review"]
+        if verify_git and review["outcome"] == "pending":
+            try:
+                previous = yaml.load(_git(root, "show", f"HEAD^:{REGISTER}"), Loader=UniqueKeyLoader)
+            except (DecisionRegisterError, yaml.YAMLError):
+                previous = None
+            if isinstance(previous, dict):
+                prior = {item["id"]: item for item in previous.get("decisions", [])}.get(entry["id"])
+                if prior and prior.get("review", {}).get("outcome") == "rejected":
+                    raise DecisionRegisterError(f"rejected review was rewritten to pending: {entry['id']}")
         if entry["risk"] in HIGH_RISK and (review["mode"] != "independent" or review["outcome"] == "not-required"):
             raise DecisionRegisterError(f"high-risk decision lacks independent review: {entry['id']}")
         if review["outcome"] in {"rejected", "accepted"}:
@@ -268,6 +304,9 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
             static_allowed.update(path for path in entry["authority_refs"] if path.startswith("docs/design/adr/") or path.startswith("schemas/"))
             if set(receipt["acceptance"]["allowed_changed_paths"]) != static_allowed:
                 raise DecisionRegisterError(f"review receipt acceptance allowlist mismatch: {receipt_id}")
+            severity_ids = {severity: [item for item in receipt["finding_ids"] if item.startswith(severity.upper() + "-")] for severity in ("p0", "p1", "p2")}
+            if any(len(severity_ids[severity]) != receipt["findings"][severity] for severity in severity_ids):
+                raise DecisionRegisterError(f"review finding census/detail mismatch: {receipt_id}")
             if review["outcome"] == "accepted":
                 if receipt["verdict"] != "accepted" or receipt["findings"]["p0"] or receipt["findings"]["p1"]:
                     raise DecisionRegisterError(f"accepted review has unresolved P0/P1: {receipt_id}")

@@ -19,10 +19,29 @@ env:
   CTEST_PARALLEL_LEVEL: ${{ vars.CXXLENS_SANITIZER_TEST_JOBS || 2 }}
 
 jobs:
+  latest-main:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    outputs:
+      candidate_sha: ${{ steps.bind.outputs.candidate_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - id: bind
+        run: |
+          git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          printf 'candidate_sha=%s\n' "$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
   sanitizers:
+    needs: latest-main
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ needs.latest-main.outputs.candidate_sha }}
       - uses: ./.github/actions/setup-ci
         with:
           profile: developer
@@ -52,7 +71,7 @@ jobs:
             --evidence-output build/asan-ubsan/asan-ubsan.evidence.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: cxxlens-nightly-asan-ubsan-${{ github.sha }}
+          name: cxxlens-nightly-asan-ubsan-${{ needs.latest-main.outputs.candidate_sha }}
           path: |
             build/asan-ubsan/ctest.xml
             build/asan-ubsan/sanitizer-coverage.log
@@ -61,9 +80,12 @@ jobs:
           if-no-files-found: error
 
   thread-sanitizer:
+    needs: latest-main
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ needs.latest-main.outputs.candidate_sha }}
       - uses: ./.github/actions/setup-ci
         with:
           profile: developer
@@ -97,7 +119,7 @@ jobs:
             --evidence-output build/tsan/tsan.evidence.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: cxxlens-nightly-tsan-${{ github.sha }}
+          name: cxxlens-nightly-tsan-${{ needs.latest-main.outputs.candidate_sha }}
           path: |
             build/tsan/ctest.xml
             build/tsan/sanitizer-coverage.log
@@ -106,9 +128,12 @@ jobs:
           if-no-files-found: error
 
   static-analysis:
+    needs: latest-main
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ needs.latest-main.outputs.candidate_sha }}
       - uses: ./.github/actions/setup-ci
         with:
           profile: static-analysis
@@ -130,7 +155,7 @@ jobs:
             --evidence-output build/ci-quick/clang-tidy.evidence.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: cxxlens-nightly-clang-tidy-${{ github.sha }}
+          name: cxxlens-nightly-clang-tidy-${{ needs.latest-main.outputs.candidate_sha }}
           path: |
             build/ci-quick/clang-tidy.log
             build/ci-quick/toolchain.json
@@ -138,11 +163,13 @@ jobs:
           if-no-files-found: error
 
   materialization-scale:
+    needs: latest-main
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ needs.latest-main.outputs.candidate_sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-ci
         with:
@@ -252,7 +279,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         if: always()
         with:
-          name: cxxlens-nightly-materialization-scale-${{ github.sha }}
+          name: cxxlens-nightly-materialization-scale-${{ needs.latest-main.outputs.candidate_sha }}
           path: |
             ${{ runner.temp }}/cxxlens-materialization-scale-evidence.json
             ${{ runner.temp }}/cxxlens-materialization-scale-evidence.process
@@ -279,16 +306,18 @@ jobs:
           fi
 
   evidence-ownership:
-    needs: [sanitizers, thread-sanitizer, static-analysis, materialization-scale]
+    needs: [latest-main, sanitizers, thread-sanitizer, static-analysis, materialization-scale]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ needs.latest-main.outputs.candidate_sha }}
       - uses: ./.github/actions/setup-ci
         with:
           profile: none
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
         with:
-          pattern: cxxlens-nightly-*-${{ github.sha }}
+          pattern: cxxlens-nightly-*-${{ needs.latest-main.outputs.candidate_sha }}
           path: build/nightly-evidence-input
       - run: |
           python tools/quality/check_quality_ownership.py aggregate \
@@ -296,15 +325,17 @@ jobs:
             --report build/nightly-evidence-set.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: cxxlens-nightly-evidence-${{ github.sha }}
+          name: cxxlens-nightly-evidence-${{ needs.latest-main.outputs.candidate_sha }}
           path: build/nightly-evidence-set.json
           if-no-files-found: error
 
   clean-full:
+    needs: latest-main
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ needs.latest-main.outputs.candidate_sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-ci
         with:
@@ -321,7 +352,7 @@ jobs:
             --output "${RUNNER_TEMP}/cxxlens-clean-full-toolchain.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: cxxlens-clean-full-${{ github.sha }}
+          name: cxxlens-clean-full-${{ needs.latest-main.outputs.candidate_sha }}
           path: |
             ${{ runner.temp }}/cxxlens-clean-full.json
             ${{ runner.temp }}/cxxlens-clean-full*.xml

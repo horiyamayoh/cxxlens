@@ -31,20 +31,25 @@ $defs:
     type: object
     additionalProperties: false
     required: [owner, authority, contract, success_states, message_ids, bounds, terminal_failures]
-    properties: {owner: {}, authority: {}, contract: {}, success_states: {}, message_ids: {}, bounds: {}, terminal_failures: {}}
+    properties: {owner: {type: string}, authority: {type: string}, contract: {type: string}, success_states: {$ref: '#/$defs/nonempty_strings'}, message_ids: {type: object}, bounds: {type: object}, terminal_failures: {$ref: '#/$defs/nonempty_strings'}}
   store_machine:
     type: object
     additionalProperties: false
     required: [owner, authority, candidate_states, report_states, publication_outcomes, post_attempt_failure, projections, bounds, representation]
-    properties: {owner: {}, authority: {}, candidate_states: {}, report_states: {}, publication_outcomes: {}, post_attempt_failure: {}, projections: {}, bounds: {}, representation: {}}
+    properties: {owner: {type: string}, authority: {type: string}, candidate_states: {$ref: '#/$defs/nonempty_strings'}, report_states: {$ref: '#/$defs/nonempty_strings'}, publication_outcomes: {$ref: '#/$defs/nonempty_strings'}, post_attempt_failure: {type: string}, projections: {type: object}, bounds: {type: object}, representation: {type: object}}
   sqlite_mapping_machine:
     type: object
     additionalProperties: false
-    required: [owners, authority, nesting, no_effect_boundary, outer_states, writer_states, reader_states, reader_forbidden_products, predelegation_authority, promotion_predicate, teardown_transition_graph, zero_effect_receipt, read_receipt_barrier, fork_transition_graph, child_quarantine_forbidden, ambiguous_callback]
-    properties: {owners: {}, authority: {}, nesting: {}, no_effect_boundary: {}, outer_states: {}, writer_states: {}, reader_states: {}, reader_forbidden_products: {}, predelegation_authority: {}, promotion_predicate: {}, teardown_transition_graph: {}, zero_effect_receipt: {}, read_receipt_barrier: {}, fork_transition_graph: {}, child_quarantine_forbidden: {}, ambiguous_callback: {}}
+    required: [owners, authority, nesting, no_effect_boundary, outer_states, writer_states, reader_states, reader_forbidden_products, predelegation_authority, promotion_predicate, teardown_transition_graph, reader_teardown_transition_graph, zero_effect_receipt, read_receipt_barrier, fork_transition_graph, child_quarantine_forbidden, ambiguous_callback, production_activation_predicate]
+    properties: {owners: {$ref: '#/$defs/nonempty_strings'}, authority: {type: string}, nesting: {type: string}, no_effect_boundary: {type: string}, outer_states: {$ref: '#/$defs/nonempty_strings'}, writer_states: {$ref: '#/$defs/nonempty_strings'}, reader_states: {$ref: '#/$defs/nonempty_strings'}, reader_forbidden_products: {$ref: '#/$defs/nonempty_strings'}, predelegation_authority: {type: object}, promotion_predicate: {type: string}, teardown_transition_graph: {type: object}, reader_teardown_transition_graph: {type: object}, zero_effect_receipt: {$ref: '#/$defs/nonempty_strings'}, read_receipt_barrier: {$ref: '#/$defs/nonempty_strings'}, fork_transition_graph: {type: object}, child_quarantine_forbidden: {$ref: '#/$defs/nonempty_strings'}, ambiguous_callback: {type: string}, production_activation_predicate: {$ref: '#/$defs/nonempty_strings'}}
   sqlite_effect_machine:
     type: object
     additionalProperties: false
-    required: [owner, authority, separate_from_zero_effect_read, entry, states, fixture_partition_machine, recrash_transition, production_profile, canonical_user_source_activation, parent_sync_after_each_delete]
-    properties: {owner: {}, authority: {}, separate_from_zero_effect_read: {}, entry: {}, states: {}, fixture_partition_machine: {}, recrash_transition: {}, production_profile: {}, canonical_user_source_activation: {}, parent_sync_after_each_delete: {}}
+    required: [owner, authority, separate_from_zero_effect_read, entry, states, fixture_partition_machine, recrash_transition, production_activation_predicate, canonical_user_source_activation, parent_sync_after_each_delete]
+    properties: {owner: {type: string}, authority: {type: string}, separate_from_zero_effect_read: {type: boolean}, entry: {type: string}, states: {$ref: '#/$defs/nonempty_strings'}, fixture_partition_machine: {type: object, minProperties: 7, maxProperties: 7, additionalProperties: {$ref: '#/$defs/effect_family'}}, recrash_transition: {type: string}, production_activation_predicate: {$ref: '#/$defs/nonempty_strings'}, canonical_user_source_activation: {type: string}, parent_sync_after_each_delete: {type: string}}
+  effect_family:
+    type: object
+    additionalProperties: false
+    required: [entry_guard, route, lifecycle, terminal]
+    properties: {entry_guard: {type: string}, route: {type: array, minItems: 1, items: {type: string}}, lifecycle: {type: array, minItems: 5, items: {type: string}}, terminal: {type: string}}
   nonempty_strings: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
