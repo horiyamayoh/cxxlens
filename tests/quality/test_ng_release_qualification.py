@@ -1222,7 +1222,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "request_count": 0,
                 "report_count": 0,
                 "report_set_count": 0,
-                "owner_issue": "#181",
+                "owner_issue": "#173",
                 "feedback": [
                     "DF-0182",
                     "DF-0187",
@@ -1272,9 +1272,9 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 ), self.assertRaisesRegex(
                     release.ReleaseQualificationError,
                     "neither the exact "
-                    "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
+                    "#173/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
                     "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207/"
-                    "DF-0208 "
+                    "DF-0208/DF-0261 "
                     "tracked gap",
                 ):
                     release.materialization_assignment_transition(ROOT)
@@ -1290,7 +1290,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "request_count": 0,
                 "report_count": 0,
                 "report_set_count": 0,
-                "owner_issue": "#181",
+                "owner_issue": "#173",
                 "feedback": [
                     "DF-0182",
                     "DF-0187",
@@ -1306,6 +1306,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0206",
                     "DF-0207",
                     "DF-0208",
+                    "DF-0261",
                 ],
             },
         }
@@ -2279,7 +2280,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "request_count": 0,
                 "report_count": 0,
                 "report_set_count": 0,
-                "owner_issue": "#181",
+                "owner_issue": "#173",
                 "feedback": [
                     "DF-0182",
                     "DF-0187",
@@ -2295,6 +2296,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0206",
                     "DF-0207",
                     "DF-0208",
+                    "DF-0261",
                 ],
             }
             with mock.patch.object(
@@ -2316,7 +2318,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
             )
             self.assertEqual(
                 report["evidence"]["materialization_evidence"]["owner_issue"],
-                "#181",
+                "#173",
             )
 
             wrong_owner = copy.deepcopy(report)

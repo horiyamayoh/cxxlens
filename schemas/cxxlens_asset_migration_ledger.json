@@ -1,5 +1,5 @@
 {
-  "asset_count": 710,
+  "asset_count": 715,
   "assets": [
     {
       "authority": "active",
@@ -1242,6 +1242,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/decision-review-register.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/development/doxygen-style.md",
       "removal_issue": null,
       "replacement": null,
@@ -1964,6 +1971,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_design_feedback_record.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_development_decision_register.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_development_decision_register.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4189,6 +4210,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_development_decisions.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_foundation_completion.py",
       "removal_issue": null,
       "replacement": null,
@@ -4700,6 +4728,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_development_decisions.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_foundation_audits.py",
       "removal_issue": null,
       "replacement": null,
@@ -4973,7 +5008,7 @@
     }
   ],
   "classifications": {
-    "active": 674,
+    "active": 679,
     "archived": 35,
     "generated": 1
   },

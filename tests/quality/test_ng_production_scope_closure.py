@@ -228,7 +228,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
         self.assertTrue(all(row["inherited_from"]["domain"] == "public.catalog-entry" for row in callable_rows))
         incremental = [row for row in callable_rows if row["inherited_from"]["id"] == "public.incremental"]
         self.assertTrue(incremental)
-        self.assertTrue(all(row["qualification"] == "tracked-gap" for row in incremental))
+        self.assertTrue(all(row["qualification"] == "qualified" for row in incremental))
         self.assertFalse(
             any(
                 surface["domain"] == "public.callable"
@@ -266,7 +266,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
         )
         self.assertEqual(implemented_entry["status"], "implemented")
         self.assertEqual(
-            self.model.assignments[implemented_gap]["qualification"], "tracked-gap"
+            self.model.assignments[implemented_gap]["qualification"], "qualified"
         )
 
     def test_catalog_entry_without_scope_assignment_is_rejected(self) -> None:
@@ -286,7 +286,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
         assignments = {assignment["id"]: assignment for assignment in self.model.manifest["assignments"]}
         self.assertEqual(len(assignments["scope.clang22-installed-adoption-gap"]["surfaces"]), 14)
         self.assertEqual(len(assignments["scope.ng1-provider-hardening-gap"]["surfaces"]), 6)
-        self.assertEqual(len(assignments["scope.incremental-coordinator-gap"]["surfaces"]), 6)
+        self.assertNotIn("scope.incremental-coordinator-gap", assignments)
         self.assertEqual(len(assignments["scope.nightly-qualification-gap"]["surfaces"]), 5)
         self.assertEqual(
             {

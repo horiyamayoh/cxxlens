@@ -1,0 +1,103 @@
+schema: cxxlens.ng-development-decision-register.v1
+document_version: 1.0.0
+authority:
+  owner_issue: '#173'
+  product_authority: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  workflow_authority: AGENTS.md
+delivery:
+  route: main-atomic-commit-post-update-ci
+  history: fast-forward-no-rewrite
+  review_commit_sequence: proposed-main-commit-independent-review-follow-up-accepted-main-commit
+  pull_request: not-correctness-authority
+review_policy:
+  user_approval_gate: none
+  high_risk: [contract, invariant, security, compatibility, irreversible, resource-bound]
+  acceptance_binding: exact-main-commit-independent-review-comment-accepted-adr
+decisions:
+  - id: decision.delivery.direct-main
+    title: Use atomic direct-to-main delivery for every repository change
+    owner_issues: ['#173']
+    risk: contract
+    contract_ids: [development.delivery.v2]
+    choice: main-atomic-commit-post-update-ci
+    rejected: [mandatory-feature-branch, mandatory-pull-request, history-rewrite]
+    decision_status: decided
+    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    implementation_status: partial
+    qualification_status: not-claimed
+    activation: active
+    authority_refs: [AGENTS.md, docs/development/agent-api-development-goal.md]
+  - id: decision.source-closure.dedicated-transport
+    title: Add request 2.2 task v4 and a dedicated source-closure transfer state machine
+    owner_issues: ['#261']
+    risk: security
+    contract_ids: [provider.source-closure-transport.v1, provider.protocol.v1_2]
+    choice: dedicated-manifest-blob-chunk-seal-ack-reject-transport
+    rejected: [reuse-task-input-chunks-container, ambient-filesystem, physical-checkout, cross-task-cache-v1]
+    decision_status: decided
+    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    implementation_status: pending
+    qualification_status: not-claimed
+    activation: blocked-until-accepted-authority-and-independent-review
+    authority_refs: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, schemas/cxxlens_ng_provider_protocol.yaml]
+  - id: decision.store.streaming-candidate
+    title: Use backend-owned incremental candidates and streaming exact revalidation
+    owner_issues: ['#200']
+    risk: resource-bound
+    contract_ids: [store.incremental-candidate.v1, materialization.bounded-report.v1]
+    choice: sqlite-o-w-memory-f-plus-o-w-with-independent-byte-exact-dual-projection
+    rejected: [aggregate-resident-claim-batch, digest-only-validation, second-complete-validator-graph, complete-report-dom]
+    decision_status: decided
+    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    implementation_status: partial
+    qualification_status: not-claimed
+    activation: blocked-until-accepted-authority-and-independent-review
+    authority_refs: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md]
+  - id: decision.sqlite.unified-lifecycle
+    title: Integrate readonly recovery normalization and same-process mapping leases
+    owner_issues: ['#201', '#202', '#205']
+    risk: irreversible
+    contract_ids: [store.sqlite-source-lifecycle.v1]
+    choice: zero-mutation-read-then-exact-empty-normalization-then-authenticated-lease-projection
+    rejected: [raw-native-ok-projection, post-close-endpoint-proof, untyped-path-authority, silent-recovery-fallback]
+    decision_status: decided
+    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    implementation_status: partial
+    qualification_status: not-claimed
+    activation: blocked-until-accepted-authority-and-independent-review
+    authority_refs: [docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
+  - id: decision.provider.ng1-after-source-closure-registry
+    title: Preserve heartbeat 23 and implement NG1 after source-closure message allocation
+    owner_issues: ['#183', '#261']
+    risk: contract
+    contract_ids: [provider.ng1-hardening.v1, provider.source-closure-transport.v1]
+    choice: heartbeat-23-source-closure-24-plus-no-cache-resume-alias
+    rejected: [message-id-overlap, source-closure-cache-as-resume-token, implicit-ng0-downgrade]
+    decision_status: decided
+    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    implementation_status: partial
+    qualification_status: not-claimed
+    activation: blocked-until-accepted-authority-and-independent-review
+    authority_refs: [docs/design/adr/0099-provider-ng1-hardening.md, docs/design/adr/0100-ng1-resume-provider-digest-grammar.md, schemas/cxxlens_ng_provider_protocol.yaml]
+  - id: decision.sdk-doctor.capability-boundary
+    title: Separate static relation presence from project capability diagnosis
+    owner_issues: ['#277']
+    risk: compatibility
+    contract_ids: [sdk-doctor.relation-presence.v1, sdk-doctor.project-missing.v1]
+    choice: relation-presence-is-narrow-and-missing-project-uses-capability-graph
+    rejected: [missing-relation-id-as-project-capability, diagnostic-prose-control, handwritten-capability-inventory]
+    decision_status: decided
+    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    implementation_status: pending
+    qualification_status: not-claimed
+    activation: blocked-until-accepted-authority-and-independent-review
+    authority_refs: [schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml]
+preserved_wip:
+  - ref: agent/remaining-issues-full-implementation
+    exact_head: 9e8c30fe7c024b67e5b35a8b563c45be820f9e48
+    disposition: preserve-review-only
+    deletion: forbidden
+  - ref: pull/353
+    exact_head: 7a0717be2472cea7e8fdaa267118e702bcdb0f0b
+    disposition: superseded-do-not-merge
+    deletion: forbidden

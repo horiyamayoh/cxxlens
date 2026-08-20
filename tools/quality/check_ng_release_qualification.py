@@ -108,7 +108,7 @@ MATERIALIZATION_MATRIX = (
 )
 MATERIALIZATION_TOOL_FILE = "bin/cxxlens-clang22-materialize"
 MATERIALIZATION_ASSIGNMENT_ID = "scope.clang22-installed-adoption-gap"
-MATERIALIZATION_ASSIGNMENT_OWNER = "#181"
+MATERIALIZATION_ASSIGNMENT_OWNER = "#173"
 MATERIALIZATION_ASSIGNMENT_FEEDBACK = (
     "DF-0182",
     "DF-0187",
@@ -549,19 +549,12 @@ def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
                 "gap": {
                     "finding": "scope.tracked-gap.clang22-installed-adoption",
                     "remediation": (
-                        "Resolve the proposed DF-0261 source-closure identity and compiler "
-                        "VFS authority before qualifying real-project consumers; implement "
-                        "the accepted DF-0195 through DF-0199 sealed-evidence, "
-                        "measured-occurrence, authenticated-streaming, head-observation, "
-                        "and canonical-Base64 authority; implement the accepted DF-0200 bounded "
-                        "claim/Store staging, the accepted DF-0205/DF-0206 same-process "
-                        "writer-mapping and writer-native-attachment authorities, the accepted "
-                        "DF-0207 reader-native-attachment authority, and the accepted DF-0208 "
-                        "typed determinate gate-failure evidence authority before qualifying the full "
-                        "CAS/race/attachment counterexample matrix or activating production; "
-                        "complete a distinct exact implementation review; then complete installed "
-                        "actual-source worker output adoption with exact publication and query "
-                        "evidence; do not claim generic relation-row reference enforcement."
+                        "Complete #261 dedicated source-closure transport and installed "
+                        "real-project qualification, #200 bounded claim/Store/report staging, "
+                        "and the #201/#202/#205 SQLite lifecycle before #173 binds the "
+                        "cross-cutting installed adoption evidence; complete distinct exact "
+                        "implementation reviews and do not claim generic relation-row reference "
+                        "enforcement."
                     ),
                 },
                 "feedback": list(MATERIALIZATION_ASSIGNMENT_FEEDBACK),
@@ -621,8 +614,8 @@ def materialization_assignment_transition(root: pathlib.Path) -> dict[str, Any]:
         }
     fail(
         "Clang 22 materializer assignment is neither the exact "
-        "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197/"
-        "DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207/DF-0208 "
+        "#173/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197/"
+        "DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207/DF-0208/DF-0261 "
         "tracked gap nor the exact included+qualified assignment"
     )
 
@@ -630,7 +623,7 @@ def materialization_assignment_transition(root: pathlib.Path) -> dict[str, Any]:
 def materialization_required_install_files(
     manifest: dict[str, Any], transition: dict[str, Any]
 ) -> list[str]:
-    """Apply the pre-#181 exemption to the tool binary and to no schema."""
+    """Apply the tracked cross-cutting adoption exemption to the tool binary and to no schema."""
 
     required = list(manifest["package"]["required_files"])
     state = transition.get("assignment_state")
@@ -678,8 +671,8 @@ def collect_materialization_evidence(
     if state == "tracked-gap":
         if report_paths or request_paths or receipt_paths:
             fail(
-                "the exact #181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
-                "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207/DF-0208 "
+                "the exact #173/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
+                "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207/DF-0208/DF-0261 "
                 "tracked gap requires zero materialization "
                 f"requests and reports, found {len(request_paths)} requests and "
                 f"{len(report_paths)} reports and {len(receipt_paths)} execution receipts"

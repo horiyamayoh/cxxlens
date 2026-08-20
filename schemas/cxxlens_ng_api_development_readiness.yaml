@@ -9,6 +9,7 @@ authority:
   callable_inventory_issue: '#169'
   product_direction_issue: '#271'
   development_acceleration_issue: '#291'
+  development_decisions: schemas/cxxlens_ng_development_decision_register.yaml
 binding:
   branch: main
   report_schema: cxxlens.ng-api-development-readiness-report.v1
@@ -17,22 +18,23 @@ ci_tiers:
   contract: development.ci-tiering.v1
   owner_issue: '#291'
   duplicate_suppression:
-    pull_request_source: pull-request-event
-    non_main_push: forbidden
+    direct_main_source: push-main
+    optional_review_source: pull-request-event
+    non_main_push: advisory-only
     main_push: full-only
   tiers:
     fast:
-      trigger: draft-pull-request
+      trigger: local-or-optional-review
       purpose: early-bounded-feedback
       final_correctness_evidence: false
       command: tools/quality/run_gate.py fast
     check:
-      trigger: ready-pull-request
+      trigger: optional-ready-review
       purpose: pre-main-static-shared-quality-install-evidence
       final_correctness_evidence: false
       closure_job: check-tier
     full:
-      trigger: merged-main
+      trigger: exact-main-push
       purpose: exact-sha-foundation-wave0-g5-and-install-closure
       final_correctness_evidence: true
       closure_job: full-tier

@@ -103,6 +103,8 @@ PACKAGE_PATHS = (
     "schemas/cxxlens_ng_quality_ownership.schema.yaml",
     "schemas/cxxlens_ng_quality_evidence.schema.yaml",
     "schemas/cxxlens_ng_design_feedback_record.schema.yaml",
+    "schemas/cxxlens_ng_development_decision_register.yaml",
+    "schemas/cxxlens_ng_development_decision_register.schema.yaml",
     "schemas/cxxlens_ng_install_artifact_manifest.schema.yaml",
     "schemas/cxxlens_ng_foundation_completion_manifest.yaml",
     "schemas/cxxlens_ng_foundation_completion_manifest.schema.yaml",

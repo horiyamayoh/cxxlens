@@ -1,0 +1,132 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-development-decision-register.v1
+title: cxxlens development decision and review register
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - authority
+  - delivery
+  - review_policy
+  - decisions
+  - preserved_wip
+properties:
+  schema: {const: cxxlens.ng-development-decision-register.v1}
+  document_version: {const: 1.0.0}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [owner_issue, product_authority, workflow_authority]
+    properties:
+      owner_issue: {$ref: '#/$defs/issue'}
+      product_authority: {$ref: '#/$defs/repo_path'}
+      workflow_authority: {$ref: '#/$defs/repo_path'}
+  delivery:
+    type: object
+    additionalProperties: false
+    required: [route, history, review_commit_sequence, pull_request]
+    properties:
+      route: {const: main-atomic-commit-post-update-ci}
+      history: {const: fast-forward-no-rewrite}
+      review_commit_sequence:
+        const: proposed-main-commit-independent-review-follow-up-accepted-main-commit
+      pull_request: {const: not-correctness-authority}
+  review_policy:
+    type: object
+    additionalProperties: false
+    required: [user_approval_gate, high_risk, acceptance_binding]
+    properties:
+      user_approval_gate: {const: none}
+      high_risk:
+        type: array
+        uniqueItems: true
+        minItems: 6
+        items:
+          enum: [contract, invariant, security, compatibility, irreversible, resource-bound]
+      acceptance_binding:
+        const: exact-main-commit-independent-review-comment-accepted-adr
+  decisions:
+    type: array
+    minItems: 6
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - owner_issues
+        - risk
+        - contract_ids
+        - choice
+        - rejected
+        - decision_status
+        - review
+        - implementation_status
+        - qualification_status
+        - activation
+        - authority_refs
+      properties:
+        id: {type: string, pattern: '^decision\.[a-z][a-z0-9.-]+$'}
+        title: {type: string, minLength: 1}
+        owner_issues:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {$ref: '#/$defs/issue'}
+        risk:
+          enum: [local, contract, invariant, security, compatibility, irreversible, resource-bound]
+        contract_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
+        choice: {type: string, minLength: 1}
+        rejected:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, minLength: 1}
+        decision_status: {const: decided}
+        review:
+          type: object
+          additionalProperties: false
+          required: [mode, status, author, reviewer, refs]
+          properties:
+            mode: {enum: [self, independent]}
+            status: {enum: [not-required, required, complete]}
+            author: {type: string, minLength: 1}
+            reviewer:
+              oneOf:
+                - {type: string, minLength: 1}
+                - {type: 'null'}
+            refs:
+              type: array
+              uniqueItems: true
+              items: {type: string, minLength: 1}
+        implementation_status: {enum: [pending, partial, complete]}
+        qualification_status: {enum: [not-claimed, pending, qualified]}
+        activation:
+          enum: [active, blocked-until-accepted-authority-and-independent-review]
+        authority_refs:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {$ref: '#/$defs/repo_path'}
+  preserved_wip:
+    type: array
+    minItems: 2
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [ref, exact_head, disposition, deletion]
+      properties:
+        ref: {type: string, minLength: 1}
+        exact_head: {type: string, pattern: '^[0-9a-f]{40}$'}
+        disposition: {enum: [preserve-review-only, superseded-do-not-merge]}
+        deletion: {const: forbidden}
+$defs:
+  issue: {type: string, pattern: '^#[1-9][0-9]*$'}
+  repo_path: {type: string, pattern: '^(?!/)(?!.*\.\.)(?!.*\\).+'}

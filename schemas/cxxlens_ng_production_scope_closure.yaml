@@ -29,6 +29,7 @@ assignments:
     qualification: qualified
     evidence:
       - quality.ng-foundation_completion
+      - quality.ng-g5_qualification
       - quality.ng-provider_protocol
       - quality.ng-provider_runtime
       - quality.ng-public_callable_inventory
@@ -74,6 +75,10 @@ assignments:
       - {domain: distribution.target, id: 'cxxlens::provider_sdk'}
       - {domain: distribution.target, id: 'cxxlens::query'}
       - {domain: distribution.target, id: 'cxxlens::recipes'}
+      - {domain: g5.closure-kind, id: call-target-set}
+      - {domain: g5.closure-kind, id: include-provider-set}
+      - {domain: g5.closure-kind, id: inheritance-subtype-set}
+      - {domain: g5.closure-kind, id: relation-key-enumeration}
       - {domain: provider.execution-surface, id: in_process}
       - {domain: provider.execution-surface, id: out_of_process}
       - {domain: provider.message, id: '10:column_chunk'}
@@ -113,6 +118,7 @@ assignments:
       - {domain: public.author-path, id: runtime-dynamic-query}
       - {domain: public.catalog-entry, id: public.claim-kernel}
       - {domain: public.catalog-entry, id: public.common}
+      - {domain: public.catalog-entry, id: public.incremental}
       - {domain: public.catalog-entry, id: public.logical-query}
       - {domain: public.catalog-entry, id: public.native-provider-sdk}
       - {domain: public.catalog-entry, id: public.project-catalog}
@@ -219,6 +225,7 @@ assignments:
       - {domain: release.migration, id: R1}
       - {domain: release.migration, id: R2}
       - {domain: release.migration, id: R3}
+      - {domain: release.migration, id: R4}
       - {domain: security.namespace, id: interpretation.cc}
       - {domain: security.namespace, id: interpretation.core}
       - {domain: security.namespace, id: interpretation.provider-owned}
@@ -237,12 +244,12 @@ assignments:
       - {domain: security.sandbox-profile, id: trust.remote-provider}
       - {domain: security.sandbox-profile, id: trust.third-party-provider}
   - id: scope.clang22-installed-adoption-gap
-    owner_issue: '#181'
+    owner_issue: '#173'
     scope: included
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.clang22-installed-adoption
-      remediation: Resolve the proposed DF-0261 source-closure identity and compiler VFS authority before qualifying real-project consumers; implement the accepted DF-0195 through DF-0199 sealed-evidence, measured-occurrence, authenticated-streaming, head-observation, and canonical-Base64 authority; implement the accepted DF-0200 bounded claim/Store staging, the accepted DF-0205/DF-0206 same-process writer-mapping and writer-native-attachment authorities, the accepted DF-0207 reader-native-attachment authority, and the accepted DF-0208 typed determinate gate-failure evidence authority before qualifying the full CAS/race/attachment counterexample matrix or activating production; complete a distinct exact implementation review; then complete installed actual-source worker output adoption with exact publication and query evidence; do not claim generic relation-row reference enforcement.
+      remediation: 'Complete #261 dedicated source-closure transport and installed real-project qualification, #200 bounded claim/Store/report staging, and the #201/#202/#205 SQLite lifecycle before #173 binds the cross-cutting installed adoption evidence; complete distinct exact implementation reviews and do not claim generic relation-row reference enforcement.'
     feedback: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200, DF-0205, DF-0206, DF-0207, DF-0208, DF-0261]
     surfaces:
       - {domain: distribution.consumer-configuration, id: shared/real-project}
@@ -260,7 +267,7 @@ assignments:
       - {domain: relation.descriptor, id: frontend.clang22.entity_observation.v2}
       - {domain: relation.descriptor, id: frontend.clang22.type_observation.v2}
   - id: scope.sqlite-store-v3-gap
-    owner_issue: '#181'
+    owner_issue: '#205'
     scope: included
     qualification: tracked-gap
     gap:
@@ -284,20 +291,6 @@ assignments:
       - {domain: provider.profile-feature, id: NG1/long-run-fault-qualification}
       - {domain: provider.profile-feature, id: NG1/progress-rate-enforcement}
       - {domain: provider.profile-feature, id: NG1/spill-staging}
-  - id: scope.incremental-coordinator-gap
-    owner_issue: '#184'
-    scope: included
-    qualification: tracked-gap
-    gap:
-      finding: scope.tracked-gap.incremental-coordinator
-      remediation: Bind G5 and R4 to a production materialization coordinator rather than planner counters.
-    surfaces:
-      - {domain: g5.closure-kind, id: call-target-set}
-      - {domain: g5.closure-kind, id: include-provider-set}
-      - {domain: g5.closure-kind, id: inheritance-subtype-set}
-      - {domain: g5.closure-kind, id: relation-key-enumeration}
-      - {domain: public.catalog-entry, id: public.incremental}
-      - {domain: release.migration, id: R4}
   - id: scope.nightly-qualification-gap
     owner_issue: '#185'
     scope: included
