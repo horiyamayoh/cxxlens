@@ -209,6 +209,12 @@ def validate_reject_control(control: dict[str, Any], contract: dict[str, Any]) -
     expected = set(contract["wire_controls"]["source_closure_reject"]["exact_fields"])
     if set(control) != expected:
         raise SourceClosureTransportError("reject control fields are not exact and closed")
+    for field in ("session_id", "task_id", "cleanup_receipt"):
+        value = control.get(field)
+        if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096:
+            raise SourceClosureTransportError(
+                f"reject control {field} is not a bounded typed ID"
+            )
     phase = control.get("failure_phase")
     row = contract["failure_phase_matrix"].get(phase)
     if row is None or control.get("reason_code") not in row["allowed"]:
@@ -344,7 +350,9 @@ def _validate_logical_path(value: Any) -> None:
         raise SourceClosureTransportError("task v4 logical path violates ADR 0101 segments")
 
 
-def validate_request_binding(request: dict[str, Any]) -> None:
+def validate_request_binding(
+    request: dict[str, Any], manifests: list[dict[str, Any]]
+) -> None:
     """Validate cross-document v2.2 relationships JSON Schema cannot express."""
 
     base_tasks = request.get("tasks")
@@ -397,8 +405,33 @@ def validate_request_binding(request: dict[str, Any]) -> None:
             raise SourceClosureTransportError("source closure ID/digest mismatch")
         closure_by_id[identifier] = closure
 
+    manifest_by_id: dict[str, dict[str, Any]] = {}
+    for manifest in manifests:
+        identifier = manifest.get("closure_id")
+        if identifier in manifest_by_id:
+            raise SourceClosureTransportError("duplicate source closure manifest ID")
+        manifest_by_id[identifier] = manifest
+    if set(manifest_by_id) != set(closure_by_id):
+        raise SourceClosureTransportError("request source closure/manifest census mismatch")
+    for identifier, closure in closure_by_id.items():
+        manifest = manifest_by_id[identifier]
+        members = manifest.get("members", [])
+        blobs = manifest.get("blobs", [])
+        if (
+            manifest.get("closure_digest") != closure.get("source_closure_digest")
+            or manifest_digest(manifest) != closure.get("manifest_digest")
+            or closure.get("member_count") != len(members)
+            or closure.get("blob_count") != len(blobs)
+            or closure.get("unique_blob_bytes")
+            != sum(blob.get("size_bytes", -1) for blob in blobs)
+        ):
+            raise SourceClosureTransportError(
+                "request source closure census/manifest binding mismatch"
+            )
+
     task_ids: set[str] = set()
     indices: set[int] = set()
+    referenced_closures: set[str] = set()
     for extension in extensions:
         task_id = extension.get("task_id")
         index = extension.get("base_task_index")
@@ -422,14 +455,27 @@ def validate_request_binding(request: dict[str, Any]) -> None:
         }
         if extension.get("open_task") != expected_open:
             raise SourceClosureTransportError("task v4 open-task authority mismatch")
+        _validate_logical_path(extension.get("main_logical_path"))
+        _validate_logical_path(extension.get("logical_working_directory"))
+        if extension.get("main_logical_path") != base.get("source", {}).get(
+            "logical_path"
+        ) or extension.get("logical_working_directory") != base.get(
+            "working_directory"
+        ):
+            raise SourceClosureTransportError("task v4 base path binding mismatch")
         reference = extension.get("source_closure", {})
         closure = closure_by_id.get(reference.get("id"))
         if closure is None or reference.get("digest") != closure.get(
             "source_closure_digest"
         ) or reference.get("manifest_digest") != closure.get("manifest_digest"):
             raise SourceClosureTransportError("task v4 closure reference does not resolve exactly")
-        _validate_logical_path(extension.get("main_logical_path"))
-        _validate_logical_path(extension.get("logical_working_directory"))
+        manifest_main = [
+            member["logical_path"]
+            for member in manifest_by_id[reference["id"]]["members"]
+            if member["role"] == "main"
+        ]
+        if manifest_main != [extension.get("main_logical_path")]:
+            raise SourceClosureTransportError("task v4 manifest main path binding mismatch")
         expected_task_digest = semantic_digest(
             "cxxlens.clang22.task.v4", task_v4_projection(extension)
         )
@@ -439,8 +485,11 @@ def validate_request_binding(request: dict[str, Any]) -> None:
             raise SourceClosureTransportError("task v4 semantic identity mismatch")
         task_ids.add(task_id)
         indices.add(index)
+        referenced_closures.add(reference["id"])
     if indices != set(range(len(base_tasks))):
         raise SourceClosureTransportError("task v4/base task index set is incomplete")
+    if referenced_closures != set(closure_by_id):
+        raise SourceClosureTransportError("request contains an unreferenced source closure")
     expected_request_digest = semantic_digest(
         "cxxlens.clang22.materialization-request.v2_2",
         request_v2_2_projection(request),
@@ -578,7 +627,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
             witness
         )
         validate_manifest(witness_manifest, manifest_schema)
-        validate_request_binding(witness)
+        validate_request_binding(witness, [witness_manifest])
     except (jsonschema.ValidationError, SourceClosureTransportError) as error:
         message = (
             error.message
@@ -773,6 +822,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
 
     maturity = contract["maturity"]
     review = contract["authority"]["review"]
+    review_findings = contract["review_findings"]
     adr_status = "Accepted" if "- Status: Accepted" in adr else "Proposed"
     if maturity == "proposed":
         if set(legacy_ids).intersection(proposed_ids):
@@ -788,6 +838,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
             "exact_main_commit": None,
         }:
             raise SourceClosureTransportError("proposed authority has premature acceptance")
+        if review_findings["status"] != "blocking" or review_findings["receipt_id"] is not None:
+            raise SourceClosureTransportError("proposed authority lost blocking review history")
     else:
         if adr_status != "Accepted" or review["status"] != "complete":
             raise SourceClosureTransportError("accepted authority lacks completed review")
@@ -799,6 +851,28 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
             r"[0-9a-f]{40}", review["exact_main_commit"]
         ):
             raise SourceClosureTransportError("accepted authority lacks exact main commit")
+        if review_findings != {
+            "status": "resolved",
+            "exact_main_commit": review["exact_main_commit"],
+            "ref": review["ref"],
+            "reviewer": review["reviewer"],
+            "receipt_id": review_findings["receipt_id"],
+            "required_resolutions": review_findings["required_resolutions"],
+        } or not isinstance(review_findings["receipt_id"], str):
+            raise SourceClosureTransportError("accepted authority retains blocking review findings")
+        import check_ng_development_decisions as decisions  # noqa: PLC0415
+        register = decisions.validate(root)
+        decision = next(
+            (entry for entry in register["decisions"] if entry["id"] == "decision.source-closure.dedicated-transport"),
+            None,
+        )
+        if (
+            decision is None
+            or decision["authority_status"] != "accepted"
+            or decision["review"]["outcome"] != "accepted"
+            or review_findings["receipt_id"] not in decision["review"]["receipt_ids"]
+        ):
+            raise SourceClosureTransportError("accepted source closure bypasses authenticated decision receipt")
         try:
             reviewed_contract = subprocess.run(
                 ["git", "show", f"{review['exact_main_commit']}:{CONTRACT.as_posix()}"],

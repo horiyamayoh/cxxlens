@@ -113,6 +113,9 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     if heavy.get("concurrency") != {"group": "autonomy-heavy-latest-main", "cancel-in-progress": True}:
         raise AutonomyCiError("heavy coalescing policy drift")
     freshness = heavy["jobs"].get("freshness", {})
+    refresh = step_by(freshness, name="Refresh current main authority")
+    if refresh.get("run") != "git fetch --no-tags origin main":
+        raise AutonomyCiError("heavy preflight main refresh drift")
     classify = step_by(freshness, identifier="classify")
     if classify.get("env") != {"EVENT_CANDIDATE": "${{ github.event.workflow_run.head_sha }}"} or "classify-heavy" not in classify.get("run", "") or "DISPATCH" in classify.get("run", ""):
         raise AutonomyCiError("heavy freshness classifier structure drift")

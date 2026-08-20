@@ -25,6 +25,8 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+      - name: Refresh current main authority
+        run: git fetch --no-tags origin main
       - id: classify
         name: Classify exact candidate freshness
         # A stale candidate produces only the uploaded superseded freshness report.

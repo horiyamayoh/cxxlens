@@ -61,7 +61,7 @@ class DevelopmentDecisionTest(unittest.TestCase):
         files = [{"path": path, "blob": "a" * 40} for path in decision["authority_refs"]]
         allowed = {str(REGISTER), str(RECEIPTS), "docs/design/SHA256SUMS", "schemas/cxxlens_ng_work_units.yaml"}
         allowed.update(path for path in decision["authority_refs"] if path.startswith("docs/design/adr/") or path.startswith("schemas/"))
-        receipt = {"id": receipt_id, "decision_id": decision["id"], "owner_issue": "#261", "candidate_commit": "b" * 40, "candidate_tree": "c" * 40, "candidate_git_author_email": "owner@example.com", "authority_files": files, "authority_digest": authority_digest(files), "comment_url": "https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-1", "comment_body_sha256": "sha256:" + "d" * 64, "comment_author_login": "independent-reviewer", "author": "repository-owner", "reviewer": "codex-independent-source", "reviewer_github_login": "independent-reviewer", "reviewer_provenance": "isolated-read-only-codex-exec", "reviewer_session": "12345678-1234-1234-1234-123456789abc", "reviewer_invocation": "codex-exec-ephemeral-sandbox-read-only", "review_output_sha256": "sha256:" + "e" * 64, "verdict": "accepted", "findings": {"p0": 0, "p1": 0, "p2": 1}, "finding_ids": ["P2-DOC-LIMIT"], "verification_limits": ["production qualification not executed"], "connected_verification": {"status": "verified", "run_id": 1, "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1", "run_commit": "b" * 40, "workflow_name": "Autonomy fast", "event": "push", "conclusion": "success"}, "acceptance": {"status": "committed", "derivation": "first-descendant-containing-receipt", "allowed_changed_paths": sorted(allowed)}}
+        receipt = {"id": receipt_id, "decision_id": decision["id"], "owner_issue": "#261", "candidate_commit": "b" * 40, "candidate_tree": "c" * 40, "candidate_git_author_email": "owner@example.com", "candidate_github_login": "candidate-owner", "authority_files": files, "authority_digest": authority_digest(files), "comment_url": "https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-1", "comment_body_sha256": "sha256:" + "d" * 64, "comment_author_login": "independent-reviewer", "author": "repository-owner", "reviewer": "codex-independent-source", "reviewer_github_login": "independent-reviewer", "reviewer_provenance": "isolated-read-only-codex-exec", "reviewer_session": "12345678-1234-1234-1234-123456789abc", "reviewer_invocation": "codex-exec-ephemeral-sandbox-read-only", "review_output_sha256": "sha256:" + "e" * 64, "verdict": "accepted", "findings": {"p0": 0, "p1": 0, "p2": 1}, "finding_ids": ["P2-DOC-LIMIT"], "verification_limits": ["production qualification not executed"], "connected_verification": {"status": "verified", "run_id": 1, "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1", "run_commit": "b" * 40, "workflow_id": 1, "workflow_path": ".github/workflows/autonomy-fast.yml", "workflow_name": "Autonomy fast", "event": "push", "conclusion": "success"}, "acceptance": {"status": "committed", "derivation": "first-descendant-containing-receipt", "allowed_changed_paths": sorted(allowed)}}
         (root / REGISTER).write_text(yaml.safe_dump(register, sort_keys=False), encoding="utf-8")
         document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
         document["receipts"] = [receipt]
@@ -137,6 +137,18 @@ class DevelopmentDecisionTest(unittest.TestCase):
             receipt["verification_limits"].append("connected CI unavailable")
             self.assertNotEqual(accepted, canonical_review_comment(receipt))
             self.assertNotEqual(hashlib.sha256(accepted.encode()).hexdigest(), hashlib.sha256(canonical_review_comment(receipt).encode()).hexdigest())
+
+    def test_candidate_and_reviewer_github_identity_must_differ(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            receipt["candidate_github_login"] = receipt["reviewer_github_login"]
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [receipt]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(DecisionRegisterError, "GitHub identities"):
+                validate(root, verify_git=False)
 
 
 if __name__ == "__main__":

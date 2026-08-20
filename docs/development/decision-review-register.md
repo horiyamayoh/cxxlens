@@ -18,7 +18,8 @@ verdict. `decided` therefore never implies Accepted, implemented, qualified, or 
 Accepted authority references a receipt in
 `schemas/cxxlens_ng_development_review_receipts.yaml`. The receipt binds the candidate commit and
 tree, authority blobs and normalized digest, owner issue and canonical comment body, distinct
-author/reviewer/session, verdict and P0/P1/P2 census, and an exact-candidate connected CI run. The
+candidate/reviewer GitHub logins plus reviewer identity/session, verdict and P0/P1/P2 census, and an
+exact-candidate connected CI run bound to the immutable active workflow ID/path. The
 acceptance commit may change only declared status/receipt paths and must descend from the candidate.
 To avoid a self-referential commit hash, it is derived as the first descendant commit whose receipt
 registry contains that receipt ID.
@@ -32,6 +33,7 @@ The offline checker rejects duplicate or orphan receipts, foreign owner issues, 
 or normalized authority digests, self-review, accepted verdicts with P0/P1, missing exact-candidate
 connected verification, activation before acceptance, qualification before implementation, and
 replacement of a preserved WIP ref. Connected CI additionally authenticates GitHub comment bytes,
-author identity, and the named CI run; offline-only evidence cannot activate production support.
+author identity, and the named CI run plus active workflow object; a spoofed workflow name is not
+authority. Offline-only evidence cannot activate production support.
 The comment is canonical receipt JSON, so candidate, authority closure, isolated reviewer session,
 verdict, finding census, and qualification boundary cannot drift independently.

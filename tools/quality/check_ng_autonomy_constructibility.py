@@ -37,25 +37,121 @@ def require_exact(actual: Any, expected: Any, label: str) -> None:
         raise ConstructibilityError(f"constructibility drift: {label}")
 
 
+def validate_closed_graph(
+    graph: dict[str, Any], initial: str, external_terminals: set[str] | None = None
+) -> None:
+    external = external_terminals or set()
+    reachable: set[str] = set()
+    pending = [initial]
+    while pending:
+        state = pending.pop()
+        if state in reachable or state in external:
+            continue
+        if state not in graph:
+            raise ConstructibilityError(f"graph target has no state: {state}")
+        reachable.add(state)
+        targets = graph[state]
+        targets = [targets] if isinstance(targets, str) else targets
+        if not isinstance(targets, list) or not all(
+            isinstance(target, str) for target in targets
+        ):
+            raise ConstructibilityError(f"graph transition is not closed: {state}")
+        pending.extend(targets)
+    if reachable != set(graph):
+        raise ConstructibilityError("graph contains unreachable state")
+
+
 def execute_store_symbolic_witness(store: dict[str, Any]) -> None:
     expected_records = [("claim", "a", b"alpha"), ("claim", "b", b"beta")]
-    actual_records = [(kind, key, bytes(payload)) for kind, key, payload in expected_records]
+    backend_rows = [
+        {"ordinal": 0, "kind": "claim", "key": "a", "payload": b"alpha"},
+        {"ordinal": 1, "kind": "claim", "key": "b", "payload": b"beta"},
+    ]
+    actual_records = [
+        (row["kind"], row["key"], row["payload"])
+        for row in sorted(backend_rows, key=lambda row: row["ordinal"])
+    ]
+
     def frame(record: tuple[str, str, bytes]) -> bytes:
         body = record[0].encode() + b"\0" + record[1].encode() + b"\0" + record[2]
         return len(body).to_bytes(8, "big") + body + hashlib.sha256(body).digest()
-    if any(frame(actual) != frame(expected) for actual, expected in zip(actual_records, expected_records, strict=True)):
+
+    def projections_equal(
+        actual: list[tuple[str, str, bytes]],
+        expected: list[tuple[str, str, bytes]],
+    ) -> bool:
+        return len(actual) == len(expected) and all(
+            frame(left) == frame(right)
+            for left, right in zip(actual, expected, strict=True)
+        )
+
+    if not projections_equal(actual_records, expected_records):
         raise ConstructibilityError("Store symbolic dual projection mismatch")
-    if frame(("claim", "b", b"BETA")) == frame(expected_records[1]):
-        raise ConstructibilityError("Store symbolic recomputed-checksum tamper accepted")
-    for outcome in store["publication_outcomes"]:
-        if outcome in {"publication-outcome-unknown", "committed-unverified"}:
-            response, exit_code, recovery_authority = None, 2, "Store recovery record"
-            if response is not None or exit_code != 2 or recovery_authority != "Store recovery record":
-                raise ConstructibilityError("Store symbolic ambiguous publication failure")
+    adversarial_actuals = [
+        actual_records[:-1],
+        [actual_records[0], actual_records[0], actual_records[1]],
+        list(reversed(actual_records)),
+        [actual_records[0], ("claim", "b", b"BETA")],
+    ]
+    if any(projections_equal(candidate, expected_records) for candidate in adversarial_actuals):
+        raise ConstructibilityError("Store symbolic projection counterexample accepted")
+
+    expected_policy = {
+        "not-attempted": {"response": "typed-failure", "exit": 1, "recovery_authority": "none"},
+        "rejected-stale": {"response": "typed-publication-conflict", "exit": 1, "recovery_authority": "Store"},
+        "rejected-store-failure": {"response": "typed-store-failure", "exit": 1, "recovery_authority": "Store"},
+        "publication-outcome-unknown": {"response": "none", "exit": 2, "recovery_authority": "Store"},
+        "committed-unverified": {"response": "safe-committed-unverified-detail-or-none", "exit": "0-or-2", "recovery_authority": "Store"},
+        "committed-verified": {"response": "validated-success", "exit": 0, "recovery_authority": "Store"},
+    }
+    require_exact(store["outcome_policy"], expected_policy, "Store outcome policy")
+    if set(store["outcome_policy"]) != set(store["publication_outcomes"]):
+        raise ConstructibilityError("Store outcome policy census mismatch")
+
     bounds = store["bounds"]
-    resident = bounds["source_window_bytes"] + bounds["sort_arena_bytes"] + bounds["comparator_cursor_count"] * bounds["comparator_cursor_bytes_each"]
-    if resident >= bounds["scale_bytes"]:
+    def checked_add(left: int, right: int, maximum: int) -> int:
+        if left < 0 or right < 0 or left > maximum - right:
+            raise ConstructibilityError("Store symbolic checked arithmetic overflow")
+        return left + right
+
+    def checked_multiply(left: int, right: int, maximum: int) -> int:
+        if left < 0 or right < 0 or (right and left > maximum // right):
+            raise ConstructibilityError("Store symbolic checked arithmetic overflow")
+        return left * right
+
+    cursor_bytes = bounds["comparator_cursor_count"] * bounds["comparator_cursor_bytes_each"]
+    resident = checked_add(
+        checked_add(bounds["source_window_bytes"], bounds["sort_arena_bytes"], bounds["counter_max"]),
+        cursor_bytes,
+        bounds["counter_max"],
+    )
+    if resident != bounds["resident_window_limit_bytes"]:
         raise ConstructibilityError("Store symbolic bounded-window witness invalid")
+    if bounds["merge_file_descriptors"] != bounds["merge_fan_in"] + 2:
+        raise ConstructibilityError("Store symbolic merge descriptor witness invalid")
+    admitted_scale_accumulator = checked_add(
+        checked_multiply(
+            bounds["tasks"],
+            bounds["counter_max"],
+            bounds["accumulator_max"],
+        ),
+        bounds["scale_bytes"],
+        bounds["accumulator_max"],
+    )
+    if admitted_scale_accumulator <= bounds["counter_max"]:
+        raise ConstructibilityError("Store symbolic u128 accumulator witness invalid")
+    try:
+        checked_add(bounds["counter_max"], 1, bounds["counter_max"])
+    except ConstructibilityError:
+        pass
+    else:
+        raise ConstructibilityError("Store symbolic overflow counterexample accepted")
+    try:
+        checked_multiply(bounds["accumulator_max"], 2, bounds["accumulator_max"])
+    except ConstructibilityError:
+        pass
+    else:
+        raise ConstructibilityError("Store symbolic u128 overflow counterexample accepted")
 
 
 def validate(root: pathlib.Path) -> dict[str, Any]:
@@ -90,7 +186,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     require_exact(store["post_attempt_failure"], "exit-2-zero-authoritative-response-store-recovery-only", "post-attempt failure")
     require_exact(store["publication_outcomes"], ["not-attempted", "rejected-stale", "rejected-store-failure", "publication-outcome-unknown", "committed-unverified", "committed-verified"], "Store publication outcomes")
     require_exact(store["projections"], {"actual_source": "backend-staging-canonical-physical-order", "expected_source": "immutable-sealed-task-plus-selected-request-and-journal", "comparison": "separate-cursors-full-record-byte-exact"}, "dual projection")
-    require_exact(store["bounds"], {"tasks": 4096, "scale_bytes": 512 * 1024 * 1024, "source_window_bytes": 64 * 1024 * 1024, "sort_arena_bytes": 8 * 1024 * 1024, "comparator_cursor_count": 2, "comparator_cursor_bytes_each": 32 * 1024, "merge_fan_in": 16, "merge_file_descriptors": 18, "report_bytes": 1024 * 1024 * 1024}, "DF-0200 numeric bounds")
+    require_exact(store["bounds"], {"tasks": 4096, "scale_bytes": 512 * 1024 * 1024, "source_window_bytes": 64 * 1024 * 1024, "sort_arena_bytes": 8 * 1024 * 1024, "comparator_cursor_count": 2, "comparator_cursor_bytes_each": 32 * 1024, "resident_window_limit_bytes": 72 * 1024 * 1024 + 64 * 1024, "merge_fan_in": 16, "merge_file_descriptors": 18, "report_bytes": 1024 * 1024 * 1024, "counter_max": (1 << 64) - 1, "accumulator_max": (1 << 128) - 1}, "DF-0200 numeric bounds")
     require_exact(store["representation"], {"logical_write": "cxxlens.ng-snapshot-payload.v5", "sqlite_physical": "cxxlens.sqlite-semantic-store.v3", "sqlite_version": "3.0.0", "chunk_profile": "cxxlens.sqlite-payload-chunks.v1", "chunk_bytes": 8 * 1024 * 1024, "legacy_read": ["v1", "v2", "v3", "v4"]}, "Store exact representation")
     execute_store_symbolic_witness(store)
     require_exact(model["counterexample_sets"]["store_candidate_report"], ["second-full-graph", "shared-projection-traversal", "digest-only", "compact-after-attempt", "lost-publication-outcome-unknown", "eager-sqlite-residency-claim"], "Store counterexamples")
@@ -98,7 +194,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     mapping = machines["sqlite_read_mapping"]
     require_exact(mapping["nesting"], "#205-inside-#201-active-read-connection", "SQLite nesting")
     require_exact(mapping["no_effect_boundary"], "before-target-xOpen", "SQLite no-effect boundary")
-    require_exact(mapping["outer_states"], ["unresolved", "runtime-vfs-filesystem-sealed", "retained-parent-held", "no-effect-boundary-armed", "typed-family-census", "active-read-connection-open", "wal-lock-and-prefix-held", "mapping-subprotocol-or-private-index", "eager-decode", "decoded-read-candidate-sealed", "connection-revoking", "reader-and-writer-retired", "connection-closed", "zero-effect-callback-receipt-sealed", "logical-read-receipt"], "SQLite outer states")
+    require_exact(mapping["outer_states"], ["unresolved", "runtime-vfs-filesystem-sealed", "retained-parent-held", "no-effect-boundary-armed", "typed-family-census", "active-read-connection-open", "wal-lock-and-prefix-held", "mapping-subprotocol-or-private-index", "eager-decode", "decoded-read-candidate-sealed", "connection-revoking", "outer-custody-join-sealed", "connection-closed", "zero-effect-callback-receipt-sealed", "logical-read-receipt"], "SQLite outer states")
     require_exact(mapping["writer_states"], ["callback-admitted", "pre-callback-sequence-cut", "attempt-pin-held", "native-started", "native-outcome-captured", "pending-mapping-receipt", "identity-validated", "mapping-lease-promoted", "eager-use-owner-held", "writer-handoff-sealed"], "SQLite writer states")
     require_exact(mapping["reader_states"], ["reader-session-reserved", "writer-lease-page-support-pin-held", "native-started", "native-outcome-captured", "reader-attachment-candidate", "identity-and-effect-validated", "reader-attachment-group-promoted", "eager-session-owner-admitted", "reader-handoff-sealed"], "SQLite reader states")
     require_exact(mapping["reader_forbidden_products"], ["mapping-lease-promoted", "writer-authority", "transitive-page-authority"], "SQLite reader product separation")
@@ -106,10 +202,17 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     require_exact(mapping["promotion_predicate"], "native-SQLITE_OK-nonnull-plus-full-identity-zero-effect-receipt-and-writer-gates", "SQLite promotion predicate")
     teardown = mapping["teardown_transition_graph"]
     require_exact(teardown, {"active": "hide-generation", "hide-generation": "seal-pre-callback-cut", "seal-pre-callback-cut": "revoke-admission", "revoke-admission": "drain-callbacks-and-use-owners", "drain-callbacks-and-use-owners": "seal-owner-census", "seal-owner-census": "native-unmap-deleteFlag-zero", "native-unmap-deleteFlag-zero": ["unmap-confirmed-OK", "terminal-opaque-quarantine-zero-close"], "unmap-confirmed-OK": "consume-distinct-close-owner-and-native-close-once", "consume-distinct-close-owner-and-native-close-once": ["close-confirmed", "terminal-opaque-quarantine"], "close-confirmed": "seal-zero-effect-outcomes-retire-registry-release-pins", "terminal-opaque-quarantine-zero-close": [], "terminal-opaque-quarantine": []}, "SQLite teardown transition graph")
-    require_exact(mapping["reader_teardown_transition_graph"], {"reader-handoff-sealed": "hide-reader-generation", "hide-reader-generation": "seal-reader-pre-callback-cut", "seal-reader-pre-callback-cut": "revoke-reader-admission", "revoke-reader-admission": "drain-reader-callbacks-and-use-owners", "drain-reader-callbacks-and-use-owners": "seal-reader-member-and-use-owner-census", "seal-reader-member-and-use-owner-census": "native-reader-unmap-deleteFlag-zero", "native-reader-unmap-deleteFlag-zero": ["reader-unmap-confirmed-OK", "reader-terminal-opaque-quarantine"], "reader-unmap-confirmed-OK": "consume-reader-close-owner-and-native-close-once", "consume-reader-close-owner-and-native-close-once": ["reader-close-confirmed", "reader-terminal-opaque-quarantine"], "reader-close-confirmed": "seal-reader-callback-effect-transcript-and-cleanup-ack", "seal-reader-callback-effect-transcript-and-cleanup-ack": "retire-reader-attachment-group-and-release-page-support-pin", "retire-reader-attachment-group-and-release-page-support-pin": "reader-and-writer-retired", "reader-and-writer-retired": [], "reader-terminal-opaque-quarantine": []}, "SQLite reader teardown transition graph")
+    writer_terminal = "seal-zero-effect-outcomes-retire-registry-release-pins"
+    validate_closed_graph(teardown, "active", {writer_terminal})
+    reader_teardown = mapping["reader_teardown_transition_graph"]
+    require_exact(reader_teardown, {"reader-handoff-sealed": "hide-reader-generation", "hide-reader-generation": "seal-reader-pre-callback-cut", "seal-reader-pre-callback-cut": "revoke-reader-admission", "revoke-reader-admission": "drain-reader-callbacks-and-use-owners", "drain-reader-callbacks-and-use-owners": "seal-reader-member-and-use-owner-census", "seal-reader-member-and-use-owner-census": "native-reader-unmap-deleteFlag-zero", "native-reader-unmap-deleteFlag-zero": ["reader-unmap-confirmed-OK", "reader-terminal-opaque-quarantine"], "reader-unmap-confirmed-OK": "consume-reader-close-owner-and-native-close-once", "consume-reader-close-owner-and-native-close-once": ["reader-close-confirmed", "reader-terminal-opaque-quarantine"], "reader-close-confirmed": "seal-reader-callback-effect-transcript-and-cleanup-ack", "seal-reader-callback-effect-transcript-and-cleanup-ack": "retire-reader-attachment-group-and-release-page-support-pin", "retire-reader-attachment-group-and-release-page-support-pin": "reader-retired", "reader-retired": [], "reader-terminal-opaque-quarantine": []}, "SQLite reader teardown transition graph")
+    validate_closed_graph(reader_teardown, "reader-handoff-sealed")
+    require_exact(mapping["retirement_join"], {"writer_terminal": "seal-zero-effect-outcomes-retire-registry-release-pins", "reader_terminal": "reader-retired", "scope": "outer-connection-owned-writer-attachments-and-reader-sessions-only", "join": "outer-custody-join-sealed", "forbidden": "reader-retirement-claims-independent-writer-retirement"}, "SQLite scoped retirement join")
     require_exact(mapping["zero_effect_receipt"], ["initialize", "create", "write", "truncate", "extend", "delete", "resize"], "SQLite zero-effect receipt")
-    require_exact(mapping["read_receipt_barrier"], ["reader-and-writer-retired", "connection-closed", "zero-live-callbacks-leases-and-use-owners", "zero-effect-callback-receipt-sealed"], "SQLite read receipt barrier")
-    require_exact(mapping["fork_transition_graph"], {"running": "atfork-prepare-seal-admission-and-census", "atfork-prepare-seal-admission-and-census": ["parent-revalidate-process-and-fork-generation", "child-transfer-all-inherited-custody"], "parent-revalidate-process-and-fork-generation": "running", "child-transfer-all-inherited-custody": "child-inherited-custody-quarantine", "child-inherited-custody-quarantine": ["child-exec", "child-exit"], "child-exec": [], "child-exit": []}, "SQLite fork transition graph")
+    require_exact(mapping["read_receipt_barrier"], ["outer-custody-join-sealed", "connection-closed", "outer-scoped-zero-live-callbacks-leases-and-use-owners", "zero-effect-callback-receipt-sealed"], "SQLite read receipt barrier")
+    fork_graph = mapping["fork_transition_graph"]
+    require_exact(fork_graph, {"running": "atfork-prepare-seal-admission-and-census", "atfork-prepare-seal-admission-and-census": ["parent-revalidate-process-and-fork-generation", "child-transfer-all-inherited-custody"], "parent-revalidate-process-and-fork-generation": "running", "child-transfer-all-inherited-custody": "child-inherited-custody-quarantine", "child-inherited-custody-quarantine": ["child-exec", "child-exit"], "child-exec": [], "child-exit": []}, "SQLite fork transition graph")
+    validate_closed_graph(fork_graph, "running")
     require_exact(mapping["child_quarantine_forbidden"], ["SQLite-entry", "native-unmap", "native-close", "retry", "cleanup", "owner-drain", "authority-reconstruction"], "SQLite child quarantine")
     require_exact(mapping["ambiguous_callback"], "permanent-quarantine-no-retry", "ambiguous callback")
     require_exact(mapping["production_activation_predicate"], ["accepted-independent-review", "exact-static-shared-runtime-vfs-sqlite-dso-source-id-hash-build-toolchain-identity", "two-live-store-cas", "materialization-race", "cross-process-race", "cantinit-readonly-negative", "pending-only-state-rejection", "four-extend-pairs", "simultaneous-first-writer-join-and-mismatch", "w2-retirement-ordering", "new-page-size-update", "duplicate-fd-lock-loss", "native-close-pinning", "timeout-and-unknown-outcomes", "same-page-successor", "different-page-successor-rejection", "fork-aba-unload-replacement", "connected-main-ci-and-platform-qualification"], "mapping production predicate")
@@ -123,7 +226,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "F0": ["live-receipt", "fixture-normalizer"],
         "FP": ["authenticated-cleanup-or-recovery", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer"],
         "FH": ["authenticated-cleanup-or-recovery", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer"],
-        "FZ-pre": ["retain-and-revalidate-exact-size-zero-coordination-WAL", "new-live-receipt-bound-to-same-WAL", "fixture-normalizer", "authenticated-coordination-WAL-delete", "retained-parent-fsync"],
+        "FZ-pre": ["retain-and-revalidate-exact-size-zero-coordination-WAL", "authenticated-coordination-WAL-delete", "retained-parent-fsync", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer"],
         "FI": ["independently-validated-rollback-empty-fresh-anchor"],
         "FZ-post": ["authenticated-size-zero-WAL-delete", "retained-parent-fsync", "independently-validated-rollback-empty-fresh-anchor"],
         "FO": ["independently-validated-rollback-empty-fresh-anchor"],
@@ -132,7 +235,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "F0": ["confirmed-close", "post-close-census"],
         "FP": ["authenticated-cleanup-or-recovery", "parent-fsync", "confirmed-close", "post-close-census"],
         "FH": ["authenticated-cleanup-or-recovery", "parent-fsync", "confirmed-close", "post-close-census"],
-        "FZ-pre": ["authenticated-coordination-WAL-delete", "retained-parent-fsync", "confirmed-close", "post-close-census"],
+        "FZ-pre": ["authenticated-coordination-WAL-delete", "retained-parent-fsync", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer", "confirmed-close", "post-close-census"],
         "FI": ["independently-validated-rollback-empty-fresh-anchor"],
         "FZ-post": ["authenticated-size-zero-WAL-delete", "retained-parent-fsync", "independently-validated-rollback-empty-fresh-anchor"],
         "FO": ["independently-validated-rollback-empty-fresh-anchor"],
@@ -151,6 +254,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     require_exact(effect["production_activation_predicate"], ["tracked-exact-harness", "static-shared-loaded-sqlite-dso-source-id-hash-build-toolchain-identity", "runtime-vfs-device-filesystem-profile", "all-callback-boundaries", "parameterized-sector-page-record-set", "authenticated-coordination-wal-delete", "parent-sync-after-each-delete", "rebind-at-unlink", "seven-family-recrash-idempotence", "post-normalization-fresh-transition", "canonical-report-digest", "distinct-implementation-review", "explicit-accepted-effect-profile", "connected-main-ci-and-platform-qualification"], "normalization production predicate")
     require_exact(effect["canonical_user_source_activation"], "prohibited", "production normalization activation")
     require_exact(effect["parent_sync_after_each_delete"], "required", "normalization parent sync")
+    require_exact(model["counterexample_sets"]["sqlite_read_mapping"], ["first-map-mutation", "writer-predelegation-lease", "reader-without-predelegation-writer-lease-pin", "missing-zero-effect-receipt", "nonzero-unmap-deleteFlag", "ok-null", "pointer-substitution", "aba", "fork-ordinary-drain", "unload-before-revoke", "callback-retry"], "SQLite mapping counterexamples")
+    require_exact(model["counterexample_sets"]["sqlite_normalization_effect"], ["physical-census-entry", "fixture-production-promotion", "missing-parent-sync", "nonempty", "sidecar-ambiguous"], "SQLite effect counterexamples")
     return model
 
 

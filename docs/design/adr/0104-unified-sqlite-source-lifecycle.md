@@ -27,7 +27,8 @@ The no-effect boundary begins before target `xOpen`, not after census:
 `unresolved -> runtime-vfs-filesystem-sealed -> retained-parent-held`
 `-> no-effect-boundary-armed -> typed-family-census -> active-read-connection-open`
 `-> wal-lock-and-prefix-held -> mapping-subprotocol-or-private-index`
-`-> eager-decode -> decoded-read-candidate-sealed -> connection-revoking -> connection-closed`
+`-> eager-decode -> decoded-read-candidate-sealed -> connection-revoking`
+`-> outer-custody-join-sealed -> connection-closed`
 `-> zero-effect-callback-receipt-sealed -> logical-read-receipt`.
 
 From `no-effect-boundary-armed` through `logical-read-receipt`, including every map, unmap, and
@@ -116,8 +117,11 @@ continuity alone is never such proof.
 Reader attachment retirement repeats the same cut/census discipline independently: hide generation,
 seal its pre-callback cut, revoke admission, drain callbacks and use owners, seal the complete member
 census, perform one authenticated `xShmUnmap(0)`, consume its distinct close owner, seal close outcome,
-callback-effect transcript, and cleanup acknowledgement, then release the page-support pin. The outer
-connection cannot cross `reader-and-writer-retired` or mint a logical read receipt before this terminal.
+callback-effect transcript, and cleanup acknowledgement, then release the page-support pin and seal
+only `reader-retired`. It never retires or makes a claim about an independently live writer attachment.
+The outer connection separately joins all reader terminals with all writer terminals owned by that
+outer connection; only this scoped census seals `outer-custody-join-sealed`. Unrelated live writers do
+not block it, and reader retirement alone cannot satisfy it.
 
 Fork is not an ordinary drain. `pthread_atfork` prepare seals admission and records the complete
 custody census; the parent handler revalidates process/fork generation before resuming. The child
@@ -140,10 +144,10 @@ The accepted DF-0202 fixture authority remains an executable closed partition, n
 
 - `F0 -> live-receipt -> fixture-normalizer`.
 - `FP/FH -> authenticated cleanup-or-recovery -> independently-revalidated F0 -> new-live-receipt`.
-- `FZ-pre -> retain-and-revalidate-the-exact-size-zero-coordination-WAL -> new-live-receipt`; the
-  normalizer binds that same WAL as its coordination object. Its authenticated terminal cleanup
-  deletes that coordination WAL and separately fsyncs the retained parent before handoff; it never
-  reclassifies the entry as F0 or admits rollback/post-form bytes through the FZ-pre guard.
+- `FZ-pre -> retain-and-revalidate-the-exact-size-zero-coordination-WAL -> authenticated delete`
+  `-> retained-parent fsync -> independently-revalidated F0 -> new-live-receipt -> fixture-normalizer`.
+  Deletion and parent durability dominate journal creation; a crash before the fresh F0 receipt is
+  cold-reclassified and cannot continue the original FZ-pre edge.
 - `FI/FZ-post/FO -> independently-validated rollback-empty-fresh-anchor` only; none is a completed
   normalization edge and none may mint or reuse a live receipt.
 
@@ -192,7 +196,7 @@ fresh initialization, never Store/public success. Fixture-only capability cannot
 | fork/PID reuse/VFS unload/replacement/ABA | source unchanged by reader | hide/revoke before cleanup; no successor until census drains |
 | before #202 effect | source unchanged and #201 connection closed | release exclusive owner; discard receipt |
 | during fixture normalization | exact DF-0202 old or journaled recoverable state | follow F0/FZ-pre/FZ-post/FP/FH/FI/FO matrix; no blind retry |
-| after durable normalization before fresh init | durable exact-empty rollback state | consume same receipt once or reclassify |
+| after durable normalization before fresh init | durable exact-empty rollback state | discard original receipt; cold-reclassify only; no original success continuation |
 | during fresh init | existing atomic Store initialization states | existing recovery; no intermediate public success |
 | CAS loss or phase-opaque commit | atomic old/new or unknown | preserve Store conflict/unknown semantics; lease/effect failures are not CAS conflicts |
 

@@ -137,9 +137,10 @@ tail reservation, compact downgrade after attempt, loss of `publication_outcome_
 stdout authority, non-v5 writes, legacy one-BLOB SQLite writes, and implicit lazy-read claims.
 
 Acceptance requires the machine checker plus an exact-candidate independent review with P0/P1 zero.
-The proposal witness executes symbolic state ordering, separate actual/expected record cursors,
-byte-exact comparison including checksum-recomputed tamper, ambiguous publication authority, and
-bounded-window arithmetic. It deliberately does not claim runtime implementation. The later bounded
+The proposal witness executes the six-outcome policy, symbolic state ordering, separate
+backend-row/immutable-input projection builders, byte-exact comparison including omission,
+duplication, reorder, and checksum-recomputed tamper, ambiguous publication authority, and checked
+u64/u128 window/descriptor arithmetic. It deliberately does not claim runtime implementation. The later bounded
 implementation unit must add 4,096 tasks/512 MiB, memory/reopened-SQLite parity, every publication and
 report crash edge, and a negative production call into a bulk API. SQLite lazy-read residency remains
 a separate blocked unit; production qualification is not claimed by either step.

@@ -88,6 +88,19 @@ class AutonomyCiTest(unittest.TestCase):
             with self.assertRaisesRegex(AutonomyCiError, "provisional artifact guard"):
                 validate(root)
 
+    def test_heavy_preflight_without_fresh_origin_main_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-heavy.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            steps = value["jobs"]["freshness"]["steps"]
+            steps[:] = [
+                step for step in steps if step.get("name") != "Refresh current main authority"
+            ]
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "missing or ambiguous"):
+                validate(root)
+
     def test_release_push_trigger_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

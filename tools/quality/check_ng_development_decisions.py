@@ -131,36 +131,62 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
     allowed = set(acceptance["allowed_changed_paths"])
     if not changed or not changed <= allowed:
         raise DecisionRegisterError(f"acceptance commit is not status/receipt-only: {receipt['id']}")
-    def authority_projection(value: Any) -> Any:
-        if not isinstance(value, dict):
-            return value
-        result = dict(value)
-        result.pop("maturity", None)
-        authority = result.get("authority")
-        if isinstance(authority, dict):
-            authority = dict(authority)
-            authority.pop("review", None)
-            result["authority"] = authority
-        return result
+    def authority_transition(before_value: Any, after_value: Any) -> bool:
+        if before_value == after_value:
+            return True
+        if not isinstance(before_value, dict) or not isinstance(after_value, dict):
+            return False
+        expected = json.loads(json.dumps(before_value))
+        if expected.get("maturity") != "proposed" or after_value.get("maturity") != "accepted":
+            return False
+        expected["maturity"] = "accepted"
+        authority = expected.get("authority")
+        if not isinstance(authority, dict) or "review" not in authority:
+            return False
+        authority["review"] = {
+            "status": "complete",
+            "reviewer": receipt["reviewer"],
+            "ref": receipt["comment_url"],
+            "exact_main_commit": receipt["candidate_commit"],
+        }
+        if "review_findings" in expected:
+            expected["review_findings"] = {
+                "status": "resolved",
+                "exact_main_commit": receipt["candidate_commit"],
+                "ref": receipt["comment_url"],
+                "reviewer": receipt["reviewer"],
+                "receipt_id": receipt["id"],
+                "required_resolutions": expected["review_findings"]["required_resolutions"],
+            }
+        return expected == after_value
 
-    def register_projection(value: dict[str, Any]) -> dict[str, Any]:
-        result = json.loads(json.dumps(value))
-        for decision in result.get("decisions", []):
-            decision.pop("authority_status", None)
-            decision.pop("activation", None)
-            review = decision.get("review", {})
-            for key in ("outcome", "reviewer", "receipt_ids", "references"):
-                review.pop(key, None)
-        return result
+    def register_transition(before_value: dict[str, Any], after_value: dict[str, Any]) -> bool:
+        expected = json.loads(json.dumps(before_value))
+        targets = [
+            decision
+            for decision in expected.get("decisions", [])
+            if decision.get("id") == receipt["decision_id"]
+        ]
+        if len(targets) != 1:
+            return False
+        target = targets[0]
+        target["authority_status"] = "accepted"
+        target["review"] = {
+            "mode": "independent",
+            "outcome": "accepted",
+            "author": receipt["author"],
+            "reviewer": receipt["reviewer"],
+            "receipt_ids": [receipt["id"]],
+            "references": [receipt["comment_url"]],
+        }
+        return expected == after_value
 
     def work_unit_projection(value: dict[str, Any]) -> dict[str, Any]:
         result = json.loads(json.dumps(value))
         for entry in result.get("entries", []):
-            entry.pop("authority_digest", None)
-            for unit in entry.get("units", []):
-                unit.pop("state", None)
+            if set(entry.get("authority_sources", [])).intersection(authority_paths):
+                entry.pop("authority_digest", None)
         return result
-    infrastructure = {str(REGISTER), str(RECEIPTS), "docs/design/SHA256SUMS", "schemas/cxxlens_ng_work_units.yaml"}
     authority_paths = {item["path"] for item in receipt["authority_files"]}
     for path in changed:
         if path == str(RECEIPTS) or path == "docs/design/SHA256SUMS":
@@ -168,7 +194,7 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
         before = _git(root, "show", f"{candidate}:{path}")
         after = _git(root, "show", f"{commit}:{path}")
         if path == str(REGISTER):
-            if register_projection(yaml.load(before, Loader=UniqueKeyLoader)) != register_projection(yaml.load(after, Loader=UniqueKeyLoader)):
+            if not register_transition(yaml.load(before, Loader=UniqueKeyLoader), yaml.load(after, Loader=UniqueKeyLoader)):
                 raise DecisionRegisterError(f"acceptance changes decision semantics: {receipt['id']}")
             continue
         if path == "schemas/cxxlens_ng_work_units.yaml":
@@ -178,12 +204,19 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
         if path not in authority_paths:
             raise DecisionRegisterError(f"acceptance changes non-authority path: {receipt['id']}:{path}")
         if path.endswith((".yaml", ".yml")):
-            if authority_projection(yaml.load(before, Loader=UniqueKeyLoader)) != authority_projection(yaml.load(after, Loader=UniqueKeyLoader)):
+            if not authority_transition(yaml.load(before, Loader=UniqueKeyLoader), yaml.load(after, Loader=UniqueKeyLoader)):
                 raise DecisionRegisterError(f"acceptance changes authority semantics: {receipt['id']}:{path}")
         else:
-            before_lines = [line for line in before.splitlines() if not line.startswith(("- Status:", "- Review:"))]
-            after_lines = [line for line in after.splitlines() if not line.startswith(("- Status:", "- Review:"))]
-            if before_lines != after_lines:
+            before_lines = before.splitlines()
+            after_lines = after.splitlines()
+            differences = [
+                (left, right)
+                for left, right in zip(before_lines, after_lines, strict=False)
+                if left != right
+            ]
+            if len(before_lines) != len(after_lines) or differences != [
+                ("- Status: Proposed for independent review", "- Status: Accepted")
+            ]:
                 raise DecisionRegisterError(f"acceptance changes authority prose: {receipt['id']}:{path}")
 
 
@@ -208,6 +241,7 @@ def canonical_review_comment(receipt: dict[str, Any]) -> str:
         "receipt_id": receipt["id"], "decision_id": receipt["decision_id"],
         "owner_issue": receipt["owner_issue"], "candidate_commit": receipt["candidate_commit"],
         "candidate_tree": receipt["candidate_tree"], "candidate_git_author_email": receipt["candidate_git_author_email"],
+        "candidate_github_login": receipt["candidate_github_login"],
         "authority_digest": receipt["authority_digest"], "author": receipt["author"],
         "reviewer": receipt["reviewer"], "reviewer_github_login": receipt["reviewer_github_login"], "reviewer_provenance": receipt["reviewer_provenance"],
         "reviewer_session": receipt["reviewer_session"], "reviewer_invocation": receipt["reviewer_invocation"],
@@ -240,9 +274,22 @@ def verify_connected(root: pathlib.Path, token: str) -> None:
         run = _github_json(f"https://api.github.com/repos/horiyamayoh/cxxlens/actions/runs/{connected['run_id']}", token)
         if (run.get("id") != connected["run_id"] or run.get("html_url") != connected["run_url"] or
                 run.get("head_sha") != receipt["candidate_commit"] or run.get("head_sha") != connected["run_commit"] or
+                run.get("workflow_id") != connected["workflow_id"] or
                 run.get("name") != connected["workflow_name"] or run.get("event") != connected["event"] or
                 run.get("conclusion") != "success"):
             raise DecisionRegisterError(f"connected CI run mismatch: {receipt['id']}")
+        workflow = _github_json(
+            "https://api.github.com/repos/horiyamayoh/cxxlens/actions/workflows/"
+            f"{connected['workflow_id']}",
+            token,
+        )
+        if (
+            workflow.get("id") != connected["workflow_id"]
+            or workflow.get("name") != connected["workflow_name"]
+            or workflow.get("path") != connected["workflow_path"]
+            or workflow.get("state") != "active"
+        ):
+            raise DecisionRegisterError(f"connected CI workflow identity mismatch: {receipt['id']}")
 
 
 def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
@@ -327,7 +374,9 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                 raise DecisionRegisterError(f"review receipt authority closure mismatch: {receipt_id}")
             if receipt["author"] != review["author"] or receipt["reviewer"] != review["reviewer"]:
                 raise DecisionRegisterError(f"review receipt identity mismatch: {receipt_id}")
-            if receipt["reviewer"] in {receipt["author"], receipt["comment_author_login"], receipt["candidate_git_author_email"]}:
+            if receipt["candidate_github_login"] == receipt["reviewer_github_login"]:
+                raise DecisionRegisterError(f"review receipt GitHub identities are not independent: {receipt_id}")
+            if receipt["reviewer"] in {receipt["author"], receipt["candidate_git_author_email"]}:
                 raise DecisionRegisterError(f"review receipt reviewer is not process-independent: {receipt_id}")
             static_allowed = {str(REGISTER), str(RECEIPTS), "docs/design/SHA256SUMS", "schemas/cxxlens_ng_work_units.yaml"}
             static_allowed.update(path for path in entry["authority_refs"] if path.startswith("docs/design/adr/") or path.startswith("schemas/"))

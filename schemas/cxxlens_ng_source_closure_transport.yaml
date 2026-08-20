@@ -11,6 +11,7 @@ review_findings:
   exact_main_commit: d7dfb7a2a5d2fe7e2fa247232be46da577166aa4
   ref: https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358501463
   reviewer: codex-independent-reviewer/01a01fe3-fd16-7191-8275-275ba44196eb
+  receipt_id: null
   required_resolutions:
     - id: SC-R2-01
       problem: request-v2-2-nests-protocol-1-1-and-source-bytes

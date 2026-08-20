@@ -60,6 +60,11 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         if status:
             raise AgentContextV2Error("dirty worktree cannot produce an execution packet")
         revision = _git(root, "rev-parse", "HEAD")
+        origin_main = _git(root, "rev-parse", "origin/main")
+        if revision != origin_main:
+            raise AgentContextV2Error(
+                "stale checkout cannot produce an execution packet: HEAD != origin/main"
+            )
         tree = _git(root, "rev-parse", "HEAD^{tree}")
         worktree = "clean"
     all_units = {candidate["id"]: candidate for owner in manifest["entries"] for candidate in owner["units"]}
@@ -85,7 +90,11 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         blockers = sorted([*blocked_dependencies, *authority_blockers])
     else:
         disposition = {"ready": "ready", "review-required": "stop-review-required", "blocked-by-authority": "stop-blocked-by-authority"}[state]
-        blockers = [] if state == "ready" else [state, *sorted(blocked_dependencies)]
+        blockers = [] if state == "ready" else [
+            state,
+            *sorted(blocked_dependencies),
+            *sorted(authority_blockers),
+        ]
     reading_paths = sorted(set(entry["authority_sources"] + unit["consumed_paths"] + [str(DECISIONS)]))
     reading_set = [{"path": value, "sha256": _file_digest(root / value)} for value in reading_paths]
     return {

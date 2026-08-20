@@ -70,6 +70,30 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "publication outcomes"):
                 validate(root)
 
+    def test_store_outcome_policy_cannot_be_weakened(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["store_candidate_report"][
+                    "outcome_policy"
+                ]["publication-outcome-unknown"].update({"exit": 0}),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "outcome policy"):
+                validate(root)
+
+    def test_store_resident_bound_drift_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["store_candidate_report"]["bounds"].update(
+                    {"resident_window_limit_bytes": 1}
+                ),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "numeric bounds|bounded-window"):
+                validate(root)
+
     def test_reader_without_predelegation_lease_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -105,6 +129,18 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "reader states"):
                 validate(root)
 
+    def test_reader_retirement_cannot_claim_writer_retirement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"]["retirement_join"].update(
+                    {"reader_terminal": "reader-and-writer-retired"}
+                ),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "retirement join"):
+                validate(root)
+
     def test_unmap_failure_cannot_close(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -117,6 +153,18 @@ class ConstructibilityTest(unittest.TestCase):
             root = self.copied_root(temporary)
             self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FZ-pre"].__setitem__("route", ["delete-WAL"]))
             with self.assertRaisesRegex(ConstructibilityError, "FZ-pre route|schema validation"):
+                validate(root)
+
+    def test_fz_pre_delete_must_precede_parent_fsync_and_new_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            def mutate(value) -> None:
+                route = value["machines"]["sqlite_normalization_effect"][
+                    "fixture_partition_machine"
+                ]["FZ-pre"]["route"]
+                route[1], route[2] = route[2], route[1]
+            self.rewrite(root, mutate)
+            with self.assertRaisesRegex(ConstructibilityError, "FZ-pre route"):
                 validate(root)
 
     def test_production_predicate_cannot_be_weakened(self) -> None:

@@ -30,6 +30,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     closure_digest,
     complete_request_witness,
     content_projection_digest,
+    manifest_digest,
     request_v2_2_projection,
     semantic_digest,
     task_v4_projection,
@@ -56,6 +57,15 @@ class SourceClosureTransportTest(unittest.TestCase):
             "normalized_invocation_digest": "semantic-v2:sha256:" + "4" * 64,
             "toolchain_digest": "semantic-v2:sha256:" + "5" * 64,
             "environment_digest": "sha256:" + "6" * 64,
+            "working_directory": "project://src",
+            "source": {
+                "file_id": "file:sha256:" + "a" * 64,
+                "logical_path": "project://src/main.cpp",
+                "content_digest": content,
+                "size_bytes": 1,
+                "encoding": "utf8",
+                "read_only": True,
+            },
             "sandbox": {"minimum": "enforced", "policy_digest": "sha256:" + "8" * 64},
         }
         closure = {
@@ -111,6 +121,75 @@ class SourceClosureTransportTest(unittest.TestCase):
         request["request_id"] = "materialization-request:" + request["request_digest"]
         return request
 
+    @staticmethod
+    def bind_manifest(request: dict) -> dict:
+        base = request["tasks"][0]
+        source = base["source"]
+        member = {
+            "file_id": source["file_id"],
+            "logical_path": source["logical_path"],
+            "role": "main",
+            "encoding": source["encoding"],
+            "size_bytes": source["size_bytes"],
+            "content_digest": source["content_digest"],
+            "read_only": source["read_only"],
+        }
+        blob = {
+            "content_digest": source["content_digest"],
+            "size_bytes": source["size_bytes"],
+        }
+        digest = closure_digest([member], [blob])
+        manifest = {
+            "schema": "cxxlens.source-closure-manifest.v1",
+            "closure_id": "source-closure:" + digest,
+            "closure_digest": digest,
+            "members": [member],
+            "blobs": [blob],
+        }
+        closure = request["source_closures"][0]
+        closure.update(
+            {
+                "source_closure_id": manifest["closure_id"],
+                "source_closure_digest": digest,
+                "manifest_digest": manifest_digest(manifest),
+                "member_count": 1,
+                "blob_count": 1,
+                "unique_blob_bytes": source["size_bytes"],
+            }
+        )
+        extension = request["task_extensions"][0]
+        extension["base_task_v3_digest"] = content_projection_digest(base)
+        extension["source_closure"] = {
+            "id": closure["source_closure_id"],
+            "digest": closure["source_closure_digest"],
+            "manifest_digest": closure["manifest_digest"],
+        }
+        extension["main_logical_path"] = source["logical_path"]
+        extension["logical_working_directory"] = base["working_directory"]
+        extension["task_v4_digest"] = semantic_digest(
+            "cxxlens.clang22.task.v4", task_v4_projection(extension)
+        )
+        extension["task_id"] = "task:" + extension["task_v4_digest"]
+        request["request_digest"] = semantic_digest(
+            "cxxlens.clang22.materialization-request.v2_2",
+            request_v2_2_projection(request),
+        )
+        request["request_id"] = "materialization-request:" + request["request_digest"]
+        return manifest
+
+    @staticmethod
+    def reseal_request(request: dict) -> None:
+        for extension in request["task_extensions"]:
+            extension["task_v4_digest"] = semantic_digest(
+                "cxxlens.clang22.task.v4", task_v4_projection(extension)
+            )
+            extension["task_id"] = "task:" + extension["task_v4_digest"]
+        request["request_digest"] = semantic_digest(
+            "cxxlens.clang22.materialization-request.v2_2",
+            request_v2_2_projection(request),
+        )
+        request["request_id"] = "materialization-request:" + request["request_digest"]
+
     def copied_root(self, temporary: str) -> pathlib.Path:
         root = pathlib.Path(temporary)
         legacy = tuple(
@@ -155,11 +234,12 @@ class SourceClosureTransportTest(unittest.TestCase):
         validate_manifest(
             manifest, yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text())
         )
-        validate_request_binding(request)
+        validate_request_binding(request, [manifest])
 
     def test_adr_0101_identity_and_request_binding_are_constructible(self) -> None:
         request = self.bound_request()
-        validate_request_binding(request)
+        manifest = self.bind_manifest(request)
+        validate_request_binding(request, [manifest])
         task_schema = yaml.safe_load((ROOT / TASK).read_text(encoding="utf-8"))
         jsonschema.Draft202012Validator(task_schema).validate(request["task_extensions"][0])
 
@@ -269,46 +349,91 @@ class SourceClosureTransportTest(unittest.TestCase):
 
     def test_trust_policy_digest_and_worker_parity_are_enforced(self) -> None:
         request = self.bound_request()
-        validate_request_binding(request)
+        manifest = self.bind_manifest(request)
+        validate_request_binding(request, [manifest])
         request["trust_policy"]["protocol_minor"] = 1
         with self.assertRaisesRegex(SourceClosureTransportError, "parity"):
-            validate_request_binding(request)
+            validate_request_binding(request, [manifest])
 
     def test_duplicate_and_dangling_relationships_are_rejected(self) -> None:
         request = self.bound_request()
+        manifest = self.bind_manifest(request)
         request["source_closures"].append(dict(request["source_closures"][0]))
         with self.assertRaisesRegex(SourceClosureTransportError, "duplicate"):
-            validate_request_binding(request)
+            validate_request_binding(request, [manifest])
 
     def test_request_and_task_semantic_identity_tamper_is_rejected(self) -> None:
         request = self.bound_request()
+        manifest = self.bind_manifest(request)
         request["request_digest"] = "semantic-v2:sha256:" + "9" * 64
         with self.assertRaisesRegex(SourceClosureTransportError, "request v2.2"):
-            validate_request_binding(request)
+            validate_request_binding(request, [manifest])
         request = self.bound_request()
+        manifest = self.bind_manifest(request)
         request["task_extensions"][0]["task_v4_digest"] = (
             "semantic-v2:sha256:" + "9" * 64
         )
         with self.assertRaisesRegex(SourceClosureTransportError, "task v4"):
-            validate_request_binding(request)
+            validate_request_binding(request, [manifest])
         request = self.bound_request()
+        manifest = self.bind_manifest(request)
         request["task_extensions"][0]["source_closure"]["id"] = (
             "source-closure:semantic-v2:sha256:" + "9" * 64
         )
         with self.assertRaisesRegex(SourceClosureTransportError, "does not resolve"):
-            validate_request_binding(request)
+            validate_request_binding(request, [manifest])
 
     def test_traversal_and_utf8_byte_overflow_are_rejected(self) -> None:
         request = self.bound_request()
+        manifest = self.bind_manifest(request)
         request["task_extensions"][0]["main_logical_path"] = (
             "project://src/../ambient.hpp"
         )
         with self.assertRaisesRegex(SourceClosureTransportError, "segments"):
-            validate_request_binding(request)
+            validate_request_binding(request, [manifest])
         request = self.bound_request()
+        manifest = self.bind_manifest(request)
         request["task_extensions"][0]["main_logical_path"] = "project://" + "é" * 4090
         with self.assertRaisesRegex(SourceClosureTransportError, "UTF-8"):
-            validate_request_binding(request)
+            validate_request_binding(request, [manifest])
+
+    def test_resealed_path_census_and_orphan_counterexamples_are_rejected(self) -> None:
+        request = self.bound_request()
+        manifest = self.bind_manifest(request)
+        request["task_extensions"][0]["main_logical_path"] = "project://src/other.hpp"
+        self.reseal_request(request)
+        with self.assertRaisesRegex(SourceClosureTransportError, "base path"):
+            validate_request_binding(request, [manifest])
+
+        request = self.bound_request()
+        manifest = self.bind_manifest(request)
+        request["source_closures"][0]["member_count"] = 4096
+        self.reseal_request(request)
+        with self.assertRaisesRegex(SourceClosureTransportError, "census/manifest"):
+            validate_request_binding(request, [manifest])
+
+        request = self.bound_request()
+        manifest = self.bind_manifest(request)
+        extra = dict(request["source_closures"][0])
+        extra["source_closure_id"] = "source-closure:semantic-v2:sha256:" + "9" * 64
+        extra["source_closure_digest"] = "semantic-v2:sha256:" + "9" * 64
+        request["source_closures"].append(extra)
+        self.reseal_request(request)
+        with self.assertRaisesRegex(SourceClosureTransportError, "manifest census"):
+            validate_request_binding(request, [manifest])
+
+    def test_reject_terminal_requires_typed_identity_and_cleanup_receipt(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        control = {
+            "session_id": {},
+            "task_id": None,
+            "failure_phase": "before-manifest",
+            "reason_code": "source-closure.required-feature-missing",
+            "observed_counters": {"observed-control-frame-count": 0},
+            "cleanup_receipt": ["fabricated"],
+        }
+        with self.assertRaisesRegex(SourceClosureTransportError, "bounded typed ID"):
+            validate_reject_control(control, contract)
 
     def test_bounded_terminal_seal_uses_one_digest_for_4096_blobs(self) -> None:
         receipts = [
@@ -385,7 +510,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             with self.assertRaisesRegex(SourceClosureTransportError, "legacy"):
                 validate(root)
 
-    def test_acceptance_requires_atomic_protocol_activation(self) -> None:
+    def test_acceptance_requires_authenticated_decision_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             self.rewrite(
@@ -403,6 +528,15 @@ class SourceClosureTransportTest(unittest.TestCase):
                             }
                         }
                     ),
+                    value["review_findings"].update(
+                        {
+                            "status": "resolved",
+                            "exact_main_commit": "1" * 40,
+                            "ref": "https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-1",
+                            "reviewer": "independent-reviewer",
+                            "receipt_id": "review-receipt.source-closure.v1",
+                        }
+                    ),
                 ),
             )
             adr = root / ADR
@@ -412,7 +546,7 @@ class SourceClosureTransportTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(SourceClosureTransportError, "reviewed exact main commit"):
+            with self.assertRaisesRegex(Exception, "development_decision_register"):
                 validate(root)
 
     def test_cross_task_cache_activation_is_rejected(self) -> None:

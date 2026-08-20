@@ -16,16 +16,23 @@ machines:
     candidate_states: [idle, staging-session-open, appending, input-sealed, candidate-identity-sealed, independently-validating, validation-sealed, publication-attempt, publication-terminal]
     report_states: [publication-independent-projection, projection-validated, maximum-tail-reserved, publication-attempt, exact-outcome-captured, outcome-tail-finalized, full-schema-validated, bottom-up-cross-binding-validated, stdout-published]
     publication_outcomes: [not-attempted, rejected-stale, rejected-store-failure, publication-outcome-unknown, committed-unverified, committed-verified]
+    outcome_policy:
+      not-attempted: {response: typed-failure, exit: 1, recovery_authority: none}
+      rejected-stale: {response: typed-publication-conflict, exit: 1, recovery_authority: Store}
+      rejected-store-failure: {response: typed-store-failure, exit: 1, recovery_authority: Store}
+      publication-outcome-unknown: {response: none, exit: 2, recovery_authority: Store}
+      committed-unverified: {response: safe-committed-unverified-detail-or-none, exit: 0-or-2, recovery_authority: Store}
+      committed-verified: {response: validated-success, exit: 0, recovery_authority: Store}
     post_attempt_failure: exit-2-zero-authoritative-response-store-recovery-only
     projections: {actual_source: backend-staging-canonical-physical-order, expected_source: immutable-sealed-task-plus-selected-request-and-journal, comparison: separate-cursors-full-record-byte-exact}
-    bounds: {tasks: 4096, scale_bytes: 536870912, source_window_bytes: 67108864, sort_arena_bytes: 8388608, comparator_cursor_count: 2, comparator_cursor_bytes_each: 32768, merge_fan_in: 16, merge_file_descriptors: 18, report_bytes: 1073741824}
+    bounds: {tasks: 4096, scale_bytes: 536870912, source_window_bytes: 67108864, sort_arena_bytes: 8388608, comparator_cursor_count: 2, comparator_cursor_bytes_each: 32768, resident_window_limit_bytes: 75563008, merge_fan_in: 16, merge_file_descriptors: 18, report_bytes: 1073741824, counter_max: 18446744073709551615, accumulator_max: 340282366920938463463374607431768211455}
     representation: {logical_write: cxxlens.ng-snapshot-payload.v5, sqlite_physical: cxxlens.sqlite-semantic-store.v3, sqlite_version: 3.0.0, chunk_profile: cxxlens.sqlite-payload-chunks.v1, chunk_bytes: 8388608, legacy_read: [v1, v2, v3, v4]}
   sqlite_read_mapping:
     owners: ['#201', '#205']
     authority: docs/design/adr/0104-unified-sqlite-source-lifecycle.md
     nesting: '#205-inside-#201-active-read-connection'
     no_effect_boundary: before-target-xOpen
-    outer_states: [unresolved, runtime-vfs-filesystem-sealed, retained-parent-held, no-effect-boundary-armed, typed-family-census, active-read-connection-open, wal-lock-and-prefix-held, mapping-subprotocol-or-private-index, eager-decode, decoded-read-candidate-sealed, connection-revoking, reader-and-writer-retired, connection-closed, zero-effect-callback-receipt-sealed, logical-read-receipt]
+    outer_states: [unresolved, runtime-vfs-filesystem-sealed, retained-parent-held, no-effect-boundary-armed, typed-family-census, active-read-connection-open, wal-lock-and-prefix-held, mapping-subprotocol-or-private-index, eager-decode, decoded-read-candidate-sealed, connection-revoking, outer-custody-join-sealed, connection-closed, zero-effect-callback-receipt-sealed, logical-read-receipt]
     writer_states: [callback-admitted, pre-callback-sequence-cut, attempt-pin-held, native-started, native-outcome-captured, pending-mapping-receipt, identity-validated, mapping-lease-promoted, eager-use-owner-held, writer-handoff-sealed]
     reader_states: [reader-session-reserved, writer-lease-page-support-pin-held, native-started, native-outcome-captured, reader-attachment-candidate, identity-and-effect-validated, reader-attachment-group-promoted, eager-session-owner-admitted, reader-handoff-sealed]
     reader_forbidden_products: [mapping-lease-promoted, writer-authority, transitive-page-authority]
@@ -56,11 +63,17 @@ machines:
       consume-reader-close-owner-and-native-close-once: [reader-close-confirmed, reader-terminal-opaque-quarantine]
       reader-close-confirmed: seal-reader-callback-effect-transcript-and-cleanup-ack
       seal-reader-callback-effect-transcript-and-cleanup-ack: retire-reader-attachment-group-and-release-page-support-pin
-      retire-reader-attachment-group-and-release-page-support-pin: reader-and-writer-retired
-      reader-and-writer-retired: []
+      retire-reader-attachment-group-and-release-page-support-pin: reader-retired
+      reader-retired: []
       reader-terminal-opaque-quarantine: []
+    retirement_join:
+      writer_terminal: seal-zero-effect-outcomes-retire-registry-release-pins
+      reader_terminal: reader-retired
+      scope: outer-connection-owned-writer-attachments-and-reader-sessions-only
+      join: outer-custody-join-sealed
+      forbidden: reader-retirement-claims-independent-writer-retirement
     zero_effect_receipt: [initialize, create, write, truncate, extend, delete, resize]
-    read_receipt_barrier: [reader-and-writer-retired, connection-closed, zero-live-callbacks-leases-and-use-owners, zero-effect-callback-receipt-sealed]
+    read_receipt_barrier: [outer-custody-join-sealed, connection-closed, outer-scoped-zero-live-callbacks-leases-and-use-owners, zero-effect-callback-receipt-sealed]
     fork_transition_graph:
       running: atfork-prepare-seal-admission-and-census
       atfork-prepare-seal-admission-and-census: [parent-revalidate-process-and-fork-generation, child-transfer-all-inherited-custody]
@@ -82,7 +95,7 @@ machines:
       F0: {entry_guard: exact-pre-no-sidecar, route: [live-receipt, fixture-normalizer], recrash_graph: [pre-effect-to-effect-admitted, effect-admitted-to-recoverable-interruption-or-live-terminal, recoverable-interruption-to-recrash-classified, recrash-classified-to-reenter-seven-family-classifier, reclassified-family-authority-only-no-original-success], success_dominators: [confirmed-close, post-close-census], terminal: normalization-receipt}
       FP: {entry_guard: exact-pre-nonhot-journal-prefix, route: [authenticated-cleanup-or-recovery, independently-revalidated-F0, new-live-receipt, fixture-normalizer], recrash_graph: [pre-effect-to-effect-admitted, effect-admitted-to-recoverable-interruption-or-live-terminal, recoverable-interruption-to-recrash-classified, recrash-classified-to-reenter-seven-family-classifier, reclassified-family-authority-only-no-original-success], success_dominators: [authenticated-cleanup-or-recovery, parent-fsync, confirmed-close, post-close-census], terminal: normalization-receipt}
       FH: {entry_guard: valid-hot-journal-with-exact-preimages, route: [authenticated-cleanup-or-recovery, independently-revalidated-F0, new-live-receipt, fixture-normalizer], recrash_graph: [pre-effect-to-effect-admitted, effect-admitted-to-recoverable-interruption-or-live-terminal, recoverable-interruption-to-recrash-classified, recrash-classified-to-reenter-seven-family-classifier, reclassified-family-authority-only-no-original-success], success_dominators: [authenticated-cleanup-or-recovery, parent-fsync, confirmed-close, post-close-census], terminal: normalization-receipt}
-      FZ-pre: {entry_guard: exact-pre-plus-size-zero-WAL, route: [retain-and-revalidate-exact-size-zero-coordination-WAL, new-live-receipt-bound-to-same-WAL, fixture-normalizer, authenticated-coordination-WAL-delete, retained-parent-fsync], recrash_graph: [pre-effect-to-effect-admitted, effect-admitted-to-recoverable-interruption-or-live-terminal, recoverable-interruption-to-recrash-classified, recrash-classified-to-reenter-seven-family-classifier, reclassified-family-authority-only-no-original-success], success_dominators: [authenticated-coordination-WAL-delete, retained-parent-fsync, confirmed-close, post-close-census], terminal: normalization-receipt}
+      FZ-pre: {entry_guard: exact-pre-plus-size-zero-WAL, route: [retain-and-revalidate-exact-size-zero-coordination-WAL, authenticated-coordination-WAL-delete, retained-parent-fsync, independently-revalidated-F0, new-live-receipt, fixture-normalizer], recrash_graph: [pre-effect-to-effect-admitted, effect-admitted-to-recoverable-interruption-or-live-terminal, recoverable-interruption-to-recrash-classified, recrash-classified-to-reenter-seven-family-classifier, reclassified-family-authority-only-no-original-success], success_dominators: [authenticated-coordination-WAL-delete, retained-parent-fsync, independently-revalidated-F0, new-live-receipt, fixture-normalizer, confirmed-close, post-close-census], terminal: normalization-receipt}
       FI: {entry_guard: journal-preimages-exact-pre-and-deterministic-post-plus-invalidated-journal, route: [independently-validated-rollback-empty-fresh-anchor], recrash_graph: [pre-effect-to-effect-admitted, effect-admitted-to-recoverable-interruption-or-live-terminal, recoverable-interruption-to-recrash-classified, recrash-classified-to-reenter-seven-family-classifier, reclassified-family-authority-only-no-original-success], success_dominators: [independently-validated-rollback-empty-fresh-anchor], terminal: fresh-anchor-only-never-completed-edge}
       FZ-post: {entry_guard: exact-post-plus-size-zero-WAL, route: [authenticated-size-zero-WAL-delete, retained-parent-fsync, independently-validated-rollback-empty-fresh-anchor], recrash_graph: [pre-effect-to-effect-admitted, effect-admitted-to-recoverable-interruption-or-live-terminal, recoverable-interruption-to-recrash-classified, recrash-classified-to-reenter-seven-family-classifier, reclassified-family-authority-only-no-original-success], success_dominators: [authenticated-size-zero-WAL-delete, retained-parent-fsync, independently-validated-rollback-empty-fresh-anchor], terminal: fresh-anchor-only-never-completed-edge}
       FO: {entry_guard: complete-valid-rollback-exact-empty-current-main-no-sidecar, route: [independently-validated-rollback-empty-fresh-anchor], recrash_graph: [pre-effect-to-effect-admitted, effect-admitted-to-recoverable-interruption-or-live-terminal, recoverable-interruption-to-recrash-classified, recrash-classified-to-reenter-seven-family-classifier, reclassified-family-authority-only-no-original-success], success_dominators: [independently-validated-rollback-empty-fresh-anchor], terminal: fresh-anchor-only-never-completed-edge}

@@ -9,7 +9,7 @@ entries:
     conflict_class: governance-global
     integration_owner: '#173'
     authority_sources: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_development_decision_register.yaml]
-    authority_digest: sha256:0ce3760b84e73679653e773b69e985a093eb6b7ebbabfb9730f7d4a42d6f15e9
+    authority_digest: sha256:3a1819dc262a6fa424923bc5e30a17bf230140a088e45f169c85da6798e54c40
     completion_class: autonomy-readiness
     residual_qualification: '#173 remains open for aggregate release; production qualification not claimed'
     units:
@@ -28,7 +28,7 @@ entries:
     conflict_class: provider-protocol
     integration_owner: '#261'
     authority_sources: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:c6090f9e86d679b886b7d9943529752c8e0d43efc59e201c68415bbea9d1899f
+    authority_digest: sha256:00e6a0915929aef9023ea68cacc6eec1d9424e08fc02a3a7ae26f05dad5d4179
     completion_class: bounded-implementation
     residual_qualification: installed static/shared and cxxmonster E2E remain explicit later evidence
     units:
@@ -47,7 +47,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6e936c5b5af7b3b1d1a340bbd47571b1129d299f948457a83ed027f6151bf649
+    authority_digest: sha256:0266dbafaeb3006301b69e4d6afdbc4c0d149ee1fcfa8e45d19c2264699ad4ca
     completion_class: bounded-implementation
     residual_qualification: platform native SQLite tuples remain with integration and release gates
     units:
@@ -61,12 +61,13 @@ entries:
         generated_surfaces: []
         forbidden_shortcuts: [mutation-before-read-receipt, raw-sqlite-ok-as-capability, missing-wal-shm-as-empty]
         evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R 'sqlite_(source_shm_readonly_preflight|wal_source_capture)' --output-on-failure]
-        completion_plan: [accept zero-effect read authority, prove first-map no mutation, publish read receipt only after eager decode, hand nested mapping ownership to wu-205]
+        completion_plan:
+          - 'jointly accept the #201/#205 authority, prove first-map no mutation, obtain the nested mapping terminal from wu-205, revoke and close the outer connection, seal the scoped zero-custody and zero-effect census, then let #201 publish the logical read receipt'
   - issue: '#205'
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6e936c5b5af7b3b1d1a340bbd47571b1129d299f948457a83ed027f6151bf649
+    authority_digest: sha256:0266dbafaeb3006301b69e4d6afdbc4c0d149ee1fcfa8e45d19c2264699ad4ca
     completion_class: bounded-implementation
     residual_qualification: multi-Store and platform qualification remain separate
     units:
@@ -80,12 +81,13 @@ entries:
         generated_surfaces: []
         forbidden_shortcuts: [lease-before-native-success, callback-after-revoke, aba-identity-reuse, inherited-fork-lease, unload-before-revoke]
         evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R 'sqlite_same_process_shm_(mapping|process)' --output-on-failure]
-        completion_plan: [enter with callback-local attempt pin, promote to pending lease only after native success, seal read receipt after eager decode, revoke and hide before cleanup, quarantine ambiguous callbacks]
+        completion_plan:
+          - 'jointly accept the #201/#205 authority, enter with callback-local attempt pin, promote to pending lease only after native success, return only the nested mapping and retirement terminal to #201, revoke and hide before cleanup, quarantine ambiguous callbacks, never mint a logical read receipt'
   - issue: '#202'
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, docs/development/implementation-learning/records/df-0202-sqlite-exact-empty-wal-normalization.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6e2594f025e5e64e542201c573035d306482bb43e87bd26d750f6bf16cf3bd8c
+    authority_digest: sha256:cc0fc4c4b2a25d697981cf377e92ef9d7dd7a590adc80bd301f55e087b939e84
     completion_class: bounded-implementation
     residual_qualification: production canonical and user-source activation remains prohibited pending separate review
     units:
@@ -104,7 +106,7 @@ entries:
     conflict_class: materialization-store
     integration_owner: '#200'
     authority_sources: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6bf2ce6e9535944b39786e26b476eab42c56b18a13a9081054751fb7410bbdc6
+    authority_digest: sha256:38661928b4988624b33582e6d865470765b93fc82c045697d05e9fef2f9a0df9
     completion_class: bounded-implementation
     residual_qualification: scale parity and SQLite lazy-read residency are tracked separately
     units:

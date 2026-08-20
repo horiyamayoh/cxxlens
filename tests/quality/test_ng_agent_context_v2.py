@@ -6,6 +6,7 @@ from __future__ import annotations
 import pathlib
 import sys
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -49,6 +50,22 @@ class AgentContextV2Test(unittest.TestCase):
         packet = _packet(ROOT, manifest, entry, unit, synthetic=True)
         self.assertEqual(packet["execution_disposition"], "stop-blocked-by-dependency")
         self.assertTrue(any(value.startswith("decision:decision.delivery.direct-main:proposed:rejected") for value in packet["blockers"]))
+
+    def test_clean_stale_checkout_cannot_emit_execution_packet(self) -> None:
+        manifest = work_units.validate(ROOT)
+        entry, unit = _select(manifest, "#173", "wu-173-governance")
+        responses = {
+            ("status", "--porcelain=v1", "--untracked-files=all"): "",
+            ("rev-parse", "HEAD"): "0" * 40,
+            ("rev-parse", "origin/main"): "1" * 40,
+        }
+        from check_ng_agent_context_v2 import _packet
+        with mock.patch(
+            "check_ng_agent_context_v2._git",
+            side_effect=lambda _root, *arguments: responses[arguments],
+        ):
+            with self.assertRaisesRegex(AgentContextV2Error, "stale checkout"):
+                _packet(ROOT, manifest, entry, unit, synthetic=False)
 
 
 if __name__ == "__main__":

@@ -27,12 +27,13 @@ properties:
   review_findings:
     type: object
     additionalProperties: false
-    required: [status, exact_main_commit, ref, reviewer, required_resolutions]
+    required: [status, exact_main_commit, ref, reviewer, receipt_id, required_resolutions]
     properties:
-      status: {const: blocking}
-      exact_main_commit: {const: d7dfb7a2a5d2fe7e2fa247232be46da577166aa4}
-      ref: {const: 'https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358501463'}
-      reviewer: {const: codex-independent-reviewer/01a01fe3-fd16-7191-8275-275ba44196eb}
+      status: {enum: [blocking, resolved]}
+      exact_main_commit: {type: string, pattern: '^[0-9a-f]{40}$'}
+      ref: {type: string, pattern: '^https://github\.com/horiyamayoh/cxxlens/issues/261#issuecomment-[1-9][0-9]*$'}
+      reviewer: {type: string, minLength: 1}
+      receipt_id: {oneOf: [{type: 'null'}, {type: string, pattern: '^review-receipt\.[a-z0-9.-]+\.v[0-9]+$'}]}
       required_resolutions: {type: array, minItems: 5, maxItems: 5, uniqueItems: true}
   versions:
     const:
