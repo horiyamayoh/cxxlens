@@ -5,9 +5,13 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import json
+import os
 import pathlib
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from typing import Any
 
 import jsonschema
@@ -126,10 +130,14 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     for line in git(root, "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads", "refs/remotes/origin").splitlines():
         ref, head = line.split(" ", 1)
         current_refs[ref] = head
+    strict_live_repository = any(
+        ref in current_refs and entry["disposition"] != "moving-canonical"
+        for ref, entry in captured_refs.items()
+    )
     for ref, entry in captured_refs.items():
         if entry["disposition"] == "moving-canonical":
             continue
-        if current_refs.get(ref) != entry["head"]:
+        if strict_live_repository and current_refs.get(ref) != entry["head"]:
             raise WipInventoryError(f"preserved branch ref missing or replaced: {ref}")
     captured_worktrees = {entry["path"]: entry for entry in inventory["worktrees"]}
     for entry in parse_worktrees(root):
@@ -141,20 +149,48 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         if entry["prunable"]:
             raise WipInventoryError(f"prunable registration remains after normalization: {entry['path']}")
     for entry in inventory["worktrees"]:
-        if entry["disposition"] != "moving-canonical":
+        if strict_live_repository and entry["disposition"] != "moving-canonical":
             git(root, "cat-file", "-e", f"{entry['head']}^{{commit}}")
     return inventory
 
 
+def _github_json(url: str, token: str) -> dict[str, Any]:
+    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}", "X-GitHub-Api-Version": "2022-11-28"})
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            value = json.load(response)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
+        raise WipInventoryError(f"connected WIP verification unavailable: {error}") from error
+    if not isinstance(value, dict):
+        raise WipInventoryError("connected WIP response is not an object")
+    return value
+
+
+def verify_connected(root: pathlib.Path, token: str) -> None:
+    if not token:
+        raise WipInventoryError("connected WIP verification requires a token")
+    inventory = validate(root)
+    refs = {entry["ref"]: entry["head"] for entry in inventory["refs"]}
+    branch = _github_json("https://api.github.com/repos/horiyamayoh/cxxlens/git/ref/heads/agent/remaining-issues-full-implementation", token)
+    if branch.get("object", {}).get("sha") != refs.get("origin/agent/remaining-issues-full-implementation"):
+        raise WipInventoryError("selected WIP remote branch head was replaced")
+    pull = _github_json("https://api.github.com/repos/horiyamayoh/cxxlens/pulls/353", token)
+    if pull.get("head", {}).get("sha") != refs.get("origin/pr/353") or pull.get("state") != "closed":
+        raise WipInventoryError("PR #353 provenance was replaced or reopened")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("snapshot", "check"))
+    parser.add_argument("command", choices=("snapshot", "check", "verify-connected"))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     args = parser.parse_args()
     root = args.root.resolve()
     try:
         if args.command == "snapshot":
             print(yaml.safe_dump(snapshot(root), sort_keys=False), end="")
+        elif args.command == "verify-connected":
+            verify_connected(root, os.environ.get("GITHUB_TOKEN", ""))
+            print("wip-inventory: connected selected provenance ok")
         else:
             inventory = validate(root)
             print(f"wip-inventory: ok ({len(inventory['worktrees'])} worktrees, {len(inventory['refs'])} refs)")

@@ -34,6 +34,7 @@ jobs:
           python3 tools/quality/check_ng_work_units.py check --root .
           python3 tools/quality/check_ng_autonomy_constructibility.py check --root .
           python3 tools/quality/check_ng_wip_inventory.py check --root .
+          python3 tools/quality/check_ng_wip_inventory.py verify-connected --root .
           python3 tools/quality/check_ng_agent_context_v2.py corpus --root .
           python3 -m unittest \
             tests.quality.test_ng_development_decisions \
