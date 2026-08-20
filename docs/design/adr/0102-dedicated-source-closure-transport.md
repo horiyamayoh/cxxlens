@@ -1,0 +1,145 @@
+# ADR 0102: Dedicated source-closure transport
+
+- Status: Proposed for independent review
+- Date: 2026-08-21
+- Decision owner: repository owner
+- Decision issue: #261
+- Implementation issue: #261
+- Design feedback: DF-0261
+- Amends: ADR 0096
+- Depends on: ADR 0101
+
+## Context
+
+ADR 0101 fixes source-closure identity and the read-only compiler VFS, but intentionally leaves
+request/task transport unresolved. Request 2.1 and task v3 carry one main-source input through
+`input_descriptor`/`input_chunk`; treating a multi-file closure as that opaque input would hide
+manifest, blob, phase, cancellation, and replay semantics from protocol validation. The rejected
+PR #353 candidate also mixed obsolete VFS code with a closure-in-task representation and is not an
+implementation authority.
+
+Heartbeat already owns message type 23. NG1 durable resume must not allocate the same IDs or treat a
+source-closure cache receipt as a resume token.
+
+## Decision
+
+Adopt request 2.2, task v4, Provider Protocol minor 1.2, and required capability
+`task-source-closure-v1`. Keep request 2.1/task v3/protocol 1.1 byte semantics unchanged. A task that
+requires a closure cannot downgrade: absence of the capability is a typed rejection before closure
+bytes are accepted.
+
+The normative proposed contract is
+`schemas/cxxlens_ng_source_closure_transport.yaml`. Until this ADR is independently reviewed and
+Accepted, the live accepted protocol remains 1.1; the proposed contract reserves these IDs:
+
+| ID | Message | Direction | Purpose |
+| ---: | --- | --- | --- |
+| 24 | `source_closure_manifest` | host to provider | Stream a descriptor plus contiguous chunks that bind task, closure identity, ordered members, blob census, and bounds. |
+| 25 | `source_closure_blob` | host to provider | Start exactly one canonical-order blob. |
+| 26 | `source_closure_chunk` | host to provider | Transfer a contiguous bounded occurrence of that blob. |
+| 27 | `source_closure_seal` | host to provider | Bind manifest and every recomputed blob digest into one terminal digest. |
+| 28 | `source_closure_ack` | provider to host | Attest complete validation and durable task-local staging. |
+| 29 | `source_closure_reject` | provider to host | Return a typed phase-authentic failure and cleanup receipt. |
+
+### State machine and phase-authentic fields
+
+The only success path is:
+
+`task-v4-sealed -> manifest-open -> manifest-streaming -> manifest-validated`
+`-> blob-open -> blob-streaming -> blob-sealed`
+`-> (blob-open ...)* -> closure-sealed -> closure-acknowledged -> task-accepted`.
+
+`cancel` is legal from every nonterminal closure state and transitions to `cancelling`, then exactly
+one `source_closure_reject` with reason `source-closure.cancelled`. Any missing, duplicate,
+reordered, overlapping, extra, post-seal, or cross-task frame rejects the task. Worker crash or
+connection loss discards the task-local spool; replay starts again at the manifest and transfers
+every blob. A replay prefix, ack, or digest from another task/session is never reusable.
+
+Field availability is phase-authentic:
+
+| Phase | Available authority | Forbidden claims |
+| --- | --- | --- |
+| before manifest | task/session and task-v4 digest | closure/member/blob identity |
+| manifest streaming | declared manifest size, observed bytes, offset, streaming digest | member/blob authority or terminal digest |
+| manifest validated | closure/member/blob census and declared digests | blob bytes or terminal digest |
+| blob streaming | current blob ordinal, offset, observed bytes, streaming digest | later blobs or closure completeness |
+| closure sealed | recomputed blob/manifest/closure transfer digests | VFS mount or compiler outcome |
+| acknowledged | task-local spool receipt and cleanup owner | execution/output success |
+| rejected | failure phase, typed reason, observed bounded counters, cleanup receipt | values belonging to later phases |
+
+`source_closure_ack` is not a compiler or publication success. `task_accepted` remains impossible
+until task v4, manifest, all blobs, and the terminal seal validate.
+
+### Identity, canonicality, and replay
+
+The manifest is first and its canonical member/blob order is the ADR 0101 order. Message 24 first
+declares its total length and digest, then repeats with contiguous chunks of at most 1 MiB; semantic
+fields are unavailable until the complete canonical manifest is revalidated. Blob descriptors
+must follow manifest blob order; chunks are contiguous from offset zero with monotonically
+increasing indices. Each frame payload has the existing frame SHA-256, each completed blob is
+recomputed against its manifest digest, and the seal binds task ID, task-v4 digest, manifest digest,
+ordered blob digests/sizes, total bytes, and closure digest. These are independent projections; a
+matching frame checksum cannot substitute for blob or closure validation.
+
+The worker uses only the validated task-local spool to construct ADR 0101 values and mount its VFS.
+Ambient filesystem content, a physical checkout, process CWD, or an unqualified system path cannot
+satisfy a closure member.
+
+### Bounds
+
+- members and unique blobs: 4096 each;
+- logical path: 4096 UTF-8 bytes;
+- one blob: 16 MiB; aggregate unique blob content: 48 MiB;
+- manifest: 20 MiB in at most 20 one-MiB payload chunks; blob chunk payload: 1 MiB; blob chunks: at
+  most 48 per 48 MiB closure;
+- task-local spool: at most 68 MiB including manifest and content;
+- resident transport working set: at most one 1 MiB chunk plus 256 KiB of parser/digest state.
+
+Counts, lengths, offsets, and additions are checked before allocation or write. The spool is
+backend-owned, private to one task, digest-bound, sealed before semantic use, and removed on reject,
+cancel, crash recovery, or task terminal. No complete closure-sized memory copy is permitted.
+
+### Cache and compatibility
+
+Cross-task blob cache is excluded from v1. Every closure is transferred completely for every task.
+No cache capability may be advertised until a separate accepted ADR defines lifetime, eviction,
+restart, tenant/session binding, and negative replay behavior.
+
+Protocol 1.1 peers continue request 2.1/task v3 only. Protocol 1.2 peers may use either legacy tasks
+or request 2.2/task v4, but v4 requires `task-source-closure-v1`. Unknown required message IDs and
+attempted implicit downgrade fail closed. Message 23 remains heartbeat and IDs 24--29 cannot be
+allocated by NG1.
+
+## Crash/effect matrix
+
+| Event | External effect | Recovery |
+| --- | --- | --- |
+| before manifest validation | none | reject without spool |
+| during manifest/blob/chunk | private unsealed spool only | remove spool; full replay required |
+| after seal, before ack | sealed private spool only | remove on lost session; full replay required |
+| after ack, before execution | task-local sealed spool only | cancel removes it; no cache survives |
+| worker crash | no publication or ambient mutation | authenticated cleanup scan removes orphan spool |
+| disk full/resource limit | no task acceptance | typed reject with observed counters and cleanup receipt |
+
+## Counterexamples that must be rejected
+
+Missing/duplicate/reordered manifests or blobs; overlapping/gapped/duplicate chunks; content or
+terminal tamper; count, path, chunk, aggregate, or spool limit overflow; blob not referenced by the
+manifest; manifest member without a blob; task/session/digest rebinding; frames after seal; stale or
+foreign ack/replay; cancellation followed by content; capability omission; protocol downgrade;
+message ID collision; ambient shadow content; and using an NG1 resume token as closure evidence.
+
+## Consequences and non-goals
+
+This adds an explicit transport rather than overloading `input_descriptor`/`input_chunk`. It costs a
+full transfer per task in v1, but gives bounded staging, precise failure phases, and replay without
+hidden state. It does not implement the codec, worker/VFS wiring, installed qualification, cxxmonster
+E2E, NG1 hardening, or production qualification; those remain dependency-ordered implementation and
+qualification work.
+
+## Acceptance gate
+
+The Proposed exact `main` commit requires an independent counterexample review recorded on #261.
+After all blocking findings are corrected, a follow-up non-rewriting `main` commit may set this ADR
+and its machine contract to Accepted, bind the canonical issue-comment review URL and reviewer, and
+activate the protocol 1.2 registry changes. Production qualification is not claimed by acceptance.

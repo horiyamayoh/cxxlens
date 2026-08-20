@@ -1,5 +1,5 @@
 {
-  "asset_count": 715,
+  "asset_count": 722,
   "assets": [
     {
       "authority": "active",
@@ -1193,6 +1193,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0102-dedicated-source-closure-transport.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1942,6 +1949,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_clang22_materialization_scale_evidence.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -2299,6 +2313,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_provider_task_v4.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_public_api_catalog.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -2580,6 +2601,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_snapshot_store_contract.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_source_closure_transport.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_source_closure_transport.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4329,6 +4364,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_source_closure_transport.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_sqlite_store_contract.py",
       "removal_issue": null,
       "replacement": null,
@@ -4861,6 +4903,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_source_closure_transport.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_sqlite_store_contract.py",
       "removal_issue": null,
       "replacement": null,
@@ -5008,7 +5057,7 @@
     }
   ],
   "classifications": {
-    "active": 679,
+    "active": 686,
     "archived": 35,
     "generated": 1
   },

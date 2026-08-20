@@ -75,6 +75,7 @@
 | [0099](0099-provider-ng1-hardening.md) | provider NG1 hardening lifecycle and evidence |
 | [0100](0100-ng1-resume-provider-digest-grammar.md) | NG1 resume provider identity digest grammar |
 | [0101](0101-source-closure-identity-and-compiler-vfs.md) | source closure identity and read-only compiler VFS |
+| [0102](0102-dedicated-source-closure-transport.md) | dedicated source-closure transport |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

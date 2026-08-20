@@ -1,0 +1,48 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.clang22-materialization-request.v2_2
+title: cxxlens installed Clang 22 materialization request v2.2 authority
+type: object
+additionalProperties: false
+required: [schema, request_version, request_id, request_digest, required_features, source_closures, tasks]
+properties:
+  schema: {const: cxxlens.clang22-materialization-request.v2_2}
+  request_version: {const: 2.2.0}
+  request_id: {type: string, pattern: '^materialization-request:sha256:[0-9a-f]{64}$'}
+  request_digest: {$ref: '#/$defs/digest'}
+  required_features: {const: [task-input-chunks-v1, task-source-closure-v1]}
+  source_closures:
+    type: array
+    minItems: 1
+    maxItems: 4096
+    uniqueItems: true
+    items: {$ref: '#/$defs/closure'}
+  tasks:
+    type: array
+    minItems: 1
+    maxItems: 4096
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [task_codec, task_id, task_input_digest, source_closure_id, source_closure_digest, source_closure_manifest_digest]
+      properties:
+        task_codec: {const: cxxlens.clang22.task.v4}
+        task_id: {type: string, pattern: '^task:semantic-v2:sha256:[0-9a-f]{64}$'}
+        task_input_digest: {$ref: '#/$defs/digest'}
+        source_closure_id: {type: string, pattern: '^source-closure:sha256:[0-9a-f]{64}$'}
+        source_closure_digest: {$ref: '#/$defs/digest'}
+        source_closure_manifest_digest: {$ref: '#/$defs/digest'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  closure:
+    type: object
+    additionalProperties: false
+    required: [source_closure_id, source_closure_digest, manifest_digest, member_count, blob_count, unique_blob_bytes]
+    properties:
+      source_closure_id: {type: string, pattern: '^source-closure:sha256:[0-9a-f]{64}$'}
+      source_closure_digest: {$ref: '#/$defs/digest'}
+      manifest_digest: {$ref: '#/$defs/digest'}
+      member_count: {type: integer, minimum: 1, maximum: 4096}
+      blob_count: {type: integer, minimum: 1, maximum: 4096}
+      unique_blob_bytes: {type: integer, minimum: 0, maximum: 50331648}
+description: Blob bytes are forbidden in the request and are transferred only by Provider Protocol 1.2 messages 24 through 29.

@@ -145,6 +145,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-ng-source-closure-transport-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_source_closure_transport.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-ng-constructibility-gate-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -246,6 +254,7 @@ add_dependencies(
   cxxlens-documentation-consistency-check
   cxxlens-ng-design-feedback-check
   cxxlens-ng-development-decision-check
+  cxxlens-ng-source-closure-transport-check
   cxxlens-ng-clang22-materialization-check
   cxxlens-ng-provider-protocol-check
   cxxlens-ng-provider-ng1-qualification-check

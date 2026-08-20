@@ -39,7 +39,7 @@ decisions:
     implementation_status: pending
     qualification_status: not-claimed
     activation: blocked-until-accepted-authority-and-independent-review
-    authority_refs: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, schemas/cxxlens_ng_provider_protocol.yaml]
+    authority_refs: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_provider_protocol.yaml]
   - id: decision.store.streaming-candidate
     title: Use backend-owned incremental candidates and streaming exact revalidation
     owner_issues: ['#200']

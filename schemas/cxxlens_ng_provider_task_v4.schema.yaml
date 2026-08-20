@@ -1,0 +1,32 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.clang22.task.v4
+title: cxxlens Clang 22 task v4 semantic authority
+type: object
+additionalProperties: false
+required: [schema, task_id, source_closure, main_logical_path, logical_working_directory, effective_argv]
+properties:
+  schema: {const: cxxlens.clang22.task.v4}
+  task_id: {type: string, pattern: '^task:semantic-v2:sha256:[0-9a-f]{64}$'}
+  source_closure:
+    type: object
+    additionalProperties: false
+    required: [id, digest, manifest_digest]
+    properties:
+      id: {type: string, pattern: '^source-closure:sha256:[0-9a-f]{64}$'}
+      digest: {$ref: '#/$defs/digest'}
+      manifest_digest: {$ref: '#/$defs/digest'}
+  main_logical_path: {$ref: '#/$defs/logical_path'}
+  logical_working_directory: {$ref: '#/$defs/logical_path'}
+  effective_argv:
+    type: array
+    minItems: 2
+    maxItems: 4096
+    items: {type: string, minLength: 1, maxLength: 4096, pattern: '^[^\u0000]+$'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  logical_path:
+    type: string
+    minLength: 11
+    maxLength: 4096
+    pattern: '^project://[^\u0000-\u001f\u007f\\?#]+$'
+description: The task carries only closure identity. Manifest and blob bytes are forbidden and use task-source-closure-v1 messages.

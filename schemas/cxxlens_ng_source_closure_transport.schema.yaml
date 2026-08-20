@@ -1,0 +1,40 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.source-closure-transport.v1
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, versions, capability, message_registry, state_machine, phase_fields, limits, resource_policy, identity, cache, compatibility, failures, crash_effects, counterexamples, qualification]
+properties:
+  schema: {const: cxxlens.source-closure-transport.v1}
+  document_version: {const: 1.0.0}
+  maturity: {enum: [proposed, accepted]}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [adr, identity_adr, owner_issue, review]
+    properties:
+      adr: {const: docs/design/adr/0102-dedicated-source-closure-transport.md}
+      identity_adr: {const: docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md}
+      owner_issue: {const: '#261'}
+      review:
+        type: object
+        additionalProperties: false
+        required: [status, reviewer, ref, exact_main_commit]
+        properties:
+          status: {enum: [required, complete]}
+          reviewer: {type: [string, 'null']}
+          ref: {type: [string, 'null']}
+          exact_main_commit: {type: [string, 'null']}
+  versions: {type: object}
+  capability: {type: object}
+  message_registry: {type: object}
+  state_machine: {type: object}
+  phase_fields: {type: object}
+  limits: {type: object}
+  resource_policy: {type: object}
+  identity: {type: object}
+  cache: {type: object}
+  compatibility: {type: object}
+  failures: {type: array, minItems: 16, uniqueItems: true, items: {type: string, pattern: '^source-closure\.'}}
+  crash_effects: {type: object}
+  counterexamples: {type: array, minItems: 20, uniqueItems: true, items: {type: string}}
+  qualification: {const: {implementation: not-claimed, production: not-claimed}}

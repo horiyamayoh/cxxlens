@@ -1,0 +1,101 @@
+schema: cxxlens.source-closure-transport.v1
+document_version: 1.0.0
+maturity: proposed
+authority:
+  adr: docs/design/adr/0102-dedicated-source-closure-transport.md
+  identity_adr: docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md
+  owner_issue: '#261'
+  review: {status: required, reviewer: null, ref: null, exact_main_commit: null}
+versions:
+  provider_protocol: {legacy: 1.1, proposed: 1.2, downgrade: reject}
+  request: {legacy: 2.1, proposed: 2.2}
+  task: {legacy: cxxlens.clang22.task.v3, proposed: cxxlens.clang22.task.v4}
+capability:
+  id: task-source-closure-v1
+  required_for: [request-2.2, task-v4]
+  absence: provider.required-feature-missing
+message_registry:
+  preserved: {heartbeat: 23}
+  proposed:
+    - {id: 24, name: source_closure_manifest, direction: host-to-provider}
+    - {id: 25, name: source_closure_blob, direction: host-to-provider}
+    - {id: 26, name: source_closure_chunk, direction: host-to-provider}
+    - {id: 27, name: source_closure_seal, direction: host-to-provider}
+    - {id: 28, name: source_closure_ack, direction: provider-to-host}
+    - {id: 29, name: source_closure_reject, direction: provider-to-host}
+state_machine:
+  initial: task-v4-sealed
+  success_path: [task-v4-sealed, manifest-open, manifest-streaming, manifest-validated, blob-open, blob-streaming, blob-sealed, closure-sealed, closure-acknowledged, task-accepted]
+  repeated_blob_subpath: [blob-open, blob-streaming, blob-sealed]
+  cancellation: {from: every-nonterminal-closure-state, via: cancelling, terminal: source-closure.cancelled}
+  replay: manifest-first-complete-transfer-same-task-and-session-only
+  invalid_transition: source-closure.protocol-state-invalid
+phase_fields:
+  before-manifest: [session-id, task-id, task-v4-digest]
+  manifest-streaming: [declared-manifest-bytes, observed-bytes, next-offset, next-chunk-index, streaming-digest]
+  manifest-validated: [closure-id, closure-digest, manifest-digest, member-count, blob-count, total-blob-bytes]
+  blob-streaming: [blob-ordinal, blob-digest, declared-bytes, observed-bytes, next-offset, next-chunk-index]
+  closure-sealed: [recomputed-manifest-digest, ordered-blob-receipts, transfer-digest]
+  acknowledged: [task-local-spool-receipt, cleanup-owner]
+  rejected: [failure-phase, reason-code, observed-counters, cleanup-receipt]
+limits:
+  maximum_members: 4096
+  maximum_unique_blobs: 4096
+  maximum_logical_path_utf8_bytes: 4096
+  maximum_blob_bytes: 16777216
+  maximum_unique_blob_bytes: 50331648
+  maximum_manifest_bytes: 20971520
+  maximum_manifest_chunks: 20
+  maximum_chunk_payload_bytes: 1048576
+  maximum_chunks: 48
+  maximum_task_spool_bytes: 71303168
+  maximum_resident_transport_bytes: 1310720
+resource_policy:
+  allocation: validate-count-length-offset-and-sum-before-allocation-or-write
+  spool: backend-owned-private-task-local-digest-bound
+  complete-memory-copy: forbidden
+  cleanup: reject-cancel-crash-recovery-or-task-terminal
+identity:
+  manifest_order: adr-0101-canonical-member-and-blob-order
+  blob_order: exact-manifest-order
+  chunk_order: contiguous-index-and-offset-from-zero
+  seal_fields: [session-id, task-id, task-v4-digest, manifest-digest, ordered-blob-digests-and-sizes, total-bytes, closure-digest]
+  ambient_filesystem: forbidden
+cache:
+  cross_task_v1: forbidden
+  transfer: complete-per-task
+  future_activation: separate-accepted-capability-and-adr
+compatibility:
+  legacy_2_1_v3: byte-exact-unchanged
+  legacy_protocol_1_1: supported-without-source-closure
+  v4_without_capability: reject-before-closure-bytes
+  unknown_required_message: reject
+  ng1_resume_or_cache_alias: forbidden
+failures:
+  - source-closure.required-feature-missing
+  - source-closure.protocol-state-invalid
+  - source-closure.manifest-invalid
+  - source-closure.blob-order-invalid
+  - source-closure.chunk-order-invalid
+  - source-closure.chunk-overlap
+  - source-closure.chunk-gap
+  - source-closure.digest-mismatch
+  - source-closure.limit-exceeded
+  - source-closure.task-binding-mismatch
+  - source-closure.session-binding-mismatch
+  - source-closure.replay-invalid
+  - source-closure.cancelled
+  - source-closure.spool-io
+  - source-closure.cleanup-failed
+  - source-closure.ambient-fallback-denied
+crash_effects:
+  before-manifest: {effect: none, recovery: reject-without-spool}
+  unsealed-transfer: {effect: private-unsealed-spool, recovery: remove-and-full-replay}
+  sealed-before-ack: {effect: private-sealed-spool, recovery: remove-and-full-replay}
+  acknowledged-before-execution: {effect: task-local-sealed-spool, recovery: cancel-removes-no-cache}
+  worker-crash: {effect: no-publication-or-ambient-mutation, recovery: authenticated-orphan-cleanup}
+  resource-failure: {effect: no-task-acceptance, recovery: typed-reject-and-cleanup-receipt}
+counterexamples: [missing, duplicate, reordered, overlap, gap, extra, post-seal, tamper, limit-overflow, orphan-blob, missing-blob, cross-task, cross-session, stale-ack, foreign-replay, cancel-then-content, capability-absent, downgrade, message-id-collision, ambient-shadow, ng1-resume-alias]
+qualification:
+  implementation: not-claimed
+  production: not-claimed
