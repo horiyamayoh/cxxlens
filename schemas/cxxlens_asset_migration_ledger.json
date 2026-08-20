@@ -1,5 +1,5 @@
 {
-  "asset_count": 726,
+  "asset_count": 728,
   "assets": [
     {
       "authority": "active",
@@ -2020,6 +2020,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_development_decision_register.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_development_review_receipts.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_development_review_receipts.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -5085,7 +5099,7 @@
     }
   ],
   "classifications": {
-    "active": 690,
+    "active": 692,
     "archived": 35,
     "generated": 1
   },

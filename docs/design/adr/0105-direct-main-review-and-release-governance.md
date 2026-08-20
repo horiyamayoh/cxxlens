@@ -3,7 +3,7 @@
 - Status: Proposed for independent review
 - Date: 2026-08-21
 - Owner: #173
-- Contract ID: `development.direct-main-review-governance.v1`
+- Contract IDs: `development.direct-main-review-governance.v1`, `development.review-receipt.v1`, `development.release-authority-composition.v1`
 - Product semantics: unchanged
 
 ## Context
@@ -30,7 +30,7 @@ Evidence classes are distinct:
 - `leaf`: focused contract/source tests for one bounded implementation unit;
 - `integration`: exact-main dependency closure and shared-surface tests;
 - `platform`: an exact toolchain/OS/configuration tuple;
-- `release`: full/stress/platform/scope-closure evaluation owned only by #173.
+- `release`: #173 aggregate decision composed from #167 GR execution and #179 terminal scope closure.
 
 No leaf or Linux-only result is promoted to platform or release evidence. A closed implementation
 issue may state `production qualification: not claimed`.
@@ -49,11 +49,15 @@ resource-bound changes use two non-rewriting commits:
 5. only an `accept` receipt with no unresolved P0/P1 may accompany a follow-up Accepted commit and
    corresponding machine-authority activation.
 
-The offline checker verifies receipt shape, body digest, reviewed commit object/tree and ancestry,
-semantic equality between Proposed and Accepted content, reviewer/author distinction, and exact
-activation. A connected CI check verifies the GitHub URL, comment author, and body bytes. If network
-verification is unavailable, acceptance remains locally review-complete but remotely unverified and
-cannot activate production support.
+The v2 register keeps `decision_status`, `authority_status`, `review.outcome`,
+`implementation_status`, `qualification_status`, and `activation` independent. Rejection is durable
+and is never rewritten to pending. Receipt v1 binds candidate commit/tree, the sorted authority
+path/blob projection and canonical digest, owner issue, comment URL/body digest, distinct
+author/reviewer/session, verdict and P0/P1/P2 census, connected run, and the status-only acceptance
+path allowlist. Offline checking verifies Git identity, authority blobs, ancestry, allowlisted paths,
+identity separation, findings, activation and preserved WIP heads. Connected CI verifies GitHub
+comment bytes/author and the exact-candidate successful run. Offline-only evidence cannot activate
+production support.
 
 ## Concurrency and WIP
 
@@ -83,24 +87,22 @@ because aggregate release remains blocked.
 
 Acceptance requires negative tests for stale base, wrong tree/SHA/comment digest, reviewer equality,
 missing connected verification, unknown decision state, evidence-class promotion, and release owner
-drift. The proposed role allocation must explicitly compose #173 aggregate tracking with the existing
-#167 release gate and #179 terminal production-scope closure, or amend all three authorities together.
+drift. The role allocation composes #173 aggregate tracking with #167 GR execution and #179 terminal
+production-scope closure. #173 does not fabricate either closed contract owner's result.
 
-## Independent review disposition
+## Prior independent review and current candidate
 
 The review of exact commit `ac68aa78a3aaa91e6e33e73b40e55a8da827b16e` rejected this ADR's evidence
 mechanics with four P1 findings. Direct-to-main delivery remains active under `AGENTS.md`; the
 rejection applies to the proposed review receipt and release-role model.
 
-Before another acceptance review, the authority must:
+The v2 candidate addresses the four findings as follows:
 
-- implement a non-forgeable receipt binding exact commit/tree, canonical comment-body digest,
-  verdict, and unresolved P0/P1 census, plus connected verification;
-- reconcile roles with accepted contracts that currently assign `gate.release` to #167 and terminal
-  production-scope closure to #179; until coordinated amendments are accepted, #173 is an aggregate
-  tracker and cross-cutting gap owner, not the sole formal release authority;
-- pin preserved WIP identities and heads in machine authority so replacement or deletion fails; and
-- represent leaf/integration/platform/release evidence classes and reject promotion, stale bases,
-  wrong receipts, missing connected verification, and owner drift.
+- receipt v1 binds exact candidate/tree/authority/comment/reviewer/session/finding census and requires
+  a successful connected run before Accepted activation;
+- release roles are the explicit #173/#167/#179 composition;
+- preserved WIP refs are resolved against immutable recorded heads; and
+- work-unit and CI contracts own stale-base, scope, freshness, and evidence-class checks.
 
-This ADR remains Proposed, while the direct-to-main amendment in `AGENTS.md` remains controlling.
+This revision remains Proposed until its exact commit receives a fresh independent P0/P1-zero review
+and connected receipt. The direct-to-main amendment in `AGENTS.md` remains controlling meanwhile.

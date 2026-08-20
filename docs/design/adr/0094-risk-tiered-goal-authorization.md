@@ -5,7 +5,7 @@
 - Issue: #176
 - Design feedback: DF-0177 / #177
 - Depends on: ADR 0088, ADR 0089, ADR 0093
-- Amended by: ADR 0095; workflow amendment #263; completion-policy amendment #291
+- Amended by: ADR 0095; workflow amendment #263; completion-policy amendment #291; direct-to-main amendment #173 (2026-08-16)
 
 ## Context
 
@@ -32,8 +32,8 @@ repository 限定の policy `CXXLENS_AGENT_AUTHORIZATION_V1` を採用する。�
 操作を次の五区分へ分ける。
 
 1. **Standing authorization**: read-only audit、active unit 内の編集・生成・test/build、同一 issue の CI 根本修正、
-   unit branch/commit/push、canonical cxxlens repository 上の active issue/PR に限定した更新・check rerun・review 対応、
-   exact-head gate を満たした active PR の merge、および merge 済み bounded implementation completion evidence と
+   atomic main commit/push、canonical cxxlens repository 上の active issue と任意 review PR に限定した更新・check rerun・review 対応、
+   exact-main gate を満たした bounded implementation completion evidence と
    learning checkpoint を満たした active issue の close は再承認不要とする。明示的な integration/readiness/qualification issue は、
    自身が所有する qualification evidence も満たしてから close する。無関係な issue、PR、branch の mutable state は含めない。
 2. **Notify and continue**: 当初想定外の supporting test/file が必要でも、同一 contract・同一 issue 内で可逆なら、原因、追加 scope、
@@ -49,9 +49,10 @@ skill が一般的な explicit approval を要求しても、その操作が act
 goal 開始時の承認で満たされたものとする。skill が要求する診断、focused plan、結果報告は省略せず、approval のためだけに会話を
 停止しない。skill がより具体的な安全条件を持つ場合や操作が列挙範囲外の場合は、その条件または fresh-approval gate を維持する。
 
-protected `main` への変更は、unit branch、PR、exact-head required checks、未解決 review の解消、merge、exact merged-main
-integration evaluation の順で行う。直接 main push を durable workflow として認可しない。merge は branch protection、
-exact-head required checks、review、bounded conflict-scoped active-unit invariant を満たした場合に限る。
+この旧 branch/PR sequence は direct-to-main amendment #173 により superseded である。現在の通常経路は
+`base-main-recorded -> focused verification -> atomic main commit -> origin fast-forward -> exact-main CI` とする。
+branch/PR は外部 contribution、隔離、独立 review transport に使えるが correctness authority ではない。公開履歴の
+force update、reset、rebase は引き続き認可しない。
 
 通常の implementation issue close は、merge 済みであること、担当 scope の bounded implementation completion evidence、
 残余 gap の明示 ownership、completion evidence、learning checkpoint を要求するが、Foundation/Wave 0/G5/Nightly/release または
@@ -60,8 +61,8 @@ issue の semantic completion claim は区別する。
 
 `AGENTS.md` と goal document は policy ID をそれぞれ exactly once 参照し、API-development readiness checker は activation と
 通常会話での non-activation、standing authorization の active-unit scope、notification、target/effect-specific fresh approval、
-external blocker、platform carve-out、protected-main workflow、revoke/narrow、および skill compatibility の binding を fail closed に
-検証する。旧 direct-main workflow の再導入も拒否する。
+external blocker、platform carve-out、direct-to-main workflow、revoke/narrow、および skill compatibility の binding を fail closed に
+検証する。legacy protected-main token は baseline compatibility のためだけに残し、その語義を運用へ復活させない。
 
 ### Workflow amendment #263 — bounded conflict-scoped parallel units
 

@@ -115,6 +115,8 @@ PACKAGE_PATHS = (
     "schemas/cxxlens_ng_design_feedback_record.schema.yaml",
     "schemas/cxxlens_ng_development_decision_register.yaml",
     "schemas/cxxlens_ng_development_decision_register.schema.yaml",
+    "schemas/cxxlens_ng_development_review_receipts.yaml",
+    "schemas/cxxlens_ng_development_review_receipts.schema.yaml",
     "schemas/cxxlens_ng_install_artifact_manifest.schema.yaml",
     "schemas/cxxlens_ng_foundation_completion_manifest.yaml",
     "schemas/cxxlens_ng_foundation_completion_manifest.schema.yaml",

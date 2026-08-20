@@ -1,6 +1,6 @@
 # Development decision and review register
 
-`schemas/cxxlens_ng_development_decision_register.yaml` is the versioned inventory of
+`schemas/cxxlens_ng_development_decision_register.yaml` v2 is the versioned inventory of
 repository-level decisions that must remain distinct from implementation and production
 qualification. It records the selected alternative, rejected shortcuts, review state,
 implementation state, qualification state, and preserved WIP provenance.
@@ -10,19 +10,24 @@ accepted ADR and machine-readable contracts resolve it and an independent review
 reviewed `main` commit to a canonical GitHub issue comment. The repository owner does not provide a
 separate interactive approval gate.
 
-`decision_status: decided` means that the owner has selected a direction and rejected alternatives;
-it does not mean that a Proposed ADR is Accepted. `review.status: required` remains set after a
-rejecting review while P0/P1 findings are unresolved. In that state, `review.refs` records the
-completed counterexample review, and activation remains blocked until a corrected exact commit is
-reviewed and accepted.
+The six dimensions are deliberately independent: `decision_status`, `authority_status`,
+`review.outcome`, `implementation_status`, `qualification_status`, and `activation`. A rejected
+review remains `rejected`; a corrected candidate starts a new review and does not erase the prior
+verdict. `decided` therefore never implies Accepted, implemented, qualified, or active.
+
+Accepted authority references a receipt in
+`schemas/cxxlens_ng_development_review_receipts.yaml`. The receipt binds the candidate commit and
+tree, authority blobs and normalized digest, owner issue and canonical comment body, distinct
+author/reviewer/session, verdict and P0/P1/P2 census, and an exact-candidate connected CI run. The
+acceptance commit may change only declared status/receipt paths and must descend from the candidate.
 
 Delivery uses atomic fast-forward commits on `main`. A pull request can remain useful review or
 external-contribution evidence, but its existence, review state, or branch status is not correctness
 authority. Proposed high-risk authority is committed first, independently reviewed at that exact
 commit, and accepted only by a later non-rewriting `main` commit.
 
-The current offline checker rejects duplicate decisions, unknown repository paths, high-risk
-self-review presented as complete, completion before review, and qualification before implementation.
-It validates the shape of preserved WIP provenance but does not yet make prior heads immutable or
-authenticate GitHub comment bytes. Those two enforcement gaps are blocking findings against Proposed
-ADR 0105 and must be closed before its receipt mechanism can be Accepted.
+The offline checker rejects duplicate or orphan receipts, foreign owner issues, wrong commit/tree/blob
+or normalized authority digests, self-review, accepted verdicts with P0/P1, missing exact-candidate
+connected verification, activation before acceptance, qualification before implementation, and
+replacement of a preserved WIP ref. Connected CI additionally authenticates GitHub comment bytes,
+author identity, and the named CI run; offline-only evidence cannot activate production support.

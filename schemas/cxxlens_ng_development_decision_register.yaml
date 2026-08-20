@@ -1,103 +1,134 @@
-schema: cxxlens.ng-development-decision-register.v1
-document_version: 1.0.0
+schema: cxxlens.ng-development-decision-register.v2
+document_version: 2.0.0
 authority:
-  owner_issue: '#173'
+  aggregate_owner: '#173'
+  release_gate_contract_owner: '#167'
+  scope_closure_contract_owner: '#179'
   product_authority: docs/design/cxxlens_next_generation_integrated_design_ja.md
   workflow_authority: AGENTS.md
 delivery:
   route: main-atomic-commit-post-update-ci
   history: fast-forward-no-rewrite
-  review_commit_sequence: proposed-main-commit-independent-review-follow-up-accepted-main-commit
-  pull_request: not-correctness-authority
+  review_commit_sequence: proposed-candidate-exact-review-connected-verification-status-only-acceptance
+  pull_request: optional-review-transport-not-correctness-authority
 review_policy:
   user_approval_gate: none
+  receipt_registry: schemas/cxxlens_ng_development_review_receipts.yaml
   high_risk: [contract, invariant, security, compatibility, irreversible, resource-bound]
-  acceptance_binding: exact-main-commit-independent-review-comment-accepted-adr
+  acceptance_binding: exact-candidate-commit-tree-authority-digest-comment-body-reviewer-session-ci-run
 decisions:
   - id: decision.delivery.direct-main
-    title: Use atomic direct-to-main delivery for every repository change
+    title: Use atomic direct-to-main delivery for repository work units
     owner_issues: ['#173']
     risk: contract
-    contract_ids: [development.delivery.v2]
+    contract_ids: [development.delivery.v2, development.review-receipt.v1]
     choice: main-atomic-commit-post-update-ci
     rejected: [mandatory-feature-branch, mandatory-pull-request, history-rewrite]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: codex-independent-reviewer, refs: ['https://github.com/horiyamayoh/cxxlens/issues/173#issuecomment-5358694999']}
+    authority_status: proposed
+    review: {mode: independent, outcome: rejected, author: repository-owner, reviewer: codex-independent-reviewer, receipt_ids: [], references: ['https://github.com/horiyamayoh/cxxlens/issues/173#issuecomment-5358694999']}
     implementation_status: partial
     qualification_status: not-claimed
-    activation: active
-    authority_refs: [AGENTS.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/agent-api-development-goal.md]
+    activation: active-by-workflow-amendment
+    authority_refs: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md]
+  - id: decision.release.composed-authority
+    title: Compose aggregate decision, GR execution, and terminal scope closure
+    owner_issues: ['#173', '#167', '#179']
+    risk: contract
+    contract_ids: [development.release-authority-composition.v1]
+    choice: issue-173-aggregate-issue-167-gr-issue-179-scope-closure
+    rejected: [issue-173-as-sole-gr-authority, reopening-closed-contract-owners, leaf-evidence-as-release]
+    decision_status: decided
+    authority_status: proposed
+    review: {mode: independent, outcome: rejected, author: repository-owner, reviewer: codex-independent-reviewer, receipt_ids: [], references: ['https://github.com/horiyamayoh/cxxlens/issues/173#issuecomment-5358694999']}
+    implementation_status: partial
+    qualification_status: not-claimed
+    activation: blocked-until-accepted-review
+    authority_refs: [docs/design/adr/0095-production-scope-closure.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_release_qualification.yaml]
   - id: decision.source-closure.dedicated-transport
-    title: Add request 2.2 task v4 and a dedicated source-closure transfer state machine
+    title: Add request 2.2 task v4 and dedicated source-closure transport
     owner_issues: ['#261']
     risk: security
     contract_ids: [provider.source-closure-transport.v1, provider.protocol.v1_2]
     choice: dedicated-manifest-blob-chunk-seal-ack-reject-transport
     rejected: [reuse-task-input-chunks-container, ambient-filesystem, physical-checkout, cross-task-cache-v1]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: codex-independent-reviewer, refs: ['https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358304579', 'https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358501463']}
+    authority_status: proposed
+    review: {mode: independent, outcome: rejected, author: repository-owner, reviewer: codex-independent-reviewer, receipt_ids: [], references: ['https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358304579', 'https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358501463']}
     implementation_status: pending
     qualification_status: not-claimed
-    activation: blocked-until-accepted-authority-and-independent-review
+    activation: blocked-until-accepted-review
     authority_refs: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_provider_protocol.yaml]
   - id: decision.store.streaming-candidate
-    title: Use backend-owned incremental candidates and streaming exact revalidation
+    title: Bound candidate adoption and reporting independently from SQLite read residency
     owner_issues: ['#200']
     risk: resource-bound
     contract_ids: [store.incremental-candidate.v1, materialization.bounded-report.v1]
-    choice: sqlite-o-w-memory-f-plus-o-w-with-independent-byte-exact-dual-projection
-    rejected: [aggregate-resident-claim-batch, digest-only-validation, second-complete-validator-graph, complete-report-dom]
+    choice: candidate-publication-endpoint-two-phase-report-byte-exact-dual-projection
+    rejected: [aggregate-resident-claim-batch, digest-only-validation, second-complete-validator-graph, complete-report-dom, eager-sqlite-residency-as-part-of-this-unit]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: codex-independent-reviewer, refs: ['https://github.com/horiyamayoh/cxxlens/issues/200#issuecomment-5358662966']}
+    authority_status: proposed
+    review: {mode: independent, outcome: rejected, author: repository-owner, reviewer: codex-independent-reviewer, receipt_ids: [], references: ['https://github.com/horiyamayoh/cxxlens/issues/200#issuecomment-5358662966']}
     implementation_status: partial
     qualification_status: not-claimed
-    activation: blocked-until-accepted-authority-and-independent-review
-    authority_refs: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md]
-  - id: decision.sqlite.unified-lifecycle
-    title: Integrate readonly recovery normalization and same-process mapping leases
-    owner_issues: ['#201', '#202', '#205']
+    activation: blocked-until-accepted-review
+    authority_refs: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0096-clang22-installed-materialization-boundary.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md]
+  - id: decision.sqlite.read-mapping-lifecycle
+    title: Nest authenticated mapping lease within zero-effect active WAL reading
+    owner_issues: ['#201', '#205']
     risk: irreversible
-    contract_ids: [store.sqlite-source-lifecycle.v1]
-    choice: zero-mutation-read-then-exact-empty-normalization-then-authenticated-lease-projection
-    rejected: [raw-native-ok-projection, post-close-endpoint-proof, untyped-path-authority, silent-recovery-fallback]
+    contract_ids: [store.sqlite-read-mapping-lifecycle.v1]
+    choice: attempt-pin-native-success-pending-lease-eager-decode-read-receipt-revoke-cleanup
+    rejected: [sibling-read-and-lease-machines, raw-native-ok-projection, post-close-endpoint-proof, ambiguous-callback-reuse]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: codex-independent-reviewer, refs: ['https://github.com/horiyamayoh/cxxlens/issues/201#issuecomment-5358695491', 'https://github.com/horiyamayoh/cxxlens/issues/202#issuecomment-5358695055', 'https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5358694968']}
+    authority_status: proposed
+    review: {mode: independent, outcome: rejected, author: repository-owner, reviewer: codex-independent-reviewer, receipt_ids: [], references: ['https://github.com/horiyamayoh/cxxlens/issues/201#issuecomment-5358695491', 'https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5358694968']}
     implementation_status: partial
     qualification_status: not-claimed
-    activation: blocked-until-accepted-authority-and-independent-review
+    activation: blocked-until-accepted-review
     authority_refs: [docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md, docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
+  - id: decision.sqlite.normalization-effect-profile
+    title: Keep production exact-empty WAL normalization as an independently accepted effect profile
+    owner_issues: ['#202']
+    risk: irreversible
+    contract_ids: [store.sqlite-exact-empty-normalization-effect.v1]
+    choice: start-only-from-logical-exact-empty-read-receipt
+    rejected: [normalization-during-zero-effect-census, fixture-capability-as-production-authority, canonical-source-activation-without-review]
+    decision_status: decided
+    authority_status: proposed
+    review: {mode: independent, outcome: pending, author: repository-owner, reviewer: null, receipt_ids: [], references: []}
+    implementation_status: partial
+    qualification_status: not-claimed
+    activation: inactive-production-fail-closed
+    authority_refs: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, docs/development/implementation-learning/records/df-0202-sqlite-exact-empty-wal-normalization.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
   - id: decision.provider.ng1-after-source-closure-registry
-    title: Preserve heartbeat 23 and implement NG1 after source-closure message allocation
+    title: Preserve heartbeat 23 and activate NG1 runtime only after closure registry acceptance
     owner_issues: ['#183', '#261']
     risk: contract
     contract_ids: [provider.ng1-hardening.v1, provider.source-closure-transport.v1]
-    choice: heartbeat-23-source-closure-24-plus-no-cache-resume-alias
-    rejected: [message-id-overlap, source-closure-cache-as-resume-token, implicit-ng0-downgrade]
+    choice: heartbeat-23-source-closure-24-through-29-live-port-first
+    rejected: [message-id-overlap, source-closure-cache-as-resume-token, implicit-ng0-downgrade, blocking-runtime-before-live-port]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    authority_status: proposed
+    review: {mode: independent, outcome: pending, author: repository-owner, reviewer: null, receipt_ids: [], references: []}
     implementation_status: partial
     qualification_status: not-claimed
-    activation: blocked-until-accepted-authority-and-independent-review
+    activation: blocked-until-accepted-review
     authority_refs: [docs/design/adr/0099-provider-ng1-hardening.md, docs/design/adr/0100-ng1-resume-provider-digest-grammar.md, schemas/cxxlens_ng_provider_protocol.yaml]
   - id: decision.sdk-doctor.capability-boundary
-    title: Separate static relation presence from project capability diagnosis
+    title: Separate relation presence from project capability diagnosis
     owner_issues: ['#277']
     risk: compatibility
     contract_ids: [sdk-doctor.relation-presence.v1, sdk-doctor.project-missing.v1]
-    choice: relation-presence-is-narrow-and-missing-project-uses-capability-graph
+    choice: relation-presence-narrow-project-missing-capability-graph-later
     rejected: [missing-relation-id-as-project-capability, diagnostic-prose-control, handwritten-capability-inventory]
     decision_status: decided
-    review: {mode: independent, status: required, author: repository-owner, reviewer: null, refs: []}
+    authority_status: proposed
+    review: {mode: independent, outcome: pending, author: repository-owner, reviewer: null, receipt_ids: [], references: []}
     implementation_status: pending
     qualification_status: not-claimed
-    activation: blocked-until-accepted-authority-and-independent-review
+    activation: blocked-until-accepted-review
     authority_refs: [schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml]
 preserved_wip:
-  - ref: agent/remaining-issues-full-implementation
-    exact_head: 9e8c30fe7c024b67e5b35a8b563c45be820f9e48
-    disposition: preserve-review-only
-    deletion: forbidden
-  - ref: pull/353
-    exact_head: 7a0717be2472cea7e8fdaa267118e702bcdb0f0b
-    disposition: superseded-do-not-merge
-    deletion: forbidden
+  - {ref: agent/remaining-issues-full-implementation, exact_head: 9e8c30fe7c024b67e5b35a8b563c45be820f9e48, disposition: selected-provenance, deletion: forbidden}
+  - {ref: origin/pr/353, exact_head: 7a0717be2472cea7e8fdaa267118e702bcdb0f0b, disposition: historical-unreviewed, deletion: forbidden}

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Validate the repository development decision and review register."""
+"""Fail-closed validation for development decisions and review receipts."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import pathlib
 import re
+import subprocess
 import sys
 from typing import Any
 
@@ -16,14 +19,14 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 REGISTER = pathlib.Path("schemas/cxxlens_ng_development_decision_register.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_development_decision_register.schema.yaml")
+RECEIPTS = pathlib.Path("schemas/cxxlens_ng_development_review_receipts.yaml")
+RECEIPT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_development_review_receipts.schema.yaml")
 HIGH_RISK = {"contract", "invariant", "security", "compatibility", "irreversible", "resource-bound"}
-REVIEW_REF = re.compile(
-    r"^https://github\.com/horiyamayoh/cxxlens/issues/[1-9][0-9]*#issuecomment-[1-9][0-9]*$"
-)
+REVIEW_REF = re.compile(r"^https://github\.com/horiyamayoh/cxxlens/issues/([1-9][0-9]*)#issuecomment-([1-9][0-9]*)$")
 
 
 class DecisionRegisterError(ValueError):
-    """A fail-closed development decision register violation."""
+    """A fail-closed development-governance violation."""
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -54,56 +57,154 @@ def _load(path: pathlib.Path) -> dict[str, Any]:
     return value
 
 
-def validate(root: pathlib.Path) -> dict[str, Any]:
-    register = _load(root / REGISTER)
-    schema = _load(root / SCHEMA)
-    raw_decisions = register.get("decisions")
-    if isinstance(raw_decisions, list):
-        raw_identifiers = [
-            entry.get("id") for entry in raw_decisions if isinstance(entry, dict)
-        ]
-        if len(raw_identifiers) != len(set(raw_identifiers)):
-            raise DecisionRegisterError("duplicate decision IDs")
+def _schema_validate(document: dict[str, Any], schema: dict[str, Any], label: str) -> None:
     try:
         jsonschema.Draft202012Validator.check_schema(schema)
-        jsonschema.Draft202012Validator(schema).validate(register)
+        jsonschema.Draft202012Validator(schema).validate(document)
     except (jsonschema.SchemaError, jsonschema.ValidationError) as error:
-        raise DecisionRegisterError(f"decision register schema validation failed: {error.message}") from error
+        raise DecisionRegisterError(f"{label} schema validation failed: {error.message}") from error
+
+
+def _git(root: pathlib.Path, *arguments: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), *arguments],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise DecisionRegisterError(f"git authority unavailable: {' '.join(arguments)}") from error
+    return result.stdout.strip()
+
+
+def authority_digest(files: list[dict[str, str]]) -> str:
+    canonical = json.dumps(
+        sorted(files, key=lambda item: item["path"]),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def _validate_receipt_git(root: pathlib.Path, receipt: dict[str, Any]) -> None:
+    commit = receipt["candidate_commit"]
+    if _git(root, "show", "-s", "--format=%T", commit) != receipt["candidate_tree"]:
+        raise DecisionRegisterError(f"review receipt candidate tree mismatch: {receipt['id']}")
+    for authority in receipt["authority_files"]:
+        actual = _git(root, "rev-parse", f"{commit}:{authority['path']}")
+        if actual != authority["blob"]:
+            raise DecisionRegisterError(f"review receipt authority blob mismatch: {receipt['id']}:{authority['path']}")
+    if authority_digest(receipt["authority_files"]) != receipt["authority_digest"]:
+        raise DecisionRegisterError(f"review receipt authority digest mismatch: {receipt['id']}")
+
+
+def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> None:
+    acceptance = receipt["acceptance"]
+    if acceptance["status"] != "committed":
+        return
+    commit = acceptance["commit"]
+    candidate = receipt["candidate_commit"]
+    if not commit or _git(root, "merge-base", candidate, commit) != candidate:
+        raise DecisionRegisterError(f"acceptance does not descend from candidate: {receipt['id']}")
+    changed = set(_git(root, "diff", "--name-only", candidate, commit).splitlines())
+    allowed = set(acceptance["allowed_changed_paths"])
+    if not changed or not changed <= allowed:
+        raise DecisionRegisterError(f"acceptance commit is not status/receipt-only: {receipt['id']}")
+
+
+def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
+    register = _load(root / REGISTER)
+    schema = _load(root / SCHEMA)
+    receipt_document = _load(root / RECEIPTS)
+    receipt_schema = _load(root / RECEIPT_SCHEMA)
+    raw_decisions = register.get("decisions")
+    if isinstance(raw_decisions, list):
+        raw_ids = [entry.get("id") for entry in raw_decisions if isinstance(entry, dict)]
+        if len(raw_ids) != len(set(raw_ids)):
+            raise DecisionRegisterError("duplicate decision IDs")
+    raw_receipts = receipt_document.get("receipts")
+    if isinstance(raw_receipts, list):
+        raw_receipt_ids = [entry.get("id") for entry in raw_receipts if isinstance(entry, dict)]
+        if len(raw_receipt_ids) != len(set(raw_receipt_ids)):
+            raise DecisionRegisterError("duplicate review receipt IDs")
+    _schema_validate(register, schema, "decision register")
+    _schema_validate(receipt_document, receipt_schema, "review receipt")
 
     decisions = register["decisions"]
     identifiers = [entry["id"] for entry in decisions]
     required = {
         "decision.delivery.direct-main",
+        "decision.release.composed-authority",
         "decision.source-closure.dedicated-transport",
         "decision.store.streaming-candidate",
-        "decision.sqlite.unified-lifecycle",
+        "decision.sqlite.read-mapping-lifecycle",
+        "decision.sqlite.normalization-effect-profile",
         "decision.provider.ng1-after-source-closure-registry",
         "decision.sdk-doctor.capability-boundary",
     }
+    if len(identifiers) != len(set(identifiers)):
+        raise DecisionRegisterError("duplicate decision IDs")
     if set(identifiers) != required:
-        raise DecisionRegisterError("decision inventory differs from the accepted repository set")
+        raise DecisionRegisterError("decision inventory differs from the repository set")
+
+    receipts = receipt_document["receipts"]
+    receipt_ids = [entry["id"] for entry in receipts]
+    if len(receipt_ids) != len(set(receipt_ids)):
+        raise DecisionRegisterError("duplicate review receipt IDs")
+    by_receipt = {entry["id"]: entry for entry in receipts}
+    referenced_receipts: set[str] = set()
 
     for entry in decisions:
         for reference in entry["authority_refs"]:
             if not (root / reference).is_file():
                 raise DecisionRegisterError(f"decision authority does not exist: {entry['id']}:{reference}")
         review = entry["review"]
-        if entry["risk"] in HIGH_RISK:
-            if review["mode"] != "independent" or review["status"] == "not-required":
-                raise DecisionRegisterError(f"high-risk decision lacks independent review: {entry['id']}")
-            if review["status"] == "complete":
-                if review["reviewer"] in (None, review["author"]):
-                    raise DecisionRegisterError(f"reviewer is not independent: {entry['id']}")
-                if not review["refs"] or not all(REVIEW_REF.fullmatch(ref) for ref in review["refs"]):
-                    raise DecisionRegisterError(f"review reference is not canonical: {entry['id']}")
-        if entry["implementation_status"] == "complete" and review["status"] != "complete":
-            raise DecisionRegisterError(f"implementation completed before review: {entry['id']}")
+        if entry["risk"] in HIGH_RISK and (review["mode"] != "independent" or review["outcome"] == "not-required"):
+            raise DecisionRegisterError(f"high-risk decision lacks independent review: {entry['id']}")
+        if review["outcome"] in {"rejected", "accepted"}:
+            if review["reviewer"] in (None, review["author"]):
+                raise DecisionRegisterError(f"reviewer is not independent: {entry['id']}")
+            if not review["references"] or not all(REVIEW_REF.fullmatch(ref) for ref in review["references"]):
+                raise DecisionRegisterError(f"review reference is not canonical: {entry['id']}")
+        if review["outcome"] == "pending" and review["receipt_ids"]:
+            raise DecisionRegisterError(f"pending review references a receipt: {entry['id']}")
+        if entry["authority_status"] == "accepted" or review["outcome"] == "accepted":
+            if entry["authority_status"] != "accepted" or review["outcome"] != "accepted" or not review["receipt_ids"]:
+                raise DecisionRegisterError(f"accepted authority and review are not atomic: {entry['id']}")
+        if entry["activation"] == "active" and entry["authority_status"] != "accepted":
+            raise DecisionRegisterError(f"unaccepted authority is active: {entry['id']}")
         if entry["qualification_status"] == "qualified" and entry["implementation_status"] != "complete":
             raise DecisionRegisterError(f"qualification precedes implementation: {entry['id']}")
+        for receipt_id in review["receipt_ids"]:
+            receipt = by_receipt.get(receipt_id)
+            if receipt is None or receipt["decision_id"] != entry["id"]:
+                raise DecisionRegisterError(f"unknown or foreign review receipt: {entry['id']}:{receipt_id}")
+            referenced_receipts.add(receipt_id)
+            if receipt["owner_issue"] not in entry["owner_issues"]:
+                raise DecisionRegisterError(f"review receipt owner issue mismatch: {receipt_id}")
+            if receipt["author"] != review["author"] or receipt["reviewer"] != review["reviewer"]:
+                raise DecisionRegisterError(f"review receipt identity mismatch: {receipt_id}")
+            if review["outcome"] == "accepted":
+                if receipt["verdict"] != "accepted" or receipt["findings"]["p0"] or receipt["findings"]["p1"]:
+                    raise DecisionRegisterError(f"accepted review has unresolved P0/P1: {receipt_id}")
+                connected = receipt["connected_verification"]
+                if connected["status"] != "verified" or connected["conclusion"] != "success" or connected["run_commit"] != receipt["candidate_commit"]:
+                    raise DecisionRegisterError(f"accepted review lacks connected exact-candidate verification: {receipt_id}")
+            if verify_git:
+                _validate_receipt_git(root, receipt)
+                _validate_acceptance_commit(root, receipt)
+    if referenced_receipts != set(receipt_ids):
+        raise DecisionRegisterError("orphan review receipt")
 
     wip_refs = [entry["ref"] for entry in register["preserved_wip"]]
     if len(wip_refs) != len(set(wip_refs)):
         raise DecisionRegisterError("duplicate preserved WIP refs")
+    if verify_git:
+        for entry in register["preserved_wip"]:
+            if _git(root, "rev-parse", entry["ref"]) != entry["exact_head"]:
+                raise DecisionRegisterError(f"preserved WIP head replaced: {entry['ref']}")
     return register
 
 

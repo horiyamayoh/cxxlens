@@ -1,0 +1,66 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-development-review-receipts.v1
+title: cxxlens authenticated development review receipts
+type: object
+additionalProperties: false
+required: [schema, document_version, repository, receipts]
+properties:
+  schema: {const: cxxlens.ng-development-review-receipts.v1}
+  document_version: {const: 1.0.0}
+  repository: {const: horiyamayoh/cxxlens}
+  receipts:
+    type: array
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, decision_id, owner_issue, candidate_commit, candidate_tree, authority_files, authority_digest, comment_url, comment_body_sha256, author, reviewer, reviewer_session, verdict, findings, connected_verification, acceptance]
+      properties:
+        id: {type: string, pattern: '^review-receipt\.[a-z0-9.-]+\.v[0-9]+$'}
+        decision_id: {type: string, pattern: '^decision\.[a-z][a-z0-9.-]+$'}
+        owner_issue: {type: string, pattern: '^#[1-9][0-9]*$'}
+        candidate_commit: {$ref: '#/$defs/hex40'}
+        candidate_tree: {$ref: '#/$defs/hex40'}
+        authority_files:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: object
+            additionalProperties: false
+            required: [path, blob]
+            properties: {path: {$ref: '#/$defs/repo_path'}, blob: {$ref: '#/$defs/hex40'}}
+        authority_digest: {$ref: '#/$defs/digest'}
+        comment_url: {type: string, pattern: '^https://github\.com/horiyamayoh/cxxlens/issues/[1-9][0-9]*#issuecomment-[1-9][0-9]*$'}
+        comment_body_sha256: {$ref: '#/$defs/digest'}
+        author: {type: string, minLength: 1}
+        reviewer: {type: string, minLength: 1}
+        reviewer_session: {type: string, minLength: 1}
+        verdict: {enum: [accepted, rejected]}
+        findings:
+          type: object
+          additionalProperties: false
+          required: [p0, p1, p2]
+          properties: {p0: {type: integer, minimum: 0}, p1: {type: integer, minimum: 0}, p2: {type: integer, minimum: 0}}
+        connected_verification:
+          type: object
+          additionalProperties: false
+          required: [status, run_id, run_url, run_commit, conclusion]
+          properties:
+            status: {enum: [pending, verified]}
+            run_id: {oneOf: [{type: integer, minimum: 1}, {type: 'null'}]}
+            run_url: {oneOf: [{type: string, pattern: '^https://github\.com/horiyamayoh/cxxlens/actions/runs/[1-9][0-9]*$'}, {type: 'null'}]}
+            run_commit: {oneOf: [{$ref: '#/$defs/hex40'}, {type: 'null'}]}
+            conclusion: {enum: [pending, success]}
+        acceptance:
+          type: object
+          additionalProperties: false
+          required: [status, commit, allowed_changed_paths]
+          properties:
+            status: {enum: [not-applicable, pending, committed]}
+            commit: {oneOf: [{$ref: '#/$defs/hex40'}, {type: 'null'}]}
+            allowed_changed_paths: {type: array, uniqueItems: true, items: {$ref: '#/$defs/repo_path'}}
+$defs:
+  hex40: {type: string, pattern: '^[0-9a-f]{40}$'}
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  repo_path: {type: string, pattern: '^(?!/)(?!.*\.\.)(?!.*\\).+'}
