@@ -4,12 +4,16 @@ aggregate_owner: '#173'
 open_issue_inventory: ['#173', '#183', '#185', '#200', '#201', '#202', '#205', '#261', '#277']
 closed_contract_owners: ['#167', '#179']
 generated_surface_policy: integration-owner-regenerates-and-commits
+product_receipts:
+  sqlite.active-read-connection: {contract: cxxlens.sqlite-active-read-connection.v1, receipt_profile: exact-producer-commit-tree-artifact-and-evidence-digests, status: pending}
+  sqlite.nested-mapping-terminal: {contract: cxxlens.sqlite-nested-mapping-terminal.v1, receipt_profile: exact-producer-commit-tree-artifact-and-evidence-digests, status: pending}
+  sqlite.logical-read-receipt: {contract: cxxlens.sqlite-logical-read-receipt.v1, receipt_profile: exact-producer-commit-tree-artifact-and-evidence-digests, status: pending}
 entries:
   - issue: '#173'
     conflict_class: governance-global
     integration_owner: '#173'
     authority_sources: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_development_decision_register.yaml]
-    authority_digest: sha256:063f4c948030738f9e84d62fa501cc32da66908ab2d23ed5efe25a900433ebca
+    authority_digest: sha256:91502dc9356a48164bf8e46e3713e11c3dc172800943a49f953f8636cb873d97
     completion_class: autonomy-readiness
     residual_qualification: '#173 remains open for aggregate release; production qualification not claimed'
     units:
@@ -30,7 +34,7 @@ entries:
     conflict_class: provider-protocol
     integration_owner: '#261'
     authority_sources: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:3a4a9f4660f07e415fade5a12eafc84e9e15115c7ab77d97672117a403798d53
+    authority_digest: sha256:4d70e9ca73e736fecc4aeeade3a1c6618108097c32f3c48e98870cc7ac00d7d3
     completion_class: bounded-implementation
     residual_qualification: installed static/shared and cxxmonster E2E remain explicit later evidence
     units:
@@ -51,7 +55,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6c16040046e7a4e68edd4cb0582b24c892693b8caec530e1b1ed2127e3ae009f
+    authority_digest: sha256:01aaa7d7b1c2e692decb722812aa1c6314578886722d4d6c9769c51612bee55f
     completion_class: bounded-implementation
     residual_qualification: platform native SQLite tuples remain with integration and release gates
     units:
@@ -86,7 +90,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6c16040046e7a4e68edd4cb0582b24c892693b8caec530e1b1ed2127e3ae009f
+    authority_digest: sha256:01aaa7d7b1c2e692decb722812aa1c6314578886722d4d6c9769c51612bee55f
     completion_class: bounded-implementation
     residual_qualification: multi-Store and platform qualification remain separate
     units:
@@ -108,7 +112,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, docs/development/implementation-learning/records/df-0202-sqlite-exact-empty-wal-normalization.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:42491faa28a1fe6f1941b16a497633cd45d6d3d5b8e221e6b0567e3ad45785b6
+    authority_digest: sha256:aed5d70f883e2406e3487b7aa7460383d087da3a5715f24b863bd4338083c461
     completion_class: bounded-implementation
     residual_qualification: production canonical and user-source activation remains prohibited pending separate review
     units:
@@ -129,7 +133,7 @@ entries:
     conflict_class: materialization-store
     integration_owner: '#200'
     authority_sources: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:db154e0134cbd421a0bb04b7a9d45d5064c41d53b087910f5ed8d83b9758b12f
+    authority_digest: sha256:a544d9d4da7ef38b64e9c954c8f7a8edf59913086ed64af25d31203e45c42cc6
     completion_class: bounded-implementation
     residual_qualification: scale parity and SQLite lazy-read residency are tracked separately
     units:
@@ -205,7 +209,7 @@ entries:
     conflict_class: agent-ux
     integration_owner: '#277'
     authority_sources: [schemas/cxxlens_ng_work_units.schema.yaml, schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_agent_context.schema.yaml]
-    authority_digest: sha256:a4f44e35b1fd8c8c1f8f44020dc0c7c2d5fbe6ea3973b1ec94150b8cd45841e8
+    authority_digest: sha256:fddc2e6a0b74a1c013c6db5d3994e45485fd0d58b6b8ce1cec5e324b606cafd1
     completion_class: autonomy-readiness
     residual_qualification: generic golden paths and missing --project remain later milestones
     units:

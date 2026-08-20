@@ -14,7 +14,7 @@ properties:
     items:
       type: object
       additionalProperties: false
-      required: [id, decision_id, owner_issue, candidate_commit, candidate_tree, candidate_git_author_email, candidate_github_login, authority_files, authority_digest, comment_url, comment_body_sha256, comment_author_login, author, reviewer, reviewer_github_login, reviewer_provenance, reviewer_session, reviewer_invocation, review_output_sha256, verdict, findings, finding_ids, verification_limits, connected_verification, acceptance]
+      required: [id, decision_id, owner_issue, candidate_commit, candidate_tree, candidate_git_author_email, candidate_github_login, authority_files, authority_digest, comment_url, comment_body_sha256, comment_author_login, author, reviewer, reviewer_github_login, reviewer_provenance, reviewer_session, reviewer_invocation, review_output, review_output_sha256, verdict, findings, finding_ids, verification_limits, connected_verification, acceptance]
       properties:
         id: {type: string, pattern: '^review-receipt\.[a-z0-9.-]+\.v[0-9]+$'}
         decision_id: {type: string, pattern: '^decision\.[a-z][a-z0-9.-]+$'}
@@ -42,6 +42,7 @@ properties:
         reviewer_provenance: {const: isolated-read-only-codex-exec}
         reviewer_session: {type: string, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'}
         reviewer_invocation: {const: codex-exec-ephemeral-sandbox-read-only}
+        review_output: {type: string, minLength: 1, maxLength: 60000}
         review_output_sha256: {$ref: '#/$defs/digest'}
         verdict: {enum: [accepted, rejected]}
         findings:

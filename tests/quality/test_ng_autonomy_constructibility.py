@@ -226,21 +226,21 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "teardown transition graph"):
                 validate(root)
 
-    def test_fz_pre_coordination_wal_cannot_be_deleted(self) -> None:
+    def test_fz_pre_cannot_collapse_to_unbound_wal_delete(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FZ-pre"].__setitem__("route", ["delete-WAL"]))
             with self.assertRaisesRegex(ConstructibilityError, "FZ-pre route|schema validation"):
                 validate(root)
 
-    def test_fz_pre_delete_must_precede_parent_fsync_and_new_receipt(self) -> None:
+    def test_fz_pre_delete_must_precede_parent_fsync(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             def mutate(value) -> None:
                 route = value["machines"]["sqlite_normalization_effect"][
                     "fixture_partition_machine"
                 ]["FZ-pre"]["route"]
-                route[1], route[2] = route[2], route[1]
+                route[2], route[3] = route[3], route[2]
             self.rewrite(root, mutate)
             with self.assertRaisesRegex(ConstructibilityError, "FZ-pre route"):
                 validate(root)

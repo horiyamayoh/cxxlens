@@ -22,8 +22,10 @@ candidate/reviewer GitHub logins plus reviewer identity/session, verdict and P0/
 exact-candidate connected CI run bound to the immutable active workflow ID/path. The
 acceptance commit may change only declared status/receipt paths and must descend from the candidate.
 To avoid a self-referential commit hash, it is derived as the first descendant commit whose receipt
-registry contains that receipt ID. The registry transition is append-only: the selected receipt is
-added exactly once and every existing receipt must remain byte-identical. Connected verification
+registry contains that receipt ID. The registry transition is append-only in the canonical semantic
+projection: the selected receipt is added exactly once and every existing parsed receipt remains
+identical; YAML formatting is not authority. The canonical comment contains the complete review
+output and binds its digest, making the claimed review evidence replayable. Connected verification
 binds the claimed candidate GitHub login to the authenticated candidate commit author and requires
 the reviewer login to differ from both authenticated author and committer.
 

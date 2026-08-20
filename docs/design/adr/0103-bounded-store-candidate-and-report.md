@@ -20,7 +20,8 @@ blocked until its cursor lifetime, page residency, and query semantics are indep
 The backend-owned candidate machine is:
 
 `idle -> staging-session-open -> appending -> input-sealed -> candidate-identity-sealed`
-`-> independently-validating -> validation-sealed -> publication-attempt -> publication-terminal`.
+`-> independently-validating -> validation-sealed -> (not-attempted | publication-attempt)`
+`-> publication-terminal`.
 
 `staging_session_id` is random/private cleanup identity available at open. `candidate_id` is a
 semantic identity available only after the external request/journal census and complete input seal.
@@ -45,7 +46,10 @@ response is exit 2 with zero authoritative response and no compact downgrade. A 
 not rolled back; the Store recovery record is the only authority. Partial stdout is non-authoritative.
 A safely constructible detailed response may preserve `committed_unverified`. A phase-opaque
 writer/commit error always preserves `publication_outcome_unknown`, even if later inspection sees no
-candidate. Only an exact expected-head mismatch is `store.publication-conflict`.
+candidate. When the complete detailed failure is safely finalized, both
+`publication_outcome_unknown` and `committed_unverified` exit 1; only an unsafe finalization or
+transport failure exits 2 with no authoritative response. They never exit 0. Only an exact
+expected-head mismatch is `store.publication-conflict`.
 
 ## Additive candidate port
 
@@ -79,7 +83,9 @@ duplicate/conflicting claims, detached rows, or coverage/unresolved/provenance/g
 32 KiB comparator cursors, a 1 MiB backend cursor, 64 KiB codec/hash state, a 1 MiB record buffer,
 and 4 KiB counter state: `77,729,792` resident bytes. No omitted allocator, backend cursor, codec, or
 counter state may be treated as zero-cost evidence. The maximum reserved report tail is exactly
-`67,109,062` bytes: the 64 MiB source window plus the 86-byte stream header and 112-byte trailer.
+`28,321,546` bytes, derived independently from the accepted ADR 0096 maxima: 10,420,985 global
+projection bytes, 8,463,179 task-metadata bytes, 8 MiB exact SDK records, 1 MiB diagnostics, and 198
+framing bytes. It is not inferred from the source window.
 The exact DF-0200 limits are:
 
 - 4,096 tasks and a 512 MiB aggregate scale witness;

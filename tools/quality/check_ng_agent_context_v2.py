@@ -69,6 +69,31 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         tree = _git(root, "rev-parse", "HEAD^{tree}")
         worktree = "clean"
     all_units = {candidate["id"]: candidate for owner in manifest["entries"] for candidate in owner["units"]}
+    unit_entries = {
+        candidate["id"]: owner
+        for owner in manifest["entries"]
+        for candidate in owner["units"]
+    }
+    decision_register = work_units.load(root / DECISIONS)
+
+    def decision_blockers(identifier: str) -> list[str]:
+        candidate = all_units[identifier]
+        owner = unit_entries[identifier]
+        if candidate["risk"] not in {"contract", "invariant", "security", "compatibility", "irreversible", "resource-bound"}:
+            return []
+        authority_set = set(owner["authority_sources"])
+        relevant = [
+            decision for decision in decision_register["decisions"]
+            if owner["issue"] in decision["owner_issues"]
+            and authority_set.intersection(decision["authority_refs"])
+        ]
+        return [
+            f"decision:{decision['id']}:{decision['authority_status']}:{decision['review']['outcome']}"
+            for decision in relevant
+            if decision["authority_status"] != "accepted"
+            or decision["review"]["outcome"] != "accepted"
+        ]
+
     pending = list(unit["depends_on"])
     blocked_dependencies: list[str] = []
     seen: set[str] = set()
@@ -80,21 +105,26 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         dependency_unit = all_units[dependency]
         if dependency_unit["state"] != "ready":
             blocked_dependencies.append(f"dependency:{dependency}:{dependency_unit['state']}")
+        for blocker in decision_blockers(dependency):
+            blocked_dependencies.append(f"dependency:{dependency}:{blocker}")
         pending.extend(dependency_unit["depends_on"])
     state = unit["state"]
-    decision_register = work_units.load(root / DECISIONS)
-    authority_set = set(entry["authority_sources"])
-    relevant_decisions = [decision for decision in decision_register["decisions"] if entry["issue"] in decision["owner_issues"] and authority_set.intersection(decision["authority_refs"])]
-    authority_blockers = [f"decision:{decision['id']}:{decision['authority_status']}:{decision['review']['outcome']}" for decision in relevant_decisions if unit["risk"] in {"contract", "invariant", "security", "compatibility", "irreversible", "resource-bound"} and (decision["authority_status"] != "accepted" or decision["review"]["outcome"] != "accepted")]
-    if state == "ready" and (blocked_dependencies or authority_blockers):
+    authority_blockers = decision_blockers(unit["id"])
+    product_blockers = [
+        f"product:{product}:{manifest['product_receipts'][product]['status']}"
+        for product in unit["consumed_products"]
+        if manifest["product_receipts"][product]["status"] != "available"
+    ]
+    if state == "ready" and (blocked_dependencies or authority_blockers or product_blockers):
         disposition = "stop-blocked-by-dependency"
-        blockers = sorted([*blocked_dependencies, *authority_blockers])
+        blockers = sorted([*blocked_dependencies, *authority_blockers, *product_blockers])
     else:
         disposition = {"ready": "ready", "review-required": "stop-review-required", "blocked-by-authority": "stop-blocked-by-authority"}[state]
         blockers = [] if state == "ready" else [
             state,
             *sorted(blocked_dependencies),
             *sorted(authority_blockers),
+            *sorted(product_blockers),
         ]
     reading_paths = sorted(set(entry["authority_sources"] + unit["consumed_paths"] + [str(DECISIONS)]))
     reading_set = [{"path": value, "sha256": _file_digest(root / value)} for value in reading_paths]
@@ -112,6 +142,10 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         "dependencies": unit["depends_on"],
         "owned_products": unit["owned_products"],
         "consumed_products": unit["consumed_products"],
+        "required_product_receipts": {
+            product: manifest["product_receipts"][product]
+            for product in unit["consumed_products"]
+        },
         "authority": {
             "revision": revision,
             "tree": tree,

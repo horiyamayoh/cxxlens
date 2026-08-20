@@ -156,10 +156,11 @@ properties:
   protocol_activation:
     type: object
     additionalProperties: false
-    required: [current, registry, minor_profile]
+    required: [status, target_current, target_registry, minor_profile]
     properties:
-      current: {const: 1.2.0}
-      registry: {const: exact-existing-1-through-23-plus-contract-24-through-29}
+      status: {const: blocked-until-accepted-authority-and-bounded-implementation}
+      target_current: {const: 1.2.0}
+      target_registry: {const: exact-existing-1-through-23-plus-contract-24-through-29}
       minor_profile: {type: object}
   crash_effects: {type: object, required: [before-manifest, unsealed-transfer, sealed-before-ack, acknowledged-before-execution, worker-crash, resource-failure]}
   counterexamples: {type: array, minItems: 21, uniqueItems: true, items: {type: string}}

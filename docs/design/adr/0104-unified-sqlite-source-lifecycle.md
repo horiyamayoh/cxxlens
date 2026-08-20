@@ -148,11 +148,13 @@ The accepted DF-0202 fixture authority remains an executable closed partition, n
 - `F0 -> live-receipt -> fixture-normalizer`.
 - `FP/FH -> authenticated cleanup-or-recovery -> independently-revalidated F0 -> new-live-receipt`.
 - `FZ-pre -> retain-and-revalidate-the-exact-size-zero-coordination-WAL`
-  `-> fixture-normalizer-with-same-coordination-WAL -> post-main-sealed`
+  `-> fixture-normalizer-with-same-coordination-WAL`
   `-> authenticated-coordination-WAL-delete -> retained-parent fsync`
+  `-> journal-created-and-parent-fsynced -> valid-journal-and-main-write`
+  `-> terminal-journal-delete-and-parent-fsynced`
   `-> confirmed-close -> post-close-census -> normalization-receipt`.
   The coordination WAL is retained through the same normalizer coordination object; deletion is
-  permitted only after the post-main seal. A crash or indeterminate effect enters
+  completed and its parent durability sealed before journal creation or main write. A crash or indeterminate effect enters
   `recoverable-interruption`, is cold-reclassified through the seven-family classifier, and cannot
   continue or mint the original FZ-pre receipt.
 - `FI/FZ-post/FO -> independently-validated rollback-empty-fresh-anchor` only; none is a completed

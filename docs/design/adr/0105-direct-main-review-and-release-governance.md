@@ -57,8 +57,9 @@ path/blob projection and canonical digest, owner issue, comment URL/body digest,
 author/reviewer/session, verdict and P0/P1/P2 census, connected run, and the status-only acceptance
 path allowlist. The acceptance SHA is not self-embedded; the checker deterministically selects the
 first descendant commit whose receipt registry contains the receipt ID, then verifies its diff.
-The receipt registry is append-only: an acceptance commit may add exactly the selected receipt and
-must preserve every earlier receipt byte-for-byte. Offline checking verifies Git identity, authority blobs, ancestry, allowlisted paths,
+The receipt registry is append-only at its canonical semantic projection: an acceptance commit may
+add exactly the selected receipt and must preserve every earlier parsed receipt value. YAML
+presentation is not authority. Offline checking verifies Git identity, authority blobs, ancestry, allowlisted paths,
 identity separation, findings, activation and preserved WIP heads. Connected CI verifies GitHub
 comment bytes/author and the exact-candidate successful run. It fetches the candidate commit from
 GitHub, binds the claimed candidate login to the authenticated commit author, and requires the
@@ -68,7 +69,7 @@ connected checker resolves the immutable workflow ID and requires the active wor
 
 The authenticated comment body is the canonical JSON projection of receipt ID, decision/owner,
 candidate commit/tree/Git author/candidate GitHub login, complete authority digest, author, isolated read-only Codex
-reviewer provenance and UUID session, verdict, P0/P1/P2 census, and qualification boundary. The
+reviewer provenance and UUID session, the complete review output plus its digest, verdict, P0/P1/P2 census, and qualification boundary. The
 connected checker requires byte equality with that projection; a REJECT body cannot be represented
 as an accepted receipt. The comment must be authored by the reviewer GitHub login, and that login
 must differ from the candidate GitHub login. The authority file set must exactly equal the decision register closure and

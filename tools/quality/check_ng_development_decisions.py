@@ -131,6 +131,25 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
     allowed = set(acceptance["allowed_changed_paths"])
     if not changed or not changed <= allowed:
         raise DecisionRegisterError(f"acceptance commit is not status/receipt-only: {receipt['id']}")
+    authority_paths = {item["path"] for item in receipt["authority_files"]}
+    mandatory = {
+        str(RECEIPTS), str(REGISTER), "schemas/cxxlens_ng_work_units.yaml",
+        "docs/design/SHA256SUMS",
+    }
+    for path in authority_paths:
+        before_text = _git(root, "show", f"{candidate}:{path}")
+        if "- Status: Proposed for independent review" in before_text:
+            mandatory.add(path)
+            continue
+        if path.endswith((".yaml", ".yml")):
+            value = yaml.load(before_text, Loader=UniqueKeyLoader)
+            if isinstance(value, dict) and value.get("maturity") == "proposed":
+                mandatory.add(path)
+    if not mandatory <= changed:
+        missing = ",".join(sorted(mandatory - changed))
+        raise DecisionRegisterError(
+            f"acceptance omits mandatory status transition: {receipt['id']}:{missing}"
+        )
     def authority_transition(before_value: Any, after_value: Any) -> bool:
         if before_value == after_value:
             return True
@@ -200,7 +219,6 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
         expected.get("receipts", []).append(receipt)
         return expected == after_value
 
-    authority_paths = {item["path"] for item in receipt["authority_files"]}
     for path in changed:
         if path == "docs/design/SHA256SUMS":
             continue
@@ -267,6 +285,7 @@ def canonical_review_comment(receipt: dict[str, Any]) -> str:
         "authority_digest": receipt["authority_digest"], "author": receipt["author"],
         "reviewer": receipt["reviewer"], "reviewer_github_login": receipt["reviewer_github_login"], "reviewer_provenance": receipt["reviewer_provenance"],
         "reviewer_session": receipt["reviewer_session"], "reviewer_invocation": receipt["reviewer_invocation"],
+        "review_output": receipt["review_output"],
         "review_output_sha256": receipt["review_output_sha256"], "verdict": receipt["verdict"],
         "findings": receipt["findings"], "finding_ids": receipt["finding_ids"],
         "verification_limits": receipt["verification_limits"],
@@ -419,6 +438,11 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                 raise DecisionRegisterError(f"review receipt GitHub identities are not independent: {receipt_id}")
             if receipt["reviewer"] in {receipt["author"], receipt["candidate_git_author_email"]}:
                 raise DecisionRegisterError(f"review receipt reviewer is not process-independent: {receipt_id}")
+            expected_output_digest = "sha256:" + hashlib.sha256(
+                receipt["review_output"].encode("utf-8")
+            ).hexdigest()
+            if receipt["review_output_sha256"] != expected_output_digest:
+                raise DecisionRegisterError(f"review output digest mismatch: {receipt_id}")
             static_allowed = {str(REGISTER), str(RECEIPTS), "docs/design/SHA256SUMS", "schemas/cxxlens_ng_work_units.yaml"}
             static_allowed.update(path for path in entry["authority_refs"] if path.startswith("docs/design/adr/") or path.startswith("schemas/"))
             if set(receipt["acceptance"]["allowed_changed_paths"]) != static_allowed:

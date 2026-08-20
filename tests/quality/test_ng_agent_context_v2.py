@@ -35,6 +35,7 @@ class AgentContextV2Test(unittest.TestCase):
         self.assertIn("blocked-by-authority", packet["blockers"])
         self.assertTrue(packet["completion_plan"])
         self.assertEqual(packet["consumed_products"], ["sqlite.logical-read-receipt"])
+        self.assertEqual(packet["required_product_receipts"]["sqlite.logical-read-receipt"]["status"], "pending")
 
     def test_dependency_blocked_unit_excludes_integration_owned_generated_surfaces(self) -> None:
         packet = build(ROOT, "#277", "wu-277-context-v2", synthetic=True)
@@ -51,6 +52,16 @@ class AgentContextV2Test(unittest.TestCase):
         packet = _packet(ROOT, manifest, entry, unit, synthetic=True)
         self.assertEqual(packet["execution_disposition"], "stop-blocked-by-dependency")
         self.assertTrue(any(value.startswith("decision:decision.delivery.direct-main:proposed:rejected") for value in packet["blockers"]))
+
+    def test_downstream_ready_state_cannot_bypass_dependency_authority(self) -> None:
+        manifest = work_units.validate(ROOT)
+        governance_entry, governance = _select(manifest, "#173", "wu-173-governance")
+        governance["state"] = "ready"
+        entry, unit = _select(manifest, "#185", "wu-185-timeout-readiness-fixture")
+        from check_ng_agent_context_v2 import _packet
+        packet = _packet(ROOT, manifest, entry, unit, synthetic=True)
+        self.assertEqual(packet["execution_disposition"], "stop-blocked-by-dependency")
+        self.assertTrue(any("dependency:wu-173-governance:decision:" in value for value in packet["blockers"]))
 
     def test_clean_stale_checkout_cannot_emit_execution_packet(self) -> None:
         manifest = work_units.validate(ROOT)

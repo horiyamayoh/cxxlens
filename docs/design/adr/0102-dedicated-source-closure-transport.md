@@ -173,5 +173,7 @@ qualification work.
 
 The Proposed exact `main` commit requires an independent counterexample review recorded on #261.
 After all blocking findings are corrected, a follow-up non-rewriting `main` commit may set this ADR
-and its machine contract to Accepted, bind the canonical issue-comment review URL and reviewer, and
-activate the protocol 1.2 registry changes. Production qualification is not claimed by acceptance.
+and its machine contract to Accepted and bind the canonical issue-comment review URL and reviewer.
+That status-only commit authorizes, but does not itself activate, protocol 1.2: a later bounded
+implementation unit must atomically install the reviewed IDs/profile with codec/state-machine tests.
+Until then the live registry remains 1.1 and fails closed. Production qualification is not claimed.

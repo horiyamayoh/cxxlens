@@ -244,8 +244,9 @@ failure_phase_matrix:
     allowed: [source-closure.ambient-fallback-denied]
     counters: []
 protocol_activation:
-  current: 1.2.0
-  registry: exact-existing-1-through-23-plus-contract-24-through-29
+  status: blocked-until-accepted-authority-and-bounded-implementation
+  target_current: 1.2.0
+  target_registry: exact-existing-1-through-23-plus-contract-24-through-29
   minor_profile:
     required_features: [task-input-chunks-v1, task-source-closure-v1]
     exact_frame_pattern: [hello_ack, schema_negotiate, open_task-v4, input_descriptor-task-v4, input_chunk-task-v4-one-or-more, source_closure_manifest-descriptor, source_closure_manifest-chunk-one-or-more, source_closure_blob-and-chunk-canonical-repeat, source_closure_seal, source_closure_ack-or-reject, credit, close]

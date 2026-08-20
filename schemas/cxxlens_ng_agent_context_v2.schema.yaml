@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-agent-context.v2
 title: cxxlens exact work-unit agent context v2
 type: object
 additionalProperties: false
-required: [schema, document_version, role, issue, unit_id, conflict_class, integration_owner, risk, execution_disposition, blockers, dependencies, owned_products, consumed_products, authority, reading_set, allowed_write_paths, integration_generated_surfaces, forbidden_shortcuts, completion_class, evidence_commands, completion_plan, residual_qualification]
+required: [schema, document_version, role, issue, unit_id, conflict_class, integration_owner, risk, execution_disposition, blockers, dependencies, owned_products, consumed_products, required_product_receipts, authority, reading_set, allowed_write_paths, integration_generated_surfaces, forbidden_shortcuts, completion_class, evidence_commands, completion_plan, residual_qualification]
 properties:
   schema: {const: cxxlens.ng-agent-context.v2}
   document_version: {const: 2.0.0}
@@ -18,6 +18,13 @@ properties:
   dependencies: {type: array, uniqueItems: true, items: {type: string, pattern: '^wu-[1-9][0-9]*-[a-z0-9-]+$'}}
   owned_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
   consumed_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
+  required_product_receipts:
+    type: object
+    additionalProperties:
+      type: object
+      additionalProperties: false
+      required: [contract, receipt_profile, status]
+      properties: {contract: {$ref: '#/$defs/product'}, receipt_profile: {const: exact-producer-commit-tree-artifact-and-evidence-digests}, status: {const: pending}}
   authority:
     type: object
     additionalProperties: false

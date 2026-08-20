@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-work-unit.v1
 title: cxxlens autonomous bounded work-unit inventory
 type: object
 additionalProperties: false
-required: [schema, document_version, aggregate_owner, open_issue_inventory, closed_contract_owners, generated_surface_policy, entries]
+required: [schema, document_version, aggregate_owner, open_issue_inventory, closed_contract_owners, generated_surface_policy, product_receipts, entries]
 properties:
   schema: {const: cxxlens.ng-work-unit.v1}
   document_version: {const: 1.0.0}
@@ -11,6 +11,17 @@ properties:
   open_issue_inventory: {type: array, minItems: 9, maxItems: 9, uniqueItems: true, items: {$ref: '#/$defs/issue'}}
   closed_contract_owners: {const: ['#167', '#179']}
   generated_surface_policy: {const: integration-owner-regenerates-and-commits}
+  product_receipts:
+    type: object
+    minProperties: 3
+    additionalProperties:
+      type: object
+      additionalProperties: false
+      required: [contract, receipt_profile, status]
+      properties:
+        contract: {$ref: '#/$defs/product'}
+        receipt_profile: {const: exact-producer-commit-tree-artifact-and-evidence-digests}
+        status: {const: pending}
   entries:
     type: array
     minItems: 9

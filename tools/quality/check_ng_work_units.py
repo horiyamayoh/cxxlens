@@ -142,6 +142,15 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
     _acyclic(units)
     if not REQUIRED_SQLITE_PRODUCTS.issubset(product_owners):
         raise WorkUnitError("required SQLite product owner is missing")
+    if set(manifest["product_receipts"]) != set(product_owners):
+        raise WorkUnitError("product receipt inventory differs from product owners")
+    for product, receipt in manifest["product_receipts"].items():
+        if receipt != {
+            "contract": "cxxlens." + product.replace(".", "-") + ".v1",
+            "receipt_profile": "exact-producer-commit-tree-artifact-and-evidence-digests",
+            "status": "pending",
+        }:
+            raise WorkUnitError(f"product receipt contract drift: {product}")
 
     identifiers = sorted(units)
     for index, left_id in enumerate(identifiers):

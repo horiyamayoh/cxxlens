@@ -70,25 +70,46 @@ def execute_store_symbolic_witness(store: dict[str, Any]) -> None:
         "coverage": b"coverage",
         "unresolved": b"unresolved",
         "identity": b"identity",
+        "semantic_key": b"semantic-key",
+        "closure": b"closure",
+        "provenance": b"provenance",
+        "guarantee": b"guarantee",
+        "census": b"census",
     }
 
     def build_expected_projection(value: dict[str, Any]) -> list[tuple[str, str, bytes]]:
         partition = value["partition"]
         return [
             ("partition-begin", partition, b"begin"),
-            ("claim-occurrence", partition + "/claim", value["claim"]),
+            ("semantic-key", partition + "/key", value["semantic_key"]),
+            ("claim-full-projection", partition + "/claim", value["claim"]),
             ("detached-row", partition + "/row", value["detached"]),
             ("claim-annotation", partition + "/annotation", value["annotation"]),
             ("coverage", partition + "/coverage", value["coverage"]),
             ("unresolved", partition + "/unresolved", value["unresolved"]),
+            ("closure-binding", partition + "/closure", value["closure"]),
+            ("provenance", partition + "/provenance", value["provenance"]),
+            ("guarantee", partition + "/guarantee", value["guarantee"]),
+            ("partition-census", partition + "/census", value["census"]),
             ("partition-end", partition, b"end"),
             ("global-identity", "snapshot", value["identity"]),
         ]
 
     expected_records = build_expected_projection(immutable_input)
     backend_rows = [
-        {"ordinal": ordinal, "kind": kind, "key": key, "payload": payload}
-        for ordinal, (kind, key, payload) in enumerate(expected_records)
+        {"ordinal": 0, "kind": "partition-begin", "key": "p0", "payload": b"begin"},
+        {"ordinal": 1, "kind": "semantic-key", "key": "p0/key", "payload": b"semantic-key"},
+        {"ordinal": 2, "kind": "claim-full-projection", "key": "p0/claim", "payload": b"claim"},
+        {"ordinal": 3, "kind": "detached-row", "key": "p0/row", "payload": b"row"},
+        {"ordinal": 4, "kind": "claim-annotation", "key": "p0/annotation", "payload": b"annotation"},
+        {"ordinal": 5, "kind": "coverage", "key": "p0/coverage", "payload": b"coverage"},
+        {"ordinal": 6, "kind": "unresolved", "key": "p0/unresolved", "payload": b"unresolved"},
+        {"ordinal": 7, "kind": "closure-binding", "key": "p0/closure", "payload": b"closure"},
+        {"ordinal": 8, "kind": "provenance", "key": "p0/provenance", "payload": b"provenance"},
+        {"ordinal": 9, "kind": "guarantee", "key": "p0/guarantee", "payload": b"guarantee"},
+        {"ordinal": 10, "kind": "partition-census", "key": "p0/census", "payload": b"census"},
+        {"ordinal": 11, "kind": "partition-end", "key": "p0", "payload": b"end"},
+        {"ordinal": 12, "kind": "global-identity", "key": "snapshot", "payload": b"identity"},
     ]
 
     def build_actual_projection(rows: list[dict[str, Any]]) -> list[tuple[str, str, bytes]]:
@@ -127,8 +148,8 @@ def execute_store_symbolic_witness(store: dict[str, Any]) -> None:
         "not-attempted": {"response": "typed-failure", "exit": 1, "recovery_authority": "none"},
         "rejected-stale": {"response": "typed-publication-conflict", "exit": 1, "recovery_authority": "Store"},
         "rejected-store-failure": {"response": "typed-store-failure", "exit": 1, "recovery_authority": "Store"},
-        "publication-outcome-unknown": {"response": "none", "exit": 2, "recovery_authority": "Store"},
-        "committed-unverified": {"response": "safe-committed-unverified-detail-or-none", "exit": "0-or-2", "recovery_authority": "Store"},
+        "publication-outcome-unknown": {"response": "safe-detailed-failure-or-none", "exit": "1-or-2", "recovery_authority": "Store"},
+        "committed-unverified": {"response": "safe-detailed-failure-or-none", "exit": "1-or-2", "recovery_authority": "Store"},
         "committed-verified": {"response": "validated-success", "exit": 0, "recovery_authority": "Store"},
     }
     require_exact(store["outcome_policy"], expected_policy, "Store outcome policy")
@@ -148,21 +169,39 @@ def execute_store_symbolic_witness(store: dict[str, Any]) -> None:
         {
             "token": "one-move-only-publication-attempt-receipt",
             "candidate_edge": "validation-sealed-to-publication-attempt",
-            "report_edge": "maximum-tail-reserved-to-same-publication-attempt",
-            "attempt_count": 1,
-            "outcome_source": "exact-candidate-terminal",
+            "report_edge": "publication-decision-to-same-publication-attempt",
+            "maximum_attempt_count": 1,
+            "not_attempted_edge": "validation-sealed-and-publication-decision-to-not-attempted",
+            "outcome_source": "exact-candidate-publication-terminal",
         },
         "Store publication attempt coupling",
     )
-    if candidate_graph["validation-sealed"] != "publication-attempt" or report_graph["maximum-tail-reserved"] != "publication-attempt":
+    if "publication-attempt" not in candidate_graph["validation-sealed"] or "publication-attempt" not in report_graph["publication-decision"]:
         raise ConstructibilityError("Store publication attempt is not coupled")
     for outcome, policy in store["outcome_policy"].items():
-        if outcome not in candidate_graph["publication-attempt"]:
+        source = candidate_graph["validation-sealed"] if outcome == "not-attempted" else candidate_graph["publication-terminal"]
+        if outcome not in source:
             raise ConstructibilityError("Store outcome is unreachable from publication attempt")
         if outcome == "publication-outcome-unknown" and policy != {
-            "response": "none", "exit": 2, "recovery_authority": "Store"
+            "response": "safe-detailed-failure-or-none", "exit": "1-or-2", "recovery_authority": "Store"
         }:
             raise ConstructibilityError("Store ambiguous outcome is not fail-closed")
+
+    class AttemptToken:
+        def __init__(self) -> None:
+            self.consumed = False
+        def consume(self) -> None:
+            if self.consumed:
+                raise ConstructibilityError("Store publication attempt token replayed")
+            self.consumed = True
+    token = AttemptToken()
+    token.consume()
+    try:
+        token.consume()
+    except ConstructibilityError:
+        pass
+    else:
+        raise ConstructibilityError("Store publication token replay counterexample accepted")
 
     bounds = store["bounds"]
     def checked_add(left: int, right: int, maximum: int) -> int:
@@ -193,19 +232,19 @@ def execute_store_symbolic_witness(store: dict[str, Any]) -> None:
         raise ConstructibilityError("Store symbolic bounded-window witness invalid")
     if bounds["merge_file_descriptors"] != bounds["merge_fan_in"] + 2:
         raise ConstructibilityError("Store symbolic merge descriptor witness invalid")
-    active_descriptors = list(range(bounds["merge_fan_in"])) + [
-        bounds["merge_fan_in"], bounds["merge_fan_in"] + 1
-    ]
-    if len(active_descriptors) != bounds["merge_file_descriptors"]:
-        raise ConstructibilityError("Store merge descriptor acquisition census invalid")
-    active_descriptors.clear()
-    if active_descriptors:
-        raise ConstructibilityError("Store merge descriptors were not released")
-    exact_tail = checked_add(
-        bounds["source_window_bytes"],
-        checked_add(bounds["stream_header_bytes"], bounds["stream_trailer_bytes"], bounds["counter_max"]),
-        bounds["counter_max"],
-    )
+    for fail_at in range(bounds["merge_file_descriptors"] + 1):
+        active_descriptors: list[int] = []
+        for descriptor in range(bounds["merge_file_descriptors"]):
+            if descriptor == fail_at:
+                break
+            active_descriptors.append(descriptor)
+        while active_descriptors:
+            active_descriptors.pop()
+        if active_descriptors:
+            raise ConstructibilityError("Store partial descriptor acquisition leaked")
+    exact_tail = 0
+    for field in ("report_tail_global_projection_bytes", "report_tail_task_metadata_bytes", "report_tail_sdk_records_bytes", "report_tail_diagnostics_bytes", "report_tail_framing_bytes"):
+        exact_tail = checked_add(exact_tail, bounds[field], bounds["counter_max"])
     if exact_tail != bounds["report_tail_reservation_bytes"] or exact_tail > bounds["report_bytes"]:
         raise ConstructibilityError("Store report tail reservation witness invalid")
     singleton_record = bounds["sort_arena_bytes"] + 1
@@ -260,17 +299,18 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
 
     store = machines["store_candidate_report"]
     require_exact(store["candidate_states"], ["idle", "staging-session-open", "appending", "input-sealed", "candidate-identity-sealed", "independently-validating", "validation-sealed", "publication-attempt", "publication-terminal"], "Store candidate states")
-    require_exact(store["report_states"], ["publication-independent-projection", "projection-validated", "maximum-tail-reserved", "publication-attempt", "exact-outcome-captured", "outcome-tail-finalized", "full-schema-validated", "bottom-up-cross-binding-validated", "stdout-published"], "Store report states")
+    require_exact(store["report_states"], ["publication-independent-projection", "projection-validated", "maximum-tail-reserved", "publication-decision", "publication-attempt", "exact-outcome-captured", "outcome-tail-finalized", "full-schema-validated", "bottom-up-cross-binding-validated", "stdout-published"], "Store report states")
     if store["candidate_states"].index("candidate-identity-sealed") >= store["candidate_states"].index("independently-validating"):
         raise ConstructibilityError("candidate identity is not sealed before validation")
     if store["report_states"].index("maximum-tail-reserved") >= store["report_states"].index("publication-attempt"):
         raise ConstructibilityError("report tail is not reserved before publication")
     require_exact(store["post_attempt_failure"], "exit-2-zero-authoritative-response-store-recovery-only", "post-attempt failure")
     require_exact(store["publication_outcomes"], ["not-attempted", "rejected-stale", "rejected-store-failure", "publication-outcome-unknown", "committed-unverified", "committed-verified"], "Store publication outcomes")
-    require_exact(store["candidate_transition_graph"], {"idle": "staging-session-open", "staging-session-open": "appending", "appending": "input-sealed", "input-sealed": "candidate-identity-sealed", "candidate-identity-sealed": "independently-validating", "independently-validating": "validation-sealed", "validation-sealed": "publication-attempt", "publication-attempt": ["not-attempted", "rejected-stale", "rejected-store-failure", "publication-outcome-unknown", "committed-unverified", "committed-verified"]}, "Store candidate transition graph")
-    require_exact(store["report_transition_graph"], {"publication-independent-projection": "projection-validated", "projection-validated": "maximum-tail-reserved", "maximum-tail-reserved": "publication-attempt", "publication-attempt": "exact-outcome-captured", "exact-outcome-captured": "outcome-tail-finalized", "outcome-tail-finalized": "full-schema-validated", "full-schema-validated": "bottom-up-cross-binding-validated", "bottom-up-cross-binding-validated": "stdout-published", "stdout-published": []}, "Store report transition graph")
-    require_exact(store["projections"], {"actual_source": "backend-staging-canonical-physical-order", "expected_source": "immutable-sealed-task-plus-selected-request-and-journal", "comparison": "separate-cursors-full-record-byte-exact", "record_grammar": ["partition-begin", "claim-occurrence", "detached-row", "claim-annotation", "coverage", "unresolved", "partition-end", "global-identity"]}, "dual projection")
-    require_exact(store["bounds"], {"tasks": 4096, "scale_bytes": 512 * 1024 * 1024, "source_window_bytes": 64 * 1024 * 1024, "sort_arena_bytes": 8 * 1024 * 1024, "comparator_cursor_count": 2, "comparator_cursor_bytes_each": 32 * 1024, "backend_cursor_bytes": 1024 * 1024, "codec_hash_state_bytes": 64 * 1024, "record_buffer_bytes": 1024 * 1024, "counter_state_bytes": 4096, "resident_window_limit_bytes": 77729792, "merge_fan_in": 16, "merge_file_descriptors": 18, "stream_header_bytes": 86, "stream_trailer_bytes": 112, "report_tail_reservation_bytes": 64 * 1024 * 1024 + 86 + 112, "report_bytes": 1024 * 1024 * 1024, "counter_max": (1 << 64) - 1, "accumulator_max": (1 << 128) - 1}, "DF-0200 numeric bounds")
+    require_exact(store["candidate_transition_graph"], {"idle": "staging-session-open", "staging-session-open": "appending", "appending": "input-sealed", "input-sealed": "candidate-identity-sealed", "candidate-identity-sealed": "independently-validating", "independently-validating": "validation-sealed", "validation-sealed": ["not-attempted", "publication-attempt"], "publication-attempt": "publication-terminal", "publication-terminal": ["rejected-stale", "rejected-store-failure", "publication-outcome-unknown", "committed-unverified", "committed-verified"]}, "Store candidate transition graph")
+    require_exact(store["report_transition_graph"], {"publication-independent-projection": "projection-validated", "projection-validated": "maximum-tail-reserved", "maximum-tail-reserved": "publication-decision", "publication-decision": ["outcome-not-attempted", "publication-attempt"], "publication-attempt": "exact-outcome-captured", "exact-outcome-captured": ["outcome-rejected-stale", "outcome-rejected-store-failure", "outcome-publication-outcome-unknown", "outcome-committed-unverified", "outcome-committed-verified"], "outcome-not-attempted": "outcome-tail-finalized", "outcome-rejected-stale": "outcome-tail-finalized", "outcome-rejected-store-failure": "outcome-tail-finalized", "outcome-publication-outcome-unknown": "outcome-tail-finalized", "outcome-committed-unverified": "outcome-tail-finalized", "outcome-committed-verified": "outcome-tail-finalized", "outcome-tail-finalized": "full-schema-validated", "full-schema-validated": "bottom-up-cross-binding-validated", "bottom-up-cross-binding-validated": "stdout-published", "stdout-published": []}, "Store report transition graph")
+    require_exact(store["projections"], {"actual_source": "backend-staging-canonical-physical-order", "expected_source": "immutable-sealed-task-plus-selected-request-and-journal", "comparison": "separate-cursors-full-record-byte-exact", "record_grammar": ["partition-begin", "semantic-key", "claim-full-projection", "detached-row", "claim-annotation", "coverage", "unresolved", "closure-binding", "provenance", "guarantee", "partition-census", "partition-end", "global-identity"]}, "dual projection")
+    require_exact(store["retention_roles"], ["one-immutable-final-payload-or-none", "one-task-source-output-window", "one-sort-arena", "two-comparator-cursors", "one-backend-cursor", "fixed-codec-hash-and-counter-state", "no-second-complete-graph", "no-second-final-payload"], "Store retention role census")
+    require_exact(store["bounds"], {"tasks": 4096, "scale_bytes": 512 * 1024 * 1024, "source_window_bytes": 64 * 1024 * 1024, "sort_arena_bytes": 8 * 1024 * 1024, "comparator_cursor_count": 2, "comparator_cursor_bytes_each": 32 * 1024, "backend_cursor_bytes": 1024 * 1024, "codec_hash_state_bytes": 64 * 1024, "record_buffer_bytes": 1024 * 1024, "counter_state_bytes": 4096, "resident_window_limit_bytes": 77729792, "merge_fan_in": 16, "merge_file_descriptors": 18, "report_tail_global_projection_bytes": 10420985, "report_tail_task_metadata_bytes": 8463179, "report_tail_sdk_records_bytes": 8 * 1024 * 1024, "report_tail_diagnostics_bytes": 1024 * 1024, "report_tail_framing_bytes": 198, "report_tail_reservation_bytes": 28321546, "report_bytes": 1024 * 1024 * 1024, "counter_max": (1 << 64) - 1, "accumulator_max": (1 << 128) - 1}, "DF-0200 numeric bounds")
     require_exact(store["representation"], {"logical_write": "cxxlens.ng-snapshot-payload.v5", "sqlite_physical": "cxxlens.sqlite-semantic-store.v3", "sqlite_version": "3.0.0", "chunk_profile": "cxxlens.sqlite-payload-chunks.v1", "chunk_bytes": 8 * 1024 * 1024, "legacy_read": ["v1", "v2", "v3", "v4"]}, "Store exact representation")
     execute_store_symbolic_witness(store)
     require_exact(model["counterexample_sets"]["store_candidate_report"], ["second-full-graph", "shared-projection-traversal", "digest-only", "compact-after-attempt", "lost-publication-outcome-unknown", "eager-sqlite-residency-claim"], "Store counterexamples")
@@ -310,22 +350,28 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "forbidden": "reader-retirement-claims-independent-writer-retirement",
     }
     require_exact(mapping["retirement_join"], expected_join, "SQLite scoped retirement join")
+    custody_kinds = ["connection", "callback-attempt", "reservation", "mapping-lease", "reader-attachment", "use-owner", "cleanup-owner", "close-owner", "uncertainty-owner"]
+    require_exact(mapping["outer_custody_kinds"], custody_kinds, "SQLite outer custody kinds")
+    require_exact(mapping["outer_join_terminal_profiles"], {"retired": "authenticated-terminal-receipt", "quarantined": "permanent-tombstone-with-retained-custody", "enrollment": "atomically-sealed-before-join", "duplicate_or_late": "reject"}, "SQLite outer join profiles")
 
-    def seals_outer_join(
-        owned_writers: set[str], retired_writers: set[str],
-        owned_readers: set[str], retired_readers: set[str],
-        unrelated_writers: set[str],
-    ) -> bool:
-        if (owned_writers & unrelated_writers) or (retired_writers & unrelated_writers):
-            return False
-        return owned_writers == retired_writers and owned_readers == retired_readers
+    def seals_outer_join(rows: list[tuple[str, str, str]], *, enrollment_sealed: bool) -> bool:
+        keys = [(kind, identifier) for kind, identifier, _ in rows]
+        return (
+            enrollment_sealed
+            and len(keys) == len(set(keys))
+            and set(kind for kind, _, _ in rows) == set(custody_kinds)
+            and all(terminal in {"retired", "quarantined"} for _, _, terminal in rows)
+        )
 
-    if not seals_outer_join({"w0"}, {"w0"}, {"r0"}, {"r0"}, {"w-other"}):
-        raise ConstructibilityError("SQLite outer custody join rejected exact census")
-    if seals_outer_join({"w0"}, set(), {"r0"}, {"r0"}, {"w-other"}):
-        raise ConstructibilityError("SQLite outer custody join accepted live writer")
-    if seals_outer_join({"w0"}, {"w0"}, {"r0"}, set(), {"w-other"}):
-        raise ConstructibilityError("SQLite outer custody join accepted live reader")
+    complete_custody = [(kind, f"owner-{index}", "retired") for index, kind in enumerate(custody_kinds)]
+    if not seals_outer_join(complete_custody, enrollment_sealed=True):
+        raise ConstructibilityError("SQLite outer custody join rejected complete authenticated census")
+    if seals_outer_join(complete_custody[:-1], enrollment_sealed=True):
+        raise ConstructibilityError("SQLite outer custody join accepted omitted custody kind")
+    if seals_outer_join([*complete_custody, complete_custody[0]], enrollment_sealed=True):
+        raise ConstructibilityError("SQLite outer custody join accepted duplicate custody")
+    if seals_outer_join(complete_custody, enrollment_sealed=False):
+        raise ConstructibilityError("SQLite outer custody join accepted late enrollment window")
     require_exact(mapping["zero_effect_receipt"], ["initialize", "create", "write", "truncate", "extend", "delete", "resize"], "SQLite zero-effect receipt")
     require_exact(mapping["read_receipt_barrier"], ["outer-custody-join-sealed", "connection-closed", "outer-scoped-zero-live-callbacks-leases-and-use-owners", "zero-effect-callback-receipt-sealed"], "SQLite read receipt barrier")
     fork_graph = mapping["fork_transition_graph"]
@@ -333,27 +379,28 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     validate_closed_graph(fork_graph, "running")
     require_exact(mapping["child_quarantine_forbidden"], ["SQLite-entry", "native-unmap", "native-close", "retry", "cleanup", "owner-drain", "authority-reconstruction"], "SQLite child quarantine")
     require_exact(mapping["ambiguous_callback"], "permanent-quarantine-no-retry", "ambiguous callback")
+    ordinary_revoke = {"outer": "connection-revoking", "writer": "hide-generation", "reader": "hide-reader-generation", "terminal": "outer-custody-join-pending"}
     expected_revocations = {
-        "aba": "hide-generation",
-        "vfs-unload": "hide-generation",
-        "file-replacement": "hide-generation",
-        "directory-replacement": "hide-generation",
-        "watch-loss-or-overflow": "hide-generation",
-        "wal-reset-or-resize": "hide-generation",
-        "ambiguous-callback": "terminal-opaque-quarantine",
+        "aba": ordinary_revoke,
+        "vfs-unload-request": {**ordinary_revoke, "terminal": "unload-permitted-after-outer-custody-join"},
+        "file-replacement": ordinary_revoke,
+        "directory-replacement": ordinary_revoke,
+        "watch-loss-or-overflow": ordinary_revoke,
+        "wal-reset-or-resize": ordinary_revoke,
+        "ambiguous-callback": {"outer": "connection-revoking", "writer": "terminal-opaque-quarantine", "reader": "reader-terminal-opaque-quarantine", "terminal": "outer-custody-join-pending"},
     }
     require_exact(mapping["revocation_events"], expected_revocations, "SQLite revocation event edges")
-    for event, target in mapping["revocation_events"].items():
-        if target not in teardown:
-            raise ConstructibilityError(f"SQLite revocation target is not executable: {event}")
-        if target in {"close-confirmed", writer_terminal}:
-            raise ConstructibilityError(f"SQLite revocation event reached success: {event}")
+    for event, targets in mapping["revocation_events"].items():
+        if targets["outer"] != "connection-revoking" or targets["writer"] not in teardown or targets["reader"] not in reader_teardown:
+            raise ConstructibilityError(f"SQLite revocation fanout is not executable: {event}")
+        if event == "vfs-unload-request" and targets["terminal"] != "unload-permitted-after-outer-custody-join":
+            raise ConstructibilityError("SQLite unload can precede outer custody join")
     require_exact(mapping["production_activation_predicate"], ["accepted-independent-review", "exact-static-shared-runtime-vfs-sqlite-dso-source-id-hash-build-toolchain-identity", "two-live-store-cas", "materialization-race", "cross-process-race", "cantinit-readonly-negative", "pending-only-state-rejection", "four-extend-pairs", "simultaneous-first-writer-join-and-mismatch", "w2-retirement-ordering", "new-page-size-update", "duplicate-fd-lock-loss", "native-close-pinning", "timeout-and-unknown-outcomes", "same-page-successor", "different-page-successor-rejection", "fork-aba-unload-replacement", "connected-main-ci-and-platform-qualification"], "mapping production predicate")
 
     effect = machines["sqlite_normalization_effect"]
     require_exact(effect["separate_from_zero_effect_read"], True, "normalization isolation")
     require_exact(effect["entry"], "logical-read-receipt-exact-empty-after-connection-closed-zero-custody-zero-effect", "normalization entry")
-    effect_states = ["logical-read-receipt", "receipt-revalidated", "effect-profile-capability-sealed", "exclusive-normalization-owner", "pre-effect-sealed", "effect-journal-open", "permitted-callback-effects", "file-and-parent-durable", "confirmed-close", "post-close-census", "normalization-receipt", "ordinary-fresh-init", "recoverable-interruption", "cold-reclassified", "seven-family-classified"]
+    effect_states = ["logical-read-receipt", "receipt-revalidated", "effect-profile-capability-sealed", "exclusive-normalization-owner", "pre-effect-sealed", "effect-journal-open", "permitted-callback-effects", "file-and-parent-durable", "confirmed-close", "post-close-census", "normalization-receipt", "ordinary-fresh-init", "recoverable-interruption", "cold-reclassified", "seven-family-classified", "cold-family-authority-selected"]
     require_exact(effect["states"], effect_states, "normalization effect states")
     expected_effect_graph = {
         "logical-read-receipt": "receipt-revalidated",
@@ -365,12 +412,13 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "permitted-callback-effects": ["file-and-parent-durable", "recoverable-interruption"],
         "file-and-parent-durable": ["confirmed-close", "recoverable-interruption"],
         "confirmed-close": ["post-close-census", "recoverable-interruption"],
-        "post-close-census": "normalization-receipt",
-        "normalization-receipt": "ordinary-fresh-init",
+        "post-close-census": ["normalization-receipt", "recoverable-interruption"],
+        "normalization-receipt": ["ordinary-fresh-init", "recoverable-interruption"],
         "ordinary-fresh-init": [],
         "recoverable-interruption": "cold-reclassified",
         "cold-reclassified": "seven-family-classified",
-        "seven-family-classified": [],
+        "seven-family-classified": "cold-family-authority-selected",
+        "cold-family-authority-selected": [],
     }
     require_exact(effect["transition_graph"], expected_effect_graph, "normalization transition graph")
     validate_closed_graph(effect["transition_graph"], "logical-read-receipt")
@@ -380,6 +428,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "permitted-callback-effects": "recoverable-interruption",
         "file-and-parent-durable": "recoverable-interruption",
         "confirmed-close": "recoverable-interruption",
+        "post-close-census": "recoverable-interruption",
+        "normalization-receipt": "recoverable-interruption",
     }
     require_exact(effect["interruption_edges"], expected_interruptions, "normalization interruption edges")
     for source, target in effect["interruption_edges"].items():
@@ -387,13 +437,15 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         targets = [targets] if isinstance(targets, str) else targets
         if target != "recoverable-interruption" or target not in targets:
             raise ConstructibilityError("normalization interruption edge is not executable")
+    require_exact(effect["admission_guard"], {"capability": "harness-minted-nonserializable-disposable-root", "binds": ["root-object-identity", "canonical-locator", "run-id", "exact-effect-schedule", "runtime-vfs-device-profile"], "canonical_or_user_locator": "reject", "revocation": "before-effect-arm-only", "production_profile": "absent-fail-closed"}, "normalization effect admission guard")
+    require_exact(effect["cold_family_routes"], {"F0": "new-live-normalizer-authority", "FP": "new-live-normalizer-authority", "FH": "new-live-normalizer-authority", "FZ-pre": "new-live-normalizer-authority", "FI": "rollback-empty-fresh-anchor-only", "FZ-post": "rollback-empty-fresh-anchor-only", "FO": "rollback-empty-fresh-anchor-only", "unrecognized": "opaque-failure"}, "normalization cold family authority")
     partitions = effect["fixture_partition_machine"]
     expected_guards = {"F0": "exact-pre-no-sidecar", "FP": "exact-pre-nonhot-journal-prefix", "FH": "valid-hot-journal-with-exact-preimages", "FZ-pre": "exact-pre-plus-size-zero-WAL", "FI": "journal-preimages-exact-pre-and-deterministic-post-plus-invalidated-journal", "FZ-post": "exact-post-plus-size-zero-WAL", "FO": "complete-valid-rollback-exact-empty-current-main-no-sidecar"}
     expected_routes = {
         "F0": ["live-receipt", "fixture-normalizer"],
         "FP": ["authenticated-cleanup-or-recovery", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer"],
         "FH": ["authenticated-cleanup-or-recovery", "independently-revalidated-F0", "new-live-receipt", "fixture-normalizer"],
-        "FZ-pre": ["retain-and-revalidate-exact-size-zero-coordination-WAL", "fixture-normalizer-with-same-coordination-WAL", "post-main-sealed", "authenticated-coordination-WAL-delete", "retained-parent-fsync", "confirmed-close", "post-close-census", "normalization-receipt"],
+        "FZ-pre": ["retain-and-revalidate-exact-size-zero-coordination-WAL", "fixture-normalizer-with-same-coordination-WAL", "authenticated-coordination-WAL-delete", "retained-parent-fsync", "journal-created-and-parent-fsynced", "valid-journal-and-main-write", "terminal-journal-delete-and-parent-fsynced", "confirmed-close", "post-close-census", "normalization-receipt"],
         "FI": ["independently-validated-rollback-empty-fresh-anchor"],
         "FZ-post": ["authenticated-size-zero-WAL-delete", "retained-parent-fsync", "independently-validated-rollback-empty-fresh-anchor"],
         "FO": ["independently-validated-rollback-empty-fresh-anchor"],
@@ -402,7 +454,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "F0": ["confirmed-close", "post-close-census"],
         "FP": ["authenticated-cleanup-or-recovery", "parent-fsync", "confirmed-close", "post-close-census"],
         "FH": ["authenticated-cleanup-or-recovery", "parent-fsync", "confirmed-close", "post-close-census"],
-        "FZ-pre": ["fixture-normalizer-with-same-coordination-WAL", "post-main-sealed", "authenticated-coordination-WAL-delete", "retained-parent-fsync", "confirmed-close", "post-close-census"],
+        "FZ-pre": ["fixture-normalizer-with-same-coordination-WAL", "authenticated-coordination-WAL-delete", "retained-parent-fsync", "journal-created-and-parent-fsynced", "valid-journal-and-main-write", "terminal-journal-delete-and-parent-fsynced", "confirmed-close", "post-close-census"],
         "FI": ["independently-validated-rollback-empty-fresh-anchor"],
         "FZ-post": ["authenticated-size-zero-WAL-delete", "retained-parent-fsync", "independently-validated-rollback-empty-fresh-anchor"],
         "FO": ["independently-validated-rollback-empty-fresh-anchor"],
