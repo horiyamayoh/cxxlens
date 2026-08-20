@@ -1,5 +1,5 @@
 {
-  "asset_count": 739,
+  "asset_count": 743,
   "assets": [
     {
       "authority": "active",
@@ -2733,6 +2733,20 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_wip_inventory.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_wip_inventory.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_work_units.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -4483,6 +4497,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_wip_inventory.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_work_units.py",
       "removal_issue": null,
       "replacement": null,
@@ -5043,6 +5064,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_wip_inventory.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_work_units.py",
       "removal_issue": null,
       "replacement": null,
@@ -5176,7 +5204,7 @@
     }
   ],
   "classifications": {
-    "active": 703,
+    "active": 707,
     "archived": 35,
     "generated": 1
   },
