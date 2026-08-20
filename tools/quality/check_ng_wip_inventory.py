@@ -130,8 +130,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     for line in git(root, "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads", "refs/remotes/origin").splitlines():
         ref, head = line.split(" ", 1)
         current_refs[ref] = head
-    strict_live_repository = any(
-        ref in current_refs and entry["disposition"] != "moving-canonical"
+    strict_live_repository = len(parse_worktrees(root)) > 1 or any(
+        ref in current_refs and not ref.startswith("origin/") and ref != "main" and entry["disposition"] != "moving-canonical"
         for ref, entry in captured_refs.items()
     )
     for ref, entry in captured_refs.items():
