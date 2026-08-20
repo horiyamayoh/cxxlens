@@ -26,7 +26,7 @@ decisions:
     implementation_status: partial
     qualification_status: not-claimed
     activation: active
-    authority_refs: [AGENTS.md, docs/development/agent-api-development-goal.md]
+    authority_refs: [AGENTS.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/agent-api-development-goal.md]
   - id: decision.source-closure.dedicated-transport
     title: Add request 2.2 task v4 and a dedicated source-closure transfer state machine
     owner_issues: ['#261']

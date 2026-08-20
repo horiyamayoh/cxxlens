@@ -1,5 +1,5 @@
 {
-  "asset_count": 725,
+  "asset_count": 726,
   "assets": [
     {
       "authority": "active",
@@ -1208,6 +1208,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0104-unified-sqlite-source-lifecycle.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0105-direct-main-review-and-release-governance.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -5078,7 +5085,7 @@
     }
   ],
   "classifications": {
-    "active": 689,
+    "active": 690,
     "archived": 35,
     "generated": 1
   },
