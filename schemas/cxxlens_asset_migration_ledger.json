@@ -1,5 +1,5 @@
 {
-  "asset_count": 724,
+  "asset_count": 725,
   "assets": [
     {
       "authority": "active",
@@ -1201,6 +1201,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0103-bounded-store-candidate-and-report.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0104-unified-sqlite-source-lifecycle.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -5071,7 +5078,7 @@
     }
   ],
   "classifications": {
-    "active": 688,
+    "active": 689,
     "archived": 35,
     "generated": 1
   },

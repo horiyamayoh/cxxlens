@@ -65,7 +65,7 @@ decisions:
     implementation_status: partial
     qualification_status: not-claimed
     activation: blocked-until-accepted-authority-and-independent-review
-    authority_refs: [docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
+    authority_refs: [docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md, docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
   - id: decision.provider.ng1-after-source-closure-registry
     title: Preserve heartbeat 23 and implement NG1 after source-closure message allocation
     owner_issues: ['#183', '#261']

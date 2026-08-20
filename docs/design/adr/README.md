@@ -77,6 +77,7 @@
 | [0101](0101-source-closure-identity-and-compiler-vfs.md) | source closure identity and read-only compiler VFS |
 | [0102](0102-dedicated-source-closure-transport.md) | dedicated source-closure transport |
 | [0103](0103-bounded-store-candidate-and-report.md) | bounded Store candidate and report construction |
+| [0104](0104-unified-sqlite-source-lifecycle.md) | unified SQLite source lifecycle |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。
