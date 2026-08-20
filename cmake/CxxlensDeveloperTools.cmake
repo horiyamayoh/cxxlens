@@ -145,6 +145,22 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-ng-work-unit-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_work_units.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
+  cxxlens-ng-agent-context-v2-corpus-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_agent_context_v2.py"
+    corpus --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-ng-source-closure-transport-check
   COMMAND
     "${Python3_EXECUTABLE}"

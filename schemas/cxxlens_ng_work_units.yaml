@@ -1,0 +1,189 @@
+schema: cxxlens.ng-work-unit.v1
+document_version: 1.0.0
+aggregate_owner: '#173'
+open_issue_inventory: ['#173', '#183', '#185', '#200', '#201', '#202', '#205', '#261', '#277']
+closed_contract_owners: ['#167', '#179']
+generated_surface_policy: integration-owner-regenerates-and-commits
+entries:
+  - issue: '#173'
+    conflict_class: governance-global
+    integration_owner: '#173'
+    authority_sources: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_development_decision_register.yaml]
+    authority_digest: sha256:f764b6a9d89089503c41b3e5e861f4e55266750abbd7f4f608a80372832a2a4d
+    completion_class: autonomy-readiness
+    residual_qualification: '#173 remains open for aggregate release; production qualification not claimed'
+    units:
+      - id: wu-173-governance
+        risk: contract
+        state: ready
+        depends_on: []
+        serialized_with: []
+        owned_paths: [docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_work_units.yaml, schemas/cxxlens_ng_work_units.schema.yaml, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_work_units.py, tests/quality/test_ng_development_decisions.py, tests/quality/test_ng_work_units.py]
+        consumed_paths: [schemas/cxxlens_ng_release_qualification.yaml]
+        generated_surfaces: [docs/design/SHA256SUMS, schemas/cxxlens_asset_migration_ledger.json]
+        forbidden_shortcuts: [self-review, accepted-with-p1, stale-ci-promotion, branch-or-pr-as-correctness-authority]
+        evidence_commands: [python3 tools/quality/check_ng_development_decisions.py check --root ., python3 tools/quality/check_ng_work_units.py check --root ., python3 -m unittest tests.quality.test_ng_development_decisions tests.quality.test_ng_work_units]
+        completion_plan: [keep authority Proposed, obtain exact-candidate independent review, verify the canonical comment and CI run, commit only receipt and status changes]
+  - issue: '#261'
+    conflict_class: provider-protocol
+    integration_owner: '#261'
+    authority_sources: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_provider_protocol.yaml]
+    authority_digest: sha256:def3bbd035f49fdec18f761340c586d083557390791444d5ca572e09f3f753c7
+    completion_class: bounded-implementation
+    residual_qualification: installed static/shared and cxxmonster E2E remain explicit later evidence
+    units:
+      - id: wu-261-source-closure-authority
+        risk: security
+        state: review-required
+        depends_on: [wu-173-governance]
+        serialized_with: []
+        owned_paths: [docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_source_closure_transport.schema.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_provider_protocol.schema.yaml, schemas/cxxlens_ng_provider_task_v4.schema.yaml, schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml, tools/quality/check_ng_source_closure_transport.py, tests/quality/test_ng_source_closure_transport.py]
+        consumed_paths: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md]
+        generated_surfaces: [docs/design/SHA256SUMS, schemas/cxxlens_asset_migration_ledger.json]
+        forbidden_shortcuts: [ambient-filesystem, request-2.1-container-reuse, cross-task-cache-v1, protocol-downgrade, message-id-overlap]
+        evidence_commands: [python3 tools/quality/check_ng_source_closure_transport.py check --root ., python3 -m unittest tests.quality.test_ng_source_closure_transport]
+        completion_plan: [close P0/P1 constructibility findings, obtain an exact-candidate independent review, accept authority by receipt-only follow-up, then create implementation units]
+  - issue: '#201'
+    conflict_class: sqlite-lifecycle
+    integration_owner: '#205'
+    authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
+    authority_digest: sha256:4d50a6816329f8341a2ad665742332a52f6324ca9d49c1a84e00341f70fb94c7
+    completion_class: bounded-implementation
+    residual_qualification: platform native SQLite tuples remain with integration and release gates
+    units:
+      - id: wu-201-zero-effect-active-read
+        risk: irreversible
+        state: review-required
+        depends_on: [wu-173-governance]
+        serialized_with: [wu-205-nested-mapping-lease, wu-202-normalization-effect]
+        owned_paths: [src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp, src/sdk/sqlite_source_shm_readonly_preflight_internal.hpp, src/sdk/sqlite_same_process_shm_reader_lifecycle_internal.hpp, src/sdk/sqlite_wal_source_capture_internal.cpp, src/sdk/sqlite_wal_source_capture_internal.hpp, tests/unit/sdk/sqlite_source_shm_readonly_preflight_test.cpp, tests/unit/sdk/sqlite_wal_source_capture_test.cpp]
+        consumed_paths: [schemas/cxxlens_ng_sqlite_store_contract.yaml]
+        generated_surfaces: []
+        forbidden_shortcuts: [mutation-before-read-receipt, raw-sqlite-ok-as-capability, missing-wal-shm-as-empty]
+        evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R 'sqlite_(source_shm_readonly_preflight|wal_source_capture)' --output-on-failure]
+        completion_plan: [accept zero-effect read authority, prove first-map no mutation, publish read receipt only after eager decode, hand nested mapping ownership to wu-205]
+  - issue: '#205'
+    conflict_class: sqlite-lifecycle
+    integration_owner: '#205'
+    authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
+    authority_digest: sha256:4d50a6816329f8341a2ad665742332a52f6324ca9d49c1a84e00341f70fb94c7
+    completion_class: bounded-implementation
+    residual_qualification: multi-Store and platform qualification remain separate
+    units:
+      - id: wu-205-nested-mapping-lease
+        risk: irreversible
+        state: blocked-by-authority
+        depends_on: [wu-201-zero-effect-active-read]
+        serialized_with: [wu-201-zero-effect-active-read, wu-202-normalization-effect]
+        owned_paths: [src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp, src/sdk/sqlite_same_process_shm_mapping_lease_internal.hpp, src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp, src/sdk/sqlite_same_process_shm_mapping_registry_internal.hpp, src/sdk/sqlite_same_process_shm_process_port_internal.cpp, src/sdk/sqlite_same_process_shm_process_port_internal.hpp, tests/unit/sdk/sqlite_same_process_shm_mapping_lease_test.cpp, tests/unit/sdk/sqlite_same_process_shm_mapping_registry_test.cpp, tests/unit/sdk/sqlite_same_process_shm_process_port_test.cpp]
+        consumed_paths: [schemas/cxxlens_ng_sqlite_store_contract.yaml, src/sdk/sqlite_same_process_shm_reader_lifecycle_internal.hpp]
+        generated_surfaces: []
+        forbidden_shortcuts: [lease-before-native-success, callback-after-revoke, aba-identity-reuse, inherited-fork-lease, unload-before-revoke]
+        evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R 'sqlite_same_process_shm_(mapping|process)' --output-on-failure]
+        completion_plan: [enter with callback-local attempt pin, promote to pending lease only after native success, seal read receipt after eager decode, revoke and hide before cleanup, quarantine ambiguous callbacks]
+  - issue: '#202'
+    conflict_class: sqlite-lifecycle
+    integration_owner: '#205'
+    authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, docs/development/implementation-learning/records/df-0202-sqlite-exact-empty-wal-normalization.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
+    authority_digest: sha256:5e95bc518fd18493750b41a9f9d533115b4a1543d7e6e152a17891dee40783b4
+    completion_class: bounded-implementation
+    residual_qualification: production canonical and user-source activation remains prohibited pending separate review
+    units:
+      - id: wu-202-normalization-effect
+        risk: irreversible
+        state: blocked-by-authority
+        depends_on: [wu-201-zero-effect-active-read, wu-205-nested-mapping-lease]
+        serialized_with: [wu-201-zero-effect-active-read, wu-205-nested-mapping-lease]
+        owned_paths: [src/sdk/sqlite_disposable_normalization_internal.cpp, src/sdk/sqlite_disposable_normalization_internal.hpp, tests/unit/sdk/sqlite_disposable_qualification_test.cpp]
+        consumed_paths: [schemas/cxxlens_ng_sqlite_store_contract.yaml, src/sdk/sqlite_wal_receipt_internal.hpp]
+        generated_surfaces: []
+        forbidden_shortcuts: [normalization-from-physical-census, fixture-capability-in-production, canonical-source-effect-before-review]
+        evidence_commands: [python3 tools/quality/check_ng_sqlite_store_contract.py check --root ., ctest --preset dev-clang -R sqlite_disposable_qualification --output-on-failure]
+        completion_plan: [preserve F0 FZ-pre FZ-post FP FH FI FO fixture authority, define production effect profile from logical exact-empty receipt, obtain distinct independent review, keep production fail-closed]
+  - issue: '#200'
+    conflict_class: materialization-store
+    integration_owner: '#200'
+    authority_sources: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md]
+    authority_digest: sha256:cdb3a79736c64a8934706120ed30845ee260a9fe6e5c754bc735419f3ea86500
+    completion_class: bounded-implementation
+    residual_qualification: scale parity and SQLite lazy-read residency are tracked separately
+    units:
+      - id: wu-200-candidate-adoption-report
+        risk: resource-bound
+        state: review-required
+        depends_on: [wu-173-governance]
+        serialized_with: [wu-200-sqlite-lazy-read-residency]
+        owned_paths: [docs/design/adr/0103-bounded-store-candidate-and-report.md, src/llvm/clang22/materialization_incremental_coordinator.cpp, src/llvm/clang22/materialization_incremental_coordinator.hpp, src/llvm/clang22/materialization_report.cpp, src/llvm/clang22/materialization_report.hpp, src/llvm/clang22/materialization_public_report.cpp, src/llvm/clang22/materialization_public_report.hpp, tests/adapter/clang22/materialization_report_test.cpp]
+        consumed_paths: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md]
+        generated_surfaces: [docs/design/SHA256SUMS]
+        forbidden_shortcuts: [second-full-graph, complete-report-dom, digest-only-validation, authoritative-response-after-post-attempt-failure]
+        evidence_commands: [ctest --preset dev-clang -R 'materialization_(report|store)' --output-on-failure, python3 tools/quality/check_ng_clang22_materialization.py check --root .]
+        completion_plan: [make publication the candidate endpoint, restore ADR-0096 two-phase report, define independent actual and expected byte projections, preserve publication_outcome_unknown, prove DF-0200 bounds]
+      - id: wu-200-sqlite-lazy-read-residency
+        risk: resource-bound
+        state: blocked-by-authority
+        depends_on: [wu-200-candidate-adoption-report, wu-201-zero-effect-active-read]
+        serialized_with: [wu-200-candidate-adoption-report]
+        owned_paths: [src/sdk/sqlite_payload_streaming_internal.cpp, src/sdk/sqlite_payload_streaming_internal.hpp, tests/unit/sdk/sqlite_payload_streaming_test.cpp]
+        consumed_paths: [src/sdk/store.cpp, schemas/cxxlens_ng_sqlite_store_contract.yaml]
+        generated_surfaces: []
+        forbidden_shortcuts: [eager-full-store-decode, hidden-second-graph, memory-parity-by-noncanonical-order]
+        evidence_commands: [ctest --preset dev-clang -R sqlite_payload_streaming --output-on-failure]
+        completion_plan: [define cursor lifetime and page residency, bind O-W window, retain v1-v4 read compatibility, prove reopened SQLite and memory byte parity]
+  - issue: '#183'
+    conflict_class: provider-protocol
+    integration_owner: '#183'
+    authority_sources: [docs/design/adr/0099-provider-ng1-hardening.md, docs/design/adr/0100-ng1-resume-provider-digest-grammar.md, schemas/cxxlens_ng_provider_protocol.yaml]
+    authority_digest: sha256:d307e82859ee8bbda1447d2ed60259d6a02c6dac28f3ad38fc943cd8f031b9da
+    completion_class: bounded-implementation
+    residual_qualification: long-run static/shared platform evidence remains with heavy and Nightly gates
+    units:
+      - id: wu-183-live-port-selection
+        risk: contract
+        state: blocked-by-authority
+        depends_on: [wu-261-source-closure-authority]
+        serialized_with: [wu-185-timeout-readiness-fixture]
+        owned_paths: [src/sdk/provider_runtime.cpp, src/sdk/provider_runtime_internal.hpp, tests/unit/sdk/provider_runtime_test.cpp]
+        consumed_paths: [schemas/cxxlens_ng_provider_protocol.yaml]
+        generated_surfaces: []
+        forbidden_shortcuts: [blocking-execute-path, closure-receipt-as-resume-token, implicit-ng0-downgrade]
+        evidence_commands: [ctest --preset dev-clang -R provider_runtime --output-on-failure]
+        completion_plan: [select existing ng1_duplex_process_port in production runtime, then implement resume and rate boundaries, then spill and crash recovery, then platform qualification]
+  - issue: '#185'
+    conflict_class: qualification-global
+    integration_owner: '#185'
+    authority_sources: [schemas/cxxlens_ng_sanitizer_coverage.yaml, .github/workflows/nightly.yml, tests/unit/sdk/provider_runtime_test.cpp]
+    authority_digest: sha256:fca1632c910aacd6bdf30d7bd7ace5ca23c2e71cecf3e5bf58e3ba4aecfb3842
+    completion_class: bounded-implementation
+    residual_qualification: exact-main Nightly qualification remains evidence for #173 and is not claimed by fixture repair
+    units:
+      - id: wu-185-timeout-readiness-fixture
+        risk: local
+        state: ready
+        depends_on: [wu-173-governance]
+        serialized_with: [wu-183-live-port-selection]
+        owned_paths: [tests/unit/sdk/provider_runtime_test.cpp]
+        consumed_paths: [src/sdk/provider_runtime.cpp, .github/workflows/nightly.yml]
+        generated_surfaces: []
+        forbidden_shortcuts: [fixed-marker-sleep-as-readiness, timeout-clock-including-executable-verification, cleanup-inferred-from-timeout]
+        evidence_commands: [ctest --preset dev-clang -R provider_runtime --repeat until-pass:20 --output-on-failure]
+        completion_plan: [add child readiness handshake, start runtime timeout after readiness, measure executable verification separately, record descendant cleanup independently, repeat under CPU contention]
+  - issue: '#277'
+    conflict_class: agent-ux
+    integration_owner: '#277'
+    authority_sources: [schemas/cxxlens_ng_work_units.schema.yaml, schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_agent_context.schema.yaml]
+    authority_digest: sha256:b21e4938237e7b0834d0a029cf88facce0db28ec9411a0c8a1b11da67ea4ae98
+    completion_class: autonomy-readiness
+    residual_qualification: generic golden paths and missing --project remain later milestones
+    units:
+      - id: wu-277-context-v2
+        risk: compatibility
+        state: ready
+        depends_on: [wu-173-governance]
+        serialized_with: []
+        owned_paths: [schemas/cxxlens_ng_agent_context_v2.schema.yaml, tools/quality/check_ng_agent_context_v2.py, tests/quality/test_ng_agent_context_v2.py, docs/development/extending-platform.md]
+        consumed_paths: [schemas/cxxlens_ng_work_units.yaml, schemas/cxxlens_ng_agent_context.schema.yaml, tools/quality/check_ng_agent_context.py]
+        generated_surfaces: [schemas/cxxlens_asset_migration_ledger.json]
+        forbidden_shortcuts: [v1-packet-breakage, relation-presence-as-project-diagnosis, handwritten-capability-inventory, packet-from-dirty-or-stale-authority]
+        evidence_commands: [python3 tools/quality/check_ng_agent_context_v2.py corpus --root ., python3 -m unittest tests.quality.test_ng_agent_context_v2]
+        completion_plan: [generate packets for every open work unit, require safe-stop rate 100 percent, require bounded completion selection rate at least 80 percent, retain v1 issue-261 read compatibility, defer generic golden paths and missing --project]

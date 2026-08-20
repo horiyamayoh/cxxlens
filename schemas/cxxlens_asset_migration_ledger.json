@@ -1,5 +1,5 @@
 {
-  "asset_count": 728,
+  "asset_count": 735,
   "assets": [
     {
       "authority": "active",
@@ -1879,6 +1879,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_agent_context_v2.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_api_development_readiness.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -2706,6 +2713,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_work_units.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_work_units.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4245,6 +4266,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_agent_context_v2.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_api_development_readiness.py",
       "removal_issue": null,
       "replacement": null,
@@ -4428,6 +4456,13 @@
     {
       "authority": "active",
       "path": "tests/quality/test_ng_use_case_capability_catalog.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_work_units.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4770,6 +4805,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_agent_context_v2.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_api_development_readiness.py",
       "removal_issue": null,
       "replacement": null,
@@ -4973,6 +5015,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_work_units.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_public_headers.py",
       "removal_issue": null,
       "replacement": null,
@@ -5099,7 +5148,7 @@
     }
   ],
   "classifications": {
-    "active": 692,
+    "active": 699,
     "archived": 35,
     "generated": 1
   },

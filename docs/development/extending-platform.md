@@ -205,7 +205,25 @@ non-authoritative projection です。projection job は authority に `workflow
 `#261` lane、readiness report、release qualification、issue closure を失敗させません。artifact 名、packet schema、generator、
 consumer を分けることで、二つの generator が同じ authority を曖昧に競合しないようにしています。
 
-`check_ng_agent_context.py` が #277 non-authoritative projection の唯一の producer です。`check_ng_api_development_readiness.py`
+`check_ng_agent_context.py` が #261 向け v1 non-authoritative projection の producer です。v1 packet は読み取り互換として維持します。
+全 open issue の実行選択には work-unit authority と v2 producer を使います。
+
+```sh
+python3 tools/quality/check_ng_work_units.py check --root .
+python3 tools/quality/check_ng_agent_context_v2.py packet --root . \
+  --issue 200 --unit wu-200-candidate-adoption-report
+python3 tools/quality/check_ng_agent_context_v2.py corpus --root .
+```
+
+v2 packet は issue/unit の exact match、authority digest、current revision/tree、最小 reading set、write scope、
+blocker、dependency-ordered completion plan、evidence command、残余 qualification を結合します。dirty worktree、
+unknown/foreign unit、authority drift は実行 packet を生成しません。共有 checksum/ledger は packet の write scope
+から除外され、integration owner が生成・commitします。固定 corpus は安全停止率100%と bounded packet 完備率80%以上を要求します。
+
+静的 relation inventory を残す場合の契約名は `relation-presence` です。これは use-case/capability graph、support tuple、
+input/model/evidence gap と dependency-ordered plan を読む将来の `missing --project` とは別機能であり、相互代用しません。
+
+legacy v1 projection の producer は引き続き `check_ng_agent_context.py` だけです。`check_ng_api_development_readiness.py`
 は #261 readiness artifact の authority/generator であり、readiness document と workflow を検証します。#277 projection の出力は
 Issue #261 の source-closure implementation や #276 の constructibility acceptance を進めるものではなく、
 source-closure/VFS、provider qualification、real-project evidence、golden path 評価、`agent-autonomous-completion-rate`
