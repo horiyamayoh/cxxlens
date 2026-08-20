@@ -153,7 +153,7 @@ entries:
     conflict_class: qualification-global
     integration_owner: '#185'
     authority_sources: [schemas/cxxlens_ng_sanitizer_coverage.yaml, .github/workflows/nightly.yml, tests/unit/sdk/provider_runtime_test.cpp]
-    authority_digest: sha256:fca1632c910aacd6bdf30d7bd7ace5ca23c2e71cecf3e5bf58e3ba4aecfb3842
+    authority_digest: sha256:21d2076aefac28fbf3880ee0afb9a586f5bd728edd3515aaa5840d873cfecaf7
     completion_class: bounded-implementation
     residual_qualification: exact-main Nightly qualification remains evidence for #173 and is not claimed by fixture repair
     units:
@@ -162,11 +162,11 @@ entries:
         state: ready
         depends_on: [wu-173-governance]
         serialized_with: [wu-183-live-port-selection]
-        owned_paths: [tests/unit/sdk/provider_runtime_test.cpp]
+        owned_paths: [tests/fixtures/provider_process_fixture.cpp, tests/unit/sdk/provider_runtime_test.cpp]
         consumed_paths: [src/sdk/provider_runtime.cpp, .github/workflows/nightly.yml]
         generated_surfaces: []
         forbidden_shortcuts: [fixed-marker-sleep-as-readiness, timeout-clock-including-executable-verification, cleanup-inferred-from-timeout]
-        evidence_commands: [ctest --preset dev-clang -R provider_runtime --repeat until-pass:20 --output-on-failure]
+        evidence_commands: [ctest --preset dev-clang -R '^unit\\.sdk-provider-runtime-timeout$' --repeat until-fail:20 --output-on-failure]
         completion_plan: [add child readiness handshake, start runtime timeout after readiness, measure executable verification separately, record descendant cleanup independently, repeat under CPU contention]
   - issue: '#277'
     conflict_class: agent-ux

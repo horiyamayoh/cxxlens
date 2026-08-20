@@ -30,8 +30,10 @@
 #endif
 #if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
 	defined(SYS_pidfd_send_signal)
+#include <fcntl.h>
 #include <poll.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #endif
 #include <sys/socket.h>
@@ -2326,6 +2328,13 @@ namespace
 		fs::remove(sentinel_marker, marker_error);
 		require(!marker_error, "could not remove stale sentinel descendant marker");
 		const auto negative_marker = fs::path{marker.string() + ".negative"};
+		const auto readiness_fifo = fs::path{marker.string() + ".ready"};
+		fs::remove(readiness_fifo, marker_error);
+		require(!marker_error, "could not remove stale readiness FIFO");
+		require(::mkfifo(readiness_fifo.c_str(), S_IRUSR | S_IWUSR) == 0,
+				"could not create descendant readiness FIFO");
+		const auto readiness_fd = ::open(readiness_fifo.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+		require(readiness_fd >= 0, "could not open descendant readiness FIFO");
 		fs::remove(negative_marker, marker_error);
 		require(!marker_error, "could not remove stale negative descendant marker");
 		{
@@ -2340,7 +2349,8 @@ namespace
 				"descendant observation accepted an incomplete marker");
 		fs::remove(negative_marker, marker_error);
 		require(!marker_error, "could not remove the negative descendant marker");
-		auto grandchild_request = task(select(executable, "timeout-grandchild:" + marker.string()));
+		auto grandchild_request = task(select(
+			executable, "timeout-grandchild:" + marker.string() + "|" + readiness_fifo.string()));
 		// The fixture forks after launch; derive the budget from the inherited ceiling and
 		// current same-UID thread count instead of assuming a fixed host process count.
 		const auto subprocess_budget = descendant_fixture_subprocess_budget();
@@ -2350,11 +2360,31 @@ namespace
 		grandchild_request.budget.wall_ms = 5000U;
 		std::promise<descendant_observation> holder_promise;
 		auto holder_future = holder_promise.get_future();
+		std::atomic_bool execution_finished{};
 		std::thread holder_watcher{
-			[marker, promise = std::move(holder_promise)]() mutable
+			[marker,
+			 readiness_fd,
+			 &execution_finished,
+			 promise = std::move(holder_promise)]() mutable
 			{
-				const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{7};
-				while (std::chrono::steady_clock::now() < deadline)
+				std::array<std::byte, 2U> readiness{};
+				std::size_t received{};
+				while (received < readiness.size())
+				{
+					const auto count = ::read(
+						readiness_fd, readiness.data() + received, readiness.size() - received);
+					if (count > 0)
+						received += static_cast<std::size_t>(count);
+					else if (count < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
+						break;
+					if (received == readiness.size())
+						break;
+					if (execution_finished.load(std::memory_order_acquire))
+						break;
+					pollfd event{readiness_fd, POLLIN, 0};
+					(void)::poll(&event, 1U, 50);
+				}
+				if (received == readiness.size())
 				{
 					auto holder = observe_descendant(marker.string() + ".holder");
 					auto sentinel = observe_descendant(marker.string() + ".sentinel");
@@ -2369,7 +2399,6 @@ namespace
 						(void)::close(holder->pidfd);
 					if (sentinel)
 						(void)::close(sentinel->pidfd);
-					std::this_thread::sleep_for(std::chrono::milliseconds{1});
 				}
 				promise.set_value({});
 			},
@@ -2377,6 +2406,7 @@ namespace
 		const auto grandchild_started = std::chrono::steady_clock::now();
 		auto grandchild_report = runtime.execute(grandchild_request);
 		const auto grandchild_finished = std::chrono::steady_clock::now();
+		execution_finished.store(true, std::memory_order_release);
 		const auto grandchild_terminal =
 			grandchild_report ? grandchild_report->terminal : grandchild_report.error().code;
 		// Capture the typed terminal before any observation fallback or descendant cleanup.  The
@@ -2426,6 +2456,7 @@ namespace
 		};
 		const auto descendants = holder_future.get();
 		holder_watcher.join();
+		(void)::close(readiness_fd);
 		// Executable verification is part of runtime setup and is materially slower under
 		// sanitizer instrumentation.  The cleanup bound starts at the positive fixture readiness
 		// observation, so it measures timeout/RAII behavior rather than hashing cold-start time.
@@ -2435,14 +2466,8 @@ namespace
 			? descendants.ready_at
 			: grandchild_started;
 		const auto grandchild_elapsed = grandchild_finished - observation_origin;
-		auto observed_descendants = descendants;
-		if (!observed_descendants.holder.valid)
-			if (auto holder = observe_descendant(holder_marker))
-				observed_descendants.holder = std::move(*holder);
-		if (!observed_descendants.sentinel.valid)
-			if (auto sentinel = observe_descendant(sentinel_marker))
-				observed_descendants.sentinel = std::move(*sentinel);
-		const auto cleanup = cleanup_descendant(observed_descendants);
+		const auto verification_and_launch_elapsed = observation_origin - grandchild_started;
+		const auto cleanup = cleanup_descendant(descendants);
 		require(typed_timeout_terminal,
 				"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal);
 		require(cleanup[0] && cleanup[1],
@@ -2462,11 +2487,17 @@ namespace
 		require(cleanup[6], "pipe-holding descendant markers could not be removed");
 		fs::remove(negative_marker, marker_error);
 		require(!marker_error, "could not clean up the negative descendant marker");
+		fs::remove(readiness_fifo, marker_error);
+		require(!marker_error, "could not clean up the readiness FIFO");
 		require(grandchild_elapsed < std::chrono::seconds{8},
 				"provider timeout waited for the pipe-holding descendant instead of closing it: " +
 					std::to_string(
 						std::chrono::duration_cast<std::chrono::milliseconds>(grandchild_elapsed)
 							.count()) +
+					"ms verification-and-launch=" +
+					std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
+									   verification_and_launch_elapsed)
+									   .count()) +
 					"ms");
 #endif
 		return true;

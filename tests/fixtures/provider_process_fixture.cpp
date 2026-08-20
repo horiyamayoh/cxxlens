@@ -338,9 +338,24 @@ int main(const int argument_count, const char* const* arguments)
 	constexpr std::string_view timeout_grandchild_prefix = "timeout-grandchild:";
 	if (mode.starts_with(timeout_grandchild_prefix))
 	{
-		const auto marker_path = mode.substr(timeout_grandchild_prefix.size());
-		if (marker_path.empty())
+		const auto fixture = mode.substr(timeout_grandchild_prefix.size());
+		const auto separator = fixture.rfind('|');
+		if (separator == std::string_view::npos)
 			return EXIT_FAILURE;
+		const auto marker_path = fixture.substr(0U, separator);
+		const auto readiness_path = fixture.substr(separator + 1U);
+		if (marker_path.empty() || readiness_path.empty())
+			return EXIT_FAILURE;
+		const auto signal_ready = [readiness_path]() noexcept
+		{
+			const auto descriptor = ::open(readiness_path.data(), O_WRONLY | O_CLOEXEC);
+			if (descriptor < 0)
+				return false;
+			const std::byte ready{0x01};
+			const bool written = ::write(descriptor, &ready, sizeof(ready)) == sizeof(ready);
+			const bool closed = ::close(descriptor) == 0;
+			return written && closed;
+		};
 		const std::string holder_marker{std::string{marker_path} + ".holder"};
 		const std::string holder_marker_temporary{holder_marker + ".tmp"};
 		const std::string sentinel_marker{std::string{marker_path} + ".sentinel"};
@@ -363,8 +378,11 @@ int main(const int argument_count, const char* const* arguments)
 				(void)::close(STDERR_FILENO);
 				if (!write_process_marker(sentinel_marker_temporary, sentinel_marker))
 					::_exit(EXIT_FAILURE);
-				const std::byte ready{0x01};
-				if (::write(ready_pipe[1U], &ready, sizeof(ready)) != sizeof(ready))
+				if (!signal_ready())
+					::_exit(EXIT_FAILURE);
+				const std::byte internal_ready{0x01};
+				if (::write(ready_pipe[1U], &internal_ready, sizeof(internal_ready)) !=
+					sizeof(internal_ready))
 					::_exit(EXIT_FAILURE);
 				(void)::close(ready_pipe[1U]);
 				sleep_for_seconds(30U);
@@ -376,8 +394,14 @@ int main(const int argument_count, const char* const* arguments)
 				sentinel_guard.cleanup_now();
 				::_exit(EXIT_FAILURE);
 			}
-			const std::byte ready{0x01};
-			if (::write(ready_pipe[1U], &ready, sizeof(ready)) != sizeof(ready))
+			if (!signal_ready())
+			{
+				sentinel_guard.cleanup_now();
+				::_exit(EXIT_FAILURE);
+			}
+			const std::byte internal_ready{0x01};
+			if (::write(ready_pipe[1U], &internal_ready, sizeof(internal_ready)) !=
+				sizeof(internal_ready))
 			{
 				sentinel_guard.cleanup_now();
 				::_exit(EXIT_FAILURE);
