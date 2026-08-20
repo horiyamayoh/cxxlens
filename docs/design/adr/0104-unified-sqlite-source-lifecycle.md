@@ -1,153 +1,162 @@
-# ADR 0104: Unified SQLite source capability, normalization, and mapping lease lifecycle
+# ADR 0104: SQLite zero-effect read, nested mapping lease, and isolated normalization effect
 
 - Status: Proposed for independent review
 - Date: 2026-08-21
-- Owners: #201, #202, #205
-- Contract ID: `store.sqlite-source-lifecycle.v1`
+- Owners: #201 and #205; separate effect-profile owner #202
+- Contract IDs: `store.sqlite-read-mapping-lifecycle.v1`, `store.sqlite-exact-empty-normalization-effect.v1`
 - Production activation: fail-closed
 - Production qualification: not claimed
 
-## Context
+## Context and ownership
 
-#201, #202, and #205 describe different phases of one file-family lifecycle. Reviewing them in
-isolation permits contradictory ownership of the first source map, an exact-empty persistent effect,
-and a live same-process mapping. This ADR fixes their ordering and proof composition while retaining
-ADR 0013/0097 Store semantics.
+The prior sibling-branch model was not constructible. #201 owns the zero-source-mutation active-WAL
+read connection. #205 is an authenticated same-process mapping subprotocol nested inside that live
+connection; it is not a sibling source outcome. #202 is a later persistent-effect profile that may
+start only from an already sealed logical exact-empty read receipt. A raw physical census never
+authorizes it.
 
-## Decision and ownership
+No receipt substitutes for another. #201 cannot authorize normalization, #205 cannot prove logical
+database validity or CAS, and #202 cannot mint or prolong a mapping lease. Production canonical or
+user-source normalization remains disabled until the separate #202 effect profile has an exact
+candidate P0/P1-zero review and authenticated acceptance receipt.
 
-- #201 owns a zero-source-mutation active-WAL/SHM read capability acquired before the first target
-  `xOpen`/`xShmMap` and retained through eager decode.
-- #202 owns the only new persistent effect: normalization of an independently proved exact-empty,
-  sidecar-absent WAL-header remnant to rollback-journal/DELETE, followed by ordinary fresh init.
-- #205 owns a one-reader, non-transitive, authenticated same-process writer-mapping lease and the
-  narrow `SQLITE_OK/non-null -> SQLITE_READONLY/same-pointer` outward projection.
+## #201 outer zero-effect machine
 
-No receipt substitutes for another: #201 cannot authorize normalization; #202 cannot mint a mapping
-lease; #205 cannot prove logical database validity or bypass CAS.
+The no-effect boundary begins before target `xOpen`, not after census:
 
-## Integrated state machine
+`unresolved -> runtime-vfs-filesystem-sealed -> retained-parent-held`
+`-> no-effect-boundary-armed -> typed-family-census -> active-read-connection-open`
+`-> wal-lock-and-prefix-held -> mapping-subprotocol-or-private-index`
+`-> eager-decode -> logical-read-receipt -> connection-revoking -> connection-closed`.
 
-The dispatcher first seals a target-independent runtime/VFS/filesystem capability and a retained
-parent namespace handle, then performs an effect-free file-family census.
+From `no-effect-boundary-armed` through `logical-read-receipt`, the target family cannot be created,
+deleted, truncated, resized, renamed, or written. Census uses retained-parent, no-follow typed
+enumeration/open/stat and never re-resolves a host path. Cold active-WAL reading may receive authentic
+`SQLITE_READONLY_CANTINIT/null` and build SQLite's private heap WAL index under `WAL_READ_LOCK(0)`.
+Native `SQLITE_OK`, including null, is fail-closed unless the nested #205 callback path validates.
+Decode is eager and complete while connection, locks, held objects, namespace epoch, and all use
+owners remain pinned. Only then can #201 seal a logical read receipt.
 
-`unresolved -> capability-sealed -> namespace-held -> census-sealed` branches exactly once:
+The receipt binds runtime image/source ID/build options, VFS callbacks/app-data, filesystem/mount,
+retained parent, main/WAL/SHM/journal object and directory-entry identities, pre-`xOpen` namespace
+epoch, WAL header/salts/authoritative prefix, decoded logical state and page/census projection, and
+the complete mapping/private-index provenance. Empty, unresolved, conflicting, and corrupt are
+distinct terminal values.
 
-1. `active-wal-shm -> read-epoch-held -> first-map-qualified -> eager-decode -> read-receipt` (#201)
-2. `exact-empty-wal-remnant -> normalization-lease-held -> pre-effect-sealed -> normalizing`
-   `-> durable-post-effect-sealed -> fresh-init -> initialized-receipt` (#202)
-3. `same-process-live-writer -> lease-acquired -> native-map-observed -> readonly-projected`
-   `-> reader-unmapped -> lease-released` (#205)
-4. other accepted ordinary states enter the existing no-new-effect Store path.
+## #205 nested mapping subprotocol
 
-Mixed state, missing capability, identity drift, unknown result shape, or receipt incompleteness
-transitions to a typed terminal before effect. No branch falls through to another after it has
-observed or attempted an effect.
+Each writer or reader `xShmMap` callback follows:
 
-## Identity, epoch, and ABA rules
+`callback-admitted -> pre-callback-sequence-cut -> attempt-pin-held -> native-started`
+`-> native-outcome-captured -> pending-mapping-receipt -> identity-validated`
+`-> mapping-lease-promoted -> eager-use-owner-held -> handoff-sealed`.
 
-The composite authority binds pinned SQLite source ID and loaded image, underlying VFS callbacks and
-app-data, mount/filesystem profile, retained root/parent, main/WAL/SHM/journal held-object and
-directory-entry identities, WAL header/salts and authoritative prefix, namespace epoch, mapping
-page/size/pointer, writer generation, process-instance generation, PID, and fork generation as each
-becomes phase-authentic.
+Before delegation there is only a callback-local attempt pin and writer/reader cohort in-flight pin.
+There is no registry lease or pending mapping. Exact native `SQLITE_OK` with a non-null pointer makes
+a non-authoritative pending receipt. Promotion occurs only after page, size, pointer, extend pair,
+mapping generation, process instance, PID/fork generation, runtime/VFS/filesystem/file-family,
+SHM object/entry/mount, namespace watch, and all current Store writer gates validate. Simultaneous
+first writers may install or join one exact generation only through CAS on the complete key.
 
-The epoch starts before target resolution or map delegation. Namespace watch overflow/loss, any
-held-object or entry replacement, WAL reset/salt change, VFS unregister/re-register, runtime unload,
-PID/fork change, mapping resize/unmap, or writer close revokes or quarantines affected capabilities
-before pointer reuse. Monotone generation plus epoch identity rejects A-to-B-to-A and pointer ABA;
-path equality, raw pointer equality, PID alone, and post-close endpoint equality are insufficient.
+The production exception can translate exactly one promoted native `SQLITE_OK/non-null` to
+`SQLITE_READONLY` with the identical pointer. `OK/null`, different pointer, unknown extend, missing or
+stale receipt, cross-process/fork, or a generation/page not in the sealed member set is rejected and
+never exposes a mapping. A reader attachment can contain multiple independently validated page map
+receipts, one member per unique generation/page tuple, but owns exactly one attachment handoff and
+one cleanup owner.
 
-## Branch-specific effects
+## Lifetime, ABA, callback, and cleanup order
 
-### #201 active read
+Every open/attempt/pending/lease/attachment/use-owner/cleanup owner carries a move-only runtime/VFS
+image lifetime pin plus process-instance and fork generation. Pointer/path/PID equality is never
+identity. The writer-map stat epoch is armed before pre-stat. Watch loss/overflow, A-to-B-to-A,
+object/directory replacement, WAL salt/reset, resize, close, unload, unregister/re-register, fork, or
+PID reuse blocks new admissions and revokes the full generation.
 
-The exact capability forbids create/delete/truncate/resize/write from the first target map. It may
-return authentic `SQLITE_READONLY_CANTINIT/null` so the same SQLite connection constructs a private
-heap WAL index under `WAL_READ_LOCK(0)`, or exact `SQLITE_READONLY/non-null` when qualified. Any
-native `SQLITE_OK`, including null, is fail-closed unless the #205 lease branch was selected before
-delegation. Decode is eager and complete while locks, objects, namespace epoch, and receipts remain
-held. Cold-process success never depends on a #205 same-process lease.
+The only teardown order is:
 
-### #202 exact-empty normalization
+1. atomically hide the generation and seal a pre-callback sequence cut;
+2. revoke new mapping and use-owner admission;
+3. retain lifetime pins while all already admitted callbacks and eager-use owners drain;
+4. seal the complete member/use-owner census;
+5. delegate at most one authenticated native unmap/close for its owner;
+6. capture the exact outcome, retire generation and registry entries, then release pins/cleanup.
 
-Eligibility requires logical and physical exact-empty, WAL-mode main header, all sidecars absent,
-stable held identities, exclusive non-forgeable normalization lease, and no reader/writer ambiguity.
-The allowlist contains only the minimal main-header/file-family changes required for WAL-to-DELETE
-normalization and durability. Schema, Store metadata, payload, partition, chunk, counter, head, and
-publication writes are forbidden. Pre-effect receipt, effect journal, file/parent durability barrier,
-post-close census, and fresh-init receipt form one non-reusable chain. Any failure prevents fresh init.
+A native-started callback that returns after the cut remains an original-callback drain only. It
+cannot publish a mapping, successor, or fresh cleanup authority. Same-thread/reentrant retirement
+returns the exact outer `SQLITE_IOERR` and permanently quarantines the handle/lease. Unknown callback,
+unmap, close, unload, or cleanup outcome also creates a permanent non-reusable quarantine tombstone;
+there is no retry or reconstruction. Revoke always precedes cleanup and VFS unload.
 
-### #205 same-process mapping lease
+## #202 independently reviewed effect profile
 
-The writer registry mints a provisional lease before native delegation and promotes it only after
-the exact mapping and identities are observed. A reader acquires an in-flight one-shot handoff before
-its delegation. Only exact native `SQLITE_OK` with the same non-null pointer, page, size, generation,
-epoch, runtime, VFS, filesystem, file-family identities, PID, and process instance can project to
-exact `SQLITE_READONLY` with that pointer. Null, different pointer, absent/stale/revoked lease, unknown
-extend, or cross-process/fork use fails closed and does not expose a mapping.
+The effect machine is not entered by raw census. Its sole entry is:
 
-## Ordering and CAS
+`logical-read-receipt(exact-empty) -> receipt-revalidated -> effect-profile-capability-sealed`
+`-> exclusive-normalization-owner -> pre-effect-sealed -> effect-journal-open`
+`-> permitted-callback-effects -> file-and-parent-durable -> confirmed-close`
+`-> post-close-census -> normalization-receipt -> ordinary-fresh-init`.
 
-Revocation/quarantine begins no later than unmap, writer close, rollback/reset, resize, unload,
-replacement, or fork detection; new acquisition is blocked, in-flight users drain, native unmap or
-close completes, then registry retirement and cleanup occur. Publication validation precedes
-expected-head CAS in one transaction. Only an expected-head mismatch is
-`store.publication-conflict`; lease/capability/normalization/I/O failures never become CAS conflicts.
+The accepted DF-0202 fixture authority and its closed `F0`, `FZ-pre`, `FZ-post`, `FP`, `FH`, `FI`,
+and `FO` partitions remain exact; this ADR does not merge, rename, or broaden them. `F0/FP/FH/FZ-pre`
+may reach the fixture normalizer only through their required cleanup/recovery. `FO/FI/FZ-post` may
+reach only an independently validated rollback-empty fresh anchor. No path infers cold operation
+history, a completed edge, or success.
+
+Eligibility binds the original accepted-empty recovery receipt, same main object/entry, continuous
+namespace epoch, exclusive lock, exact pre-main bytes, VFS/runtime/device/build profile, sidecar
+census, decoded page size and logical page count, deterministic post-main bytes, exact effect
+allowlist, confirmed close, and post-close census. Cleanup is authenticated-known-path unlink through
+the retained parent after immediate leaf type/identity observation. A final-check-to-unlink rebind is
+effect/durability opaque: no retry, handoff, or second snapshot. Every deletion requires a separate
+retained-parent fsync before handoff; journal namespace sync occurs after first journal sync and
+before valid header/main writes.
+
+Schema, Store metadata, payload, partition, chunk, counter, head, and publication writes are never
+normalization effects. Successful normalization is an internal one-shot receipt consumed by ordinary
+fresh initialization, never Store/public success. Fixture-only capability cannot satisfy production.
 
 ## Phase-authentic fields
 
 | Phase | Available | Forbidden |
 | --- | --- | --- |
-| capability | runtime/VFS/filesystem qualification | target file identity |
-| census | held parent and observed file-family identities | mapping pointer or WAL decode |
-| read epoch | locks, WAL header/salt/prefix, namespace epoch | logical success before eager decode |
-| normalization pre-effect | exact-empty proof, exclusive lease, allowlist | post-effect identity |
-| normalization post-effect | effect journal, sync/close/census receipts | Store/publication success |
-| mapping lease | writer/process generation and exact mapping identity | database validity or CAS success |
-| terminal | original failure and bounded cleanup evidence | values from an unentered later phase |
+| pre-`xOpen` boundary | runtime/VFS/filesystem/retained parent and namespace epoch | target pointer or logical database claim |
+| typed census | held file-family identities and physical observations | exact-empty logical receipt or effect eligibility |
+| callback attempt | callback cut, attempt/in-flight pin, requested page/size/extend | registry lease |
+| native outcome | exact return and pointer | promoted mapping or database validity |
+| promoted lease | full mapping/process/runtime/file-family identity and generation | logical read success or CAS |
+| eager decode | locks, mapping/private-index receipts, decoded values | read receipt before complete decode |
+| effect pre-seal | exact-empty logical receipt and profile capability | post-effect identity or fresh success |
+| terminal/quarantine | original outcome, full owner census, cleanup evidence | values from an unentered later phase |
 
 ## Crash/effect matrix
 
-| Interruption | Allowed durable state | Recovery |
+| Interruption | Allowed state | Recovery |
 | --- | --- | --- |
-| before branch selection | source unchanged | discard receipts |
-| active read/map/decode | source unchanged | release locks/mapping; fail closed |
-| before normalization effect | source unchanged | release exclusive lease |
-| during normalization | old or journaled recoverable exact-empty physical state | replay/rollback journal, re-prove eligibility |
-| after normalization sync, before fresh init | durable exact-empty DELETE state | consume same receipt chain or reclassify |
-| during fresh init | ordinary atomic Store initialization states | existing recovery; no intermediate public success |
-| lease revoke with readers | source unchanged by readers | quarantine, drain, unmap, retire generation |
-| CAS loss/crash | atomic old or new head only | rollback/reopen and independently validate |
+| before/inside #201 read or map | source unchanged | revoke, drain, unmap/close, typed fail-closed |
+| callback returns after cut | source unchanged by reader | original drain only; permanent quarantine on ambiguity |
+| fork/PID reuse/VFS unload/replacement/ABA | source unchanged by reader | hide/revoke before cleanup; no successor until census drains |
+| before #202 effect | source unchanged | release exclusive owner; discard receipt |
+| during fixture normalization | exact DF-0202 old or journaled recoverable state | follow F0/FZ-pre/FZ-post/FP/FH/FI/FO matrix; no blind retry |
+| after durable normalization before fresh init | durable exact-empty rollback state | consume same receipt once or reclassify |
+| during fresh init | existing atomic Store initialization states | existing recovery; no intermediate public success |
+| CAS loss or phase-opaque commit | atomic old/new or unknown | preserve Store conflict/unknown semantics; lease/effect failures are not CAS conflicts |
 
 ## Counterexamples and acceptance
 
-Reject first-map mutation, `OK+null`, unleased or different-pointer projection, lease transfer,
-stale/revoked/ABA lease, fork/PID reuse, runtime/VFS reload, alias/mount/object/directory replacement,
-WAL reset, watch loss, non-empty normalization, sidecar-present normalization, implicit normal-open
-effect, post-close-only proof, CAS weakening, cleanup-as-success, and cross-branch fallback.
+Reject first-map mutation, census-selected normalization, pre-delegation lease, `OK+null`, different
+pointer, incomplete member/use-owner census, stale/ABA/fork/PID/VFS lease, unload before revoke,
+callback retry, inferred cleanup, cross-branch fallback, fixture-to-production promotion, missing
+parent fsync, non-empty normalization, sidecar ambiguity, and CAS reclassification.
 
-Acceptance requires one exact-main independent review of this combined machine and its minimal
-witnesses: cold active-WAL read, exact-empty normalization/recrash at every barrier, two live Stores
-with CAS win/loss, and lease revoke/unload/fork/ABA. Source activation remains fail-closed until
-contract/schema/source/checker agree. #173 tracks the aggregate qualification gap; formal release and
-terminal production-scope evidence retain their accepted owners until coordinated amendments are
-accepted.
+The constructibility witness must cover cold active-WAL read, private-index fallback, nested native
+mapping success/failure, multi-page attachment, two-live-Store CAS, all revoke/unload/fork/ABA and late
+callback cuts, and every DF-0202 callback/recrash partition. #201/#205 may be accepted together only
+after an exact-candidate P0/P1-zero review. #202 requires a distinct later review receipt and remains
+production-inactive even if #201/#205 are accepted.
 
-## Independent review disposition
+## Review history
 
-The review of exact commit `75b233e3c3dcf1e2c636b06313e7511bbb86c54c` rejected acceptance with
-five P1 findings. The current branch list is not constructible and must be replaced by an ordered,
-nested machine:
-
-1. #201 owns the effect-free active-read connection and eager-decode receipt.
-2. #205 is an authenticated same-process mapping subprotocol inside #201, not a sibling terminal
-   branch. Pre-delegation custody is an attempt/in-flight pin, never a registry lease.
-3. #202 eligibility is evaluated only after a phase-authentic logical exact-empty proof exists; a
-   physical census cannot select this branch.
-
-The redraft must also preserve DF-0202's closed crash partition and restricted fixture authorization,
-move the no-effect boundary before target `xOpen` delegation, and specify lifetime pins,
-pre-callback sequence cuts, complete use-owner census, revoke-before-cleanup, and permanent quarantine
-for ambiguous callbacks. ADR 0013, ADR 0097, and accepted DF records remain controlling. Production
-activation remains fail-closed.
+The review of `75b233e3c3dcf1e2c636b06313e7511bbb86c54c` rejected the sibling-machine
+proposal with five P1 findings. This redraft resolves their ordering directionally but remains
+Proposed pending machine-checker evidence and fresh independent review.

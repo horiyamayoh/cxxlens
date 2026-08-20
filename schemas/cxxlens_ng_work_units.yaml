@@ -47,7 +47,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
-    authority_digest: sha256:4d50a6816329f8341a2ad665742332a52f6324ca9d49c1a84e00341f70fb94c7
+    authority_digest: sha256:62156f71ef94e12d463a1952e0c918b3bbdf23c81b729bbc09188d12684c740c
     completion_class: bounded-implementation
     residual_qualification: platform native SQLite tuples remain with integration and release gates
     units:
@@ -66,7 +66,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
-    authority_digest: sha256:4d50a6816329f8341a2ad665742332a52f6324ca9d49c1a84e00341f70fb94c7
+    authority_digest: sha256:62156f71ef94e12d463a1952e0c918b3bbdf23c81b729bbc09188d12684c740c
     completion_class: bounded-implementation
     residual_qualification: multi-Store and platform qualification remain separate
     units:
@@ -85,7 +85,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, docs/development/implementation-learning/records/df-0202-sqlite-exact-empty-wal-normalization.md, schemas/cxxlens_ng_sqlite_store_contract.yaml]
-    authority_digest: sha256:5e95bc518fd18493750b41a9f9d533115b4a1543d7e6e152a17891dee40783b4
+    authority_digest: sha256:2e84d70b01caf92cd892ccfa16c874aa52ec18f9d4bd0d4cf20be431208bb5ff
     completion_class: bounded-implementation
     residual_qualification: production canonical and user-source activation remains prohibited pending separate review
     units:
