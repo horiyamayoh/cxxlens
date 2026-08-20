@@ -1,32 +1,47 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.clang22.task.v4
-title: cxxlens Clang 22 task v4 semantic authority
+title: cxxlens Clang 22 task v4 closure extension authority
 type: object
 additionalProperties: false
-required: [schema, task_id, source_closure, main_logical_path, logical_working_directory, effective_argv]
+required: [schema, task_id, task_v4_digest, base_task_index, base_task_v3_digest, open_task, source_closure, main_logical_path, logical_working_directory]
 properties:
   schema: {const: cxxlens.clang22.task.v4}
   task_id: {type: string, pattern: '^task:semantic-v2:sha256:[0-9a-f]{64}$'}
+  task_v4_digest: {$ref: '#/$defs/semantic_digest'}
+  base_task_index: {type: integer, minimum: 0, maximum: 4095}
+  base_task_v3_digest: {$ref: '#/$defs/content_digest'}
+  open_task:
+    type: object
+    additionalProperties: false
+    required: [task_input_digest, normalized_invocation_digest, toolchain_digest, environment_digest]
+    properties:
+      task_input_digest: {$ref: '#/$defs/content_digest'}
+      normalized_invocation_digest: {$ref: '#/$defs/content_digest'}
+      toolchain_digest: {$ref: '#/$defs/content_digest'}
+      environment_digest: {$ref: '#/$defs/content_digest'}
   source_closure:
     type: object
     additionalProperties: false
     required: [id, digest, manifest_digest]
     properties:
-      id: {type: string, pattern: '^source-closure:sha256:[0-9a-f]{64}$'}
-      digest: {$ref: '#/$defs/digest'}
-      manifest_digest: {$ref: '#/$defs/digest'}
+      id: {$ref: '#/$defs/source_closure_id'}
+      digest: {$ref: '#/$defs/semantic_digest'}
+      manifest_digest: {$ref: '#/$defs/semantic_digest'}
   main_logical_path: {$ref: '#/$defs/logical_path'}
   logical_working_directory: {$ref: '#/$defs/logical_path'}
-  effective_argv:
-    type: array
-    minItems: 2
-    maxItems: 4096
-    items: {type: string, minLength: 1, maxLength: 4096, pattern: '^[^\u0000]+$'}
 $defs:
-  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  content_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  semantic_digest: {type: string, pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'}
+  source_closure_id: {type: string, pattern: '^source-closure:semantic-v2:sha256:[0-9a-f]{64}$'}
   logical_path:
     type: string
     minLength: 11
     maxLength: 4096
+    x-cxxlens-max-utf8-bytes: 4096
     pattern: '^project://[^\u0000-\u001f\u007f\\?#]+$'
-description: The task carries only closure identity. Manifest and blob bytes are forbidden and use task-source-closure-v1 messages.
+    allOf:
+      - {not: {pattern: '^project:///'}}
+      - {not: {pattern: '/$'}}
+      - {not: {pattern: '(^|/)\.{1,2}(/|$)'}}
+      - {not: {pattern: '//'}}
+description: Semantic validation cross-binds this extension by base_task_index to the exact nested v2.1 task, preserves all v3 authority through base_task_v3_digest, verifies every open_task field against that task, and binds main/workdir to ADR 0101 canonical paths. Manifest and blob bytes are forbidden.

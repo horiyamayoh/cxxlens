@@ -13,7 +13,7 @@ versions:
 capability:
   id: task-source-closure-v1
   required_for: [request-2.2, task-v4]
-  absence: provider.required-feature-missing
+  absence: source-closure.required-feature-missing
 message_registry:
   preserved: {heartbeat: 23}
   proposed:
@@ -23,6 +23,48 @@ message_registry:
     - {id: 27, name: source_closure_seal, direction: host-to-provider}
     - {id: 28, name: source_closure_ack, direction: provider-to-host}
     - {id: 29, name: source_closure_reject, direction: provider-to-host}
+wire_controls:
+  common:
+    encoding: deterministic-cbor-closed-map
+    stream_id: exact-open-task-stream
+    sequence: contiguous-shared-session-sequence
+    flags: zero
+    control_bytes: 65536
+    payload_bytes: 1048576
+    unknown_or_extra_field: reject
+    field_types:
+      kind: closed-enum
+      session_id: typed-id
+      task_id: typed-id
+      task_v4_digest: semantic-v2-digest
+      closure_id: source-closure-semantic-v2-id
+      closure_digest: semantic-v2-digest
+      manifest_digest: semantic-v2-digest
+      blob_digest: content-sha256-digest
+      transfer_digest: semantic-v2-digest
+      counts-offsets-and-sizes: uint64
+      ordered_blob_receipts: canonical-array
+      observed_counters: canonical-closed-map
+      receipts-and-cleanup-owner: typed-id-or-semantic-v2-digest
+  source_closure_manifest:
+    descriptor: {kind: descriptor, exact_fields: [kind, session_id, task_id, task_v4_digest, closure_id, closure_digest, manifest_digest, total_bytes, chunk_bytes, chunk_count], payload: empty}
+    chunk: {kind: chunk, exact_fields: [kind, session_id, task_id, manifest_digest, chunk_index, offset, byte_count], payload: exact-byte-count-frame-digest}
+  source_closure_blob:
+    exact_fields: [session_id, task_id, closure_digest, blob_ordinal, blob_digest, total_bytes, chunk_bytes, chunk_count]
+    payload: empty
+  source_closure_chunk:
+    exact_fields: [session_id, task_id, blob_ordinal, blob_digest, chunk_index, offset, byte_count]
+    payload: exact-byte-count-frame-digest
+  source_closure_seal:
+    exact_fields: [session_id, task_id, task_v4_digest, manifest_digest, ordered_blob_receipts, total_bytes, closure_digest, transfer_digest]
+    payload: empty
+  source_closure_ack:
+    exact_fields: [session_id, task_id, closure_digest, transfer_digest, spool_receipt, cleanup_owner]
+    payload: empty
+  source_closure_reject:
+    exact_fields: [session_id, task_id, failure_phase, reason_code, observed_counters, cleanup_receipt]
+    unavailable_fields: omitted-never-placeholder
+    payload: empty
 state_machine:
   initial: task-v4-sealed
   success_path: [task-v4-sealed, manifest-open, manifest-streaming, manifest-validated, blob-open, blob-streaming, blob-sealed, closure-sealed, closure-acknowledged, task-accepted]
@@ -30,8 +72,18 @@ state_machine:
   cancellation: {from: every-nonterminal-closure-state, via: cancelling, terminal: source-closure.cancelled}
   replay: manifest-first-complete-transfer-same-task-and-session-only
   invalid_transition: source-closure.protocol-state-invalid
+  pre_accept_liveness:
+    clock: host-injected-monotonic
+    send_progress_timeout_ns: 5000000000
+    seal_ack_timeout_ns: 5000000000
+    timeout: source-closure.transfer-timeout
+  terminal_precedence:
+    valid_reject_on_live_connection: exactly-one
+    connection-loss-or-worker-crash: local-typed-terminal-no-fabricated-peer-reject
+    cancel_then_valid_reject: cancelled
+    cancel_then_connection-loss: provider.crash-with-cancel-observed
 phase_fields:
-  before-manifest: [session-id, task-id, task-v4-digest]
+  before-manifest: [session-id, task-id, task-v4-digest, expected-closure-id, expected-closure-digest, expected-manifest-digest]
   manifest-streaming: [declared-manifest-bytes, observed-bytes, next-offset, next-chunk-index, streaming-digest]
   manifest-validated: [closure-id, closure-digest, manifest-digest, member-count, blob-count, total-blob-bytes]
   blob-streaming: [blob-ordinal, blob-digest, declared-bytes, observed-bytes, next-offset, next-chunk-index]
@@ -47,7 +99,8 @@ limits:
   maximum_manifest_bytes: 20971520
   maximum_manifest_chunks: 20
   maximum_chunk_payload_bytes: 1048576
-  maximum_chunks: 48
+  maximum_chunks_per_blob: 16
+  maximum_blob_chunk_frames: 4144
   maximum_task_spool_bytes: 71303168
   maximum_resident_transport_bytes: 1310720
 resource_policy:
@@ -61,12 +114,27 @@ identity:
   chunk_order: contiguous-index-and-offset-from-zero
   seal_fields: [session-id, task-id, task-v4-digest, manifest-digest, ordered-blob-digests-and-sizes, total-bytes, closure-digest]
   ambient_filesystem: forbidden
+request_task_binding:
+  request_shape: exact-v2-1-authority-envelope-plus-closure-extensions
+  closure_identity: source-closure-id-equals-source-closure-prefix-plus-semantic-closure-digest
+  closure_ids: unique
+  task_ids: unique-and-exact-index-parity-with-base-v2-1-tasks
+  task_reference: resolves-exactly-one-request-closure
+  base_task_v3_digest: recompute-from-exact-base-task-before-v4-identity
+  open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests
+  logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation
+  blob_bytes_in_request_or_task: forbidden
 cache:
   cross_task_v1: forbidden
   transfer: complete-per-task
   future_activation: separate-accepted-capability-and-adr
 compatibility:
   legacy_2_1_v3: byte-exact-unchanged
+  legacy_bindings:
+    request_schema_sha256: b960f61c1104dfc62ae12b5cec78e14be616fff70cd1c8d824b2da768a74e73a
+    task_v3_header_sha256: ce0709ab54036f17123033c750facbe56532ea7620255df023d3b1887ce4948b
+    task_v3_implementation_sha256: da52373e06a68a43bf75afbc623377854cdb578fcced9686854a95e2eb0b4535
+    request_v2_1_implementation_sha256: 952ce399e3240558ab347ca97a0b03697c1dad5bccc1bcd1cd067ecc5ccbb1b8
   legacy_protocol_1_1: supported-without-source-closure
   v4_without_capability: reject-before-closure-bytes
   unknown_required_message: reject
@@ -85,6 +153,7 @@ failures:
   - source-closure.session-binding-mismatch
   - source-closure.replay-invalid
   - source-closure.cancelled
+  - source-closure.transfer-timeout
   - source-closure.spool-io
   - source-closure.cleanup-failed
   - source-closure.ambient-fallback-denied

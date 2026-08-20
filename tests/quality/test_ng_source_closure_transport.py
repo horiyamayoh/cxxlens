@@ -24,13 +24,69 @@ from check_ng_source_closure_transport import (  # noqa: E402
     TASK,
     SourceClosureTransportError,
     validate,
+    validate_request_binding,
 )
 
 
 class SourceClosureTransportTest(unittest.TestCase):
+    @staticmethod
+    def bound_request() -> dict:
+        semantic = "semantic-v2:sha256:" + "1" * 64
+        content = "sha256:" + "2" * 64
+        task_id = "task:semantic-v2:sha256:" + "3" * 64
+        closure_id = "source-closure:" + semantic
+        base = {
+            "provider_task_id": task_id,
+            "task_input_digest": content,
+            "normalized_invocation_digest": "sha256:" + "4" * 64,
+            "toolchain_digest": "sha256:" + "5" * 64,
+            "environment_digest": "sha256:" + "6" * 64,
+        }
+        closure = {
+            "source_closure_id": closure_id,
+            "source_closure_digest": semantic,
+            "manifest_digest": "semantic-v2:sha256:" + "7" * 64,
+        }
+        return {
+            "base_request_v2_1": {"tasks": [base]},
+            "source_closures": [closure],
+            "task_extensions": [
+                {
+                    "task_id": task_id,
+                    "base_task_index": 0,
+                    "base_task_v3_digest": content,
+                    "open_task": {
+                        field: base[field]
+                        for field in (
+                            "task_input_digest",
+                            "normalized_invocation_digest",
+                            "toolchain_digest",
+                            "environment_digest",
+                        )
+                    },
+                    "source_closure": {
+                        "id": closure_id,
+                        "digest": semantic,
+                        "manifest_digest": closure["manifest_digest"],
+                    },
+                    "main_logical_path": "project://src/main.cpp",
+                    "logical_working_directory": "project://src",
+                }
+            ],
+        }
+
     def copied_root(self, temporary: str) -> pathlib.Path:
         root = pathlib.Path(temporary)
-        for relative in (ADR, CONTRACT, PROTOCOL, REQUEST, SCHEMA, TASK):
+        legacy = tuple(
+            pathlib.Path(path)
+            for path in (
+                "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
+                "src/llvm/clang22/provider_task_v3.hpp",
+                "src/llvm/clang22/provider_task_v3.cpp",
+                "src/llvm/clang22/materialization_request_v2_1.cpp",
+            )
+        )
+        for relative in (ADR, CONTRACT, PROTOCOL, REQUEST, SCHEMA, TASK, *legacy):
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, destination)
@@ -46,6 +102,33 @@ class SourceClosureTransportTest(unittest.TestCase):
     def test_repository_contract_is_valid(self) -> None:
         validate(ROOT)
 
+    def test_adr_0101_identity_and_request_binding_are_constructible(self) -> None:
+        validate_request_binding(self.bound_request())
+
+    def test_duplicate_and_dangling_relationships_are_rejected(self) -> None:
+        request = self.bound_request()
+        request["source_closures"].append(dict(request["source_closures"][0]))
+        with self.assertRaisesRegex(SourceClosureTransportError, "duplicate"):
+            validate_request_binding(request)
+        request = self.bound_request()
+        request["task_extensions"][0]["source_closure"]["id"] = (
+            "source-closure:semantic-v2:sha256:" + "9" * 64
+        )
+        with self.assertRaisesRegex(SourceClosureTransportError, "does not resolve"):
+            validate_request_binding(request)
+
+    def test_traversal_and_utf8_byte_overflow_are_rejected(self) -> None:
+        request = self.bound_request()
+        request["task_extensions"][0]["main_logical_path"] = (
+            "project://src/../ambient.hpp"
+        )
+        with self.assertRaisesRegex(SourceClosureTransportError, "segments"):
+            validate_request_binding(request)
+        request = self.bound_request()
+        request["task_extensions"][0]["main_logical_path"] = "project://" + "é" * 4090
+        with self.assertRaisesRegex(SourceClosureTransportError, "UTF-8"):
+            validate_request_binding(request)
+
     def test_message_collision_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -54,7 +137,7 @@ class SourceClosureTransportTest(unittest.TestCase):
                 CONTRACT,
                 lambda value: value["message_registry"]["proposed"][0].update({"id": 23}),
             )
-            with self.assertRaisesRegex(SourceClosureTransportError, "collides"):
+            with self.assertRaisesRegex(SourceClosureTransportError, "schema|collides"):
                 validate(root)
 
     def test_protocol_downgrade_is_rejected(self) -> None:
@@ -70,6 +153,63 @@ class SourceClosureTransportTest(unittest.TestCase):
             with self.assertRaisesRegex(SourceClosureTransportError, "version|schema"):
                 validate(root)
 
+    def test_normative_limit_and_ambient_mutation_are_rejected(self) -> None:
+        for label, mutate in (
+            (
+                "ambient",
+                lambda value: value["identity"].update({"ambient_filesystem": "allowed"}),
+            ),
+            (
+                "chunks",
+                lambda value: value["limits"].update(
+                    {"maximum_blob_chunk_frames": 48}
+                ),
+            ),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                root = self.copied_root(temporary)
+                self.rewrite(root, CONTRACT, mutate)
+                with self.assertRaisesRegex(SourceClosureTransportError, "schema|chunk"):
+                    validate(root)
+
+    def test_legacy_authority_drift_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / "src/llvm/clang22/provider_task_v3.hpp"
+            path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(SourceClosureTransportError, "legacy"):
+                validate(root)
+
+    def test_acceptance_requires_atomic_protocol_activation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                CONTRACT,
+                lambda value: (
+                    value.update({"maturity": "accepted"}),
+                    value["authority"].update(
+                        {
+                            "review": {
+                                "status": "complete",
+                                "reviewer": "independent-reviewer",
+                                "ref": "https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-1",
+                                "exact_main_commit": "1" * 40,
+                            }
+                        }
+                    ),
+                ),
+            )
+            adr = root / ADR
+            adr.write_text(
+                adr.read_text(encoding="utf-8").replace(
+                    "- Status: Proposed for independent review", "- Status: Accepted"
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SourceClosureTransportError, "atomically active"):
+                validate(root)
+
     def test_cross_task_cache_activation_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -78,7 +218,7 @@ class SourceClosureTransportTest(unittest.TestCase):
                 CONTRACT,
                 lambda value: value["cache"].update({"cross_task_v1": "enabled"}),
             )
-            with self.assertRaisesRegex(SourceClosureTransportError, "cache"):
+            with self.assertRaisesRegex(SourceClosureTransportError, "schema|cache"):
                 validate(root)
 
     def test_acceptance_without_review_is_rejected(self) -> None:

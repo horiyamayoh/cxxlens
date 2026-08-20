@@ -49,8 +49,11 @@ The only success path is:
 `-> blob-open -> blob-streaming -> blob-sealed`
 `-> (blob-open ...)* -> closure-sealed -> closure-acknowledged -> task-accepted`.
 
-`cancel` is legal from every nonterminal closure state and transitions to `cancelling`, then exactly
-one `source_closure_reject` with reason `source-closure.cancelled`. Any missing, duplicate,
+`cancel` is legal from every nonterminal closure state and transitions to `cancelling`. On a live
+connection it produces exactly one `source_closure_reject` with reason `source-closure.cancelled`;
+connection loss or worker crash instead produces a host-local typed terminal and never fabricates a
+peer reject. Cancel wins over a subsequently valid peer reject; a crash after observed cancel is
+reported as `provider.crash` with cancel-observed evidence. Any missing, duplicate,
 reordered, overlapping, extra, post-seal, or cross-task frame rejects the task. Worker crash or
 connection loss discards the task-local spool; replay starts again at the manifest and transfers
 every blob. A replay prefix, ack, or digest from another task/session is never reusable.
@@ -59,7 +62,7 @@ Field availability is phase-authentic:
 
 | Phase | Available authority | Forbidden claims |
 | --- | --- | --- |
-| before manifest | task/session and task-v4 digest | closure/member/blob identity |
+| before manifest | task/session, task-v4 digest, and expected closure/manifest identity | member/blob census or received bytes |
 | manifest streaming | declared manifest size, observed bytes, offset, streaming digest | member/blob authority or terminal digest |
 | manifest validated | closure/member/blob census and declared digests | blob bytes or terminal digest |
 | blob streaming | current blob ordinal, offset, observed bytes, streaming digest | later blobs or closure completeness |
@@ -72,13 +75,16 @@ until task v4, manifest, all blobs, and the terminal seal validate.
 
 ### Identity, canonicality, and replay
 
-The manifest is first and its canonical member/blob order is the ADR 0101 order. Message 24 first
+Every message uses deterministic closed-map CBOR, the exact open-task stream, a contiguous shared
+session sequence, zero flags, and the exact control/payload fields in the machine contract. The
+manifest `kind` field is the descriptor/chunk discriminant. The manifest is first and its canonical
+member/blob order is the ADR 0101 order. Message 24 first
 declares its total length and digest, then repeats with contiguous chunks of at most 1 MiB; semantic
 fields are unavailable until the complete canonical manifest is revalidated. Blob descriptors
 must follow manifest blob order; chunks are contiguous from offset zero with monotonically
 increasing indices. Each frame payload has the existing frame SHA-256, each completed blob is
 recomputed against its manifest digest, and the seal binds task ID, task-v4 digest, manifest digest,
-ordered blob digests/sizes, total bytes, and closure digest. These are independent projections; a
+session ID, ordered blob digests/sizes, total bytes, and closure digest. These are independent projections; a
 matching frame checksum cannot substitute for blob or closure validation.
 
 The worker uses only the validated task-local spool to construct ADR 0101 values and mount its VFS.
@@ -90,12 +96,14 @@ satisfy a closure member.
 - members and unique blobs: 4096 each;
 - logical path: 4096 UTF-8 bytes;
 - one blob: 16 MiB; aggregate unique blob content: 48 MiB;
-- manifest: 20 MiB in at most 20 one-MiB payload chunks; blob chunk payload: 1 MiB; blob chunks: at
-  most 48 per 48 MiB closure;
+- manifest: 20 MiB in at most 20 one-MiB payload chunks; blob chunk payload: 1 MiB; at most 16 chunks
+  per blob and 4144 blob chunk frames per closure, covering the 4096-small-blob rounding case;
 - task-local spool: at most 68 MiB including manifest and content;
 - resident transport working set: at most one 1 MiB chunk plus 256 KiB of parser/digest state.
 
-Counts, lengths, offsets, and additions are checked before allocation or write. The spool is
+Counts, lengths, offsets, and additions are checked before allocation or write. Before
+`task_accepted`, a host-monotonic five-second send-progress deadline and five-second seal-to-ack
+deadline bound the lifecycle without reusing NG1 heartbeat or resume semantics. The spool is
 backend-owned, private to one task, digest-bound, sealed before semantic use, and removed on reject,
 cancel, crash recovery, or task terminal. No complete closure-sized memory copy is permitted.
 
@@ -105,7 +113,9 @@ Cross-task blob cache is excluded from v1. Every closure is transferred complete
 No cache capability may be advertised until a separate accepted ADR defines lifetime, eviction,
 restart, tenant/session binding, and negative replay behavior.
 
-Protocol 1.1 peers continue request 2.1/task v3 only. Protocol 1.2 peers may use either legacy tasks
+Request 2.2 is an envelope over one byte-exact complete request 2.1 authority plus indexed task-v4
+closure extensions; it does not project away tool, worker, project, registry, engine, trust,
+sandbox, budget, topology, task, or publication fields. Protocol 1.1 peers continue request 2.1/task v3 only. Protocol 1.2 peers may use either legacy tasks
 or request 2.2/task v4, but v4 requires `task-source-closure-v1`. Unknown required message IDs and
 attempted implicit downgrade fail closed. Message 23 remains heartbeat and IDs 24--29 cannot be
 allocated by NG1.

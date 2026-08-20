@@ -2,7 +2,7 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.source-closure-transport.v1
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, versions, capability, message_registry, state_machine, phase_fields, limits, resource_policy, identity, cache, compatibility, failures, crash_effects, counterexamples, qualification]
+required: [schema, document_version, maturity, authority, versions, capability, message_registry, wire_controls, state_machine, phase_fields, limits, resource_policy, identity, request_task_binding, cache, compatibility, failures, crash_effects, counterexamples, qualification]
 properties:
   schema: {const: cxxlens.source-closure-transport.v1}
   document_version: {const: 1.0.0}
@@ -24,17 +24,90 @@ properties:
           reviewer: {type: [string, 'null']}
           ref: {type: [string, 'null']}
           exact_main_commit: {type: [string, 'null']}
-  versions: {type: object}
-  capability: {type: object}
-  message_registry: {type: object}
-  state_machine: {type: object}
-  phase_fields: {type: object}
-  limits: {type: object}
-  resource_policy: {type: object}
-  identity: {type: object}
-  cache: {type: object}
-  compatibility: {type: object}
-  failures: {type: array, minItems: 16, uniqueItems: true, items: {type: string, pattern: '^source-closure\.'}}
-  crash_effects: {type: object}
-  counterexamples: {type: array, minItems: 20, uniqueItems: true, items: {type: string}}
+  versions:
+    const:
+      provider_protocol: {legacy: 1.1, proposed: 1.2, downgrade: reject}
+      request: {legacy: 2.1, proposed: 2.2}
+      task: {legacy: cxxlens.clang22.task.v3, proposed: cxxlens.clang22.task.v4}
+  capability:
+    const: {id: task-source-closure-v1, required_for: [request-2.2, task-v4], absence: source-closure.required-feature-missing}
+  message_registry:
+    type: object
+    additionalProperties: false
+    required: [preserved, proposed]
+    properties:
+      preserved: {const: {heartbeat: 23}}
+      proposed:
+        const:
+          - {id: 24, name: source_closure_manifest, direction: host-to-provider}
+          - {id: 25, name: source_closure_blob, direction: host-to-provider}
+          - {id: 26, name: source_closure_chunk, direction: host-to-provider}
+          - {id: 27, name: source_closure_seal, direction: host-to-provider}
+          - {id: 28, name: source_closure_ack, direction: provider-to-host}
+          - {id: 29, name: source_closure_reject, direction: provider-to-host}
+  wire_controls:
+    type: object
+    additionalProperties: false
+    required: [common, source_closure_manifest, source_closure_blob, source_closure_chunk, source_closure_seal, source_closure_ack, source_closure_reject]
+    properties:
+      common:
+        const:
+          encoding: deterministic-cbor-closed-map
+          stream_id: exact-open-task-stream
+          sequence: contiguous-shared-session-sequence
+          flags: zero
+          control_bytes: 65536
+          payload_bytes: 1048576
+          unknown_or_extra_field: reject
+          field_types:
+            kind: closed-enum
+            session_id: typed-id
+            task_id: typed-id
+            task_v4_digest: semantic-v2-digest
+            closure_id: source-closure-semantic-v2-id
+            closure_digest: semantic-v2-digest
+            manifest_digest: semantic-v2-digest
+            blob_digest: content-sha256-digest
+            transfer_digest: semantic-v2-digest
+            counts-offsets-and-sizes: uint64
+            ordered_blob_receipts: canonical-array
+            observed_counters: canonical-closed-map
+            receipts-and-cleanup-owner: typed-id-or-semantic-v2-digest
+      source_closure_manifest: {type: object, required: [descriptor, chunk]}
+      source_closure_blob: {type: object, required: [exact_fields, payload]}
+      source_closure_chunk: {type: object, required: [exact_fields, payload]}
+      source_closure_seal: {type: object, required: [exact_fields, payload]}
+      source_closure_ack: {type: object, required: [exact_fields, payload]}
+      source_closure_reject: {type: object, required: [exact_fields, unavailable_fields, payload]}
+  state_machine: {type: object, required: [initial, success_path, repeated_blob_subpath, cancellation, replay, invalid_transition, pre_accept_liveness, terminal_precedence]}
+  phase_fields: {type: object, required: [before-manifest, manifest-streaming, manifest-validated, blob-streaming, closure-sealed, acknowledged, rejected]}
+  limits:
+    const: {maximum_members: 4096, maximum_unique_blobs: 4096, maximum_logical_path_utf8_bytes: 4096, maximum_blob_bytes: 16777216, maximum_unique_blob_bytes: 50331648, maximum_manifest_bytes: 20971520, maximum_manifest_chunks: 20, maximum_chunk_payload_bytes: 1048576, maximum_chunks_per_blob: 16, maximum_blob_chunk_frames: 4144, maximum_task_spool_bytes: 71303168, maximum_resident_transport_bytes: 1310720}
+  resource_policy:
+    const: {allocation: validate-count-length-offset-and-sum-before-allocation-or-write, spool: backend-owned-private-task-local-digest-bound, complete-memory-copy: forbidden, cleanup: reject-cancel-crash-recovery-or-task-terminal}
+  identity:
+    const: {manifest_order: adr-0101-canonical-member-and-blob-order, blob_order: exact-manifest-order, chunk_order: contiguous-index-and-offset-from-zero, seal_fields: [session-id, task-id, task-v4-digest, manifest-digest, ordered-blob-digests-and-sizes, total-bytes, closure-digest], ambient_filesystem: forbidden}
+  request_task_binding:
+    const: {request_shape: exact-v2-1-authority-envelope-plus-closure-extensions, closure_identity: source-closure-id-equals-source-closure-prefix-plus-semantic-closure-digest, closure_ids: unique, task_ids: unique-and-exact-index-parity-with-base-v2-1-tasks, task_reference: resolves-exactly-one-request-closure, base_task_v3_digest: recompute-from-exact-base-task-before-v4-identity, open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests, logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation, blob_bytes_in_request_or_task: forbidden}
+  cache:
+    const: {cross_task_v1: forbidden, transfer: complete-per-task, future_activation: separate-accepted-capability-and-adr}
+  compatibility:
+    type: object
+    additionalProperties: false
+    required: [legacy_2_1_v3, legacy_bindings, legacy_protocol_1_1, v4_without_capability, unknown_required_message, ng1_resume_or_cache_alias]
+    properties:
+      legacy_2_1_v3: {const: byte-exact-unchanged}
+      legacy_bindings:
+        const:
+          request_schema_sha256: b960f61c1104dfc62ae12b5cec78e14be616fff70cd1c8d824b2da768a74e73a
+          task_v3_header_sha256: ce0709ab54036f17123033c750facbe56532ea7620255df023d3b1887ce4948b
+          task_v3_implementation_sha256: da52373e06a68a43bf75afbc623377854cdb578fcced9686854a95e2eb0b4535
+          request_v2_1_implementation_sha256: 952ce399e3240558ab347ca97a0b03697c1dad5bccc1bcd1cd067ecc5ccbb1b8
+      legacy_protocol_1_1: {const: supported-without-source-closure}
+      v4_without_capability: {const: reject-before-closure-bytes}
+      unknown_required_message: {const: reject}
+      ng1_resume_or_cache_alias: {const: forbidden}
+  failures: {type: array, minItems: 17, uniqueItems: true, items: {type: string, pattern: '^source-closure\.'}}
+  crash_effects: {type: object, required: [before-manifest, unsealed-transfer, sealed-before-ack, acknowledged-before-execution, worker-crash, resource-failure]}
+  counterexamples: {type: array, minItems: 21, uniqueItems: true, items: {type: string}}
   qualification: {const: {implementation: not-claimed, production: not-claimed}}
