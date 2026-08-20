@@ -104,7 +104,7 @@ entries:
     conflict_class: materialization-store
     integration_owner: '#200'
     authority_sources: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md]
-    authority_digest: sha256:cdb3a79736c64a8934706120ed30845ee260a9fe6e5c754bc735419f3ea86500
+    authority_digest: sha256:5956fb86ba47808269eb662d7cc014923aa9f94ff8360b2f081cdad7751a9be8
     completion_class: bounded-implementation
     residual_qualification: scale parity and SQLite lazy-read residency are tracked separately
     units:

@@ -26,7 +26,7 @@ b640038f40ea0adf212833e0d72625aea77d233039aef17ddcb50d98066c5173  adr/0098-expli
 a14a170f9c037cdbe543982ee513fdbf5edd9e0809ca108e27a98c080001c5ec  adr/0100-ng1-resume-provider-digest-grammar.md
 8063308a6ee6e58d50b4451bdd0aab07664bfa9c8cd177e2a21675f1f83b5d6a  adr/0101-source-closure-identity-and-compiler-vfs.md
 014f8511e7bd7fae66d94336defb6b1bea064bb81a38e000b11ce64d6f073000  adr/0102-dedicated-source-closure-transport.md
-e611a3fb0f2dec5e8b2ad2c431c4c967b4793e544d61a65bd3043c51c06223f5  adr/0103-bounded-store-candidate-and-report.md
+49a8c8f9a635c4d3d391245e69dbf2b955ed33b2689a092b9e90c8d098bcb478  adr/0103-bounded-store-candidate-and-report.md
 0bbb20651b7bc22e1c26dc922de3470b76fa39ee75a388aadd0a7262593fea30  adr/0104-unified-sqlite-source-lifecycle.md
 1f76fd6cafdd35eedf1595573db2fdf32352095dbae0608583e3a9b23caef63a  adr/0105-direct-main-review-and-release-governance.md
 999c20ee237e4a9934728891ffcd8fd584772fa5b9e7b033563d772191012a17  catalogs/README.md
@@ -102,7 +102,7 @@ ba85f2dad18ebb35563f8c9eb57555fd25d29900c0b3bce4f9c51adc96d2032b  ../../schemas/
 3f522f2c364fde625011f576df4476f1081bf5a259007c53c327554a5139c12f  ../../schemas/cxxlens_ng_development_decision_register.schema.yaml
 3d655cc546f3f8d81095dfb28f2e763933dbbe774454411efb4f63c0b33e8728  ../../schemas/cxxlens_ng_development_review_receipts.yaml
 1f599bd47494ab35b9370ef2e15ef508495ae971ccaff8e68efd36d22102ca72  ../../schemas/cxxlens_ng_development_review_receipts.schema.yaml
-95529f0e5935cc19ec3c92041ab02cad4c3b5813e482477362147054bf7d72c8  ../../schemas/cxxlens_ng_work_units.yaml
+6d04cc2c1e747fd3ab9f718cde10e1142ca0d9e3ef7eb2354e794cf5f84adec6  ../../schemas/cxxlens_ng_work_units.yaml
 f519b12042de7bc39ba230cbcee3e5c492598916ea12094a62e58751718a250c  ../../schemas/cxxlens_ng_work_units.schema.yaml
 c3b81e643dd12977a5a6d49770325fe064043af3fdc35b10b79b6b9a7c7a216e  ../../schemas/cxxlens_ng_agent_context_v2.schema.yaml
 a42a8696c3e7b9b74e0b53d2246f9c5cc7267faff3514400b275cc7e03c3485f  ../../schemas/cxxlens_ng_install_artifact_manifest.schema.yaml

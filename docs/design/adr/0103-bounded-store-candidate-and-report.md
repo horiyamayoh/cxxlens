@@ -1,131 +1,149 @@
-# ADR 0103: Bounded Store candidate and report construction
+# ADR 0103: Bounded Store candidate, adoption, and report construction
 
 - Status: Proposed for independent review
 - Date: 2026-08-21
 - Owner: #200
-- Contract ID: `store.bounded-candidate-and-report.v1`
+- Contract IDs: `store.incremental-candidate.v1`, `materialization.bounded-report.v1`
 - Production qualification: not claimed
 
-## Context
+## Context and scope split
 
-The production materializer must preserve ADR 0033's independent tamper detection without retaining
-all tasks, a second complete candidate graph, and a complete public-report DOM simultaneously.
-DF-0200 proves that moving existing vectors is insufficient. This ADR fixes the lifecycle needed
-before implementation; it does not activate a production write path.
+The production materializer must preserve ADR 0033 independent tamper detection without retaining
+all tasks, a second complete candidate graph, or a complete public-report DOM. DF-0200 proves that
+moving current vectors is insufficient. This ADR authorizes only prepublication candidate/adoption
+and ADR 0096 two-phase report construction. It does not claim that a reopened SQLite Store/query
+handle has `O(W)` residency. That separate unit is `wu-200-sqlite-lazy-read-residency` and remains
+blocked until its cursor lifetime, page residency, and query semantics are independently accepted.
 
-## Decision and state machine
+## Two coupled but distinct machines
 
-Adopt an additive, move-only candidate port with the sole success path:
+The backend-owned candidate machine is:
 
-`idle -> candidate-open -> appending -> input-sealed -> independently-validating`
-`-> validation-sealed -> cas-pending -> published -> report-streaming -> report-sealed`.
+`idle -> staging-session-open -> appending -> input-sealed -> candidate-identity-sealed`
+`-> independently-validating -> validation-sealed -> publication-attempt -> publication-terminal`.
 
-Any failure before `published` transitions through `aborting` to `aborted`. A report failure after
-Store publication cannot erase the committed snapshot and returns typed
-`materialization.report-failure` with the publication receipt; it never fabricates an all-success
-report. Destruction of a nonterminal candidate performs bounded abort and records cleanup failure
-without changing the original verdict.
+`staging_session_id` is random/private cleanup identity available at open. `candidate_id` is a
+semantic identity available only after the external request/journal census and complete input seal.
+They are never equal or substituted. `publication-terminal` is exactly one of `not-attempted`,
+`rejected-stale`, `rejected-store-failure`, `publication-outcome-unknown`, `committed-unverified`, or
+`committed-verified`. Publication ends the Store candidate. Reporting is not another Store outcome.
 
-The semantic operations are `begin_candidate(metadata, budgets, expected_head)`,
-`append_partition` or `append_task`, `seal_input`, `validate`, `publish`, and `abort`. Names remain
-additive; existing bulk APIs stay source/ABI compatible but are convenience adapters and are
-forbidden on the production bounded path.
+The report machine is the accepted ADR 0096 bounded two-phase lifecycle:
 
-## Memory and storage contract
+`publication-independent-projection -> projection-validated -> maximum-tail-reserved`
+`-> publication-attempt -> exact-outcome-captured -> outcome-tail-finalized`
+`-> full-schema-validated -> bottom-up-cross-binding-validated -> stdout-published`.
 
-`W` is one task/source/output-validation window plus one actual and one independently generated
-record, bounded codec/hash buffers, backend cursor state, and fixed counters. `F` is the single
-immutable final memory-backend payload plus its query-serving indexes.
+Before publication, it may build only publication-independent report sections and must reserve the
+checked maximum tail for every applicable detailed outcome, final JSON framing, exact SDK records,
+receipts, and maximum bounded diagnostics. It cannot claim publication outcome, invocation
+publication record, physical generation, or reopen status. If projection/reservation cannot produce
+a schema-valid zero-effect compact response, the process exits 2 with zero authoritative stdout.
 
-- SQLite peak process retention: `O(W)`, independent of task count and aggregate accepted output.
-- Memory peak process retention: `F + O(W)`; no second complete `F` may coexist.
-- Actual and expected external runs have separate namespaces and a declared finite disk quota.
-- A candidate may own aggregate disk bytes but never exports a complete aggregate object graph.
-- Report sections use private canonical spools; encoding is streaming and retains no complete DOM.
+After the single publication attempt, failure to capture/finalize/validate/write the complete
+response is exit 2 with zero authoritative response and no compact downgrade. A committed Store is
+not rolled back; the Store recovery record is the only authority. Partial stdout is non-authoritative.
+A safely constructible detailed response may preserve `committed_unverified`. A phase-opaque
+writer/commit error always preserves `publication_outcome_unknown`, even if later inspection sees no
+candidate. Only an exact expected-head mismatch is `store.publication-conflict`.
 
-The scale witness is 4,096 tasks and 512 MiB aggregate admitted materializer output. Evidence records
-peak RSS, SQLite page cache, temp/spool bytes, file count, and final memory payload separately. A
-green functional test without these counters is not resource evidence.
+## Additive candidate port
 
-## Independent validation
+The move-only port operations are `begin_staging_session(metadata, budgets, expected_head)`,
+`append_task(sealed_task&&)`, `seal_input(external_census)`, `validate_independently()`,
+`publish_once()`, and `abort()`. Existing bulk APIs remain source/ABI compatible convenience
+adapters but are forbidden on this production bounded path. Destruction of a nonterminal session
+performs bounded abort and records cleanup failure without replacing the original verdict.
 
-Backend staging contains complete claim envelopes. An independent generator reconstructs claim
-semantic keys, assertions, content, rows, claim sets, coverage, partition content/count/completeness,
-closure bindings, detached rows, annotations, unresolved records, and global identities bottom-up.
-Actual and expected projections are separate canonical ordered cursors and are compared one complete
-record at a time, byte for byte. Hashes may index and reject early but cannot replace comparison.
-Encoder and validator may share canonical codecs, identity functions, and field validators only;
-they must not share traversal, verdict, or projection-construction control flow.
+## Independent actual and expected projections
 
-Checksum-recomputed tamper, reordered input, duplicate/conflicting claims, omitted partitions,
-detached rows, coverage/unresolved loss, and provenance/guarantee changes reject as `store.corrupt`.
-Only an expected-head mismatch is `store.publication-conflict`.
+The actual projection is produced only by replaying backend staging rows in canonical physical key
+order and decoding their exact framed bytes. The expected projection is produced before the first
+event encoder call from the immutable sealed task result plus the independently retained selected
+request and execution-journal receipts. It enumerates semantic keys, full claim projections,
+detached rows, annotations, coverage, unresolved records, partition censuses/completeness, closure
+bindings, and global identities bottom-up. It never reads staging rows, segment/run manifests, or an
+encoder-emitted digest.
 
-## Phase-authentic values
+Both projections emit the same closed record grammar into separate namespaces and separate cursors.
+Comparison is one full record at a time, byte-exact, including counts and ordered full projections.
+The paths may share canonical codecs, identity functions, and field validators, but not traversal,
+verdict logic, projection construction, or mutable state. Hashes may reject early but cannot replace
+the dual byte comparison. Checksum-recomputed tamper, whole-partition omission, reordered input,
+duplicate/conflicting claims, detached rows, or coverage/unresolved/provenance/guarantee drift is
+`store.corrupt`.
 
-| Phase | Values available | Values forbidden |
+## Exact bounds
+
+`W` is one task/source/output-validation window plus one actual and one expected record, fixed
+codec/hash state, two comparator cursors, one bounded sort arena, backend cursor state, and counters.
+The exact DF-0200 limits are:
+
+- 4,096 tasks and a 512 MiB aggregate scale witness;
+- canonical v5 collection counts are unsigned 64-bit with checked unsigned-128 aggregate arithmetic;
+- exact `CXLPEV01` stream header 86 bytes and exact `CXLPEEND` trailer 112 bytes;
+- sort arena 8 MiB; records larger than it are streamed singleton runs;
+- exactly two 32 KiB comparator cursors, total comparison budget 64 KiB;
+- merge fan-in 16 inputs plus one output and one metadata descriptor, exactly 18 FDs;
+- maximum authoritative report bytes 1 GiB;
+- materializer source/output validation window 64 MiB, as fixed by the machine contract.
+
+Record length, segment/spool capacity, offsets, counters, report reservation, and additions are
+checked before allocation/I/O. SQLite candidate/adoption/report peak retention is `O(W)`, independent
+of task count and admitted output. Memory is one immutable final payload `F` plus `O(W)` and may never
+hold a second complete `F`. Private spool/disk quota is explicit evidence, not resident memory.
+
+## Representation and compatibility
+
+Production writes use exact logical `cxxlens.ng-snapshot-payload.v5` with u64 collections and exact
+decode/re-encode byte identity. SQLite writes use exact physical
+`cxxlens.sqlite-semantic-store.v3` version `3.0.0`, chunk profile
+`cxxlens.sqlite-payload-chunks.v1`, maximum chunk bytes `8,388,608`, the closed publication/chunk/head
+matrix in ADR 0097, and its schema/user-object census. v1-v4 payloads remain read-compatible; they are
+never production write output or silently upgraded. The direct bindings are
+`schemas/cxxlens_ng_snapshot_store_contract.yaml`, `schemas/cxxlens_ng_sqlite_store_contract.yaml`,
+`schemas/cxxlens_ng_clang22_materialization_contract.yaml`, and their existing fail-closed checkers.
+
+## Phase-authentic fields
+
+| Phase | Available | Forbidden |
 | --- | --- | --- |
-| candidate-open | candidate ID, budgets, expected head | task/partition census, snapshot ID |
-| appending | next input ordinal, observed bytes, per-window receipt | global completeness or identity |
-| input-sealed | external request/journal census and spool receipts | validation verdict |
-| validating | actual/expected cursor positions and bounded mismatch witness | publish/head receipt |
-| validation-sealed | complete candidate identity and validation receipt | CAS/publication outcome |
-| cas-pending | expected head and transaction-local candidate | public success |
-| published | snapshot/head/publication receipt | report success |
-| report-streaming | publication receipt, section offsets/counts/digests | sealed report digest |
-| aborted | original typed failure and cleanup outcome | later-phase identities |
-
-## Backend and compatibility rules
-
-SQLite uses file-backed staging, bounded page cache, canonical ordered tables/cursors, one publication
-transaction, and CAS after validation. Memory uses private spool input and constructs `F` once by
-ownership transfer; indexes are part of `F` and cannot alter observable identity after publication.
-Both backends yield byte-identical snapshot export/query/report semantics after SQLite reopen.
-
-v1-v4 reads remain supported under existing legacy profiles. New production writes require a fully
-revalidatable v5-or-later representation. Legacy amplification is measured separately and is not
-authority to weaken the new write path.
+| staging open | staging session, budgets, expected head | candidate/snapshot identity |
+| input sealed | external census, stream/task receipts, candidate identity | validation or publication verdict |
+| validating | actual/expected cursor and bounded mismatch witness | publication receipt |
+| report reservation | publication-independent projection and maximum tail capacity | outcome/generation/reopen claims |
+| publication attempt | expected head and attempt receipt | zero-effect claim after ambiguous I/O |
+| terminal capture | exact SDK return/error or outcome-unknown | fabricated prior-head preservation |
+| full response sealed | complete validated bytes | partial stdout authority |
+| aborted | original failure and cleanup outcome | later-phase identities |
 
 ## Crash/effect matrix
 
-| Event | Public effect | Required outcome |
+| Event | Durable/public effect | Required outcome |
 | --- | --- | --- |
-| append/validation/disk-full/cancel | none | total candidate abort; typed original and cleanup receipts |
-| crash before CAS commit | none | backend recovery removes private staging |
-| CAS loss | none | rollback; `store.publication-conflict` only |
-| crash during commit | atomic old or new head | ordinary Store recovery proves one state |
-| report failure after commit | snapshot remains published | typed report failure bound to publication receipt |
-| cleanup failure | never success | preserve original failure plus cleanup evidence |
+| append/validation/reservation/disk-full/cancel before attempt | none | abort private staging; typed original plus cleanup receipt |
+| crash before publication attempt | none | recovery removes private staging |
+| exact CAS loss | none | `store.publication-conflict` |
+| phase-opaque commit I/O or crash | old or new head | `publication_outcome_unknown`; no blind retry |
+| returned handle then reopen/verification failure | committed snapshot | safe detailed `committed_unverified`, otherwise exit 2/no response |
+| post-attempt report allocation/validation/stdout failure | Store-defined old/new state | exit 2/no authoritative response; Store recovery record only |
+| cleanup failure | no success promotion | preserve original failure and cleanup evidence |
 
 ## Counterexamples and acceptance
 
-Reject a second complete candidate graph, digest-only comparison, shared traversal/verdict logic,
-unbounded SQLite TEMP/page cache, full report DOM, report-before-publication, partial public report,
-silent bulk-path use, non-v5 production writes, failure reclassification, and cleanup-as-success.
+Reject a second full graph, common actual/expected traversal, digest-only validation, unbounded
+SQLite TEMP/page cache, a complete report DOM, candidate identity before sealing, publication before
+tail reservation, compact downgrade after attempt, loss of `publication_outcome_unknown`, partial
+stdout authority, non-v5 writes, legacy one-BLOB SQLite writes, and implicit lazy-read claims.
 
-Acceptance requires an exact-main independent counterexample review covering the 4,096-task/512-MiB
-witness, memory/SQLite parity, byte-exact tamper rejection, every crash/effect boundary, and a
-checker that detects production calls into the bulk path. Implementation and release qualification
-remain separate. #173 tracks the aggregate distribution decision, while the existing formal release
-gate and terminal production-scope closure retain their accepted owners until coordinated authority
-amendments are accepted.
+Acceptance requires the machine checker plus an exact-candidate independent review with P0/P1 zero.
+The witness includes 4,096 tasks/512 MiB, all numeric boundaries above, byte-exact tamper rejection,
+memory/reopened-SQLite parity, every publication/report crash edge, and a negative production call
+into a bulk API. SQLite lazy-read residency remains a separate blocked unit. Implementation and
+production qualification are not claimed by accepting this authority.
 
-## Independent review disposition
+## Review history
 
-The review of exact commit `c69d9be74f3e4b2b42c455a7cd4bfeb30591b9e1` rejected acceptance with
-seven P1 findings. The next revision must resolve all of the following before another acceptance
-review:
-
-- make report failure phase-authentic without adding a post-publication Store outcome that conflicts
-  with ADR 0096;
-- scope SQLite `O(W)` to the prepublication construction path or separately authorize and prove lazy
-  query handles;
-- distinguish staging-session identity from candidate identity and reserve report production before
-  publication if report completeness is part of success;
-- define independently derived actual and expected projections so comparison cannot be tautological;
-- preserve `publication_outcome_unknown` across ambiguous commit outcomes;
-- bind exact numeric resource limits from DF-0200; and
-- name the exact v5 representation, physical matrix, contract IDs, and checker bindings.
-
-The owner decision remains selected, but this ADR remains Proposed and implementation/production
-activation must not treat the review reference as acceptance.
+The review of `c69d9be74f3e4b2b42c455a7cd4bfeb30591b9e1` rejected the previous proposal with
+seven P1 findings. This redraft resolves them directionally but remains Proposed until a fresh exact
+candidate review and authenticated receipt accept it.
