@@ -17,8 +17,8 @@ properties:
     required: [task_input_digest, normalized_invocation_digest, toolchain_digest, environment_digest]
     properties:
       task_input_digest: {$ref: '#/$defs/content_digest'}
-      normalized_invocation_digest: {$ref: '#/$defs/content_digest'}
-      toolchain_digest: {$ref: '#/$defs/content_digest'}
+      normalized_invocation_digest: {$ref: '#/$defs/semantic_digest'}
+      toolchain_digest: {$ref: '#/$defs/semantic_digest'}
       environment_digest: {$ref: '#/$defs/content_digest'}
   source_closure:
     type: object

@@ -28,10 +28,12 @@ from check_ng_source_closure_transport import (  # noqa: E402
     SourceClosureTransportError,
     blob_receipts_digest,
     closure_digest,
+    complete_request_witness,
     content_projection_digest,
     request_v2_2_projection,
     semantic_digest,
     task_v4_projection,
+    trust_policy_digest,
     validate,
     validate_manifest,
     validate_reject_control,
@@ -51,9 +53,10 @@ class SourceClosureTransportTest(unittest.TestCase):
         base = {
             "provider_task_id": base_task_id,
             "task_input_digest": content,
-            "normalized_invocation_digest": "sha256:" + "4" * 64,
-            "toolchain_digest": "sha256:" + "5" * 64,
+            "normalized_invocation_digest": "semantic-v2:sha256:" + "4" * 64,
+            "toolchain_digest": "semantic-v2:sha256:" + "5" * 64,
             "environment_digest": "sha256:" + "6" * 64,
+            "sandbox": {"minimum": "enforced", "policy_digest": "sha256:" + "8" * 64},
         }
         closure = {
             "source_closure_id": closure_id,
@@ -86,14 +89,17 @@ class SourceClosureTransportTest(unittest.TestCase):
             "cxxlens.clang22.task.v4", task_v4_projection(extension)
         )
         extension["task_id"] = "task:" + extension["task_v4_digest"]
+        worker = {"provider_id": "cxxlens.clang22.reference", "provider_version": "1.0.0", "semantic_contract_digest": "sha256:" + "9" * 64, "protocol_major": 1, "protocol_minor": 2, "required_features": ["task-input-chunks-v1", "task-source-closure-v1"], "sandbox_policy_digest": "sha256:" + "8" * 64}
+        trust = {"policy_id": "cxxlens.clang22-installed-native-worker-trust.v1", "execution_profile": "trust.native-worker", "provider_id": worker["provider_id"], "provider_version": worker["provider_version"], "semantic_contract_digest": worker["semantic_contract_digest"], "protocol_major": 1, "protocol_minor": 2, "required_features": list(worker["required_features"]), "required_qualification": "canonical-semantic-qualified", "worker_sandbox_policy_digest": worker["sandbox_policy_digest"], "task_sandbox_requirements": [base["sandbox"]], "trust_policy_digest": "pending"}
+        trust["trust_policy_digest"] = trust_policy_digest(trust)
         request = {
             "schema": "cxxlens.clang22-materialization-request.v2_2",
             "request_version": "2.2.0",
             "required_features": ["task-input-chunks-v1", "task-source-closure-v1"],
             "materialization_request_id": "id:base",
             "semantic_request_digest": semantic,
-            "tool": {}, "worker": {}, "project": {}, "registry": {}, "engine": {},
-            "interpretation_policy": {}, "trust_policy": {}, "group_topology": {},
+            "tool": {}, "worker": worker, "project": {}, "registry": {}, "engine": {},
+            "interpretation_policy": {}, "trust_policy": trust, "group_topology": {},
             "tasks": [base], "publication": {},
             "source_closures": [closure],
             "task_extensions": [extension],
@@ -141,6 +147,15 @@ class SourceClosureTransportTest(unittest.TestCase):
 
     def test_repository_contract_is_valid(self) -> None:
         validate(ROOT)
+
+    def test_complete_v2_2_request_witness_is_schema_valid_and_bound(self) -> None:
+        request, manifest = complete_request_witness(ROOT)
+        self.assertEqual(request["request_version"], "2.2.0")
+        self.assertNotIn("content_base64", request["tasks"][0]["source"])
+        validate_manifest(
+            manifest, yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text())
+        )
+        validate_request_binding(request)
 
     def test_adr_0101_identity_and_request_binding_are_constructible(self) -> None:
         request = self.bound_request()
@@ -230,6 +245,34 @@ class SourceClosureTransportTest(unittest.TestCase):
         control["byte_count"] = 2
         with self.assertRaisesRegex(SourceClosureTransportError, "byte count"):
             validate_wire_control("source_closure_manifest", control, b"x", "manifest-open", contract)
+
+    def test_wire_descriptor_bounds_ids_and_payload_types_are_rejected(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        semantic = "semantic-v2:sha256:" + "1" * 64
+        content = "sha256:" + "2" * 64
+        blob = {"session_id": "s", "task_id": "t", "closure_digest": semantic, "blob_ordinal": 0, "blob_digest": content, "total_bytes": 16777217, "chunk_bytes": 1048576, "chunk_count": 17}
+        with self.assertRaisesRegex(SourceClosureTransportError, "byte bound"):
+            validate_wire_control("source_closure_blob", blob, b"", "manifest-validated", contract)
+        blob.update({"total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1})
+        with self.assertRaisesRegex(SourceClosureTransportError, "byte string"):
+            validate_wire_control("source_closure_blob", blob, "", "manifest-validated", contract)
+        descriptor = {"kind": "descriptor", "session_id": "s", "task_id": "t", "task_v4_digest": semantic, "closure_id": "x", "closure_digest": semantic, "manifest_digest": semantic, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}
+        with self.assertRaisesRegex(SourceClosureTransportError, "source closure ID"):
+            validate_wire_control("source_closure_manifest", descriptor, b"", "task-v4-sealed", contract)
+
+    def test_zero_byte_blob_has_descriptor_only_wire_representation(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        semantic = "semantic-v2:sha256:" + "1" * 64
+        content = "sha256:" + "2" * 64
+        blob = {"session_id": "s", "task_id": "t", "closure_digest": semantic, "blob_ordinal": 0, "blob_digest": content, "total_bytes": 0, "chunk_bytes": 1048576, "chunk_count": 0}
+        validate_wire_control("source_closure_blob", blob, b"", "manifest-validated", contract)
+
+    def test_trust_policy_digest_and_worker_parity_are_enforced(self) -> None:
+        request = self.bound_request()
+        validate_request_binding(request)
+        request["trust_policy"]["protocol_minor"] = 1
+        with self.assertRaisesRegex(SourceClosureTransportError, "parity"):
+            validate_request_binding(request)
 
     def test_duplicate_and_dangling_relationships_are_rejected(self) -> None:
         request = self.bound_request()

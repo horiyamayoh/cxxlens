@@ -138,6 +138,37 @@ def closure_digest(members: list[dict[str, Any]], blobs: list[dict[str, Any]]) -
     return semantic_digest_bytes("cxxlens.source-closure.v1", projection)
 
 
+def trust_policy_digest(policy: dict[str, Any]) -> str:
+    projection = _canonical_tuple(
+        [
+            _canonical_string(policy["policy_id"]),
+            _canonical_string(policy["execution_profile"]),
+            _canonical_string(policy["provider_id"]),
+            _canonical_string(policy["provider_version"]),
+            _canonical_string(policy["semantic_contract_digest"]),
+            _canonical_integer(policy["protocol_major"]),
+            _canonical_integer(policy["protocol_minor"]),
+            _canonical_tuple(
+                [_canonical_string(value) for value in policy["required_features"]]
+            ),
+            _canonical_string(policy["required_qualification"]),
+            _canonical_string(policy["worker_sandbox_policy_digest"]),
+            _canonical_tuple(
+                [
+                    _canonical_tuple(
+                        [
+                            _canonical_string(value["minimum"]),
+                            _canonical_string(value["policy_digest"]),
+                        ]
+                    )
+                    for value in policy["task_sandbox_requirements"]
+                ]
+            ),
+        ]
+    )
+    return semantic_digest_bytes("cxxlens.clang22-installed-native-worker-trust.v1", projection)
+
+
 def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     """Execute the semantic closure rules that JSON Schema cannot express."""
     try:
@@ -199,6 +230,8 @@ def validate_wire_control(
     contract: dict[str, Any],
 ) -> None:
     """Validate one non-reject control before allocation, I/O, or state mutation."""
+    if type(payload) is not bytes:
+        raise SourceClosureTransportError("wire payload is not an exact byte string")
     controls = contract["wire_controls"]
     if name == "source_closure_reject":
         if payload:
@@ -231,7 +264,10 @@ def validate_wire_control(
             prefix = "sha256:" if field == "blob_digest" else "semantic-v2:sha256:"
             if not isinstance(value, str) or not re.fullmatch(re.escape(prefix) + r"[0-9a-f]{64}", value):
                 raise SourceClosureTransportError(f"wire control {field} is not a typed digest")
-        elif field in {"session_id", "task_id", "closure_id", "spool_receipt", "cleanup_owner"}:
+        elif field == "closure_id":
+            if not isinstance(value, str) or not re.fullmatch(r"source-closure:semantic-v2:sha256:[0-9a-f]{64}", value):
+                raise SourceClosureTransportError("wire control closure_id is not a source closure ID")
+        elif field in {"session_id", "task_id", "spool_receipt", "cleanup_owner"}:
             if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096:
                 raise SourceClosureTransportError(f"wire control {field} is not a bounded typed ID")
     if spec["payload"] == "empty" and payload:
@@ -243,8 +279,14 @@ def validate_wire_control(
             raise SourceClosureTransportError("wire chunk payload exceeds bound")
     if "chunk_bytes" in control and not 0 < control["chunk_bytes"] <= contract["limits"]["maximum_chunk_payload_bytes"]:
         raise SourceClosureTransportError("wire descriptor chunk bound invalid")
-    if "chunk_count" in control and (control["chunk_count"] == 0 or control["chunk_count"] > contract["limits"]["maximum_blob_chunk_frames"]):
-        raise SourceClosureTransportError("wire descriptor chunk count invalid")
+    if "chunk_count" in control:
+        maximum_count = contract["limits"]["maximum_manifest_chunks"] if name == "source_closure_manifest" else contract["limits"]["maximum_chunks_per_blob"]
+        maximum_bytes = contract["limits"]["maximum_manifest_bytes"] if name == "source_closure_manifest" else contract["limits"]["maximum_blob_bytes"]
+        if control["total_bytes"] > maximum_bytes:
+            raise SourceClosureTransportError("wire descriptor total byte bound exceeded")
+        expected_count = 0 if control["total_bytes"] == 0 else (control["total_bytes"] + control["chunk_bytes"] - 1) // control["chunk_bytes"]
+        if control["chunk_count"] != expected_count or control["chunk_count"] > maximum_count:
+            raise SourceClosureTransportError("wire descriptor chunk count invalid")
 
 
 def blob_receipts_digest(receipts: list[dict[str, Any]]) -> str:
@@ -312,6 +354,38 @@ def validate_request_binding(request: dict[str, Any]) -> None:
         raise SourceClosureTransportError("request 2.2 relationship inputs are missing")
     if len(base_tasks) != len(extensions):
         raise SourceClosureTransportError("task v4/base v2.1 census mismatch")
+    worker = request.get("worker")
+    trust = request.get("trust_policy")
+    if not isinstance(worker, dict) or not isinstance(trust, dict):
+        raise SourceClosureTransportError("request 2.2 worker/trust authority missing")
+    parity = {
+        "provider_id": "provider_id",
+        "provider_version": "provider_version",
+        "semantic_contract_digest": "semantic_contract_digest",
+        "protocol_major": "protocol_major",
+        "protocol_minor": "protocol_minor",
+        "required_features": "required_features",
+        "worker_sandbox_policy_digest": "sandbox_policy_digest",
+    }
+    if any(trust.get(left) != worker.get(right) for left, right in parity.items()):
+        raise SourceClosureTransportError("request 2.2 worker/trust parity mismatch")
+    sandbox_requirements = sorted(
+        {
+            (
+                task.get("sandbox", {}).get("minimum"),
+                task.get("sandbox", {}).get("policy_digest"),
+            )
+            for task in base_tasks
+        }
+    )
+    expected_requirements = [
+        {"minimum": minimum, "policy_digest": digest}
+        for minimum, digest in sandbox_requirements
+    ]
+    if trust.get("task_sandbox_requirements") != expected_requirements or trust.get(
+        "trust_policy_digest"
+    ) != trust_policy_digest(trust):
+        raise SourceClosureTransportError("request 2.2 trust policy semantic digest mismatch")
 
     closure_by_id: dict[str, dict[str, Any]] = {}
     for closure in closures:
@@ -377,6 +451,93 @@ def validate_request_binding(request: dict[str, Any]) -> None:
         raise SourceClosureTransportError("request v2.2 semantic identity mismatch")
 
 
+def complete_request_witness(root: pathlib.Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build one complete v2.2 request from the repository's executable v2.1 witness."""
+
+    sys.path.insert(0, str(root / "tools" / "quality"))
+    import check_ng_clang22_materialization as materialization  # noqa: PLC0415
+
+    fixture_root = (
+        root if (root / "schemas/cxxlens_ng_relation_registry.yaml").exists() else ROOT
+    )
+    request = materialization.sample_request(fixture_root)
+    base = request["tasks"][0]
+    source = base["source"]
+    source["read_only"] = True
+    source.pop("content_base64")
+    member = {
+        field: source[field]
+        for field in (
+            "file_id", "logical_path", "encoding", "size_bytes",
+            "content_digest", "read_only",
+        )
+    }
+    member["role"] = "main"
+    blob = {field: source[field] for field in ("content_digest", "size_bytes")}
+    digest = closure_digest([member], [blob])
+    manifest = {
+        "schema": "cxxlens.source-closure-manifest.v1",
+        "closure_id": "source-closure:" + digest,
+        "closure_digest": digest,
+        "members": [member],
+        "blobs": [blob],
+    }
+    sealed_manifest_digest = manifest_digest(manifest)
+    closure = {
+        "source_closure_id": manifest["closure_id"],
+        "source_closure_digest": digest,
+        "manifest_digest": sealed_manifest_digest,
+        "member_count": 1,
+        "blob_count": 1,
+        "unique_blob_bytes": source["size_bytes"],
+    }
+
+    required_features = ["task-input-chunks-v1", "task-source-closure-v1"]
+    request["schema"] = "cxxlens.clang22-materialization-request.v2_2"
+    request["request_version"] = "2.2.0"
+    request["required_features"] = required_features
+    request["worker"]["protocol_minor"] = 2
+    request["worker"]["required_features"] = required_features
+    request["trust_policy"]["protocol_minor"] = 2
+    request["trust_policy"]["required_features"] = required_features
+    request["trust_policy"]["task_sandbox_requirements"] = [base["sandbox"]]
+    request["trust_policy"]["trust_policy_digest"] = trust_policy_digest(
+        request["trust_policy"]
+    )
+    extension = {
+        "schema": "cxxlens.clang22.task.v4",
+        "base_task_index": 0,
+        "base_provider_task_id": base["provider_task_id"],
+        "base_task_v3_digest": content_projection_digest(base),
+        "open_task": {
+            field: base[field]
+            for field in (
+                "task_input_digest", "normalized_invocation_digest",
+                "toolchain_digest", "environment_digest",
+            )
+        },
+        "source_closure": {
+            "id": closure["source_closure_id"],
+            "digest": digest,
+            "manifest_digest": sealed_manifest_digest,
+        },
+        "main_logical_path": source["logical_path"],
+        "logical_working_directory": base["working_directory"],
+    }
+    extension["task_v4_digest"] = semantic_digest(
+        "cxxlens.clang22.task.v4", task_v4_projection(extension)
+    )
+    extension["task_id"] = "task:" + extension["task_v4_digest"]
+    request["source_closures"] = [closure]
+    request["task_extensions"] = [extension]
+    request["request_digest"] = semantic_digest(
+        "cxxlens.clang22.materialization-request.v2_2",
+        request_v2_2_projection(request),
+    )
+    request["request_id"] = "materialization-request:" + request["request_digest"]
+    return request, manifest
+
+
 def validate(root: pathlib.Path) -> dict[str, Any]:
     contract = load(root / CONTRACT)
     schema = load(root / SCHEMA)
@@ -402,6 +563,30 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     except jsonschema.SchemaError as error:
         raise SourceClosureTransportError(
             f"request/task schema is invalid: {error.message}"
+        ) from error
+    witness, witness_manifest = complete_request_witness(root)
+    legacy_request_schema = load(root / LEGACY_BINDINGS["request_schema_sha256"])
+    schema_store = {
+        request["$id"]: request,
+        legacy_request_schema["$id"]: legacy_request_schema,
+        task["$id"]: task,
+        "https://cxxlens.dev/schemas/cxxlens_ng_provider_task_v4.schema.yaml": task,
+    }
+    try:
+        resolver = jsonschema.RefResolver.from_schema(request, store=schema_store)
+        jsonschema.Draft202012Validator(request, resolver=resolver).validate(
+            witness
+        )
+        validate_manifest(witness_manifest, manifest_schema)
+        validate_request_binding(witness)
+    except (jsonschema.ValidationError, SourceClosureTransportError) as error:
+        message = (
+            error.message
+            if isinstance(error, jsonschema.ValidationError)
+            else str(error)
+        )
+        raise SourceClosureTransportError(
+            f"complete request 2.2 constructibility witness failed: {message}"
         ) from error
     adr = (root / ADR).read_text(encoding="utf-8")
 

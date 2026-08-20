@@ -113,6 +113,12 @@ there is no retry or reconstruction. Revoke always precedes cleanup and VFS unlo
 receipt proves zero initialize/create, write, truncate, extend, delete, and resize effect; identity
 continuity alone is never such proof.
 
+Reader attachment retirement repeats the same cut/census discipline independently: hide generation,
+seal its pre-callback cut, revoke admission, drain callbacks and use owners, seal the complete member
+census, perform one authenticated `xShmUnmap(0)`, consume its distinct close owner, seal close outcome,
+callback-effect transcript, and cleanup acknowledgement, then release the page-support pin. The outer
+connection cannot cross `reader-and-writer-retired` or mint a logical read receipt before this terminal.
+
 Fork is not an ordinary drain. `pthread_atfork` prepare seals admission and records the complete
 custody census; the parent handler revalidates process/fork generation before resuming. The child
 handler atomically moves all inherited connection, callback, mapping, cleanup, and lifetime custody
@@ -144,6 +150,11 @@ The accepted DF-0202 fixture authority remains an executable closed partition, n
 Each family has `pre-effect`, `effect-admitted`, `recoverable-interruption`, `recrash-classified`, and
 its listed terminal route. A recrash re-enters the same seven-family classifier from durable bytes;
 it cannot resume from in-memory phase, merge families, or cross-route to success.
+
+`normalization-receipt` is a live uninterrupted terminal only. After any recoverable interruption,
+the original family has no success edge: durable bytes are reclassified and only the newly selected
+family authority applies. In particular, post-form plus zero WAL becomes `FZ-post`, never an `F0` or
+`FZ-pre` success continuation. Family-specific cleanup and parent-sync steps dominate every handoff.
 
 Eligibility binds the original accepted-empty recovery receipt, same main object/entry, continuous
 namespace epoch, exclusive lock, exact pre-main bytes, VFS/runtime/device/build profile, sidecar

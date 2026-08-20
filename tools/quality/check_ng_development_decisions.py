@@ -114,7 +114,7 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
         raise DecisionRegisterError(f"committed acceptance lacks deterministic derivation: {receipt['id']}")
     if _git(root, "merge-base", candidate, "HEAD") != candidate:
         raise DecisionRegisterError(f"acceptance does not descend from candidate: {receipt['id']}")
-    commits = _git(root, "log", "--reverse", "--ancestry-path", "--format=%H", f"{candidate}..HEAD", "--", str(RECEIPTS)).splitlines()
+    commits = _git(root, "rev-list", "--first-parent", "--reverse", f"{candidate}..HEAD").splitlines()
     commit = None
     for possible in commits:
         document = yaml.load(_git(root, "show", f"{possible}:{RECEIPTS}"), Loader=UniqueKeyLoader)
@@ -131,22 +131,54 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
     allowed = set(acceptance["allowed_changed_paths"])
     if not changed or not changed <= allowed:
         raise DecisionRegisterError(f"acceptance commit is not status/receipt-only: {receipt['id']}")
-    status_keys = {"maturity", "status", "authority_status", "outcome", "reviewer", "ref", "exact_main_commit", "receipt_ids", "references", "activation"}
-    def scrub(value: Any) -> Any:
-        if isinstance(value, dict):
-            return {key: scrub(item) for key, item in value.items() if key not in status_keys}
-        if isinstance(value, list):
-            return [scrub(item) for item in value]
-        return value
+    def authority_projection(value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        result = dict(value)
+        result.pop("maturity", None)
+        authority = result.get("authority")
+        if isinstance(authority, dict):
+            authority = dict(authority)
+            authority.pop("review", None)
+            result["authority"] = authority
+        return result
+
+    def register_projection(value: dict[str, Any]) -> dict[str, Any]:
+        result = json.loads(json.dumps(value))
+        for decision in result.get("decisions", []):
+            decision.pop("authority_status", None)
+            decision.pop("activation", None)
+            review = decision.get("review", {})
+            for key in ("outcome", "reviewer", "receipt_ids", "references"):
+                review.pop(key, None)
+        return result
+
+    def work_unit_projection(value: dict[str, Any]) -> dict[str, Any]:
+        result = json.loads(json.dumps(value))
+        for entry in result.get("entries", []):
+            entry.pop("authority_digest", None)
+            for unit in entry.get("units", []):
+                unit.pop("state", None)
+        return result
     infrastructure = {str(REGISTER), str(RECEIPTS), "docs/design/SHA256SUMS", "schemas/cxxlens_ng_work_units.yaml"}
     authority_paths = {item["path"] for item in receipt["authority_files"]}
-    for path in changed - infrastructure:
-        if path not in authority_paths:
-            raise DecisionRegisterError(f"acceptance changes non-authority path: {receipt['id']}:{path}")
+    for path in changed:
+        if path == str(RECEIPTS) or path == "docs/design/SHA256SUMS":
+            continue
         before = _git(root, "show", f"{candidate}:{path}")
         after = _git(root, "show", f"{commit}:{path}")
+        if path == str(REGISTER):
+            if register_projection(yaml.load(before, Loader=UniqueKeyLoader)) != register_projection(yaml.load(after, Loader=UniqueKeyLoader)):
+                raise DecisionRegisterError(f"acceptance changes decision semantics: {receipt['id']}")
+            continue
+        if path == "schemas/cxxlens_ng_work_units.yaml":
+            if work_unit_projection(yaml.load(before, Loader=UniqueKeyLoader)) != work_unit_projection(yaml.load(after, Loader=UniqueKeyLoader)):
+                raise DecisionRegisterError(f"acceptance changes work-unit semantics: {receipt['id']}")
+            continue
+        if path not in authority_paths:
+            raise DecisionRegisterError(f"acceptance changes non-authority path: {receipt['id']}:{path}")
         if path.endswith((".yaml", ".yml")):
-            if scrub(yaml.load(before, Loader=UniqueKeyLoader)) != scrub(yaml.load(after, Loader=UniqueKeyLoader)):
+            if authority_projection(yaml.load(before, Loader=UniqueKeyLoader)) != authority_projection(yaml.load(after, Loader=UniqueKeyLoader)):
                 raise DecisionRegisterError(f"acceptance changes authority semantics: {receipt['id']}:{path}")
         else:
             before_lines = [line for line in before.splitlines() if not line.startswith(("- Status:", "- Review:"))]
@@ -177,7 +209,7 @@ def canonical_review_comment(receipt: dict[str, Any]) -> str:
         "owner_issue": receipt["owner_issue"], "candidate_commit": receipt["candidate_commit"],
         "candidate_tree": receipt["candidate_tree"], "candidate_git_author_email": receipt["candidate_git_author_email"],
         "authority_digest": receipt["authority_digest"], "author": receipt["author"],
-        "reviewer": receipt["reviewer"], "reviewer_provenance": receipt["reviewer_provenance"],
+        "reviewer": receipt["reviewer"], "reviewer_github_login": receipt["reviewer_github_login"], "reviewer_provenance": receipt["reviewer_provenance"],
         "reviewer_session": receipt["reviewer_session"], "reviewer_invocation": receipt["reviewer_invocation"],
         "review_output_sha256": receipt["review_output_sha256"], "verdict": receipt["verdict"],
         "findings": receipt["findings"], "finding_ids": receipt["finding_ids"],
@@ -203,7 +235,7 @@ def verify_connected(root: pathlib.Path, token: str) -> None:
         body = comment.get("body")
         if not isinstance(body, str) or body != canonical_review_comment(receipt) or "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest() != receipt["comment_body_sha256"]:
             raise DecisionRegisterError(f"GitHub review comment body mismatch: {receipt['id']}")
-        if comment.get("html_url") != receipt["comment_url"] or comment.get("user", {}).get("login") != receipt["comment_author_login"]:
+        if comment.get("html_url") != receipt["comment_url"] or comment.get("user", {}).get("login") != receipt["comment_author_login"] or receipt["comment_author_login"] != receipt["reviewer_github_login"]:
             raise DecisionRegisterError(f"GitHub review comment identity mismatch: {receipt['id']}")
         run = _github_json(f"https://api.github.com/repos/horiyamayoh/cxxlens/actions/runs/{connected['run_id']}", token)
         if (run.get("id") != connected["run_id"] or run.get("html_url") != connected["run_url"] or
@@ -261,12 +293,9 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                 raise DecisionRegisterError(f"decision authority does not exist: {entry['id']}:{reference}")
         review = entry["review"]
         if verify_git and review["outcome"] == "pending":
-            try:
-                previous = yaml.load(_git(root, "show", f"HEAD^:{REGISTER}"), Loader=UniqueKeyLoader)
-            except (DecisionRegisterError, yaml.YAMLError):
-                previous = None
-            if isinstance(previous, dict):
-                prior = {item["id"]: item for item in previous.get("decisions", [])}.get(entry["id"])
+            for commit in _git(root, "log", "--first-parent", "--format=%H", "--", str(REGISTER)).splitlines()[1:]:
+                historical = yaml.load(_git(root, "show", f"{commit}:{REGISTER}"), Loader=UniqueKeyLoader)
+                prior = {item["id"]: item for item in historical.get("decisions", [])}.get(entry["id"])
                 if prior and prior.get("review", {}).get("outcome") == "rejected":
                     raise DecisionRegisterError(f"rejected review was rewritten to pending: {entry['id']}")
         if entry["risk"] in HIGH_RISK and (review["mode"] != "independent" or review["outcome"] == "not-required"):
@@ -308,6 +337,8 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
             if any(len(severity_ids[severity]) != receipt["findings"][severity] for severity in severity_ids):
                 raise DecisionRegisterError(f"review finding census/detail mismatch: {receipt_id}")
             if review["outcome"] == "accepted":
+                if receipt["acceptance"]["status"] != "committed":
+                    raise DecisionRegisterError(f"accepted review bypasses acceptance commit: {receipt_id}")
                 if receipt["verdict"] != "accepted" or receipt["findings"]["p0"] or receipt["findings"]["p1"]:
                     raise DecisionRegisterError(f"accepted review has unresolved P0/P1: {receipt_id}")
                 connected = receipt["connected_verification"]

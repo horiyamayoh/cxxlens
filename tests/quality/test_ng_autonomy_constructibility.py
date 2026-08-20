@@ -116,7 +116,7 @@ class ConstructibilityTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FZ-pre"].__setitem__("route", ["delete-WAL"]))
-            with self.assertRaisesRegex(ConstructibilityError, "FZ-pre route"):
+            with self.assertRaisesRegex(ConstructibilityError, "FZ-pre route|schema validation"):
                 validate(root)
 
     def test_production_predicate_cannot_be_weakened(self) -> None:
@@ -136,8 +136,8 @@ class ConstructibilityTest(unittest.TestCase):
     def test_family_recrash_stage_cannot_be_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
-            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FP"]["lifecycle"].remove("recrash-classified"))
-            with self.assertRaisesRegex(ConstructibilityError, "FP recrash lifecycle|schema validation"):
+            self.rewrite(root, lambda value: value["machines"]["sqlite_normalization_effect"]["fixture_partition_machine"]["FP"]["recrash_graph"].remove("recoverable-interruption-to-recrash-classified"))
+            with self.assertRaisesRegex(ConstructibilityError, "FP recrash graph|schema validation"):
                 validate(root)
 
     def test_mapping_activation_matrix_cannot_be_shortened(self) -> None:

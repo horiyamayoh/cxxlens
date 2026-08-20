@@ -63,6 +63,31 @@ class AutonomyCiTest(unittest.TestCase):
             with self.assertRaisesRegex(AutonomyCiError, "connected to Autonomy fast"):
                 validate(root)
 
+    def test_duplicate_workflow_key_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-fast.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8") + "\nname: duplicate\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(AutonomyCiError, "duplicate mapping key"):
+                validate(root)
+
+    def test_heavy_provisional_upload_without_postflight_guard_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-heavy.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            uploads = value["jobs"]["exact-latest-heavy"]["steps"]
+            provisional = next(
+                step for step in uploads if "provisional" in step.get("with", {}).get("name", "")
+            )
+            provisional["if"] = "success()"
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "provisional artifact guard"):
+                validate(root)
+
     def test_release_push_trigger_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -92,6 +117,16 @@ class AutonomyCiTest(unittest.TestCase):
             value["release"]["composition"]["gr_execution_contract"] = "#173"
             path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
             with self.assertRaisesRegex(AutonomyCiError, "role composition"):
+                validate(root)
+
+    def test_release_checkout_head_instead_of_candidate_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-release-evaluation.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            value["jobs"]["exact-current-evaluation"]["steps"][0]["with"]["ref"] = "main"
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "exact-candidate bound"):
                 validate(root)
 
 

@@ -24,9 +24,36 @@ class AutonomyCiError(ValueError):
     """A stale, promotable, or structurally invalid CI configuration."""
 
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate mapping keys."""
+
+
+def _construct_unique_mapping(
+    loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False
+) -> dict[Any, Any]:
+    loader.flatten_mapping(node)
+    result: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in result:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"duplicate mapping key: {key!r}",
+                key_node.start_mark,
+            )
+        result[key] = loader.construct_object(value_node, deep=deep)
+    return result
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
+)
+
+
 def load(path: pathlib.Path) -> dict[str, Any]:
     try:
-        value = yaml.safe_load(path.read_text(encoding="utf-8"))
+        value = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
     except (OSError, UnicodeError, yaml.YAMLError) as error:
         raise AutonomyCiError(f"cannot load {path}: {error}") from error
     if not isinstance(value, dict):
@@ -47,6 +74,20 @@ def triggers(document: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise AutonomyCiError("workflow trigger mapping missing")
     return value
+
+
+def step_by(
+    job: dict[str, Any], *, identifier: str | None = None, name: str | None = None
+) -> dict[str, Any]:
+    matches = [
+        step
+        for step in job.get("steps", [])
+        if (identifier is None or step.get("id") == identifier)
+        and (name is None or step.get("name") == name)
+    ]
+    if len(matches) != 1:
+        raise AutonomyCiError(f"workflow step is missing or ambiguous: {identifier or name}")
+    return matches[0]
 
 
 def validate(root: pathlib.Path) -> dict[str, Any]:
@@ -71,10 +112,21 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         raise AutonomyCiError("heavy workflow is not connected to Autonomy fast")
     if heavy.get("concurrency") != {"group": "autonomy-heavy-latest-main", "cancel-in-progress": True}:
         raise AutonomyCiError("heavy coalescing policy drift")
-    heavy_text = (root / contract["heavy"]["workflow"]).read_text(encoding="utf-8")
-    for marker in ("classify-heavy", "superseded", "needs.freshness.outputs.disposition == 'current'", "run_gate.py full", "Reclassify freshness after full gate", "steps.postflight.outputs.disposition == 'current'", "provisional", "artifact existence is never authority"):
-        if marker not in heavy_text:
-            raise AutonomyCiError(f"heavy freshness marker missing: {marker}")
+    freshness = heavy["jobs"].get("freshness", {})
+    classify = step_by(freshness, identifier="classify")
+    if classify.get("env") != {"EVENT_CANDIDATE": "${{ github.event.workflow_run.head_sha }}"} or "classify-heavy" not in classify.get("run", "") or "DISPATCH" in classify.get("run", ""):
+        raise AutonomyCiError("heavy freshness classifier structure drift")
+    heavy_job = heavy["jobs"].get("exact-latest-heavy", {})
+    if heavy_job.get("if") != "needs.freshness.outputs.disposition == 'current'":
+        raise AutonomyCiError("heavy current-candidate job guard drift")
+    postflight = step_by(heavy_job, identifier="postflight")
+    if postflight.get("if") != "always()" or "git fetch --no-tags origin main" not in postflight.get("run", "") or "classify-heavy" not in postflight.get("run", ""):
+        raise AutonomyCiError("heavy postflight structure drift")
+    uploads = [step for step in heavy_job.get("steps", []) if isinstance(step.get("uses"), str) and "upload-artifact" in step["uses"] and "provisional" in step.get("with", {}).get("name", "")]
+    if len(uploads) != 1 or uploads[0].get("if") != "success() && steps.postflight.outputs.disposition == 'current'":
+        raise AutonomyCiError("heavy provisional artifact guard drift")
+    if not any("run_gate.py full" in step.get("run", "") for step in heavy_job.get("steps", [])):
+        raise AutonomyCiError("heavy full gate missing")
     if contract["heavy"].get("artifact_authority") != "provisional-consumer-reauthenticates-current-origin-main":
         raise AutonomyCiError("heavy artifact is incorrectly authoritative")
     nightly_on = triggers(nightly)
@@ -94,17 +146,43 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
             continue
         needs = job.get("needs", [])
         needs = [needs] if isinstance(needs, str) else needs
-        if "latest-main" not in needs or candidate_expression not in json.dumps(job, sort_keys=True):
+        checkout = [step for step in job.get("steps", []) if isinstance(step.get("uses"), str) and step["uses"].startswith("actions/checkout@")]
+        if "latest-main" not in needs or len(checkout) != 1 or checkout[0].get("with", {}).get("ref") != candidate_expression:
             raise AutonomyCiError(f"Nightly job is not exact-candidate bound: {name}")
     release_on = triggers(release)
     if set(release_on) != {"workflow_dispatch"}:
         raise AutonomyCiError("release evaluation is not dispatch-only")
     if release.get("concurrency", {}).get("cancel-in-progress") is not False:
         raise AutonomyCiError("release evaluation may not be cancelled")
-    release_text = (root / contract["release"]["workflow"]).read_text(encoding="utf-8")
-    for marker in ("git rev-parse origin/main", "workflow_dispatch", "not-qualified-evaluation-only-no-gr"):
-        if marker not in release_text and marker != "not-qualified-evaluation-only-no-gr":
-            raise AutonomyCiError(f"release freshness marker missing: {marker}")
+    if set(release.get("jobs", {})) != {"exact-current-evaluation"}:
+        raise AutonomyCiError("release evaluation job census drift")
+    release_job = release["jobs"]["exact-current-evaluation"]
+    release_checkout = [
+        step
+        for step in release_job.get("steps", [])
+        if isinstance(step.get("uses"), str) and step["uses"].startswith("actions/checkout@")
+    ]
+    if len(release_checkout) != 1 or release_checkout[0].get("with", {}).get("ref") != "${{ inputs.candidate_sha }}":
+        raise AutonomyCiError("release checkout is not exact-candidate bound")
+    freshness_step = step_by(
+        release_job, name="Reject non-current or non-dispatch release evaluation"
+    )
+    freshness_run = freshness_step.get("run", "")
+    required_freshness = (
+        'test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"',
+        'test "$(git rev-parse HEAD)" = "${CANDIDATE_SHA}"',
+        'test "$(git rev-parse origin/main)" = "${CANDIDATE_SHA}"',
+    )
+    if freshness_step.get("env") != {"CANDIDATE_SHA": "${{ inputs.candidate_sha }}"} or any(
+        command not in freshness_run for command in required_freshness
+    ):
+        raise AutonomyCiError("release exact-main freshness step drift")
+    evaluation_step = step_by(
+        release_job, name="Validate release role contracts without issuing GR"
+    )
+    evaluation_run = evaluation_step.get("run", "")
+    if "check_ng_release_contract.py check" not in evaluation_run or "check_ng_autonomy_ci.py release-evaluation" not in evaluation_run:
+        raise AutonomyCiError("release exact-main evaluation structure drift")
     if contract["release"]["composition"] != {"aggregate_decision": "#173", "gr_execution_contract": "#167", "scope_closure_contract": "#179"}:
         raise AutonomyCiError("release role composition drift")
     if contract["release"]["current_capability"] != "not-qualified-evaluation-only-no-gr":

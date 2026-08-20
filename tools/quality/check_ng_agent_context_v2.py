@@ -79,7 +79,7 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
     decision_register = work_units.load(root / DECISIONS)
     authority_set = set(entry["authority_sources"])
     relevant_decisions = [decision for decision in decision_register["decisions"] if entry["issue"] in decision["owner_issues"] and authority_set.intersection(decision["authority_refs"])]
-    authority_blockers = [f"decision:{decision['id']}:{decision['authority_status']}:{decision['review']['outcome']}" for decision in relevant_decisions if unit["risk"] in {"contract", "security", "irreversible", "resource-bound"} and (decision["authority_status"] != "accepted" or decision["review"]["outcome"] != "accepted")]
+    authority_blockers = [f"decision:{decision['id']}:{decision['authority_status']}:{decision['review']['outcome']}" for decision in relevant_decisions if unit["risk"] in {"contract", "invariant", "security", "compatibility", "irreversible", "resource-bound"} and (decision["authority_status"] != "accepted" or decision["review"]["outcome"] != "accepted")]
     if state == "ready" and (blocked_dependencies or authority_blockers):
         disposition = "stop-blocked-by-dependency"
         blockers = sorted([*blocked_dependencies, *authority_blockers])
