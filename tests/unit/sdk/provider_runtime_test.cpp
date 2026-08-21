@@ -293,6 +293,20 @@ namespace
 		sandbox_assurance achieved_;
 	};
 
+	class counting_process_port final : public provider_process_port
+	{
+	  public:
+		[[nodiscard]] result<process_output> run(const process_invocation&,
+												 std::stop_token) const override
+		{
+			++run_calls;
+			return cxxlens::sdk::unexpected(error{
+				"test.process-port-invoked", "ng1-prelaunch-gate", "unexpected-process-launch"});
+		}
+
+		mutable std::uint64_t run_calls{};
+	};
+
 	[[nodiscard]] std::string executable_digest(const std::string& executable)
 	{
 		std::ifstream input{executable, std::ios::binary};
@@ -2145,6 +2159,39 @@ namespace
 		auto feature = runtime.execute(feature_request);
 		require(!feature && feature.error().code == "provider.required-feature-missing",
 				"unsupported required provider feature was negotiated");
+
+		// Every NG1 hardening feature must stop at the runtime pre-launch boundary
+		// until the accepted source-closure registry and live-port dispatch exist.
+		// In particular, this must not fall through to the completed-process port.
+		for (const auto ng1_feature : std::array{
+				 std::string_view{"durable-resume-token"},
+				 std::string_view{"heartbeat"},
+				 std::string_view{"progress-rate-enforcement"},
+				 std::string_view{"spill-staging"},
+				 std::string_view{"long-run-fault-qualification"},
+			 })
+		{
+			auto ng1_candidate = candidate(executable, "success");
+			ng1_candidate.description.protocol.minimum_minor = 1U;
+			ng1_candidate.description.protocol.maximum_minor = 1U;
+			ng1_candidate.description.protocol.required_features = {
+				"credit-backpressure", "task-input-chunks-v1", std::string{ng1_feature}};
+			auto ng1_selection =
+				select_provider(selection_request(executable), std::span{&ng1_candidate, 1U});
+			require(ng1_selection.has_value(),
+					"NG1 feature provider selection failed before runtime gate");
+			auto ng1_request = task(std::move(*ng1_selection));
+			ng1_request.limits.minimum_minor = 1U;
+			ng1_request.limits.maximum_minor = 1U;
+			counting_process_port ng1_processes;
+			process_provider_runtime ng1_runtime{ng1_processes};
+			auto ng1 = ng1_runtime.execute(std::move(ng1_request));
+			require(!ng1 && ng1.error().code == "provider.ng1.capability-unavailable" &&
+						ng1.error().field == "protocol" &&
+						ng1.error().detail == "accepted-source-closure-registry-required" &&
+						ng1_processes.run_calls == 0U,
+					"NG1 hardening feature escaped the fail-closed pre-launch boundary");
+		}
 
 		// Source-closure transport is a proposed protocol-1.2 extension.  The
 		// accepted runtime must reject its advertisement before launching a

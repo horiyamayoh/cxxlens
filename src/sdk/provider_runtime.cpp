@@ -2595,6 +2595,31 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 			static const std::set<std::string, std::less<>> supported_features{
 				"credit-backpressure", "task-input-chunks-v1"};
+			// NG1 hardening is source-private and cannot be selected through the
+			// completed-process provider port.  Keep this check ahead of the generic
+			// feature filter so a provider cannot be mistaken for an ordinary NG0
+			// feature miss (or silently enter the blocking path) while the accepted
+			// source-closure registry and live-port dispatch are absent.  This is a
+			// pre-launch rejection: no process, input transcript, or capability claim
+			// is created.
+			static constexpr std::array ng1_features{
+				std::string_view{"durable-resume-token"},
+				std::string_view{"heartbeat"},
+				std::string_view{"progress-rate-enforcement"},
+				std::string_view{"spill-staging"},
+				std::string_view{"long-run-fault-qualification"},
+			};
+			if (const auto ng1_feature = std::ranges::find_if(
+					provider.protocol.required_features,
+					[](const std::string& feature)
+					{
+						return std::ranges::find(ng1_features, feature) != ng1_features.end();
+					});
+				ng1_feature != provider.protocol.required_features.end())
+				return cxxlens::sdk::unexpected(
+					runtime_error("provider.ng1.capability-unavailable",
+								  "protocol",
+								  "accepted-source-closure-registry-required"));
 			// Source-closure transport is deliberately not part of the accepted
 			// provider runtime yet.  Keep the feature name explicit at this
 			// launcher boundary so a future v1.2 provider cannot be mistaken for
