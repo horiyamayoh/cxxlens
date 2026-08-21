@@ -52,23 +52,32 @@ class WorkUnitTest(unittest.TestCase):
         validate(ROOT)
 
     def test_governance_authority_closure_requires_enforcement_surfaces(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = self.copied_root(temporary)
-            missing = next(iter(GOVERNANCE_WORK_UNIT_AUTHORITY_SURFACES))
+        required_surfaces = (
+            ".github/workflows/nightly.yml",
+            ".github/workflows/quality.yml",
+            "schemas/cxxlens_ng_release_evidence_bundle.schema.yaml",
+            "schemas/cxxlens_ng_release_evidence_selection.schema.yaml",
+            "schemas/cxxlens_ng_release_qualification.yaml",
+            "tools/quality/check_ng_release_evidence_bundle.py",
+        )
+        self.assertTrue(set(required_surfaces) <= GOVERNANCE_WORK_UNIT_AUTHORITY_SURFACES)
+        for missing in required_surfaces:
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
+                root = self.copied_root(temporary)
 
-            def mutate(value) -> None:
-                entry = next(item for item in value["entries"] if item["issue"] == "#173")
-                entry["authority_sources"].remove(missing)
-                entry["authority_digest"] = canonical_digest(
-                    root, entry["authority_sources"]
-                )
+                def mutate(value) -> None:
+                    entry = next(item for item in value["entries"] if item["issue"] == "#173")
+                    entry["authority_sources"].remove(missing)
+                    entry["authority_digest"] = canonical_digest(
+                        root, entry["authority_sources"]
+                    )
 
-            self.rewrite(root, mutate)
-            with self.assertRaisesRegex(
-                WorkUnitError,
-                "governance work-unit authority closure missing enforcement surface",
-            ):
-                validate(root)
+                self.rewrite(root, mutate)
+                with self.assertRaisesRegex(
+                    WorkUnitError,
+                    "governance work-unit authority closure missing enforcement surface",
+                ):
+                    validate(root)
 
     def test_runtime_repository_path_guard_rejects_unsafe_values(self) -> None:
         unsafe_paths = (

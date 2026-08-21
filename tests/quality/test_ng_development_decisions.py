@@ -83,6 +83,12 @@ class DevelopmentDecisionTest(unittest.TestCase):
             "AGENTS.md",
             "docs/design/adr/0094-risk-tiered-goal-authorization.md",
             "docs/design/adr/0105-direct-main-review-and-release-governance.md",
+            ".github/workflows/nightly.yml",
+            ".github/workflows/quality.yml",
+            "schemas/cxxlens_ng_release_evidence_bundle.schema.yaml",
+            "schemas/cxxlens_ng_release_evidence_selection.schema.yaml",
+            "schemas/cxxlens_ng_release_qualification.yaml",
+            "tools/quality/check_ng_release_evidence_bundle.py",
         )
         self.assertTrue(set(required_roots) <= GOVERNANCE_ENFORCEMENT_SURFACES)
         for missing in required_roots:

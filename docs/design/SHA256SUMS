@@ -98,11 +98,11 @@ e8bc1adc409bbac29f762ea134788537fbe7b28dd952e4e669a17ea167ba113b  ../../schemas/
 045a6f68d9941f1459b17a800645a01158b1254af5832d9eb6b43dc024f7bc84  ../../schemas/cxxlens_ng_quality_ownership.schema.yaml
 8087db0eb3f26d04879daf7eb1ad61f893fa03cdd20619cdea3f177b8d833df8  ../../schemas/cxxlens_ng_quality_evidence.schema.yaml
 ba85f2dad18ebb35563f8c9eb57555fd25d29900c0b3bce4f9c51adc96d2032b  ../../schemas/cxxlens_ng_design_feedback_record.schema.yaml
-cfa3e6dbcee53ea9d8a83b0bcd1a54c85adb79e85b0d6bfa8b2ffbc5df95a4f9  ../../schemas/cxxlens_ng_development_decision_register.yaml
+c6042484e019aa184b8ea2abc7329ed7f786308d97cef686eb21d98ee76d6599  ../../schemas/cxxlens_ng_development_decision_register.yaml
 89a4981ca685462098a524f703d9d4e47247dc7e2ff90879f54be19ecfa9f95f  ../../schemas/cxxlens_ng_development_decision_register.schema.yaml
 3d655cc546f3f8d81095dfb28f2e763933dbbe774454411efb4f63c0b33e8728  ../../schemas/cxxlens_ng_development_review_receipts.yaml
 680e40f8eb2c8a7b8ec93b503d5651aeb68c67e0ba0d85624f7ab289d43fb845  ../../schemas/cxxlens_ng_development_review_receipts.schema.yaml
-c8dc23705aed78d9f8cd592249964d2dd4dc9d53de8f925973a8519accd970d6  ../../schemas/cxxlens_ng_work_units.yaml
+59fce8cd1f9f7e90424d6c49c3129d0c4329996a1c1069567adc4c621614971d  ../../schemas/cxxlens_ng_work_units.yaml
 d7c8fa9f0d51068e6f5de5fd1313b0c0b79ad6ee13e7023cc21760974b75fff3  ../../schemas/cxxlens_ng_work_units.schema.yaml
 c22b37a78489bae643123974b6927213d79e4c7bc2ca54efd8132335f04bef97  ../../schemas/cxxlens_ng_agent_context_v2.schema.yaml
 c81a7e3f8929577a8a0d7ac736ff02c124f184e121c1cc4e532457ecbc879327  ../../schemas/cxxlens_ng_autonomy_constructibility.yaml
