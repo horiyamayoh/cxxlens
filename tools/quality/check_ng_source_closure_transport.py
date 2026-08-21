@@ -978,14 +978,29 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "sequence"
     ) != "contiguous-shared-session-sequence":
         raise SourceClosureTransportError("wire canonical encoding or sequence drift")
+    if common["control_bytes"] != protocol["wire"]["limits"]["control_bytes"]:
+        raise SourceClosureTransportError(
+            "source-closure and provider control-byte limits drift"
+        )
 
+    maximum_blob_count = contract["limits"]["maximum_unique_blobs"]
+    maximum_total_blob_bytes = contract["limits"]["maximum_unique_blob_bytes"]
+    if maximum_total_blob_bytes % maximum_blob_count:
+        raise SourceClosureTransportError(
+            "maximum receipt witness cannot evenly cover unique blob bytes"
+        )
+    maximum_receipt_size = maximum_total_blob_bytes // maximum_blob_count
+    if maximum_receipt_size > contract["limits"]["maximum_blob_bytes"]:
+        raise SourceClosureTransportError(
+            "maximum receipt witness exceeds per-blob byte bound"
+        )
     maximum_receipts = [
         {
             "blob_ordinal": index,
             "blob_digest": "sha256:" + f"{index:064x}",
-            "size_bytes": 1,
+            "size_bytes": maximum_receipt_size,
         }
-        for index in range(contract["limits"]["maximum_unique_blobs"])
+        for index in range(maximum_blob_count)
     ]
     maximum_session_id = "provider-session:sha256:" + "f" * 64
     maximum_task_id = "task:semantic-v2:sha256:" + "e" * 64
@@ -999,8 +1014,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "task_v4_digest": maximum_task_digest,
         "manifest_digest": maximum_manifest_digest,
         "blob_receipts_digest": maximum_receipts_digest,
-        "blob_count": contract["limits"]["maximum_unique_blobs"],
-        "total_bytes": contract["limits"]["maximum_unique_blob_bytes"],
+        "blob_count": maximum_blob_count,
+        "total_bytes": maximum_total_blob_bytes,
         "closure_digest": maximum_closure_digest,
     }
     maximum_seal["transfer_digest"] = transfer_digest(

@@ -688,10 +688,11 @@ class SourceClosureTransportTest(unittest.TestCase):
             {
                 "blob_ordinal": index,
                 "blob_digest": "sha256:" + f"{index:064x}",
-                "size_bytes": 1,
+                "size_bytes": 12288,
             }
             for index in range(4096)
         ]
+        self.assertEqual(sum(receipt["size_bytes"] for receipt in receipts), 50331648)
         request = self.bound_request()
         receipts_digest = blob_receipts_digest(receipts)
         projection = {
