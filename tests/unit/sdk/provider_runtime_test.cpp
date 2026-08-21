@@ -2215,8 +2215,7 @@ namespace
 		// fixture process to remain unobserved.
 		counting_process_port source_closure_processes;
 		process_provider_runtime source_closure_runtime{source_closure_processes};
-		auto source_closure =
-			source_closure_runtime.execute(std::move(source_closure_request));
+		auto source_closure = source_closure_runtime.execute(std::move(source_closure_request));
 		require(
 			!source_closure && source_closure.error().code == "provider.required-feature-missing" &&
 				source_closure.error().field == "protocol" &&
