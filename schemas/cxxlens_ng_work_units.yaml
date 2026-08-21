@@ -245,7 +245,7 @@ entries:
     conflict_class: agent-ux
     integration_owner: '#277'
     authority_sources: [CMakeLists.txt, docs/development/extending-platform.md, schemas/cxxlens_asset_migration_ledger.json, schemas/cxxlens_agent_capability_resolution.schema.yaml, schemas/cxxlens_ng_agent_capability_resolution.yaml, schemas/cxxlens_ng_work_units.schema.yaml, schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_agent_context.schema.yaml, schemas/cxxlens_ng_agent_context_v2.schema.yaml, tests/CMakeLists.txt, tests/quality/test_ng_agent_capability_resolution.py, tests/quality/test_ng_agent_context_v2.py, tests/unit/sdk/check_sdk_doctor_capability.py, tools/quality/check_ng_agent_capability_resolution.py, tools/quality/check_ng_agent_context_v2.py, tools/sdk/agent_capability_resolution.hpp, tools/sdk/sdk_doctor_main.cpp]
-    authority_digest: sha256:cfa0c88fc9ae3fca12cc80f1c6919999b06db10a50b4c1509ed4df06b4734b2e
+    authority_digest: sha256:f65ec667e273656e1e6ebc950b2a0b185a98175b236153bbeccad57938ce6622
     completion_class: autonomy-readiness
     residual_qualification: installed consumer and later admitted-use-case expansion remain with integration and readiness gates
     units:

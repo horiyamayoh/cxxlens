@@ -1285,6 +1285,7 @@ add_dependencies(
   cxxlens-clang22-materialization-claims
   cxxlens-clang22-materialization-seal
   cxxlens-clang22-materialization-store
+  cxxlens-clang22-materialization-store-candidate
   cxxlens-clang22-materialization-store-outcome
   cxxlens-clang22-materialization-request-stream
   cxxlens-clang22-materialization-request-identity
@@ -1296,6 +1297,7 @@ add_dependencies(
   cxxlens-clang22-observation-v2
   cxxlens-clang22-unicode-nfc
   cxxlens-clang22-source-closure
+  cxxlens-clang22-source-closure-transport
   cxxlens-clang22-source-closure-vfs
   cxxlens-clang22-source-closure-invocation
   cxxlens-clang22-source-closure-native
@@ -1305,6 +1307,7 @@ add_dependencies(
   cxxlens-public-header-provider-clang22
   cxxlens-public-api-provider-clang22-translation-unit-input
   cxxlens-public-header-sdk
+  cxxlens-sdk-doctor
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
   cxxlens-unit-sdk-provider-ng1-validation
