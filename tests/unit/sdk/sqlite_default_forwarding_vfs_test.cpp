@@ -2054,6 +2054,65 @@ int main()
 	}
 
 	{
+		const std::string cleanup_retry_path{"/proc/self/fd/716/active/main.db"};
+		auto cleanup_retry_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				cleanup_retry_path, bundle->observation->capability_token());
+		require(cleanup_retry_scope.has_value() &&
+					(*cleanup_retry_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(cleanup_retry_path))
+						.has_value(),
+				"qualified native cleanup-retry fresh scope and arm");
+		std::array<char, 256U> cleanup_retry_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									cleanup_retry_path.c_str(),
+									static_cast<int>(cleanup_retry_full_path.size()),
+									cleanup_retry_full_path.data()) == sqlite_ok,
+				"qualified native cleanup-retry xFullPathname");
+		auto cleanup_retry_filename = sqlite_uri_filename(cleanup_retry_path, exact_uri_parameters);
+		auto cleanup_retry_storage = file_storage(*wrapper);
+		auto* cleanup_retry_file =
+			reinterpret_cast<sqlite3_file*>(cleanup_retry_storage.data());
+		int cleanup_retry_out{};
+		require(wrapper->open(wrapper,
+							cleanup_retry_filename.data(),
+							cleanup_retry_file,
+							source_shm_main_xopen_flags,
+							&cleanup_retry_out) == sqlite_ok,
+				"qualified native cleanup-retry fresh handle open");
+
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+		shm_unmap_result = sqlite_io_error;
+		volatile void* cleanup_retry_mapping{};
+		const auto cleanup_retry_maps_before = shm_map_calls;
+		const auto cleanup_retry_unmaps_before = shm_unmap_calls;
+		require(cleanup_retry_file->methods->shm_map(
+					cleanup_retry_file, 0, 4096, 0, &cleanup_retry_mapping) == sqlite_io_error &&
+					cleanup_retry_mapping == nullptr &&
+					shm_map_calls == cleanup_retry_maps_before + 1 &&
+					shm_unmap_calls == cleanup_retry_unmaps_before + 1,
+				"failed native cleanup retains a bounded source obligation");
+
+		// The source terminal remains fail-closed, but the next xShmUnmap is the
+		// only callback permitted to consume the retained native cleanup retry.
+		shm_unmap_result = sqlite_ok;
+		require(cleanup_retry_file->methods->shm_unmap(cleanup_retry_file, 0) == sqlite_ok &&
+					shm_unmap_calls == cleanup_retry_unmaps_before + 2,
+				"retained native cleanup retries exactly once under source custody");
+		cleanup_retry_mapping = shm_page.data();
+		require(cleanup_retry_file->methods->shm_map(
+					cleanup_retry_file, 0, 4096, 0, &cleanup_retry_mapping) == sqlite_io_error &&
+					cleanup_retry_mapping == nullptr &&
+					shm_map_calls == cleanup_retry_maps_before + 1,
+				"cleanup retry does not reopen the fail-closed source route");
+		require(cleanup_retry_file->methods->close(cleanup_retry_file) == sqlite_ok,
+				"cleanup-retry handle closes after exact unmap retry");
+		shm_unmap_result = sqlite_ok;
+	}
+
+	{
 		const std::string capacity_path{"/proc/self/fd/707/active/main.db"};
 		auto capacity_scope =
 			bundle->connection_observation_port->begin_source_shm_qualification_observation(

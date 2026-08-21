@@ -572,6 +572,13 @@ namespace cxxlens::sdk
 			std::uint64_t reader_generation{};
 			bool reader_existing_route_active{};
 			bool reader_lifecycle_failed{};
+			// A qualified source map can return a protocol failure after the underlying VFS
+			// has already exposed a native mapping.  If that mandatory cleanup callback is
+			// non-OK/unknown, retain the native file and one bounded retry obligation until
+			// SQLite presents xShmUnmap or xClose.  Dropping this custody would strand the
+			// mapping while the terminal latch correctly rejects ordinary native operations.
+			bool source_shm_native_cleanup_pending{};
+			std::uint8_t source_shm_native_cleanup_attempts{};
 			std::shared_ptr<native_file_node> quarantine_self;
 			std::atomic_bool quarantine_enqueued{false};
 			// Non-owning link; quarantine_self remains the owner for process lifetime.
@@ -3531,6 +3538,15 @@ namespace cxxlens::sdk
 			node->close_attempted = true;
 			try
 			{
+				if (node->source_shm_native_cleanup_pending)
+				{
+					// Never enter xClose while the preceding native xShmMap has an
+					// unresolved cleanup effect.  The process-lifetime quarantine retains
+					// the exact runtime/VFS/file custody for diagnosis and prevents a
+					// close callback from being mistaken for successful unmap cleanup.
+					quarantine_native_file(node);
+					return sqlite_io_error;
+				}
 				if (!node->writer_holders.empty() || !node->writer_pending.empty())
 				{
 					// xClose cannot revoke a live or pending writer attachment. The caller must
@@ -3781,6 +3797,46 @@ namespace cxxlens::sdk
 			if (file.source_shm_readonly_qualified)
 				file.source_shm_terminal_failure = true;
 			mark_incomplete(file.connection_observation);
+		}
+
+		void retain_source_shm_native_cleanup(native_file_node& node) noexcept
+		{
+			// The first failed attempt is the callback's original cleanup.  Exactly one
+			// later callback retry is allowed; further uncertainty remains quarantined.
+			if (node.source_shm_native_cleanup_attempts < 2U)
+			{
+				++node.source_shm_native_cleanup_attempts;
+				node.source_shm_native_cleanup_pending = true;
+			}
+		}
+
+		[[nodiscard]] bool retry_source_shm_native_cleanup(forwarding_file& file) noexcept
+		{
+			auto node = file.native;
+			if (!node || !node->source_shm_native_cleanup_pending ||
+				node->source_shm_native_cleanup_attempts >= 2U ||
+				!native_shm_callback_identity_valid(*node))
+				return false;
+			auto* raw = underlying_file(file);
+			const auto* methods = underlying_methods(file);
+			if (raw == nullptr || methods == nullptr || methods->shm_unmap == nullptr)
+				return false;
+			++node->source_shm_native_cleanup_attempts;
+			int status{};
+			try
+			{
+				status = methods->shm_unmap(raw, 0);
+			}
+			catch (...)
+			{
+				return false;
+			}
+			if (!native_shm_callback_identity_valid(*node))
+				return false;
+			if (status != sqlite_ok)
+				return false;
+			node->source_shm_native_cleanup_pending = false;
+			return true;
 		}
 
 		[[nodiscard]] bool effectful_file_control(const int operation) noexcept
@@ -4577,6 +4633,8 @@ namespace cxxlens::sdk
 								native_unmap_succeeded = false;
 							}
 						}
+						if (!native_unmap_succeeded && file.native)
+							retain_source_shm_native_cleanup(*file.native);
 						return native_unmap_succeeded;
 					};
 					try
@@ -4591,18 +4649,11 @@ namespace cxxlens::sdk
 					}
 					if (!native_shm_callback_identity_valid(*node))
 					{
-						if (native_mapping != nullptr && methods->shm_unmap != nullptr)
-						{
-							try
-							{
-								if (methods->shm_unmap(raw, 0) != sqlite_ok)
-									mark_source_shm_terminal_failure(file);
-							}
-							catch (...)
-							{
-								mark_source_shm_terminal_failure(file);
-							}
-						}
+						// Identity drift is terminal even when the native map returned a
+						// pointer.  Reuse the custody-preserving cleanup path so a failed
+						// unmap is not silently discarded while the VFS replacement remains
+						// quarantined.
+						(void)release_native_mapping();
 						mark_source_shm_terminal_failure(file);
 						return sqlite_io_error;
 					}
@@ -6284,7 +6335,11 @@ namespace cxxlens::sdk
 							}
 						}
 						if (!native_unmap_succeeded)
+						{
+							if (file->native)
+								retain_source_shm_native_cleanup(*file->native);
 							mark_source_shm_terminal_failure(*file);
+						}
 						return native_unmap_succeeded;
 					};
 					int native_status{};
@@ -7385,6 +7440,17 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (file->source_shm_readonly_qualified && file->native &&
+					file->native->source_shm_native_cleanup_pending)
+				{
+					// Cleanup custody is independent of the candidate/production route:
+					// once a native pointer was observed, the retained node owns one
+					// bounded retry even though the source terminal remains fail-closed.
+					if (retry_source_shm_native_cleanup(*file))
+						return sqlite_ok;
+					mark_source_shm_terminal_failure(*file);
+					return sqlite_io_error;
+				}
 				if (file->source_shm_readonly_qualified &&
 					!file->source_shm_qualification_candidate)
 				{
@@ -7412,16 +7478,22 @@ namespace cxxlens::sdk
 					}
 					catch (...)
 					{
+						if (file->native)
+							retain_source_shm_native_cleanup(*file->native);
 						mark_source_shm_terminal_failure(*file);
 						return sqlite_io_error;
 					}
 					if (!native_shm_callback_identity_valid(*file->native))
 					{
+						retain_source_shm_native_cleanup(*file->native);
 						mark_source_shm_terminal_failure(*file);
 						return sqlite_io_error;
 					}
 					if (status != sqlite_ok)
+					{
+						retain_source_shm_native_cleanup(*file->native);
 						mark_source_shm_terminal_failure(*file);
+					}
 					else
 					{
 						file->shm_readonly_cannot_initialize = false;
@@ -7467,11 +7539,17 @@ namespace cxxlens::sdk
 				}
 				catch (...)
 				{
+					if (file->source_shm_readonly_qualified && file->native)
+						retain_source_shm_native_cleanup(*file->native);
 					mark_source_shm_terminal_failure(*file);
 					return sqlite_io_error;
 				}
 				if (file->source_shm_readonly_qualified && status != sqlite_ok)
+				{
+					if (file->native)
+						retain_source_shm_native_cleanup(*file->native);
 					mark_source_shm_terminal_failure(*file);
+				}
 				if (status == sqlite_ok)
 					file->shm_readonly_cannot_initialize = false;
 				if (status == sqlite_ok)
