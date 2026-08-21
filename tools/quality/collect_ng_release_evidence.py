@@ -4,7 +4,9 @@
 This is the connected half of the release-evidence handoff.  It never searches
 for a latest run: every run and artifact is addressed by an ID from the
 selection document, downloaded directly, and represented in the offline bundle
-that ``check_ng_release_evidence_bundle.py`` validates.
+that ``check_ng_release_evidence_bundle.py`` validates.  The ``download``
+command is also used by owner workflows to stream one explicitly selected
+artifact under the same metadata and size boundary before handoff validation.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import stat
 import subprocess
 import sys
@@ -41,6 +44,7 @@ def fail(message: str) -> None:
 
 MAX_ARTIFACT_BYTES = 1 << 30
 STREAM_CHUNK_BYTES = 1024 * 1024
+REPOSITORY_COMPONENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -199,6 +203,62 @@ def validate_artifact_metadata(
         artifact.get("archive_download_url"), f"/actions/artifacts/{artifact_id}/zip"
     ):
         fail(f"artifact download URL is not bound to its ID: {artifact_id}")
+
+
+def _artifact_endpoint(repository: str, artifact_id: int) -> str:
+    """Build an explicit artifact endpoint from a validated repository name."""
+
+    components = repository.split("/")
+    if (
+        len(components) != 2
+        or not all(REPOSITORY_COMPONENT.fullmatch(component) for component in components)
+    ):
+        fail(f"repository is not a canonical owner/name pair: {repository!r}")
+    if not isinstance(artifact_id, int) or isinstance(artifact_id, bool) or artifact_id <= 0:
+        fail(f"artifact ID is invalid: {artifact_id!r}")
+    return f"repos/{repository}/actions/artifacts/{artifact_id}/zip"
+
+
+def download_selected_artifact(
+    *,
+    metadata_path: pathlib.Path,
+    repository: str,
+    artifact_id: int,
+    run_id: int,
+    expected_name: str,
+    output_path: pathlib.Path,
+) -> tuple[str, int]:
+    """Download one explicitly selected artifact with metadata and size bounds.
+
+    Owner workflows use this connected helper before the offline handoff checker.
+    Metadata is authenticated before the archive stream starts, and the final
+    bytes are checked against GitHub's advertised digest and size.  A failed
+    download or mismatch never leaves a seemingly usable output archive.
+    """
+
+    metadata = load_json(metadata_path)
+    validate_artifact_metadata(metadata, artifact_id, expected_name, run_id)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        gh_archive(_artifact_endpoint(repository, artifact_id), output_path)
+        observed_digest, observed_size = digest_file(output_path)
+        if observed_size != metadata["size_in_bytes"]:
+            fail(
+                f"artifact {artifact_id} size differs from GitHub metadata: "
+                f"expected={metadata['size_in_bytes']}, observed={observed_size}"
+            )
+        if observed_digest != metadata["digest"]:
+            fail(
+                f"artifact {artifact_id} digest differs from GitHub metadata: "
+                f"expected={metadata['digest']}, observed={observed_digest}"
+            )
+    except Exception:
+        try:
+            output_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    return observed_digest, observed_size
 
 
 def normalize_run(
@@ -529,21 +589,57 @@ def collect(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("collect")
-    parser.add_argument("--selection", type=pathlib.Path, required=True)
-    parser.add_argument("--selection-output", type=pathlib.Path, required=True)
-    parser.add_argument("--bundle-output", type=pathlib.Path, required=True)
-    parser.add_argument("--artifact-root", type=pathlib.Path, required=True)
+    parser.add_argument("command", choices=("collect", "download"))
+    parser.add_argument("--selection", type=pathlib.Path)
+    parser.add_argument("--selection-output", type=pathlib.Path)
+    parser.add_argument("--bundle-output", type=pathlib.Path)
+    parser.add_argument("--artifact-root", type=pathlib.Path)
+    parser.add_argument("--artifact-metadata", type=pathlib.Path)
+    parser.add_argument("--repository")
+    parser.add_argument("--artifact-id", type=int)
+    parser.add_argument("--run-id", type=int)
+    parser.add_argument("--expected-name")
+    parser.add_argument("--output", type=pathlib.Path)
     arguments = parser.parse_args(argv)
-    if arguments.collect != "collect":
-        parser.error("the only command is collect")
     try:
-        bundle = collect(
-            selection_path=arguments.selection.resolve(),
-            selection_output=arguments.selection_output.resolve(),
-            bundle_output=arguments.bundle_output.resolve(),
-            artifact_root=arguments.artifact_root.resolve(),
-        )
+        if arguments.command == "collect":
+            required = {
+                "--selection": arguments.selection,
+                "--selection-output": arguments.selection_output,
+                "--bundle-output": arguments.bundle_output,
+                "--artifact-root": arguments.artifact_root,
+            }
+            missing = [name for name, value in required.items() if value is None]
+            if missing:
+                parser.error("collect requires " + ", ".join(missing))
+            bundle = collect(
+                selection_path=arguments.selection.resolve(),
+                selection_output=arguments.selection_output.resolve(),
+                bundle_output=arguments.bundle_output.resolve(),
+                artifact_root=arguments.artifact_root.resolve(),
+            )
+        else:
+            required = {
+                "--artifact-metadata": arguments.artifact_metadata,
+                "--repository": arguments.repository,
+                "--artifact-id": arguments.artifact_id,
+                "--run-id": arguments.run_id,
+                "--expected-name": arguments.expected_name,
+                "--output": arguments.output,
+            }
+            missing = [name for name, value in required.items() if value is None]
+            if missing:
+                parser.error("download requires " + ", ".join(missing))
+            digest, size = download_selected_artifact(
+                metadata_path=arguments.artifact_metadata.resolve(),
+                repository=arguments.repository,
+                artifact_id=arguments.artifact_id,
+                run_id=arguments.run_id,
+                expected_name=arguments.expected_name,
+                output_path=arguments.output.resolve(),
+            )
+            print(f"release-evidence-downloader: {digest} ({size} bytes)")
+            return 0
     except (ReleaseEvidenceCollectionError, ReleaseEvidenceError) as error:
         print(f"release-evidence-collector: {error}", file=sys.stderr)
         return 1

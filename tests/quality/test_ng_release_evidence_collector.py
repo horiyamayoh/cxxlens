@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import pathlib
 import sys
 import tempfile
@@ -18,6 +19,7 @@ from collect_ng_release_evidence import (  # noqa: E402
     authenticate_candidate,
     authenticate_workflow,
     digest_file,
+    download_selected_artifact,
     normalize_run,
     validate_artifact_metadata,
 )
@@ -131,6 +133,106 @@ class ReleaseEvidenceCollectorTest(unittest.TestCase):
             with mock.patch("collect_ng_release_evidence.MAX_ARTIFACT_BYTES", 4):
                 with self.assertRaisesRegex(ReleaseEvidenceCollectionError, "exceeds"):
                     digest_file(path)
+
+    def test_selected_artifact_download_authenticates_before_stream(self) -> None:
+        payload = b"authenticated artifact bytes\n"
+        digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+        metadata = {
+            "id": 2001,
+            "name": f"cxxlens-ng-release-qualification-{SHA}",
+            "expired": False,
+            "workflow_run": {"id": 1001},
+            "size_in_bytes": len(payload),
+            "digest": digest,
+            "url": "https://api.github.com/repos/example/cxxlens/actions/artifacts/2001",
+            "archive_download_url": (
+                "https://api.github.com/repos/example/cxxlens/actions/artifacts/2001/zip"
+            ),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            metadata_path = root / "artifact.json"
+            output_path = root / "artifact.zip"
+            metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+            def fake_download(endpoint: str, path: pathlib.Path) -> None:
+                self.assertEqual(endpoint, "repos/example/cxxlens/actions/artifacts/2001/zip")
+                path.write_bytes(payload)
+
+            with mock.patch("collect_ng_release_evidence.gh_archive", side_effect=fake_download):
+                observed_digest, observed_size = download_selected_artifact(
+                    metadata_path=metadata_path,
+                    repository="example/cxxlens",
+                    artifact_id=2001,
+                    run_id=1001,
+                    expected_name=f"cxxlens-ng-release-qualification-{SHA}",
+                    output_path=output_path,
+                )
+            self.assertEqual((observed_digest, observed_size), (digest, len(payload)))
+            self.assertEqual(output_path.read_bytes(), payload)
+
+    def test_selected_artifact_download_removes_digest_mismatch(self) -> None:
+        payload = b"tampered artifact bytes\n"
+        metadata = {
+            "id": 2001,
+            "name": f"cxxlens-ng-release-qualification-{SHA}",
+            "expired": False,
+            "workflow_run": {"id": 1001},
+            "size_in_bytes": len(payload),
+            "digest": "sha256:" + "c" * 64,
+            "url": "https://api.github.com/repos/example/cxxlens/actions/artifacts/2001",
+            "archive_download_url": (
+                "https://api.github.com/repos/example/cxxlens/actions/artifacts/2001/zip"
+            ),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            metadata_path = root / "artifact.json"
+            output_path = root / "artifact.zip"
+            metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+            with mock.patch(
+                "collect_ng_release_evidence.gh_archive",
+                side_effect=lambda _endpoint, path: path.write_bytes(payload),
+            ):
+                with self.assertRaisesRegex(
+                    ReleaseEvidenceCollectionError, "digest differs from GitHub metadata"
+                ):
+                    download_selected_artifact(
+                        metadata_path=metadata_path,
+                        repository="example/cxxlens",
+                        artifact_id=2001,
+                        run_id=1001,
+                        expected_name=f"cxxlens-ng-release-qualification-{SHA}",
+                        output_path=output_path,
+                    )
+            self.assertFalse(output_path.exists())
+
+    def test_selected_artifact_download_rejects_noncanonical_repository(self) -> None:
+        metadata = {
+            "id": 2001,
+            "name": f"cxxlens-ng-release-qualification-{SHA}",
+            "expired": False,
+            "workflow_run": {"id": 1001},
+            "size_in_bytes": 1,
+            "digest": "sha256:" + "c" * 64,
+            "url": "https://api.github.com/repos/example/cxxlens/actions/artifacts/2001",
+            "archive_download_url": (
+                "https://api.github.com/repos/example/cxxlens/actions/artifacts/2001/zip"
+            ),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            metadata_path = root / "artifact.json"
+            metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+            with self.assertRaisesRegex(ReleaseEvidenceCollectionError, "canonical owner/name"):
+                download_selected_artifact(
+                    metadata_path=metadata_path,
+                    repository="example/cxxlens/extra",
+                    artifact_id=2001,
+                    run_id=1001,
+                    expected_name=f"cxxlens-ng-release-qualification-{SHA}",
+                    output_path=root / "artifact.zip",
+                )
 
 
 if __name__ == "__main__":

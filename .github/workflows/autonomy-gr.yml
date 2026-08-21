@@ -52,6 +52,7 @@ jobs:
       - name: Download explicitly selected quality producer artifact
         env:
           GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
           SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
         run: |
@@ -59,7 +60,14 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" > "${RUNNER_TEMP}/source-run.json"
           gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/quality.yml" > "${RUNNER_TEMP}/source-workflow.json"
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}" > "${RUNNER_TEMP}/source-artifact.json"
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" > "${RUNNER_TEMP}/source-artifact.zip"
+          # The bounded downloader resolves the exact endpoint actions/artifacts/${SOURCE_ARTIFACT_ID}/zip.
+          python3 tools/quality/collect_ng_release_evidence.py download \
+            --artifact-metadata "${RUNNER_TEMP}/source-artifact.json" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --artifact-id "${SOURCE_ARTIFACT_ID}" \
+            --run-id "${SOURCE_RUN_ID}" \
+            --expected-name "cxxlens-ng-release-qualification-${CANDIDATE_SHA}" \
+            --output "${RUNNER_TEMP}/source-artifact.zip"
       - name: Authenticate issue-167 report without recreating it
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
