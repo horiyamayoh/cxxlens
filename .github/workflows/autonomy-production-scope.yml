@@ -60,7 +60,7 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/quality.yml" > "${RUNNER_TEMP}/source-workflow.json"
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}" > "${RUNNER_TEMP}/source-artifact.json"
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" > "${RUNNER_TEMP}/source-artifact.zip"
-      - name: Authenticate #179 report without recreating it
+      - name: Authenticate issue-179 report without recreating it
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           SELECTION_DIGEST: ${{ inputs.selection_digest }}

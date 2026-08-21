@@ -118,7 +118,7 @@ function(run_installed_tools label)
       "@Python3_EXECUTABLE@"
       "@CMAKE_CURRENT_SOURCE_DIR@/install/check_sdk_doctor_installed_consumer.py"
       "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
-    COMMAND_ERROR_IS_FATAL ANY)
+      COMMAND_ERROR_IS_FATAL ANY)
   run_clean(
     0 "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
     explain "${doctored_report}")

@@ -772,15 +772,15 @@ set_tests_properties(
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-candidate
   adapter/clang22/materialization_store_candidate_test.cpp)
-target_link_libraries(
-  cxxlens-clang22-materialization-store-candidate
-  PRIVATE cxxlens_clang22_materializer_core)
+target_link_libraries(cxxlens-clang22-materialization-store-candidate
+                      PRIVATE cxxlens_clang22_materializer_core)
 add_test(NAME adapter.clang22-materialization-store-candidate
          COMMAND cxxlens-clang22-materialization-store-candidate)
 set_tests_properties(
   adapter.clang22-materialization-store-candidate
-  PROPERTIES LABELS
-             "adapter;provider;clang22;materialization;store;candidate;bounded;security")
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;store;candidate;bounded;security")
 
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-outcome
@@ -925,17 +925,17 @@ set_tests_properties(
   PROPERTIES
     LABELS "adapter;provider;clang22;source-closure;security;identity;contract")
 
-cxxlens_add_test_executable(
-  cxxlens-clang22-source-closure-transport
-  adapter/clang22/source_closure_transport_test.cpp)
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-transport
+                            adapter/clang22/source_closure_transport_test.cpp)
 target_link_libraries(cxxlens-clang22-source-closure-transport
                       PRIVATE cxxlens_clang22_materialization_codecs)
 add_test(NAME adapter.clang22-source-closure-transport
          COMMAND cxxlens-clang22-source-closure-transport)
 set_tests_properties(
   adapter.clang22-source-closure-transport
-  PROPERTIES LABELS
-             "adapter;provider;clang22;source-closure;transport;security;contract")
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;source-closure;transport;security;contract")
 
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-vfs
                             adapter/clang22/source_closure_vfs_test.cpp)
@@ -1194,8 +1194,8 @@ add_test(
   NAME quality.ng-store-candidate
   COMMAND "${Python3_EXECUTABLE}"
           "${PROJECT_SOURCE_DIR}/tests/quality/test_ng_store_candidate.py")
-set_tests_properties(quality.ng-store-candidate PROPERTIES LABELS
-                                                        "quality;ng;store;candidate")
+set_tests_properties(quality.ng-store-candidate
+                     PROPERTIES LABELS "quality;ng;store;candidate")
 
 add_test(
   NAME quality.ownership
