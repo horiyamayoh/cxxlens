@@ -4,6 +4,13 @@ title: cxxlens exact work-unit agent context v2
 type: object
 additionalProperties: false
 required: [schema, document_version, role, issue, unit_id, conflict_class, integration_owner, risk, execution_disposition, blockers, dependencies, owned_products, consumed_products, required_product_receipts, authority, reading_set, allowed_write_paths, integration_generated_surfaces, forbidden_shortcuts, completion_class, evidence_commands, completion_plan, residual_qualification]
+allOf:
+  - if:
+      properties: {execution_disposition: {const: ready}}
+    then:
+      properties: {blockers: {maxItems: 0}}
+    else:
+      properties: {blockers: {minItems: 1}}
 properties:
   schema: {const: cxxlens.ng-agent-context.v2}
   document_version: {const: 2.0.0}
@@ -14,7 +21,7 @@ properties:
   integration_owner: {type: string, pattern: '^#[1-9][0-9]*$'}
   risk: {enum: [local, contract, invariant, security, compatibility, irreversible, resource-bound]}
   execution_disposition: {enum: [ready, stop-review-required, stop-blocked-by-authority, stop-blocked-by-dependency]}
-  blockers: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+  blockers: {type: array, uniqueItems: true, items: {$ref: '#/$defs/actionable_string'}}
   dependencies: {type: array, uniqueItems: true, items: {type: string, pattern: '^wu-[1-9][0-9]*-[a-z0-9-]+$'}}
   owned_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
   consumed_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}
@@ -61,13 +68,14 @@ properties:
       properties: {path: {$ref: '#/$defs/path'}, sha256: {$ref: '#/$defs/digest'}}
   allowed_write_paths: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/path'}}
   integration_generated_surfaces: {type: array, uniqueItems: true, items: {$ref: '#/$defs/path'}}
-  forbidden_shortcuts: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
+  forbidden_shortcuts: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/actionable_string'}}
   completion_class: {enum: [bounded-implementation, autonomy-readiness]}
-  evidence_commands: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
-  completion_plan: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
-  residual_qualification: {type: string, minLength: 1}
+  evidence_commands: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/actionable_string'}}
+  completion_plan: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/actionable_string'}}
+  residual_qualification: {$ref: '#/$defs/actionable_string'}
 $defs:
   hex40: {type: string, pattern: '^[0-9a-f]{40}$'}
   digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   path: {type: string, minLength: 1, pattern: '^(?!/)(?!.*\\)(?!.*\u0000)(?!.*(?:^|/)(?:\.{0,2}|\.git)(?:/|$)).+$'}
   product: {type: string, pattern: '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$'}
+  actionable_string: {type: string, minLength: 1, pattern: '.*\S.*'}

@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 from check_ng_agent_context_v2 import (  # noqa: E402
     AgentContextV2Error,
     _packet,
+    _is_bounded_completion,
+    _registered_units,
     _select,
     build,
     corpus,
@@ -30,7 +32,60 @@ class AgentContextV2Test(unittest.TestCase):
         self.assertGreaterEqual(report["packets"], 9)
         self.assertEqual(report["safe_stop_rate_percent"], 100)
         self.assertGreaterEqual(report["bounded_packet_completion_rate_percent"], 80)
-        self.assertEqual(report["v1_issue_261_compatibility"], "preserved")
+        self.assertEqual(report["v1_issue_261_compatibility"], "verified")
+        compatibility = report["v1_issue_261_compatibility_evidence"]
+        self.assertEqual(compatibility["method"], "exact-v1-plan-and-check")
+        self.assertEqual(compatibility["packet_schema"], "cxxlens.ng-agent-context.v1")
+        self.assertEqual(compatibility["issue"], "#261")
+        self.assertEqual(compatibility["plan_exit_code"], 0)
+        self.assertEqual(compatibility["check_exit_code"], 0)
+        self.assertEqual(compatibility["authority_scope"], "temporary-clean-head-clone")
+        self.assertEqual(compatibility["output_scope"], "temporary-directory")
+
+    def test_completion_selection_requires_registered_semantic_binding(self) -> None:
+        manifest = work_units.validate(ROOT)
+        entry, unit = _select(manifest, "#277", "wu-277-context-v2")
+        packet = build(ROOT, "#277", "wu-277-context-v2", synthetic=True)
+        self.assertTrue(_is_bounded_completion(ROOT, manifest, entry, unit, packet, synthetic=True))
+        mutations = (
+            ("issue", lambda value: value.__setitem__("issue", "#261"), "issue/unit identity"),
+            (
+                "dependency",
+                lambda value: value.__setitem__("dependencies", ["wu-999-unknown"]),
+                "unknown dependency",
+            ),
+            (
+                "manifest-digest",
+                lambda value: value["authority"].__setitem__("manifest_digest", "sha256:" + "0" * 64),
+                "manifest digest",
+            ),
+            (
+                "actionable",
+                lambda value: value.__setitem__("completion_plan", [" "]),
+                "(actionable field|authority projection drift)",
+            ),
+        )
+        for name, mutate, message in mutations:
+            with self.subTest(name=name):
+                candidate = copy.deepcopy(packet)
+                mutate(candidate)
+                with self.assertRaisesRegex(AgentContextV2Error, message):
+                    _is_bounded_completion(ROOT, manifest, entry, unit, candidate, synthetic=True)
+
+    def test_unknown_work_unit_reference_cannot_enter_corpus_registry(self) -> None:
+        manifest = work_units.validate(ROOT)
+        mutated = copy.deepcopy(manifest)
+        mutated["entries"][0]["units"][0]["depends_on"] = ["wu-999-unknown"]
+        with self.assertRaisesRegex(AgentContextV2Error, "unknown work unit reference"):
+            _registered_units(mutated)
+
+    def test_v1_compatibility_failure_is_not_reported_as_preserved(self) -> None:
+        with mock.patch(
+            "check_ng_agent_context_v2._run_v1_compatibility",
+            side_effect=AgentContextV2Error("synthetic v1 failure"),
+        ):
+            with self.assertRaisesRegex(AgentContextV2Error, "synthetic v1 failure"):
+                corpus(ROOT)
 
     def test_issue_and_unit_must_match_exactly(self) -> None:
         manifest = work_units.validate(ROOT)
@@ -57,6 +112,23 @@ class AgentContextV2Test(unittest.TestCase):
                 mutate(candidate)
                 with self.assertRaisesRegex(AgentContextV2Error, "schema validation failed"):
                     validate_packet(ROOT, candidate)
+
+    def test_whitespace_only_actionable_fields_are_rejected_by_schema(self) -> None:
+        packet = build(ROOT, "#277", "wu-277-context-v2", synthetic=True)
+        for field in ("forbidden_shortcuts", "evidence_commands", "completion_plan"):
+            with self.subTest(field=field):
+                candidate = copy.deepcopy(packet)
+                candidate[field] = [" "]
+                with self.assertRaisesRegex(AgentContextV2Error, "schema validation failed"):
+                    validate_packet(ROOT, candidate)
+
+    def test_schema_requires_blocker_for_nonready_disposition(self) -> None:
+        packet = build(ROOT, "#202", "wu-202-normalization-effect", synthetic=True)
+        self.assertNotEqual(packet["execution_disposition"], "ready")
+        candidate = copy.deepcopy(packet)
+        candidate["blockers"] = []
+        with self.assertRaisesRegex(AgentContextV2Error, "schema validation failed"):
+            validate_packet(ROOT, candidate)
 
     def test_blocked_unit_has_actionable_stop(self) -> None:
         packet = build(ROOT, "202", "wu-202-normalization-effect", synthetic=True)

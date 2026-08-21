@@ -216,9 +216,13 @@ python3 tools/quality/check_ng_agent_context_v2.py corpus --root .
 ```
 
 v2 packet は issue/unit の exact match、authority digest、current revision/tree、最小 reading set、write scope、
-blocker、dependency-ordered completion plan、evidence command、残余 qualification を結合します。dirty worktree、
+blocker、dependency-ordered completion plan、evidence command、残余 qualification を結合します。corpus の bounded
+completion 選択は、登録済み issue/unit identity、dependency reference、packet の manifest/authority digest、actionable
+field の非空性を packet と manifest の独立 projection で再照合し、unknown work unit を受理しません。dirty worktree、
 unknown/foreign unit、authority drift は実行 packet を生成しません。共有 checksum/ledger は packet の write scope
-から除外され、integration owner が生成・commitします。固定 corpus は安全停止率100%と bounded packet 完備率80%以上を要求します。
+から除外され、integration owner が生成・commitします。固定 corpus は安全停止率100%と bounded packet 完備率80%以上を要求し、
+v1 の #261 exact packet `plan`/`check` を一時 clean-HEAD clone と一時出力ディレクトリで実行した measurable evidence を
+`v1_issue_261_compatibility_evidence` に保持します。v1 producer/schema は変更しません。
 
 静的 relation inventory を残す場合の契約名は `relation-presence` です。これは use-case/capability graph、support tuple、
 input/model/evidence gap と dependency-ordered plan を読む将来の `missing --project` とは別機能であり、相互代用しません。
