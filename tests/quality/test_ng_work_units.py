@@ -18,9 +18,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_ng_work_units import (  # noqa: E402
+    GOVERNANCE_WORK_UNIT_AUTHORITY_SURFACES,
     MANIFEST,
     SCHEMA,
     WorkUnitError,
+    canonical_digest,
     validate,
     validate_repository_path,
 )
@@ -48,6 +50,25 @@ class WorkUnitTest(unittest.TestCase):
 
     def test_repository_inventory_is_valid(self) -> None:
         validate(ROOT)
+
+    def test_governance_authority_closure_requires_enforcement_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            missing = next(iter(GOVERNANCE_WORK_UNIT_AUTHORITY_SURFACES))
+
+            def mutate(value) -> None:
+                entry = next(item for item in value["entries"] if item["issue"] == "#173")
+                entry["authority_sources"].remove(missing)
+                entry["authority_digest"] = canonical_digest(
+                    root, entry["authority_sources"]
+                )
+
+            self.rewrite(root, mutate)
+            with self.assertRaisesRegex(
+                WorkUnitError,
+                "governance work-unit authority closure missing enforcement surface",
+            ):
+                validate(root)
 
     def test_runtime_repository_path_guard_rejects_unsafe_values(self) -> None:
         unsafe_paths = (

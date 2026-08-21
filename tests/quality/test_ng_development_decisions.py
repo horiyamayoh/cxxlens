@@ -20,12 +20,14 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_ng_development_decisions import (  # noqa: E402
     DecisionRegisterError,
+    GOVERNANCE_ENFORCEMENT_SURFACES,
     RECEIPTS,
     RECEIPT_SCHEMA,
     REGISTER,
     SCHEMA,
     authority_digest,
     canonical_review_comment,
+    _validate_current_authority_projection,
     _verify_connected_receipt,
     validate,
 )
@@ -42,6 +44,8 @@ class DevelopmentDecisionTest(unittest.TestCase):
         for entry in register["decisions"]:
             for reference in entry["authority_refs"]:
                 destination = root / reference
+                if destination.exists():
+                    continue
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.write_text("authority\n", encoding="utf-8")
         return root
@@ -73,6 +77,45 @@ class DevelopmentDecisionTest(unittest.TestCase):
 
     def test_repository_register_is_valid(self) -> None:
         validate(ROOT)
+
+    def test_direct_main_authority_closure_requires_enforcement_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            missing = next(iter(GOVERNANCE_ENFORCEMENT_SURFACES))
+
+            def mutate(value) -> None:
+                decision = value["decisions"][0]
+                decision["authority_refs"].remove(missing)
+
+            self.rewrite(root, mutate)
+            with self.assertRaisesRegex(
+                DecisionRegisterError,
+                "direct-main governance authority closure missing enforcement surface",
+            ):
+                validate(root, verify_git=False)
+
+    def test_accepted_receipt_rejects_current_authority_projection_drift(self) -> None:
+        receipt = {
+            "id": "review-receipt.governance-drift.test.v1",
+            "authority_files": [{"path": "authority.md", "blob": "a" * 40}],
+        }
+
+        def fake_git(_root: pathlib.Path, *arguments: str) -> str:
+            if arguments == ("rev-parse", f"{'c' * 40}:authority.md"):
+                return "a" * 40
+            if arguments == ("rev-parse", "HEAD:authority.md"):
+                return "b" * 40
+            raise AssertionError(arguments)
+
+        with mock.patch(
+            "check_ng_development_decisions._git", side_effect=fake_git
+        ):
+            with self.assertRaisesRegex(
+                DecisionRegisterError, "current authority projection drift"
+            ):
+                _validate_current_authority_projection(
+                    pathlib.Path("/tmp/governance-test"), receipt, "c" * 40
+                )
 
     def test_duplicate_decision_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

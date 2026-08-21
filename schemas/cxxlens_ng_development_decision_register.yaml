@@ -30,7 +30,7 @@ decisions:
     implementation_status: partial
     qualification_status: not-claimed
     activation: active-by-workflow-amendment
-    authority_refs: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_autonomy_ci.yaml]
+    authority_refs: [AGENTS.md, .github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_autonomy_ci.schema.yaml, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_autonomy_constructibility.schema.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_wip_inventory.schema.yaml, schemas/cxxlens_ng_wip_inventory.yaml, schemas/cxxlens_ng_work_units.schema.yaml, schemas/cxxlens_ng_work_units.yaml, tools/quality/check_ng_autonomy_ci.py, tools/quality/check_ng_autonomy_constructibility.py, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_wip_inventory.py, tools/quality/check_ng_work_units.py]
   - id: decision.release.composed-authority
     title: Compose aggregate decision, GR execution, and terminal scope closure
     owner_issues: ['#173', '#167', '#179']
@@ -77,7 +77,7 @@ decisions:
     title: Nest authenticated mapping lease within zero-effect active WAL reading
     owner_issues: ['#201', '#205']
     risk: irreversible
-    contract_ids: [store.sqlite-read-mapping-lifecycle.v1]
+    contract_ids: [store.sqlite-active-read-connection.v1, cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1, cxxlens.sqlite.reader-shm-native-attachment.v1, cxxlens.sqlite-nested-mapping-terminal.v1, store.sqlite-logical-read-receipt.v1]
     choice: attempt-pin-native-success-pending-lease-eager-decode-read-receipt-revoke-cleanup
     rejected: [sibling-read-and-lease-machines, raw-native-ok-projection, post-close-endpoint-proof, ambiguous-callback-reuse]
     decision_status: decided

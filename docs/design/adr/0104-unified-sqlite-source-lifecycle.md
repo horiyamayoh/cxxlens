@@ -3,7 +3,12 @@
 - Status: Proposed for independent review
 - Date: 2026-08-21
 - Owners: #201 and #205; separate effect-profile owner #202
-- Contract IDs: `store.sqlite-read-mapping-lifecycle.v1`, `store.sqlite-exact-empty-normalization-effect.v1`
+- Contract IDs: `store.sqlite-active-read-connection.v1`,
+  `cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1`,
+  `cxxlens.sqlite.reader-shm-native-attachment.v1`,
+  `cxxlens.sqlite-nested-mapping-terminal.v1`,
+  `store.sqlite-logical-read-receipt.v1`,
+  `store.sqlite-exact-empty-normalization-effect.v1`
 - Production activation: fail-closed
 - Production qualification: not claimed
 
@@ -19,6 +24,11 @@ No receipt substitutes for another. #201 cannot authorize normalization, #205 ca
 database validity or CAS, and #202 cannot mint or prolong a mapping lease. Production canonical or
 user-source normalization remains disabled until the separate #202 effect profile has an exact
 candidate P0/P1-zero review and authenticated acceptance receipt.
+
+The composite `cxxlens.sqlite-nested-mapping-terminal.v1` is only the authenticated #201/#205
+handoff surface. It carries the separately sealed writer-generation and reader-attachment terminals;
+it cannot mint either underlying authority, substitute a reader zero-effect receipt, or satisfy the
+outer logical-read barrier by itself.
 
 ## #201 outer zero-effect machine
 
@@ -44,6 +54,13 @@ zero-create/write/truncate/extend/delete/resize callback-effect transcript. Only
 closure, zero live callbacks/leases/use owners, and that zero-effect receipt can #201 seal the
 logical read receipt.
 
+This is the #201 outer-read invariant, not a blanket reclassification of a #205 writer receipt.
+The effectful writer subprotocol is a separate authenticated RW-main/WAL-gated path: a writer
+`{1,1}` outcome is never evidence for the outer zero-effect receipt or the logical read receipt.
+If an outer custody census contains a writer terminal, #201 must independently prove that its
+writer effect scope is zero before sealing the outer receipt; a writer terminal alone cannot satisfy
+that barrier, and any observed writer effect makes the outer logical-read candidate non-authoritative.
+
 The receipt binds runtime image/source ID/build options, VFS callbacks/app-data, filesystem/mount,
 retained parent, main/WAL/SHM/journal object and directory-entry identities, pre-`xOpen` namespace
 epoch, WAL header/salts/authoritative prefix, decoded logical state and page/census projection, and
@@ -68,15 +85,26 @@ A reader callback follows:
 A reader never enters `mapping-lease-promoted`, mints writer/page authority, or admits another page
 transitively. Its product is one reader attachment group/handoff plus the exact session owner.
 
+Writer and reader map effects are separate receipts. A writer map carries an exact extend/effect
+pair and may use `{0,0}` only for a pre-existing unchanged SHM object, or `{1,1}` only under an
+authenticated read-write main-database, exact WAL write-lock, and Store writer-effect gate. The
+`{1,1}` receipt is limited to the expected direct SHM creation or exact monotonic range extension.
+`{1,0}`, `{0,1}`, any other pair, missing effect evidence, and effect-gate drift are rejected and
+cannot promote a writer generation. A reader map instead requires a distinct zero-effect receipt;
+reader native entry and reader attachment promotion prove zero initialize/create, write, truncate,
+extend, delete, and resize effect. Neither writer-effect evidence nor reader zero-effect evidence
+is a logical read receipt.
+
 Before writer delegation there is only a callback-local attempt pin and writer cohort in-flight pin.
 There is no new registry lease or pending mapping. A reader callback, however, must first acquire a
 fresh, page/range-specific pre-delegation pin from an already-live authenticated local writer mapping
 lease and its sealed page-support receipt. Absence, retirement, ambiguity, or cross-process ownership
 rejects the reader before native entry. Exact native `SQLITE_OK` with a non-null pointer makes
-a non-authoritative pending receipt. Promotion occurs only after page, size, pointer, extend pair,
-mapping generation, process instance, PID/fork generation, runtime/VFS/filesystem/file-family,
-SHM object/entry/mount, namespace watch, the exact zero-effect callback receipt, and all current Store
-writer gates validate. Simultaneous
+a non-authoritative pending receipt. Writer promotion occurs only after page, size, pointer, extend
+pair, writer effect receipt, mapping generation, process instance, PID/fork generation,
+runtime/VFS/filesystem/file-family, SHM object/entry/mount, namespace watch, and all current Store
+writer gates validate. Reader promotion additionally requires the distinct reader zero-effect
+receipt. Simultaneous
 first writers may install or join one exact generation only through CAS on the complete key.
 
 The production exception can translate exactly one promoted native `SQLITE_OK/non-null` to
@@ -102,23 +130,26 @@ The only teardown order is:
 4. seal the complete member/use-owner census;
 5. delegate at most one authenticated native `xShmUnmap(deleteFlag=0)` and capture its outcome;
 6. only after confirmed `xShmUnmap == SQLITE_OK`, consume the distinct close owner and call `xClose`;
-7. after confirmed close, seal the callback-effect transcript, retire generation and registry
-   entries, then release pins/cleanup. Non-OK, throw, timeout, or indeterminate unmap installs a
+7. after confirmed close, seal the writer callback-effect transcript or reader zero-effect callback
+   transcript for the exact attachment, retire generation and registry entries, then release
+   pins/cleanup. Non-OK, throw, timeout, or indeterminate unmap installs a
    terminal opaque quarantine and performs zero close, retry, or reconstructed cleanup.
 
 A native-started callback that returns after the cut remains an original-callback drain only. It
 cannot publish a mapping, successor, or fresh cleanup authority. Same-thread/reentrant retirement
 returns the exact outer `SQLITE_IOERR` and permanently quarantines the handle/lease. Unknown callback,
 unmap, close, unload, or cleanup outcome also creates a permanent non-reusable quarantine tombstone;
-there is no retry or reconstruction. Revoke always precedes cleanup and VFS unload. Every callback
-receipt proves zero initialize/create, write, truncate, extend, delete, and resize effect; identity
-continuity alone is never such proof.
+there is no retry or reconstruction. Revoke always precedes cleanup and VFS unload. Every writer
+callback receipt proves its exact extend/effect pair and gate-bound effect scope; every reader and
+outer-read callback receipt proves zero initialize/create, write, truncate, extend, delete, and
+resize effect. Identity continuity alone is never such proof.
 
 Reader attachment retirement repeats the same cut/census discipline independently: hide generation,
 seal its pre-callback cut, revoke admission, drain callbacks and use owners, seal the complete member
 census, perform one authenticated `xShmUnmap(0)`, consume its distinct close owner, seal close outcome,
-callback-effect transcript, and cleanup acknowledgement, then release the page-support pin and seal
-only `reader-retired`. It never retires or makes a claim about an independently live writer attachment.
+zero-effect callback transcript, and cleanup acknowledgement, then release the page-support pin and
+seal only `reader-retired`. It never retires or makes a claim about an independently live writer
+attachment.
 The outer connection separately joins all reader terminals with all writer terminals owned by that
 outer connection. It enters `outer-custody-join-pending`, compares the exact outer-owned writer set
 with the retired-writer set and the exact outer-owned reader set with the retired-reader set, and
@@ -196,8 +227,8 @@ fresh initialization, never Store/public success. Fixture-only capability cannot
 | pre-`xOpen` boundary | runtime/VFS/filesystem/retained parent and namespace epoch | target pointer or logical database claim |
 | typed census | held file-family identities and physical observations | exact-empty logical receipt or effect eligibility |
 | callback attempt | callback cut, attempt/in-flight pin, requested page/size/extend | registry lease |
-| native outcome | exact return and pointer | promoted mapping or database validity |
-| promoted lease | full mapping/process/runtime/file-family identity and generation | logical read success or CAS |
+| native outcome | exact return, pointer, and writer/reader-specific effect receipt | promoted mapping or database validity |
+| promoted lease | full mapping/process/runtime/file-family identity, generation, and writer effect scope | logical read success or CAS |
 | eager decode | locks, mapping/private-index receipts, decoded values | public read receipt or effect entry |
 | closed read candidate | decoded candidate, closed connection, zero live custody, exact zero-effect callback receipt | normalization before all four predicates |
 | effect pre-seal | exact-empty logical receipt and profile capability | post-effect identity or fresh success |
@@ -221,7 +252,8 @@ fresh initialization, never Store/public success. Fixture-only capability cannot
 Reject first-map mutation, census-selected normalization, writer pre-delegation lease, reader native
 entry without a fresh authenticated writer-lease pin, `OK+null`, different pointer, incomplete
 member/use-owner census, stale/ABA/fork/PID/VFS lease, unload before revoke, callback effect without
-an exact zero-effect receipt, nonzero unmap delete flag, callback retry, ordinary-drain fork handling,
+an exact writer effect receipt or reader/outer zero-effect receipt, writer `{1,0}`/`{0,1}`/unknown
+effect pair, writer effect without the exact gate, nonzero unmap delete flag, callback retry, ordinary-drain fork handling,
 `#202` entry before connection-close/zero-custody, inferred cleanup, cross-branch fallback,
 fixture-to-production promotion, missing
 parent fsync, non-empty normalization, sidecar ambiguity, and CAS reclassification.

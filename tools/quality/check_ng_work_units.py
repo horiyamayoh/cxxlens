@@ -14,10 +14,19 @@ from typing import Any
 import jsonschema
 import yaml
 
+from check_ng_development_decisions import GOVERNANCE_ENFORCEMENT_SURFACES
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = pathlib.Path("schemas/cxxlens_ng_work_units.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_work_units.schema.yaml")
+# The manifest is the projection being digested, so including it in its own
+# authority source set would create a self-referential digest.  The decision
+# register still covers the manifest itself; this set covers the remaining
+# governance enforcement surfaces owned by wu-173.
+GOVERNANCE_WORK_UNIT_AUTHORITY_SURFACES = frozenset(
+    path for path in GOVERNANCE_ENFORCEMENT_SURFACES if path != str(MANIFEST)
+)
 EXPECTED_ISSUES = {"#173", "#183", "#185", "#200", "#201", "#202", "#205", "#261", "#277"}
 REQUIRED_SQLITE_PRODUCTS = {
     "sqlite.active-read-connection",
@@ -210,6 +219,17 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
                         surfaces[field],
                         f"{unit['id']}.product_receipt_surfaces.{product}.{field}",
                     )
+    governance_entries = [entry for entry in entries if entry["issue"] == "#173"]
+    if len(governance_entries) != 1:
+        raise WorkUnitError("governance work-unit entry is missing or non-unique")
+    missing_governance_surfaces = GOVERNANCE_WORK_UNIT_AUTHORITY_SURFACES - set(
+        governance_entries[0]["authority_sources"]
+    )
+    if missing_governance_surfaces:
+        raise WorkUnitError(
+            "governance work-unit authority closure missing enforcement surface: "
+            + ",".join(sorted(missing_governance_surfaces))
+        )
     for product, receipt in manifest["product_receipts"].items():
         if receipt["status"] == "available":
             for field in ("artifact_path", "evidence_path"):

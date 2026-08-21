@@ -145,6 +145,54 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "predelegation authority"):
                 validate(root)
 
+    def test_sqlite_contract_roles_cannot_collapse_to_one_lifecycle_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"]["contract_ids"].update(
+                    {"logical_read": "store.sqlite-active-read-connection.v1"}
+                ),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "SQLite contract ownership"):
+                validate(root)
+
+    def test_writer_effect_must_not_be_modeled_as_reader_zero_effect(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"].__setitem__(
+                    "writer_effect_profile", "zero-effect"
+                ),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "schema validation|writer/reader effect profiles"):
+                validate(root)
+
+    def test_writer_effect_pair_without_gate_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"]["writer_effect_profile"].__setitem__(
+                    "gated_effect_pair", "{0,1}"
+                ),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "writer/reader effect profiles"):
+                validate(root)
+
+    def test_writer_effect_cannot_satisfy_outer_zero_effect_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"]["outer_effect_boundary"].__setitem__(
+                    "writer_effect_disposition", "satisfies-outer-zero-effect"
+                ),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "SQLite outer effect boundary"):
+                validate(root)
+
     def test_physical_census_normalization_entry_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

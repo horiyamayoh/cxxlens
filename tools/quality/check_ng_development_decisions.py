@@ -32,6 +32,35 @@ DIRECT_MAIN_CONTRACT_IDS = frozenset(
     {"development.delivery.v2", "development.review-receipt.v1"}
 )
 DIRECT_MAIN_CHOICE = "main-atomic-commit-post-update-ci"
+# These files jointly define the direct-main route and its executable
+# enforcement.  Keeping this census in the checker prevents a review receipt
+# from accepting the prose contract while silently omitting a checker or
+# schema that can change the route's meaning.
+GOVERNANCE_ENFORCEMENT_SURFACES = frozenset(
+    {
+        ".github/workflows/autonomy-fast.yml",
+        ".github/workflows/autonomy-heavy.yml",
+        ".github/workflows/autonomy-release-evaluation.yml",
+        "docs/development/decision-review-register.md",
+        "schemas/cxxlens_ng_autonomy_ci.yaml",
+        "schemas/cxxlens_ng_autonomy_ci.schema.yaml",
+        "schemas/cxxlens_ng_autonomy_constructibility.yaml",
+        "schemas/cxxlens_ng_autonomy_constructibility.schema.yaml",
+        "schemas/cxxlens_ng_development_decision_register.yaml",
+        "schemas/cxxlens_ng_development_decision_register.schema.yaml",
+        "schemas/cxxlens_ng_development_review_receipts.yaml",
+        "schemas/cxxlens_ng_development_review_receipts.schema.yaml",
+        "schemas/cxxlens_ng_wip_inventory.yaml",
+        "schemas/cxxlens_ng_wip_inventory.schema.yaml",
+        "schemas/cxxlens_ng_work_units.yaml",
+        "schemas/cxxlens_ng_work_units.schema.yaml",
+        "tools/quality/check_ng_autonomy_ci.py",
+        "tools/quality/check_ng_autonomy_constructibility.py",
+        "tools/quality/check_ng_development_decisions.py",
+        "tools/quality/check_ng_wip_inventory.py",
+        "tools/quality/check_ng_work_units.py",
+    }
+)
 NON_NORMATIVE_AUTHORITY_COMPONENTS = frozenset(
     {"implementation-learning", "archive", "archives"}
 )
@@ -137,10 +166,10 @@ def _validate_receipt_git(root: pathlib.Path, receipt: dict[str, Any]) -> None:
         raise DecisionRegisterError(f"review receipt authority digest mismatch: {receipt['id']}")
 
 
-def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> None:
+def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> str | None:
     acceptance = receipt["acceptance"]
     if acceptance["status"] != "committed":
-        return
+        return None
     candidate = receipt["candidate_commit"]
     if acceptance["derivation"] != "first-descendant-containing-receipt":
         raise DecisionRegisterError(f"committed acceptance lacks deterministic derivation: {receipt['id']}")
@@ -290,6 +319,33 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
                 ("- Status: Proposed for independent review", "- Status: Accepted")
             ]:
                 raise DecisionRegisterError(f"acceptance changes authority prose: {receipt['id']}:{path}")
+    return commit
+
+
+def _validate_current_authority_projection(
+    root: pathlib.Path, receipt: dict[str, Any], accepted_commit: str
+) -> None:
+    """Reject an accepted receipt after any post-accept authority drift.
+
+    The candidate commit is intentionally not used as the comparison
+    baseline: the status-only acceptance commit is allowed to change
+    Proposed authority files.  The first descendant containing the receipt
+    is the accepted projection; every current authority blob must remain
+    byte-identical to that projection thereafter.
+    """
+    for authority in receipt["authority_files"]:
+        path = authority["path"]
+        try:
+            accepted_blob = _git(root, "rev-parse", f"{accepted_commit}:{path}")
+            current_blob = _git(root, "rev-parse", f"HEAD:{path}")
+        except DecisionRegisterError as error:
+            raise DecisionRegisterError(
+                f"current authority projection drift: {receipt['id']}:{path}"
+            ) from error
+        if current_blob != accepted_blob:
+            raise DecisionRegisterError(
+                f"current authority projection drift: {receipt['id']}:{path}"
+            )
 
 
 def _github_json(url: str, token: str) -> dict[str, Any]:
@@ -436,6 +492,13 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                 )
             if not (root / reference).is_file():
                 raise DecisionRegisterError(f"decision authority does not exist: {entry['id']}:{reference}")
+        if entry["id"] == DIRECT_MAIN_DECISION_ID:
+            missing = GOVERNANCE_ENFORCEMENT_SURFACES - set(entry["authority_refs"])
+            if missing:
+                raise DecisionRegisterError(
+                    "direct-main governance authority closure missing enforcement "
+                    f"surface: {','.join(sorted(missing))}"
+                )
         review = entry["review"]
         if verify_git and review["outcome"] == "pending":
             for commit in _git(root, "log", "--first-parent", "--format=%H", "--", str(REGISTER)).splitlines()[1:]:
@@ -507,7 +570,15 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                     raise DecisionRegisterError(f"accepted review lacks connected exact-candidate verification: {receipt_id}")
             if verify_git:
                 _validate_receipt_git(root, receipt)
-                _validate_acceptance_commit(root, receipt)
+                accepted_commit = _validate_acceptance_commit(root, receipt)
+                if review["outcome"] == "accepted":
+                    if accepted_commit is None:
+                        raise DecisionRegisterError(
+                            f"accepted review has no accepted authority projection: {receipt_id}"
+                        )
+                    _validate_current_authority_projection(
+                        root, receipt, accepted_commit
+                    )
     if referenced_receipts != set(receipt_ids):
         raise DecisionRegisterError("orphan review receipt")
 

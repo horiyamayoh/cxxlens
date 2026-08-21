@@ -12,8 +12,8 @@ entries:
   - issue: '#173'
     conflict_class: governance-global
     integration_owner: '#173'
-    authority_sources: [AGENTS.md, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_development_decision_register.yaml]
-    authority_digest: sha256:7c24e3dd0daccc3c9ec9cdccc8e657716b223ac9b025bdfbaaf1ac8f429e81a2
+    authority_sources: [AGENTS.md, .github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_autonomy_ci.schema.yaml, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_autonomy_constructibility.schema.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_wip_inventory.schema.yaml, schemas/cxxlens_ng_wip_inventory.yaml, schemas/cxxlens_ng_work_units.schema.yaml, tools/quality/check_ng_autonomy_ci.py, tools/quality/check_ng_autonomy_constructibility.py, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_wip_inventory.py, tools/quality/check_ng_work_units.py]
+    authority_digest: sha256:66f3fca19acff56fb799e1633902b61a4f235569f1f39b1a59a04fee80cd2f9a
     completion_class: autonomy-readiness
     residual_qualification: '#173 remains open for aggregate release; production qualification not claimed'
     units:
@@ -24,7 +24,7 @@ entries:
         serialized_with: []
         owned_products: []
         consumed_products: []
-        owned_paths: [.github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_autonomy_ci.schema.yaml, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_wip_inventory.yaml, schemas/cxxlens_ng_wip_inventory.schema.yaml, schemas/cxxlens_ng_work_units.yaml, schemas/cxxlens_ng_work_units.schema.yaml, tools/quality/check_ng_autonomy_ci.py, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_wip_inventory.py, tools/quality/check_ng_work_units.py, tests/quality/test_ng_autonomy_ci.py, tests/quality/test_ng_development_decisions.py, tests/quality/test_ng_wip_inventory.py, tests/quality/test_ng_work_units.py]
+        owned_paths: [.github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_autonomy_ci.schema.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml, schemas/cxxlens_ng_autonomy_constructibility.schema.yaml, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_wip_inventory.yaml, schemas/cxxlens_ng_wip_inventory.schema.yaml, schemas/cxxlens_ng_work_units.yaml, schemas/cxxlens_ng_work_units.schema.yaml, tools/quality/check_ng_autonomy_ci.py, tools/quality/check_ng_autonomy_constructibility.py, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_wip_inventory.py, tools/quality/check_ng_work_units.py, tests/quality/test_ng_autonomy_ci.py, tests/quality/test_ng_autonomy_constructibility.py, tests/quality/test_ng_development_decisions.py, tests/quality/test_ng_wip_inventory.py, tests/quality/test_ng_work_units.py]
         consumed_paths: [schemas/cxxlens_ng_release_qualification.yaml]
         generated_surfaces: [docs/design/SHA256SUMS, schemas/cxxlens_asset_migration_ledger.json]
         forbidden_shortcuts: [self-review, accepted-with-p1, stale-ci-promotion, branch-or-pr-as-correctness-authority]
@@ -34,7 +34,7 @@ entries:
     conflict_class: provider-protocol
     integration_owner: '#261'
     authority_sources: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:8f0807c142dcc17506fa0cade6b1b6ed43729da953030a6d26ec41a36eb2c34e
+    authority_digest: sha256:6fd6811379cd01e55a5315713ea26a7d0ec3d768f22d98863836bfb2f19d3b1a
     completion_class: bounded-implementation
     residual_qualification: installed static/shared and cxxmonster E2E remain explicit later evidence
     units:
@@ -55,7 +55,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:28c0faf98e14ae9acadbb3b9e98aa86f3098a7d8a42b11bdb3949d14cddfdc57
+    authority_digest: sha256:dfa98e0bfafa4a2a682ae8f419bb97bb819449af52db3a31f4af72754d47dc83
     completion_class: bounded-implementation
     residual_qualification: platform native SQLite tuples remain with integration and release gates
     units:
@@ -73,7 +73,7 @@ entries:
         forbidden_shortcuts: [mutation-before-read-receipt, raw-sqlite-ok-as-capability, missing-wal-shm-as-empty]
         evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R '^unit\.sdk-sqlite-(source-shm-readonly-preflight|wal-source-capture)$' --output-on-failure]
         completion_plan:
-          - 'jointly accept the #201/#205 authority, prove first-map no mutation, and return the authenticated active-read connection without minting a logical read receipt'
+          - 'accept the #201 active-read and logical-read contracts separately from the #205 writer-generation and reader-attachment contracts; prove first-map no mutation and return the authenticated active-read connection without minting a logical read receipt'
       - id: wu-201-logical-read-receipt
         risk: irreversible
         state: blocked-by-authority
@@ -92,7 +92,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:28c0faf98e14ae9acadbb3b9e98aa86f3098a7d8a42b11bdb3949d14cddfdc57
+    authority_digest: sha256:dfa98e0bfafa4a2a682ae8f419bb97bb819449af52db3a31f4af72754d47dc83
     completion_class: bounded-implementation
     residual_qualification: multi-Store and platform qualification remain separate
     units:
@@ -110,12 +110,12 @@ entries:
         forbidden_shortcuts: [lease-before-native-success, callback-after-revoke, aba-identity-reuse, inherited-fork-lease, unload-before-revoke]
         evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R '^unit\.sdk-sqlite-(shm-mapping-lease|shm-process-port|shm-mapping-registry|shm-mapping-registry-qualified-mapped-acceptance)$' --output-on-failure]
         completion_plan:
-          - 'jointly accept the #201/#205 authority, enter with callback-local attempt pin, promote to pending lease only after native success, return only the nested mapping and retirement terminal to #201, revoke and hide before cleanup, quarantine ambiguous callbacks, never mint a logical read receipt'
+          - 'accept the #205 writer-generation and reader-attachment contracts separately, preserve writer extend/effect receipts including gated {1,1} and reader zero-effect receipts, enter with callback-local attempt pin, promote to pending lease only after native success, return only the nested mapping and retirement terminal to #201, revoke and hide before cleanup, quarantine ambiguous callbacks, never mint a logical read receipt'
   - issue: '#202'
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:28c0faf98e14ae9acadbb3b9e98aa86f3098a7d8a42b11bdb3949d14cddfdc57
+    authority_digest: sha256:dfa98e0bfafa4a2a682ae8f419bb97bb819449af52db3a31f4af72754d47dc83
     completion_class: bounded-implementation
     residual_qualification: production canonical and user-source activation remains prohibited pending separate review
     units:
@@ -136,7 +136,7 @@ entries:
     conflict_class: materialization-store
     integration_owner: '#200'
     authority_sources: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:81dad03a5949e651701832696d5e39bda240b4621195c876279423f940f1d85e
+    authority_digest: sha256:fe4a11f0c9a18ff2bd07233758f52314979f751525065c1a5c2800103c51fc5c
     completion_class: bounded-implementation
     residual_qualification: scale parity and SQLite lazy-read residency are tracked separately
     units:
@@ -191,7 +191,7 @@ entries:
     conflict_class: qualification-global
     integration_owner: '#185'
     authority_sources: [schemas/cxxlens_ng_sanitizer_coverage.yaml, .github/workflows/nightly.yml, tests/unit/sdk/provider_runtime_test.cpp]
-    authority_digest: sha256:12aeca73dd4b3b543f4541d95248cac05eb9f3ad3cb84e7d115155c9b7a0ae57
+    authority_digest: sha256:2632f64cce764f16c52cb81a4f43b7b293e3bd395549ee083a4cbfca11499a59
     completion_class: bounded-implementation
     residual_qualification: 'exact-main Nightly qualification remains evidence for #173 and is not claimed by fixture repair'
     units:

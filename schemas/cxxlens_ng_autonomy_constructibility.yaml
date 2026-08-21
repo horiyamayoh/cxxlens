@@ -34,15 +34,35 @@ machines:
   sqlite_read_mapping:
     owners: ['#201', '#205']
     authority: docs/design/adr/0104-unified-sqlite-source-lifecycle.md
+    contract_ids:
+      active_read: store.sqlite-active-read-connection.v1
+      writer_generation: cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1
+      reader_attachment: cxxlens.sqlite.reader-shm-native-attachment.v1
+      nested_mapping_terminal: cxxlens.sqlite-nested-mapping-terminal.v1
+      logical_read: store.sqlite-logical-read-receipt.v1
     nesting: '#205-inside-#201-active-read-connection'
     no_effect_boundary: before-target-xOpen
+    outer_effect_boundary:
+      outer_receipt: outer-read-zero-effect-receipt
+      writer_effect_disposition: writer-effect-never-satisfies-outer-zero-effect-or-logical-read-receipt
+      writer_terminal_disposition: writer-terminal-is-audit-only-until-outer-zero-effect-census-proves-no-writer-effect
     outer_states: [unresolved, runtime-vfs-filesystem-sealed, retained-parent-held, no-effect-boundary-armed, typed-family-census, active-read-connection-open, wal-lock-and-prefix-held, mapping-subprotocol-or-private-index, eager-decode, decoded-read-candidate-sealed, connection-revoking, outer-custody-join-pending, outer-custody-join-sealed, connection-closed, zero-effect-callback-receipt-sealed, logical-read-receipt]
     outer_transition_graph: {unresolved: runtime-vfs-filesystem-sealed, runtime-vfs-filesystem-sealed: retained-parent-held, retained-parent-held: no-effect-boundary-armed, no-effect-boundary-armed: typed-family-census, typed-family-census: active-read-connection-open, active-read-connection-open: wal-lock-and-prefix-held, wal-lock-and-prefix-held: mapping-subprotocol-or-private-index, mapping-subprotocol-or-private-index: eager-decode, eager-decode: decoded-read-candidate-sealed, decoded-read-candidate-sealed: connection-revoking, connection-revoking: outer-custody-join-pending, outer-custody-join-pending: outer-custody-join-sealed, outer-custody-join-sealed: connection-closed, connection-closed: zero-effect-callback-receipt-sealed, zero-effect-callback-receipt-sealed: logical-read-receipt, logical-read-receipt: []}
     writer_states: [callback-admitted, pre-callback-sequence-cut, attempt-pin-held, native-started, native-outcome-captured, pending-mapping-receipt, identity-validated, mapping-lease-promoted, eager-use-owner-held, writer-handoff-sealed]
     reader_states: [reader-session-reserved, writer-lease-page-support-pin-held, native-started, native-outcome-captured, reader-attachment-candidate, identity-and-effect-validated, reader-attachment-group-promoted, eager-session-owner-admitted, reader-handoff-sealed]
     reader_forbidden_products: [mapping-lease-promoted, writer-authority, transitive-page-authority]
     predelegation_authority: {writer: attempt-and-in-flight-pin-only, reader: fresh-active-writer-lease-page-support-pin-required-before-native}
-    promotion_predicate: native-SQLITE_OK-nonnull-plus-full-identity-zero-effect-receipt-and-writer-gates
+    writer_effect_profile:
+      writer_receipt: writer-map-effect-receipt
+      reader_receipt: reader-zero-effect-receipt
+      allowed_extend_pairs: ['{0,0}', '{1,1}']
+      no_effect_pair: '{0,0}'
+      gated_effect_pair: '{1,1}'
+      rejected_extend_pairs: ['{1,0}', '{0,1}', other]
+      effect_gate: authenticated-rw-main-db-exact-wal-write-lock-store-writer-gate
+      gated_effect_scope: expected-direct-shm-create-or-monotonic-range-extension-only
+    promotion_predicate: native-SQLITE_OK-nonnull-plus-full-identity-writer-effect-receipt-and-writer-gates
+    reader_promotion_predicate: native-SQLITE_OK-nonnull-plus-full-identity-reader-zero-effect-receipt
     teardown_transition_graph:
       active: hide-generation
       hide-generation: seal-pre-callback-cut
@@ -53,7 +73,7 @@ machines:
       native-unmap-deleteFlag-zero: [unmap-confirmed-OK, terminal-opaque-quarantine-zero-close]
       unmap-confirmed-OK: consume-distinct-close-owner-and-native-close-once
       consume-distinct-close-owner-and-native-close-once: [close-confirmed, terminal-opaque-quarantine]
-      close-confirmed: seal-zero-effect-outcomes-retire-registry-release-pins
+      close-confirmed: seal-writer-effect-outcomes-retire-registry-release-pins
       terminal-opaque-quarantine-zero-close: []
       terminal-opaque-quarantine: []
     reader_teardown_transition_graph:
@@ -66,13 +86,13 @@ machines:
       native-reader-unmap-deleteFlag-zero: [reader-unmap-confirmed-OK, reader-terminal-opaque-quarantine]
       reader-unmap-confirmed-OK: consume-reader-close-owner-and-native-close-once
       consume-reader-close-owner-and-native-close-once: [reader-close-confirmed, reader-terminal-opaque-quarantine]
-      reader-close-confirmed: seal-reader-callback-effect-transcript-and-cleanup-ack
-      seal-reader-callback-effect-transcript-and-cleanup-ack: retire-reader-attachment-group-and-release-page-support-pin
+      reader-close-confirmed: seal-reader-zero-effect-callback-transcript-and-cleanup-ack
+      seal-reader-zero-effect-callback-transcript-and-cleanup-ack: retire-reader-attachment-group-and-release-page-support-pin
       retire-reader-attachment-group-and-release-page-support-pin: reader-retired
       reader-retired: []
       reader-terminal-opaque-quarantine: []
     retirement_join:
-      writer_terminal: seal-zero-effect-outcomes-retire-registry-release-pins
+      writer_terminal: seal-writer-effect-outcomes-retire-registry-release-pins
       reader_terminal: reader-retired
       scope: outer-connection-owned-writer-attachments-and-reader-sessions-only
       pending: outer-custody-join-pending
@@ -132,5 +152,5 @@ machines:
 counterexample_sets:
   source_closure: [message-id-overlap, downgrade, ambient-filesystem, tamper, replay-across-task]
   store_candidate_report: [second-full-graph, shared-projection-traversal, digest-only, compact-after-attempt, lost-publication-outcome-unknown, eager-sqlite-residency-claim]
-  sqlite_read_mapping: [first-map-mutation, writer-predelegation-lease, reader-without-predelegation-writer-lease-pin, missing-zero-effect-receipt, nonzero-unmap-deleteFlag, ok-null, pointer-substitution, aba, fork-ordinary-drain, unload-before-revoke, callback-retry]
+  sqlite_read_mapping: [first-map-mutation, writer-predelegation-lease, reader-without-predelegation-writer-lease-pin, writer-effect-conflated-with-reader-zero-effect, writer-invalid-extend-pair, writer-effect-without-store-gate, writer-effect-leaked-into-outer-zero-effect-read, missing-zero-effect-receipt, nonzero-unmap-deleteFlag, ok-null, pointer-substitution, aba, fork-ordinary-drain, unload-before-revoke, callback-retry]
   sqlite_normalization_effect: [physical-census-entry, fixture-production-promotion, missing-parent-sync, nonempty, sidecar-ambiguous]
