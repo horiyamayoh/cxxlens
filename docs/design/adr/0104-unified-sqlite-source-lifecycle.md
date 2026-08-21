@@ -222,7 +222,7 @@ Reject first-map mutation, census-selected normalization, writer pre-delegation 
 entry without a fresh authenticated writer-lease pin, `OK+null`, different pointer, incomplete
 member/use-owner census, stale/ABA/fork/PID/VFS lease, unload before revoke, callback effect without
 an exact zero-effect receipt, nonzero unmap delete flag, callback retry, ordinary-drain fork handling,
-#202 entry before connection-close/zero-custody, inferred cleanup, cross-branch fallback,
+`#202` entry before connection-close/zero-custody, inferred cleanup, cross-branch fallback,
 fixture-to-production promotion, missing
 parent fsync, non-empty normalization, sidecar ambiguity, and CAS reclassification.
 

@@ -27,7 +27,7 @@ a14a170f9c037cdbe543982ee513fdbf5edd9e0809ca108e27a98c080001c5ec  adr/0100-ng1-r
 8063308a6ee6e58d50b4451bdd0aab07664bfa9c8cd177e2a21675f1f83b5d6a  adr/0101-source-closure-identity-and-compiler-vfs.md
 48c9243369ed9d8cd1f368aa2ed527e1ee395008ac6836f8a6fa7d3d56e929b6  adr/0102-dedicated-source-closure-transport.md
 a8fb8ea5d7bc3f31373327c4794eabe345dca9dcc15f5b0fb0eb52b05533a7c3  adr/0103-bounded-store-candidate-and-report.md
-70742afdfe12638e9d6378015e9f25d16e752c59cd82705c0c75f9c1522fdd5e  adr/0104-unified-sqlite-source-lifecycle.md
+068a4bedf8a7ac675fd086622f397d6bdbe056ccbd07beed0b6ffe5dad4164c3  adr/0104-unified-sqlite-source-lifecycle.md
 e9c09a0c3946ca6867bc406ab37aff6297d65dbc3a8892ba4d8b979598b3f6b1  adr/0105-direct-main-review-and-release-governance.md
 999c20ee237e4a9934728891ffcd8fd584772fa5b9e7b033563d772191012a17  catalogs/README.md
 f9b80b8096426feb8e1e3ce960e60cb6b45e7bac9f8b90815d75f9b217e370fa  ../../schemas/cxxlens_ng_claim_envelope.schema.yaml
@@ -102,7 +102,7 @@ ba85f2dad18ebb35563f8c9eb57555fd25d29900c0b3bce4f9c51adc96d2032b  ../../schemas/
 89a4981ca685462098a524f703d9d4e47247dc7e2ff90879f54be19ecfa9f95f  ../../schemas/cxxlens_ng_development_decision_register.schema.yaml
 3d655cc546f3f8d81095dfb28f2e763933dbbe774454411efb4f63c0b33e8728  ../../schemas/cxxlens_ng_development_review_receipts.yaml
 680e40f8eb2c8a7b8ec93b503d5651aeb68c67e0ba0d85624f7ab289d43fb845  ../../schemas/cxxlens_ng_development_review_receipts.schema.yaml
-3afd8fdf02e9f2013fcefe5b76a30e906ae579a648345760770f2bc2814e0013  ../../schemas/cxxlens_ng_work_units.yaml
+dcbcb09d2d5131062408af51575c9d7209917b0b40a91817d9a0f0e5455f6048  ../../schemas/cxxlens_ng_work_units.yaml
 d7c8fa9f0d51068e6f5de5fd1313b0c0b79ad6ee13e7023cc21760974b75fff3  ../../schemas/cxxlens_ng_work_units.schema.yaml
 c22b37a78489bae643123974b6927213d79e4c7bc2ca54efd8132335f04bef97  ../../schemas/cxxlens_ng_agent_context_v2.schema.yaml
 836d0e1b35c3e3542218e4c3fe7382eed324fd38955c85efd3c5ce69926e8dd3  ../../schemas/cxxlens_ng_autonomy_constructibility.yaml
