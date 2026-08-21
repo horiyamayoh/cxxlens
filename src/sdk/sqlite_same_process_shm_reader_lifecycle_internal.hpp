@@ -173,6 +173,11 @@ namespace cxxlens::sdk::detail
 		exclusive_source_revalidated,
 		pre_effect_receipt_sealed,
 		effect_armed,
+		/** Every allowed callback effect is present exactly once and in contract order. */
+		effect_transcript_sealed,
+		/** Coordination-WAL delete, journal creation, and terminal delete have parent-sync
+		 * receipts. */
+		durability_barrier_sealed,
 		effect_confirmed,
 		connection_closed,
 		post_effect_projection_validated,
@@ -185,6 +190,8 @@ namespace cxxlens::sdk::detail
 		sqlite_shm_reader_normalization_phase::exclusive_source_revalidated,
 		sqlite_shm_reader_normalization_phase::pre_effect_receipt_sealed,
 		sqlite_shm_reader_normalization_phase::effect_armed,
+		sqlite_shm_reader_normalization_phase::effect_transcript_sealed,
+		sqlite_shm_reader_normalization_phase::durability_barrier_sealed,
 		sqlite_shm_reader_normalization_phase::effect_confirmed,
 		sqlite_shm_reader_normalization_phase::connection_closed,
 		sqlite_shm_reader_normalization_phase::post_effect_projection_validated,
@@ -211,6 +218,10 @@ namespace cxxlens::sdk::detail
 			case phase::pre_effect_receipt_sealed:
 				return destination == phase::effect_armed;
 			case phase::effect_armed:
+				return destination == phase::effect_transcript_sealed;
+			case phase::effect_transcript_sealed:
+				return destination == phase::durability_barrier_sealed;
+			case phase::durability_barrier_sealed:
 				return destination == phase::effect_confirmed;
 			case phase::effect_confirmed:
 				return destination == phase::connection_closed;

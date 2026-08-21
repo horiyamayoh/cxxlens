@@ -661,6 +661,8 @@ namespace
 			phase::exclusive_source_revalidated,
 			phase::pre_effect_receipt_sealed,
 			phase::effect_armed,
+			phase::effect_transcript_sealed,
+			phase::durability_barrier_sealed,
 			phase::effect_confirmed,
 			phase::connection_closed,
 			phase::post_effect_projection_validated,
@@ -677,6 +679,15 @@ namespace
 		require(!detail::is_sqlite_shm_reader_normalization_transition(
 					phase::pre_effect_receipt_sealed, phase::effect_confirmed),
 				"effect confirmation cannot bypass the effect arm");
+		require(!detail::is_sqlite_shm_reader_normalization_transition(phase::effect_armed,
+																	   phase::effect_confirmed),
+				"effect confirmation cannot bypass the callback transcript");
+		require(!detail::is_sqlite_shm_reader_normalization_transition(
+					phase::effect_transcript_sealed, phase::effect_confirmed),
+				"effect confirmation cannot bypass the parent durability barrier");
+		require(!detail::is_sqlite_shm_reader_normalization_transition(
+					phase::durability_barrier_sealed, phase::connection_closed),
+				"close cannot bypass the sealed effect receipt");
 		require(detail::is_sqlite_shm_reader_normalization_transition(
 					phase::exclusive_source_revalidated, phase::terminal_quarantined),
 				"source drift has a terminal quarantine route");
@@ -716,6 +727,34 @@ namespace
 		};
 		require(!detail::validate_sqlite_shm_reader_normalization_path(quarantined),
 				"quarantine is terminal and cannot be projected as normalization success");
+
+		constexpr std::array missing_transcript{
+			phase::no_authenticated_receipt,
+			phase::logical_read_receipt_authenticated,
+			phase::exclusive_source_revalidated,
+			phase::pre_effect_receipt_sealed,
+			phase::effect_armed,
+			phase::durability_barrier_sealed,
+			phase::effect_confirmed,
+			phase::connection_closed,
+			phase::post_effect_projection_validated,
+		};
+		require(!detail::validate_sqlite_shm_reader_normalization_path(missing_transcript),
+				"normalization path rejects an effect receipt without its transcript");
+
+		constexpr std::array missing_barrier{
+			phase::no_authenticated_receipt,
+			phase::logical_read_receipt_authenticated,
+			phase::exclusive_source_revalidated,
+			phase::pre_effect_receipt_sealed,
+			phase::effect_armed,
+			phase::effect_transcript_sealed,
+			phase::effect_confirmed,
+			phase::connection_closed,
+			phase::post_effect_projection_validated,
+		};
+		require(!detail::validate_sqlite_shm_reader_normalization_path(missing_barrier),
+				"normalization path rejects a close without parent durability receipts");
 	}
 
 	void exercise_map_sequence_proof()
