@@ -1,5 +1,5 @@
 {
-  "asset_count": 779,
+  "asset_count": 783,
   "assets": [
     {
       "authority": "active",
@@ -1929,6 +1929,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_agent_autonomous_completion_metric.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4273,6 +4280,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/install/check_sdk_doctor_installed_consumer.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/install/clang22_materializer_installation_binding_test.py",
       "removal_issue": null,
       "replacement": null,
@@ -4435,6 +4449,13 @@
     {
       "authority": "active",
       "path": "tests/qualification/sqlite_store_v3_qualification_case_runner.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_agent_autonomous_completion.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -5043,6 +5064,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_agent_autonomous_completion.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_agent_capability_resolution.py",
       "removal_issue": null,
       "replacement": null,
@@ -5456,7 +5484,7 @@
     }
   ],
   "classifications": {
-    "active": 743,
+    "active": 747,
     "archived": 35,
     "generated": 1
   },

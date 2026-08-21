@@ -87,6 +87,16 @@ class AgentCapabilityResolutionTests(unittest.TestCase):
         with self.assertRaisesRegex(resolution.CapabilityResolutionError, "unknown or forward"):
             resolution.validate_catalog(ROOT, catalog)
 
+    def test_demand_binding_must_reference_the_admitted_issue_277_family(self) -> None:
+        catalog = copy.deepcopy(resolution.validate_catalog(ROOT))
+        catalog["golden_paths"][0]["demand"]["family_id"] = "invented-family"
+        with self.assertRaisesRegex(resolution.CapabilityResolutionError, "demand family is unknown"):
+            resolution.validate_catalog(ROOT, catalog)
+        catalog = copy.deepcopy(resolution.validate_catalog(ROOT))
+        catalog["golden_paths"][0]["demand"]["capabilities"].append("invented-capability")
+        with self.assertRaisesRegex(resolution.CapabilityResolutionError, "demand capability edge"):
+            resolution.validate_catalog(ROOT, catalog)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -250,6 +250,20 @@ safe-stop rate and exercises every result state; it is readiness evidence and do
 promote a provider or platform tuple to production qualification. The legacy v1 producer remains
 unchanged and v2 packets retain the exact v1 compatibility evidence.
 
+Each golden path also carries an explicit demand edge to the admitted `agent-guided-extension`
+family and its declared #277 capabilities. The checker reads that family from the #275 readiness
+projection and rejects an unknown family or capability edge, so the evaluation corpus cannot
+become a parallel handwritten demand authority.
+
+The separate `agent-autonomous-completion-rate` metric is receipt-bound. Running
+`tools/quality/check_ng_agent_autonomous_completion.py report` without an execution-evidence
+file deliberately returns the exact nine-scenario population as `not-evaluated` with a null
+rate. A numeric rate is emitted only when every scenario has an exact current revision/tree and
+catalog digest, a bounded-completion witness, and typed receipt/context/command digests. Failed
+and safe-stop outcomes remain in the denominator. This metric reports evaluation state only;
+`qualification: not-qualification-evidence` is fixed by schema and it cannot promote a provider,
+consumer, support tuple, constructibility gate, or release.
+
 静的 relation inventory を残す場合の契約名は `relation-presence` です。これは canonical capability resolution の
 use-case/capability graph、support tuple、input/model/evidence gap と dependency-ordered plan を読む `missing --project`
 とは別機能であり、相互代用しません。

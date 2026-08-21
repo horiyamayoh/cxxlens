@@ -1179,6 +1179,7 @@ foreach(
         use_case_capability_catalog
         agent_context
         agent_capability_resolution
+        agent_autonomous_completion
         design_feedback
         public_callable_inventory
         g5_qualification)

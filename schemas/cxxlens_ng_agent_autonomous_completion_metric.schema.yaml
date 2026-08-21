@@ -1,0 +1,114 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-agent-autonomous-completion-metric.v1
+title: cxxlens agent autonomous completion rate report
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - role
+  - metric
+  - authority
+  - scenario_set
+  - outcomes
+  - population
+  - value_percent
+  - status
+  - evidence_disposition
+  - qualification
+  - provenance
+  - canonical_digest
+properties:
+  schema: {const: cxxlens.ng-agent-autonomous-completion-metric.v1}
+  document_version: {const: 1.0.0}
+  role: {const: evaluation-only-metric-report}
+  metric: {const: agent-autonomous-completion-rate}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, catalog_path, catalog_digest, stale_policy]
+    properties:
+      revision: {$ref: '#/$defs/hex40'}
+      tree: {$ref: '#/$defs/hex40'}
+      catalog_path: {const: schemas/cxxlens_ng_agent_capability_resolution.yaml}
+      catalog_digest: {$ref: '#/$defs/digest'}
+      stale_policy: {const: reject}
+  scenario_set:
+    type: object
+    additionalProperties: false
+    required: [id, source, scenarios]
+    properties:
+      id: {const: agent-capability-golden-paths.v1}
+      source: {const: schemas/cxxlens_ng_agent_capability_resolution.yaml}
+      scenarios:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [scenario_id, use_case_id, expected_result_state]
+          properties:
+            scenario_id: {$ref: '#/$defs/id'}
+            use_case_id: {$ref: '#/$defs/id'}
+            expected_result_state: {$ref: '#/$defs/result_state'}
+  outcomes:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [scenario_id, outcome]
+      properties:
+        scenario_id: {$ref: '#/$defs/id'}
+        outcome: {enum: [completed, failed, safe-stop, not-evaluated]}
+        bounded_completion: {type: boolean}
+        reason_code: {$ref: '#/$defs/nonempty'}
+        context_digest: {$ref: '#/$defs/digest'}
+        command_digest: {$ref: '#/$defs/digest'}
+        receipt_digest: {$ref: '#/$defs/digest'}
+        completion_plan_digest: {$ref: '#/$defs/digest'}
+  population:
+    type: object
+    additionalProperties: false
+    required: [denominator, completed, failed, safe_stop, not_evaluated]
+    properties:
+      denominator: {type: integer, minimum: 1}
+      completed: {type: integer, minimum: 0}
+      failed: {type: integer, minimum: 0}
+      safe_stop: {type: integer, minimum: 0}
+      not_evaluated: {type: integer, minimum: 0}
+  value_percent:
+    type: [number, 'null']
+    minimum: 0
+    maximum: 100
+  status: {enum: [evaluated, not-evaluated]}
+  evidence_disposition:
+    {enum: [execution-receipts-bound, execution-receipts-required]}
+  qualification: {const: not-qualification-evidence}
+  provenance:
+    type: object
+    additionalProperties: false
+    required: [generator, input_contract, evidence_source]
+    properties:
+      generator: {$ref: '#/$defs/path'}
+      input_contract: {const: cxxlens.agent-autonomous-completion-evidence.v1}
+      evidence_source: {$ref: '#/$defs/nonempty'}
+  canonical_digest: {$ref: '#/$defs/digest'}
+$defs:
+  hex40: {type: string, pattern: '^[0-9a-f]{40}$'}
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  id:
+    type: string
+    pattern: '^[a-z][a-z0-9_]*(?:[.-][a-z0-9_]+)+$'
+  nonempty:
+    type: string
+    minLength: 1
+    pattern: '.*\S.*'
+  path:
+    type: string
+    minLength: 1
+    pattern: '^(?!/)(?!.*\\)(?!.*\u0000)(?!.*(?:^|/)(?:\\.{0,2}|\\.git)(?:/|$)).+$'
+  result_state:
+    enum: [proved, disproved, unknown, partial, conflicting]

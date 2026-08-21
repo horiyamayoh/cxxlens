@@ -23,6 +23,7 @@ golden_paths:
     question: Can the admitted relation be queried with its identity and provenance intact?
     expected_result_states: [proved, disproved, unknown, partial, conflicting]
     state: proved
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
     capability_path:
       - id: input.source-snapshot.v1
         kind: input
@@ -52,6 +53,7 @@ golden_paths:
     question: Can a versioned recipe produce a deterministic, evidence-backed explanation?
     expected_result_states: [proved, disproved, unknown, partial, conflicting]
     state: disproved
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
     capability_path:
       - id: input.effective-invocation.v1
         kind: input
@@ -81,6 +83,7 @@ golden_paths:
     question: Can an analysis retain partiality and unresolved findings instead of collapsing them to success?
     expected_result_states: [proved, disproved, unknown, partial, conflicting]
     state: conflicting
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
     capability_path:
       - id: artifact.semantic-snapshot.v1
         kind: input
@@ -108,6 +111,7 @@ golden_paths:
     question: Is the requested model pack available for this analysis and toolchain context?
     expected_result_states: [proved, disproved, unknown, partial, conflicting]
     state: unknown
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
     capability_path:
       - id: input.toolchain-context.v1
         kind: input
@@ -135,6 +139,7 @@ golden_paths:
     question: Can a portable provider publish typed observations through the versioned protocol?
     expected_result_states: [proved, disproved, unknown, partial, conflicting]
     state: proved
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
     capability_path:
       - id: input.portable-task.v1
         kind: input
@@ -164,6 +169,7 @@ golden_paths:
     question: Is the native provider path qualified for the requested toolchain and platform tuple?
     expected_result_states: [proved, disproved, unknown, partial, conflicting]
     state: partial
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
     capability_path:
       - id: input.native-toolchain.v1
         kind: input
@@ -198,6 +204,7 @@ golden_paths:
     question: Can the query operator preserve typed identity, order, and static/dynamic parity?
     expected_result_states: [proved, disproved, unknown, partial, conflicting]
     state: proved
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
     capability_path:
       - id: relation.queryable.v1
         kind: relation
@@ -220,6 +227,7 @@ golden_paths:
     question: Is this provider/relation/toolchain/platform tuple explicitly supported and qualified?
     expected_result_states: [proved, disproved, unknown, partial, conflicting]
     state: unknown
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
     capability_path:
       - id: support.provider-tuple.v1
         kind: support
@@ -240,6 +248,7 @@ golden_paths:
     question: If completion is unavailable, can the agent receive an actionable typed reason and dependency-ordered upgrade plan?
     expected_result_states: [proved, disproved, unknown, partial, conflicting]
     state: unknown
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
     capability_path:
       - id: input.admitted-use-case.v1
         kind: input

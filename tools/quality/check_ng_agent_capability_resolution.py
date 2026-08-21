@@ -26,6 +26,7 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = pathlib.Path("schemas/cxxlens_agent_capability_resolution.schema.yaml")
 CATALOG = pathlib.Path("schemas/cxxlens_ng_agent_capability_resolution.yaml")
+READINESS = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
 GENERATOR = pathlib.Path("tools/quality/check_ng_agent_capability_resolution.py")
 RESULT_STATES = ("proved", "disproved", "unknown", "partial", "conflicting")
 REASON_CODES = (
@@ -131,6 +132,26 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any] | None = None) 
         if not isinstance(path, str) or path.startswith("/") or ".." in pathlib.PurePosixPath(path).parts:
             raise CapabilityResolutionError(f"unsafe catalog source path: {path!r}")
         _file_digest(root, path)
+    if READINESS.as_posix() not in source_paths:
+        raise CapabilityResolutionError("demand source readiness is not bound")
+    readiness = _load(root / READINESS)
+    direction = readiness.get("product_direction")
+    closure = direction.get("closure") if isinstance(direction, dict) else None
+    if not isinstance(direction, dict) or not isinstance(closure, dict) or closure.get("tracking_issue") != "#275":
+        raise CapabilityResolutionError("demand source is not the accepted #275 closure")
+    roadmap = direction.get("roadmap")
+    families = roadmap.get("use_case_families") if isinstance(roadmap, dict) else None
+    if not isinstance(families, list):
+        raise CapabilityResolutionError("demand source has no use-case family graph")
+    demand_families = {
+        family.get("id"): family
+        for family in families
+        if isinstance(family, dict) and isinstance(family.get("id"), str)
+    }
+    if "agent-guided-extension" not in demand_families:
+        raise CapabilityResolutionError("#277 admitted demand family is missing")
+    if demand_families["agent-guided-extension"].get("tracking_issue") != "#277":
+        raise CapabilityResolutionError("#277 demand family owner drift")
     contract = document.get("result_contract")
     if not isinstance(contract, dict) or contract.get("states") != list(RESULT_STATES):
         raise CapabilityResolutionError("result-state contract drift")
@@ -146,7 +167,7 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any] | None = None) 
             raise CapabilityResolutionError(f"{prefix} is not an object")
         required = {
             "id", "use_case_id", "consumer", "question", "expected_result_states", "state",
-            "capability_path", "completion_plan",
+            "demand", "capability_path", "completion_plan",
         }
         if set(golden) != required:
             raise CapabilityResolutionError(f"{prefix} fields differ: {sorted(set(golden) ^ required)}")
@@ -163,6 +184,22 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any] | None = None) 
             raise CapabilityResolutionError(f"{prefix} does not exercise every result state")
         if golden["state"] not in RESULT_STATES:
             raise CapabilityResolutionError(f"{prefix} has invalid selected state")
+        demand = golden["demand"]
+        if not isinstance(demand, dict) or set(demand) != {"family_id", "capabilities"}:
+            raise CapabilityResolutionError(f"{prefix} demand binding is not exact")
+        family_id = demand.get("family_id")
+        if family_id not in demand_families:
+            raise CapabilityResolutionError(f"{prefix} demand family is unknown")
+        demanded = demand.get("capabilities")
+        family_capabilities = demand_families[family_id].get("capabilities")
+        if (
+            not isinstance(demanded, list)
+            or not demanded
+            or len(demanded) != len(set(demanded))
+            or not isinstance(family_capabilities, list)
+            or any(value not in family_capabilities for value in demanded)
+        ):
+            raise CapabilityResolutionError(f"{prefix} demand capability edge is not admitted")
         capability_path = golden["capability_path"]
         if not isinstance(capability_path, list) or not capability_path:
             raise CapabilityResolutionError(f"{prefix} capability path is empty")
