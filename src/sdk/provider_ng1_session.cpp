@@ -44,11 +44,11 @@ namespace cxxlens::sdk::provider::detail
 				valid_sha256_digest(provenance.provider_binary_digest) &&
 				valid_sha256_digest(provenance.provider_semantic_contract_digest) &&
 				valid_runtime_id(provenance.protocol_session_id) && provenance.task_id == task_id &&
-				valid_runtime_id(provenance.task_input_digest) &&
-				valid_runtime_id(provenance.normalized_invocation_digest) &&
-				valid_runtime_id(provenance.toolchain_digest) &&
-				valid_runtime_id(provenance.environment_digest) &&
-				valid_runtime_id(provenance.sandbox_policy_digest) &&
+				valid_semantic_digest(provenance.task_input_digest) &&
+				valid_semantic_digest(provenance.normalized_invocation_digest) &&
+				valid_semantic_digest(provenance.toolchain_digest) &&
+				valid_semantic_digest(provenance.environment_digest) &&
+				valid_semantic_digest(provenance.sandbox_policy_digest) &&
 				valid_runtime_id(provenance.dependency_group_id) &&
 				valid_runtime_id(provenance.atomic_output_group_id) &&
 				valid_runtime_id(provenance.batch_id) && provenance.stream_id != 0U;

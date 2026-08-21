@@ -435,6 +435,16 @@ namespace
 			provenance.stream_id = resume.stream_id;
 			if (mutation == "task-input")
 				provenance.task_input_digest = digest("different-input");
+			else if (mutation == "malformed-task-input")
+				provenance.task_input_digest = manifest_digest('c');
+			else if (mutation == "malformed-invocation")
+				provenance.normalized_invocation_digest = manifest_digest('c');
+			else if (mutation == "malformed-toolchain")
+				provenance.toolchain_digest = manifest_digest('c');
+			else if (mutation == "malformed-environment")
+				provenance.environment_digest = manifest_digest('c');
+			else if (mutation == "malformed-sandbox")
+				provenance.sandbox_policy_digest = manifest_digest('c');
 			else if (mutation == "stream")
 				provenance.stream_id = resume.stream_id + 1U;
 			else if (mutation == "sequence")
@@ -910,6 +920,18 @@ namespace
 			make_ng1_replay_validation_receipt(values.output_receipt(), *generic_runtime);
 		require(!incomplete_replay && incomplete_replay.error().field == "replay.provenance",
 				"replay admitted an opaque runtime receipt without complete provenance");
+
+		for (const auto mutation : {std::string_view{"malformed-task-input"},
+									std::string_view{"malformed-invocation"},
+									std::string_view{"malformed-toolchain"},
+									std::string_view{"malformed-environment"},
+									std::string_view{"malformed-sandbox"}})
+		{
+			auto malformed_replay = make_ng1_replay_validation_receipt(
+				values.output_receipt(), values.replay_runtime_receipt(mutation));
+			require(!malformed_replay && malformed_replay.error().field == "replay.provenance",
+					"replay admitted a non-semantic provenance digest");
+		}
 
 		auto zero_sequence = make_ng1_replay_validation_receipt(
 			values.output_receipt(), values.replay_runtime_receipt("zero-sequence"));
