@@ -124,6 +124,17 @@ class WorkUnitTest(unittest.TestCase):
             with self.assertRaisesRegex(WorkUnitError, "unknown dependency"):
                 validate(root)
 
+    def test_unknown_integration_owner_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+
+            def mutate(value) -> None:
+                value["entries"][0]["integration_owner"] = "#999"
+
+            self.rewrite(root, mutate)
+            with self.assertRaisesRegex(WorkUnitError, "unknown integration owner"):
+                validate(root)
+
     def test_undeclared_owned_overlap_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

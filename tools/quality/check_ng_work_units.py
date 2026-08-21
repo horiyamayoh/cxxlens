@@ -192,6 +192,12 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
         raise WorkUnitError("open issue inventory drift")
     if set(issues) & set(manifest["closed_contract_owners"]):
         raise WorkUnitError("closed contract owner owns an active work unit")
+    known_integration_owners = EXPECTED_ISSUES | set(manifest["closed_contract_owners"])
+    for entry in entries:
+        if entry["integration_owner"] not in known_integration_owners:
+            raise WorkUnitError(
+                f"unknown integration owner: {entry['issue']}:{entry['integration_owner']}"
+            )
 
     for entry in entries:
         validate_authority_sources(entry["authority_sources"], f"{entry['issue']}.authority_sources")
