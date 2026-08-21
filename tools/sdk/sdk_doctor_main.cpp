@@ -696,11 +696,14 @@ namespace
 		node.kind = text_member(*object, "kind", "capability");
 		node.dependencies = dependency_values(*object);
 		const auto state = text_member(
-			*object, "state",
-			text_member(*object, "result_state",
-				text_member(*object, "disposition", text_member(*object, "status"))));
+			*object,
+			"state",
+			text_member(*object,
+						"result_state",
+						text_member(*object, "disposition", text_member(*object, "status"))));
 		node.declared_state = parse_state(state);
-		node.reason_code = text_member(*object, "reason_code", text_member(*object, "missing_reason_code"));
+		node.reason_code =
+			text_member(*object, "reason_code", text_member(*object, "missing_reason_code"));
 		if (node.reason_code.empty())
 		{
 			if (const auto* reason = member(*object, "reason"); reason != nullptr)
@@ -714,7 +717,8 @@ namespace
 			{
 				if (const auto* reason = member(*object, "missing_reason"); reason != nullptr)
 				{
-					if (const auto* reason_text = reason->as_string()) node.reason_code = *reason_text;
+					if (const auto* reason_text = reason->as_string())
+						node.reason_code = *reason_text;
 					else if (const auto* reason_object = reason->as_object())
 						node.reason_code = text_member(*reason_object, "code");
 				}

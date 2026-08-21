@@ -2066,20 +2066,19 @@ int main()
 				"qualified native cleanup-retry fresh scope and arm");
 		std::array<char, 256U> cleanup_retry_full_path{};
 		require(wrapper->full_pathname(wrapper,
-									cleanup_retry_path.c_str(),
-									static_cast<int>(cleanup_retry_full_path.size()),
-									cleanup_retry_full_path.data()) == sqlite_ok,
+									   cleanup_retry_path.c_str(),
+									   static_cast<int>(cleanup_retry_full_path.size()),
+									   cleanup_retry_full_path.data()) == sqlite_ok,
 				"qualified native cleanup-retry xFullPathname");
 		auto cleanup_retry_filename = sqlite_uri_filename(cleanup_retry_path, exact_uri_parameters);
 		auto cleanup_retry_storage = file_storage(*wrapper);
-		auto* cleanup_retry_file =
-			reinterpret_cast<sqlite3_file*>(cleanup_retry_storage.data());
+		auto* cleanup_retry_file = reinterpret_cast<sqlite3_file*>(cleanup_retry_storage.data());
 		int cleanup_retry_out{};
 		require(wrapper->open(wrapper,
-							cleanup_retry_filename.data(),
-							cleanup_retry_file,
-							source_shm_main_xopen_flags,
-							&cleanup_retry_out) == sqlite_ok,
+							  cleanup_retry_filename.data(),
+							  cleanup_retry_file,
+							  source_shm_main_xopen_flags,
+							  &cleanup_retry_out) == sqlite_ok,
 				"qualified native cleanup-retry fresh handle open");
 
 		shm_map_result = sqlite_ok;

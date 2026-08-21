@@ -14501,8 +14501,8 @@ namespace
 	{
 		constexpr std::uint8_t marker = 222U;
 		auto setup = make_reader_candidate_setup(marker);
-		const auto before_lifecycle = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
-			*setup.coordinator);
+		const auto before_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
 		const auto before = setup.coordinator->snapshot();
 		const auto registry_before = setup.fixture.registry->snapshot();
 
@@ -14515,8 +14515,8 @@ namespace
 				"move-only reader-open authority did not leave an unusable presentation");
 		auto rejected = setup.fixture.registry->admit_reader_session_before_sqlite(
 			*setup.fixture.family_pin, setup.open, setup.pre_sqlite);
-		const auto after_lifecycle = sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(
-			*setup.coordinator);
+		const auto after_lifecycle =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*setup.coordinator);
 		const auto after = setup.coordinator->snapshot();
 		const auto registry_after = setup.fixture.registry->snapshot();
 		require(
@@ -14527,19 +14527,20 @@ namespace
 				rejected->rejection()->reason == sqlite_shm_lease_rejection_reason::stale_token &&
 				!rejected->has_proposal_custody() &&
 				after_lifecycle.last_issued_sequence == before_lifecycle.last_issued_sequence &&
-				after_lifecycle.last_committed_sequence == before_lifecycle.last_committed_sequence &&
+				after_lifecycle.last_committed_sequence ==
+					before_lifecycle.last_committed_sequence &&
 				after.reader_session_reservation_count == before.reader_session_reservation_count &&
 				after.reader_session_owner_count == before.reader_session_owner_count &&
 				after.reader_registry_activity_authority_count ==
 					before.reader_registry_activity_authority_count &&
 				after.reader_registry_bound_session_count ==
 					before.reader_registry_bound_session_count &&
-					registry_after.active_reader_open_count ==
+				registry_after.active_reader_open_count ==
 					registry_before.active_reader_open_count &&
-					registry_after.active_activity_pin_count ==
+				registry_after.active_activity_pin_count ==
 					registry_before.active_activity_pin_count &&
-					!after.quarantined && !registry_after.registry_quarantined,
-				"reader admission without a live open crossed the pre-SQLite/native boundary");
+				!after.quarantined && !registry_after.registry_quarantined,
+			"reader admission without a live open crossed the pre-SQLite/native boundary");
 
 		const auto cancelled = sqlite_same_process_shm_lease_test_peer::reader_session_terminal(
 			setup.session_request,

@@ -17,7 +17,7 @@ namespace cxxlens::detail::clang22::materialization
 		constexpr std::size_t projection_compare_window_bytes = 32U * 1024U;
 
 		[[nodiscard]] sdk::error projection_error(const std::string_view field,
-											 const std::string_view detail)
+												  const std::string_view detail)
 		{
 			return sdk::error{"store.projection", std::string{field}, std::string{detail}};
 		}
@@ -82,8 +82,7 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] std::optional<std::uint64_t>
-		first_mismatch(std::optional<std::uint64_t> current,
-						 const std::uint64_t candidate) noexcept
+		first_mismatch(std::optional<std::uint64_t> current, const std::uint64_t candidate) noexcept
 		{
 			if (!current || candidate < *current)
 				return candidate;
@@ -674,9 +673,8 @@ namespace cxxlens::detail::clang22::materialization
 	}
 
 	sdk::result<materialization_store_projection_comparison>
-	compare_materialization_store_projections(
-		materialization_store_projection_writer& actual,
-		materialization_store_projection_writer& expected)
+	compare_materialization_store_projections(materialization_store_projection_writer& actual,
+											  materialization_store_projection_writer& expected)
 	{
 		if (!actual.sealed() || !expected.sealed())
 			return sdk::unexpected(projection_error("lifecycle", "streams-not-sealed"));
@@ -690,10 +688,11 @@ namespace cxxlens::detail::clang22::materialization
 		for (;;)
 		{
 			auto actual_header = read_projection_frame_header(actual.storage(), actual_offset);
-			auto expected_header = read_projection_frame_header(expected.storage(), expected_offset);
+			auto expected_header =
+				read_projection_frame_header(expected.storage(), expected_offset);
 			if (!actual_header || !expected_header)
 				return sdk::unexpected(!actual_header ? std::move(actual_header.error())
-												 : std::move(expected_header.error()));
+													  : std::move(expected_header.error()));
 			if (!actual_header->present && !expected_header->present)
 				break;
 
@@ -705,8 +704,8 @@ namespace cxxlens::detail::clang22::materialization
 				if (actual_header->present)
 				{
 					if (output.actual_record_count == std::numeric_limits<std::uint64_t>::max() ||
-						actual_header->payload_bytes > std::numeric_limits<std::uint64_t>::max() -
-							output.actual_payload_bytes)
+						actual_header->payload_bytes >
+							std::numeric_limits<std::uint64_t>::max() - output.actual_payload_bytes)
 						return sdk::unexpected(projection_error("actual", "counter-overflow"));
 					++output.actual_record_count;
 					output.actual_payload_bytes += actual_header->payload_bytes;
@@ -716,21 +715,22 @@ namespace cxxlens::detail::clang22::materialization
 				{
 					if (output.expected_record_count == std::numeric_limits<std::uint64_t>::max() ||
 						expected_header->payload_bytes > std::numeric_limits<std::uint64_t>::max() -
-							output.expected_payload_bytes)
+								output.expected_payload_bytes)
 						return sdk::unexpected(projection_error("expected", "counter-overflow"));
 					++output.expected_record_count;
 					output.expected_payload_bytes += expected_header->payload_bytes;
-					expected_offset = expected_header->payload_offset + expected_header->payload_bytes;
+					expected_offset =
+						expected_header->payload_offset + expected_header->payload_bytes;
 				}
 				continue;
 			}
 
 			if (output.actual_record_count == std::numeric_limits<std::uint64_t>::max() ||
 				output.expected_record_count == std::numeric_limits<std::uint64_t>::max() ||
-				actual_header->payload_bytes > std::numeric_limits<std::uint64_t>::max() -
-					output.actual_payload_bytes ||
-				expected_header->payload_bytes > std::numeric_limits<std::uint64_t>::max() -
-					output.expected_payload_bytes)
+				actual_header->payload_bytes >
+					std::numeric_limits<std::uint64_t>::max() - output.actual_payload_bytes ||
+				expected_header->payload_bytes >
+					std::numeric_limits<std::uint64_t>::max() - output.expected_payload_bytes)
 				return sdk::unexpected(projection_error("stream", "counter-overflow"));
 			++output.actual_record_count;
 			++output.expected_record_count;
@@ -743,29 +743,30 @@ namespace cxxlens::detail::clang22::materialization
 					first_mismatch(output.first_mismatch_offset, actual_offset);
 			}
 
-			const auto common_bytes = std::min(actual_header->payload_bytes,
-											 expected_header->payload_bytes);
+			const auto common_bytes =
+				std::min(actual_header->payload_bytes, expected_header->payload_bytes);
 			std::uint64_t compared{};
 			while (compared < common_bytes)
 			{
 				const auto chunk = static_cast<std::size_t>(std::min<std::uint64_t>(
 					common_bytes - compared, projection_compare_window_bytes));
 				if (auto read = read_projection_bytes(actual.storage(),
-												 actual_header->payload_offset + compared,
-												 std::span{actual_buffer}.first(chunk));
+													  actual_header->payload_offset + compared,
+													  std::span{actual_buffer}.first(chunk));
 					!read)
 					return sdk::unexpected(std::move(read.error()));
 				if (auto read = read_projection_bytes(expected.storage(),
-												 expected_header->payload_offset + compared,
-												 std::span{expected_buffer}.first(chunk));
+													  expected_header->payload_offset + compared,
+													  std::span{expected_buffer}.first(chunk));
 					!read)
 					return sdk::unexpected(std::move(read.error()));
 				for (std::size_t index{}; index < chunk; ++index)
 					if (actual_buffer[index] != expected_buffer[index])
 					{
 						output.equal = false;
-						output.first_mismatch_offset = first_mismatch(
-							output.first_mismatch_offset, actual_header->payload_offset + compared + index);
+						output.first_mismatch_offset =
+							first_mismatch(output.first_mismatch_offset,
+										   actual_header->payload_offset + compared + index);
 						break;
 					}
 				compared += chunk;
@@ -867,7 +868,7 @@ namespace cxxlens::detail::clang22::materialization
 		return state_ && state_->writer && !state_->observation.first_issue &&
 			!state_->observation.publication_attempted &&
 			state_->observation.semantic_graph_validation !=
-				materialization_store_semantic_graph_validation::not_attempted;
+			materialization_store_semantic_graph_validation::not_attempted;
 	}
 
 	const materialization_store_observation&

@@ -11,9 +11,9 @@
 #include <variant>
 #include <vector>
 
+#include "materialization_io.hpp"
 #include "materialization_request.hpp"
 #include "materialization_request_binding.hpp"
-#include "materialization_io.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -47,7 +47,8 @@ namespace cxxlens::detail::clang22::materialization
 		std::uint64_t maximum_framed_bytes{512U * 1024U * 1024U};
 		std::uint64_t maximum_record_bytes{1U * 1024U * 1024U};
 
-		[[nodiscard]] bool operator==(const materialization_store_projection_limits&) const = default;
+		[[nodiscard]] bool
+		operator==(const materialization_store_projection_limits&) const = default;
 	};
 
 	/** Receipt for one sealed canonical projection stream. */
@@ -58,7 +59,8 @@ namespace cxxlens::detail::clang22::materialization
 		std::uint64_t framed_bytes{};
 		std::string content_digest;
 
-		[[nodiscard]] bool operator==(const materialization_store_projection_receipt&) const = default;
+		[[nodiscard]] bool
+		operator==(const materialization_store_projection_receipt&) const = default;
 	};
 
 	struct materialization_store_projection_comparison;
@@ -74,11 +76,12 @@ namespace cxxlens::detail::clang22::materialization
 	class materialization_store_projection_writer final
 	{
 	  public:
-		materialization_store_projection_writer(const materialization_store_projection_writer&) = delete;
+		materialization_store_projection_writer(const materialization_store_projection_writer&) =
+			delete;
 		materialization_store_projection_writer&
 		operator=(const materialization_store_projection_writer&) = delete;
-		materialization_store_projection_writer(materialization_store_projection_writer&&) noexcept =
-			default;
+		materialization_store_projection_writer(
+			materialization_store_projection_writer&&) noexcept = default;
 		materialization_store_projection_writer&
 		operator=(materialization_store_projection_writer&&) noexcept = default;
 		~materialization_store_projection_writer() = default;
@@ -136,8 +139,8 @@ namespace cxxlens::detail::clang22::materialization
 		std::uint64_t expected_payload_bytes{};
 		std::optional<std::uint64_t> first_mismatch_offset;
 
-		[[nodiscard]] bool operator==(const materialization_store_projection_comparison&) const =
-			default;
+		[[nodiscard]] bool
+		operator==(const materialization_store_projection_comparison&) const = default;
 	};
 
 	/**
@@ -148,9 +151,8 @@ namespace cxxlens::detail::clang22::materialization
 	 * byte mismatch, or divergent EOF produces `equal == false` with a bounded witness.
 	 */
 	[[nodiscard]] sdk::result<materialization_store_projection_comparison>
-	compare_materialization_store_projections(
-		materialization_store_projection_writer& actual,
-		materialization_store_projection_writer& expected);
+	compare_materialization_store_projections(materialization_store_projection_writer& actual,
+											  materialization_store_projection_writer& expected);
 
 	/** Fully prepared SDK transaction input. This boundary only consumes Store-ready values. */
 	struct prepared_store_transaction

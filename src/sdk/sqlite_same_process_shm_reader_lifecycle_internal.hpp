@@ -196,7 +196,8 @@ namespace cxxlens::sdk::detail
 		const sqlite_shm_reader_normalization_phase destination) noexcept
 	{
 		using phase = sqlite_shm_reader_normalization_phase;
-		if (destination == phase::terminal_quarantined && origin != phase::post_effect_projection_validated &&
+		if (destination == phase::terminal_quarantined &&
+			origin != phase::post_effect_projection_validated &&
 			origin != phase::terminal_quarantined)
 			return true;
 		switch (origin)

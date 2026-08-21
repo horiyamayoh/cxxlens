@@ -691,7 +691,7 @@ namespace
 		{
 			require(receipt.handle->query_annotations_available(),
 					"SQLite streaming reopen lost v5 query annotations");
-				require(receipt.handle->input_coverage().size() == 1U &&
+			require(receipt.handle->input_coverage().size() == 1U &&
 						receipt.handle->partition_bindings().size() == 1U &&
 						receipt.handle->unresolved_items().empty(),
 					"SQLite streaming reopen lost semantic graph side projections");
@@ -706,14 +706,12 @@ namespace
 			auto rows = receipt.handle->open(*relation);
 			require(rows.has_value(), "SQLite streaming reopen lost row query");
 			auto first = rows->next();
-			require(first && first->has_value(),
-					"SQLite streaming reopen lost the persisted row");
+			require(first && first->has_value(), "SQLite streaming reopen lost the persisted row");
 			auto copied = (*first)->copy();
 			require(copied && copied->canonical_form() == expected_row,
 					"SQLite streaming reopen changed the persisted row projection");
 			auto row_end = rows->next();
-			require(row_end && !*row_end,
-					"SQLite streaming reopen row cursor was not finite");
+			require(row_end && !*row_end, "SQLite streaming reopen row cursor was not finite");
 		}
 	}
 
@@ -823,7 +821,7 @@ namespace
 		auto expected = materialization_store_projection_writer::create(limits);
 		require(actual && expected, "projection writer creation failed");
 		const auto append = [](materialization_store_projection_writer& writer,
-										const std::string_view value) -> sdk::result<void>
+							   const std::string_view value) -> sdk::result<void>
 		{
 			return writer.append(std::as_bytes(std::span{value.data(), value.size()}));
 		};
@@ -833,8 +831,7 @@ namespace
 		auto actual_receipt = actual->seal();
 		auto expected_receipt = expected->seal();
 		require(actual_receipt && expected_receipt && actual->sealed() && expected->sealed() &&
-					actual_receipt->record_count == 2U &&
-					expected_receipt->record_count == 2U &&
+					actual_receipt->record_count == 2U && expected_receipt->record_count == 2U &&
 					actual_receipt->payload_bytes == expected_receipt->payload_bytes,
 				"projection stream seal receipt was not exact");
 		auto equal = compare_materialization_store_projections(*actual, *expected);
@@ -861,7 +858,7 @@ namespace
 		const materialization_store_projection_limits aggregate_limits{32U, 24U};
 		auto aggregate = materialization_store_projection_writer::create(aggregate_limits);
 		require(aggregate && append(*aggregate, std::string(24U, 'a')) &&
-				!append(*aggregate, "b") && !aggregate->seal(),
+					!append(*aggregate, "b") && !aggregate->seal(),
 				"projection writer crossed its aggregate framed-byte bound");
 
 		const materialization_store_projection_limits window_limits{256U * 1024U, 128U * 1024U};
@@ -878,8 +875,8 @@ namespace
 		auto window_mismatch =
 			compare_materialization_store_projections(*window_actual, *window_expected);
 		require(window_mismatch && !window_mismatch->equal &&
-				window_mismatch->first_mismatch_offset &&
-				*window_mismatch->first_mismatch_offset == 8U + 80U * 1024U,
+					window_mismatch->first_mismatch_offset &&
+					*window_mismatch->first_mismatch_offset == 8U + 80U * 1024U,
 				"multi-window projection mismatch was not byte-exact");
 	}
 } // namespace

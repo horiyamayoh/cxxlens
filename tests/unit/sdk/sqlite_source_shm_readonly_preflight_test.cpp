@@ -42,9 +42,9 @@ namespace
 	{
 	  public:
 		active_read_held_object(const sqlite_backend_file_role role,
-								 const std::string_view label,
-								 const sqlite_backend_opaque_identity& filesystem,
-								 const sqlite_backend_opaque_identity& mount)
+								const std::string_view label,
+								const sqlite_backend_opaque_identity& filesystem,
+								const sqlite_backend_opaque_identity& mount)
 			: role_{role}, object_{active_read_identity(std::string{label} + ".object")},
 			  entry_{active_read_identity(std::string{label} + ".entry")}, filesystem_{filesystem},
 			  mount_{mount}
@@ -56,12 +56,14 @@ namespace
 			return role_;
 		}
 
-		[[nodiscard]] const sqlite_backend_opaque_identity& object_identity() const noexcept override
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		object_identity() const noexcept override
 		{
 			return object_;
 		}
 
-		[[nodiscard]] const sqlite_backend_opaque_identity& directory_entry_identity() const noexcept override
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		directory_entry_identity() const noexcept override
 		{
 			return entry_;
 		}
@@ -80,7 +82,8 @@ namespace
 
 		[[nodiscard]] result<void> recheck_retained_object() const override
 		{
-			return retained_recheck_ok ? result<void>{} : unexpected(active_read_error("retained-recheck"));
+			return retained_recheck_ok ? result<void>{}
+									   : unexpected(active_read_error("retained-recheck"));
 		}
 
 		[[nodiscard]] result<std::uint64_t> size() const override
@@ -89,7 +92,7 @@ namespace
 		}
 
 		[[nodiscard]] result<void> read_exact(const std::uint64_t,
-										  const std::span<std::byte>) const override
+											  const std::span<std::byte>) const override
 		{
 			return {};
 		}
@@ -100,7 +103,8 @@ namespace
 		}
 
 		[[nodiscard]] result<std::shared_ptr<sqlite_backend_private_snapshot>>
-		copy_exact(sqlite_backend_private_snapshot_builder&, const std::span<std::byte>) const override
+		copy_exact(sqlite_backend_private_snapshot_builder&,
+				   const std::span<std::byte>) const override
 		{
 			return unexpected(active_read_error("unexpected-copy"));
 		}
@@ -132,7 +136,7 @@ namespace
 	{
 	  public:
 		active_read_namespace_guard(std::string locator, sqlite_backend_opaque_identity identity)
-		: locator_{std::move(locator)}, identity_{std::move(identity)}
+			: locator_{std::move(locator)}, identity_{std::move(identity)}
 		{
 		}
 
@@ -154,12 +158,15 @@ namespace
 		[[nodiscard]] result<sqlite_backend_entry_observation>
 		retained_entry(const sqlite_backend_file_role) const override
 		{
-			return unexpected(error{"test.failure", "sqlite-active-read", "unexpected-retained-entry"});
+			return unexpected(
+				error{"test.failure", "sqlite-active-read", "unexpected-retained-entry"});
 		}
 
 		[[nodiscard]] result<void> recheck() const override
 		{
-			return recheck_ok ? result<void>{} : unexpected(error{"test.failure", "sqlite-active-read", "guard-recheck"});
+			return recheck_ok
+				? result<void>{}
+				: unexpected(error{"test.failure", "sqlite-active-read", "guard-recheck"});
 		}
 
 		[[nodiscard]] result<void> claim_target_epoch() override
@@ -260,7 +267,8 @@ namespace
 			request.connection_custody = request.connection.connection_token;
 			request.connection.complete = true;
 			request.connection.main_handle_open = true;
-			constexpr int main_flags = 0x00000001 | 0x00000040 | 0x00000100 | 0x00010000 | 0x00040000;
+			constexpr int main_flags =
+				0x00000001 | 0x00000040 | 0x00000100 | 0x00010000 | 0x00040000;
 			request.connection.open_events = {
 				{sqlite_backend_file_role::main_database,
 				 main_flags,
@@ -277,24 +285,25 @@ namespace
 			};
 			request.connection.shared_memory_object_identity = shm->object_identity();
 			request.connection.shared_memory_entry_identity = shm->directory_entry_identity();
-			request.connection.source_shm_open_callback_receipt = sqlite_source_shm_open_callback_receipt{
-				"sqlite-source-shm-readonly-unix-uri-v1",
-				request.connection.connection_token,
-				active_read_identity("qualification"),
-				active_read_identity("target-namespace-epoch"),
-				path,
-				std::string{guard->anchored_main_locator()},
-				"file:%2Ftmp%2Factive-read%2Fmain.db?mode=ro&cache=private&readonly_shm=1",
-				"cxxlens-test-forwarding-vfs",
-				"ro",
-				"private",
-				"1",
-				main_flags,
-				request.runtime.runtime_identity,
-				request.forwarding_vfs_identity,
-				request.pinned_underlying_vfs_identity,
-				request.pinned_underlying_vfs_app_data_identity,
-			};
+			request.connection.source_shm_open_callback_receipt =
+				sqlite_source_shm_open_callback_receipt{
+					"sqlite-source-shm-readonly-unix-uri-v1",
+					request.connection.connection_token,
+					active_read_identity("qualification"),
+					active_read_identity("target-namespace-epoch"),
+					path,
+					std::string{guard->anchored_main_locator()},
+					"file:%2Ftmp%2Factive-read%2Fmain.db?mode=ro&cache=private&readonly_shm=1",
+					"cxxlens-test-forwarding-vfs",
+					"ro",
+					"private",
+					"1",
+					main_flags,
+					request.runtime.runtime_identity,
+					request.forwarding_vfs_identity,
+					request.pinned_underlying_vfs_identity,
+					request.pinned_underlying_vfs_app_data_identity,
+				};
 		}
 
 		[[nodiscard]] static sqlite_backend_entry_observation
@@ -302,12 +311,12 @@ namespace
 				   const std::shared_ptr<active_read_held_object>& object)
 		{
 			return {role,
-					 sqlite_backend_entry_state::held_regular,
-					 object->object_identity(),
-					 object->directory_entry_identity(),
-					 object,
-					 object->object_filesystem_profile().value(),
-					 true};
+					sqlite_backend_entry_state::held_regular,
+					object->object_identity(),
+					object->directory_entry_identity(),
+					object,
+					object->object_filesystem_profile().value(),
+					true};
 		}
 
 		[[nodiscard]] static sqlite_backend_entry_observation
@@ -332,7 +341,8 @@ namespace
 		{
 			return 0;
 		}
-		static int fake_exec(void*, const char*, sqlite_source_shm_runtime_binding::exec_callback, void*, char**)
+		static int fake_exec(
+			void*, const char*, sqlite_source_shm_runtime_binding::exec_callback, void*, char**)
 		{
 			return 0;
 		}
@@ -340,9 +350,7 @@ namespace
 		{
 			return "";
 		}
-		static void fake_free(void*)
-		{
-		}
+		static void fake_free(void*) {}
 		static const char* fake_source_id()
 		{
 			return "test-sqlite";
@@ -488,13 +496,15 @@ namespace
 		require(receipt.has_value(), "authenticated active-read connection preflight");
 		require(receipt->contract == "cxxlens.sqlite-active-read-connection.v1",
 				"active-read receipt contract");
-		require(receipt->phase == detail::sqlite_active_read_connection_phase::active_read_connection,
+		require(receipt->phase ==
+					detail::sqlite_active_read_connection_phase::active_read_connection,
 				"active-read receipt terminates at active connection");
 		require(receipt->source_namespace_guard == fixture.guard,
 				"active-read receipt retains the source namespace guard");
 		require(receipt->source_guard_identity == fixture.guard->identity(),
 				"active-read receipt binds the continuous guard identity");
-		require(receipt->connection.shm_map_events.empty() && receipt->connection.held_shm_locks.empty(),
+		require(receipt->connection.shm_map_events.empty() &&
+					receipt->connection.held_shm_locks.empty(),
 				"active-read receipt is sealed before the first SHM map/lock");
 		require(receipt->pre_effect.source_family_unchanged && !receipt->pre_effect.write_observed,
 				"active-read receipt retains the authenticated pre-effect census");
@@ -536,14 +546,14 @@ namespace
 		require(!validate_sqlite_active_read_connection(mutated),
 				"source-family replacement fails closed");
 		fixture.wal->replacement = sqlite_backend_replacement_state::exact_same_entry_and_object;
-		for (const auto forbidden : {
-				 &sqlite_active_read_pre_effect_census::watch_loss_or_overflow_observed,
-				 &sqlite_active_read_pre_effect_census::runtime_drift_observed,
-				 &sqlite_active_read_pre_effect_census::vfs_drift_observed,
-				 &sqlite_active_read_pre_effect_census::process_drift_observed,
-				 &sqlite_active_read_pre_effect_census::fork_drift_observed,
-				 &sqlite_active_read_pre_effect_census::unload_requested,
-				 &sqlite_active_read_pre_effect_census::late_callback_observed})
+		for (const auto forbidden :
+			 {&sqlite_active_read_pre_effect_census::watch_loss_or_overflow_observed,
+			  &sqlite_active_read_pre_effect_census::runtime_drift_observed,
+			  &sqlite_active_read_pre_effect_census::vfs_drift_observed,
+			  &sqlite_active_read_pre_effect_census::process_drift_observed,
+			  &sqlite_active_read_pre_effect_census::fork_drift_observed,
+			  &sqlite_active_read_pre_effect_census::unload_requested,
+			  &sqlite_active_read_pre_effect_census::late_callback_observed})
 		{
 			mutated = fixture.request;
 			mutated.pre_effect.*forbidden = true;
@@ -645,8 +655,9 @@ namespace
 			phase::connection_closed,
 			phase::post_effect_projection_validated,
 		};
-		require(detail::validate_sqlite_shm_reader_normalization_path(complete),
-				"normalization path requires the authenticated logical-read receipt and post proof");
+		require(
+			detail::validate_sqlite_shm_reader_normalization_path(complete),
+			"normalization path requires the authenticated logical-read receipt and post proof");
 		require(!detail::is_sqlite_shm_reader_normalization_transition(
 					phase::no_authenticated_receipt, phase::exclusive_source_revalidated),
 				"source recheck cannot bypass the logical-read receipt");
@@ -659,8 +670,8 @@ namespace
 		require(detail::is_sqlite_shm_reader_normalization_transition(
 					phase::exclusive_source_revalidated, phase::terminal_quarantined),
 				"source drift has a terminal quarantine route");
-		require(!detail::is_sqlite_shm_reader_normalization_transition(
-					phase::terminal_quarantined, phase::terminal_quarantined),
+		require(!detail::is_sqlite_shm_reader_normalization_transition(phase::terminal_quarantined,
+																	   phase::terminal_quarantined),
 				"normalization quarantine is sticky and cannot be replayed");
 
 		constexpr std::array skipped_receipt{

@@ -1107,9 +1107,8 @@ namespace
 			ng1_source_closure_authority_status::not_accepted,
 		});
 		require(!rejected_downgrade &&
-					rejected_downgrade.error().code ==
-					"provider.ng1.implicit-downgrade-denied" &&
-				rejected_downgrade.error().detail == "explicit-request-required",
+					rejected_downgrade.error().code == "provider.ng1.implicit-downgrade-denied" &&
+					rejected_downgrade.error().detail == "explicit-request-required",
 				"NG1 selection silently entered a non-NG1 path");
 
 		const auto blocked_registry = detail::select_ng1_live_process_port({
@@ -1119,9 +1118,9 @@ namespace
 			ng1_source_closure_authority_status::not_accepted,
 		});
 		require(!blocked_registry &&
-				blocked_registry.error().code == "provider.ng1.capability-unavailable" &&
-				blocked_registry.error().field == "source-closure" &&
-				blocked_registry.error().detail == "authority-not-accepted",
+					blocked_registry.error().code == "provider.ng1.capability-unavailable" &&
+					blocked_registry.error().field == "source-closure" &&
+					blocked_registry.error().detail == "authority-not-accepted",
 				"NG1 live port was selected before source-closure authority acceptance");
 
 		const auto wrong_protocol = detail::select_ng1_live_process_port({
@@ -1131,8 +1130,8 @@ namespace
 			ng1_source_closure_authority_status::accepted,
 		});
 		require(!wrong_protocol &&
-				wrong_protocol.error().code == "provider.ng1.registry-revision-mismatch" &&
-				wrong_protocol.error().detail == "minor-one-required",
+					wrong_protocol.error().code == "provider.ng1.registry-revision-mismatch" &&
+					wrong_protocol.error().detail == "minor-one-required",
 				"NG1 live port accepted a protocol revision outside the private P0 contract");
 
 		const auto selected = detail::select_ng1_live_process_port({
@@ -2156,20 +2155,19 @@ namespace
 		source_closure_candidate.description.protocol.maximum_minor = 2U;
 		source_closure_candidate.description.protocol.required_features = {
 			"credit-backpressure", "task-input-chunks-v1", "task-source-closure-v1"};
-		auto source_closure_selection = select_provider(
-			selection_request(executable), std::span{&source_closure_candidate, 1U});
+		auto source_closure_selection = select_provider(selection_request(executable),
+														std::span{&source_closure_candidate, 1U});
 		require(source_closure_selection.has_value(),
 				"source-closure provider selection failed before runtime gate");
 		auto source_closure_request = task(std::move(*source_closure_selection));
 		source_closure_request.limits.minimum_minor = 2U;
 		source_closure_request.limits.maximum_minor = 2U;
 		auto source_closure = runtime.execute(std::move(source_closure_request));
-		require(!source_closure &&
-				source_closure.error().code == "provider.required-feature-missing" &&
+		require(
+			!source_closure && source_closure.error().code == "provider.required-feature-missing" &&
 				source_closure.error().field == "protocol" &&
-				source_closure.error().detail.find("task-source-closure-v1") !=
-					std::string::npos,
-				"source-closure capability did not fail closed before process launch");
+				source_closure.error().detail.find("task-source-closure-v1") != std::string::npos,
+			"source-closure capability did not fail closed before process launch");
 
 		transcript_sink sink;
 		protocol_writer writer{sink};

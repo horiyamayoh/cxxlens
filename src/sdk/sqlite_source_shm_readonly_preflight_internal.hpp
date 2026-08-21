@@ -92,8 +92,7 @@ namespace cxxlens::sdk
 
 	/** Validate and seal the bounded #201 active-read connection product. */
 	[[nodiscard]] result<sqlite_active_read_connection_receipt>
-	validate_sqlite_active_read_connection(
-		const sqlite_active_read_connection_request& request);
+	validate_sqlite_active_read_connection(const sqlite_active_read_connection_request& request);
 
 	/** Build the exact internal URI accepted by the readonly-SHM source profile. */
 	[[nodiscard]] result<std::string>

@@ -2339,8 +2339,7 @@ namespace cxxlens::sdk::provider
 		if (!request.explicit_ng1_request)
 			return cxxlens::sdk::unexpected(runtime_error(
 				"provider.ng1.implicit-downgrade-denied", "ng1-live", "explicit-request-required"));
-		if (request.source_closure_authority !=
-			ng1_source_closure_authority_status::accepted)
+		if (request.source_closure_authority != ng1_source_closure_authority_status::accepted)
 			return cxxlens::sdk::unexpected(runtime_error(
 				"provider.ng1.capability-unavailable", "source-closure", "authority-not-accepted"));
 		if (request.protocol_major != 1U || request.protocol_minor != 1U)
