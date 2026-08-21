@@ -113,9 +113,11 @@ a status flag, worktree bytes, or unauthenticated producer claim cannot unblock 
 Nightly evidence is release-eligible only when entered by schedule or explicit dispatch and bound to
 latest main at start; legacy reusable invocations and the legacy Quality workflow remain compatibility
 evidence, not inputs to the autonomy release authority. Release evaluation is non-cancelled,
-dispatch-only, and requires `candidate_sha == current origin/main`. Its current implementation emits
-only `not-qualified` and never GR. Future qualified evaluation must authenticate exact successful
-Heavy and Nightly, #167 GR execution, and #179 terminal scope closure before #173 aggregates them.
+dispatch-only, and requires `candidate_sha == current origin/main`. Without a successfully
+authenticated exact-selection bundle it emits only `not-qualified` and never GR. A `qualified`
+evaluation is permitted only after exact successful Heavy and Nightly, connected #167 GR execution,
+and connected #179 terminal scope closure are authenticated for the same candidate; the handoff still
+does not issue GR or claim production support.
 
 ## Failure and recovery matrix
 
