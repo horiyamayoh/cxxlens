@@ -600,7 +600,12 @@ namespace
 		}
 		require(!iteration_error, "could not count same-uid threads for timeout fixture");
 		const auto required = same_uid_threads + 3U;
-		constexpr std::uint64_t scheduling_margin = 4U;
+		// The census is necessarily a snapshot: the test runner and its launcher can
+		// create same-UID tasks between the scan and the provider's descendant fork.
+		// Keep the fixture bounded while leaving enough room for that race and the
+		// shell's single sleep child; this does not change the provider's product
+		// subprocess budget or its cleanup assertions.
+		constexpr std::uint64_t scheduling_margin = 256U;
 		const auto maximum = limit.rlim_max > std::numeric_limits<std::uint64_t>::max()
 			? std::numeric_limits<std::uint64_t>::max()
 			: static_cast<std::uint64_t>(limit.rlim_max);
