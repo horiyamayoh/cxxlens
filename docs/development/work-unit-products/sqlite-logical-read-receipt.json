@@ -1,0 +1,48 @@
+{
+  "schema": "cxxlens.work-unit-product.v1",
+  "product": "sqlite.logical-read-receipt",
+  "contract": "cxxlens.sqlite-logical-read-receipt.v1",
+  "unit_id": "wu-201-logical-read-receipt",
+  "owner": "#201",
+  "status": "bounded-internal-candidate",
+  "production_activation": "prohibited",
+  "qualification": "not-claimed",
+  "success_phases": [
+    "active_read_connection",
+    "eager_logical_read",
+    "nested_terminal_consumed",
+    "outer_connection_revoking",
+    "outer_custody_join_pending",
+    "outer_custody_join_sealed",
+    "outer_connection_closed",
+    "zero_effect_census_sealed",
+    "logical_read_receipt"
+  ],
+  "quarantine_phases": [
+    "active_read_connection",
+    "eager_logical_read",
+    "terminal_quarantined"
+  ],
+  "validator": "cxxlens::sdk::detail::validate_sqlite_logical_read_receipt_path",
+  "receipt_barrier": [
+    "authenticated nested mapping terminal consumed exactly once",
+    "outer connection revocation and custody join sealed",
+    "outer connection closed",
+    "zero live callback lease and use-owner census",
+    "independent zero-effect callback census sealed"
+  ],
+  "forbidden_shortcuts": [
+    "receipt-before-nested-terminal",
+    "receipt-before-outer-custody-join",
+    "receipt-with-live-callback-or-lease",
+    "receipt-without-zero-effect-census",
+    "writer-effect-receipt-as-outer-zero-effect-proof",
+    "missing-WAL-as-empty-read"
+  ],
+  "forbidden_products": [
+    "store.sqlite-exact-empty-normalization-effect.v1",
+    "public-Store-success",
+    "native-SQLITE_OK-projection"
+  ],
+  "failure_policy": "typed-fail-closed-before-receipt"
+}

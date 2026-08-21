@@ -852,6 +852,127 @@ namespace
 					inconsistent_pointer_flags, &vfs_identity, &app_data_identity, true, false),
 				"map proof rejects pointer/nonnull metadata disagreement");
 	}
+
+	void exercise_nested_terminal_and_logical_receipt_barriers()
+	{
+		using nested = detail::sqlite_nested_mapping_terminal_phase;
+		constexpr std::array mapped_success{
+			nested::active_read_connection,
+			nested::attempt_pin_acquired,
+			nested::native_callback_entered,
+			nested::native_result_observed,
+			nested::pending_lease,
+			nested::published_reader_lease,
+			nested::revoke_intent,
+			nested::registry_hidden,
+			nested::callbacks_drained,
+			nested::native_cleanup_complete,
+			nested::nested_mapping_terminal,
+		};
+		require(detail::validate_sqlite_nested_mapping_terminal_path(mapped_success),
+				"nested mapping terminal requires native observation and hide-before-cleanup");
+
+		constexpr std::array nonpromotable_cleanup{
+			nested::active_read_connection,
+			nested::attempt_pin_acquired,
+			nested::native_callback_entered,
+			nested::native_result_observed,
+			nested::nonpromotable_outcome,
+			nested::revoke_intent,
+			nested::registry_hidden,
+			nested::callbacks_drained,
+			nested::native_cleanup_complete,
+			nested::nested_mapping_terminal,
+		};
+		require(detail::validate_sqlite_nested_mapping_terminal_path(nonpromotable_cleanup),
+				"nonpromotable native outcome still requires custody cleanup before terminal");
+
+		constexpr std::array quarantined{
+			nested::active_read_connection,
+			nested::attempt_pin_acquired,
+			nested::native_callback_entered,
+			nested::terminal_quarantined,
+		};
+		require(detail::validate_sqlite_nested_mapping_terminal_path(quarantined),
+				"ambiguous callback has a fail-closed nested quarantine terminal");
+
+		constexpr std::array promoted_before_native{
+			nested::active_read_connection,
+			nested::attempt_pin_acquired,
+			nested::pending_lease,
+			nested::published_reader_lease,
+			nested::revoke_intent,
+			nested::registry_hidden,
+			nested::callbacks_drained,
+			nested::native_cleanup_complete,
+			nested::nested_mapping_terminal,
+		};
+		require(!detail::validate_sqlite_nested_mapping_terminal_path(promoted_before_native),
+				"lease cannot be published before native callback result");
+
+		constexpr std::array cleanup_before_hide{
+			nested::active_read_connection,
+			nested::attempt_pin_acquired,
+			nested::native_callback_entered,
+			nested::native_result_observed,
+			nested::pending_lease,
+			nested::published_reader_lease,
+			nested::revoke_intent,
+			nested::native_cleanup_complete,
+			nested::nested_mapping_terminal,
+		};
+		require(!detail::validate_sqlite_nested_mapping_terminal_path(cleanup_before_hide),
+				"cleanup cannot precede registry hide and callback drain");
+
+		using logical = detail::sqlite_logical_read_receipt_phase;
+		constexpr std::array logical_success{
+			logical::active_read_connection,
+			logical::eager_logical_read,
+			logical::nested_terminal_consumed,
+			logical::outer_connection_revoking,
+			logical::outer_custody_join_pending,
+			logical::outer_custody_join_sealed,
+			logical::outer_connection_closed,
+			logical::zero_effect_census_sealed,
+			logical::logical_read_receipt,
+		};
+		require(detail::validate_sqlite_logical_read_receipt_path(logical_success),
+				"logical receipt requires nested terminal, custody join, close, and zero-effect "
+				"census");
+
+		constexpr std::array missing_nested_terminal{
+			logical::active_read_connection,
+			logical::eager_logical_read,
+			logical::outer_connection_revoking,
+			logical::outer_custody_join_pending,
+			logical::outer_custody_join_sealed,
+			logical::outer_connection_closed,
+			logical::zero_effect_census_sealed,
+			logical::logical_read_receipt,
+		};
+		require(!detail::validate_sqlite_logical_read_receipt_path(missing_nested_terminal),
+				"logical receipt cannot bypass nested terminal consumption");
+
+		constexpr std::array missing_join_and_census{
+			logical::active_read_connection,
+			logical::eager_logical_read,
+			logical::nested_terminal_consumed,
+			logical::outer_connection_revoking,
+			logical::outer_custody_join_pending,
+			logical::outer_connection_closed,
+			logical::logical_read_receipt,
+		};
+		require(!detail::validate_sqlite_logical_read_receipt_path(missing_join_and_census),
+				"logical receipt cannot bypass sealed custody and zero-effect census");
+
+		constexpr std::array logical_quarantine{
+			logical::active_read_connection,
+			logical::eager_logical_read,
+			logical::terminal_quarantined,
+		};
+		require(detail::validate_sqlite_logical_read_receipt_path(logical_quarantine),
+				"outer ambiguity remains a fail-closed terminal");
+	}
 } // namespace
 
 int main()
@@ -862,6 +983,7 @@ int main()
 	exercise_outer_read_phase_order();
 	exercise_normalization_entry_phase_order();
 	exercise_map_sequence_proof();
+	exercise_nested_terminal_and_logical_receipt_barriers();
 #if defined(__linux__) && defined(F_OFD_SETLK)
 	exercise_repeated_exact_census();
 #endif

@@ -1,0 +1,38 @@
+{
+  "schema": "cxxlens.work-unit-evidence.v1",
+  "product": "sqlite.logical-read-receipt",
+  "unit_id": "wu-201-logical-read-receipt",
+  "contract": "cxxlens.sqlite-logical-read-receipt.v1",
+  "status": "local-focused-candidate-evidence",
+  "production_qualification": "not-claimed",
+  "candidate_revision": "bound-by-the-coordinating-commit",
+  "checks": [
+    {
+      "command": "cmake --build --preset dev-clang --target cxxlens-unit-sdk-sqlite-source-shm-readonly-preflight -j2",
+      "result": "pass"
+    },
+    {
+      "command": "ctest --preset dev-clang -R '^unit\\.sdk-sqlite-source-shm-readonly-preflight$' --output-on-failure",
+      "result": "pass"
+    }
+  ],
+  "positive_witness": [
+    "eager logical read consumes an authenticated nested terminal",
+    "outer custody join is sealed before connection close is accepted",
+    "zero-effect census follows connection close and zero live custody",
+    "logical receipt is the final phase and cannot be reused as a mapping authority"
+  ],
+  "negative_witness": [
+    "logical receipt before nested terminal consumption",
+    "logical receipt before sealed custody join",
+    "logical receipt before connection close",
+    "logical receipt without zero-effect census",
+    "ambiguous outer custody becomes terminal quarantine"
+  ],
+  "limitations": [
+    "state-only receipt barrier; no logical-read receipt is minted by production code",
+    "source decode, native cold reopen, live reset, and complete static/shared qualification remain unclaimed",
+    "#202 normalization remains independently fail-closed and cannot consume this candidate artifact",
+    "product receipt inventory remains pending until an exact producer commit and evidence are integrated"
+  ]
+}
