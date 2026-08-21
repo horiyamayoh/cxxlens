@@ -339,6 +339,21 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
+	 * Exact phase in which the SDK's independent semantic-object-graph validator completed.
+	 *
+	 * `candidate` is the prepublication `snapshot_writer::validate()` result.  `reopened` is
+	 * stronger: the SQLite close/reopen path also decoded and independently revalidated the v5
+	 * persisted graph.  This is backend evidence only; it does not claim bounded residency or
+	 * production/release qualification.
+	 */
+	enum class materialization_store_semantic_graph_validation : std::uint8_t
+	{
+		not_attempted,
+		candidate,
+		reopened,
+	};
+
+	/**
 	 * Actual-value source on both sides of the irreversible publish boundary.
 	 *
 	 * This value deliberately has no stale/store/unknown/committed-unverified classification and
@@ -360,6 +375,8 @@ namespace cxxlens::detail::clang22::materialization
 		std::optional<sdk::snapshot_handle> publish_returned_handle;
 		std::optional<sdk::publication_record> publish_returned_record;
 		std::optional<materialization_store_recovery_receipt> recovery_receipt;
+		materialization_store_semantic_graph_validation semantic_graph_validation{
+			materialization_store_semantic_graph_validation::not_attempted};
 		std::array<materialization_store_path_receipt, 3U> verification_receipts;
 		std::optional<sdk::snapshot_store> verification_store;
 		std::optional<materialization_store_issue> first_issue;

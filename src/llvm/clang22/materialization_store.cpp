@@ -865,7 +865,9 @@ namespace cxxlens::detail::clang22::materialization
 	bool materialization_store_preparation::ready_for_publish() const noexcept
 	{
 		return state_ && state_->writer && !state_->observation.first_issue &&
-			!state_->observation.publication_attempted;
+			!state_->observation.publication_attempted &&
+			state_->observation.semantic_graph_validation !=
+				materialization_store_semantic_graph_validation::not_attempted;
 	}
 
 	const materialization_store_observation&
@@ -1010,6 +1012,10 @@ namespace cxxlens::detail::clang22::materialization
 			state_value->writer.reset();
 			return materialization_store_preparation{std::move(state_value)};
 		}
+		// SDK validation reconstructs the independent semantic graph before the candidate can
+		// become visible.  Retain the phase as evidence; the SQLite reopen below upgrades it.
+		output.semantic_graph_validation =
+			materialization_store_semantic_graph_validation::candidate;
 		if (!candidate_manifest)
 		{
 			retain_sdk_failure(output,
@@ -1280,6 +1286,10 @@ namespace cxxlens::detail::clang22::materialization
 			state_value->writer.reset();
 			return materialization_store_preparation{std::move(state_value)};
 		}
+		// The streaming adapter has the same SDK-owned independent graph validation as the
+		// compatibility bulk adapter.  No publication is allowed without this phase.
+		output.semantic_graph_validation =
+			materialization_store_semantic_graph_validation::candidate;
 
 		output.candidate_manifest = std::move(indexed->manifest);
 		if (!prior_sequence || *prior_sequence != std::numeric_limits<std::uint64_t>::max())
@@ -1438,6 +1448,10 @@ namespace cxxlens::detail::clang22::materialization
 				return std::move(output);
 			}
 			state_value->store.emplace(std::move(*reopened));
+			// open_sqlite_snapshot_store performs ADR-0033 v5 envelope reconstruction and exact
+			// semantic-projection comparison before returning the reopened store.
+			output.semantic_graph_validation =
+				materialization_store_semantic_graph_validation::reopened;
 		}
 
 		output.verification_receipts[1U].id_lookup = record.publication_id;

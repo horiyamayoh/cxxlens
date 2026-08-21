@@ -2194,6 +2194,14 @@ int main(const int argc, char**)
 	};
 	try
 	{
+		const auto& revalidated_store_observation = postpublication->store_observation();
+		const auto graph_validation = admitted_request.publication().backend == "sqlite"
+			? materialization_store_semantic_graph_validation::reopened
+			: materialization_store_semantic_graph_validation::candidate;
+		if (revalidated_store_observation.semantic_graph_validation != graph_validation)
+			return fail_after_publication(
+				materialization_postpublication_failure_phase::report_validation,
+				{"materialization.store-revalidation", "semantic-graph", "required-phase-missing"});
 		public_materialization_success_report_input public_input;
 		public_input.request = &*request;
 		public_input.request_globals = &*request_globals;
