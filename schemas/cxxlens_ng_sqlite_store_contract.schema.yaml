@@ -2832,6 +2832,7 @@ $defs:
             - pinned-sqlite-runtime-identity-and-version
             - exact-normalization-effect-grammar-profile-receipt
             - accepted-empty-private-recovery-stable-source-receipt
+            - exact-authenticated-logical-read-receipt-v1-after-connection-closed-zero-custody-and-zero-effect-callback-receipt
             - preinit-exact-empty-wal-header-anchor
             - pre-coordination-zero-wal-branch-absent-create-or-preexisting-bound-size-zero-open
             - actual-normalizer-main-open-file-instance-identity-and-directory-entry-binding

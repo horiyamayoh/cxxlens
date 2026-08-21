@@ -165,6 +165,75 @@ namespace cxxlens::sdk::detail
 		return path.back() == sqlite_shm_reader_outer_read_phase::logical_read_receipt;
 	}
 
+	/** The #202 exact-empty normalization cutover graph (production-inactive). */
+	enum class sqlite_shm_reader_normalization_phase : std::uint8_t
+	{
+		no_authenticated_receipt,
+		logical_read_receipt_authenticated,
+		exclusive_source_revalidated,
+		pre_effect_receipt_sealed,
+		effect_armed,
+		effect_confirmed,
+		connection_closed,
+		post_effect_projection_validated,
+		terminal_quarantined,
+	};
+
+	inline constexpr std::array sqlite_shm_reader_normalization_phases{
+		sqlite_shm_reader_normalization_phase::no_authenticated_receipt,
+		sqlite_shm_reader_normalization_phase::logical_read_receipt_authenticated,
+		sqlite_shm_reader_normalization_phase::exclusive_source_revalidated,
+		sqlite_shm_reader_normalization_phase::pre_effect_receipt_sealed,
+		sqlite_shm_reader_normalization_phase::effect_armed,
+		sqlite_shm_reader_normalization_phase::effect_confirmed,
+		sqlite_shm_reader_normalization_phase::connection_closed,
+		sqlite_shm_reader_normalization_phase::post_effect_projection_validated,
+		sqlite_shm_reader_normalization_phase::terminal_quarantined,
+	};
+
+	[[nodiscard]] constexpr bool is_sqlite_shm_reader_normalization_transition(
+		const sqlite_shm_reader_normalization_phase origin,
+		const sqlite_shm_reader_normalization_phase destination) noexcept
+	{
+		using phase = sqlite_shm_reader_normalization_phase;
+		if (destination == phase::terminal_quarantined && origin != phase::post_effect_projection_validated &&
+			origin != phase::terminal_quarantined)
+			return true;
+		switch (origin)
+		{
+			case phase::no_authenticated_receipt:
+				return destination == phase::logical_read_receipt_authenticated;
+			case phase::logical_read_receipt_authenticated:
+				return destination == phase::exclusive_source_revalidated;
+			case phase::exclusive_source_revalidated:
+				return destination == phase::pre_effect_receipt_sealed;
+			case phase::pre_effect_receipt_sealed:
+				return destination == phase::effect_armed;
+			case phase::effect_armed:
+				return destination == phase::effect_confirmed;
+			case phase::effect_confirmed:
+				return destination == phase::connection_closed;
+			case phase::connection_closed:
+				return destination == phase::post_effect_projection_validated;
+			case phase::post_effect_projection_validated:
+			case phase::terminal_quarantined:
+				return false;
+		}
+		return false;
+	}
+
+	[[nodiscard]] constexpr bool validate_sqlite_shm_reader_normalization_path(
+		const std::span<const sqlite_shm_reader_normalization_phase> path) noexcept
+	{
+		using phase = sqlite_shm_reader_normalization_phase;
+		if (path.empty() || path.front() != phase::no_authenticated_receipt)
+			return false;
+		for (std::size_t index = 1U; index < path.size(); ++index)
+			if (!is_sqlite_shm_reader_normalization_transition(path[index - 1U], path[index]))
+				return false;
+		return path.back() == phase::post_effect_projection_validated;
+	}
+
 	/**
 	 * Canonical DF-0207 reader attachment reservation phases.
 	 *

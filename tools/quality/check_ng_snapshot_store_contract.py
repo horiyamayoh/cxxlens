@@ -23,7 +23,7 @@ CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:939021ff7797042e9fcb62e11efef3d1bd8a69424243fe59e5c9eb1acc6dfd0e"
+    "sha256:debd845a46b1e28dfaed66d9526d6da1c32075a36ce8863d6e1cbf3b62a9fded"
 )
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_snapshot_manifest.schema.yaml")
 VECTORS = pathlib.Path("schemas/cxxlens_ng_store_conformance_vectors.yaml")
@@ -1434,6 +1434,7 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
                 "pinned-sqlite-runtime-identity-and-version",
                 "exact-normalization-effect-grammar-profile-receipt",
                 "accepted-empty-private-recovery-stable-source-receipt",
+                "exact-authenticated-logical-read-receipt-v1-after-connection-closed-zero-custody-and-zero-effect-callback-receipt",
                 "preinit-exact-empty-wal-header-anchor",
                 (
                     "pre-coordination-zero-wal-branch-absent-create-or-preexisting-"

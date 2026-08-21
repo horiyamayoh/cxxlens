@@ -1672,6 +1672,16 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ].remove("exact-normalization-effect-grammar-profile-receipt"),
             ),
             (
+                "logical-read-receipt",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["sealed_receipt_profiles"][
+                    "accepted_empty_normalization_source_anchor"
+                ].remove(
+                    "exact-authenticated-logical-read-receipt-v1-after-connection-closed-zero-custody-and-zero-effect-callback-receipt"
+                ),
+            ),
+            (
                 "bounded-effect-transcript",
                 lambda value: value["publication_transaction"][
                     "sqlite_terminal_recovery"

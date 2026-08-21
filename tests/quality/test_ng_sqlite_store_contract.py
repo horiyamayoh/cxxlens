@@ -3140,6 +3140,14 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "normalization-logical-read-receipt",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_source_anchor"].remove(
+                    "exact-authenticated-logical-read-receipt-v1-after-connection-closed-zero-custody-and-zero-effect-callback-receipt"
+                ),
+            ),
+            (
                 "normalization-source-byte-snapshot-receipt",
                 lambda value: value["transaction"]["recovery_model"]
                 ["terminal_reclassification"]["sealed_receipt_profiles"]

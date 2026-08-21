@@ -632,6 +632,71 @@ namespace
 				"outer read path rejects receipt before connection close and zero-effect proof");
 	}
 
+	void exercise_normalization_entry_phase_order()
+	{
+		using phase = detail::sqlite_shm_reader_normalization_phase;
+		constexpr std::array complete{
+			phase::no_authenticated_receipt,
+			phase::logical_read_receipt_authenticated,
+			phase::exclusive_source_revalidated,
+			phase::pre_effect_receipt_sealed,
+			phase::effect_armed,
+			phase::effect_confirmed,
+			phase::connection_closed,
+			phase::post_effect_projection_validated,
+		};
+		require(detail::validate_sqlite_shm_reader_normalization_path(complete),
+				"normalization path requires the authenticated logical-read receipt and post proof");
+		require(!detail::is_sqlite_shm_reader_normalization_transition(
+					phase::no_authenticated_receipt, phase::exclusive_source_revalidated),
+				"source recheck cannot bypass the logical-read receipt");
+		require(!detail::is_sqlite_shm_reader_normalization_transition(
+					phase::logical_read_receipt_authenticated, phase::effect_armed),
+				"effect cannot bypass exclusive recheck and pre-effect sealing");
+		require(!detail::is_sqlite_shm_reader_normalization_transition(
+					phase::pre_effect_receipt_sealed, phase::effect_confirmed),
+				"effect confirmation cannot bypass the effect arm");
+		require(detail::is_sqlite_shm_reader_normalization_transition(
+					phase::exclusive_source_revalidated, phase::terminal_quarantined),
+				"source drift has a terminal quarantine route");
+		require(!detail::is_sqlite_shm_reader_normalization_transition(
+					phase::terminal_quarantined, phase::terminal_quarantined),
+				"normalization quarantine is sticky and cannot be replayed");
+
+		constexpr std::array skipped_receipt{
+			phase::no_authenticated_receipt,
+			phase::exclusive_source_revalidated,
+			phase::pre_effect_receipt_sealed,
+			phase::effect_armed,
+			phase::effect_confirmed,
+			phase::connection_closed,
+			phase::post_effect_projection_validated,
+		};
+		require(!detail::validate_sqlite_shm_reader_normalization_path(skipped_receipt),
+				"normalization path rejects a missing logical-read receipt");
+
+		constexpr std::array skipped_pre_effect{
+			phase::no_authenticated_receipt,
+			phase::logical_read_receipt_authenticated,
+			phase::exclusive_source_revalidated,
+			phase::effect_armed,
+			phase::effect_confirmed,
+			phase::connection_closed,
+			phase::post_effect_projection_validated,
+		};
+		require(!detail::validate_sqlite_shm_reader_normalization_path(skipped_pre_effect),
+				"normalization path rejects effect arm before pre-effect sealing");
+
+		constexpr std::array quarantined{
+			phase::no_authenticated_receipt,
+			phase::logical_read_receipt_authenticated,
+			phase::exclusive_source_revalidated,
+			phase::terminal_quarantined,
+		};
+		require(!detail::validate_sqlite_shm_reader_normalization_path(quarantined),
+				"quarantine is terminal and cannot be projected as normalization success");
+	}
+
 	void exercise_map_sequence_proof()
 	{
 		constexpr int readonly = 8;
@@ -735,6 +800,7 @@ int main()
 	exercise_branch_local_capability_absence();
 	exercise_active_read_connection_receipt();
 	exercise_outer_read_phase_order();
+	exercise_normalization_entry_phase_order();
 	exercise_map_sequence_proof();
 #if defined(__linux__) && defined(F_OFD_SETLK)
 	exercise_repeated_exact_census();
