@@ -428,7 +428,10 @@ int main(const int argument_count, const char* const* arguments)
 		}
 		(void)::close(ready_pipe[0U]);
 		if (received != ready.size())
+		{
+			std::cerr << "timeout-grandchild internal readiness bytes=" << received << '\n';
 			return EXIT_FAILURE;
+		}
 		holder_guard.release();
 		// Keep the leader alive with its descendants so the host observes a typed timeout
 		// rather than an EOF/truncated transcript before process-group cleanup.

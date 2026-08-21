@@ -64,6 +64,15 @@ namespace
 	constexpr std::uint64_t provider_address_space_budget = 256U * 1024U * 1024U;
 	constexpr std::uint64_t provider_subprocess_budget = 1U;
 #endif
+#if defined(CXXLENS_SANITIZER_INSTRUMENTED)
+	constexpr std::uint64_t timeout_grandchild_wall_budget_ms = 30'000U;
+	constexpr std::uint64_t timeout_grandchild_cpu_budget_ms = 30'000U;
+	constexpr std::uint64_t timeout_grandchild_elapsed_bound_seconds = 40U;
+#else
+	constexpr std::uint64_t timeout_grandchild_wall_budget_ms = 5'000U;
+	constexpr std::uint64_t timeout_grandchild_cpu_budget_ms = 2'000U;
+	constexpr std::uint64_t timeout_grandchild_elapsed_bound_seconds = 8U;
+#endif
 	void require(const bool condition, const std::string& message)
 	{
 		if (!condition)
@@ -2362,7 +2371,8 @@ namespace
 		if (!subprocess_budget)
 			return false;
 		grandchild_request.budget.subprocesses = *subprocess_budget;
-		grandchild_request.budget.wall_ms = 5000U;
+		grandchild_request.budget.wall_ms = timeout_grandchild_wall_budget_ms;
+		grandchild_request.budget.cpu_ms = timeout_grandchild_cpu_budget_ms;
 		std::promise<descendant_observation> holder_promise;
 		auto holder_future = holder_promise.get_future();
 		std::atomic_bool execution_finished{};
@@ -2515,7 +2525,8 @@ namespace
 		require(!marker_error, "could not clean up the negative descendant marker");
 		fs::remove(readiness_fifo, marker_error);
 		require(!marker_error, "could not clean up the readiness FIFO");
-		require(grandchild_elapsed < std::chrono::seconds{8},
+		require(grandchild_elapsed <
+				std::chrono::seconds{timeout_grandchild_elapsed_bound_seconds},
 				"provider timeout waited for the pipe-holding descendant instead of closing it: " +
 					std::to_string(
 						std::chrono::duration_cast<std::chrono::milliseconds>(grandchild_elapsed)
