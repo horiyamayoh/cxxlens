@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
@@ -14,7 +17,9 @@ from collect_ng_release_evidence import (  # noqa: E402
     ReleaseEvidenceCollectionError,
     authenticate_candidate,
     authenticate_workflow,
+    digest_file,
     normalize_run,
+    validate_artifact_metadata,
 )
 
 
@@ -78,6 +83,54 @@ class ReleaseEvidenceCollectorTest(unittest.TestCase):
         foreign["head_repository"] = {"id": REPOSITORY_ID + 1}
         with self.assertRaisesRegex(ReleaseEvidenceCollectionError, "repository identity"):
             normalize_run(foreign, _selected(), SHA, REPOSITORY_ID)
+
+    def test_artifact_metadata_is_authenticated_before_download(self) -> None:
+        metadata = {
+            "id": 2001,
+            "name": f"cxxlens-ng-release-qualification-{SHA}",
+            "expired": False,
+            "workflow_run": {"id": 1001},
+            "size_in_bytes": 1,
+            "digest": "sha256:" + "c" * 64,
+            "url": "https://api.github.com/repos/example/cxxlens/actions/artifacts/2001",
+            "archive_download_url": (
+                "https://api.github.com/repos/example/cxxlens/actions/artifacts/2001/zip"
+            ),
+        }
+        validate_artifact_metadata(
+            metadata,
+            2001,
+            f"cxxlens-ng-release-qualification-{SHA}",
+            1001,
+        )
+        for key, value, message in (
+            ("expired", True, "expired"),
+            ("name", "wrong", "name differs"),
+            ("size_in_bytes", (1 << 30) + 1, "bounded range"),
+            ("url", "https://api.github.com/actions/artifacts/999", "API URL"),
+            ("archive_download_url", "https://api.github.com/actions/artifacts/999/zip", "download URL"),
+        ):
+            mutated = dict(metadata)
+            mutated[key] = value
+            with self.subTest(key=key):
+                with self.assertRaisesRegex(ReleaseEvidenceCollectionError, message):
+                    validate_artifact_metadata(
+                        mutated,
+                        2001,
+                        f"cxxlens-ng-release-qualification-{SHA}",
+                        1001,
+                    )
+
+    def test_archive_digest_is_streamed_and_bounded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "artifact.zip"
+            path.write_bytes(b"bounded")
+            digest, size = digest_file(path)
+            self.assertEqual(size, 7)
+            self.assertEqual(digest, "sha256:" + hashlib.sha256(b"bounded").hexdigest())
+            with mock.patch("collect_ng_release_evidence.MAX_ARTIFACT_BYTES", 4):
+                with self.assertRaisesRegex(ReleaseEvidenceCollectionError, "exceeds"):
+                    digest_file(path)
 
 
 if __name__ == "__main__":

@@ -15,10 +15,12 @@ import hashlib
 import json
 import os
 import pathlib
+import stat
 import subprocess
 import sys
 import zipfile
 from typing import Any
+from urllib.parse import urlparse
 
 from check_ng_release_evidence_bundle import (  # noqa: E402
     ArtifactSpec,
@@ -35,6 +37,10 @@ class ReleaseEvidenceCollectionError(ValueError):
 
 def fail(message: str) -> None:
     raise ReleaseEvidenceCollectionError(message)
+
+
+MAX_ARTIFACT_BYTES = 1 << 30
+STREAM_CHUNK_BYTES = 1024 * 1024
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -87,17 +93,45 @@ def gh_json(endpoint: str) -> dict[str, Any]:
 
 
 def gh_archive(endpoint: str, path: pathlib.Path) -> None:
+    temporary = path.with_name(path.name + ".partial")
+    process: subprocess.Popen[bytes] | None = None
     try:
-        result = subprocess.run(
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary.unlink(missing_ok=True)
+        process = subprocess.Popen(
             ["gh", "api", endpoint],
-            check=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             env=os.environ.copy(),
         )
-    except (OSError, subprocess.CalledProcessError) as error:
+        if process.stdout is None:
+            fail(f"GitHub artifact download produced no stream: {endpoint}")
+        with temporary.open("wb") as output:
+            total = 0
+            while True:
+                chunk = process.stdout.read(STREAM_CHUNK_BYTES)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_ARTIFACT_BYTES:
+                    fail(
+                        f"GitHub artifact exceeds {MAX_ARTIFACT_BYTES}-byte bound: "
+                        f"{endpoint}"
+                    )
+                output.write(chunk)
+        stderr = process.communicate()[1]
+        if process.returncode != 0:
+            detail = stderr.decode("utf-8", errors="replace").strip()
+            suffix = f": {detail}" if detail else ""
+            fail(f"GitHub artifact download failed for explicit endpoint {endpoint}{suffix}")
+        temporary.replace(path)
+    except (OSError, subprocess.SubprocessError) as error:
         fail(f"GitHub artifact download failed for explicit endpoint {endpoint}: {error}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(result.stdout)
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.wait()
+        temporary.unlink(missing_ok=True)
 
 
 def digest_bytes(value: bytes) -> str:
@@ -105,11 +139,66 @@ def digest_bytes(value: bytes) -> str:
 
 
 def digest_file(path: pathlib.Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
     try:
-        value = path.read_bytes()
+        with path.open("rb") as stream:
+            while True:
+                chunk = stream.read(STREAM_CHUNK_BYTES)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_ARTIFACT_BYTES:
+                    fail(f"downloaded artifact exceeds {MAX_ARTIFACT_BYTES}-byte bound: {path}")
+                digest.update(chunk)
     except OSError as error:
         fail(f"cannot read downloaded artifact {path}: {error}")
-    return digest_bytes(value), len(value)
+    return "sha256:" + digest.hexdigest(), size
+
+
+def _valid_digest(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == len("sha256:") + 64
+        and value.startswith("sha256:")
+        and all(character in "0123456789abcdef" for character in value[7:])
+    )
+
+
+def _url_ends_with(value: Any, suffix: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    return urlparse(value).path.rstrip("/").endswith(suffix)
+
+
+def validate_artifact_metadata(
+    artifact: dict[str, Any], artifact_id: int, expected_name: str, run_id: int
+) -> None:
+    """Authenticate artifact metadata before opening its archive stream."""
+
+    if artifact.get("id") != artifact_id:
+        fail(f"artifact API identity differs: {artifact_id}")
+    if artifact.get("name") != expected_name:
+        fail(
+            "artifact name differs: "
+            f"expected={expected_name!r}, observed={artifact.get('name')!r}"
+        )
+    if artifact.get("expired") is not False:
+        fail(f"artifact is expired or has no expiry attestation: {artifact_id}")
+    workflow_run = artifact.get("workflow_run")
+    if not isinstance(workflow_run, dict) or workflow_run.get("id") != run_id:
+        fail(f"artifact {artifact_id} was not produced by selected run")
+    size = artifact.get("size_in_bytes")
+    if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_ARTIFACT_BYTES:
+        fail(f"artifact size is outside the bounded range: {artifact_id}")
+    if not _valid_digest(artifact.get("digest")):
+        fail(f"artifact digest is unavailable or malformed: {artifact_id}")
+    if not _url_ends_with(artifact.get("url"), f"/actions/artifacts/{artifact_id}"):
+        fail(f"artifact API URL is not bound to its ID: {artifact_id}")
+    if not _url_ends_with(
+        artifact.get("archive_download_url"), f"/actions/artifacts/{artifact_id}/zip"
+    ):
+        fail(f"artifact download URL is not bound to its ID: {artifact_id}")
 
 
 def normalize_run(
@@ -217,6 +306,7 @@ def read_artifact_files(
 ) -> list[dict[str, Any]]:
     expected = {row.path: row for row in spec.files}
     observed: dict[str, dict[str, Any]] = {}
+    total_uncompressed = 0
     try:
         with zipfile.ZipFile(archive_path) as archive:
             infos = archive.infolist()
@@ -232,16 +322,44 @@ def read_artifact_files(
                     or name.endswith("/")
                 ):
                     fail(f"downloaded artifact has unsafe member: {name!r}")
+                mode = (info.external_attr >> 16) & 0o170000
+                if mode not in {0, stat.S_IFREG}:
+                    fail(f"downloaded artifact contains non-regular member: {name!r}")
                 if name in observed:
                     fail(f"downloaded artifact has duplicate member: {name}")
                 if name not in expected:
                     fail(f"downloaded artifact has unexpected member: {name}")
-                content = archive.read(info)
+                digest = hashlib.sha256()
+                member_size = 0
+                needs_content = not (
+                    role == "nightly"
+                    or (role == "heavy" and spec.kind == "quality-report")
+                )
+                content_parts: list[bytes] = []
+                with archive.open(info, "r") as stream:
+                    while True:
+                        chunk = stream.read(STREAM_CHUNK_BYTES)
+                        if not chunk:
+                            break
+                        member_size += len(chunk)
+                        total_uncompressed += len(chunk)
+                        if (
+                            member_size > MAX_ARTIFACT_BYTES
+                            or total_uncompressed > MAX_ARTIFACT_BYTES
+                        ):
+                            fail(
+                                "downloaded artifact uncompressed bytes exceed "
+                                f"{MAX_ARTIFACT_BYTES}-byte bound"
+                            )
+                        digest.update(chunk)
+                        if needs_content:
+                            content_parts.append(chunk)
+                content = b"".join(content_parts) if needs_content else b""
                 observed[name] = {
                     "path": name,
                     "schema": expected[name].schema,
-                    "digest": digest_bytes(content),
-                    "byte_count": len(content),
+                    "digest": "sha256:" + digest.hexdigest(),
+                    "byte_count": member_size,
                     "revision": candidate_sha,
                     "tree": candidate_tree,
                     "result": artifact_result(role, spec.kind, name, content),
@@ -274,10 +392,12 @@ def collect_role(
     role_spec = ROLE_SPECS[role]
     for artifact_id, artifact_spec in zip(selected["artifact_ids"], role_spec.artifacts, strict=True):
         raw_artifact = gh_json(f"{endpoint_prefix}/artifacts/{artifact_id}")
-        if raw_artifact.get("id") != artifact_id:
-            fail(f"artifact API identity differs: {artifact_id}")
-        if raw_artifact.get("workflow_run", {}).get("id") != selected["run_id"]:
-            fail(f"artifact {artifact_id} was not produced by selected run")
+        validate_artifact_metadata(
+            raw_artifact,
+            artifact_id,
+            role_spec.artifacts[len(receipts)].name_template.format(sha=candidate_sha),
+            selected["run_id"],
+        )
         archive_path = artifact_root / f"{artifact_id}.zip"
         gh_archive(f"{endpoint_prefix}/artifacts/{artifact_id}/zip", archive_path)
         archive_digest, archive_size = digest_file(archive_path)

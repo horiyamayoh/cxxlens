@@ -29,6 +29,7 @@ TERMINAL_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_production_scope_closure_report.schema.yaml"
 )
 MAX_BYTES = 1 << 30
+STREAM_CHUNK_BYTES = 1024 * 1024
 
 
 class OwnerHandoffError(ValueError):
@@ -94,13 +95,21 @@ def digest_bytes(value: bytes) -> str:
 
 
 def digest_file(path: pathlib.Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
     try:
-        raw = path.read_bytes()
+        with path.open("rb") as stream:
+            while True:
+                chunk = stream.read(STREAM_CHUNK_BYTES)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_BYTES:
+                    fail(f"archive exceeds {MAX_BYTES}-byte bound: {path}")
+                digest.update(chunk)
     except OSError as error:
         fail(f"cannot read archive {path}: {error}")
-    if len(raw) > MAX_BYTES:
-        fail(f"archive exceeds {MAX_BYTES}-byte bound: {path}")
-    return digest_bytes(raw), len(raw)
+    return "sha256:" + digest.hexdigest(), size
 
 
 def _required(value: dict[str, Any], key: str, label: str) -> Any:
@@ -209,7 +218,20 @@ def _read_archive(
             mode = (info.external_attr >> 16) & 0o170000
             if mode not in {0, stat.S_IFREG}:
                 fail("source report archive member is not regular")
-            content = archive.read(info)
+            if info.file_size > MAX_BYTES:
+                fail("source report archive member exceeds bounded range")
+            content_parts: list[bytes] = []
+            size = 0
+            with archive.open(info, "r") as stream:
+                while True:
+                    chunk = stream.read(STREAM_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > MAX_BYTES:
+                        fail("source report archive member exceeds bounded range")
+                    content_parts.append(chunk)
+            content = b"".join(content_parts)
     except OwnerHandoffError:
         raise
     except (OSError, zipfile.BadZipFile, RuntimeError) as error:
