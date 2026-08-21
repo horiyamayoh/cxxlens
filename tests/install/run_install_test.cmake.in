@@ -177,6 +177,7 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/${install_libdir}/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
       "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
+      "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_agent_autonomous_completion_metric.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
