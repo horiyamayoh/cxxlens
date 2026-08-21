@@ -2333,6 +2333,27 @@ namespace cxxlens::sdk::provider
 		}
 	} // namespace detail
 
+	result<std::unique_ptr<detail::ng1_duplex_process_port>>
+	detail::select_ng1_live_process_port(const detail::ng1_live_port_selection_request& request)
+	{
+		if (!request.explicit_ng1_request)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.ng1.implicit-downgrade-denied", "ng1-live", "explicit-request-required"));
+		if (request.source_closure_authority !=
+			ng1_source_closure_authority_status::accepted)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.ng1.capability-unavailable", "source-closure", "authority-not-accepted"));
+		if (request.protocol_major != 1U || request.protocol_minor != 1U)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.ng1.registry-revision-mismatch", "protocol", "minor-one-required"));
+
+		auto port = make_system_ng1_duplex_process_port();
+		if (!port)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.ng1.capability-unavailable", "ng1-live", "duplex-port-unavailable"));
+		return port;
+	}
+
 	namespace
 	{
 

@@ -1096,6 +1096,55 @@ namespace
 #endif
 	}
 
+	void check_ng1_live_port_selection()
+	{
+		using detail::ng1_source_closure_authority_status;
+
+		const auto rejected_downgrade = detail::select_ng1_live_process_port({
+			false,
+			1U,
+			1U,
+			ng1_source_closure_authority_status::not_accepted,
+		});
+		require(!rejected_downgrade &&
+					rejected_downgrade.error().code ==
+					"provider.ng1.implicit-downgrade-denied" &&
+				rejected_downgrade.error().detail == "explicit-request-required",
+				"NG1 selection silently entered a non-NG1 path");
+
+		const auto blocked_registry = detail::select_ng1_live_process_port({
+			true,
+			1U,
+			1U,
+			ng1_source_closure_authority_status::not_accepted,
+		});
+		require(!blocked_registry &&
+				blocked_registry.error().code == "provider.ng1.capability-unavailable" &&
+				blocked_registry.error().field == "source-closure" &&
+				blocked_registry.error().detail == "authority-not-accepted",
+				"NG1 live port was selected before source-closure authority acceptance");
+
+		const auto wrong_protocol = detail::select_ng1_live_process_port({
+			true,
+			1U,
+			0U,
+			ng1_source_closure_authority_status::accepted,
+		});
+		require(!wrong_protocol &&
+				wrong_protocol.error().code == "provider.ng1.registry-revision-mismatch" &&
+				wrong_protocol.error().detail == "minor-one-required",
+				"NG1 live port accepted a protocol revision outside the private P0 contract");
+
+		const auto selected = detail::select_ng1_live_process_port({
+			true,
+			1U,
+			1U,
+			ng1_source_closure_authority_status::accepted,
+		});
+		require(selected.has_value(),
+				"accepted NG1 authority did not select the source-private duplex port");
+	}
+
 	void check_sandbox_closed_enum(const std::string& executable)
 	{
 		execution_budget minimum_budget;
@@ -3012,6 +3061,7 @@ int main(const int argument_count, const char* const* arguments)
 	const std::string executable{arguments[1]};
 	check_selection(executable);
 	check_verified_executable_binding();
+	check_ng1_live_port_selection();
 	check_sandbox_closed_enum(executable);
 	check_host_transcript_validator(executable);
 	check_sealed_provider_validation();
