@@ -761,6 +761,19 @@ set_tests_properties(
 )
 
 cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-store-candidate
+  adapter/clang22/materialization_store_candidate_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-materialization-store-candidate
+  PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-store-candidate
+         COMMAND cxxlens-clang22-materialization-store-candidate)
+set_tests_properties(
+  adapter.clang22-materialization-store-candidate
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;store;candidate;bounded;security")
+
+cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-outcome
   adapter/clang22/materialization_store_outcome_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-store-outcome
@@ -1165,6 +1178,13 @@ foreach(
   set_tests_properties("quality.ng-${contract}"
                        PROPERTIES LABELS "quality;ng;contract")
 endforeach()
+
+add_test(
+  NAME quality.ng-store-candidate
+  COMMAND "${Python3_EXECUTABLE}"
+          "${PROJECT_SOURCE_DIR}/tests/quality/test_ng_store_candidate.py")
+set_tests_properties(quality.ng-store-candidate PROPERTIES LABELS
+                                                        "quality;ng;store;candidate")
 
 add_test(
   NAME quality.ownership

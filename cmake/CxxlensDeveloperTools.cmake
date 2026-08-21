@@ -26,6 +26,14 @@ add_custom_target(
     check --root "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
+add_custom_target(
+  cxxlens-ng-store-candidate-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_store_candidate.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
 foreach(
   contract IN
   ITEMS release_contract

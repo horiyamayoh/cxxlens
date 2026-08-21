@@ -457,6 +457,7 @@ add_library(
   src/llvm/clang22/materialization_claim_stream.cpp
   src/llvm/clang22/materialization_bounded_claim_source.cpp
   src/llvm/clang22/materialization_store.cpp
+  src/llvm/clang22/materialization_store_candidate.cpp
   src/llvm/clang22/materialization_store_outcome.cpp
   src/llvm/clang22/materialization_rooted_vfs.cpp
   src/llvm/clang22/materialization_occurrence.cpp
