@@ -2209,11 +2209,19 @@ namespace
 		auto source_closure_request = task(std::move(*source_closure_selection));
 		source_closure_request.limits.minimum_minor = 2U;
 		source_closure_request.limits.maximum_minor = 2U;
-		auto source_closure = runtime.execute(std::move(source_closure_request));
+		// Keep the source-closure predecessor fail-closed at the same launcher boundary as
+		// NG1: an unaccepted 1.2 capability must not reach the completed-process port.  A
+		// counting port makes the no-launch invariant explicit instead of relying on the
+		// fixture process to remain unobserved.
+		counting_process_port source_closure_processes;
+		process_provider_runtime source_closure_runtime{source_closure_processes};
+		auto source_closure =
+			source_closure_runtime.execute(std::move(source_closure_request));
 		require(
 			!source_closure && source_closure.error().code == "provider.required-feature-missing" &&
 				source_closure.error().field == "protocol" &&
-				source_closure.error().detail.find("task-source-closure-v1") != std::string::npos,
+				source_closure.error().detail.find("task-source-closure-v1") != std::string::npos &&
+				source_closure_processes.run_calls == 0U,
 			"source-closure capability did not fail closed before process launch");
 
 		transcript_sink sink;
