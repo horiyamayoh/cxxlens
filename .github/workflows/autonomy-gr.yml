@@ -79,6 +79,15 @@ jobs:
             --archive "${RUNNER_TEMP}/source-artifact.zip" \
             --report-output "${RUNNER_TEMP}/cxxlens-ng-release-qualification-report.json" \
             --handoff-output "${RUNNER_TEMP}/cxxlens-ng-release-owner-handoff.json"
+      - name: Revalidate exact current main authority before publication
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "${CANDIDATE_SHA}"
+          test "$(git rev-parse origin/main)" = "${CANDIDATE_SHA}"
+          test "$(git status --porcelain=v1 --untracked-files=all)" = ""
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: cxxlens-ng-release-qualification-${{ inputs.candidate_sha }}

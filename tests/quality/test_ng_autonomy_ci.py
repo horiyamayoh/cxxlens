@@ -165,6 +165,72 @@ class AutonomyCiTest(unittest.TestCase):
             ):
                 validate(root)
 
+    def test_owner_workflow_without_publication_freshness_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-gr.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            value["jobs"]["collect-owner-report"]["steps"] = [
+                step
+                for step in value["jobs"]["collect-owner-report"]["steps"]
+                if step.get("name")
+                != "Revalidate exact current main authority before publication"
+            ]
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "missing or ambiguous"):
+                validate(root)
+
+    def test_release_without_publication_freshness_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-release-evaluation.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            value["jobs"]["exact-current-evaluation"]["steps"] = [
+                step
+                for step in value["jobs"]["exact-current-evaluation"]["steps"]
+                if step.get("name")
+                != "Revalidate exact current main authority before publication"
+            ]
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "missing or ambiguous"):
+                validate(root)
+
+    def test_owner_publication_freshness_after_upload_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-gr.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            steps = value["jobs"]["collect-owner-report"]["steps"]
+            postflight = next(
+                step
+                for step in steps
+                if step.get("name")
+                == "Revalidate exact current main authority before publication"
+            )
+            steps.remove(postflight)
+            steps.append(postflight)
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "publication freshness ordering"):
+                validate(root)
+
+    def test_release_publication_freshness_after_upload_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-release-evaluation.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            steps = value["jobs"]["exact-current-evaluation"]["steps"]
+            postflight = next(
+                step
+                for step in steps
+                if step.get("name")
+                == "Revalidate exact current main authority before publication"
+            )
+            steps.remove(postflight)
+            steps.append(postflight)
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "publication freshness ordering"):
+                validate(root)
+
     def test_release_role_drift_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -222,6 +288,20 @@ class AutonomyCiTest(unittest.TestCase):
             self.assertEqual(value["status"], "not-qualified")
             self.assertFalse(value["gr_issued"])
             self.assertEqual(value["production_qualification"], "not-claimed")
+
+    def test_release_evaluation_rejects_main_movement_during_evaluation(self) -> None:
+        candidate = "a" * 40
+        moved = "b" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            report = pathlib.Path(temporary) / "release-evaluation.json"
+            with mock.patch(
+                "check_ng_autonomy_ci.git",
+                side_effect=[candidate, candidate, moved],
+            ):
+                with self.assertRaisesRegex(
+                    AutonomyCiError, "moved during evidence evaluation"
+                ):
+                    release_evaluation(ROOT, candidate, report)
 
 
 if __name__ == "__main__":

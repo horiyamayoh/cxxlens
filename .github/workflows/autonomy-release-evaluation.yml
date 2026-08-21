@@ -83,6 +83,16 @@ jobs:
               --candidate "${CANDIDATE_SHA}" \
               --report "${RUNNER_TEMP}/cxxlens-autonomy-release-evaluation.json"
           fi
+      - name: Revalidate exact current main authority before publication
+        if: success()
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "${CANDIDATE_SHA}"
+          test "$(git rev-parse origin/main)" = "${CANDIDATE_SHA}"
+          test "$(git status --porcelain=v1 --untracked-files=all)" = ""
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: cxxlens-autonomy-release-evaluation-${{ inputs.candidate_sha }}

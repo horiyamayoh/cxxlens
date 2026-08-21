@@ -214,6 +214,37 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         ):
             if marker not in text:
                 raise AutonomyCiError(f"{owner_name} owner workflow marker is missing: {marker}")
+        owner_postflight = step_by(
+            job, name="Revalidate exact current main authority before publication"
+        )
+        owner_postflight_run = owner_postflight.get("run", "")
+        required_owner_postflight = (
+            "git fetch --no-tags origin main",
+            'test "$(git rev-parse HEAD)" = "${CANDIDATE_SHA}"',
+            'test "$(git rev-parse origin/main)" = "${CANDIDATE_SHA}"',
+            'test "$(git status --porcelain=v1 --untracked-files=all)" = ""',
+        )
+        if owner_postflight.get("env") != {
+            "CANDIDATE_SHA": "${{ inputs.candidate_sha }}"
+        } or any(command not in owner_postflight_run for command in required_owner_postflight):
+            raise AutonomyCiError(f"{owner_name} owner publication freshness drift")
+        steps = job.get("steps", [])
+        checker_index = next(
+            index
+            for index, step in enumerate(steps)
+            if "check_ng_release_owner_handoff.py check" in step.get("run", "")
+        )
+        postflight_index = steps.index(owner_postflight)
+        if postflight_index <= checker_index:
+            raise AutonomyCiError(f"{owner_name} owner publication freshness ordering drift")
+        upload_indices = [
+            index
+            for index, step in enumerate(steps)
+            if isinstance(step.get("uses"), str)
+            and "actions/upload-artifact" in step["uses"]
+        ]
+        if not upload_indices or postflight_index >= min(upload_indices):
+            raise AutonomyCiError(f"{owner_name} owner publication freshness ordering drift")
     release_on = triggers(release)
     if set(release_on) != {"workflow_dispatch"}:
         raise AutonomyCiError("release evaluation is not dispatch-only")
@@ -269,6 +300,35 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     authenticate_step = step_by(release_job, identifier="authenticate")
     if authenticate_step.get("continue-on-error") is not True:
         raise AutonomyCiError("release evidence authentication must fail closed to not-qualified")
+    release_postflight = step_by(
+        release_job, name="Revalidate exact current main authority before publication"
+    )
+    release_postflight_run = release_postflight.get("run", "")
+    required_release_postflight = (
+        "git fetch --no-tags origin main",
+        'test "$(git rev-parse HEAD)" = "${CANDIDATE_SHA}"',
+        'test "$(git rev-parse origin/main)" = "${CANDIDATE_SHA}"',
+        'test "$(git status --porcelain=v1 --untracked-files=all)" = ""',
+    )
+    if release_postflight.get("if") != "success()" or release_postflight.get("env") != {
+        "CANDIDATE_SHA": "${{ inputs.candidate_sha }}"
+    } or any(command not in release_postflight_run for command in required_release_postflight):
+        raise AutonomyCiError("release publication freshness drift")
+    evaluation_index = next(
+        index
+        for index, step in enumerate(release_job.get("steps", []))
+        if step.get("name") == "Validate release contracts and emit bounded aggregate evaluation"
+    )
+    if release_job.get("steps", []).index(release_postflight) <= evaluation_index:
+        raise AutonomyCiError("release publication freshness ordering drift")
+    release_upload_indices = [
+        index
+        for index, step in enumerate(release_job.get("steps", []))
+        if isinstance(step.get("uses"), str)
+        and "actions/upload-artifact" in step["uses"]
+    ]
+    if not release_upload_indices or release_job.get("steps", []).index(release_postflight) >= min(release_upload_indices):
+        raise AutonomyCiError("release publication freshness ordering drift")
     if contract["release"]["composition"] != {"aggregate_decision": "#173", "gr_execution_contract": "#167", "scope_closure_contract": "#179"}:
         raise AutonomyCiError("release role composition drift")
     if contract["release"]["current_capability"] != "authenticated-evidence-handoff-no-gr":
@@ -353,6 +413,13 @@ def release_evaluation(
                 missing_inputs = ["authenticated-release-evidence-bundle"]
         else:
             raise AutonomyCiError("release evidence bundle has unsupported outcome")
+    # The connected workflow performs a final fetch immediately before upload,
+    # but retain this second read in the evaluator as a defense-in-depth race
+    # fence for local/alternate callers. Evidence acquired against an old
+    # main must never be emitted as a candidate evaluation.
+    current_after = git(root, "rev-parse", "origin/main")
+    if current_after != candidate:
+        raise AutonomyCiError("origin/main moved during evidence evaluation")
     value: dict[str, Any] = {
         "schema": "cxxlens.autonomy-release-evaluation.v1",
         "created_at": datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
