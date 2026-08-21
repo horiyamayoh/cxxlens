@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import json
 import pathlib
+import shutil
 import tempfile
 import unittest
 
@@ -77,6 +78,23 @@ class AgentCapabilityResolutionTests(unittest.TestCase):
                 "agent.golden-relation.v1",
                 synthetic=True,
                 expected_tree="1" * 40,
+            )
+
+    def test_catalog_bytes_are_part_of_the_authority_digest(self) -> None:
+        catalog = copy.deepcopy(resolution.validate_catalog(ROOT))
+        self.assertIn(resolution.CATALOG.as_posix(), catalog["authority"]["source_paths"])
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            for relative in catalog["authority"]["source_paths"]:
+                destination = root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / relative, destination)
+            original = resolution._authority(root, catalog, synthetic=True)
+            catalog_path = root / resolution.CATALOG
+            catalog_path.write_bytes(catalog_path.read_bytes() + b"\n# authority drift\n")
+            changed = resolution._authority(root, catalog, synthetic=True)
+            self.assertNotEqual(
+                original["authority_digest"], changed["authority_digest"]
             )
 
     def test_forward_dependency_and_path_drift_fail_closed(self) -> None:

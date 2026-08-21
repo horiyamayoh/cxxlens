@@ -554,6 +554,139 @@ namespace
 		return text == nullptr ? std::string{fallback} : *text;
 	}
 
+	/**
+	 * @brief The source authority compiled into this installed doctor.
+	 *
+	 * Capability diagnosis is allowed to consume an authority-bound packet only when the packet
+	 * names the exact source revision/tree and the byte digests of the catalog inputs that were
+	 * compiled into this executable.  A project file without this object remains a legacy,
+	 * unbound diagnostic input and is reported as such; it is never promoted to canonical
+	 * capability evidence.
+	 */
+	struct authority_binding
+	{
+		bool present{};
+		std::string revision;
+		std::string tree;
+		std::string source;
+		std::string source_digest;
+		std::string authority_digest;
+		std::string stale_policy;
+	};
+
+	[[nodiscard]] std::string compiled_source_revision()
+	{
+#ifdef CXXLENS_SOURCE_REVISION
+		return CXXLENS_SOURCE_REVISION;
+#else
+		return {};
+#endif
+	}
+
+	[[nodiscard]] std::string compiled_source_tree()
+	{
+#ifdef CXXLENS_SOURCE_TREE
+		return CXXLENS_SOURCE_TREE;
+#else
+		return {};
+#endif
+	}
+
+	[[nodiscard]] std::string compiled_capability_source_digest()
+	{
+#ifdef CXXLENS_AGENT_CAPABILITY_SOURCE_DIGEST
+		return CXXLENS_AGENT_CAPABILITY_SOURCE_DIGEST;
+#else
+		return {};
+#endif
+	}
+
+	[[nodiscard]] std::string compiled_capability_authority_digest()
+	{
+#ifdef CXXLENS_AGENT_CAPABILITY_AUTHORITY_DIGEST
+		return CXXLENS_AGENT_CAPABILITY_AUTHORITY_DIGEST;
+#else
+		return {};
+#endif
+	}
+
+	[[nodiscard]] authority_binding compiled_authority()
+	{
+		return {false,
+				compiled_source_revision(),
+				compiled_source_tree(),
+				"schemas/cxxlens_ng_api_development_readiness.yaml",
+				compiled_capability_source_digest(),
+				compiled_capability_authority_digest(),
+				"reject"};
+	}
+
+	[[nodiscard]] bool
+	parse_authority(const json_value::object& object, authority_binding& output, std::string& error)
+	{
+		const auto* raw = member(object, "authority");
+		if (raw == nullptr)
+		{
+			output = compiled_authority();
+			return true;
+		}
+		const auto* authority = raw->as_object();
+		if (authority == nullptr)
+		{
+			error = "sdk.capability-authority-invalid";
+			return false;
+		}
+		const auto status = text_member(*authority, "status", "bound");
+		if (status != "bound" && status != "unbound")
+		{
+			error = "sdk.capability-authority-invalid";
+			return false;
+		}
+		const auto revision = text_member(*authority, "revision");
+		const auto tree = text_member(*authority, "tree");
+		const auto source = text_member(*authority, "source");
+		const auto source_digest = text_member(*authority, "source_digest");
+		const auto authority_digest = text_member(*authority, "authority_digest");
+		const auto stale_policy = text_member(*authority, "stale_policy");
+		const auto expected = compiled_authority();
+		if (revision.empty() || tree.empty() || source.empty() || source_digest.empty() ||
+			authority_digest.empty() || stale_policy != "reject")
+		{
+			error = "sdk.capability-authority-invalid";
+			return false;
+		}
+		if (revision != expected.revision || tree != expected.tree || source != expected.source ||
+			source_digest != expected.source_digest ||
+			authority_digest != expected.authority_digest)
+		{
+			error = "sdk.capability-authority-stale";
+			return false;
+		}
+		output = {status == "bound",
+				  revision,
+				  tree,
+				  source,
+				  source_digest,
+				  authority_digest,
+				  stale_policy};
+		return true;
+	}
+
+	[[nodiscard]] json_value authority_json(const authority_binding& binding)
+	{
+		const auto expected = compiled_authority();
+		const auto& value = binding.revision.empty() ? expected : binding;
+		json_value::object output;
+		output.emplace("authority_digest", json_value{std::string{value.authority_digest}});
+		output.emplace("revision", json_value{std::string{value.revision}});
+		output.emplace("source", json_value{std::string{value.source}});
+		output.emplace("source_digest", json_value{std::string{value.source_digest}});
+		output.emplace("stale_policy", json_value{std::string{value.stale_policy}});
+		output.emplace("status", json_value{std::string{binding.present ? "bound" : "unbound"}});
+		output.emplace("tree", json_value{std::string{value.tree}});
+		return json_value{std::move(output)};
+	}
+
 	[[nodiscard]] std::optional<json_value> read_json(const std::string_view path,
 													  std::string& error)
 	{
@@ -637,6 +770,7 @@ namespace
 		std::string use_case;
 		std::string source_path;
 		std::string source_schema;
+		authority_binding authority;
 		std::vector<capability_node> nodes;
 		json_value::object preserved;
 	};
@@ -776,6 +910,8 @@ namespace
 			error = "capability-input-object-required";
 			return false;
 		}
+		if (!parse_authority(*root_object, output.authority, error))
+			return false;
 		output.source_schema = text_member(*root_object, "schema", "unknown");
 		output.use_case =
 			text_member(*root_object, "use_case", text_member(*root_object, "use_case_id"));
@@ -1104,6 +1240,7 @@ namespace
 			json_string(source.source_path.empty() ? "stdin-or-inline" : source.source_path));
 		provenance.emplace("source_schema", json_string(source.source_schema));
 		provenance.emplace("engine", json_string("cxxlens.agent-capability-resolution.v1"));
+		provenance.emplace("authority", authority_json(source.authority));
 		result.emplace("provenance", json_value{std::move(provenance)});
 		json_value::object output;
 		output.emplace("schema", json_string("cxxlens.agent-capability-resolution.v1"));
@@ -1113,6 +1250,7 @@ namespace
 		output.emplace("use_case", json_string(source.use_case));
 		output.emplace("state", json_string(state_name(resolved.state)));
 		output.emplace("result_state", json_string(state_name(resolved.state)));
+		output.emplace("authority", authority_json(source.authority));
 		output.emplace("result", json_value{std::move(result)});
 		return json_value{std::move(output)};
 	}
@@ -1125,6 +1263,13 @@ namespace
 		output += "- mode: `" + std::string{mode} + "`\n";
 		output += "- use case: `" + source.use_case + "`\n";
 		output += "- state: `" + std::string{state_name(resolved.state)} + "`\n\n";
+		output += "- authority binding: `" +
+			std::string{source.authority.present ? "bound" : "unbound"} + "`\n";
+		output += "- authority revision: `" + source.authority.revision + "`\n";
+		output += "- authority tree: `" + source.authority.tree + "`\n";
+		output += "- authority source: `" + source.authority.source + "`\n";
+		output += "- authority source digest: `" + source.authority.source_digest + "`\n";
+		output += "- authority digest: `" + source.authority.authority_digest + "`\n\n";
 		output += "## Capability resolution\n\n| Capability | State | Reason |\n|---|---|---|\n";
 		for (const auto position : resolved.order)
 		{
@@ -1208,7 +1353,8 @@ namespace
 			++missing_count;
 			checks.push_back({std::string_view{relation_ids[index]}, false, found.error().code});
 		}
-		std::cout << R"({"schema":"cxxlens.sdk-doctor-missing.v1","mode":"missing","requested":)"
+		std::cout << R"({"schema":"cxxlens.sdk-doctor-missing.v1","mode":"missing","authority":)"
+				  << json_dump(authority_json(compiled_authority())) << R"(,"requested":)"
 				  << checks.size() << R"(,"missing":)" << missing_count << R"(,"status":")"
 				  << (missing_count == 0U ? "complete" : "incomplete") << R"(","components":[)";
 		for (std::size_t index = 0U; index < checks.size(); ++index)
@@ -1395,6 +1541,7 @@ namespace
 				{
 					result_document.source_path = argv[2];
 					result_document.source_schema = document.source_schema;
+					result_document.authority = document.authority;
 					document = std::move(result_document);
 				}
 			}

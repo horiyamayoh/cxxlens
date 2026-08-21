@@ -244,6 +244,14 @@ cxxlens-sdk-doctor missing --project <project.json> [--format json|markdown]
 
 JSON is the default output. Markdown is a deterministic projection of the same canonical
 resolution and may not introduce or remove a result, reason, evidence, or completion step. The
+doctor also emits an `authority` binding on capability, explain, and project-missing outputs.
+When an input carries an authority object, the installed executable requires the exact
+`revision`, `tree`, catalog `source`/`source_digest`, and aggregate `authority_digest` compiled
+from the shipped readiness/catalog bytes; a mismatch returns the stable
+`sdk.capability-authority-stale` failure. Legacy project inputs without that object are reported
+as `status: unbound` and are never promoted to canonical capability evidence. This binding is
+content/revision integrity only: it does not authenticate an agent invocation, evaluate semantic
+execution, or qualify a release.
 nine-path corpus covers relation, recipe, analysis, model, portable provider, native provider,
 query operator, support tuple, and actionable unknown consumers. The corpus requires a 100%
 safe-stop rate and exercises every result state; it is readiness evidence and does not by itself

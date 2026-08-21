@@ -69,6 +69,9 @@ def main() -> int:
         )
         report = json.loads(output)
         assert report["schema"] == "cxxlens.agent-capability-resolution.v1"
+        assert report["authority"]["status"] == "unbound"
+        assert report["authority"]["stale_policy"] == "reject"
+        assert report["authority"]["source"] == "schemas/cxxlens_ng_api_development_readiness.yaml"
         assert report["state"] == "partial"
         assert report["result"]["coverage"] == {"proved": 1, "required": 3, "unresolved": 2}
         assert [
@@ -100,6 +103,70 @@ def main() -> int:
         missing_document = json.loads(missing)
         assert missing_document["mode"] == "missing"
         assert missing_document["state"] == "partial"
+
+        # A packet may become canonical only after it carries the exact source
+        # authority emitted by this executable.  The status is intentionally
+        # explicit: the legacy fixture above remains an unbound diagnostic.
+        authority_output, _ = run(executable, "missing", "cc.call_site.v1")
+        authority = json.loads(authority_output)["authority"]
+        authority["status"] = "bound"
+        bound_project = root / "bound-project.json"
+        bound_project.write_text(
+            json.dumps(
+                {
+                    "schema": "cxxlens.agent-capability-resolution.v1",
+                    "use_case": "bound.demo.v1",
+                    "authority": authority,
+                    "capability_path": [
+                        {"id": "input.source", "kind": "input", "state": "proved"}
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        bound_output, _ = run(
+            executable,
+            "capability",
+            "bound.demo.v1",
+            "--project",
+            str(bound_project),
+        )
+        bound_report = json.loads(bound_output)
+        assert bound_report["authority"]["status"] == "bound"
+        assert bound_report["authority"]["revision"] == authority["revision"]
+        assert bound_report["authority"]["tree"] == authority["tree"]
+        bound_report_path = root / "bound-report.json"
+        bound_report_path.write_text(bound_output, encoding="utf-8")
+        explained_bound, _ = run(executable, "explain", str(bound_report_path))
+        assert json.loads(explained_bound)["authority"]["status"] == "bound"
+        missing_bound, _ = run(executable, "missing", "--project", str(bound_project))
+        assert json.loads(missing_bound)["authority"]["status"] == "bound"
+
+        stale_project = root / "stale-project.json"
+        stale_authority = dict(authority)
+        stale_authority["revision"] = "0" * 40
+        stale_project.write_text(
+            json.dumps(
+                {
+                    "schema": "cxxlens.agent-capability-resolution.v1",
+                    "use_case": "bound.demo.v1",
+                    "authority": stale_authority,
+                    "capability_path": [
+                        {"id": "input.source", "kind": "input", "state": "proved"}
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _, stale_stderr = run(
+            executable,
+            "capability",
+            "bound.demo.v1",
+            "--project",
+            str(stale_project),
+            expected=1,
+        )
+        assert "sdk.capability-authority-stale" in stale_stderr
 
         _, stderr = run(
             executable,
