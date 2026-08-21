@@ -30,6 +30,24 @@ class WorkUnitError(ValueError):
     """A fail-closed work-unit inventory violation."""
 
 
+def validate_repository_path(value: Any, field: str) -> None:
+    """Reject paths that are not canonical repository-relative coordinates."""
+    if (
+        not isinstance(value, str)
+        or not value
+        or value.startswith(("/", "\\"))
+        or "\\" in value
+        or "\x00" in value
+        or any(part in {"", ".", "..", ".git"} for part in value.split("/"))
+    ):
+        raise WorkUnitError(f"unsafe repository-relative path: {field}:{value!r}")
+
+
+def validate_repository_paths(values: Any, field: str) -> None:
+    for index, value in enumerate(values):
+        validate_repository_path(value, f"{field}[{index}]")
+
+
 def load(path: pathlib.Path) -> dict[str, Any]:
     try:
         value = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -43,6 +61,7 @@ def load(path: pathlib.Path) -> dict[str, Any]:
 def canonical_digest(root: pathlib.Path, paths: list[str]) -> str:
     projection: list[dict[str, str]] = []
     for relative in sorted(paths):
+        validate_repository_path(relative, "authority_sources")
         path = root / relative
         if not path.is_file():
             raise WorkUnitError(f"authority source is missing: {relative}")
@@ -151,6 +170,22 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
         raise WorkUnitError("open issue inventory drift")
     if set(issues) & set(manifest["closed_contract_owners"]):
         raise WorkUnitError("closed contract owner owns an active work unit")
+
+    for entry in entries:
+        validate_repository_paths(entry["authority_sources"], f"{entry['issue']}.authority_sources")
+        for unit in entry["units"]:
+            for field in ("owned_paths", "consumed_paths", "generated_surfaces"):
+                validate_repository_paths(unit[field], f"{unit['id']}.{field}")
+            for product, surfaces in unit.get("product_receipt_surfaces", {}).items():
+                for field in ("artifact_path", "evidence_path"):
+                    validate_repository_path(
+                        surfaces[field],
+                        f"{unit['id']}.product_receipt_surfaces.{product}.{field}",
+                    )
+    for product, receipt in manifest["product_receipts"].items():
+        if receipt["status"] == "available":
+            for field in ("artifact_path", "evidence_path"):
+                validate_repository_path(receipt[field], f"product_receipts.{product}.{field}")
 
     units: dict[str, dict[str, Any]] = {}
     unit_issue: dict[str, str] = {}

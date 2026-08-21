@@ -212,7 +212,7 @@ entries:
     conflict_class: agent-ux
     integration_owner: '#277'
     authority_sources: [schemas/cxxlens_ng_work_units.schema.yaml, schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_agent_context.schema.yaml]
-    authority_digest: sha256:50e11244460caae1fb98a3297f6fb927ec5d310ed4884a0f2ae928433621728d
+    authority_digest: sha256:05eb431d6b1b57f0dcc4792668fa576d8fdaf776d2ba43eb72621ead46557cde
     completion_class: autonomy-readiness
     residual_qualification: generic golden paths and missing --project remain later milestones
     units:

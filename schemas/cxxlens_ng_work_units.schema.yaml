@@ -67,7 +67,7 @@ $defs:
   product: {type: string, pattern: '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$'}
   digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   git_oid: {type: string, pattern: '^[0-9a-f]{40}$'}
-  path: {type: string, pattern: '^(?!/)(?!.*\.\.)(?!.*\\).+'}
+  path: {type: string, minLength: 1, pattern: '^(?!/)(?!.*\\)(?!.*\u0000)(?!.*(?:^|/)(?:\.{0,2}|\.git)(?:/|$)).+$'}
   product_receipt:
     oneOf:
       - type: object

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import pathlib
 import sys
 import unittest
@@ -12,7 +13,14 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
-from check_ng_agent_context_v2 import AgentContextV2Error, _select, build, corpus  # noqa: E402
+from check_ng_agent_context_v2 import (  # noqa: E402
+    AgentContextV2Error,
+    _packet,
+    _select,
+    build,
+    corpus,
+    validate_packet,
+)
 import check_ng_work_units as work_units  # noqa: E402
 
 
@@ -28,6 +36,27 @@ class AgentContextV2Test(unittest.TestCase):
         manifest = work_units.validate(ROOT)
         with self.assertRaisesRegex(AgentContextV2Error, "foreign unit"):
             _select(manifest, "#173", "wu-261-source-closure-authority")
+
+    def test_unsafe_work_unit_path_cannot_generate_a_packet(self) -> None:
+        manifest = work_units.validate(ROOT)
+        entry, unit = _select(manifest, "#277", "wu-277-context-v2")
+        unit["owned_paths"] = [".git/HEAD", *unit["owned_paths"][1:]]
+        with self.assertRaisesRegex(AgentContextV2Error, "schema validation failed"):
+            validate_packet(ROOT, _packet(ROOT, manifest, entry, unit, synthetic=True))
+
+    def test_unsafe_packet_paths_are_rejected(self) -> None:
+        packet = build(ROOT, "#277", "wu-277-context-v2", synthetic=True)
+        mutations = (
+            ("allowed_write_paths", lambda value: value["allowed_write_paths"].__setitem__(0, "nested/.git/path")),
+            ("reading_set", lambda value: value["reading_set"][0].__setitem__("path", "nested//path")),
+            ("integration_generated_surfaces", lambda value: value["integration_generated_surfaces"].__setitem__(0, "nul\x00path")),
+        )
+        for field, mutate in mutations:
+            with self.subTest(field=field):
+                candidate = copy.deepcopy(packet)
+                mutate(candidate)
+                with self.assertRaisesRegex(AgentContextV2Error, "schema validation failed"):
+                    validate_packet(ROOT, candidate)
 
     def test_blocked_unit_has_actionable_stop(self) -> None:
         packet = build(ROOT, "202", "wu-202-normalization-effect", synthetic=True)

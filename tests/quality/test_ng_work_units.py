@@ -17,7 +17,13 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
-from check_ng_work_units import MANIFEST, SCHEMA, WorkUnitError, validate  # noqa: E402
+from check_ng_work_units import (  # noqa: E402
+    MANIFEST,
+    SCHEMA,
+    WorkUnitError,
+    validate,
+    validate_repository_path,
+)
 
 
 class WorkUnitTest(unittest.TestCase):
@@ -42,6 +48,55 @@ class WorkUnitTest(unittest.TestCase):
 
     def test_repository_inventory_is_valid(self) -> None:
         validate(ROOT)
+
+    def test_runtime_repository_path_guard_rejects_unsafe_values(self) -> None:
+        unsafe_paths = (
+            "/absolute/path",
+            "nested\\path",
+            "nul\x00path",
+            "",
+            ".",
+            "..",
+            "nested//path",
+            "./path",
+            "nested/.",
+            "nested/..",
+            ".git",
+            ".git/HEAD",
+            "nested/.git/path",
+        )
+        for unsafe_path in unsafe_paths:
+            with self.subTest(path=repr(unsafe_path)):
+                with self.assertRaisesRegex(WorkUnitError, "unsafe repository-relative path"):
+                    validate_repository_path(unsafe_path, "test")
+
+    def test_manifest_unsafe_repository_path_is_rejected(self) -> None:
+        unsafe_paths = (
+            "/absolute/path",
+            "nested\\path",
+            "nul\x00path",
+            "",
+            ".",
+            "..",
+            "nested//path",
+            "./path",
+            "nested/.",
+            "nested/..",
+            ".git",
+            ".git/HEAD",
+            "nested/.git/path",
+        )
+        for unsafe_path in unsafe_paths:
+            with self.subTest(path=repr(unsafe_path)):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = self.copied_root(temporary)
+
+                    def mutate(value, path=unsafe_path) -> None:
+                        value["entries"][0]["units"][0]["owned_paths"][0] = path
+
+                    self.rewrite(root, mutate)
+                    with self.assertRaisesRegex(WorkUnitError, "schema validation failed"):
+                        validate(root)
 
     def test_unknown_dependency_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

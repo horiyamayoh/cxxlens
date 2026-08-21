@@ -40,6 +40,36 @@ def _file_digest(path: pathlib.Path) -> str:
         raise AgentContextV2Error(f"reading-set path missing: {path}") from error
 
 
+def _validate_packet_paths(packet: dict[str, Any]) -> None:
+    path_lists = (
+        ("allowed_write_paths", packet.get("allowed_write_paths", [])),
+        ("integration_generated_surfaces", packet.get("integration_generated_surfaces", [])),
+    )
+    for field, values in path_lists:
+        for index, value in enumerate(values):
+            try:
+                work_units.validate_repository_path(value, f"{field}[{index}]")
+            except work_units.WorkUnitError as error:
+                raise AgentContextV2Error(str(error)) from error
+    for index, row in enumerate(packet.get("reading_set", [])):
+        if isinstance(row, dict) and "path" in row:
+            try:
+                work_units.validate_repository_path(row["path"], f"reading_set[{index}].path")
+            except work_units.WorkUnitError as error:
+                raise AgentContextV2Error(str(error)) from error
+    receipts = packet.get("required_product_receipts", {})
+    if isinstance(receipts, dict):
+        for product, receipt in receipts.items():
+            if isinstance(receipt, dict) and receipt.get("status") == "available":
+                for field in ("artifact_path", "evidence_path"):
+                    try:
+                        work_units.validate_repository_path(
+                            receipt[field], f"required_product_receipts.{product}.{field}"
+                        )
+                    except work_units.WorkUnitError as error:
+                        raise AgentContextV2Error(str(error)) from error
+
+
 def _select(manifest: dict[str, Any], issue: str, unit_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     normalized = issue if issue.startswith("#") else f"#{issue}"
     entries = [entry for entry in manifest["entries"] if entry["issue"] == normalized]
@@ -171,6 +201,7 @@ def validate_packet(root: pathlib.Path, packet: dict[str, Any]) -> None:
         jsonschema.Draft202012Validator(schema).validate(packet)
     except (jsonschema.SchemaError, jsonschema.ValidationError) as error:
         raise AgentContextV2Error(f"agent context v2 schema validation failed: {error.message}") from error
+    _validate_packet_paths(packet)
 
 
 def build(root: pathlib.Path, issue: str, unit_id: str, *, synthetic: bool = False) -> dict[str, Any]:
