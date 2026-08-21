@@ -148,8 +148,8 @@ add_custom_target(
   cxxlens-ng-work-unit-check
   COMMAND
     "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_work_units.py"
-    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_work_units.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
 add_custom_target(
@@ -172,16 +172,16 @@ add_custom_target(
   cxxlens-ng-wip-inventory-check
   COMMAND
     "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_wip_inventory.py"
-    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_wip_inventory.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
 add_custom_target(
   cxxlens-ng-autonomy-ci-check
   COMMAND
     "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_autonomy_ci.py"
-    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_autonomy_ci.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
 add_custom_target(
