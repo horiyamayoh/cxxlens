@@ -144,6 +144,8 @@ PACKAGE_PATHS = (
     "schemas/cxxlens_ng_security_conformance_report.schema.yaml",
     "schemas/cxxlens_ng_release_bundle.yaml",
     "schemas/cxxlens_ng_release_bundle.schema.yaml",
+    "schemas/cxxlens_ng_release_evidence_selection.schema.yaml",
+    "schemas/cxxlens_ng_release_evidence_bundle.schema.yaml",
     "schemas/cxxlens_ng_release_qualification.yaml",
     "schemas/cxxlens_ng_release_qualification.schema.yaml",
     "schemas/cxxlens_ng_release_qualification_report.schema.yaml",

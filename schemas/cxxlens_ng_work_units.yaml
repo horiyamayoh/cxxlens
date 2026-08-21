@@ -12,8 +12,8 @@ entries:
   - issue: '#173'
     conflict_class: governance-global
     integration_owner: '#173'
-    authority_sources: [AGENTS.md, .github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_autonomy_ci.schema.yaml, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_autonomy_constructibility.schema.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_wip_inventory.schema.yaml, schemas/cxxlens_ng_wip_inventory.yaml, schemas/cxxlens_ng_work_units.schema.yaml, tools/quality/check_ng_autonomy_ci.py, tools/quality/check_ng_autonomy_constructibility.py, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_wip_inventory.py, tools/quality/check_ng_work_units.py]
-    authority_digest: sha256:66f3fca19acff56fb799e1633902b61a4f235569f1f39b1a59a04fee80cd2f9a
+    authority_sources: [AGENTS.md, .github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml, .github/workflows/nightly.yml, .github/workflows/quality.yml, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_autonomy_ci.schema.yaml, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_autonomy_constructibility.schema.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_release_evidence_bundle.schema.yaml, schemas/cxxlens_ng_release_evidence_selection.schema.yaml, schemas/cxxlens_ng_release_qualification.yaml, schemas/cxxlens_ng_wip_inventory.schema.yaml, schemas/cxxlens_ng_wip_inventory.yaml, schemas/cxxlens_ng_work_units.schema.yaml, tools/quality/check_ng_autonomy_ci.py, tools/quality/check_ng_autonomy_constructibility.py, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_release_evidence_bundle.py, tools/quality/check_ng_wip_inventory.py, tools/quality/check_ng_work_units.py]
+    authority_digest: sha256:adb9914314baf3d33f481268b202590f1679ed61361778553cfb4aed6f674211
     completion_class: autonomy-readiness
     residual_qualification: '#173 remains open for aggregate release; production qualification not claimed'
     units:
@@ -30,6 +30,25 @@ entries:
         forbidden_shortcuts: [self-review, accepted-with-p1, stale-ci-promotion, branch-or-pr-as-correctness-authority]
         evidence_commands: [python3 tools/quality/check_ng_development_decisions.py check --root ., python3 tools/quality/check_ng_work_units.py check --root ., python3 -m unittest tests.quality.test_ng_development_decisions tests.quality.test_ng_work_units]
         completion_plan: [keep authority Proposed, obtain exact-candidate independent review, verify the canonical comment and CI run, commit only receipt and status changes]
+      - id: wu-173-authenticated-release-evidence-handoff
+        risk: security
+        state: review-required
+        depends_on: [wu-173-governance]
+        serialized_with: []
+        owned_products: []
+        consumed_products: []
+        owned_paths: [schemas/cxxlens_ng_release_evidence_selection.schema.yaml, schemas/cxxlens_ng_release_evidence_bundle.schema.yaml, tools/quality/check_ng_release_evidence_bundle.py, tests/quality/test_ng_release_evidence_bundle.py]
+        consumed_paths: [.github/workflows/autonomy-heavy.yml, .github/workflows/nightly.yml, .github/workflows/quality.yml, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_release_qualification.yaml]
+        generated_surfaces: [docs/design/SHA256SUMS]
+        forbidden_shortcuts: [latest-run-discovery, rerun-as-first-attempt, artifact-name-only-authentication, raw-log-as-receipt, archive-path-traversal, gr-issued-by-handoff, absent-owner-workflow-as-qualified]
+        evidence_commands:
+          - 'python3 tools/quality/check_ng_release_evidence_bundle.py check --root . --selection <selection.yaml> --bundle <bundle.yaml> --artifact-root <artifact-root>'
+          - 'python3 -m unittest tests.quality.test_ng_release_evidence_bundle'
+        completion_plan:
+          - 'keep the handoff Proposed and production qualification not-claimed'
+          - 'reconcile the absent #167/#179 workflow owner surfaces with their actual producer jobs'
+          - 'obtain exact first-attempt run and artifact receipts'
+          - 'add connected verification before activation'
   - issue: '#261'
     conflict_class: provider-protocol
     integration_owner: '#261'

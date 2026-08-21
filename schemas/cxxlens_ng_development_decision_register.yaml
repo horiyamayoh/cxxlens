@@ -129,6 +129,20 @@ decisions:
     qualification_status: not-claimed
     activation: blocked-until-accepted-review
     authority_refs: [schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml]
+  - id: decision.release.authenticated-evidence-handoff
+    title: Require explicit first-attempt producer evidence selection and offline artifact verification
+    owner_issues: ['#173', '#167', '#179']
+    risk: security
+    contract_ids: [development.authenticated-release-evidence-handoff.v1]
+    choice: explicit-selection-first-attempt-direct-artifact-download-offline-verify-no-gr
+    rejected: [latest-run-discovery, rerun-as-first-attempt, artifact-name-only-authentication, raw-log-as-receipt, handoff-issued-gr, absent-owner-workflow-as-qualified]
+    decision_status: decided
+    authority_status: proposed
+    review: {mode: independent, outcome: pending, author: repository-owner, reviewer: null, receipt_ids: [], references: []}
+    implementation_status: partial
+    qualification_status: not-claimed
+    activation: blocked-until-accepted-review
+    authority_refs: [.github/workflows/autonomy-heavy.yml, .github/workflows/nightly.yml, .github/workflows/quality.yml, .github/workflows/autonomy-release-evaluation.yml, docs/design/adr/0105-direct-main-review-and-release-governance.md, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_release_evidence_selection.schema.yaml, schemas/cxxlens_ng_release_evidence_bundle.schema.yaml, schemas/cxxlens_ng_release_qualification.yaml, tools/quality/check_ng_release_evidence_bundle.py]
 preserved_wip:
   - {ref: agent/remaining-issues-full-implementation, exact_head: 9e8c30fe7c024b67e5b35a8b563c45be820f9e48, disposition: selected-provenance, deletion: forbidden}
   - {ref: origin/pr/353, exact_head: 7a0717be2472cea7e8fdaa267118e702bcdb0f0b, disposition: historical-unreviewed, deletion: forbidden}

@@ -469,6 +469,7 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
         "decision.sqlite.normalization-effect-profile",
         "decision.provider.ng1-after-source-closure-registry",
         "decision.sdk-doctor.capability-boundary",
+        "decision.release.authenticated-evidence-handoff",
     }
     if len(identifiers) != len(set(identifiers)):
         raise DecisionRegisterError("duplicate decision IDs")
