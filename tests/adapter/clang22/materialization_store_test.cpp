@@ -746,6 +746,73 @@ namespace
 		require(after == before,
 				"v2 materializer writer_begin implicitly migrated or changed source bytes");
 	}
+
+	void bounded_projection_streams_compare_without_resident_graph()
+	{
+		const materialization_store_projection_limits limits{256U, 64U};
+		auto actual = materialization_store_projection_writer::create(limits);
+		auto expected = materialization_store_projection_writer::create(limits);
+		require(actual && expected, "projection writer creation failed");
+		const auto append = [](materialization_store_projection_writer& writer,
+										const std::string_view value) -> sdk::result<void>
+		{
+			return writer.append(std::as_bytes(std::span{value.data(), value.size()}));
+		};
+		require(append(*actual, "record:a") && append(*actual, "record:b") &&
+					append(*expected, "record:a") && append(*expected, "record:b"),
+				"projection record append failed");
+		auto actual_receipt = actual->seal();
+		auto expected_receipt = expected->seal();
+		require(actual_receipt && expected_receipt && actual->sealed() && expected->sealed() &&
+					actual_receipt->record_count == 2U &&
+					expected_receipt->record_count == 2U &&
+					actual_receipt->payload_bytes == expected_receipt->payload_bytes,
+				"projection stream seal receipt was not exact");
+		auto equal = compare_materialization_store_projections(*actual, *expected);
+		require(equal && equal->equal && equal->actual_record_count == 2U &&
+					equal->expected_record_count == 2U && !equal->first_mismatch_offset,
+				"identical independent projection streams did not compare equal");
+
+		auto reordered = materialization_store_projection_writer::create(limits);
+		require(reordered && append(*reordered, "record:b") && append(*reordered, "record:a"),
+				"reordered projection append failed");
+		const auto reordered_receipt = reordered->seal();
+		require(static_cast<bool>(reordered_receipt), "reordered projection seal failed");
+		auto mismatch = compare_materialization_store_projections(*actual, *reordered);
+		require(mismatch && !mismatch->equal && mismatch->actual_record_count == 2U &&
+					mismatch->expected_record_count == 2U && mismatch->first_mismatch_offset,
+				"record reordering was not retained as a byte-level projection mismatch");
+
+		auto oversized = materialization_store_projection_writer::create(limits);
+		require(static_cast<bool>(oversized), "oversized projection writer creation failed");
+		const std::string oversized_record(65U, 'x');
+		require(!append(*oversized, oversized_record) && !oversized->seal(),
+				"projection writer accepted a record beyond its declared bound");
+
+		const materialization_store_projection_limits aggregate_limits{32U, 24U};
+		auto aggregate = materialization_store_projection_writer::create(aggregate_limits);
+		require(aggregate && append(*aggregate, std::string(24U, 'a')) &&
+				!append(*aggregate, "b") && !aggregate->seal(),
+				"projection writer crossed its aggregate framed-byte bound");
+
+		const materialization_store_projection_limits window_limits{256U * 1024U, 128U * 1024U};
+		auto window_actual = materialization_store_projection_writer::create(window_limits);
+		auto window_expected = materialization_store_projection_writer::create(window_limits);
+		require(window_actual && window_expected, "large projection writer creation failed");
+		std::string large_record(96U * 1024U, 'p');
+		std::string altered_record = large_record;
+		altered_record[80U * 1024U] = 'q';
+		require(append(*window_actual, large_record) && append(*window_expected, altered_record),
+				"large projection record append failed");
+		require(window_actual->seal() && window_expected->seal(),
+				"large projection stream seal failed");
+		auto window_mismatch =
+			compare_materialization_store_projections(*window_actual, *window_expected);
+		require(window_mismatch && !window_mismatch->equal &&
+				window_mismatch->first_mismatch_offset &&
+				*window_mismatch->first_mismatch_offset == 8U + 80U * 1024U,
+				"multi-window projection mismatch was not byte-exact");
+	}
 } // namespace
 
 int main()
@@ -758,5 +825,6 @@ int main()
 	typed_prepublication_failures();
 	streaming_store_replays_and_rechecks_exact_partitions();
 	sqlite_reopen_failure_retains_commit();
+	bounded_projection_streams_compare_without_resident_graph();
 	return 0;
 }

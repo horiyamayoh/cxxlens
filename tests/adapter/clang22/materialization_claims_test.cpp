@@ -4296,6 +4296,11 @@ namespace
 					published->store().verification_store.has_value() &&
 					!published->store().first_issue.has_value(),
 				"incremental coordinator did not retain a successful Store publication receipt");
+		auto publication_outcome = published->publication_outcome();
+		require(publication_outcome &&
+					publication_outcome->kind ==
+						materialization_store_publication_outcome_kind::committed_verified,
+				"incremental coordinator did not expose the authenticated committed_verified outcome");
 	}
 
 	void check_bounded_conflict_fail_closed(const validated_materialization_request& request,

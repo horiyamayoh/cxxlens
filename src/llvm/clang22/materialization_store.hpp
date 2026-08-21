@@ -1,16 +1,19 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <variant>
 #include <vector>
 
 #include "materialization_request.hpp"
 #include "materialization_request_binding.hpp"
+#include "materialization_io.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -31,6 +34,123 @@ namespace cxxlens::detail::clang22::materialization
 		const materialization_incremental_execution_journal_receipt* execution_journal{};
 		std::optional<materialization_claim_request_binding> expected_request_binding;
 	};
+
+	/**
+	 * Explicit resident/spool limits for one canonical Store projection stream.
+	 *
+	 * The limits belong to the source-private projection port rather than the SDK Store API.  A
+	 * caller must select them before opening a stream; the writer never silently grows an
+	 * unbounded aggregate buffer.
+	 */
+	struct materialization_store_projection_limits
+	{
+		std::uint64_t maximum_framed_bytes{512U * 1024U * 1024U};
+		std::uint64_t maximum_record_bytes{1U * 1024U * 1024U};
+
+		[[nodiscard]] bool operator==(const materialization_store_projection_limits&) const = default;
+	};
+
+	/** Receipt for one sealed canonical projection stream. */
+	struct materialization_store_projection_receipt
+	{
+		std::uint64_t record_count{};
+		std::uint64_t payload_bytes{};
+		std::uint64_t framed_bytes{};
+		std::string content_digest;
+
+		[[nodiscard]] bool operator==(const materialization_store_projection_receipt&) const = default;
+	};
+
+	struct materialization_store_projection_comparison;
+
+	/**
+	 * Move-only bounded record writer backed by a private replayable spool.
+	 *
+	 * Records are framed as an unsigned big-endian u64 length followed by the exact record bytes.
+	 * The framing is intentionally private: it is a transport for the actual and expected cursor
+	 * ports and is not a semantic Store serialization.  A successful seal fixes the receipt and
+	 * makes every subsequent append fail.
+	 */
+	class materialization_store_projection_writer final
+	{
+	  public:
+		materialization_store_projection_writer(const materialization_store_projection_writer&) = delete;
+		materialization_store_projection_writer&
+		operator=(const materialization_store_projection_writer&) = delete;
+		materialization_store_projection_writer(materialization_store_projection_writer&&) noexcept =
+			default;
+		materialization_store_projection_writer&
+		operator=(materialization_store_projection_writer&&) noexcept = default;
+		~materialization_store_projection_writer() = default;
+
+		[[nodiscard]] static sdk::result<materialization_store_projection_writer>
+		create(materialization_store_projection_limits limits = {});
+
+		[[nodiscard]] sdk::result<void> append(std::span<const std::byte> record);
+		[[nodiscard]] sdk::result<materialization_store_projection_receipt> seal();
+		[[nodiscard]] bool sealed() const noexcept
+		{
+			return sealed_ && storage_ && storage_->sealed();
+		}
+		[[nodiscard]] const materialization_store_projection_receipt& receipt() const noexcept
+		{
+			return receipt_;
+		}
+
+	  private:
+		materialization_store_projection_writer(
+			std::unique_ptr<materialization_replayable_spool> storage,
+			materialization_store_projection_limits limits) noexcept
+			: storage_{std::move(storage)}, limits_{limits}
+		{
+		}
+
+		std::unique_ptr<materialization_replayable_spool> storage_;
+		materialization_store_projection_limits limits_;
+		materialization_store_projection_receipt receipt_;
+		std::uint64_t payload_bytes_{};
+		std::uint64_t framed_bytes_{};
+		std::uint64_t record_count_{};
+		bool sealed_{};
+		bool failed_{};
+
+		/** The comparator is the only owner of the sealed cursor read capability. */
+		[[nodiscard]] materialization_replayable_spool& storage() noexcept
+		{
+			return *storage_;
+		}
+
+		friend sdk::result<materialization_store_projection_comparison>
+		compare_materialization_store_projections(
+			materialization_store_projection_writer& actual,
+			materialization_store_projection_writer& expected);
+	};
+
+	/** Exact comparison result for two independently produced projection cursors. */
+	struct materialization_store_projection_comparison
+	{
+		bool equal{};
+		std::uint64_t actual_record_count{};
+		std::uint64_t expected_record_count{};
+		std::uint64_t actual_payload_bytes{};
+		std::uint64_t expected_payload_bytes{};
+		std::optional<std::uint64_t> first_mismatch_offset;
+
+		[[nodiscard]] bool operator==(const materialization_store_projection_comparison&) const =
+			default;
+	};
+
+	/**
+	 * Compare independently sealed actual and expected streams record-by-record.
+	 *
+	 * The comparator retains only one fixed-size read window from each stream.  It does not sort,
+	 * hash-shortcut, or materialize either projection; a length mismatch, missing/extra record,
+	 * byte mismatch, or divergent EOF produces `equal == false` with a bounded witness.
+	 */
+	[[nodiscard]] sdk::result<materialization_store_projection_comparison>
+	compare_materialization_store_projections(
+		materialization_store_projection_writer& actual,
+		materialization_store_projection_writer& expected);
 
 	/** Fully prepared SDK transaction input. This boundary only consumes Store-ready values. */
 	struct prepared_store_transaction

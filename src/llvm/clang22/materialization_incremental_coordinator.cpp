@@ -954,6 +954,12 @@ namespace cxxlens::detail::clang22::materialization
 			!store_.first_issue.has_value();
 	}
 
+	sdk::result<materialization_store_publication_outcome>
+	materialization_incremental_publication_result::publication_outcome() const
+	{
+		return classify_materialization_store_publication_outcome(store_);
+	}
+
 	sdk::result<sealed_materialization_incremental_result>
 	run_materialization_incremental_coordinator(
 		const validated_materialization_request& request,

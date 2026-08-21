@@ -18,6 +18,7 @@
 #include "materialization_io.hpp"
 #include "materialization_request_v2_1.hpp"
 #include "materialization_store.hpp"
+#include "materialization_store_outcome.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -367,6 +368,15 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] const materialization_store_observation& store() const noexcept;
 		/** True only when the single publish and all fixed-order verification passed. */
 		[[nodiscard]] bool publication_verified() const noexcept;
+		/**
+		 * Classify the retained Store observation using the closed publication outcome union.
+		 *
+		 * The observation remains the raw evidence boundary; this accessor deliberately performs
+		 * the classification on demand so callers cannot accidentally persist a guessed outcome
+		 * before the exact recovery/verification receipts have been retained.
+		 */
+		[[nodiscard]] sdk::result<materialization_store_publication_outcome>
+		publication_outcome() const;
 
 	  private:
 		materialization_incremental_publication_result(
