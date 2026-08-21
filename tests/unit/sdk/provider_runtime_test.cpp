@@ -2525,8 +2525,7 @@ namespace
 		require(!marker_error, "could not clean up the negative descendant marker");
 		fs::remove(readiness_fifo, marker_error);
 		require(!marker_error, "could not clean up the readiness FIFO");
-		require(grandchild_elapsed <
-				std::chrono::seconds{timeout_grandchild_elapsed_bound_seconds},
+		require(grandchild_elapsed < std::chrono::seconds{timeout_grandchild_elapsed_bound_seconds},
 				"provider timeout waited for the pipe-holding descendant instead of closing it: " +
 					std::to_string(
 						std::chrono::duration_cast<std::chrono::milliseconds>(grandchild_elapsed)

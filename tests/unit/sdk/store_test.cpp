@@ -1868,7 +1868,7 @@ namespace
 			const auto before = capture_files(path);
 			auto opened = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
 			require(!opened && opened.error().code == "store.backend-unavailable" &&
-					opened.error().field == "sqlite" && opened.error().detail == "effect-gate",
+						opened.error().field == "sqlite" && opened.error().detail == "effect-gate",
 					std::string{label} + " did not fail closed before fresh initialization");
 			require(capture_files(path) == before,
 					std::string{label} + " changed the source file family");
