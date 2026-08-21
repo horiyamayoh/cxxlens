@@ -319,6 +319,17 @@ class SourceClosureTransportTest(unittest.TestCase):
         task_schema = yaml.safe_load((ROOT / TASK).read_text(encoding="utf-8"))
         jsonschema.Draft202012Validator(task_schema).validate(request["task_extensions"][0])
 
+    def test_task_v4_schema_rejects_empty_logical_path_segments(self) -> None:
+        request = self.bound_request()
+        task_schema = yaml.safe_load((ROOT / TASK).read_text(encoding="utf-8"))
+        validator = jsonschema.Draft202012Validator(task_schema)
+        for field in ("main_logical_path", "logical_working_directory"):
+            with self.subTest(field=field):
+                task = dict(request["task_extensions"][0])
+                task[field] = "project://src//invalid"
+                with self.assertRaises(jsonschema.ValidationError):
+                    validator.validate(task)
+
     def test_manifest_schema_accepts_project_path_and_rejects_extra_field(self) -> None:
         schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
         semantic = "semantic-v2:sha256:" + "1" * 64
@@ -438,6 +449,19 @@ class SourceClosureTransportTest(unittest.TestCase):
             validate_reject_control(control, contract)
         control["observed_counters"] = {"observed-control-frame-count": 1 << 80}
         with self.assertRaisesRegex(SourceClosureTransportError, "uint64"):
+            validate_reject_control(control, contract)
+
+    def test_local_only_failure_cannot_be_emitted_as_wire_reject(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        control = {
+            "session_id": SESSION_ID,
+            "task_id": TASK_ID,
+            "failure_phase": "local-only",
+            "reason_code": "source-closure.ambient-fallback-denied",
+            "observed_counters": {},
+            "cleanup_receipt": CLEANUP_RECEIPT,
+        }
+        with self.assertRaisesRegex(SourceClosureTransportError, "local-only"):
             validate_reject_control(control, contract)
 
     def test_nonreject_wire_controls_are_closed_typed_and_state_bound(self) -> None:

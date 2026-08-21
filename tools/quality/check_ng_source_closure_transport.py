@@ -272,6 +272,10 @@ def validate_reject_control(control: dict[str, Any], contract: dict[str, Any]) -
     row = contract["failure_phase_matrix"].get(phase)
     if row is None or control.get("reason_code") not in row["allowed"]:
         raise SourceClosureTransportError("reject reason is unavailable in failure phase")
+    if phase == "local-only":
+        raise SourceClosureTransportError(
+            "local-only failure cannot be serialized as source-closure_reject"
+        )
     counters = control.get("observed_counters")
     if not isinstance(counters, dict) or set(counters) != set(row["counters"]):
         raise SourceClosureTransportError("reject counters are not phase-authentic")
@@ -937,6 +941,9 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     if path_contract.get("x-cxxlens-max-utf8-bytes") != 4096 or not any(
         entry.get("not", {}).get("pattern") == r"(^|/)\.{1,2}(/|$)"
         for entry in path_contract.get("allOf", [])
+    ) or not any(
+        entry.get("not", {}).get("pattern") == r"^project://.*//.*$"
+        for entry in path_contract.get("allOf", [])
     ):
         raise SourceClosureTransportError("task v4 path does not bind ADR 0101 byte/segment rules")
 
@@ -1156,6 +1163,15 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     if transfer_witness.state != "closure-acknowledged":
         raise SourceClosureTransportError("wire state witness did not reach exact terminal")
     for phase, row in matrix.items():
+        if phase == "local-only":
+            if row != {
+                "allowed": ["source-closure.ambient-fallback-denied"],
+                "counters": [],
+            }:
+                raise SourceClosureTransportError(
+                    "local-only failure phase contract is not exact"
+                )
+            continue
         validate_reject_control({
             "session_id": session_witness, "task_id": task_witness,
             "failure_phase": phase, "reason_code": row["allowed"][0],

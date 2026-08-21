@@ -42,6 +42,7 @@ $defs:
     pattern: '^project://[^\u0000-\u001f\u007f\\?#]+$'
     allOf:
       - {not: {pattern: '^project:///'}}
+      - {not: {pattern: '^project://.*//.*$'}}
       - {not: {pattern: '/$'}}
       - {not: {pattern: '(^|/)\.{1,2}(/|$)'}}
 description: Semantic validation cross-binds this extension by base_task_index to the complete request-v2.2 base-task projection with source metadata and no source bytes. The compatibility-named base_task_v3_digest binds that new projection and is intentionally not the legacy v3 digest. Every open_task field is verified against the base task, and main/workdir bind ADR 0101 canonical paths. Manifest and blob bytes are forbidden.
