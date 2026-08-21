@@ -76,7 +76,7 @@
     ".github/actions/setup-ci/action.yml": "0ee96f2d721b9007f7ee7ae8e7059de1a1c5de094822649007a3a124b73cc9d9"
   },
   "local_workflows": {
-    ".github/workflows/nightly.yml": "46b4afb2dde3ea7a0105c6970f559fc43a332278ca626dcbacc2be35d3c0911e"
+    ".github/workflows/nightly.yml": "4cd6a17e9932ff5524345e40591db4db881834c9e608c26e2f9930e35917e8ba"
   },
   "package_cache": {
     "correctness_role": "transport-optimization-only",
