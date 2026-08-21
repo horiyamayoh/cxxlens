@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/temporary-issue-261-blocker-fix.yml
       - tools/dev/temporary_issue261_patch.py
+      - tools/dev/temporary_issue261_patch_fixup.py
   pull_request:
     branches:
       - main
@@ -27,6 +28,8 @@ jobs:
       - uses: ./.github/actions/setup-ci
         with:
           profile: developer
+      - name: Correct the temporary patch anchor
+        run: python3 tools/dev/temporary_issue261_patch_fixup.py
       - name: Apply exact source-closure binding correction
         run: python3 tools/dev/temporary_issue261_patch.py
       - name: Run bounded issue 261 evidence
