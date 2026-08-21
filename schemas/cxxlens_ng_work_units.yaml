@@ -193,7 +193,7 @@ entries:
     authority_sources: [schemas/cxxlens_ng_sanitizer_coverage.yaml, .github/workflows/nightly.yml, tests/unit/sdk/provider_runtime_test.cpp]
     authority_digest: sha256:a501484fb5f4c595151044ebc1909fa2a1c61c3734a66fb345c9b3061eee53d5
     completion_class: bounded-implementation
-    residual_qualification: exact-main Nightly qualification remains evidence for #173 and is not claimed by fixture repair
+    residual_qualification: 'exact-main Nightly qualification remains evidence for #173 and is not claimed by fixture repair'
     units:
       - id: wu-185-timeout-readiness-fixture
         risk: local
