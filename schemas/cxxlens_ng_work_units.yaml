@@ -71,7 +71,7 @@ entries:
         consumed_paths: [schemas/cxxlens_ng_sqlite_store_contract.yaml]
         generated_surfaces: []
         forbidden_shortcuts: [mutation-before-read-receipt, raw-sqlite-ok-as-capability, missing-wal-shm-as-empty]
-        evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R 'sqlite_(source_shm_readonly_preflight|wal_source_capture)' --output-on-failure]
+        evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R '^unit\.sdk-sqlite-(source-shm-readonly-preflight|wal-source-capture)$' --output-on-failure]
         completion_plan:
           - 'jointly accept the #201/#205 authority, prove first-map no mutation, and return the authenticated active-read connection without minting a logical read receipt'
       - id: wu-201-logical-read-receipt
@@ -108,7 +108,7 @@ entries:
         consumed_paths: [schemas/cxxlens_ng_sqlite_store_contract.yaml, src/sdk/sqlite_same_process_shm_reader_lifecycle_internal.hpp]
         generated_surfaces: []
         forbidden_shortcuts: [lease-before-native-success, callback-after-revoke, aba-identity-reuse, inherited-fork-lease, unload-before-revoke]
-        evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R 'sqlite_same_process_shm_(mapping|process)' --output-on-failure]
+        evidence_commands: [cmake --build --preset dev-clang --target cxxlens-sdk-tests, ctest --preset dev-clang -R '^unit\.sdk-sqlite-(shm-mapping-lease|shm-process-port|shm-mapping-registry|shm-mapping-registry-qualified-mapped-acceptance)$' --output-on-failure]
         completion_plan:
           - 'jointly accept the #201/#205 authority, enter with callback-local attempt pin, promote to pending lease only after native success, return only the nested mapping and retirement terminal to #201, revoke and hide before cleanup, quarantine ambiguous callbacks, never mint a logical read receipt'
   - issue: '#202'
@@ -130,7 +130,7 @@ entries:
         consumed_paths: [schemas/cxxlens_ng_sqlite_store_contract.yaml, src/sdk/sqlite_wal_receipt_internal.hpp]
         generated_surfaces: []
         forbidden_shortcuts: [normalization-from-physical-census, fixture-capability-in-production, canonical-source-effect-before-review]
-        evidence_commands: [python3 tools/quality/check_ng_sqlite_store_contract.py check --root ., ctest --preset dev-clang -R sqlite_disposable_qualification --output-on-failure]
+        evidence_commands: [python3 tools/quality/check_ng_sqlite_store_contract.py check --root ., ctest --preset dev-clang -R '^unit\.sdk-sqlite-disposable-qualification$' --output-on-failure]
         completion_plan: [preserve F0 FZ-pre FZ-post FP FH FI FO fixture authority, define production effect profile from logical exact-empty receipt, obtain distinct independent review, keep production fail-closed]
   - issue: '#200'
     conflict_class: materialization-store

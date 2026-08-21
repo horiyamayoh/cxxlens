@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import shutil
 import sys
@@ -19,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 from check_ng_source_closure_transport import (  # noqa: E402
     ADR,
     CONTRACT,
+    LEGACY_BINDINGS,
     PROTOCOL,
     PROTOCOL_SCHEMA,
     REQUEST,
@@ -239,10 +241,74 @@ class SourceClosureTransportTest(unittest.TestCase):
         request, manifest = complete_request_witness(ROOT)
         self.assertEqual(request["request_version"], "2.2.0")
         self.assertNotIn("content_base64", request["tasks"][0]["source"])
+        request_schema = yaml.safe_load(
+            (ROOT / REQUEST).read_text(encoding="utf-8")
+        )
+        legacy_request_schema = yaml.safe_load(
+            (ROOT / LEGACY_BINDINGS["request_schema_sha256"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        task_schema = yaml.safe_load((ROOT / TASK).read_text(encoding="utf-8"))
+        schema_store = {
+            request_schema["$id"]: request_schema,
+            legacy_request_schema["$id"]: legacy_request_schema,
+            task_schema["$id"]: task_schema,
+            "https://cxxlens.dev/schemas/cxxlens_ng_provider_task_v4.schema.yaml": task_schema,
+        }
+        resolver = jsonschema.RefResolver.from_schema(
+            request_schema, store=schema_store
+        )
+        jsonschema.Draft202012Validator(
+            request_schema, resolver=resolver
+        ).validate(request)
         validate_manifest(
             manifest, yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text())
         )
         validate_request_binding(request, [manifest])
+
+    def test_maximum_manifest_constructibility_witness_is_within_transport_bound(self) -> None:
+        members = []
+        blobs_by_digest = {}
+        for index in range(4096):
+            if index == 0:
+                logical_path = "project://a-main.cpp"
+                role = "main"
+            else:
+                suffix = f"{index:04d}.hpp"
+                prefix = "project://z-generated/"
+                logical_path = prefix + ('"' * (4096 - len(prefix) - len(suffix))) + suffix
+                role = "header"
+            payload = f"source-closure-boundary-{index}".encode("utf-8")
+            content_digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+            member = {
+                "file_id": source_closure_file_id(logical_path),
+                "logical_path": logical_path,
+                "role": role,
+                "encoding": "utf8",
+                "size_bytes": len(payload),
+                "content_digest": content_digest,
+                "read_only": True,
+            }
+            members.append(member)
+            blobs_by_digest[content_digest] = {
+                "content_digest": content_digest,
+                "size_bytes": len(payload),
+            }
+        blobs = [blobs_by_digest[digest] for digest in sorted(blobs_by_digest)]
+        manifest = {
+            "schema": "cxxlens.source-closure-manifest.v1",
+            "closure_digest": closure_digest(members, blobs),
+            "members": members,
+            "blobs": blobs,
+        }
+        manifest["closure_id"] = "source-closure:" + manifest["closure_digest"]
+        manifest_bytes = canonical_json(manifest)
+        self.assertGreater(len(manifest_bytes), 32 * 1024 * 1024)
+        self.assertLessEqual(len(manifest_bytes), 40 * 1024 * 1024)
+        self.assertLessEqual((len(manifest_bytes) + (1 << 20) - 1) // (1 << 20), 40)
+        schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
+        validate_manifest(manifest, schema)
 
     def test_adr_0101_identity_and_request_binding_are_constructible(self) -> None:
         request = self.bound_request()
