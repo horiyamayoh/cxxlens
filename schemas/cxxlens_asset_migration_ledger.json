@@ -1,5 +1,5 @@
 {
-  "asset_count": 757,
+  "asset_count": 779,
   "assets": [
     {
       "authority": "active",
@@ -59,7 +59,21 @@
     },
     {
       "authority": "active",
+      "path": ".github/workflows/autonomy-gr.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": ".github/workflows/autonomy-heavy.yml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/workflows/autonomy-production-scope.yml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1522,6 +1536,20 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/work-unit-evidence/sqlite-active-read-connection.json",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/work-unit-products/sqlite-active-read-connection.json",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/doxygen-main.md",
       "removal_issue": null,
       "replacement": null,
@@ -1857,6 +1885,13 @@
       "status": "active"
     },
     {
+      "authority": "active",
+      "path": "schemas/cxxlens_agent_capability_resolution.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
       "authority": "generated-inventory",
       "path": "schemas/cxxlens_asset_migration_ledger.json",
       "removal_issue": null,
@@ -1894,6 +1929,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_agent_capability_resolution.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2579,6 +2621,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_release_owner_handoff.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_release_qualification.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -3167,6 +3216,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_store_candidate.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_store_candidate.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_store_outcome.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -3308,6 +3371,20 @@
     {
       "authority": "active",
       "path": "src/llvm/clang22/source_closure_native.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_transport.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_transport.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4070,6 +4147,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/adapter/clang22/materialization_store_candidate_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/adapter/clang22/materialization_store_outcome_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4127,6 +4211,13 @@
     {
       "authority": "active",
       "path": "tests/adapter/clang22/source_closure_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/source_closure_transport_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4350,6 +4441,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_agent_capability_resolution.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_agent_context.py",
       "removal_issue": null,
       "replacement": null,
@@ -4511,6 +4609,20 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_release_evidence_collector.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_release_owner_handoff.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_release_qualification.py",
       "removal_issue": null,
       "replacement": null,
@@ -4561,6 +4673,13 @@
     {
       "authority": "active",
       "path": "tests/quality/test_ng_sqlite_store_v3_qualification.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_store_candidate.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -4924,6 +5043,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_agent_capability_resolution.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_agent_context.py",
       "removal_issue": null,
       "replacement": null,
@@ -5099,6 +5225,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_release_owner_handoff.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_release_qualification.py",
       "removal_issue": null,
       "replacement": null,
@@ -5155,6 +5288,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_store_candidate.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_use_case_capability_catalog.py",
       "removal_issue": null,
       "replacement": null,
@@ -5198,6 +5338,13 @@
     {
       "authority": "active",
       "path": "tools/quality/check_sanitizer_coverage.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/quality/collect_ng_release_evidence.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -5281,6 +5428,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/sdk/agent_capability_resolution.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/sdk/provider_scaffold_main.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -5302,7 +5456,7 @@
     }
   ],
   "classifications": {
-    "active": 721,
+    "active": 743,
     "archived": 35,
     "generated": 1
   },
