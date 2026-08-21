@@ -158,8 +158,13 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     if contract["nightly"].get("valid_events") != ["schedule", "workflow_dispatch"] or contract["nightly"].get("ineligible_events") != ["workflow_call"]:
         raise AutonomyCiError("Nightly release event eligibility drift")
     latest = nightly.get("jobs", {}).get("latest-main", {})
-    if latest.get("if") != "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'":
-        raise AutonomyCiError("Nightly does not reject ineligible workflow_call evidence")
+    if latest.get("if") != (
+        "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' "
+        "|| github.event_name == 'workflow_call'"
+    ):
+        raise AutonomyCiError(
+            "Nightly does not execute the legacy workflow_call compatibility producer"
+        )
     latest_text = json.dumps(latest, sort_keys=True)
     if "ref: main" not in (root / contract["nightly"]["workflow"]).read_text(encoding="utf-8") or "git rev-parse origin/main" not in latest_text:
         raise AutonomyCiError("Nightly latest-main binding missing")

@@ -148,6 +148,23 @@ class AutonomyCiTest(unittest.TestCase):
             with self.assertRaisesRegex(AutonomyCiError, "exact-candidate bound"):
                 validate(root)
 
+    def test_nightly_reusable_compatibility_producer_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/nightly.yml"
+            text = path.read_text(encoding="utf-8")
+            marker = (
+                "if: github.event_name == 'schedule' || "
+                "github.event_name == 'workflow_dispatch' || "
+                "github.event_name == 'workflow_call'"
+            )
+            self.assertIn(marker, text)
+            path.write_text(text.replace(marker, marker.rsplit(" || ", 1)[0], 1), encoding="utf-8")
+            with self.assertRaisesRegex(
+                AutonomyCiError, "legacy workflow_call compatibility producer"
+            ):
+                validate(root)
+
     def test_release_role_drift_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

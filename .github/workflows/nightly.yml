@@ -20,7 +20,12 @@ env:
 
 jobs:
   latest-main:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # The reusable invocation is a compatibility producer for the legacy
+    # Quality workflow.  It must execute so that the caller can consume an
+    # exact candidate artifact, but its workflow_call run remains ineligible
+    # for the autonomous Nightly release role (which accepts only schedule
+    # and explicit dispatch runs).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call'
     runs-on: ubuntu-24.04
     outputs:
       candidate_sha: ${{ steps.bind.outputs.candidate_sha }}
