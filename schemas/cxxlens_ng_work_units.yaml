@@ -151,7 +151,7 @@ entries:
         consumed_paths: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md]
         generated_surfaces: [docs/design/SHA256SUMS]
         forbidden_shortcuts: [second-full-graph, complete-report-dom, digest-only-validation, authoritative-response-after-post-attempt-failure]
-        evidence_commands: [ctest --preset dev-clang -R 'materialization_(report|store)' --output-on-failure, python3 tools/quality/check_ng_clang22_materialization.py check --root .]
+        evidence_commands: [ctest --preset dev-clang -R 'adapter\.clang22-materialization-(report|store)' --output-on-failure, python3 tools/quality/check_ng_clang22_materialization.py check --root .]
         completion_plan: [make publication the candidate endpoint, restore ADR-0096 two-phase report, define independent actual and expected byte projections, preserve publication_outcome_unknown, prove DF-0200 bounds]
       - id: wu-200-sqlite-lazy-read-residency
         risk: resource-bound
