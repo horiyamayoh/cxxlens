@@ -98,6 +98,25 @@ class WorkUnitTest(unittest.TestCase):
                     with self.assertRaisesRegex(WorkUnitError, "schema validation failed"):
                         validate(root)
 
+    def test_authority_sources_reject_non_normative_and_evidence_paths(self) -> None:
+        for reference in (
+            "docs/development/implementation-learning/records/df-9999-test.md",
+            "docs/archive/historical.md",
+            "docs/development/work-unit-evidence/focused.json",
+        ):
+            with self.subTest(reference=reference), tempfile.TemporaryDirectory() as temporary:
+                root = self.copied_root(temporary)
+                path = root / reference
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("not authoritative\n", encoding="utf-8")
+
+                def mutate(value) -> None:
+                    value["entries"][0]["authority_sources"].append(reference)
+
+                self.rewrite(root, mutate)
+                with self.assertRaisesRegex(WorkUnitError, "schema validation failed"):
+                    validate(root)
+
     def test_unknown_dependency_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

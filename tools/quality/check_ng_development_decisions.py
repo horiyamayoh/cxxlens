@@ -26,6 +26,18 @@ RECEIPT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_development_review_receipts.sc
 WIP_INVENTORY = pathlib.Path("schemas/cxxlens_ng_wip_inventory.yaml")
 HIGH_RISK = {"contract", "invariant", "security", "compatibility", "irreversible", "resource-bound"}
 REVIEW_REF = re.compile(r"^https://github\.com/horiyamayoh/cxxlens/issues/([1-9][0-9]*)#issuecomment-([1-9][0-9]*)$")
+DIRECT_MAIN_DECISION_ID = "decision.delivery.direct-main"
+DIRECT_MAIN_OWNER_ISSUES = frozenset({"#173"})
+DIRECT_MAIN_CONTRACT_IDS = frozenset(
+    {"development.delivery.v2", "development.review-receipt.v1"}
+)
+DIRECT_MAIN_CHOICE = "main-atomic-commit-post-update-ci"
+NON_NORMATIVE_AUTHORITY_COMPONENTS = frozenset(
+    {"implementation-learning", "archive", "archives"}
+)
+EVIDENCE_ONLY_AUTHORITY_COMPONENTS = frozenset(
+    {"artifacts", "evidence", "evidence-only", "reports", "work-unit-evidence"}
+)
 
 
 class DecisionRegisterError(ValueError):
@@ -89,6 +101,26 @@ def authority_digest(files: list[dict[str, str]]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def _authority_source_violation(reference: str) -> str | None:
+    components = set(pathlib.PurePosixPath(reference).parts)
+    if components.intersection(NON_NORMATIVE_AUTHORITY_COMPONENTS):
+        return "non-normative or archived"
+    if components.intersection(EVIDENCE_ONLY_AUTHORITY_COMPONENTS):
+        return "evidence-only"
+    return None
+
+
+def _is_direct_main_governance_decision(entry: dict[str, Any]) -> bool:
+    return (
+        entry["id"] == DIRECT_MAIN_DECISION_ID
+        and set(entry["owner_issues"]) == DIRECT_MAIN_OWNER_ISSUES
+        and entry["risk"] == "contract"
+        and set(entry["contract_ids"]) == DIRECT_MAIN_CONTRACT_IDS
+        and entry["choice"] == DIRECT_MAIN_CHOICE
+        and entry["decision_status"] == "decided"
+    )
 
 
 def _validate_receipt_git(root: pathlib.Path, receipt: dict[str, Any]) -> None:
@@ -396,6 +428,12 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
 
     for entry in decisions:
         for reference in entry["authority_refs"]:
+            violation = _authority_source_violation(reference)
+            if violation is not None:
+                raise DecisionRegisterError(
+                    f"forbidden authority source path ({violation}): "
+                    f"{entry['id']}:{reference}"
+                )
             if not (root / reference).is_file():
                 raise DecisionRegisterError(f"decision authority does not exist: {entry['id']}:{reference}")
         review = entry["review"]
@@ -417,8 +455,17 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
         if review["outcome"] == "pending" and review["references"]:
             raise DecisionRegisterError(f"rejected review history was rewritten to pending: {entry['id']}")
         if entry["authority_status"] == "accepted" or review["outcome"] == "accepted":
+            if entry["decision_status"] != "decided":
+                raise DecisionRegisterError(
+                    f"accepted authority requires decision_status=decided: {entry['id']}"
+                )
             if entry["authority_status"] != "accepted" or review["outcome"] != "accepted" or not review["receipt_ids"]:
                 raise DecisionRegisterError(f"accepted authority and review are not atomic: {entry['id']}")
+        if entry["activation"] == "active-by-workflow-amendment" and not _is_direct_main_governance_decision(entry):
+            raise DecisionRegisterError(
+                "active-by-workflow-amendment is restricted to the exact "
+                f"direct-main governance decision: {entry['id']}"
+            )
         if entry["activation"] == "active" and entry["authority_status"] != "accepted":
             raise DecisionRegisterError(f"unaccepted authority is active: {entry['id']}")
         if entry["qualification_status"] == "qualified" and entry["implementation_status"] != "complete":

@@ -95,6 +95,68 @@ class DevelopmentDecisionTest(unittest.TestCase):
             with self.assertRaisesRegex(DecisionRegisterError, "rewritten to pending"):
                 validate(root, verify_git=False)
 
+    def test_authority_sources_reject_learning_archive_and_evidence_paths(self) -> None:
+        for reference in (
+            "docs/development/implementation-learning/records/df-9999-test.md",
+            "docs/archive/historical.md",
+            "docs/development/work-unit-evidence/focused.json",
+        ):
+            with self.subTest(reference=reference), tempfile.TemporaryDirectory() as temporary:
+                root = self.copied_root(temporary)
+                path = root / reference
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("not authoritative\n", encoding="utf-8")
+
+                def mutate(value) -> None:
+                    value["decisions"][0]["authority_refs"].append(reference)
+
+                self.rewrite(root, mutate)
+                with self.assertRaisesRegex(
+                    DecisionRegisterError,
+                    "schema validation failed|forbidden authority source path",
+                ):
+                    validate(root, verify_git=False)
+
+    def test_accepted_authority_requires_decided_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _ = self.accepted_receipt_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["decisions"][2].__setitem__(
+                    "decision_status", "undecided"
+                ),
+            )
+            with self.assertRaisesRegex(
+                DecisionRegisterError, "accepted authority requires decision_status=decided"
+            ):
+                validate(root, verify_git=False)
+
+    def test_workflow_amendment_activation_is_restricted_to_exact_direct_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["decisions"][1].__setitem__(
+                    "activation", "active-by-workflow-amendment"
+                ),
+            )
+            with self.assertRaisesRegex(
+                DecisionRegisterError, "active-by-workflow-amendment"
+            ):
+                validate(root, verify_git=False)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+
+            def mutate(value) -> None:
+                value["decisions"][0]["contract_ids"] = ["development.delivery.v3"]
+
+            self.rewrite(root, mutate)
+            with self.assertRaisesRegex(
+                DecisionRegisterError, "active-by-workflow-amendment"
+            ):
+                validate(root, verify_git=False)
+
     def test_accepted_authority_without_receipt_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

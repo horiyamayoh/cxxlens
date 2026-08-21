@@ -71,7 +71,7 @@ properties:
         implementation_status: {enum: [pending, partial, complete]}
         qualification_status: {enum: [not-claimed, pending, qualified]}
         activation: {enum: [active-by-workflow-amendment, blocked-until-accepted-review, inactive-production-fail-closed, active]}
-        authority_refs: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/repo_path'}}
+        authority_refs: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/authority_path'}}
   preserved_wip:
     type: array
     minItems: 2
@@ -89,3 +89,4 @@ $defs:
   issue: {type: string, pattern: '^#[1-9][0-9]*$'}
   hex40: {type: string, pattern: '^[0-9a-f]{40}$'}
   repo_path: {type: string, pattern: '^(?!/)(?!.*\.\.)(?!.*\\).+'}
+  authority_path: {type: string, pattern: '^(?!/)(?!.*\.\.)(?!.*\\)(?!.*(?:^|/)(?:implementation-learning|archive|archives|artifacts|evidence|evidence-only|reports|work-unit-evidence)(?:/|$)).+'}

@@ -24,6 +24,12 @@ REQUIRED_SQLITE_PRODUCTS = {
     "sqlite.nested-mapping-terminal",
     "sqlite.logical-read-receipt",
 }
+NON_NORMATIVE_AUTHORITY_COMPONENTS = frozenset(
+    {"implementation-learning", "archive", "archives"}
+)
+EVIDENCE_ONLY_AUTHORITY_COMPONENTS = frozenset(
+    {"artifacts", "evidence", "evidence-only", "reports", "work-unit-evidence"}
+)
 
 
 class WorkUnitError(ValueError):
@@ -46,6 +52,22 @@ def validate_repository_path(value: Any, field: str) -> None:
 def validate_repository_paths(values: Any, field: str) -> None:
     for index, value in enumerate(values):
         validate_repository_path(value, f"{field}[{index}]")
+
+
+def validate_authority_sources(values: Any, field: str) -> None:
+    validate_repository_paths(values, field)
+    for index, value in enumerate(values):
+        components = set(pathlib.PurePosixPath(value).parts)
+        if components.intersection(NON_NORMATIVE_AUTHORITY_COMPONENTS):
+            raise WorkUnitError(
+                f"forbidden authority source path (non-normative or archived): "
+                f"{field}[{index}]:{value}"
+            )
+        if components.intersection(EVIDENCE_ONLY_AUTHORITY_COMPONENTS):
+            raise WorkUnitError(
+                f"forbidden authority source path (evidence-only): "
+                f"{field}[{index}]:{value}"
+            )
 
 
 def load(path: pathlib.Path) -> dict[str, Any]:
@@ -172,7 +194,7 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
         raise WorkUnitError("closed contract owner owns an active work unit")
 
     for entry in entries:
-        validate_repository_paths(entry["authority_sources"], f"{entry['issue']}.authority_sources")
+        validate_authority_sources(entry["authority_sources"], f"{entry['issue']}.authority_sources")
         for unit in entry["units"]:
             for field in ("owned_paths", "consumed_paths", "generated_surfaces"):
                 validate_repository_paths(unit[field], f"{unit['id']}.{field}")

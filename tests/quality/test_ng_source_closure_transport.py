@@ -35,6 +35,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     manifest_digest,
     request_v2_2_projection,
     semantic_digest,
+    source_closure_file_id,
     task_v4_projection,
     trust_policy_digest,
     validate,
@@ -66,7 +67,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             "environment_digest": "sha256:" + "6" * 64,
             "working_directory": "project://src",
             "source": {
-                "file_id": "file:sha256:" + "a" * 64,
+                "file_id": source_closure_file_id("project://src/main.cpp"),
                 "logical_path": "project://src/main.cpp",
                 "content_digest": content,
                 "size_bytes": 1,
@@ -259,7 +260,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             "closure_id": "source-closure:" + semantic,
             "closure_digest": semantic,
             "members": [{
-                "file_id": "file:sha256:" + "3" * 64,
+                "file_id": source_closure_file_id("project://src/main.cpp"),
                 "logical_path": "project://src/main.cpp",
                 "role": "main",
                 "encoding": "utf8",
@@ -274,10 +275,62 @@ class SourceClosureTransportTest(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(schema).validate(manifest)
 
+    def test_manifest_rejects_strict_path_and_file_id_counterexamples(self) -> None:
+        schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
+        content = "sha256:" + "2" * 64
+        blob = {"content_digest": content, "size_bytes": 1}
+
+        wrong_file_id_member = {
+            "file_id": "file:sha256:" + "3" * 64,
+            "logical_path": "project://src/main.cpp",
+            "role": "main",
+            "encoding": "utf8",
+            "size_bytes": 1,
+            "content_digest": content,
+            "read_only": True,
+        }
+        wrong_file_id_digest = closure_digest([wrong_file_id_member], [blob])
+        wrong_file_id_manifest = {
+            "schema": "cxxlens.source-closure-manifest.v1",
+            "closure_id": "source-closure:" + wrong_file_id_digest,
+            "closure_digest": wrong_file_id_digest,
+            "members": [wrong_file_id_member],
+            "blobs": [blob],
+        }
+        with self.assertRaisesRegex(SourceClosureTransportError, "file_id"):
+            validate_manifest(wrong_file_id_manifest, schema)
+
+        for logical_path, expected_message in (
+            ("project://src//main.cpp", "schema invalid"),
+            ("project://" + "é" * 2044, "UTF-8"),
+        ):
+            with self.subTest(logical_path=logical_path):
+                member = {
+                    **wrong_file_id_member,
+                    "file_id": "file:sha256:" + "4" * 64,
+                    "logical_path": logical_path,
+                }
+                digest = closure_digest([member], [blob])
+                manifest = {
+                    "schema": "cxxlens.source-closure-manifest.v1",
+                    "closure_id": "source-closure:" + digest,
+                    "closure_digest": digest,
+                    "members": [member],
+                    "blobs": [blob],
+                }
+                with self.assertRaisesRegex(SourceClosureTransportError, expected_message):
+                    validate_manifest(manifest, schema)
+
+    def test_manifest_file_id_derivation_matches_shared_identity_vector(self) -> None:
+        self.assertEqual(
+            source_closure_file_id("project://main.cpp"),
+            "file:sha256:83e065cbf0d8f742fe73a01155b02057c0de0fbe747f88b35ea5e96efe8faf06",
+        )
+
     def test_manifest_semantic_tamper_and_orphan_are_rejected(self) -> None:
         schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
         content = "sha256:" + "2" * 64
-        members = [{"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
+        members = [{"file_id": source_closure_file_id("project://src/main.cpp"), "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
         blobs = [{"content_digest": content, "size_bytes": 1}]
         semantic = closure_digest(members, blobs)
         manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + semantic, "closure_digest": semantic, "members": members, "blobs": blobs}
@@ -294,8 +347,8 @@ class SourceClosureTransportTest(unittest.TestCase):
         schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
         content = "sha256:" + "2" * 64
         members = [
-            {"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True},
-            {"file_id": "file:sha256:" + "4" * 64, "logical_path": "project://src/z.hpp", "role": "header", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True},
+            {"file_id": source_closure_file_id("project://src/main.cpp"), "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True},
+            {"file_id": source_closure_file_id("project://src/z.hpp"), "logical_path": "project://src/z.hpp", "role": "header", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True},
         ]
         blobs = [{"content_digest": content, "size_bytes": 1}]
         digest = closure_digest(members, blobs)
@@ -479,7 +532,7 @@ class SourceClosureTransportTest(unittest.TestCase):
     def test_transfer_state_witness_recomputes_manifest_and_reject_is_terminal(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         content = "sha256:" + __import__("hashlib").sha256(b"x").hexdigest()
-        members = [{"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
+        members = [{"file_id": source_closure_file_id("project://src/main.cpp"), "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
         blobs = [{"content_digest": content, "size_bytes": 1}]
         closure = closure_digest(members, blobs)
         manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + closure, "closure_digest": closure, "members": members, "blobs": blobs}
@@ -507,7 +560,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
         content = "sha256:" + __import__("hashlib").sha256(b"x").hexdigest()
-        members = [{"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
+        members = [{"file_id": source_closure_file_id("project://src/main.cpp"), "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
         blobs = [{"content_digest": content, "size_bytes": 1}]
         closure = closure_digest(members, blobs)
         manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + closure, "closure_digest": closure, "members": members, "blobs": blobs}
@@ -539,8 +592,8 @@ class SourceClosureTransportTest(unittest.TestCase):
         self.assertEqual(witness.state, "rejected")
 
         invalid_members = [
-            {**members[0], "logical_path": "project://z/main.cpp"},
-            {**members[0], "file_id": "file:sha256:" + "4" * 64, "logical_path": "project://a/header.hpp", "role": "header"},
+            {**members[0], "file_id": source_closure_file_id("project://z/main.cpp"), "logical_path": "project://z/main.cpp"},
+            {**members[0], "file_id": source_closure_file_id("project://a/header.hpp"), "logical_path": "project://a/header.hpp", "role": "header"},
         ]
         invalid_closure = closure_digest(invalid_members, blobs)
         invalid_manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + invalid_closure, "closure_digest": invalid_closure, "members": invalid_members, "blobs": blobs}

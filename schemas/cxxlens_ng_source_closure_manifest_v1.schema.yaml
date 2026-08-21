@@ -34,6 +34,7 @@ $defs:
     pattern: '^project://[^\u0000-\u001f\u007f\\?#]+$'
     allOf:
       - {not: {pattern: '^project:///'}}
+      - {not: {pattern: '^project://.*//.*$'}}
       - {not: {pattern: '/$'}}
       - {not: {pattern: '(^|/)\.{1,2}(/|$)'}}
   member:

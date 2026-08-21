@@ -41,6 +41,8 @@ LEGACY_BINDINGS = {
 REVIEW_REF = re.compile(
     r"^https://github\.com/horiyamayoh/cxxlens/issues/261#issuecomment-[1-9][0-9]*$"
 )
+PROJECT_PATH_PREFIX = "project://"
+MAXIMUM_LOGICAL_PATH_UTF8_BYTES = 4096
 
 
 class SourceClosureTransportError(ValueError):
@@ -138,6 +140,53 @@ def closure_digest(members: list[dict[str, Any]], blobs: list[dict[str, Any]]) -
     return semantic_digest_bytes("cxxlens.source-closure.v1", projection)
 
 
+def _validated_logical_path(value: Any, *, subject: str = "logical path") -> str:
+    """Return the ADR 0101 relative path after applying source_closure.cpp rules."""
+
+    if not isinstance(value, str) or not value.startswith(PROJECT_PATH_PREFIX):
+        raise SourceClosureTransportError(f"{subject} is not project-scoped")
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise SourceClosureTransportError(
+            f"{subject} violates UTF-8/NFC bounds"
+        ) from error
+    if (
+        len(encoded) > MAXIMUM_LOGICAL_PATH_UTF8_BYTES
+        or unicodedata.normalize("NFC", value) != value
+    ):
+        raise SourceClosureTransportError(f"{subject} violates UTF-8/NFC bounds")
+    relative = value.removeprefix(PROJECT_PATH_PREFIX)
+    if (
+        not relative
+        or relative.startswith("/")
+        or relative.endswith("/")
+        or "\\" in relative
+        or "?" in relative
+        or "#" in relative
+        or any(part in {"", ".", ".."} for part in relative.split("/"))
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        raise SourceClosureTransportError(f"{subject} violates ADR 0101 segments")
+    return relative
+
+
+def source_closure_file_id(logical_path: Any) -> str:
+    """Derive the file identity used by source_closure.cpp from a logical path."""
+
+    relative = _validated_logical_path(logical_path)
+    projection = _canonical_tuple(
+        [
+            _canonical_string("project"),
+            _canonical_string(relative),
+            _canonical_string("cxxlens.logical-path.v1"),
+        ]
+    )
+    return "file:sha256:" + hashlib.sha256(
+        b"cxxlens\x00file\x00v1\x00" + projection
+    ).hexdigest()
+
+
 def trust_policy_digest(policy: dict[str, Any]) -> str:
     projection = _canonical_tuple(
         [
@@ -179,6 +228,12 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         raise SourceClosureTransportError("manifest closure ID/digest mismatch")
     members = manifest["members"]
     blobs = manifest["blobs"]
+    for member in members:
+        expected_file_id = source_closure_file_id(member["logical_path"])
+        if member["file_id"] != expected_file_id:
+            raise SourceClosureTransportError(
+                "manifest member file_id is not derived from logical_path"
+            )
     paths = [entry["logical_path"] for entry in members]
     if paths != sorted(paths, key=lambda value: value.encode("utf-8")) or len(paths) != len(set(paths)):
         raise SourceClosureTransportError("manifest member order or path uniqueness invalid")
@@ -519,22 +574,7 @@ def load(path: pathlib.Path) -> dict[str, Any]:
 
 
 def _validate_logical_path(value: Any) -> None:
-    if not isinstance(value, str) or not value.startswith("project://"):
-        raise SourceClosureTransportError("task v4 logical path is not project-scoped")
-    if len(value.encode("utf-8")) > 4096 or unicodedata.normalize("NFC", value) != value:
-        raise SourceClosureTransportError("task v4 logical path violates UTF-8/NFC bounds")
-    relative = value.removeprefix("project://")
-    if (
-        not relative
-        or relative.startswith("/")
-        or relative.endswith("/")
-        or "\\" in relative
-        or "?" in relative
-        or "#" in relative
-        or any(part in {"", ".", ".."} for part in relative.split("/"))
-        or any(ord(character) < 32 or ord(character) == 127 for character in value)
-    ):
-        raise SourceClosureTransportError("task v4 logical path violates ADR 0101 segments")
+    _validated_logical_path(value, subject="task v4 logical path")
 
 
 def validate_request_binding(
@@ -991,7 +1031,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         raise SourceClosureTransportError("failure phase/field matrix is incomplete")
     blob_payload = b"x"
     content = "sha256:" + hashlib.sha256(blob_payload).hexdigest()
-    witness_members = [{"file_id": "file:sha256:" + "3" * 64, "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
+    witness_path = "project://src/main.cpp"
+    witness_members = [{"file_id": source_closure_file_id(witness_path), "logical_path": witness_path, "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
     witness_blobs = [{"content_digest": content, "size_bytes": 1}]
     semantic = closure_digest(witness_members, witness_blobs)
     validate_manifest({

@@ -72,7 +72,7 @@ decisions:
     implementation_status: partial
     qualification_status: not-claimed
     activation: blocked-until-accepted-review
-    authority_refs: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0096-clang22-installed-materialization-boundary.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md, schemas/cxxlens_ng_autonomy_constructibility.yaml]
+    authority_refs: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0096-clang22-installed-materialization-boundary.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, schemas/cxxlens_ng_autonomy_constructibility.yaml]
   - id: decision.sqlite.read-mapping-lifecycle
     title: Nest authenticated mapping lease within zero-effect active WAL reading
     owner_issues: ['#201', '#205']
@@ -100,7 +100,7 @@ decisions:
     implementation_status: partial
     qualification_status: not-claimed
     activation: inactive-production-fail-closed
-    authority_refs: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, docs/development/implementation-learning/records/df-0202-sqlite-exact-empty-wal-normalization.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
+    authority_refs: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
   - id: decision.provider.ng1-after-source-closure-registry
     title: Preserve heartbeat 23 and activate NG1 runtime only after closure registry acceptance
     owner_issues: ['#183', '#261']
