@@ -48,6 +48,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     validate_request_binding,
     transfer_digest,
 )
+from check_ng_provider_protocol import encode_frame  # noqa: E402
 
 SEMANTIC = "semantic-v2:sha256:" + "1" * 64
 SESSION_ID = "provider-session:sha256:" + "2" * 64
@@ -705,13 +706,40 @@ class SourceClosureTransportTest(unittest.TestCase):
             "total_bytes": 50331648,
             "closure_digest": "semantic-v2:sha256:" + "1" * 64,
         }
-        encoded_seal = cbor_encode(
-            {**projection, "transfer_digest": transfer_digest(projection)}
+        seal_control = {**projection, "transfer_digest": transfer_digest(projection)}
+        encoded_seal = cbor_encode(seal_control)
+        encoded_frame = encode_frame(
+            seal_control,
+            message_type=27,
+            stream_id=1,
+            sequence=29,
+            protocol_minor=1,
         )
         self.assertRegex(receipts_digest, r"^semantic-v2:sha256:[0-9a-f]{64}$")
         self.assertRegex(transfer_digest(projection), r"^semantic-v2:sha256:[0-9a-f]{64}$")
         self.assertLessEqual(len(encoded_seal), 65536)
-        self.assertLessEqual(len(encoded_seal) + 104, 16842856)
+        self.assertEqual(len(encoded_frame), len(encoded_seal) + 104)
+        self.assertLessEqual(len(encoded_frame), 16842856)
+
+    def test_source_and_provider_control_limits_must_remain_equal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                SCHEMA,
+                lambda value: value["properties"]["wire_controls"]["properties"][
+                    "common"
+                ]["const"].update({"control_bytes": 65535}),
+            )
+            self.rewrite(
+                root,
+                CONTRACT,
+                lambda value: value["wire_controls"]["common"].update(
+                    {"control_bytes": 65535}
+                ),
+            )
+            with self.assertRaisesRegex(SourceClosureTransportError, "control-byte"):
+                validate(root)
 
     def test_message_collision_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
