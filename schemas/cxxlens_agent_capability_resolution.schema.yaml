@@ -1,0 +1,187 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.agent-capability-resolution.v1
+title: cxxlens canonical agent capability resolution
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - role
+  - authority
+  - use_case_id
+  - consumer
+  - question
+  - expected_result_states
+  - result
+  - capability_path
+  - missing
+  - completion_plan
+  - preserved_semantics
+  - evidence
+  - provenance
+  - canonical_digest
+properties:
+  schema: {const: cxxlens.agent-capability-resolution.v1}
+  document_version: {const: 1.0.0}
+  role: {enum: [canonical-capability-resolution, evaluation-corpus-resolution]}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, source, source_digest, authority_digest, stale_policy]
+    properties:
+      revision: {$ref: '#/$defs/hex40'}
+      tree: {$ref: '#/$defs/hex40'}
+      source: {$ref: '#/$defs/path'}
+      source_digest: {$ref: '#/$defs/digest'}
+      authority_digest: {$ref: '#/$defs/digest'}
+      stale_policy: {const: reject}
+  use_case_id: {$ref: '#/$defs/id'}
+  consumer: {$ref: '#/$defs/nonempty'}
+  question: {$ref: '#/$defs/nonempty'}
+  expected_result_states:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/result_state'}
+  result:
+    type: object
+    additionalProperties: false
+    required: [state, reason_code, explanation, guarantee]
+    properties:
+      state: {$ref: '#/$defs/result_state'}
+      reason_code: {$ref: '#/$defs/reason_code'}
+      explanation: {$ref: '#/$defs/nonempty'}
+      guarantee: {$ref: '#/$defs/nonempty'}
+  capability_path:
+    type: array
+    minItems: 1
+    items: {$ref: '#/$defs/capability'}
+  missing:
+    type: array
+    items: {$ref: '#/$defs/missing'}
+  completion_plan:
+    type: array
+    items: {$ref: '#/$defs/plan_step'}
+  preserved_semantics:
+    type: object
+    additionalProperties: false
+    required: [coverage, closure, unresolved, conflict, differential_disagreement, guarantee, provenance, logical_explain, physical_explain]
+    properties:
+      coverage: {$ref: '#/$defs/semantic_values'}
+      closure: {$ref: '#/$defs/semantic_values'}
+      unresolved: {$ref: '#/$defs/semantic_values'}
+      conflict: {$ref: '#/$defs/semantic_values'}
+      differential_disagreement: {$ref: '#/$defs/semantic_values'}
+      guarantee: {$ref: '#/$defs/semantic_values'}
+      provenance: {$ref: '#/$defs/semantic_values'}
+      logical_explain: {$ref: '#/$defs/semantic_values'}
+      physical_explain: {$ref: '#/$defs/semantic_values'}
+  evidence:
+    type: object
+    additionalProperties: false
+    required: [required, available, missing]
+    properties:
+      required: {$ref: '#/$defs/nonempty_array'}
+      available: {$ref: '#/$defs/string_array'}
+      missing: {$ref: '#/$defs/string_array'}
+  provenance:
+    type: object
+    additionalProperties: false
+    required: [generator, input_contract, generated_at_revision, generated_at_tree]
+    properties:
+      generator: {$ref: '#/$defs/path'}
+      input_contract: {const: cxxlens.agent-capability-resolution.v1}
+      generated_at_revision: {$ref: '#/$defs/hex40'}
+      generated_at_tree: {$ref: '#/$defs/hex40'}
+  canonical_digest: {$ref: '#/$defs/digest'}
+$defs:
+  hex40: {type: string, pattern: '^[0-9a-f]{40}$'}
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  id:
+    type: string
+    minLength: 1
+    pattern: '^[a-z][a-z0-9_]*(?:[.-][a-z0-9_]+)+$'
+  path:
+    type: string
+    minLength: 1
+    pattern: '^(?!/)(?!.*\\)(?!.*\u0000)(?!.*(?:^|/)(?:\\.{0,2}|\\.git)(?:/|$)).+$'
+  nonempty:
+    type: string
+    minLength: 1
+    pattern: '.*\S.*'
+  string_array:
+    type: array
+    uniqueItems: true
+    items: {$ref: '#/$defs/nonempty'}
+  nonempty_array:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/nonempty'}
+  semantic_values:
+    type: array
+    uniqueItems: true
+    items: {$ref: '#/$defs/nonempty'}
+  result_state:
+    enum: [proved, disproved, unknown, partial, conflicting]
+  reason_code:
+    enum:
+      - none
+      - missing-input
+      - missing-capability
+      - missing-model
+      - missing-evidence
+      - blocked-dependency
+      - unsupported-consumer
+      - unknown-use-case
+      - stale-authority
+      - conflicting-evidence
+      - invalid-request
+  capability:
+    type: object
+    additionalProperties: false
+    required: [id, kind, requires, disposition, state, owner_issue, evidence]
+    properties:
+      id: {$ref: '#/$defs/id'}
+      kind: {enum: [input, provider, relation, analysis, model, query, recipe, evidence, support]}
+      requires:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/id'}
+      disposition: {$ref: '#/$defs/nonempty'}
+      state: {$ref: '#/$defs/result_state'}
+      owner_issue:
+        type: string
+        pattern: '^#[1-9][0-9]*$'
+      evidence: {$ref: '#/$defs/string_array'}
+  missing:
+    type: object
+    additionalProperties: false
+    required: [reason_code, capability_id, explanation, owner_issue, completion_plan]
+    properties:
+      reason_code:
+        enum: [missing-input, missing-capability, missing-model, missing-evidence, blocked-dependency, unsupported-consumer, unknown-use-case, stale-authority, conflicting-evidence, invalid-request]
+      capability_id: {$ref: '#/$defs/id'}
+      explanation: {$ref: '#/$defs/nonempty'}
+      owner_issue:
+        type: string
+        pattern: '^#[1-9][0-9]*$'
+      completion_plan: {$ref: '#/$defs/nonempty_array'}
+  plan_step:
+    type: object
+    additionalProperties: false
+    required: [id, depends_on, action, owner_issue, unlocks]
+    properties:
+      id: {$ref: '#/$defs/id'}
+      depends_on:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/id'}
+      action: {$ref: '#/$defs/nonempty'}
+      owner_issue:
+        type: string
+        pattern: '^#[1-9][0-9]*$'
+      unlocks:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/id'}

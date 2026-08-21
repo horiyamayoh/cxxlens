@@ -43,6 +43,15 @@ add_test(
 set_tests_properties(unit.sdk.registration PROPERTIES LABELS
                                                       "unit;sdk;registration")
 
+add_test(
+  NAME tool.sdk-doctor-capability
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_capability.py"
+    "$<TARGET_FILE:cxxlens-sdk-doctor>")
+set_tests_properties(tool.sdk-doctor-capability
+                     PROPERTIES LABELS "tool;sdk;doctor;capability")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
                                                      "${CMAKE_DL_LIBS}")
@@ -1169,6 +1178,7 @@ foreach(
         api_development_readiness_wave0_baseline
         use_case_capability_catalog
         agent_context
+        agent_capability_resolution
         design_feedback
         public_callable_inventory
         g5_qualification)

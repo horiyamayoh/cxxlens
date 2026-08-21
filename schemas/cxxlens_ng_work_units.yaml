@@ -244,10 +244,10 @@ entries:
   - issue: '#277'
     conflict_class: agent-ux
     integration_owner: '#277'
-    authority_sources: [schemas/cxxlens_ng_work_units.schema.yaml, schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_agent_context.schema.yaml]
-    authority_digest: sha256:39df5d6380c8b20408db802dc6d7c7ccaf96e1218f137d843bd9c27c3ecec71e
+    authority_sources: [CMakeLists.txt, docs/development/extending-platform.md, schemas/cxxlens_asset_migration_ledger.json, schemas/cxxlens_agent_capability_resolution.schema.yaml, schemas/cxxlens_ng_agent_capability_resolution.yaml, schemas/cxxlens_ng_work_units.schema.yaml, schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_agent_context.schema.yaml, schemas/cxxlens_ng_agent_context_v2.schema.yaml, tests/CMakeLists.txt, tests/quality/test_ng_agent_capability_resolution.py, tests/quality/test_ng_agent_context_v2.py, tests/unit/sdk/check_sdk_doctor_capability.py, tools/quality/check_ng_agent_capability_resolution.py, tools/quality/check_ng_agent_context_v2.py, tools/sdk/agent_capability_resolution.hpp, tools/sdk/sdk_doctor_main.cpp]
+    authority_digest: sha256:a4d0bb40969a6183e655a310b32105a1440b8800f91af9d3a1582509844b5535
     completion_class: autonomy-readiness
-    residual_qualification: generic golden paths and missing --project remain later milestones
+    residual_qualification: installed consumer and later admitted-use-case expansion remain with integration and readiness gates
     units:
       - id: wu-277-context-v2
         risk: compatibility
@@ -258,9 +258,9 @@ entries:
         serialized_with: []
         owned_products: []
         consumed_products: []
-        owned_paths: [schemas/cxxlens_ng_agent_context_v2.schema.yaml, tools/quality/check_ng_agent_context_v2.py, tests/quality/test_ng_agent_context_v2.py, docs/development/extending-platform.md]
+        owned_paths: [CMakeLists.txt, docs/development/extending-platform.md, schemas/cxxlens_agent_capability_resolution.schema.yaml, schemas/cxxlens_ng_agent_capability_resolution.yaml, schemas/cxxlens_ng_agent_context_v2.schema.yaml, tests/CMakeLists.txt, tests/quality/test_ng_agent_capability_resolution.py, tests/quality/test_ng_agent_context_v2.py, tests/unit/sdk/check_sdk_doctor_capability.py, tools/quality/check_ng_agent_capability_resolution.py, tools/quality/check_ng_agent_context_v2.py, tools/sdk/agent_capability_resolution.hpp, tools/sdk/sdk_doctor_main.cpp]
         consumed_paths: [schemas/cxxlens_ng_work_units.yaml, schemas/cxxlens_ng_agent_context.schema.yaml, tools/quality/check_ng_agent_context.py]
         generated_surfaces: [schemas/cxxlens_asset_migration_ledger.json]
         forbidden_shortcuts: [v1-packet-breakage, relation-presence-as-project-diagnosis, handwritten-capability-inventory, packet-from-dirty-or-stale-authority]
         evidence_commands: [python3 tools/quality/check_ng_agent_context_v2.py corpus --root ., python3 -m unittest tests.quality.test_ng_agent_context_v2]
-        completion_plan: [generate packets for every open work unit, require safe-stop rate 100 percent, require bounded completion selection rate at least 80 percent, retain v1 issue-261 read compatibility, defer generic golden paths and missing --project]
+        completion_plan: [generate packets for every open work unit, require safe-stop rate 100 percent, require bounded completion selection rate at least 80 percent, retain v1 issue-261 read compatibility, keep the capability corpus and installed doctor consumer bound to exact schema and source digests]

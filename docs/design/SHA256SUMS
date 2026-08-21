@@ -102,9 +102,9 @@ c6042484e019aa184b8ea2abc7329ed7f786308d97cef686eb21d98ee76d6599  ../../schemas/
 89a4981ca685462098a524f703d9d4e47247dc7e2ff90879f54be19ecfa9f95f  ../../schemas/cxxlens_ng_development_decision_register.schema.yaml
 3d655cc546f3f8d81095dfb28f2e763933dbbe774454411efb4f63c0b33e8728  ../../schemas/cxxlens_ng_development_review_receipts.yaml
 d0e077d6b4b71dd410c652332d0b5809935c2e06bed277b886091d5c615d929b  ../../schemas/cxxlens_ng_development_review_receipts.schema.yaml
-72d642919d4cfc11a38c1b4fef8aeb99d1f9bf9d7ab0175c1dca67359e3a0e69  ../../schemas/cxxlens_ng_work_units.yaml
+5e3bafc381e53f135a88d4fab26805f8e0f5efbac00e41b74535515f2eb97209  ../../schemas/cxxlens_ng_work_units.yaml
 e210efeebbdb059585dbe906d4209c233d95a73e6f9af8cbb8bb6bdaaa7edef4  ../../schemas/cxxlens_ng_work_units.schema.yaml
-c22b37a78489bae643123974b6927213d79e4c7bc2ca54efd8132335f04bef97  ../../schemas/cxxlens_ng_agent_context_v2.schema.yaml
+acaa401a0861f78c5da43b853f7faf32f26664e72136485cdf1cb6170ee0f234  ../../schemas/cxxlens_ng_agent_context_v2.schema.yaml
 c81a7e3f8929577a8a0d7ac736ff02c124f184e121c1cc4e532457ecbc879327  ../../schemas/cxxlens_ng_autonomy_constructibility.yaml
 d5a9f46c914b736214850f442c427d02ff42aea00fd1ae12398d0033fa8dacf5  ../../schemas/cxxlens_ng_autonomy_constructibility.schema.yaml
 4bc6147910e0e2e6081f3dec4b4aed5c12740f10a6295a53910df84052ba61bd  ../../schemas/cxxlens_ng_wip_inventory.yaml
@@ -142,4 +142,4 @@ a43c7748ea604fd99631b00ae2f431bd816cbcc88f00313554b07aec2617f381  ../../schemas/
 0f710f1973b5eb195df7d41fe79bd2f85bd59f983c4dee77a760cfcb2ce6ef06  ../../schemas/cxxlens_ng_compatibility_request.schema.yaml
 c3ac088188fb995b76064d3b24075292a377c4a6d7e021173d5541ed3afbf442  ../../schemas/cxxlens_ng_compatibility_report.schema.yaml
 66a139a97e7bc4260683ba2d94b96d62db19d69273399817cc6bbda18292fb9e  ../../schemas/cxxlens_asset_migration_policy.yaml
-9154f9be693d2d48fb867dd8a6dad7cb6675b3898ca25e7ed3e37d2d823df516  ../../schemas/cxxlens_asset_migration_ledger.json
+1288c6402f44c080916f5b60e9ca11d554d2a11414f6197a3037ffc6d65799d6  ../../schemas/cxxlens_asset_migration_ledger.json

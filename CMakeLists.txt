@@ -495,6 +495,10 @@ cxxlens_configure_installed_tool(cxxlens-provider-scaffold)
 add_executable(cxxlens-sdk-doctor tools/sdk/sdk_doctor_main.cpp)
 target_link_libraries(cxxlens-sdk-doctor PRIVATE cxxlens::provider_sdk)
 target_compile_features(cxxlens-sdk-doctor PRIVATE cxx_std_23)
+target_compile_definitions(
+  cxxlens-sdk-doctor
+  PRIVATE CXXLENS_SOURCE_REVISION="${CXXLENS_SOURCE_REVISION}"
+          CXXLENS_SOURCE_TREE="${CXXLENS_SOURCE_TREE}")
 cxxlens_set_project_warnings(cxxlens-sdk-doctor)
 cxxlens_enable_sanitizers(cxxlens-sdk-doctor)
 cxxlens_configure_installed_tool(cxxlens-sdk-doctor)
@@ -599,6 +603,8 @@ install(
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas"
   FILES_MATCHING
   PATTERN "cxxlens_ng_*")
+install(FILES schemas/cxxlens_agent_capability_resolution.schema.yaml
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 # Explicit runtime authority evidence used by the provider-runtime contract
 # gate.
 install(

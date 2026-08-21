@@ -224,13 +224,40 @@ unknown/foreign unit、authority drift は実行 packet を生成しません。
 v1 の #261 exact packet `plan`/`check` を一時 clean-HEAD clone と一時出力ディレクトリで実行した measurable evidence を
 `v1_issue_261_compatibility_evidence` に保持します。v1 producer/schema は変更しません。
 
-静的 relation inventory を残す場合の契約名は `relation-presence` です。これは use-case/capability graph、support tuple、
-input/model/evidence gap と dependency-ordered plan を読む将来の `missing --project` とは別機能であり、相互代用しません。
+### Canonical capability resolution and SDK doctor
+
+`cxxlens.agent-capability-resolution.v1` is the canonical result contract consumed by v2 packets
+and by SDK-doctor evaluation. It is produced by
+`tools/quality/check_ng_agent_capability_resolution.py` from the exact source-bound corpus in
+`schemas/cxxlens_ng_agent_capability_resolution.yaml`; relation presence alone is never used to
+infer a use-case capability. Every result preserves the closed state set
+`proved`/`disproved`/`unknown`/`partial`/`conflicting`, a typed missing reason, and a
+dependency-ordered completion plan. Unknown results are safe stops, not empty success.
+
+The installed `cxxlens-sdk-doctor` exposes the same consumer-facing boundary:
+
+```sh
+cxxlens-sdk-doctor capability <use-case-id> [--format json|markdown]
+cxxlens-sdk-doctor explain <resolution.json> [--format json|markdown]
+cxxlens-sdk-doctor missing --project <project.json> [--format json|markdown]
+```
+
+JSON is the default output. Markdown is a deterministic projection of the same canonical
+resolution and may not introduce or remove a result, reason, evidence, or completion step. The
+nine-path corpus covers relation, recipe, analysis, model, portable provider, native provider,
+query operator, support tuple, and actionable unknown consumers. The corpus requires a 100%
+safe-stop rate and exercises every result state; it is readiness evidence and does not by itself
+promote a provider or platform tuple to production qualification. The legacy v1 producer remains
+unchanged and v2 packets retain the exact v1 compatibility evidence.
+
+静的 relation inventory を残す場合の契約名は `relation-presence` です。これは canonical capability resolution の
+use-case/capability graph、support tuple、input/model/evidence gap と dependency-ordered plan を読む `missing --project`
+とは別機能であり、相互代用しません。
 
 legacy v1 projection の producer は引き続き `check_ng_agent_context.py` だけです。`check_ng_api_development_readiness.py`
 は #261 readiness artifact の authority/generator であり、readiness document と workflow を検証します。#277 projection の出力は
 Issue #261 の source-closure implementation や #276 の constructibility acceptance を進めるものではなく、
-source-closure/VFS、provider qualification、real-project evidence、golden path 評価、`agent-autonomous-completion-rate`
+source-closure/VFS、provider qualification、real-project evidence、aggregate qualification、`agent-autonomous-completion-rate`
 の測定、Nightly の release qualification は別の accepted slice が必要です。この generator の出力だけで constructible、
 qualified、production-ready を主張してはいけません。
 
