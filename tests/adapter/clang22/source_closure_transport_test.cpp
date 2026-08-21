@@ -340,16 +340,27 @@ namespace
 					std::as_bytes(std::span{manifest.data(), manifest.size()}),
 					1U),
 				"byte-count mismatch was accepted");
-		require(validator.next_sequence() == 1U,
-				"malformed payload consumed a shared sequence before validation");
+		require(validator.next_sequence() == 1U &&
+					validator.state() == source_closure_transfer_state::rejected &&
+					sink.cleanup_calls == 1U,
+				"malformed manifest did not clean up and terminalize the spool");
+
+		test_sink sequence_sink;
+		test_authority sequence_authority{outer};
+		source_closure_transfer_validator sequence_validator{
+			outer, sequence_authority, sequence_sink};
+		require(sequence_validator.begin_manifest(manifest_descriptor(outer, manifest.size()), 0U),
+				"sequence fixture descriptor was rejected");
 		require(
-			!validator.manifest_chunk(
+			!sequence_validator.manifest_chunk(
 				{outer.session_id, outer.task_id, outer.manifest_digest, 0U, 0U, manifest.size()},
 				std::as_bytes(std::span{manifest.data(), manifest.size()}),
 				2U),
 			"non-contiguous frame sequence was accepted");
-		require(validator.next_sequence() == 1U,
-				"non-contiguous frame sequence mutated validator state");
+		require(sequence_validator.next_sequence() == 1U &&
+					sequence_validator.state() == source_closure_transfer_state::rejected &&
+					sequence_sink.cleanup_calls == 1U,
+				"non-contiguous frame did not clean up the spool");
 
 		test_sink blob_limit_sink;
 		test_authority blob_limit_authority{outer};
@@ -373,9 +384,9 @@ namespace
 										1U,
 										1U},
 									   2U) &&
-					blob_limit.state() == source_closure_transfer_state::manifest_validated &&
-					blob_limit_sink.blob_begin_calls == 0U,
-				"one-blob bound overflow reached the spool");
+					blob_limit.state() == source_closure_transfer_state::rejected &&
+					blob_limit_sink.blob_begin_calls == 0U && blob_limit_sink.cleanup_calls == 1U,
+				"one-blob bound overflow was not terminalized with cleanup");
 
 		test_sink reject_sink;
 		test_authority reject_authority{outer};

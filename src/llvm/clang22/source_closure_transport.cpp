@@ -723,21 +723,20 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(
 				failure("source-closure.protocol-state-invalid", "manifest-chunk"));
 		if (auto valid = ensure_identity(control.session_id, control.task_id); !valid)
-			return valid;
+			return fail(valid.error().code, valid.error().field, valid.error().detail);
 		if (control.manifest_digest != binding_.manifest_digest)
-			return sdk::unexpected(
-				failure("source-closure.task-binding-mismatch", "manifest-chunk"));
+			return fail("source-closure.task-binding-mismatch", "manifest-chunk");
 		if (control.chunk_index < next_chunk_index_ || control.offset < next_offset_)
-			return sdk::unexpected(failure("source-closure.chunk-overlap", "manifest-chunk"));
+			return fail("source-closure.chunk-overlap", "manifest-chunk");
 		if (control.chunk_index != next_chunk_index_ || control.offset != next_offset_)
-			return sdk::unexpected(failure("source-closure.chunk-order-invalid", "manifest-chunk"));
+			return fail("source-closure.chunk-order-invalid", "manifest-chunk");
 		const auto remaining = declared_bytes_ - next_offset_;
 		const auto expected_bytes = std::min(declared_chunk_bytes_, remaining);
 		if (control.byte_count != payload.size() || payload.size() != expected_bytes ||
 			payload.empty() || payload.size() > limits_.maximum_chunk_payload_bytes)
-			return sdk::unexpected(failure("source-closure.chunk-gap", "manifest-chunk"));
+			return fail("source-closure.chunk-gap", "manifest-chunk");
 		if (auto valid = sequence(sequence_value); !valid)
-			return valid;
+			return fail(valid.error().code, valid.error().field, valid.error().detail);
 		if (auto valid = sink_->append_manifest(payload); !valid)
 			return fail("source-closure.spool-io", "manifest-chunk", valid.error().detail);
 		next_offset_ += payload.size();
@@ -748,8 +747,7 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 		if (next_chunk_index_ != declared_chunk_count_)
-			return sdk::unexpected(
-				failure("source-closure.chunk-order-invalid", "manifest-census"));
+			return fail("source-closure.chunk-order-invalid", "manifest-census");
 		auto summary = sink_->finish_manifest(binding_.manifest_digest);
 		if (!summary)
 			return fail("source-closure.manifest-invalid", "manifest", summary.error().detail);
@@ -760,7 +758,7 @@ namespace cxxlens::detail::clang22
 			summary->blob_count > limits_.maximum_unique_blobs ||
 			summary->total_blob_bytes > limits_.maximum_unique_blob_bytes ||
 			exceeds(manifest_bytes_, summary->total_blob_bytes, limits_.maximum_task_spool_bytes))
-			return sdk::unexpected(failure("source-closure.manifest-invalid", "manifest-census"));
+			return fail("source-closure.manifest-invalid", "manifest-census");
 		manifest_member_count_ = summary->member_count;
 		manifest_blob_count_ = summary->blob_count;
 		manifest_total_blob_bytes_ = summary->total_blob_bytes;
@@ -787,15 +785,15 @@ namespace cxxlens::detail::clang22
 			state_ != source_closure_transfer_state::blob_sealed)
 			return sdk::unexpected(failure("source-closure.protocol-state-invalid", "blob"));
 		if (auto valid = ensure_identity(descriptor.session_id, descriptor.task_id); !valid)
-			return valid;
+			return fail(valid.error().code, valid.error().field, valid.error().detail);
 		if (descriptor.closure_digest != binding_.closure_digest ||
 			descriptor.blob_ordinal != completed_blobs_ ||
 			descriptor.blob_ordinal >= manifest_blob_count_ ||
 			!typed_digest(descriptor.blob_digest, content_prefix))
-			return sdk::unexpected(failure("source-closure.blob-order-invalid", "blob"));
+			return fail("source-closure.blob-order-invalid", "blob");
 		if (descriptor.total_bytes > limits_.maximum_blob_bytes || descriptor.chunk_bytes == 0U ||
 			descriptor.chunk_bytes > limits_.maximum_chunk_payload_bytes)
-			return sdk::unexpected(failure("source-closure.limit-exceeded", "blob"));
+			return fail("source-closure.limit-exceeded", "blob");
 		std::uint64_t expected_chunks{};
 		if (!checked_chunk_count(descriptor.total_bytes, descriptor.chunk_bytes, expected_chunks) ||
 			descriptor.chunk_count != expected_chunks ||
@@ -808,11 +806,11 @@ namespace cxxlens::detail::clang22
 						  total_blob_bytes_,
 						  descriptor.total_bytes,
 						  limits_.maximum_task_spool_bytes))
-			return sdk::unexpected(failure("source-closure.limit-exceeded", "blob"));
+			return fail("source-closure.limit-exceeded", "blob");
 		if (descriptor.total_bytes == 0U && descriptor.blob_digest != empty_blob_digest)
-			return sdk::unexpected(failure("source-closure.digest-mismatch", "blob"));
+			return fail("source-closure.digest-mismatch", "blob");
 		if (auto valid = sequence(sequence_value); !valid)
-			return valid;
+			return fail(valid.error().code, valid.error().field, valid.error().detail);
 		if (auto valid = sink_->begin_blob(descriptor); !valid)
 			return fail("source-closure.spool-io", "blob", valid.error().detail);
 		current_blob_ordinal_ = descriptor.blob_ordinal;
@@ -855,23 +853,23 @@ namespace cxxlens::detail::clang22
 			state_ != source_closure_transfer_state::blob_streaming)
 			return sdk::unexpected(failure("source-closure.protocol-state-invalid", "blob-chunk"));
 		if (auto valid = ensure_identity(control.session_id, control.task_id); !valid)
-			return valid;
+			return fail(valid.error().code, valid.error().field, valid.error().detail);
 		if (control.blob_ordinal != current_blob_ordinal_ ||
 			control.blob_digest != current_blob_digest_)
-			return sdk::unexpected(failure("source-closure.blob-order-invalid", "blob-chunk"));
+			return fail("source-closure.blob-order-invalid", "blob-chunk");
 		if (control.chunk_index < next_chunk_index_ || control.offset < next_offset_)
-			return sdk::unexpected(failure("source-closure.chunk-overlap", "blob-chunk"));
+			return fail("source-closure.chunk-overlap", "blob-chunk");
 		if (control.chunk_index != next_chunk_index_ || control.offset != next_offset_)
-			return sdk::unexpected(failure("source-closure.chunk-order-invalid", "blob-chunk"));
+			return fail("source-closure.chunk-order-invalid", "blob-chunk");
 		const auto remaining = declared_bytes_ - next_offset_;
 		const auto expected_bytes = std::min(declared_chunk_bytes_, remaining);
 		if (control.byte_count != payload.size() || payload.size() != expected_bytes ||
 			payload.empty() || payload.size() > limits_.maximum_chunk_payload_bytes)
-			return sdk::unexpected(failure("source-closure.chunk-gap", "blob-chunk"));
+			return fail("source-closure.chunk-gap", "blob-chunk");
 		if (blob_chunk_frames_ >= limits_.maximum_blob_chunk_frames)
-			return sdk::unexpected(failure("source-closure.limit-exceeded", "blob-chunk"));
+			return fail("source-closure.limit-exceeded", "blob-chunk");
 		if (auto valid = sequence(sequence_value); !valid)
-			return valid;
+			return fail(valid.error().code, valid.error().field, valid.error().detail);
 		sha_update(blob_hash_state_,
 				   blob_hash_buffer_,
 				   blob_hash_buffer_size_,
@@ -888,11 +886,11 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 		if (next_chunk_index_ != declared_chunk_count_)
-			return sdk::unexpected(failure("source-closure.chunk-order-invalid", "blob-census"));
+			return fail("source-closure.chunk-order-invalid", "blob-census");
 		const auto observed_digest = sha_finish(
 			blob_hash_state_, blob_hash_buffer_, blob_hash_buffer_size_, blob_hash_total_bytes_);
 		if (observed_digest != current_blob_digest_)
-			return sdk::unexpected(failure("source-closure.digest-mismatch", "blob-content"));
+			return fail("source-closure.digest-mismatch", "blob-content");
 		const source_closure_blob_receipt receipt{
 			current_blob_ordinal_, observed_digest, declared_bytes_};
 		if (auto valid = sink_->finish_blob(receipt); !valid)
@@ -917,23 +915,23 @@ namespace cxxlens::detail::clang22
 		if (state_ != source_closure_transfer_state::blob_sealed)
 			return sdk::unexpected(failure("source-closure.protocol-state-invalid", "seal"));
 		if (auto valid = ensure_identity(value.session_id, value.task_id); !valid)
-			return valid;
+			return fail(valid.error().code, valid.error().field, valid.error().detail);
 		if (value.task_v4_digest != binding_.task_v4_digest ||
 			value.manifest_digest != binding_.manifest_digest ||
 			value.closure_digest != binding_.closure_digest ||
 			completed_blobs_ != manifest_blob_count_ || value.blob_count != completed_blobs_ ||
 			value.total_bytes != total_blob_bytes_ ||
 			total_blob_bytes_ != manifest_total_blob_bytes_)
-			return sdk::unexpected(failure("source-closure.digest-mismatch", "seal-census"));
+			return fail("source-closure.digest-mismatch", "seal-census");
 		auto receipts = source_closure_blob_receipts_digest(blob_receipts_);
 		if (!receipts || *receipts != value.blob_receipts_digest)
-			return sdk::unexpected(failure("source-closure.digest-mismatch", "blob-receipts"));
+			return fail("source-closure.digest-mismatch", "blob-receipts");
 		auto expected_transfer = source_closure_transfer_digest(
 			binding_, value.blob_receipts_digest, value.blob_count, value.total_bytes);
 		if (!expected_transfer || *expected_transfer != value.transfer_digest)
-			return sdk::unexpected(failure("source-closure.digest-mismatch", "transfer"));
+			return fail("source-closure.digest-mismatch", "transfer");
 		if (auto valid = sequence(sequence_value); !valid)
-			return valid;
+			return fail(valid.error().code, valid.error().field, valid.error().detail);
 		auto credentials = sink_->finish_closure(value.transfer_digest);
 		if (!credentials)
 			return fail("source-closure.spool-io", "closure", credentials.error().detail);
