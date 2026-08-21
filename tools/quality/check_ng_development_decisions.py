@@ -38,9 +38,12 @@ DIRECT_MAIN_CHOICE = "main-atomic-commit-post-update-ci"
 # schema that can change the route's meaning.
 GOVERNANCE_ENFORCEMENT_SURFACES = frozenset(
     {
+        "AGENTS.md",
         ".github/workflows/autonomy-fast.yml",
         ".github/workflows/autonomy-heavy.yml",
         ".github/workflows/autonomy-release-evaluation.yml",
+        "docs/design/adr/0094-risk-tiered-goal-authorization.md",
+        "docs/design/adr/0105-direct-main-review-and-release-governance.md",
         "docs/development/decision-review-register.md",
         "schemas/cxxlens_ng_autonomy_ci.yaml",
         "schemas/cxxlens_ng_autonomy_ci.schema.yaml",

@@ -79,20 +79,26 @@ class DevelopmentDecisionTest(unittest.TestCase):
         validate(ROOT)
 
     def test_direct_main_authority_closure_requires_enforcement_surfaces(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = self.copied_root(temporary)
-            missing = next(iter(GOVERNANCE_ENFORCEMENT_SURFACES))
+        required_roots = (
+            "AGENTS.md",
+            "docs/design/adr/0094-risk-tiered-goal-authorization.md",
+            "docs/design/adr/0105-direct-main-review-and-release-governance.md",
+        )
+        self.assertTrue(set(required_roots) <= GOVERNANCE_ENFORCEMENT_SURFACES)
+        for missing in required_roots:
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
+                root = self.copied_root(temporary)
 
-            def mutate(value) -> None:
-                decision = value["decisions"][0]
-                decision["authority_refs"].remove(missing)
+                def mutate(value) -> None:
+                    decision = value["decisions"][0]
+                    decision["authority_refs"].remove(missing)
 
-            self.rewrite(root, mutate)
-            with self.assertRaisesRegex(
-                DecisionRegisterError,
-                "direct-main governance authority closure missing enforcement surface",
-            ):
-                validate(root, verify_git=False)
+                self.rewrite(root, mutate)
+                with self.assertRaisesRegex(
+                    DecisionRegisterError,
+                    "direct-main governance authority closure missing enforcement surface",
+                ):
+                    validate(root, verify_git=False)
 
     def test_accepted_receipt_rejects_current_authority_projection_drift(self) -> None:
         receipt = {
