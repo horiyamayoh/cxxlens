@@ -6403,6 +6403,13 @@ namespace cxxlens::sdk
 		{
 			if (!observation)
 				return unexpected(sqlite_quiescent_observation_failure());
+			// An existing source may enter fresh initialization only through a sealed
+			// logical-read receipt. That receipt is not available until the distinct
+			// source-read lifecycle is implemented, so keep existing-main routes fail
+			// closed. The explicitly authorized nonexistent-main bootstrap still passes
+			// preinit_absent and remains unchanged.
+			if (!preinit_absent)
+				return unexpected(sqlite_effect_gate_failure());
 			auto anchor_pin = sqlite_authority_anchor_pin(source_anchor);
 			if (!anchor_pin)
 				return unexpected(sqlite_effect_gate_failure());

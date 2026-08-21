@@ -1830,6 +1830,53 @@ namespace
 		std::filesystem::remove(path);
 	}
 
+	void check_sqlite_existing_empty_initialization_is_fail_closed()
+	{
+		using namespace cxxlens::test::sqlite_fixture;
+		const auto relation_engine = engine();
+		temporary_directory directory{"sqlite-existing-empty-containment"};
+
+		const auto bootstrap_path = directory.path() / "nonexistent.sqlite";
+		{
+			auto bootstrapped =
+				cxxlens::sdk::open_sqlite_snapshot_store(bootstrap_path.string(), relation_engine);
+			require(bootstrapped.has_value(),
+					"nonexistent-main bootstrap was not preserved by the containment guard");
+		}
+
+		const auto existing_empty_path = directory.path() / "existing-empty.sqlite";
+		require(std::filesystem::copy_file(bootstrap_path, existing_empty_path),
+				"existing exact-empty containment fixture seed failed");
+		std::filesystem::resize_file(existing_empty_path, 0U);
+		{
+			connection database{existing_empty_path};
+			database.exec("CREATE TABLE cxxlens_containment_probe(value INTEGER);");
+			database.exec("DROP TABLE cxxlens_containment_probe;");
+			database.exec("PRAGMA journal_mode=WAL;");
+			database.close();
+		}
+		require_wal_header_and_quiescent_sidecars(existing_empty_path);
+
+		const auto zero_byte_path = directory.path() / "existing-zero-byte.sqlite";
+		require(std::filesystem::copy_file(existing_empty_path, zero_byte_path),
+				"existing zero-byte containment fixture copy failed");
+		std::filesystem::resize_file(zero_byte_path, 0U);
+
+		const auto require_containment =
+			[&](const std::filesystem::path& path, const std::string_view label)
+		{
+			const auto before = capture_files(path);
+			auto opened = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+			require(!opened && opened.error().code == "store.backend-unavailable" &&
+					opened.error().field == "sqlite" && opened.error().detail == "effect-gate",
+					std::string{label} + " did not fail closed before fresh initialization");
+			require(capture_files(path) == before,
+					std::string{label} + " changed the source file family");
+		};
+		require_containment(existing_empty_path, "existing nonzero exact-empty source");
+		require_containment(zero_byte_path, "existing zero-byte main");
+	}
+
 	void check_sqlite_v3_fresh_schema_and_chunk_boundary()
 	{
 		using namespace cxxlens::test::sqlite_fixture;
@@ -3074,5 +3121,6 @@ int main(const int argc, char** argv)
 	check_derived_basis_membership();
 	check_derived_basis_uses_checked_snapshot_resolver();
 	check_v5_manifest_order_is_canonical();
+	check_sqlite_existing_empty_initialization_is_fail_closed();
 	return 0;
 }
