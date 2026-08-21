@@ -29,6 +29,21 @@ namespace cxxlens::detail::clang22::materialization
 			return {"materialization.claim-source-invalid", std::move(field), std::move(detail)};
 		}
 
+		[[nodiscard]] bool
+		valid_source_limits(const materialization_bounded_claim_source_limits& limits) noexcept
+		{
+			if (limits.maximum_total_spool_bytes == 0U ||
+				limits.maximum_partition_spool_bytes == 0U || limits.maximum_record_bytes == 0U ||
+				limits.maximum_partition_count == 0U ||
+				limits.maximum_partition_spool_bytes > limits.maximum_total_spool_bytes)
+				return false;
+			if (limits.maximum_record_bytes >
+				std::numeric_limits<std::uint64_t>::max() - sizeof(std::uint64_t))
+				return false;
+			return limits.maximum_record_bytes + sizeof(std::uint64_t) <=
+				limits.maximum_partition_spool_bytes;
+		}
+
 		constexpr std::array<std::string_view, 6U> base_descriptor_ids{"build.project.v1",
 																	   "build.toolchain_context.v1",
 																	   "build.variant.v1",
@@ -512,18 +527,61 @@ namespace cxxlens::detail::clang22::materialization
 				left.assumption_set_id == right.assumption_set_id;
 		}
 
-		[[nodiscard]] sdk::result<void> append_record(materialization_replayable_spool& spool,
-													  const sdk::canonical_value& value,
-													  const std::string_view field)
+		[[nodiscard]] sdk::result<void>
+		append_record(materialization_replayable_spool& spool,
+					  const sdk::canonical_value& value,
+					  const std::string_view field,
+					  const materialization_bounded_claim_source_limits& limits,
+					  std::uint64_t& total_spool_bytes)
 		{
 			auto encoded = sdk::canonical_binary(value);
-			if (!encoded || encoded->size() > std::numeric_limits<std::uint64_t>::max())
+			if (!encoded || encoded->size() > limits.maximum_record_bytes ||
+				encoded->size() > std::numeric_limits<std::uint64_t>::max())
 				return sdk::unexpected(source_error(std::string{field}, "encode"));
-			auto length = encode_u64(static_cast<std::uint64_t>(encoded->size()));
+			const auto encoded_size = static_cast<std::uint64_t>(encoded->size());
+			if (encoded_size > std::numeric_limits<std::uint64_t>::max() - sizeof(std::uint64_t))
+				return sdk::unexpected(source_error(std::string{field}, "length-overflow"));
+			const auto framed_size = encoded_size + sizeof(std::uint64_t);
+			if (total_spool_bytes > limits.maximum_total_spool_bytes ||
+				framed_size > limits.maximum_total_spool_bytes - total_spool_bytes)
+				return sdk::unexpected(source_error(std::string{field}, "spool-limit"));
+			auto length = encode_u64(encoded_size);
 			if (auto appended = spool.append(length); !appended)
 				return sdk::unexpected(source_error(std::string{field}, "spool-write"));
 			if (auto appended = spool.append(*encoded); !appended)
 				return sdk::unexpected(source_error(std::string{field}, "spool-write"));
+			total_spool_bytes += framed_size;
+			return {};
+		}
+
+		[[nodiscard]] sdk::result<void>
+		append_length_prefixed_bytes(materialization_replayable_spool& spool,
+									 const std::span<const std::byte> encoded,
+									 const std::string_view field,
+									 const materialization_bounded_claim_source_limits& limits,
+									 std::uint64_t& total_spool_bytes,
+									 std::uint64_t& local_spool_bytes)
+		{
+			if (encoded.size() > limits.maximum_record_bytes ||
+				encoded.size() > std::numeric_limits<std::uint64_t>::max())
+				return sdk::unexpected(source_error(std::string{field}, "record-limit"));
+			const auto encoded_size = static_cast<std::uint64_t>(encoded.size());
+			if (encoded_size > std::numeric_limits<std::uint64_t>::max() - sizeof(std::uint64_t))
+				return sdk::unexpected(source_error(std::string{field}, "length-overflow"));
+			const auto framed_size = encoded_size + sizeof(std::uint64_t);
+			if (local_spool_bytes > limits.maximum_partition_spool_bytes ||
+				framed_size > limits.maximum_partition_spool_bytes - local_spool_bytes)
+				return sdk::unexpected(source_error(std::string{field}, "partition-spool-limit"));
+			if (total_spool_bytes > limits.maximum_total_spool_bytes ||
+				framed_size > limits.maximum_total_spool_bytes - total_spool_bytes)
+				return sdk::unexpected(source_error(std::string{field}, "spool-limit"));
+			const auto length = encode_u64(encoded_size);
+			if (auto appended = spool.append(length); !appended)
+				return sdk::unexpected(source_error(std::string{field}, "spool-write"));
+			if (auto appended = spool.append(encoded); !appended)
+				return sdk::unexpected(source_error(std::string{field}, "spool-write"));
+			total_spool_bytes += framed_size;
+			local_spool_bytes += framed_size;
 			return {};
 		}
 
@@ -616,7 +674,7 @@ namespace cxxlens::detail::clang22::materialization
 			auto stored = record_string(value.tuple[1], "origin_associations.stored-ref");
 			auto row = record_string(value.tuple[3], "origin_associations.row");
 			if (!id || !stored || !row)
-				return sdk::unexpected(!id ? std::move(id.error())
+			return sdk::unexpected(!id ? std::move(id.error())
 										   : !stored ? std::move(stored.error())
 													 : std::move(row.error()));
 			std::array<std::string, 7U> context_values;
@@ -715,9 +773,12 @@ namespace cxxlens::detail::clang22::materialization
 
 	} // namespace
 
-	sdk::result<materialization_bounded_claim_source>
-	materialization_bounded_claim_source::begin(const validated_materialization_request& request)
+	sdk::result<materialization_bounded_claim_source> materialization_bounded_claim_source::begin(
+		const validated_materialization_request& request,
+		const materialization_bounded_claim_source_limits limits)
 	{
+		if (!valid_source_limits(limits))
+			return sdk::unexpected(source_error("limits", "invalid"));
 		if (auto valid = validate_materialization_legacy_request_binding(request); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		if (request.tasks.empty())
@@ -734,12 +795,16 @@ namespace cxxlens::detail::clang22::materialization
 			{
 				return seal_materialization_incremental_selected_request_entry_binding(request,
 																					   task_index);
-			}};
+			},
+			limits};
 	}
 
 	sdk::result<materialization_bounded_claim_source> materialization_bounded_claim_source::begin(
-		const materialization_v2_1_claim_authority& authority)
+		const materialization_v2_1_claim_authority& authority,
+		const materialization_bounded_claim_source_limits limits)
 	{
+		if (!valid_source_limits(limits))
+			return sdk::unexpected(source_error("limits", "invalid"));
 		if (authority.task_count() == 0U || authority.engine() == nullptr)
 			return sdk::unexpected(source_error("request", "empty-or-unbound"));
 		auto request_binding = make_materialization_claim_request_binding(authority);
@@ -760,7 +825,8 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(source_error("task-binding", "metadata"));
 				return seal_materialization_incremental_selected_request_entry_binding(
 					authority, task_index, *task);
-			}};
+			},
+			limits};
 	}
 
 	sdk::result<void>
@@ -868,7 +934,8 @@ namespace cxxlens::detail::clang22::materialization
 					sdk::canonical_value::from_string(envelope.sdk_singleton_claim_batch_digest),
 					sdk::canonical_value::from_bytes(std::move(*encoded)),
 				});
-				if (auto appended = append_record(*claim_envelopes_, record, "claim_envelopes");
+				if (auto appended = append_record(
+						*claim_envelopes_, record, "claim_envelopes", limits_, spool_bytes_);
 					!appended)
 					return appended;
 			}
@@ -879,8 +946,11 @@ namespace cxxlens::detail::clang22::materialization
 					sdk::canonical_value::from_string(edge.final_claim_ref),
 					sdk::canonical_value::from_string(edge.transform_semantics),
 				});
-				if (auto appended =
-						append_record(*canonicalization_edges_, record, "canonicalization_edges");
+				if (auto appended = append_record(*canonicalization_edges_,
+												  record,
+												  "canonicalization_edges",
+												  limits_,
+												  spool_bytes_);
 					!appended)
 					return appended;
 			}
@@ -910,13 +980,19 @@ namespace cxxlens::detail::clang22::materialization
 						? sdk::canonical_value::from_string(*association.source_evidence_digest)
 						: sdk::canonical_value::null(),
 				});
-				if (auto appended =
-						append_record(*origin_associations_, record, "origin_associations");
+				if (auto appended = append_record(*origin_associations_,
+												  record,
+												  "origin_associations",
+												  limits_,
+												  spool_bytes_);
 					!appended)
 					return appended;
 			}
 			for (const auto& partition : task.partitions)
 			{
+				if (!partitions_.contains(partition.manifest.partition_id) &&
+					partitions_.size() >= limits_.maximum_partition_count)
+					return sdk::unexpected(source_error("partitions", "partition-limit"));
 				auto [found, inserted] = partitions_.try_emplace(partition.manifest.partition_id);
 				if (inserted)
 				{
@@ -961,13 +1037,17 @@ namespace cxxlens::detail::clang22::materialization
 				for (const auto& claim : partition.draft.claims)
 				{
 					auto encoded = sdk::detail::encode_store_claim(claim);
-					if (!encoded || encoded->size() > std::numeric_limits<std::uint64_t>::max())
+					if (!encoded)
 						return sdk::unexpected(source_error("claims", "encode"));
-					auto length = encode_u64(static_cast<std::uint64_t>(encoded->size()));
-					if (auto appended = found->second.claims->append(length); !appended)
-						return sdk::unexpected(source_error("claims", "spool-write"));
-					if (auto appended = found->second.claims->append(*encoded); !appended)
-						return sdk::unexpected(source_error("claims", "spool-write"));
+					if (auto appended =
+							append_length_prefixed_bytes(*found->second.claims,
+														 *encoded,
+														 "claims",
+														 limits_,
+														 spool_bytes_,
+														 found->second.claim_spool_bytes);
+						!appended)
+						return appended;
 					if (found->second.appended_claim_count ==
 						std::numeric_limits<std::uint64_t>::max())
 						return sdk::unexpected(source_error("claims", "count-overflow"));
@@ -1380,6 +1460,7 @@ namespace cxxlens::detail::clang22::materialization
 			if (!records_result)
 				return sdk::unexpected(source_error("claim-status", "spool-create"));
 			auto records = std::move(*records_result);
+			std::uint64_t status_spool_bytes{};
 			std::vector<claim_run> runs;
 			runs.reserve(partitions_.size());
 			std::uint64_t claim_count{};
@@ -1457,7 +1538,8 @@ namespace cxxlens::detail::clang22::materialization
 								sdk::canonical_value::from_string(claim.content),
 								sdk::canonical_value::from_bytes(std::move(*occurrence)),
 							});
-							if (auto appended = append_record(*records, record, "claim-status");
+							if (auto appended = append_record(
+									*records, record, "claim-status", limits_, status_spool_bytes);
 								!appended)
 								return appended;
 						}
@@ -1524,7 +1606,8 @@ namespace cxxlens::detail::clang22::materialization
 					sdk::canonical_value::from_string(cursor.content),
 					sdk::canonical_value::from_bytes(cursor.occurrence),
 				});
-				if (auto appended = append_record(*records, record, "claim-status-merge");
+				if (auto appended = append_record(
+						*records, record, "claim-status-merge", limits_, status_spool_bytes);
 					!appended)
 					return sdk::unexpected(std::move(appended.error()));
 				if (ordered_count == std::numeric_limits<std::uint64_t>::max())

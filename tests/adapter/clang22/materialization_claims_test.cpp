@@ -4634,6 +4634,47 @@ namespace
 					duplicate_task_source_after_relabel->partition_count() ==
 						partition_count_before_duplicate_after_relabel,
 				"bounded adoption staged a duplicate task window");
+
+		// Source-owned staging has an explicit finite budget.  A proved limit failure is terminal
+		// and cannot be mistaken for a partial or production-qualified source.
+		auto invalid_limits = materialization_bounded_claim_source::begin(
+			request,
+			materialization_bounded_claim_source_limits{
+				0U,
+				default_materialization_bounded_claim_source_max_partition_spool_bytes,
+				default_materialization_bounded_claim_source_max_record_bytes,
+				4096U});
+		require(!invalid_limits && invalid_limits.error().field == "limits" &&
+					invalid_limits.error().detail == "invalid",
+				"bounded source accepted an invalid finite-spool profile");
+
+		materialization_bounded_claim_source_limits tiny_limits;
+		tiny_limits.maximum_total_spool_bytes = 1024U;
+		tiny_limits.maximum_partition_spool_bytes = 1024U;
+		tiny_limits.maximum_record_bytes = 512U;
+		tiny_limits.maximum_partition_count = 4096U;
+		auto over_budget = materialization_bounded_claim_source::begin(request, tiny_limits);
+		require(over_budget.has_value(), "bounded source rejected a valid finite-spool profile");
+		auto over_budget_result = over_budget->consume_task(make_task(0U));
+		require(!over_budget_result &&
+					(over_budget_result.error().detail == "record-limit" ||
+					 over_budget_result.error().detail == "spool-limit") &&
+					!over_budget->sealed() &&
+					over_budget->resource_census().spool_bytes <=
+						tiny_limits.maximum_total_spool_bytes,
+				"bounded source crossed its proved total spool limit");
+
+		materialization_bounded_claim_source_limits partition_limits;
+		partition_limits.maximum_partition_count = 1U;
+		auto over_partition =
+			materialization_bounded_claim_source::begin(request, partition_limits);
+		require(over_partition.has_value(),
+				"bounded source rejected a valid partition-count profile");
+		auto over_partition_result = over_partition->consume_task(make_task(0U));
+		require(!over_partition_result &&
+					over_partition_result.error().detail == "partition-limit" &&
+					!over_partition->sealed(),
+				"bounded source crossed its proved partition-count limit");
 	}
 
 	/**
