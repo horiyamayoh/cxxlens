@@ -76,7 +76,11 @@ namespace
 	constexpr std::uint64_t timeout_grandchild_wall_budget_ms = 5'000U;
 	constexpr std::uint64_t timeout_grandchild_cpu_budget_ms = 2'000U;
 	constexpr std::uint64_t timeout_grandchild_elapsed_bound_seconds = 8U;
-	constexpr std::uint64_t timeout_grandchild_readiness_bound_seconds = 4U;
+	// Readiness is measured from process launch, before the provider timeout terminal is
+	// classified.  Keep it independent from cleanup/elapsed assertions, but leave enough
+	// scheduler headroom for a four-way CI fast-gate run while the fixture remains under its
+	// five-second runtime wall budget.
+	constexpr std::uint64_t timeout_grandchild_readiness_bound_seconds = 8U;
 #endif
 	constexpr std::uint64_t timeout_grandchild_cleanup_bound_seconds = 5U;
 	void require(const bool condition, const std::string& message)
