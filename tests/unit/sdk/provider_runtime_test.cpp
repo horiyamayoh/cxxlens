@@ -13,6 +13,7 @@
 #include <limits>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <sstream>
 #include <stop_token>
 #include <string>
@@ -39,6 +40,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "../../fixtures/provider_timeout_readiness.hpp"
 #include "sdk/provider_ng1_process_internal.hpp"
 #include "sdk/provider_ng1_transport_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
@@ -48,6 +50,7 @@ namespace
 {
 	using namespace cxxlens::sdk;
 	using namespace cxxlens::sdk::provider;
+	namespace timeout_fixture = cxxlens::test::provider_timeout;
 	static_assert(!std::is_aggregate_v<provider_selection>);
 	static_assert(std::is_same_v<decltype(std::declval<provider_selection&>().selected_candidate()),
 								 const provider_candidate&>);
@@ -68,11 +71,14 @@ namespace
 	constexpr std::uint64_t timeout_grandchild_wall_budget_ms = 30'000U;
 	constexpr std::uint64_t timeout_grandchild_cpu_budget_ms = 30'000U;
 	constexpr std::uint64_t timeout_grandchild_elapsed_bound_seconds = 40U;
+	constexpr std::uint64_t timeout_grandchild_readiness_bound_seconds = 25U;
 #else
 	constexpr std::uint64_t timeout_grandchild_wall_budget_ms = 5'000U;
 	constexpr std::uint64_t timeout_grandchild_cpu_budget_ms = 2'000U;
 	constexpr std::uint64_t timeout_grandchild_elapsed_bound_seconds = 8U;
+	constexpr std::uint64_t timeout_grandchild_readiness_bound_seconds = 4U;
 #endif
+	constexpr std::uint64_t timeout_grandchild_cleanup_bound_seconds = 5U;
 	void require(const bool condition, const std::string& message)
 	{
 		if (!condition)
@@ -2343,6 +2349,16 @@ namespace
 		require(!marker_error, "could not remove stale sentinel descendant marker");
 		const auto negative_marker = fs::path{marker.string() + ".negative"};
 		const auto readiness_fifo = fs::path{marker.string() + ".ready"};
+		const auto nonce_clock = std::chrono::steady_clock::now().time_since_epoch().count();
+		const auto readiness_nonce =
+			static_cast<std::uint64_t>(nonce_clock) ^ static_cast<std::uint64_t>(::getpid());
+		require(readiness_nonce != 0U, "timeout readiness nonce generation returned zero");
+		const auto valid_readiness =
+			timeout_fixture::encode({readiness_nonce, 1U, 1U, 1U, 2U, 2U, 3U, 3U});
+		auto malformed_readiness = valid_readiness;
+		malformed_readiness.front() ^= std::byte{0x01};
+		require(!timeout_fixture::decode(std::span<const std::byte>{malformed_readiness}),
+				"timeout readiness decoder accepted malformed authentication header");
 		fs::remove(readiness_fifo, marker_error);
 		require(!marker_error, "could not remove stale readiness FIFO");
 		require(::mkfifo(readiness_fifo.c_str(), S_IRUSR | S_IWUSR) == 0,
@@ -2363,8 +2379,10 @@ namespace
 				"descendant observation accepted an incomplete marker");
 		fs::remove(negative_marker, marker_error);
 		require(!marker_error, "could not remove the negative descendant marker");
-		auto grandchild_request = task(select(
-			executable, "timeout-grandchild:" + marker.string() + "|" + readiness_fifo.string()));
+		auto grandchild_request =
+			task(select(executable,
+						"timeout-grandchild:" + marker.string() + "|" + readiness_fifo.string() +
+							"|" + std::to_string(readiness_nonce)));
 		// The fixture forks after launch; derive the budget from the inherited ceiling and
 		// current same-UID thread count instead of assuming a fixed host process count.
 		const auto subprocess_budget = descendant_fixture_subprocess_budget();
@@ -2373,16 +2391,44 @@ namespace
 		grandchild_request.budget.subprocesses = *subprocess_budget;
 		grandchild_request.budget.wall_ms = timeout_grandchild_wall_budget_ms;
 		grandchild_request.budget.cpu_ms = timeout_grandchild_cpu_budget_ms;
+		const bool under_cpu_contention = []
+		{
+			const auto* value = std::getenv("CXXLENS_PROVIDER_TIMEOUT_CONTENTION");
+			return value != nullptr && std::string_view{value} == "1";
+		}();
+		std::atomic_bool contention_stop{};
+		std::vector<std::thread> contention_workers;
+		if (under_cpu_contention)
+		{
+			const auto hardware = std::max(1U, std::thread::hardware_concurrency());
+			const auto worker_count = std::min(2U, hardware);
+			contention_workers.reserve(worker_count);
+			for (unsigned worker_index{}; worker_index < worker_count; ++worker_index)
+				contention_workers.emplace_back(
+					[&contention_stop, worker_index]
+					{
+						std::uint64_t state = 0x9e3779b97f4a7c15ULL + worker_index;
+						while (!contention_stop.load(std::memory_order_relaxed))
+						{
+							state ^= state << 7U;
+							state ^= state >> 9U;
+							state ^= state << 8U;
+						}
+						if (state == 0U)
+							std::this_thread::yield();
+					});
+		}
 		std::promise<descendant_observation> holder_promise;
 		auto holder_future = holder_promise.get_future();
 		std::atomic_bool execution_finished{};
 		std::thread holder_watcher{
 			[marker,
 			 readiness_fd,
+			 readiness_nonce,
 			 &execution_finished,
 			 promise = std::move(holder_promise)]() mutable
 			{
-				std::array<std::byte, 2U> readiness{};
+				std::array<std::byte, timeout_fixture::encoded_bytes> readiness{};
 				std::size_t received{};
 				while (received < readiness.size())
 				{
@@ -2399,24 +2445,39 @@ namespace
 					pollfd event{readiness_fd, POLLIN, 0};
 					(void)::poll(&event, 1U, 50);
 				}
-				const bool readiness_valid = received == readiness.size() &&
-					std::all_of(readiness.begin(),
-								readiness.end(),
-								[](const std::byte value)
-								{
-									return value == std::byte{0x01};
-								});
-				if (readiness_valid)
+				const auto record = received == readiness.size()
+					? timeout_fixture::decode(std::span<const std::byte>{readiness})
+					: std::nullopt;
+				if (record && record->nonce == readiness_nonce &&
+					record->direct_pid <= std::numeric_limits<pid_t>::max() &&
+					record->process_group <= std::numeric_limits<pid_t>::max() &&
+					record->holder_pid <= std::numeric_limits<pid_t>::max() &&
+					record->sentinel_pid <= std::numeric_limits<pid_t>::max() &&
+					record->direct_pid == record->process_group)
 				{
+					const auto direct_pid = static_cast<pid_t>(record->direct_pid);
+					const auto direct_pidfd = open_pidfd(direct_pid);
+					const auto direct_start = process_start_time(direct_pid);
 					auto holder = observe_descendant(marker.string() + ".holder");
 					auto sentinel = observe_descendant(marker.string() + ".sentinel");
-					if (holder && sentinel)
+					const bool direct_valid = direct_pidfd >= 0 && direct_start &&
+						*direct_start == record->direct_start_time &&
+						::getpgid(direct_pid) == direct_pid;
+					const bool descendants_valid = holder && sentinel &&
+						holder->pid == static_cast<pid_t>(record->holder_pid) &&
+						holder->start_time == record->holder_start_time &&
+						sentinel->pid == static_cast<pid_t>(record->sentinel_pid) &&
+						sentinel->start_time == record->sentinel_start_time;
+					if (direct_valid && descendants_valid)
 					{
+						(void)::close(direct_pidfd);
 						promise.set_value({std::move(*holder),
 										   std::move(*sentinel),
 										   std::chrono::steady_clock::now()});
 						return;
 					}
+					if (direct_pidfd >= 0)
+						(void)::close(direct_pidfd);
 					if (holder)
 						(void)::close(holder->pidfd);
 					if (sentinel)
@@ -2489,7 +2550,13 @@ namespace
 			: grandchild_started;
 		const auto grandchild_elapsed = grandchild_finished - observation_origin;
 		const auto verification_and_launch_elapsed = observation_origin - grandchild_started;
+		const auto readiness_elapsed =
+			descendants.ready_at != std::chrono::steady_clock::time_point{}
+			? descendants.ready_at - grandchild_started
+			: std::chrono::steady_clock::duration::max();
+		const auto cleanup_started = std::chrono::steady_clock::now();
 		const auto cleanup = cleanup_descendant(descendants);
+		const auto cleanup_elapsed = std::chrono::steady_clock::now() - cleanup_started;
 		std::string typed_timeout_failure{
 			"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal};
 		if (grandchild_report)
@@ -2521,6 +2588,20 @@ namespace
 				"ms");
 		require(cleanup[4] && cleanup[5], "pipe-holding descendants cleanup failed");
 		require(cleanup[6], "pipe-holding descendant markers could not be removed");
+		require(descendants.ready_at != std::chrono::steady_clock::time_point{} &&
+					readiness_elapsed <
+						std::chrono::seconds{timeout_grandchild_readiness_bound_seconds},
+				"timeout fixture readiness exceeded its independent bound: " +
+					std::to_string(
+						std::chrono::duration_cast<std::chrono::milliseconds>(readiness_elapsed)
+							.count()) +
+					"ms");
+		require(cleanup_elapsed < std::chrono::seconds{timeout_grandchild_cleanup_bound_seconds},
+				"timeout fixture cleanup exceeded its independent bound: " +
+					std::to_string(
+						std::chrono::duration_cast<std::chrono::milliseconds>(cleanup_elapsed)
+							.count()) +
+					"ms");
 		fs::remove(negative_marker, marker_error);
 		require(!marker_error, "could not clean up the negative descendant marker");
 		fs::remove(readiness_fifo, marker_error);
@@ -2535,6 +2616,10 @@ namespace
 									   verification_and_launch_elapsed)
 									   .count()) +
 					"ms");
+		contention_stop.store(true, std::memory_order_relaxed);
+		for (auto& worker : contention_workers)
+			if (worker.joinable())
+				worker.join();
 #endif
 		return true;
 	}

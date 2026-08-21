@@ -4,10 +4,12 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <iterator>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -17,6 +19,8 @@
 #include <cxxlens/sdk/provider.hpp>
 #include <fcntl.h>
 #include <sys/socket.h>
+
+#include "provider_timeout_readiness.hpp"
 #if defined(__linux__) && defined(__GLIBC__)
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -28,6 +32,7 @@ namespace
 {
 	using namespace cxxlens::sdk;
 	using namespace cxxlens::sdk::provider;
+	namespace timeout_fixture = cxxlens::test::provider_timeout;
 
 	constexpr std::string_view provider_id = "company.test.process-provider";
 
@@ -268,6 +273,81 @@ namespace
 		return true;
 	}
 
+	struct process_identity
+	{
+		std::uint32_t pid{};
+		std::uint64_t start_time{};
+	};
+	inline constexpr std::size_t internal_identity_bytes = 16U;
+
+	[[nodiscard]] bool write_internal_identity(const int descriptor) noexcept
+	{
+		const auto start_time = process_start_time();
+		if (!start_time ||
+			static_cast<unsigned long long>(::getpid()) > std::numeric_limits<std::uint32_t>::max())
+			return false;
+		std::array<std::byte, internal_identity_bytes> encoded{};
+		const auto pid = static_cast<std::uint32_t>(::getpid());
+		for (std::size_t index = sizeof(pid); index > 0U; --index)
+			encoded[sizeof(pid) - index] = static_cast<std::byte>(pid >> ((index - 1U) * 8U));
+		for (std::size_t index = sizeof(*start_time); index > 0U; --index)
+			encoded[sizeof(pid) + sizeof(*start_time) - index] =
+				static_cast<std::byte>(*start_time >> ((index - 1U) * 8U));
+		return write_all(descriptor, reinterpret_cast<const char*>(encoded.data()), encoded.size());
+	}
+
+	[[nodiscard]] std::optional<process_identity>
+	decode_internal_identity(const std::span<const std::byte> encoded) noexcept
+	{
+		if (encoded.size() != internal_identity_bytes)
+			return std::nullopt;
+		std::uint32_t pid{};
+		for (std::size_t index{}; index < sizeof(pid); ++index)
+			pid = (pid << 8U) |
+				static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(encoded[index]));
+		std::uint64_t start_time{};
+		for (std::size_t index{}; index < sizeof(start_time); ++index)
+			start_time = (start_time << 8U) |
+				static_cast<std::uint64_t>(
+							 std::to_integer<std::uint8_t>(encoded[sizeof(pid) + index]));
+		if (pid == 0U || start_time == 0U)
+			return std::nullopt;
+		return process_identity{pid, start_time};
+	}
+
+	[[nodiscard]] bool write_timeout_readiness_record(const std::string_view readiness_path,
+													  const std::uint64_t nonce,
+													  const process_identity holder,
+													  const process_identity sentinel) noexcept
+	{
+		const auto direct_start_time = process_start_time();
+		const auto raw_process_group = ::getpgid(0);
+		if (!direct_start_time || raw_process_group <= 0 ||
+			static_cast<unsigned long long>(::getpid()) >
+				std::numeric_limits<std::uint32_t>::max() ||
+			static_cast<unsigned long long>(raw_process_group) >
+				std::numeric_limits<std::uint32_t>::max())
+			return false;
+		const timeout_fixture::readiness_record record{
+			nonce,
+			static_cast<std::uint32_t>(::getpid()),
+			static_cast<std::uint32_t>(raw_process_group),
+			*direct_start_time,
+			holder.pid,
+			holder.start_time,
+			sentinel.pid,
+			sentinel.start_time};
+		const auto encoded = timeout_fixture::encode(record);
+		const std::string readiness_path_storage{readiness_path};
+		const auto descriptor = ::open(readiness_path_storage.c_str(), O_WRONLY | O_CLOEXEC);
+		if (descriptor < 0)
+			return false;
+		const bool written =
+			write_all(descriptor, reinterpret_cast<const char*>(encoded.data()), encoded.size());
+		const bool closed = ::close(descriptor) == 0;
+		return written && closed;
+	}
+
 	void sleep_for_seconds(const std::uint32_t seconds) noexcept
 	{
 		timespec remaining{static_cast<time_t>(seconds), 0};
@@ -339,23 +419,24 @@ int main(const int argument_count, const char* const* arguments)
 	if (mode.starts_with(timeout_grandchild_prefix))
 	{
 		const auto fixture = mode.substr(timeout_grandchild_prefix.size());
-		const auto separator = fixture.rfind('|');
-		if (separator == std::string_view::npos)
+		const auto marker_separator = fixture.find('|');
+		const auto readiness_separator = marker_separator == std::string_view::npos
+			? std::string_view::npos
+			: fixture.find('|', marker_separator + 1U);
+		if (marker_separator == std::string_view::npos ||
+			readiness_separator == std::string_view::npos)
 			return EXIT_FAILURE;
-		const auto marker_path = fixture.substr(0U, separator);
-		const auto readiness_path = fixture.substr(separator + 1U);
-		if (marker_path.empty() || readiness_path.empty())
+		const auto marker_path = fixture.substr(0U, marker_separator);
+		const auto readiness_path =
+			fixture.substr(marker_separator + 1U, readiness_separator - marker_separator - 1U);
+		const auto nonce_text = fixture.substr(readiness_separator + 1U);
+		std::uint64_t nonce{};
+		const auto [nonce_end, nonce_error] =
+			std::from_chars(nonce_text.data(), nonce_text.data() + nonce_text.size(), nonce);
+		if (marker_path.empty() || readiness_path.empty() || nonce_text.empty() ||
+			nonce_error != std::errc{} || nonce_end != nonce_text.data() + nonce_text.size() ||
+			nonce == 0U)
 			return EXIT_FAILURE;
-		const auto signal_ready = [readiness_path]() noexcept
-		{
-			const auto descriptor = ::open(readiness_path.data(), O_WRONLY | O_CLOEXEC);
-			if (descriptor < 0)
-				return false;
-			const std::byte ready{0x01};
-			const bool written = ::write(descriptor, &ready, sizeof(ready)) == sizeof(ready);
-			const bool closed = ::close(descriptor) == 0;
-			return written && closed;
-		};
 		const std::string holder_marker{std::string{marker_path} + ".holder"};
 		const std::string holder_marker_temporary{holder_marker + ".tmp"};
 		const std::string sentinel_marker{std::string{marker_path} + ".sentinel"};
@@ -378,11 +459,7 @@ int main(const int argument_count, const char* const* arguments)
 				(void)::close(STDERR_FILENO);
 				if (!write_process_marker(sentinel_marker_temporary, sentinel_marker))
 					::_exit(EXIT_FAILURE);
-				if (!signal_ready())
-					::_exit(EXIT_FAILURE);
-				const std::byte internal_ready{0x01};
-				if (::write(ready_pipe[1U], &internal_ready, sizeof(internal_ready)) !=
-					sizeof(internal_ready))
+				if (!write_internal_identity(ready_pipe[1U]))
 					::_exit(EXIT_FAILURE);
 				(void)::close(ready_pipe[1U]);
 				sleep_for_seconds(30U);
@@ -394,14 +471,7 @@ int main(const int argument_count, const char* const* arguments)
 				sentinel_guard.cleanup_now();
 				::_exit(EXIT_FAILURE);
 			}
-			if (!signal_ready())
-			{
-				sentinel_guard.cleanup_now();
-				::_exit(EXIT_FAILURE);
-			}
-			const std::byte internal_ready{0x01};
-			if (::write(ready_pipe[1U], &internal_ready, sizeof(internal_ready)) !=
-				sizeof(internal_ready))
+			if (!write_internal_identity(ready_pipe[1U]))
 			{
 				sentinel_guard.cleanup_now();
 				::_exit(EXIT_FAILURE);
@@ -413,7 +483,7 @@ int main(const int argument_count, const char* const* arguments)
 		}
 		child_process_guard holder_guard{holder};
 		(void)::close(ready_pipe[1U]);
-		std::array<std::byte, 2U> ready{};
+		std::array<std::byte, internal_identity_bytes * 2U> ready{};
 		std::size_t received{};
 		while (received < ready.size())
 		{
@@ -427,9 +497,30 @@ int main(const int argument_count, const char* const* arguments)
 				break;
 		}
 		(void)::close(ready_pipe[0U]);
-		if (received != ready.size())
+		const auto first_identity = received == ready.size()
+			? decode_internal_identity(
+				  std::span<const std::byte>{ready}.first(internal_identity_bytes))
+			: std::nullopt;
+		const auto second_identity = received == ready.size()
+			? decode_internal_identity(
+				  std::span<const std::byte>{ready}.last(internal_identity_bytes))
+			: std::nullopt;
+		if (received != ready.size() || !first_identity || !second_identity)
 		{
-			std::cerr << "timeout-grandchild internal readiness bytes=" << received << '\n';
+			std::cerr << "timeout-grandchild internal readiness record bytes=" << received << '\n';
+			return EXIT_FAILURE;
+		}
+		const auto holder_pid = static_cast<std::uint32_t>(holder);
+		const process_identity holder_identity =
+			first_identity->pid == holder_pid ? *first_identity : *second_identity;
+		const process_identity sentinel_identity =
+			first_identity->pid == holder_pid ? *second_identity : *first_identity;
+		if (holder_identity.pid != holder_pid || sentinel_identity.pid == holder_pid ||
+			sentinel_identity.pid == 0U ||
+			!write_timeout_readiness_record(
+				readiness_path, nonce, holder_identity, sentinel_identity))
+		{
+			std::cerr << "timeout-grandchild authenticated readiness record failed\n";
 			return EXIT_FAILURE;
 		}
 		holder_guard.release();
