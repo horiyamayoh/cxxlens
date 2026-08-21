@@ -2596,6 +2596,18 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 			static const std::set<std::string, std::less<>> supported_features{
 				"credit-backpressure", "task-input-chunks-v1"};
+			// Source-closure transport is deliberately not part of the accepted
+			// provider runtime yet.  Keep the feature name explicit at this
+			// launcher boundary so a future v1.2 provider cannot be mistaken for
+			// the legacy v1.1 input path.  This is a pre-launch rejection: no
+			// process is spawned and no closure bytes are accepted.
+			constexpr std::string_view source_closure_feature{"task-source-closure-v1"};
+			if (std::ranges::find(provider.protocol.required_features, source_closure_feature) !=
+				provider.protocol.required_features.end())
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.required-feature-missing",
+					"protocol",
+					"task-source-closure-v1 requires accepted provider protocol 1.2"));
 			if (std::ranges::any_of(provider.protocol.required_features,
 									[&](const std::string& feature)
 									{

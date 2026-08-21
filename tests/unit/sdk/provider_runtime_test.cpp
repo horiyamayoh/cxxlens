@@ -2147,6 +2147,30 @@ namespace
 		require(!feature && feature.error().code == "provider.required-feature-missing",
 				"unsupported required provider feature was negotiated");
 
+		// Source-closure transport is a proposed protocol-1.2 extension.  The
+		// accepted runtime must reject its advertisement before launching a
+		// provider process; treating it as the legacy task-input path would
+		// silently downgrade a closure task and lose its manifest/blob authority.
+		auto source_closure_candidate = candidate(executable, "success");
+		source_closure_candidate.description.protocol.minimum_minor = 2U;
+		source_closure_candidate.description.protocol.maximum_minor = 2U;
+		source_closure_candidate.description.protocol.required_features = {
+			"credit-backpressure", "task-input-chunks-v1", "task-source-closure-v1"};
+		auto source_closure_selection = select_provider(
+			selection_request(executable), std::span{&source_closure_candidate, 1U});
+		require(source_closure_selection.has_value(),
+				"source-closure provider selection failed before runtime gate");
+		auto source_closure_request = task(std::move(*source_closure_selection));
+		source_closure_request.limits.minimum_minor = 2U;
+		source_closure_request.limits.maximum_minor = 2U;
+		auto source_closure = runtime.execute(std::move(source_closure_request));
+		require(!source_closure &&
+				source_closure.error().code == "provider.required-feature-missing" &&
+				source_closure.error().field == "protocol" &&
+				source_closure.error().detail.find("task-source-closure-v1") !=
+					std::string::npos,
+				"source-closure capability did not fail closed before process launch");
+
 		transcript_sink sink;
 		protocol_writer writer{sink};
 		writer.grant_credit({64U * 1024U * 1024U, 65536U});
