@@ -535,9 +535,12 @@ namespace cxxlens::detail::clang22::materialization
 					  std::uint64_t& total_spool_bytes)
 		{
 			auto encoded = sdk::canonical_binary(value);
-			if (!encoded || encoded->size() > limits.maximum_record_bytes ||
-				encoded->size() > std::numeric_limits<std::uint64_t>::max())
+			if (!encoded)
 				return sdk::unexpected(source_error(std::string{field}, "encode"));
+			if (encoded->size() > limits.maximum_record_bytes)
+				return sdk::unexpected(source_error(std::string{field}, "record-limit"));
+			if (encoded->size() > std::numeric_limits<std::uint64_t>::max())
+				return sdk::unexpected(source_error(std::string{field}, "record-size-overflow"));
 			const auto encoded_size = static_cast<std::uint64_t>(encoded->size());
 			if (encoded_size > std::numeric_limits<std::uint64_t>::max() - sizeof(std::uint64_t))
 				return sdk::unexpected(source_error(std::string{field}, "length-overflow"));
