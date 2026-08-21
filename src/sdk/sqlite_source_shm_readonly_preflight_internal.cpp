@@ -3170,13 +3170,17 @@ namespace cxxlens::sdk
 			if (!request.connection.source_shm_open_callback_receipt)
 				return reject("source-open-callback-missing");
 			const auto& callback = *request.connection.source_shm_open_callback_receipt;
+			auto expected_uri = make_sqlite_source_shm_readonly_uri(request.canonical_vfs_locator);
+			if (!expected_uri)
+				return reject("source-open-callback-uri");
 			if (callback.profile != source_profile ||
 				callback.connection_token != request.connection.connection_token ||
 				!valid_identity(callback.qualification_token) ||
 				!valid_identity(callback.target_namespace_epoch_identity) ||
 				callback.canonical_vfs_locator != request.canonical_vfs_locator ||
-				callback.delegated_vfs_locator.empty() ||
-				callback.application_generated_uri.empty() ||
+				callback.delegated_vfs_locator !=
+					census.source_shm_guard->anchored_main_locator() ||
+				callback.application_generated_uri != *expected_uri ||
 				callback.registered_vfs_name.empty() || callback.mode != "ro" ||
 				callback.cache != "private" || callback.readonly_shm != "1" ||
 				callback.input_flags != main_open->input_flags ||

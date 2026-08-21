@@ -538,6 +538,16 @@ namespace
 		require(!validate_sqlite_active_read_connection(mutated),
 				"connection profile drift is rejected before active-read custody");
 		mutated = fixture.request;
+		mutated.connection.source_shm_open_callback_receipt->delegated_vfs_locator =
+			fixture.path;
+		require(!validate_sqlite_active_read_connection(mutated),
+				"callback host-path delegation is rejected instead of bypassing the retained parent");
+		mutated = fixture.request;
+		mutated.connection.source_shm_open_callback_receipt->application_generated_uri =
+			"file:/tmp/active-read/main.db?mode=ro&cache=private&readonly_shm=1";
+		require(!validate_sqlite_active_read_connection(mutated),
+				"noncanonical callback URI is rejected before active-read custody");
+		mutated = fixture.request;
 		mutated.source_census.entries[1].state = sqlite_backend_entry_state::absent;
 		require(!validate_sqlite_active_read_connection(mutated),
 				"missing WAL is not classified as an empty active read");
