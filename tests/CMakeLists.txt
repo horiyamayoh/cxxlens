@@ -465,10 +465,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
   # provider_runtime_test.cpp); ASan/UBSan's per-process-spawn instrumentation
   # overhead leaves too little headroom against a flat 30s CTest wall timeout
   # (observed: Nightly run 32049712322, sanitizers job, Timeout). This widens
-  # the outer CTest kill timeout for instrumented builds. The test also derives
-  # a sanitizer-only CPU/wall budget for the forked fixture's cold startup;
-  # neither allowance changes production provider runtime semantics.
-  if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)
+  # the outer CTest kill timeout for instrumented builds. TSan uses the same
+  # sanitizer-only fixture budget as ASan/UBSan, so it must receive the same
+  # outer headroom or CTest can kill the test before its internal elapsed bound.
+  # The test also derives a sanitizer-only CPU/wall budget for the forked
+  # fixture's cold startup; neither allowance changes production provider
+  # runtime semantics.
+  if(CXXLENS_ENABLE_ASAN
+     OR CXXLENS_ENABLE_UBSAN
+     OR CXXLENS_ENABLE_TSAN)
     set(CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT 90)
   else()
     set(CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT 30)
