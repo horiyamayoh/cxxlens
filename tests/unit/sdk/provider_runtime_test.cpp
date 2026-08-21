@@ -2384,7 +2384,14 @@ namespace
 					pollfd event{readiness_fd, POLLIN, 0};
 					(void)::poll(&event, 1U, 50);
 				}
-				if (received == readiness.size())
+				const bool readiness_valid = received == readiness.size() &&
+					std::all_of(readiness.begin(),
+								readiness.end(),
+								[](const std::byte value)
+								{
+									return value == std::byte{0x01};
+								});
+				if (readiness_valid)
 				{
 					auto holder = observe_descendant(marker.string() + ".holder");
 					auto sentinel = observe_descendant(marker.string() + ".sentinel");
@@ -2468,8 +2475,22 @@ namespace
 		const auto grandchild_elapsed = grandchild_finished - observation_origin;
 		const auto verification_and_launch_elapsed = observation_origin - grandchild_started;
 		const auto cleanup = cleanup_descendant(descendants);
-		require(typed_timeout_terminal,
-				"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal);
+		std::string typed_timeout_failure{
+			"pipe-holding descendant lost the typed timeout terminal: " + grandchild_terminal};
+		if (grandchild_report)
+		{
+			typed_timeout_failure += " exit=" + std::to_string(grandchild_report->exit_code) +
+				" signal=" + std::to_string(grandchild_report->termination_signal);
+			for (const auto& diagnostic : grandchild_report->diagnostics)
+				typed_timeout_failure += " diagnostic=" + diagnostic.code + ":" +
+					diagnostic.subject + ":" + diagnostic.detail;
+		}
+		else
+		{
+			const auto& error = grandchild_report.error();
+			typed_timeout_failure += " field=" + error.field + ":" + error.detail;
+		}
+		require(typed_timeout_terminal, typed_timeout_failure);
 		require(cleanup[0] && cleanup[1],
 				"pipe-holding process-group descendant identities could not be observed");
 		require(
@@ -2768,6 +2789,16 @@ namespace
 		std::error_code marker_error;
 		fs::remove(descendant_marker, marker_error);
 		require(!marker_error, "could not remove stale NG1 live descendant marker");
+		{
+			std::ofstream stale_marker{descendant_marker};
+			require(stale_marker.good(), "could not create the negative NG1 descendant marker");
+			stale_marker << ::getpid() << " 1\n";
+			require(stale_marker.good(), "could not write the negative NG1 descendant marker");
+		}
+		require(!observe_descendant(descendant_marker),
+				"NG1 live descendant observation accepted a stale identity marker");
+		fs::remove(descendant_marker, marker_error);
+		require(!marker_error, "could not remove the negative NG1 descendant marker");
 		const auto descendant_budget = descendant_fixture_subprocess_budget();
 		require(descendant_budget.has_value(),
 				"could not derive a process budget for the NG1 live descendant test");
@@ -2780,15 +2811,15 @@ namespace
 		auto descendant = make_invocation({"/bin/sh", "-c", descendant_command});
 		descendant.budget.subprocesses = *descendant_budget;
 		descendant.budget.wall_ms = 2000U;
-		const auto descendant_deadline_origin = std::chrono::steady_clock::now();
 		auto descendant_process = start_process(descendant);
 		std::optional<holder_observation> observed_descendant;
-		// Use shell builtins for the /proc read so marker readiness stays inside the live
-		// operation deadline without spawning a helper process after the descendant fork.  The
-		// origin is captured before start_process(), whose internal deadline starts during the
-		// call, so descheduling after startup cannot extend this readiness window.
+		// start_process() acknowledges process-group setup before exec reaches the shell command.
+		// Marker publication is fixture readiness, not provider work, so give it an independent
+		// post-start bound. finish() still applies the original 2-second live budget and all
+		// identity/cleanup assertions remain fail-closed.
+		const auto marker_wait_ms = std::max<std::uint64_t>(descendant.budget.wall_ms, 5'000U);
 		const auto marker_deadline =
-			descendant_deadline_origin + std::chrono::milliseconds{descendant.budget.wall_ms};
+			std::chrono::steady_clock::now() + std::chrono::milliseconds{marker_wait_ms};
 		while (std::chrono::steady_clock::now() < marker_deadline && !observed_descendant)
 		{
 			observed_descendant = observe_descendant(descendant_marker);
