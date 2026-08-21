@@ -587,6 +587,205 @@ class SourceClosureTransportTest(unittest.TestCase):
         with self.assertRaisesRegex(SourceClosureTransportError, "typed ID"):
             validate_reject_control(control, contract)
 
+    def test_transfer_state_witness_binds_outer_task_before_first_frame(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        schema = yaml.safe_load(
+            (ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8")
+        )
+        request = self.bound_request()
+        manifest = self.bind_manifest(request)
+        extension = request["task_extensions"][0]
+        payload = canonical_json(manifest)
+        descriptor = {
+            "kind": "descriptor",
+            "session_id": SESSION_ID,
+            "task_id": extension["task_id"],
+            "task_v4_digest": extension["task_v4_digest"],
+            "closure_id": extension["source_closure"]["id"],
+            "closure_digest": extension["source_closure"]["digest"],
+            "manifest_digest": extension["source_closure"]["manifest_digest"],
+            "total_bytes": len(payload),
+            "chunk_bytes": len(payload),
+            "chunk_count": 1,
+        }
+        exact = TransferStateWitness.for_task_extension(
+            session_id=SESSION_ID,
+            task_extension=extension,
+            manifest_schema=schema,
+        )
+        exact.apply("source_closure_manifest", descriptor, b"", contract)
+        self.assertEqual(exact.state, "manifest-open")
+
+        foreign = dict(descriptor)
+        foreign["task_id"] = "task:semantic-v2:sha256:" + "f" * 64
+        rebound = TransferStateWitness.for_task_extension(
+            session_id=SESSION_ID,
+            task_extension=extension,
+            manifest_schema=schema,
+        )
+        with self.assertRaisesRegex(
+            SourceClosureTransportError, "identity binding mismatch"
+        ):
+            rebound.apply(
+                "source_closure_manifest", foreign, b"", contract
+            )
+
+    def test_transfer_state_witness_rejects_full_valid_transfer_rebound_to_other_task(
+        self,
+    ) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        manifest_schema = yaml.safe_load(
+            (ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8")
+        )
+
+        def independent_request(
+            *, provider_task_suffix: str, logical_path: str, payload: bytes
+        ) -> tuple[dict, dict]:
+            request = self.bound_request()
+            base = request["tasks"][0]
+            base["provider_task_id"] = (
+                "task:semantic-v2:sha256:" + provider_task_suffix * 64
+            )
+            base["task_input_digest"] = (
+                "sha256:" + hashlib.sha256(payload + b"-task").hexdigest()
+            )
+            base["source"]["logical_path"] = logical_path
+            base["source"]["file_id"] = source_closure_file_id(logical_path)
+            base["source"]["content_digest"] = (
+                "sha256:" + hashlib.sha256(payload).hexdigest()
+            )
+            extension = request["task_extensions"][0]
+            extension["base_provider_task_id"] = base["provider_task_id"]
+            extension["open_task"] = {
+                field: base[field]
+                for field in (
+                    "task_input_digest",
+                    "normalized_invocation_digest",
+                    "toolchain_digest",
+                    "environment_digest",
+                )
+            }
+            manifest = self.bind_manifest(request)
+            validate_request_binding(request, [manifest])
+            return request, manifest
+
+        request_a, manifest_a = independent_request(
+            provider_task_suffix="a", logical_path="project://src/a.cpp", payload=b"a"
+        )
+        request_b, manifest_b = independent_request(
+            provider_task_suffix="b", logical_path="project://src/b.cpp", payload=b"b"
+        )
+        extension_a = request_a["task_extensions"][0]
+        extension_b = request_b["task_extensions"][0]
+        self.assertNotEqual(extension_a["task_id"], extension_b["task_id"])
+        self.assertNotEqual(
+            extension_a["source_closure"]["id"], extension_b["source_closure"]["id"]
+        )
+
+        payload_a = b"a"
+        manifest_payload_a = canonical_json(manifest_a)
+        closure_a = extension_a["source_closure"]
+        blob_a = manifest_a["blobs"][0]
+        descriptor_a = {
+            "kind": "descriptor",
+            "session_id": SESSION_ID,
+            "task_id": extension_a["task_id"],
+            "task_v4_digest": extension_a["task_v4_digest"],
+            "closure_id": closure_a["id"],
+            "closure_digest": closure_a["digest"],
+            "manifest_digest": closure_a["manifest_digest"],
+            "total_bytes": len(manifest_payload_a),
+            "chunk_bytes": len(manifest_payload_a),
+            "chunk_count": 1,
+        }
+        manifest_chunk_a = {
+            "kind": "chunk",
+            "session_id": SESSION_ID,
+            "task_id": extension_a["task_id"],
+            "manifest_digest": closure_a["manifest_digest"],
+            "chunk_index": 0,
+            "offset": 0,
+            "byte_count": len(manifest_payload_a),
+        }
+        blob_descriptor_a = {
+            "session_id": SESSION_ID,
+            "task_id": extension_a["task_id"],
+            "closure_digest": closure_a["digest"],
+            "blob_ordinal": 0,
+            "blob_digest": blob_a["content_digest"],
+            "total_bytes": blob_a["size_bytes"],
+            "chunk_bytes": blob_a["size_bytes"],
+            "chunk_count": 1,
+        }
+        blob_chunk_a = {
+            "session_id": SESSION_ID,
+            "task_id": extension_a["task_id"],
+            "blob_ordinal": 0,
+            "blob_digest": blob_a["content_digest"],
+            "chunk_index": 0,
+            "offset": 0,
+            "byte_count": len(payload_a),
+        }
+        receipts_a = blob_receipts_digest(
+            [{
+                "blob_ordinal": 0,
+                "blob_digest": blob_a["content_digest"],
+                "size_bytes": len(payload_a),
+            }]
+        )
+        seal_projection_a = {
+            "session_id": SESSION_ID,
+            "task_id": extension_a["task_id"],
+            "task_v4_digest": extension_a["task_v4_digest"],
+            "manifest_digest": closure_a["manifest_digest"],
+            "blob_receipts_digest": receipts_a,
+            "blob_count": 1,
+            "total_bytes": len(payload_a),
+            "closure_digest": closure_a["digest"],
+        }
+        seal_a = {
+            **seal_projection_a,
+            "transfer_digest": transfer_digest(seal_projection_a),
+        }
+        ack_a = {
+            "session_id": SESSION_ID,
+            "task_id": extension_a["task_id"],
+            "closure_digest": closure_a["digest"],
+            "transfer_digest": seal_a["transfer_digest"],
+            "spool_receipt": "spool-receipt:" + extension_a["task_v4_digest"],
+            "cleanup_owner": "cleanup-owner:" + extension_a["task_v4_digest"],
+        }
+        frames_a = [
+            ("source_closure_manifest", descriptor_a, b""),
+            ("source_closure_manifest", manifest_chunk_a, manifest_payload_a),
+            ("source_closure_blob", blob_descriptor_a, b""),
+            ("source_closure_chunk", blob_chunk_a, payload_a),
+            ("source_closure_seal", seal_a, b""),
+            ("source_closure_ack", ack_a, b""),
+        ]
+
+        valid_a = TransferStateWitness.for_task_extension(
+            session_id=SESSION_ID,
+            task_extension=extension_a,
+            manifest_schema=manifest_schema,
+        )
+        for name, control, payload in frames_a:
+            valid_a.apply(name, control, payload, contract)
+        self.assertEqual(valid_a.state, "closure-acknowledged")
+
+        rebound_b = TransferStateWitness.for_task_extension(
+            session_id=SESSION_ID,
+            task_extension=extension_b,
+            manifest_schema=manifest_schema,
+        )
+        with self.assertRaisesRegex(
+            SourceClosureTransportError, "identity binding mismatch"
+        ):
+            rebound_b.apply(*frames_a[0], contract)
+        self.assertEqual(rebound_b.state, "task-v4-sealed")
+        self.assertEqual(rebound_b.manifest_bytes, bytearray())
+        self.assertEqual(rebound_b.blob_bytes, bytearray())
+
     def test_transfer_state_witness_rejects_foreign_gap_and_zero_manifest(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         witness = TransferStateWitness(
