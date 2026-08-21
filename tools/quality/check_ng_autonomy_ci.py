@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -13,6 +14,12 @@ from typing import Any
 
 import jsonschema
 import yaml
+
+from check_ng_release_evidence_bundle import (  # noqa: E402
+    ReleaseEvidenceError,
+    load_document,
+    validate_bundle,
+)
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -165,9 +172,51 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         checkout = [step for step in job.get("steps", []) if isinstance(step.get("uses"), str) and step["uses"].startswith("actions/checkout@")]
         if "latest-main" not in needs or len(checkout) != 1 or checkout[0].get("with", {}).get("ref") != candidate_expression:
             raise AutonomyCiError(f"Nightly job is not exact-candidate bound: {name}")
+    owner_workflows = {
+        "gr": ("#167", "cxxlens-ng-release-qualification-${{ inputs.candidate_sha }}", "gr"),
+        "terminal_scope": (
+            "#179",
+            "cxxlens-ng-production-scope-closure-${{ inputs.candidate_sha }}",
+            "terminal_scope",
+        ),
+    }
+    for owner_name, (owner_issue, artifact_name, role) in owner_workflows.items():
+        owner_contract = contract[owner_name]
+        owner = load(root / owner_contract["workflow"])
+        owner_on = triggers(owner)
+        if set(owner_on) != {"workflow_dispatch"}:
+            raise AutonomyCiError(f"{owner_name} owner workflow is not dispatch-only")
+        if owner.get("permissions") != {"contents": "read", "actions": "read"}:
+            raise AutonomyCiError(f"{owner_name} owner workflow permissions drift")
+        jobs = owner.get("jobs", {})
+        if set(jobs) != {"collect-owner-report"}:
+            raise AutonomyCiError(f"{owner_name} owner workflow job census drift")
+        job = jobs["collect-owner-report"]
+        if job.get("runs-on") != "ubuntu-24.04":
+            raise AutonomyCiError(f"{owner_name} owner workflow runner drift")
+        inputs = owner_on["workflow_dispatch"].get("inputs", {})
+        if set(inputs) != {"candidate_sha", "selection_digest", "source_run_id", "source_artifact_id"}:
+            raise AutonomyCiError(f"{owner_name} owner workflow input census drift")
+        text = json.dumps(job, sort_keys=True)
+        for marker in (
+            "actions/runs/${SOURCE_RUN_ID}",
+            "actions/workflows/quality.yml",
+            "actions/artifacts/${SOURCE_ARTIFACT_ID}",
+            "actions/artifacts/${SOURCE_ARTIFACT_ID}/zip",
+            "check_ng_release_owner_handoff.py check",
+            f"--role {role}",
+            artifact_name,
+        ):
+            if marker not in text:
+                raise AutonomyCiError(f"{owner_name} owner workflow marker is missing: {marker}")
     release_on = triggers(release)
     if set(release_on) != {"workflow_dispatch"}:
         raise AutonomyCiError("release evaluation is not dispatch-only")
+    if set(release_on["workflow_dispatch"].get("inputs", {})) != {
+        "candidate_sha",
+        "selection_json",
+    }:
+        raise AutonomyCiError("release evaluation input census drift")
     if release.get("concurrency", {}).get("cancel-in-progress") is not False:
         raise AutonomyCiError("release evaluation may not be cancelled")
     if set(release.get("jobs", {})) != {"exact-current-evaluation"}:
@@ -194,14 +243,30 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     ):
         raise AutonomyCiError("release exact-main freshness step drift")
     evaluation_step = step_by(
-        release_job, name="Validate release role contracts without issuing GR"
+        release_job, name="Validate release contracts and emit bounded aggregate evaluation"
     )
     evaluation_run = evaluation_step.get("run", "")
-    if "check_ng_release_contract.py check" not in evaluation_run or "check_ng_autonomy_ci.py release-evaluation" not in evaluation_run:
+    if (
+        "check_ng_release_contract.py check" not in evaluation_run
+        or "check_ng_autonomy_ci.py release-evaluation" not in evaluation_run
+        or "--bundle" not in evaluation_run
+        or "--selection" not in evaluation_run
+        or "--artifact-root" not in evaluation_run
+    ):
         raise AutonomyCiError("release exact-main evaluation structure drift")
+    release_text = json.dumps(release_job, sort_keys=True)
+    for marker in (
+        "collect_ng_release_evidence.py collect",
+        "check_ng_release_evidence_bundle.py check",
+    ):
+        if marker not in release_text:
+            raise AutonomyCiError("release exact-main evaluation structure drift")
+    authenticate_step = step_by(release_job, identifier="authenticate")
+    if authenticate_step.get("continue-on-error") is not True:
+        raise AutonomyCiError("release evidence authentication must fail closed to not-qualified")
     if contract["release"]["composition"] != {"aggregate_decision": "#173", "gr_execution_contract": "#167", "scope_closure_contract": "#179"}:
         raise AutonomyCiError("release role composition drift")
-    if contract["release"]["current_capability"] != "not-qualified-evaluation-only-no-gr":
+    if contract["release"]["current_capability"] != "authenticated-evidence-handoff-no-gr":
         raise AutonomyCiError("release workflow overclaims current capability")
     return contract
 
@@ -221,11 +286,83 @@ def classify_heavy(root: pathlib.Path, candidate: str, output: pathlib.Path, rep
     write_report(report, {"schema": "cxxlens.autonomy-heavy-freshness.v1", "candidate_sha": candidate, "current_origin_main": current, "disposition": disposition, "heavy_evidence_authority": disposition == "current"})
 
 
-def release_evaluation(root: pathlib.Path, candidate: str, report: pathlib.Path) -> None:
+def release_evaluation(
+    root: pathlib.Path,
+    candidate: str,
+    report: pathlib.Path,
+    bundle_path: pathlib.Path | None = None,
+    selection_path: pathlib.Path | None = None,
+    artifact_root: pathlib.Path | None = None,
+) -> None:
     current = git(root, "rev-parse", "origin/main")
     if candidate != current or git(root, "rev-parse", "HEAD") != candidate:
         raise AutonomyCiError("release candidate is not exact current origin/main")
-    write_report(report, {"schema": "cxxlens.autonomy-release-evaluation.v1", "created_at": datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"), "candidate_sha": candidate, "status": "not-qualified", "gr_issued": False, "roles": {"aggregate": "#173", "gr": "#167", "scope_closure": "#179"}, "missing_inputs": ["exact-successful-heavy", "exact-successful-nightly", "authenticated-gr-report", "authenticated-terminal-scope-report"], "production_qualification": "not-claimed"})
+    missing_inputs = [
+        "exact-successful-heavy",
+        "exact-successful-nightly",
+        "authenticated-gr-report",
+        "authenticated-terminal-scope-report",
+    ]
+    status = "not-qualified"
+    bundle_digest = None
+    selection_digest_value = None
+    if bundle_path is not None:
+        try:
+            if selection_path is None or artifact_root is None:
+                raise AutonomyCiError(
+                    "release evidence bundle authentication requires selection and artifact root"
+                )
+            selection_value = load_document(selection_path)
+            bundle_value = load_document(bundle_path)
+            validate_bundle(bundle_value, selection_value, root, artifact_root)
+        except ReleaseEvidenceError as error:
+            raise AutonomyCiError(f"release evidence bundle authentication failed: {error}") from error
+        candidate_value = bundle_value.get("candidate")
+        if not isinstance(candidate_value, dict) or candidate_value.get("sha") != candidate:
+            raise AutonomyCiError("release evidence bundle candidate differs")
+        if bundle_value.get("gr_issued") is not False or bundle_value.get("production_qualification") != "not-claimed":
+            raise AutonomyCiError("release evidence bundle overclaims production authority")
+        selection_digest_value = bundle_value.get("selection_digest")
+        if not isinstance(selection_digest_value, str) or not selection_digest_value.startswith("sha256:"):
+            raise AutonomyCiError("release evidence bundle selection digest is invalid")
+        bundle_digest = "sha256:" + hashlib.sha256(bundle_path.read_bytes()).hexdigest()
+        if bundle_value.get("outcome") == "qualified-inputs-ready":
+            status = "qualified"
+            missing_inputs = []
+        elif bundle_value.get("outcome") == "superseded":
+            missing_inputs = ["current-origin-main-producer-evidence"]
+        elif bundle_value.get("outcome") == "not-qualified":
+            roles = bundle_value.get("roles", {})
+            missing_inputs = [
+                label
+                for role, label in (
+                    ("heavy", "exact-successful-heavy"),
+                    ("nightly", "exact-successful-nightly"),
+                    ("gr", "authenticated-gr-report"),
+                    ("terminal_scope", "authenticated-terminal-scope-report"),
+                )
+                if not isinstance(roles.get(role), dict)
+                or roles[role].get("disposition") != "qualified"
+            ]
+            if not missing_inputs:
+                missing_inputs = ["authenticated-release-evidence-bundle"]
+        else:
+            raise AutonomyCiError("release evidence bundle has unsupported outcome")
+    value: dict[str, Any] = {
+        "schema": "cxxlens.autonomy-release-evaluation.v1",
+        "created_at": datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "candidate_sha": candidate,
+        "current_origin_main": current,
+        "status": status,
+        "gr_issued": False,
+        "roles": {"aggregate": "#173", "gr": "#167", "scope_closure": "#179"},
+        "missing_inputs": missing_inputs,
+        "production_qualification": "not-claimed",
+    }
+    if bundle_digest is not None:
+        value["authenticated_bundle_digest"] = bundle_digest
+        value["selection_digest"] = selection_digest_value
+    write_report(report, value)
 
 
 def main() -> int:
@@ -235,6 +372,9 @@ def main() -> int:
     parser.add_argument("--candidate")
     parser.add_argument("--github-output", type=pathlib.Path)
     parser.add_argument("--report", type=pathlib.Path)
+    parser.add_argument("--bundle", type=pathlib.Path)
+    parser.add_argument("--selection", type=pathlib.Path)
+    parser.add_argument("--artifact-root", type=pathlib.Path)
     args = parser.parse_args()
     root = args.root.resolve()
     try:
@@ -246,7 +386,14 @@ def main() -> int:
         elif args.command == "release-evaluation":
             if not args.candidate or not args.report:
                 raise AutonomyCiError("release-evaluation requires candidate and report")
-            release_evaluation(root, args.candidate, args.report)
+            release_evaluation(
+                root,
+                args.candidate,
+                args.report,
+                args.bundle,
+                args.selection,
+                args.artifact_root,
+            )
         else:
             print("autonomy-ci: ok")
     except AutonomyCiError as error:

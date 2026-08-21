@@ -30,6 +30,9 @@ SELECTION_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_release_evidence_selection.schema.yaml"
 )
 BUNDLE_SCHEMA = pathlib.Path("schemas/cxxlens_ng_release_evidence_bundle.schema.yaml")
+OWNER_HANDOFF_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_release_owner_handoff.schema.yaml"
+)
 MAX_ARTIFACT_BYTES = 1 << 30
 
 
@@ -122,6 +125,11 @@ ROLE_SPECS: dict[str, RoleSpec] = {
                         "cxxlens.ng-release-qualification-report.v1",
                         frozenset({"qualified", "not-qualified"}),
                     ),
+                    FileSpec(
+                        "cxxlens-ng-release-owner-handoff.json",
+                        "cxxlens.ng-release-owner-handoff.v1",
+                        "qualified",
+                    ),
                 ),
             ),
         ),
@@ -138,6 +146,11 @@ ROLE_SPECS: dict[str, RoleSpec] = {
                     FileSpec(
                         "cxxlens-ng-production-scope-closure-report.json",
                         "cxxlens.ng-production-scope-closure-report.v1",
+                        frozenset({"qualified", "classified-with-gaps"}),
+                    ),
+                    FileSpec(
+                        "cxxlens-ng-release-owner-handoff.json",
+                        "cxxlens.ng-release-owner-handoff.v1",
                         frozenset({"qualified", "classified-with-gaps"}),
                     ),
                 ),
@@ -400,6 +413,115 @@ def _validate_archive(
         )
 
 
+def _validate_owner_handoff(
+    role_name: str,
+    artifact: dict[str, Any],
+    files: list[dict[str, Any]],
+    candidate: dict[str, Any],
+    selection_digest_value: str,
+    artifact_root: pathlib.Path,
+    root: pathlib.Path,
+) -> None:
+    """Revalidate the sidecar that binds an owner artifact to its source.
+
+    The sidecar is deliberately inside the same downloaded archive as the
+    owner report.  A report copied into a new artifact without its source
+    digest, owner role, and selection digest therefore cannot pass this gate.
+    """
+
+    if role_name not in {"gr", "terminal_scope"}:
+        return
+    sidecar_path = "cxxlens-ng-release-owner-handoff.json"
+    report_path = (
+        "cxxlens-ng-release-qualification-report.json"
+        if role_name == "gr"
+        else "cxxlens-ng-production-scope-closure-report.json"
+    )
+    archive_path = _archive_path(
+        artifact_root, artifact["downloaded_archive"]["path"]
+    )
+    expected_file_rows = {row["path"]: row for row in files}
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            sidecar_bytes = archive.read(sidecar_path)
+            report_bytes = archive.read(report_path)
+    except (OSError, KeyError, zipfile.BadZipFile, RuntimeError) as error:
+        fail(f"{role_name} owner handoff members are unavailable: {error}")
+    try:
+        handoff = json.loads(
+            sidecar_bytes.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+        )
+    except (UnicodeError, json.JSONDecodeError) as error:
+        fail(f"{role_name} owner handoff is not strict JSON: {error}")
+    if not isinstance(handoff, dict):
+        fail(f"{role_name} owner handoff is not an object")
+    validate_schema(
+        handoff,
+        load_schema(root, OWNER_HANDOFF_SCHEMA),
+        f"{role_name} owner handoff",
+    )
+    expected_issue = "#167" if role_name == "gr" else "#179"
+    expected_workflow = (
+        ".github/workflows/autonomy-gr.yml"
+        if role_name == "gr"
+        else ".github/workflows/autonomy-production-scope.yml"
+    )
+    expected_report_schema = (
+        "cxxlens.ng-release-qualification-report.v1"
+        if role_name == "gr"
+        else "cxxlens.ng-production-scope-closure-report.v1"
+    )
+    _same(handoff["role"], role_name, f"{role_name} owner handoff role")
+    _same(handoff["owner_issue"], expected_issue, f"{role_name} owner handoff issue")
+    _same(
+        handoff["workflow_path"],
+        expected_workflow,
+        f"{role_name} owner handoff workflow",
+    )
+    _same(
+        handoff["candidate"],
+        {"sha": candidate["sha"], "tree": candidate["tree"]},
+        f"{role_name} owner handoff candidate",
+    )
+    _same(
+        handoff["input_selection_digest"],
+        selection_digest_value,
+        f"{role_name} owner handoff selection digest",
+    )
+    _same(
+        handoff["report"]["path"],
+        report_path,
+        f"{role_name} owner handoff report path",
+    )
+    _same(
+        handoff["report"]["schema"],
+        expected_report_schema,
+        f"{role_name} owner handoff report schema",
+    )
+    report_digest = "sha256:" + hashlib.sha256(report_bytes).hexdigest()
+    _same(
+        handoff["report"]["digest"],
+        report_digest,
+        f"{role_name} owner handoff report digest",
+    )
+    _same(
+        expected_file_rows[report_path]["digest"],
+        report_digest,
+        f"{role_name} owner report file digest",
+    )
+    if handoff["source"]["artifact_id"] == artifact["artifact_id"]:
+        fail(f"{role_name} owner handoff source artifact self-reference")
+    expected_outcome = handoff["report"]["outcome"]
+    if role_name == "gr" and expected_outcome != "qualified":
+        fail("GR owner handoff cannot carry a non-qualified report")
+    if role_name == "terminal_scope" and expected_outcome not in {
+        "qualified",
+        "classified-with-gaps",
+    }:
+        fail("terminal owner handoff outcome is invalid")
+
+
 def _validate_artifact(
     artifact: dict[str, Any],
     spec: ArtifactSpec,
@@ -460,6 +582,7 @@ def _validate_role(
     seen_artifacts: set[int],
     artifact_root: pathlib.Path,
     seen_archive_paths: set[str],
+    root: pathlib.Path,
 ) -> bool:
     role_spec = ROLE_SPECS[role_name]
     _same(receipt["owner_issue"], role_spec.owner_issue, f"{role_name} owner issue")
@@ -500,14 +623,24 @@ def _validate_role(
     for artifact_spec in role_spec.artifacts:
         if artifact_spec.kind not in by_kind:
             fail(f"{role_name} is missing artifact kind: {artifact_spec.kind}")
-        _validate_artifact(
-            by_kind[artifact_spec.kind],
+        artifact = by_kind[artifact_spec.kind]
+        files = _validate_artifact(
+            artifact,
             artifact_spec,
             selection_role,
             candidate,
             seen_artifacts,
             artifact_root,
             seen_archive_paths,
+        )
+        _validate_owner_handoff(
+            role_name,
+            artifact,
+            files,
+            candidate,
+            selection_digest_value,
+            artifact_root,
+            root,
         )
     if role_name == "heavy":
         quality_rows = by_kind["quality-report"]["files"]
@@ -571,6 +704,7 @@ def validate_bundle(
             seen_artifacts,
             artifact_root,
             seen_archive_paths,
+            root,
         )
     all_qualified = all(role_qualified.values())
     any_superseded = any(

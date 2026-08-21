@@ -1,0 +1,89 @@
+name: Autonomy production-scope owner handoff
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact current origin/main SHA
+        required: true
+        type: string
+      selection_digest:
+        description: Canonical release-evidence selection digest
+        required: true
+        type: string
+      source_run_id:
+        description: Explicit successful quality producer run ID
+        required: true
+        type: string
+      source_artifact_id:
+        description: Explicit production-scope report artifact ID from the quality producer
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: autonomy-production-scope-${{ inputs.candidate_sha }}
+  cancel-in-progress: false
+
+jobs:
+  collect-owner-report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: none
+      - name: Verify exact current main authority
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "${CANDIDATE_SHA}"
+          test "$(git rev-parse origin/main)" = "${CANDIDATE_SHA}"
+          test "$(git status --porcelain=v1 --untracked-files=all)" = ""
+      - name: Download explicitly selected quality producer artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" > "${RUNNER_TEMP}/source-run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/quality.yml" > "${RUNNER_TEMP}/source-workflow.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}" > "${RUNNER_TEMP}/source-artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" > "${RUNNER_TEMP}/source-artifact.zip"
+      - name: Authenticate #179 report without recreating it
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          SELECTION_DIGEST: ${{ inputs.selection_digest }}
+        run: |
+          set -euo pipefail
+          candidate_tree="$(git rev-parse HEAD^{tree})"
+          python3 tools/quality/check_ng_release_owner_handoff.py check \
+            --root . \
+            --role terminal_scope \
+            --candidate-sha "${CANDIDATE_SHA}" \
+            --candidate-tree "${candidate_tree}" \
+            --selection-digest "${SELECTION_DIGEST}" \
+            --source-run "${RUNNER_TEMP}/source-run.json" \
+            --source-workflow "${RUNNER_TEMP}/source-workflow.json" \
+            --source-artifact "${RUNNER_TEMP}/source-artifact.json" \
+            --archive "${RUNNER_TEMP}/source-artifact.zip" \
+            --report-output "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json" \
+            --handoff-output "${RUNNER_TEMP}/cxxlens-ng-release-owner-handoff.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-ng-production-scope-closure-${{ inputs.candidate_sha }}
+          path: |
+            ${{ runner.temp }}/cxxlens-ng-production-scope-closure-report.json
+            ${{ runner.temp }}/cxxlens-ng-release-owner-handoff.json
+          if-no-files-found: error
+          retention-days: 365

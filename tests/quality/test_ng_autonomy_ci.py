@@ -8,13 +8,21 @@ import shutil
 import sys
 import tempfile
 import unittest
+import json
+from unittest import mock
 
 import yaml
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
-from check_ng_autonomy_ci import AutonomyCiError, CONTRACT, SCHEMA, validate  # noqa: E402
+from check_ng_autonomy_ci import (  # noqa: E402
+    AutonomyCiError,
+    CONTRACT,
+    SCHEMA,
+    release_evaluation,
+    validate,
+)
 
 
 class AutonomyCiTest(unittest.TestCase):
@@ -22,7 +30,10 @@ class AutonomyCiTest(unittest.TestCase):
         root = pathlib.Path(temporary)
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         paths = {CONTRACT, SCHEMA}
-        paths.update(pathlib.Path(contract[key]["workflow"]) for key in ("fast", "heavy", "nightly", "release"))
+        paths.update(
+            pathlib.Path(contract[key]["workflow"])
+            for key in ("fast", "heavy", "nightly", "gr", "terminal_scope", "release")
+        )
         for relative in paths:
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -156,6 +167,44 @@ class AutonomyCiTest(unittest.TestCase):
             path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
             with self.assertRaisesRegex(AutonomyCiError, "exact-candidate bound"):
                 validate(root)
+
+    def test_owner_workflow_missing_direct_artifact_download_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-gr.yml"
+            text = path.read_text(encoding="utf-8").replace(
+                'actions/artifacts/${SOURCE_ARTIFACT_ID}/zip',
+                'actions/artifacts/${SOURCE_ARTIFACT_ID}/wrong',
+            )
+            path.write_text(text, encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "owner workflow marker"):
+                validate(root)
+
+    def test_release_authentication_failure_cannot_promote_evaluation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-release-evaluation.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            authenticate = next(
+                step
+                for step in value["jobs"]["exact-current-evaluation"]["steps"]
+                if step.get("id") == "authenticate"
+            )
+            authenticate.pop("continue-on-error")
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AutonomyCiError, "fail closed"):
+                validate(root)
+
+    def test_release_evaluation_without_authenticated_bundle_stays_not_qualified(self) -> None:
+        candidate = "a" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            report = pathlib.Path(temporary) / "release-evaluation.json"
+            with mock.patch("check_ng_autonomy_ci.git", return_value=candidate):
+                release_evaluation(ROOT, candidate, report)
+            value = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual(value["status"], "not-qualified")
+            self.assertFalse(value["gr_issued"])
+            self.assertEqual(value["production_qualification"], "not-claimed")
 
 
 if __name__ == "__main__":

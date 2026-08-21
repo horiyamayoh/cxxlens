@@ -145,7 +145,13 @@ def _file(path: str, schema: str, result: str, index: int) -> dict:
     }
 
 
-def _artifact(role: str, kind: str, artifact_id: int, index: int) -> dict:
+def _artifact(
+    role: str,
+    kind: str,
+    artifact_id: int,
+    index: int,
+    selected_digest: str | None = None,
+) -> dict:
     if role == "heavy" and kind == "quality-report":
         name = f"cxxlens-autonomy-heavy-provisional-{SHA}"
         files = [
@@ -180,7 +186,13 @@ def _artifact(role: str, kind: str, artifact_id: int, index: int) -> dict:
                 "cxxlens.ng-release-qualification-report.v1",
                 "qualified",
                 index,
-            )
+            ),
+            _file(
+                "cxxlens-ng-release-owner-handoff.json",
+                "cxxlens.ng-release-owner-handoff.v1",
+                "qualified",
+                index + 1,
+            ),
         ]
     else:
         name = f"cxxlens-ng-production-scope-closure-{SHA}"
@@ -190,12 +202,67 @@ def _artifact(role: str, kind: str, artifact_id: int, index: int) -> dict:
                 "cxxlens.ng-production-scope-closure-report.v1",
                 "qualified",
                 index,
-            )
+            ),
+            _file(
+                "cxxlens-ng-release-owner-handoff.json",
+                "cxxlens.ng-release-owner-handoff.v1",
+                "qualified",
+                index + 1,
+            ),
         ]
+    if role in {"gr", "terminal_scope"} and selected_digest is None:
+        raise AssertionError("owner fixture requires the selection digest")
     archive_path = ARCHIVE_ROOT / f"{artifact_id}.zip"
+    contents: dict[str, bytes] = {}
+    for row in files:
+        if row["path"] == "cxxlens-ng-release-owner-handoff.json":
+            continue
+        contents[row["path"]] = f"fixture:{artifact_id}:{row['path']}\n".encode("utf-8")
+    if role in {"gr", "terminal_scope"}:
+        report_path = files[0]["path"]
+        report_digest = "sha256:" + hashlib.sha256(contents[report_path]).hexdigest()
+        owner_issue = "#167" if role == "gr" else "#179"
+        owner_workflow = (
+            ".github/workflows/autonomy-gr.yml"
+            if role == "gr"
+            else ".github/workflows/autonomy-production-scope.yml"
+        )
+        report_schema = (
+            "cxxlens.ng-release-qualification-report.v1"
+            if role == "gr"
+            else "cxxlens.ng-production-scope-closure-report.v1"
+        )
+        handoff = {
+            "schema": "cxxlens.ng-release-owner-handoff.v1",
+            "document_version": "1.0.0",
+            "role": role,
+            "owner_issue": owner_issue,
+            "workflow_path": owner_workflow,
+            "candidate": {"sha": SHA, "tree": TREE},
+            "input_selection_digest": selected_digest,
+            "source": {
+                "repository_id": REPOSITORY_ID,
+                "workflow_id": 999,
+                "workflow_path": ".github/workflows/quality.yml",
+                "run_id": 3000 + artifact_id,
+                "run_attempt": 1,
+                "artifact_id": 4000 + artifact_id,
+                "artifact_name": name,
+                "artifact_digest": "sha256:" + "1" * 64,
+            },
+            "report": {
+                "path": report_path,
+                "schema": report_schema,
+                "digest": report_digest,
+                "outcome": "qualified",
+            },
+        }
+        contents["cxxlens-ng-release-owner-handoff.json"] = (
+            json.dumps(handoff, sort_keys=True).encode("utf-8") + b"\n"
+        )
     with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for row in files:
-            content = f"fixture:{artifact_id}:{row['path']}\n".encode("utf-8")
+            content = contents[row["path"]]
             row["byte_count"] = len(content)
             row["digest"] = "sha256:" + hashlib.sha256(content).hexdigest()
             archive.writestr(row["path"], content)
@@ -253,7 +320,7 @@ def bundle(selection_document: dict | None = None) -> dict:
             "workflow_id": WORKFLOW_IDS["gr"],
             "event": "workflow_dispatch",
             "run": _run("gr"),
-            "artifacts": [_artifact("gr", "gr-report", 2004, 6)],
+            "artifacts": [_artifact("gr", "gr-report", 2004, 6, selected_digest)],
             "disposition": "qualified",
             "input_selection_digest": selected_digest,
         },
@@ -263,7 +330,15 @@ def bundle(selection_document: dict | None = None) -> dict:
             "workflow_id": WORKFLOW_IDS["terminal_scope"],
             "event": "workflow_dispatch",
             "run": _run("terminal_scope"),
-            "artifacts": [_artifact("terminal_scope", "terminal-scope-report", 2005, 7)],
+            "artifacts": [
+                _artifact(
+                    "terminal_scope",
+                    "terminal-scope-report",
+                    2005,
+                    7,
+                    selected_digest,
+                )
+            ],
             "disposition": "qualified",
             "input_selection_digest": selected_digest,
         },

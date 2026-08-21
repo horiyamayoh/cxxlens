@@ -1,0 +1,135 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-release-owner-handoff.v1
+title: cxxlens authenticated owner report handoff
+description: >-
+  An owner workflow's immutable attestation that a report was copied from one
+  explicitly selected producer artifact. The handoff does not grant release
+  qualification; the #173 aggregate must authenticate it again.
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - role
+  - owner_issue
+  - workflow_path
+  - candidate
+  - input_selection_digest
+  - source
+  - report
+properties:
+  schema:
+    const: cxxlens.ng-release-owner-handoff.v1
+  document_version:
+    const: 1.0.0
+  role:
+    enum: [gr, terminal_scope]
+  owner_issue:
+    enum: ['#167', '#179']
+  workflow_path:
+    enum:
+      - .github/workflows/autonomy-gr.yml
+      - .github/workflows/autonomy-production-scope.yml
+  candidate:
+    $ref: '#/$defs/candidate'
+  input_selection_digest:
+    $ref: '#/$defs/digest'
+  source:
+    type: object
+    additionalProperties: false
+    required:
+      - repository_id
+      - workflow_id
+      - workflow_path
+      - run_id
+      - run_attempt
+      - artifact_id
+      - artifact_name
+      - artifact_digest
+    properties:
+      repository_id:
+        type: integer
+        minimum: 1
+      workflow_id:
+        type: integer
+        minimum: 1
+      workflow_path:
+        const: .github/workflows/quality.yml
+      run_id:
+        type: integer
+        minimum: 1
+      run_attempt:
+        const: 1
+      artifact_id:
+        type: integer
+        minimum: 1
+      artifact_name:
+        type: string
+        minLength: 1
+      artifact_digest:
+        $ref: '#/$defs/digest'
+  report:
+    type: object
+    additionalProperties: false
+    required: [path, schema, digest, outcome]
+    properties:
+      path:
+        enum:
+          - cxxlens-ng-release-qualification-report.json
+          - cxxlens-ng-production-scope-closure-report.json
+      schema:
+        enum:
+          - cxxlens.ng-release-qualification-report.v1
+          - cxxlens.ng-production-scope-closure-report.v1
+      digest:
+        $ref: '#/$defs/digest'
+      outcome:
+        enum: [qualified, classified-with-gaps]
+allOf:
+  - if:
+      properties:
+        role: {const: gr}
+      required: [role]
+    then:
+      properties:
+        owner_issue: {const: '#167'}
+        workflow_path: {const: .github/workflows/autonomy-gr.yml}
+        source:
+          properties:
+            artifact_name: {pattern: '^cxxlens-ng-release-qualification-[0-9a-f]{40}$'}
+        report:
+          properties:
+            path: {const: cxxlens-ng-release-qualification-report.json}
+            schema: {const: cxxlens.ng-release-qualification-report.v1}
+            outcome: {const: qualified}
+  - if:
+      properties:
+        role: {const: terminal_scope}
+      required: [role]
+    then:
+      properties:
+        owner_issue: {const: '#179'}
+        workflow_path: {const: .github/workflows/autonomy-production-scope.yml}
+        source:
+          properties:
+            artifact_name: {pattern: '^cxxlens-ng-production-scope-closure-[0-9a-f]{40}$'}
+        report:
+          properties:
+            path: {const: cxxlens-ng-production-scope-closure-report.json}
+            schema: {const: cxxlens.ng-production-scope-closure-report.v1}
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  sha:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
+  candidate:
+    type: object
+    additionalProperties: false
+    required: [sha, tree]
+    properties:
+      sha:
+        $ref: '#/$defs/sha'
+      tree:
+        $ref: '#/$defs/sha'
