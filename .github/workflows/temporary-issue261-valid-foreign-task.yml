@@ -6,6 +6,11 @@ on:
       - fix/261-task-transfer-authority-binding
     paths:
       - .github/workflows/temporary-issue261-valid-foreign-task.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/temporary-issue261-valid-foreign-task.yml
 
 permissions:
   contents: write
