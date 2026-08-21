@@ -20,7 +20,7 @@ required:
   - canonical_digest
 properties:
   schema: {const: cxxlens.ng-agent-autonomous-completion-metric.v1}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.1.0}
   role: {const: evaluation-only-metric-report}
   metric: {const: agent-autonomous-completion-rate}
   authority:
@@ -60,6 +60,13 @@ properties:
       type: object
       additionalProperties: false
       required: [scenario_id, outcome]
+      allOf:
+        - if: {properties: {outcome: {const: completed}}, required: [outcome]}
+          then: {required: [bounded_completion, context_digest, command_digest, receipt_digest, execution_witness]}
+        - if: {properties: {outcome: {const: failed}}, required: [outcome]}
+          then: {required: [bounded_completion, reason_code, context_digest, command_digest, receipt_digest, execution_witness]}
+        - if: {properties: {outcome: {const: safe-stop}}, required: [outcome]}
+          then: {required: [bounded_completion, reason_code, context_digest, command_digest, receipt_digest, completion_plan_digest, execution_witness]}
       properties:
         scenario_id: {$ref: '#/$defs/id'}
         outcome: {enum: [completed, failed, safe-stop, not-evaluated]}
@@ -69,6 +76,7 @@ properties:
         command_digest: {$ref: '#/$defs/digest'}
         receipt_digest: {$ref: '#/$defs/digest'}
         completion_plan_digest: {$ref: '#/$defs/digest'}
+        execution_witness: {$ref: '#/$defs/execution_witness'}
   population:
     type: object
     additionalProperties: false
@@ -93,7 +101,7 @@ properties:
     required: [generator, input_contract, evidence_source]
     properties:
       generator: {$ref: '#/$defs/path'}
-      input_contract: {const: cxxlens.agent-autonomous-completion-evidence.v1}
+      input_contract: {const: cxxlens.agent-autonomous-completion-evidence.v2}
       evidence_source: {$ref: '#/$defs/nonempty'}
   canonical_digest: {$ref: '#/$defs/digest'}
 $defs:
@@ -112,3 +120,78 @@ $defs:
     pattern: '^(?!/)(?!.*\\)(?!.*\u0000)(?!.*(?:^|/)(?:\\.{0,2}|\\.git)(?:/|$)).+$'
   result_state:
     enum: [proved, disproved, unknown, partial, conflicting]
+  stream_receipt:
+    type: object
+    additionalProperties: false
+    required: [byte_count, digest, complete]
+    properties:
+      byte_count: {type: integer, minimum: 0}
+      digest: {$ref: '#/$defs/digest'}
+      complete: {type: boolean}
+  execution_witness:
+    type: object
+    additionalProperties: false
+    required: [schema, scenario_id, authority, context, command, process, result]
+    properties:
+      schema: {const: cxxlens.agent-autonomous-completion-execution-witness.v1}
+      scenario_id: {$ref: '#/$defs/id'}
+      authority:
+        type: object
+        additionalProperties: false
+        required: [revision, tree, catalog_digest]
+        properties:
+          revision: {$ref: '#/$defs/hex40'}
+          tree: {$ref: '#/$defs/hex40'}
+          catalog_digest: {$ref: '#/$defs/digest'}
+      context:
+        type: object
+        additionalProperties: false
+        required: [schema, use_case_id, result_state, byte_count, digest]
+        properties:
+          schema: {const: cxxlens.agent-capability-resolution.v1}
+          use_case_id: {$ref: '#/$defs/id'}
+          result_state: {$ref: '#/$defs/result_state'}
+          byte_count: {type: integer, minimum: 1}
+          digest: {$ref: '#/$defs/digest'}
+      command:
+        type: object
+        additionalProperties: false
+        required: [argv, working_directory, environment]
+        properties:
+          argv:
+            type: array
+            minItems: 1
+            items: {type: string}
+          working_directory: {const: repository-root}
+          environment:
+            type: array
+            uniqueItems: true
+            items:
+              type: object
+              additionalProperties: false
+              required: [name, value_digest]
+              properties:
+                name: {type: string, pattern: '^[A-Za-z_][A-Za-z0-9_]*$'}
+                value_digest: {$ref: '#/$defs/digest'}
+      process:
+        type: object
+        additionalProperties: false
+        required: [terminal_state, exit_status, signal, stdout, stderr]
+        properties:
+          terminal_state: {enum: [cancelled, exited, launch-failed, not-launched, signaled, timed-out]}
+          exit_status: {type: [integer, 'null'], minimum: 0, maximum: 255}
+          signal: {type: [integer, 'null'], minimum: 1}
+          stdout: {$ref: '#/$defs/stream_receipt'}
+          stderr: {$ref: '#/$defs/stream_receipt'}
+      result:
+        type: object
+        additionalProperties: false
+        required: [outcome, bounded_completion, reason_code, completion_plan]
+        properties:
+          outcome: {enum: [completed, failed, safe-stop]}
+          bounded_completion: {type: boolean}
+          reason_code: {$ref: '#/$defs/nonempty'}
+          completion_plan:
+            type: array
+            uniqueItems: true
+            items: {$ref: '#/$defs/nonempty'}

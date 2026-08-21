@@ -33,6 +33,15 @@ RESULT_STATES = set(capability.RESULT_STATES)
 OUTCOMES = {"completed", "failed", "safe-stop", "not-evaluated"}
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+EXECUTION_TERMINALS = {
+    "cancelled",
+    "exited",
+    "launch-failed",
+    "not-launched",
+    "signaled",
+    "timed-out",
+}
 
 
 class AgentAutonomousCompletionError(ValueError):
@@ -43,12 +52,30 @@ def _digest_bytes(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
 
+def _canonical_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+
+
 def _digest_object(value: Any) -> str:
-    return _digest_bytes(
-        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
-    )
+    return _digest_bytes(_canonical_bytes(value))
+
+
+def _exact_object(
+    value: Any,
+    fields: set[str],
+    description: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != fields:
+        raise AgentAutonomousCompletionError(f"{description} field set is not exact")
+    return value
+
+
+def _nonempty_text(value: Any, description: str) -> str:
+    if not isinstance(value, str) or not value.strip() or "\x00" in value:
+        raise AgentAutonomousCompletionError(f"{description} is not nonempty text")
+    return value
 
 
 def _git(root: pathlib.Path, expression: str) -> str:
@@ -112,12 +139,280 @@ def _scenario_set(catalog: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
+def _context_summary(root: pathlib.Path, scenario_id: str) -> dict[str, Any]:
+    try:
+        context = capability.build_resolution(root, scenario_id)
+    except capability.CapabilityResolutionError as error:
+        raise AgentAutonomousCompletionError(
+            f"canonical scenario context is unavailable: {scenario_id}"
+        ) from error
+    encoded = _canonical_bytes(context)
+    return {
+        "schema": context["schema"],
+        "use_case_id": context["use_case_id"],
+        "result_state": context["result"]["state"],
+        "byte_count": len(encoded),
+        "digest": _digest_bytes(encoded),
+    }
+
+
+def _normalize_command(value: Any, scenario_id: str) -> dict[str, Any]:
+    command = _exact_object(
+        value,
+        {"argv", "working_directory", "environment"},
+        f"execution command for {scenario_id}",
+    )
+    argv = command["argv"]
+    if (
+        not isinstance(argv, list)
+        or not argv
+        or any(not isinstance(argument, str) or "\x00" in argument for argument in argv)
+        or not argv[0]
+    ):
+        raise AgentAutonomousCompletionError(
+            f"execution command lacks exact argv for {scenario_id}"
+        )
+    if command["working_directory"] != "repository-root":
+        raise AgentAutonomousCompletionError(
+            f"execution command has ambient working directory for {scenario_id}"
+        )
+    environment = command["environment"]
+    if not isinstance(environment, list):
+        raise AgentAutonomousCompletionError(
+            f"execution command environment is not a list for {scenario_id}"
+        )
+    normalized_environment: list[dict[str, str]] = []
+    for index, entry in enumerate(environment):
+        item = _exact_object(
+            entry,
+            {"name", "value_digest"},
+            f"execution environment {scenario_id}[{index}]",
+        )
+        if not isinstance(item["name"], str) or not ENVIRONMENT_NAME.fullmatch(item["name"]):
+            raise AgentAutonomousCompletionError(
+                f"execution environment name is invalid for {scenario_id}"
+            )
+        if not isinstance(item["value_digest"], str) or not DIGEST.fullmatch(
+            item["value_digest"]
+        ):
+            raise AgentAutonomousCompletionError(
+                f"execution environment digest is invalid for {scenario_id}"
+            )
+        normalized_environment.append(copy.deepcopy(item))
+    names = [entry["name"] for entry in normalized_environment]
+    if names != sorted(set(names)):
+        raise AgentAutonomousCompletionError(
+            f"execution environment is not canonical for {scenario_id}"
+        )
+    return {
+        "argv": list(argv),
+        "working_directory": "repository-root",
+        "environment": normalized_environment,
+    }
+
+
+def _normalize_stream(value: Any, scenario_id: str, field: str) -> dict[str, Any]:
+    stream = _exact_object(
+        value,
+        {"byte_count", "digest", "complete"},
+        f"execution {field} receipt for {scenario_id}",
+    )
+    if not isinstance(stream["byte_count"], int) or isinstance(stream["byte_count"], bool) or stream[
+        "byte_count"
+    ] < 0:
+        raise AgentAutonomousCompletionError(
+            f"execution {field} byte count is invalid for {scenario_id}"
+        )
+    if not isinstance(stream["digest"], str) or not DIGEST.fullmatch(stream["digest"]):
+        raise AgentAutonomousCompletionError(
+            f"execution {field} digest is invalid for {scenario_id}"
+        )
+    if not isinstance(stream["complete"], bool):
+        raise AgentAutonomousCompletionError(
+            f"execution {field} completeness is invalid for {scenario_id}"
+        )
+    return copy.deepcopy(stream)
+
+
+def _normalize_process(value: Any, scenario_id: str, outcome: str) -> dict[str, Any]:
+    process = _exact_object(
+        value,
+        {"terminal_state", "exit_status", "signal", "stdout", "stderr"},
+        f"execution process receipt for {scenario_id}",
+    )
+    terminal = process["terminal_state"]
+    if terminal not in EXECUTION_TERMINALS:
+        raise AgentAutonomousCompletionError(
+            f"execution terminal state is invalid for {scenario_id}"
+        )
+    exit_status = process["exit_status"]
+    signal = process["signal"]
+    if terminal == "exited":
+        if (
+            not isinstance(exit_status, int)
+            or isinstance(exit_status, bool)
+            or exit_status < 0
+            or exit_status > 255
+            or signal is not None
+        ):
+            raise AgentAutonomousCompletionError(
+                f"exited process receipt is invalid for {scenario_id}"
+            )
+    elif terminal == "signaled":
+        if (
+            exit_status is not None
+            or not isinstance(signal, int)
+            or isinstance(signal, bool)
+            or signal <= 0
+        ):
+            raise AgentAutonomousCompletionError(
+                f"signaled process receipt is invalid for {scenario_id}"
+            )
+    elif exit_status is not None or signal is not None:
+        raise AgentAutonomousCompletionError(
+            f"non-exit process receipt invents terminal status for {scenario_id}"
+        )
+    stdout = _normalize_stream(process["stdout"], scenario_id, "stdout")
+    stderr = _normalize_stream(process["stderr"], scenario_id, "stderr")
+    if outcome == "completed" and (
+        terminal != "exited"
+        or exit_status != 0
+        or not stdout["complete"]
+        or not stderr["complete"]
+    ):
+        raise AgentAutonomousCompletionError(
+            f"completed scenario lacks a successful complete process receipt: {scenario_id}"
+        )
+    return {
+        "terminal_state": terminal,
+        "exit_status": exit_status,
+        "signal": signal,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+
+
+def _normalize_result(value: Any, scenario_id: str, outcome: str) -> dict[str, Any]:
+    result = _exact_object(
+        value,
+        {"outcome", "bounded_completion", "reason_code", "completion_plan"},
+        f"execution result receipt for {scenario_id}",
+    )
+    if result["outcome"] != outcome:
+        raise AgentAutonomousCompletionError(
+            f"execution result outcome is not cross-bound for {scenario_id}"
+        )
+    if not isinstance(result["bounded_completion"], bool):
+        raise AgentAutonomousCompletionError(
+            f"execution result completion marker is invalid for {scenario_id}"
+        )
+    reason_code = _nonempty_text(
+        result["reason_code"], f"execution result reason for {scenario_id}"
+    )
+    completion_plan = result["completion_plan"]
+    if (
+        not isinstance(completion_plan, list)
+        or any(not isinstance(step, str) or not step.strip() or "\x00" in step for step in completion_plan)
+    ):
+        raise AgentAutonomousCompletionError(
+            f"execution result completion plan is invalid for {scenario_id}"
+        )
+    if outcome == "completed":
+        if result["bounded_completion"] is not True or reason_code != "none" or completion_plan:
+            raise AgentAutonomousCompletionError(
+                f"completed execution result is not exact for {scenario_id}"
+            )
+    elif result["bounded_completion"] is not False or reason_code == "none":
+        raise AgentAutonomousCompletionError(
+            f"non-completed execution result is not exact for {scenario_id}"
+        )
+    if outcome == "safe-stop" and not completion_plan:
+        raise AgentAutonomousCompletionError(
+            f"safe-stop execution result lacks a completion plan for {scenario_id}"
+        )
+    return {
+        "outcome": outcome,
+        "bounded_completion": result["bounded_completion"],
+        "reason_code": reason_code,
+        "completion_plan": list(completion_plan),
+    }
+
+
+def _normalize_execution_witness(
+    root: pathlib.Path,
+    value: Any,
+    authority: dict[str, str],
+    scenario: dict[str, str],
+    outcome: str,
+    *,
+    input_context: bool,
+) -> dict[str, Any]:
+    scenario_id = scenario["scenario_id"]
+    witness = _exact_object(
+        value,
+        {"schema", "scenario_id", "authority", "context", "command", "process", "result"},
+        f"execution witness for {scenario_id}",
+    )
+    if witness["schema"] != "cxxlens.agent-autonomous-completion-execution-witness.v1":
+        raise AgentAutonomousCompletionError(
+            f"execution witness schema drift for {scenario_id}"
+        )
+    if witness["scenario_id"] != scenario_id:
+        raise AgentAutonomousCompletionError(
+            f"execution witness scenario mismatch for {scenario_id}"
+        )
+    expected_authority = {
+        key: authority[key] for key in ("revision", "tree", "catalog_digest")
+    }
+    if witness["authority"] != expected_authority:
+        raise AgentAutonomousCompletionError(
+            f"execution witness authority mismatch for {scenario_id}"
+        )
+    expected_context = _context_summary(root, scenario_id)
+    if input_context:
+        supplied_context = witness["context"]
+        try:
+            capability.validate_resolution(root, supplied_context)
+        except (capability.CapabilityResolutionError, TypeError) as error:
+            raise AgentAutonomousCompletionError(
+                f"execution witness context is invalid for {scenario_id}"
+            ) from error
+        if supplied_context != capability.build_resolution(root, scenario_id):
+            raise AgentAutonomousCompletionError(
+                f"execution witness context is not the canonical scenario context: {scenario_id}"
+            )
+        context = expected_context
+    else:
+        if witness["context"] != expected_context:
+            raise AgentAutonomousCompletionError(
+                f"execution witness context summary mismatch for {scenario_id}"
+            )
+        context = copy.deepcopy(witness["context"])
+    if context["result_state"] != scenario["expected_result_state"]:
+        raise AgentAutonomousCompletionError(
+            f"execution witness context result drift for {scenario_id}"
+        )
+    command = _normalize_command(witness["command"], scenario_id)
+    process = _normalize_process(witness["process"], scenario_id, outcome)
+    result = _normalize_result(witness["result"], scenario_id, outcome)
+    return {
+        "schema": "cxxlens.agent-autonomous-completion-execution-witness.v1",
+        "scenario_id": scenario_id,
+        "authority": expected_authority,
+        "context": context,
+        "command": command,
+        "process": process,
+        "result": result,
+    }
+
+
 def _validate_receipts(
+    root: pathlib.Path,
     evidence: dict[str, Any],
     authority: dict[str, str],
     scenarios: list[dict[str, str]],
 ) -> dict[str, dict[str, Any]]:
-    if evidence.get("schema") != "cxxlens.agent-autonomous-completion-evidence.v1":
+    if evidence.get("schema") != "cxxlens.agent-autonomous-completion-evidence.v2":
         raise AgentAutonomousCompletionError("evidence schema identifier drift")
     if evidence.get("authority") != {
         key: authority[key] for key in ("revision", "tree", "catalog_digest")
@@ -142,8 +437,32 @@ def _validate_receipts(
         selected[scenario_id] = copy.deepcopy(row)
     if set(selected) != expected:
         raise AgentAutonomousCompletionError("evidence scenario census is not exact")
+    scenario_map = {row["scenario_id"]: row for row in scenarios}
     for scenario_id, row in selected.items():
         outcome = row["outcome"]
+        if outcome == "not-evaluated":
+            if set(row) != {"scenario_id", "outcome"}:
+                raise AgentAutonomousCompletionError(
+                    f"not-evaluated scenario carries fabricated evidence: {scenario_id}"
+                )
+            continue
+        witness = _normalize_execution_witness(
+            root,
+            row.get("execution_witness"),
+            authority,
+            scenario_map[scenario_id],
+            outcome,
+            input_context=True,
+        )
+        normalized = {
+            "scenario_id": scenario_id,
+            "outcome": outcome,
+            "bounded_completion": witness["result"]["bounded_completion"],
+            "context_digest": witness["context"]["digest"],
+            "command_digest": _digest_object(witness["command"]),
+            "receipt_digest": _digest_object(witness),
+            "execution_witness": witness,
+        }
         if outcome == "completed":
             if row.get("bounded_completion") is not True:
                 raise AgentAutonomousCompletionError(
@@ -165,6 +484,8 @@ def _validate_receipts(
                 raise AgentAutonomousCompletionError(
                     f"safe-stop scenario lacks completion plan digest: {scenario_id}"
                 )
+            normalized["reason_code"] = row["reason_code"]
+            normalized["completion_plan_digest"] = row["completion_plan_digest"]
         elif outcome == "failed":
             if not isinstance(row.get("reason_code"), str) or not row["reason_code"].strip():
                 raise AgentAutonomousCompletionError(
@@ -176,6 +497,32 @@ def _validate_receipts(
                 raise AgentAutonomousCompletionError(
                     f"failed scenario lacks receipt digest: {scenario_id}"
                 )
+            normalized["reason_code"] = row["reason_code"]
+        if row.get("context_digest") != normalized["context_digest"]:
+            raise AgentAutonomousCompletionError(
+                f"scenario context digest is not witness-derived: {scenario_id}"
+            )
+        if row.get("command_digest") != normalized["command_digest"]:
+            raise AgentAutonomousCompletionError(
+                f"scenario command digest is not witness-derived: {scenario_id}"
+            )
+        if row.get("receipt_digest") != normalized["receipt_digest"]:
+            raise AgentAutonomousCompletionError(
+                f"scenario receipt digest is not witness-derived: {scenario_id}"
+            )
+        if outcome in {"failed", "safe-stop"} and row["reason_code"] != witness["result"][
+            "reason_code"
+        ]:
+            raise AgentAutonomousCompletionError(
+                f"scenario reason code is not witness-derived: {scenario_id}"
+            )
+        if outcome == "safe-stop" and row["completion_plan_digest"] != _digest_object(
+            witness["result"]["completion_plan"]
+        ):
+            raise AgentAutonomousCompletionError(
+                f"scenario completion plan digest is not witness-derived: {scenario_id}"
+            )
+        selected[scenario_id] = normalized
     return selected
 
 
@@ -188,7 +535,9 @@ def _report(
     authority = _authority(root)
     scenarios = _scenario_set(catalog)
     selected = (
-        _validate_receipts(evidence, authority, scenarios) if evidence is not None else None
+        _validate_receipts(root, evidence, authority, scenarios)
+        if evidence is not None
+        else None
     )
     outcomes: list[dict[str, Any]] = []
     for scenario in scenarios:
@@ -204,7 +553,7 @@ def _report(
     evaluated = evidence is not None and counts["not-evaluated"] == 0
     report: dict[str, Any] = {
         "schema": "cxxlens.ng-agent-autonomous-completion-metric.v1",
-        "document_version": "1.0.0",
+        "document_version": "1.1.0",
         "role": "evaluation-only-metric-report",
         "metric": "agent-autonomous-completion-rate",
         "authority": authority,
@@ -231,7 +580,7 @@ def _report(
         "qualification": "not-qualification-evidence",
         "provenance": {
             "generator": GENERATOR.as_posix(),
-            "input_contract": "cxxlens.agent-autonomous-completion-evidence.v1",
+            "input_contract": "cxxlens.agent-autonomous-completion-evidence.v2",
             "evidence_source": "provided-receipts" if evidence is not None else "none",
         },
     }
@@ -260,8 +609,53 @@ def validate_report(root: pathlib.Path, report: dict[str, Any]) -> None:
         raise AgentAutonomousCompletionError("metric outcome census/order drift")
     population = report["population"]
     counts = {outcome: 0 for outcome in OUTCOMES}
+    scenario_map = {row["scenario_id"]: row for row in report["scenario_set"]["scenarios"]}
     for row in report["outcomes"]:
         counts[row["outcome"]] += 1
+        outcome = row["outcome"]
+        scenario_id = row["scenario_id"]
+        if outcome == "not-evaluated":
+            if set(row) != {"scenario_id", "outcome"}:
+                raise AgentAutonomousCompletionError(
+                    f"not-evaluated report outcome carries evidence: {scenario_id}"
+                )
+            continue
+        witness = _normalize_execution_witness(
+            root,
+            row.get("execution_witness"),
+            authority,
+            scenario_map[scenario_id],
+            outcome,
+            input_context=False,
+        )
+        if row.get("bounded_completion") != witness["result"]["bounded_completion"]:
+            raise AgentAutonomousCompletionError(
+                f"metric bounded completion is not witness-derived: {scenario_id}"
+            )
+        if row.get("context_digest") != witness["context"]["digest"]:
+            raise AgentAutonomousCompletionError(
+                f"metric context digest is not witness-derived: {scenario_id}"
+            )
+        if row.get("command_digest") != _digest_object(witness["command"]):
+            raise AgentAutonomousCompletionError(
+                f"metric command digest is not witness-derived: {scenario_id}"
+            )
+        if row.get("receipt_digest") != _digest_object(witness):
+            raise AgentAutonomousCompletionError(
+                f"metric receipt digest is not witness-derived: {scenario_id}"
+            )
+        if outcome in {"failed", "safe-stop"} and row.get("reason_code") != witness[
+            "result"
+        ]["reason_code"]:
+            raise AgentAutonomousCompletionError(
+                f"metric reason code is not witness-derived: {scenario_id}"
+            )
+        if outcome == "safe-stop" and row.get("completion_plan_digest") != _digest_object(
+            witness["result"]["completion_plan"]
+        ):
+            raise AgentAutonomousCompletionError(
+                f"metric completion plan is not witness-derived: {scenario_id}"
+            )
     if population != {
         "denominator": len(scenario_ids),
         "completed": counts["completed"],
@@ -270,10 +664,23 @@ def validate_report(root: pathlib.Path, report: dict[str, Any]) -> None:
         "not_evaluated": counts["not-evaluated"],
     }:
         raise AgentAutonomousCompletionError("metric population does not match outcomes")
+    evaluated = counts["not-evaluated"] == 0
+    if report["status"] != ("evaluated" if evaluated else "not-evaluated"):
+        raise AgentAutonomousCompletionError("metric status does not match outcome census")
+    expected_disposition = (
+        "execution-receipts-bound" if evaluated else "execution-receipts-required"
+    )
+    if report["evidence_disposition"] != expected_disposition:
+        raise AgentAutonomousCompletionError(
+            "metric evidence disposition does not match outcome census"
+        )
     if report["status"] == "not-evaluated" and report["value_percent"] is not None:
         raise AgentAutonomousCompletionError("not-evaluated metric has a numeric rate")
     if report["status"] == "evaluated" and report["value_percent"] is None:
         raise AgentAutonomousCompletionError("evaluated metric has no numeric rate")
+    expected_value = round(100.0 * counts["completed"] / len(scenario_ids), 6)
+    if evaluated and report["value_percent"] != expected_value:
+        raise AgentAutonomousCompletionError("metric value does not match outcome census")
 
 
 def main(argv: list[str] | None = None) -> int:

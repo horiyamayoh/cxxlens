@@ -260,7 +260,13 @@ The separate `agent-autonomous-completion-rate` metric is receipt-bound. Running
 file deliberately returns the exact nine-scenario population as `not-evaluated` with a null
 rate. A numeric rate is emitted only when every scenario has an exact current revision/tree and
 catalog digest, a bounded-completion witness, and typed receipt/context/command digests. Failed
-and safe-stop outcomes remain in the denominator. This metric reports evaluation state only;
+and safe-stop outcomes remain in the denominator. Evidence v2 additionally requires each evaluated
+outcome to carry the current canonical capability-resolution context, an argv/environment command
+receipt, a closed process terminal/stdout/stderr receipt, and a typed result receipt. The checker
+recomputes the context, command, completion-plan, and whole-witness digests and applies the same
+cross-binding when checking a saved report; digest-shaped placeholders alone are rejected. These
+fields prove internal content binding, not that the observer is authenticated or that the reported
+execution is semantically correct. This metric reports evaluation state only;
 `qualification: not-qualification-evidence` is fixed by schema and it cannot promote a provider,
 consumer, support tuple, constructibility gate, or release.
 
