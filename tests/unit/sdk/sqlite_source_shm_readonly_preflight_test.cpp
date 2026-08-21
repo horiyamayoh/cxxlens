@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "sdk/sqlite_default_forwarding_vfs_internal.hpp"
+#include "sdk/sqlite_same_process_shm_reader_lifecycle_internal.hpp"
 #include "sdk/sqlite_source_shm_readonly_preflight_internal.hpp"
 
 namespace
@@ -128,6 +129,86 @@ namespace
 				"missing active-WAL callback dependency leaves baseline observation available");
 	}
 
+	void exercise_outer_read_phase_order()
+	{
+		// DF-0201 scope is state/test-only; this does not authorize runtime binding or activation.
+		using phase = detail::sqlite_shm_reader_outer_read_phase;
+		constexpr std::array complete{
+			phase::unresolved,
+			phase::runtime_vfs_filesystem_sealed,
+			phase::retained_parent_held,
+			phase::no_effect_boundary_armed,
+			phase::typed_family_census,
+			phase::active_read_connection_open,
+			phase::wal_lock_and_prefix_held,
+			phase::mapping_subprotocol_or_private_index,
+			phase::eager_decode,
+			phase::decoded_read_candidate_sealed,
+			phase::connection_revoking,
+			phase::outer_custody_join_pending,
+			phase::outer_custody_join_sealed,
+			phase::connection_closed,
+			phase::zero_effect_callback_receipt_sealed,
+			phase::logical_read_receipt,
+		};
+		for (std::size_t index = 1U; index < complete.size(); ++index)
+			require(
+				detail::is_sqlite_shm_reader_outer_read_transition(complete[index - 1U],
+																   complete[index]),
+				"complete outer read follows the proposed production-inactive state-only graph");
+		require(detail::validate_sqlite_shm_reader_outer_read_path(complete),
+				"state-only validator recognizes the complete logical-read receipt candidate path");
+		require(!detail::is_sqlite_shm_reader_outer_read_transition(phase::wal_lock_and_prefix_held,
+																	phase::eager_decode),
+				"outer read cannot skip the mapping subprotocol or private index route");
+		constexpr std::array skipped_mapping{
+			phase::unresolved,
+			phase::runtime_vfs_filesystem_sealed,
+			phase::retained_parent_held,
+			phase::no_effect_boundary_armed,
+			phase::typed_family_census,
+			phase::active_read_connection_open,
+			phase::wal_lock_and_prefix_held,
+			phase::eager_decode,
+			phase::decoded_read_candidate_sealed,
+			phase::connection_revoking,
+			phase::outer_custody_join_pending,
+			phase::outer_custody_join_sealed,
+			phase::connection_closed,
+			phase::zero_effect_callback_receipt_sealed,
+			phase::logical_read_receipt,
+		};
+		require(!detail::validate_sqlite_shm_reader_outer_read_path(skipped_mapping),
+				"outer read path rejects a logical receipt after a skipped mapping route");
+		require(!detail::is_sqlite_shm_reader_outer_read_transition(
+					phase::active_read_connection_open, phase::zero_effect_callback_receipt_sealed),
+				"active connection cannot skip decode and custody closure");
+		require(!detail::is_sqlite_shm_reader_outer_read_transition(
+					phase::decoded_read_candidate_sealed, phase::logical_read_receipt),
+				"decoded candidate cannot mint a receipt before close and zero-effect proof");
+		require(!detail::is_sqlite_shm_reader_outer_read_transition(phase::connection_closed,
+																	phase::logical_read_receipt),
+				"connection close alone cannot mint a logical receipt");
+		constexpr std::array skipped_close{
+			phase::unresolved,
+			phase::runtime_vfs_filesystem_sealed,
+			phase::retained_parent_held,
+			phase::no_effect_boundary_armed,
+			phase::typed_family_census,
+			phase::active_read_connection_open,
+			phase::wal_lock_and_prefix_held,
+			phase::mapping_subprotocol_or_private_index,
+			phase::eager_decode,
+			phase::decoded_read_candidate_sealed,
+			phase::connection_revoking,
+			phase::outer_custody_join_pending,
+			phase::outer_custody_join_sealed,
+			phase::logical_read_receipt,
+		};
+		require(!detail::validate_sqlite_shm_reader_outer_read_path(skipped_close),
+				"outer read path rejects receipt before connection close and zero-effect proof");
+	}
+
 	void exercise_map_sequence_proof()
 	{
 		constexpr int readonly = 8;
@@ -229,6 +310,7 @@ int main()
 {
 	exercise_strict_uri();
 	exercise_branch_local_capability_absence();
+	exercise_outer_read_phase_order();
 	exercise_map_sequence_proof();
 #if defined(__linux__) && defined(F_OFD_SETLK)
 	exercise_repeated_exact_census();

@@ -1,10 +1,123 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace cxxlens::sdk::detail
 {
+	/**
+	 * The #201 outer zero-effect read success phases in the proposed, production-inactive
+	 * state-only graph.
+	 *
+	 * This vocabulary mirrors the current Proposed ADR 0104 / DF-0201 state-and-test scope.  The
+	 * #205 mapping subprotocol or private heap WAL-index route is nested between the held WAL
+	 * prefix and eager decode.  The outer success graph deliberately has no generic quarantine
+	 * edge: failure/ambiguity is owned by the typed nested/teardown terminal routes and cannot be
+	 * converted into an outer receipt.  No phase or transition grants SQLite, VFS, mapping,
+	 * normalization, public Store, or production-activation authority.
+	 */
+	enum class sqlite_shm_reader_outer_read_phase : std::uint8_t
+	{
+		unresolved,
+		runtime_vfs_filesystem_sealed,
+		retained_parent_held,
+		no_effect_boundary_armed,
+		typed_family_census,
+		active_read_connection_open,
+		wal_lock_and_prefix_held,
+		mapping_subprotocol_or_private_index,
+		eager_decode,
+		decoded_read_candidate_sealed,
+		connection_revoking,
+		outer_custody_join_pending,
+		outer_custody_join_sealed,
+		connection_closed,
+		zero_effect_callback_receipt_sealed,
+		logical_read_receipt,
+	};
+
+	inline constexpr std::array sqlite_shm_reader_outer_read_phases{
+		sqlite_shm_reader_outer_read_phase::unresolved,
+		sqlite_shm_reader_outer_read_phase::runtime_vfs_filesystem_sealed,
+		sqlite_shm_reader_outer_read_phase::retained_parent_held,
+		sqlite_shm_reader_outer_read_phase::no_effect_boundary_armed,
+		sqlite_shm_reader_outer_read_phase::typed_family_census,
+		sqlite_shm_reader_outer_read_phase::active_read_connection_open,
+		sqlite_shm_reader_outer_read_phase::wal_lock_and_prefix_held,
+		sqlite_shm_reader_outer_read_phase::mapping_subprotocol_or_private_index,
+		sqlite_shm_reader_outer_read_phase::eager_decode,
+		sqlite_shm_reader_outer_read_phase::decoded_read_candidate_sealed,
+		sqlite_shm_reader_outer_read_phase::connection_revoking,
+		sqlite_shm_reader_outer_read_phase::outer_custody_join_pending,
+		sqlite_shm_reader_outer_read_phase::outer_custody_join_sealed,
+		sqlite_shm_reader_outer_read_phase::connection_closed,
+		sqlite_shm_reader_outer_read_phase::zero_effect_callback_receipt_sealed,
+		sqlite_shm_reader_outer_read_phase::logical_read_receipt,
+	};
+
+	[[nodiscard]] constexpr bool is_sqlite_shm_reader_outer_read_transition(
+		const sqlite_shm_reader_outer_read_phase origin,
+		const sqlite_shm_reader_outer_read_phase destination) noexcept
+	{
+		using phase = sqlite_shm_reader_outer_read_phase;
+		switch (origin)
+		{
+			case phase::unresolved:
+				return destination == phase::runtime_vfs_filesystem_sealed;
+			case phase::runtime_vfs_filesystem_sealed:
+				return destination == phase::retained_parent_held;
+			case phase::retained_parent_held:
+				return destination == phase::no_effect_boundary_armed;
+			case phase::no_effect_boundary_armed:
+				return destination == phase::typed_family_census;
+			case phase::typed_family_census:
+				return destination == phase::active_read_connection_open;
+			case phase::active_read_connection_open:
+				return destination == phase::wal_lock_and_prefix_held;
+			case phase::wal_lock_and_prefix_held:
+				return destination == phase::mapping_subprotocol_or_private_index;
+			case phase::mapping_subprotocol_or_private_index:
+				return destination == phase::eager_decode;
+			case phase::eager_decode:
+				return destination == phase::decoded_read_candidate_sealed;
+			case phase::decoded_read_candidate_sealed:
+				return destination == phase::connection_revoking;
+			case phase::connection_revoking:
+				return destination == phase::outer_custody_join_pending;
+			case phase::outer_custody_join_pending:
+				return destination == phase::outer_custody_join_sealed;
+			case phase::outer_custody_join_sealed:
+				return destination == phase::connection_closed;
+			case phase::connection_closed:
+				return destination == phase::zero_effect_callback_receipt_sealed;
+			case phase::zero_effect_callback_receipt_sealed:
+				return destination == phase::logical_read_receipt;
+			case phase::logical_read_receipt:
+				return false;
+		}
+		return false;
+	}
+
+	/**
+	 * Validate the complete #201 outer success path in the proposed, production-inactive state-only
+	 * graph.  The path has no generic failure state: a typed failure or quarantine terminal is not
+	 * an outer logical-read receipt candidate.
+	 */
+	[[nodiscard]] constexpr bool validate_sqlite_shm_reader_outer_read_path(
+		const std::span<const sqlite_shm_reader_outer_read_phase> path) noexcept
+	{
+		if (path.empty() || path.front() != sqlite_shm_reader_outer_read_phase::unresolved)
+			return false;
+		for (std::size_t index = 1U; index < path.size(); ++index)
+		{
+			if (!is_sqlite_shm_reader_outer_read_transition(path[index - 1U], path[index]))
+				return false;
+		}
+		return path.back() == sqlite_shm_reader_outer_read_phase::logical_read_receipt;
+	}
+
 	/**
 	 * Canonical DF-0207 reader attachment reservation phases.
 	 *
