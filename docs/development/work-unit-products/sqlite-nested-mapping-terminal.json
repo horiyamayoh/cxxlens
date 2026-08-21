@@ -1,0 +1,51 @@
+{
+  "schema": "cxxlens.work-unit-product.v1",
+  "product": "sqlite.nested-mapping-terminal",
+  "contract": "cxxlens.sqlite-nested-mapping-terminal.v1",
+  "unit_id": "wu-205-nested-mapping-lease",
+  "owner": "#205",
+  "status": "bounded-internal-candidate",
+  "production_activation": "prohibited",
+  "qualification": "not-claimed",
+  "success_phases": [
+    "active_read_connection",
+    "attempt_pin_acquired",
+    "native_callback_entered",
+    "native_result_observed",
+    "pending_lease",
+    "published_reader_lease",
+    "revoke_intent",
+    "registry_hidden",
+    "callbacks_drained",
+    "native_cleanup_complete",
+    "nested_mapping_terminal"
+  ],
+  "quarantine_phases": [
+    "active_read_connection",
+    "attempt_pin_acquired",
+    "native_callback_entered",
+    "terminal_quarantined"
+  ],
+  "validator": "cxxlens::sdk::detail::validate_sqlite_nested_mapping_terminal_path",
+  "invariants": [
+    "active-read connection is an input capability, not a logical-read receipt",
+    "callback-local attempt custody precedes native entry",
+    "native result is observed before pending or published lease state",
+    "registry publication is hidden before callback drain and native cleanup",
+    "ambiguous callback outcomes are permanent quarantine and never success"
+  ],
+  "forbidden_products": [
+    "store.sqlite-logical-read-receipt.v1",
+    "cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1",
+    "cxxlens.sqlite.reader-shm-native-attachment.v1",
+    "native-SQLITE_OK-projection",
+    "public-Store-success"
+  ],
+  "required_before_logical_read_receipt": [
+    "authenticated nested terminal",
+    "outer custody join over every enrolled writer/reader instance",
+    "zero live callbacks leases and use owners",
+    "independent zero-effect callback census"
+  ],
+  "failure_policy": "typed-fail-closed-or-permanent-quarantine"
+}

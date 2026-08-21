@@ -1,0 +1,39 @@
+{
+  "schema": "cxxlens.work-unit-evidence.v1",
+  "product": "sqlite.nested-mapping-terminal",
+  "unit_id": "wu-205-nested-mapping-lease",
+  "contract": "cxxlens.sqlite-nested-mapping-terminal.v1",
+  "status": "local-focused-candidate-evidence",
+  "production_qualification": "not-claimed",
+  "candidate_revision": "bound-by-the-coordinating-commit",
+  "checks": [
+    {
+      "command": "cmake --build --preset dev-clang --target cxxlens-unit-sdk-sqlite-source-shm-readonly-preflight -j2",
+      "result": "pass"
+    },
+    {
+      "command": "ctest --preset dev-clang -R '^unit\\.sdk-sqlite-source-shm-readonly-preflight$' --output-on-failure",
+      "result": "pass"
+    }
+  ],
+  "positive_witness": [
+    "active-read connection enters callback-local attempt custody",
+    "native callback result is observed before pending and published lease states",
+    "published reader lease is revoked and registry-hidden before callback drain",
+    "native cleanup completes before the nested terminal",
+    "nonpromotable native outcome still drains custody before terminal"
+  ],
+  "negative_witness": [
+    "lease publication before native result",
+    "cleanup before registry hide or callback drain",
+    "ambiguous callback after native entry",
+    "missing active-read input",
+    "native SQLITE_OK treated as qualification without lease identity"
+  ],
+  "limitations": [
+    "state-only lifecycle witness; no native VFS or SQLite projection was enabled",
+    "authenticated production lease and full native matrix remain unqualified",
+    "fork/ABA/PID/VFS unload runtime evidence remains a separate qualification gate",
+    "product receipt inventory remains pending until an exact producer commit and evidence are integrated"
+  ]
+}
