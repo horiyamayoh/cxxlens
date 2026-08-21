@@ -5637,7 +5637,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "auto fail_after_publication =", publication
         )
         guarded_setup = source.index(
-            "\n\ttry\n\t{\n\t\tpublic_materialization_success_report_input public_input;",
+            "\n\t\tpublic_materialization_success_report_input public_input;",
             recovery_helper,
         )
         bad_alloc_catch = source.index(

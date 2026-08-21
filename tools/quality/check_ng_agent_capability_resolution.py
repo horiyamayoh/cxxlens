@@ -24,7 +24,7 @@ import yaml
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-SCHEMA = pathlib.Path("schemas/cxxlens_agent_capability_resolution.schema.yaml")
+SCHEMA = pathlib.Path("schemas/cxxlens_ng_agent_capability_resolution.schema.yaml")
 CATALOG = pathlib.Path("schemas/cxxlens_ng_agent_capability_resolution.yaml")
 READINESS = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
 GENERATOR = pathlib.Path("tools/quality/check_ng_agent_capability_resolution.py")

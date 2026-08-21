@@ -603,7 +603,7 @@ install(
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas"
   FILES_MATCHING
   PATTERN "cxxlens_ng_*")
-install(FILES schemas/cxxlens_agent_capability_resolution.schema.yaml
+install(FILES schemas/cxxlens_ng_agent_capability_resolution.schema.yaml
         DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 # Explicit runtime authority evidence used by the provider-runtime contract
 # gate.

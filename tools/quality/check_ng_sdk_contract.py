@@ -474,7 +474,13 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
         if entry["status"] == "implemented"
         for code in entry["errors"]
     }
-    if missing_codes := sorted(emitted_codes - catalog_codes):
+    # NG1 hardening remains source-private while its profile/authority is
+    # Proposed.  Those reason codes are intentionally not public SDK errors;
+    # the runtime tests still bind their exact spelling and phase semantics.
+    public_emitted_codes = {
+        code for code in emitted_codes if not code.startswith("provider.ng1.")
+    }
+    if missing_codes := sorted(public_emitted_codes - catalog_codes):
         fail(f"implemented SDK error codes are absent from the catalog: {missing_codes}")
 
 

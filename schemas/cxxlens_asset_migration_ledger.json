@@ -1885,13 +1885,6 @@
       "status": "active"
     },
     {
-      "authority": "active",
-      "path": "schemas/cxxlens_agent_capability_resolution.schema.yaml",
-      "removal_issue": null,
-      "replacement": null,
-      "status": "active"
-    },
-    {
       "authority": "generated-inventory",
       "path": "schemas/cxxlens_asset_migration_ledger.json",
       "removal_issue": null,
@@ -1936,6 +1929,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_agent_autonomous_completion_metric.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_agent_capability_resolution.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
