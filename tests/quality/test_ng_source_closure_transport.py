@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import pathlib
 import shutil
@@ -32,6 +33,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     blob_receipts_digest,
     canonical_json,
     cbor_encode,
+    cleanup_owner_for_transfer,
     closure_digest,
     complete_request_witness,
     content_projection_digest,
@@ -39,6 +41,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     request_v2_2_projection,
     semantic_digest,
     source_closure_file_id,
+    spool_receipt_for_transfer,
     task_v4_projection,
     trust_policy_digest,
     validate,
@@ -268,6 +271,39 @@ class SourceClosureTransportTest(unittest.TestCase):
             manifest, yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text())
         )
         validate_request_binding(request, [manifest])
+
+    def test_v2_2_binding_revalidates_inherited_v2_1_authority(self) -> None:
+        request, manifest = complete_request_witness(ROOT)
+        legacy_schema = yaml.safe_load(
+            (ROOT / LEGACY_BINDINGS["request_schema_sha256"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        validate_request_binding(
+            request, [manifest], legacy_request_schema=legacy_schema
+        )
+
+        for field, value in (
+            ("provider_id", "provider.foreign"),
+            ("tool_executable", "foreign-materializer"),
+            ("provider_task_id", "task:semantic-v2:" + "9" * 64),
+        ):
+            with self.subTest(field=field):
+                tampered = copy.deepcopy(request)
+                if field == "provider_id":
+                    tampered["worker"][field] = value
+                elif field == "tool_executable":
+                    tampered["tool"]["executable"] = value
+                else:
+                    tampered["tasks"][0][field] = value
+                with self.assertRaisesRegex(
+                    SourceClosureTransportError, "inherited v2.1 authority"
+                ):
+                    validate_request_binding(
+                        tampered,
+                        [manifest],
+                        legacy_request_schema=legacy_schema,
+                    )
 
     def test_maximum_manifest_constructibility_witness_is_within_transport_bound(self) -> None:
         members = []
@@ -752,8 +788,12 @@ class SourceClosureTransportTest(unittest.TestCase):
             "task_id": extension_a["task_id"],
             "closure_digest": closure_a["digest"],
             "transfer_digest": seal_a["transfer_digest"],
-            "spool_receipt": "spool-receipt:" + extension_a["task_v4_digest"],
-            "cleanup_owner": "cleanup-owner:" + extension_a["task_v4_digest"],
+            "spool_receipt": spool_receipt_for_transfer(
+                SESSION_ID, extension_a["task_id"], seal_a["transfer_digest"]
+            ),
+            "cleanup_owner": cleanup_owner_for_transfer(
+                SESSION_ID, extension_a["task_id"], seal_a["transfer_digest"]
+            ),
         }
         frames_a = [
             ("source_closure_manifest", descriptor_a, b""),
@@ -772,6 +812,49 @@ class SourceClosureTransportTest(unittest.TestCase):
         for name, control, payload in frames_a:
             valid_a.apply(name, control, payload, contract)
         self.assertEqual(valid_a.state, "closure-acknowledged")
+
+        # A syntactically valid credential from another session, task, or
+        # terminal transfer must not authorize this sealed spool.
+        for field, session_id, task_id, transfer in (
+            (
+                "spool_receipt",
+                "provider-session:sha256:" + "9" * 64,
+                extension_a["task_id"],
+                seal_a["transfer_digest"],
+            ),
+            (
+                "cleanup_owner",
+                SESSION_ID,
+                "task:semantic-v2:sha256:" + "9" * 64,
+                seal_a["transfer_digest"],
+            ),
+            (
+                "spool_receipt",
+                SESSION_ID,
+                extension_a["task_id"],
+                "semantic-v2:sha256:" + "9" * 64,
+            ),
+        ):
+            with self.subTest(field=field, session_id=session_id, task_id=task_id):
+                rebound_credentials = TransferStateWitness.for_task_extension(
+                    session_id=SESSION_ID,
+                    task_extension=extension_a,
+                    manifest_schema=manifest_schema,
+                )
+                for name, control, payload in frames_a[:5]:
+                    rebound_credentials.apply(name, control, payload, contract)
+                forged_ack = dict(ack_a)
+                forged_ack[field] = (
+                    spool_receipt_for_transfer(session_id, task_id, transfer)
+                    if field == "spool_receipt"
+                    else cleanup_owner_for_transfer(session_id, task_id, transfer)
+                )
+                with self.assertRaisesRegex(
+                    SourceClosureTransportError, "credential binding"
+                ):
+                    rebound_credentials.apply(
+                        "source_closure_ack", forged_ack, b"", contract
+                    )
 
         rebound_b = TransferStateWitness.for_task_extension(
             session_id=SESSION_ID,

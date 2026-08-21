@@ -649,8 +649,11 @@ namespace cxxlens::detail::clang22
 															  const std::string field,
 															  std::string detail)
 	{
-		(void)cleanup_once();
 		state_ = source_closure_transfer_state::rejected;
+		auto cleanup = cleanup_once();
+		if (!cleanup)
+			return sdk::unexpected(
+				failure("source-closure.cleanup-failed", "cleanup", cleanup.error().detail));
 		return sdk::unexpected(failure(std::move(code), field, std::move(detail)));
 	}
 

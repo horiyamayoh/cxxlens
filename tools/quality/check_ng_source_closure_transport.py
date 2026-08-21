@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import pathlib
@@ -293,11 +294,75 @@ WIRE_ID_PATTERNS = {
     "cleanup_receipt": re.compile(r"^cleanup-receipt:semantic-v2:sha256:[0-9a-f]{64}$"),
 }
 
+SPOOL_RECEIPT_DOMAIN = "cxxlens.source-closure-spool-receipt.v1"
+CLEANUP_OWNER_DOMAIN = "cxxlens.source-closure-cleanup-owner.v1"
+
 
 def validate_wire_id(field: str, value: Any) -> None:
     pattern = WIRE_ID_PATTERNS[field]
     if not isinstance(value, str) or pattern.fullmatch(value) is None:
         raise SourceClosureTransportError(f"wire control {field} is not a typed ID")
+
+
+def _bound_cleanup_credential(
+    *,
+    field: str,
+    domain: str,
+    session_id: str,
+    task_id: str,
+    transfer_digest_value: str,
+) -> str:
+    """Derive the v1 witness credential from its complete transfer binding.
+
+    The proposed transport has no cache or resume authority.  Consequently an
+    ACK credential must not be reusable when any of the session, task, or
+    terminal transfer identity changes.  Keep the projection closed and
+    explicit instead of treating the transfer digest as an opaque alias: this
+    makes each binding edge independently testable by the witness.
+    """
+
+    validate_wire_id("session_id", session_id)
+    validate_wire_id("task_id", task_id)
+    if re.fullmatch(r"semantic-v2:sha256:[0-9a-f]{64}", transfer_digest_value) is None:
+        raise SourceClosureTransportError(
+            f"{field} transfer binding is not a typed digest"
+        )
+    return field.replace("_", "-") + ":" + semantic_digest(
+        domain,
+        {
+            "session_id": session_id,
+            "task_id": task_id,
+            "transfer_digest": transfer_digest_value,
+        },
+    )
+
+
+def spool_receipt_for_transfer(
+    session_id: str, task_id: str, transfer_digest_value: str
+) -> str:
+    """Return the task/session/transfer-bound proposed spool receipt."""
+
+    return _bound_cleanup_credential(
+        field="spool_receipt",
+        domain=SPOOL_RECEIPT_DOMAIN,
+        session_id=session_id,
+        task_id=task_id,
+        transfer_digest_value=transfer_digest_value,
+    )
+
+
+def cleanup_owner_for_transfer(
+    session_id: str, task_id: str, transfer_digest_value: str
+) -> str:
+    """Return the task/session/transfer-bound proposed cleanup owner."""
+
+    return _bound_cleanup_credential(
+        field="cleanup_owner",
+        domain=CLEANUP_OWNER_DOMAIN,
+        session_id=session_id,
+        task_id=task_id,
+        transfer_digest_value=transfer_digest_value,
+    )
 
 
 def validate_wire_control(
@@ -602,6 +667,23 @@ class TransferStateWitness:
             self._bind(control, ("closure_digest",))
             if control["transfer_digest"] != self.transfer_digest:
                 raise SourceClosureTransportError("wire ack transfer binding mismatch")
+            if (
+                control["spool_receipt"]
+                != spool_receipt_for_transfer(
+                    self.expected["session_id"],
+                    self.expected["task_id"],
+                    self.transfer_digest,
+                )
+                or control["cleanup_owner"]
+                != cleanup_owner_for_transfer(
+                    self.expected["session_id"],
+                    self.expected["task_id"],
+                    self.transfer_digest,
+                )
+            ):
+                raise SourceClosureTransportError(
+                    "wire ack credential binding mismatch"
+                )
             self.state = "closure-acknowledged"
 
 
@@ -641,14 +723,80 @@ def load(path: pathlib.Path) -> dict[str, Any]:
     return value
 
 
+def validate_inherited_v2_1_authority(
+    request: dict[str, Any], legacy_request_schema: dict[str, Any]
+) -> None:
+    """Revalidate the retained request envelope against the v2.1 authority.
+
+    Request v2.2 intentionally removes source bytes and adds closure
+    extensions.  The remaining envelope must still be accepted by the exact
+    legacy schema after those two versioned adaptations.  This is a structural
+    revalidation only: source byte/content-digest equality remains owned by
+    the closure manifest and transfer witness, never by an invented byte
+    placeholder here.
+    """
+
+    inherited = copy.deepcopy(request)
+    inherited.pop("request_id", None)
+    inherited.pop("required_features", None)
+    inherited.pop("source_closures", None)
+    inherited.pop("task_extensions", None)
+    inherited["schema"] = "cxxlens.clang22-materialization-request.v2"
+    inherited["request_version"] = "2.1.0"
+    if not isinstance(inherited.get("worker"), dict) or not isinstance(
+        inherited.get("trust_policy"), dict
+    ):
+        raise SourceClosureTransportError(
+            "inherited v2.1 authority revalidation failed: worker/trust authority missing"
+        )
+    inherited["worker"]["protocol_minor"] = 1
+    inherited["worker"]["required_features"] = ["task-input-chunks-v1"]
+    inherited["trust_policy"]["protocol_minor"] = 1
+    inherited["trust_policy"]["required_features"] = ["task-input-chunks-v1"]
+    for task in inherited.get("tasks", []):
+        if not isinstance(task, dict):
+            raise SourceClosureTransportError(
+                "inherited v2.1 authority revalidation failed: task is not an object"
+            )
+        source = task.get("source")
+        if isinstance(source, dict):
+            # The legacy schema checks canonical spelling and presence.  The
+            # actual bytes are deliberately unavailable at this projection;
+            # closure transfer validation owns their digest/size proof.
+            source["content_base64"] = ""
+    try:
+        jsonschema.Draft202012Validator(legacy_request_schema).validate(inherited)
+    except jsonschema.ValidationError as error:
+        raise SourceClosureTransportError(
+            f"inherited v2.1 authority revalidation failed: {error.message}"
+        ) from error
+    sys.path.insert(0, str(ROOT / "tools" / "quality"))
+    import check_ng_clang22_materialization as materialization  # noqa: PLC0415
+
+    for task in inherited["tasks"]:
+        expected_provider_task_id = materialization.expected_provider_task_id(
+            inherited, task
+        )
+        if task["provider_task_id"] != expected_provider_task_id:
+            raise SourceClosureTransportError(
+                "inherited v2.1 authority revalidation failed: provider task identity mismatch"
+            )
+
+
 def _validate_logical_path(value: Any) -> None:
     _validated_logical_path(value, subject="task v4 logical path")
 
 
 def validate_request_binding(
-    request: dict[str, Any], manifests: list[dict[str, Any]]
+    request: dict[str, Any],
+    manifests: list[dict[str, Any]],
+    *,
+    legacy_request_schema: dict[str, Any] | None = None,
 ) -> None:
-    """Validate cross-document v2.2 relationships JSON Schema cannot express."""
+    """Validate v2.2 binding and optionally revalidate retained v2.1 authority."""
+
+    if legacy_request_schema is not None:
+        validate_inherited_v2_1_authority(request, legacy_request_schema)
 
     base_tasks = request.get("tasks")
     closures = request.get("source_closures")
@@ -935,7 +1083,11 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
             witness
         )
         validate_manifest(witness_manifest, manifest_schema)
-        validate_request_binding(witness, [witness_manifest])
+        validate_request_binding(
+            witness,
+            [witness_manifest],
+            legacy_request_schema=legacy_request_schema,
+        )
     except (jsonschema.ValidationError, SourceClosureTransportError) as error:
         message = (
             error.message
@@ -1262,7 +1414,22 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         ("source_closure_blob", {"session_id": session_witness, "task_id": task_witness, "closure_digest": semantic, "blob_ordinal": 0, "blob_digest": content_witness, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}, b""),
         ("source_closure_chunk", {"session_id": session_witness, "task_id": task_witness, "blob_ordinal": 0, "blob_digest": content_witness, "chunk_index": 0, "offset": 0, "byte_count": 1}, blob_payload),
         ("source_closure_seal", {"session_id": session_witness, "task_id": task_witness, "task_v4_digest": semantic_witness, "manifest_digest": manifest_witness, "blob_receipts_digest": receipt_witness, "blob_count": 1, "total_bytes": 1, "closure_digest": semantic, "transfer_digest": transfer_witness_digest}, b""),
-        ("source_closure_ack", {"session_id": session_witness, "task_id": task_witness, "closure_digest": semantic, "transfer_digest": transfer_witness_digest, "spool_receipt": "spool-receipt:" + semantic_witness, "cleanup_owner": "cleanup-owner:" + semantic_witness}, b""),
+        (
+            "source_closure_ack",
+            {
+                "session_id": session_witness,
+                "task_id": task_witness,
+                "closure_digest": semantic,
+                "transfer_digest": transfer_witness_digest,
+                "spool_receipt": spool_receipt_for_transfer(
+                    session_witness, task_witness, transfer_witness_digest
+                ),
+                "cleanup_owner": cleanup_owner_for_transfer(
+                    session_witness, task_witness, transfer_witness_digest
+                ),
+            },
+            b"",
+        ),
     ]
     transfer_witness = TransferStateWitness.for_task_extension(
         session_id=session_witness,

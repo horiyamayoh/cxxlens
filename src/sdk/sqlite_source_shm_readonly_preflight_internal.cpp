@@ -396,6 +396,7 @@ namespace cxxlens::sdk
 		constexpr int sqlite_open_main_database = 0x00000100;
 		constexpr int sqlite_open_full_mutex = 0x00010000;
 		constexpr int sqlite_open_private_cache = 0x00040000;
+		constexpr int sqlite_open_write_ahead_log = 0x00080000;
 		constexpr int qualified_read_flags = sqlite_open_read_only | sqlite_open_uri |
 			sqlite_open_full_mutex | sqlite_open_private_cache;
 		constexpr int source_shm_main_xopen_flags =
@@ -2994,14 +2995,6 @@ namespace cxxlens::sdk
 	validate_sqlite_active_read_connection(
 		const sqlite_active_read_connection_request& request)
 	{
-		constexpr int sqlite_open_read_only = 0x00000001;
-		constexpr int sqlite_open_read_write = 0x00000002;
-		constexpr int sqlite_open_create = 0x00000004;
-		constexpr int sqlite_open_uri = 0x00000040;
-		constexpr int sqlite_open_main_database = 0x00000100;
-		constexpr int sqlite_open_full_mutex = 0x00010000;
-		constexpr int sqlite_open_private_cache = 0x00040000;
-		constexpr int sqlite_open_write_ahead_log = 0x00080000;
 		constexpr std::string_view source_profile{"sqlite-source-shm-readonly-unix-uri-v1"};
 		const auto reject = [](const std::string_view detail)
 			-> result<sqlite_active_read_connection_receipt>

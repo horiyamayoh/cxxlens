@@ -93,6 +93,7 @@ namespace
 		std::uint64_t closure_finish_calls{};
 		std::uint64_t cleanup_calls{};
 		bool fail_cleanup{false};
+		bool fail_manifest_append{false};
 
 		[[nodiscard]] result<void>
 		begin_manifest(const source_closure_manifest_descriptor&) override
@@ -104,6 +105,9 @@ namespace
 		[[nodiscard]] result<void> append_manifest(std::span<const std::byte>) override
 		{
 			++manifest_append_calls;
+			if (fail_manifest_append)
+				return cxxlens::sdk::unexpected(
+					cxxlens::sdk::error{"source-closure.spool-io", "manifest", "fixture"});
 			return {};
 		}
 
@@ -439,6 +443,25 @@ namespace
 					crashed.local_terminal() == source_closure_local_terminal::worker_crashed &&
 					!crashed.cancel_observed() && crash_sink.cleanup_calls == 1U,
 				"worker crash did not become a local terminal");
+
+		test_sink cleanup_failure_sink;
+		cleanup_failure_sink.fail_cleanup = true;
+		cleanup_failure_sink.fail_manifest_append = true;
+		test_authority cleanup_failure_authority{outer};
+		source_closure_transfer_validator cleanup_failure{
+			outer, cleanup_failure_authority, cleanup_failure_sink};
+		require(cleanup_failure.begin_manifest(manifest_descriptor(outer, manifest.size()), 0U),
+				"cleanup-failure fixture descriptor was rejected");
+		auto cleanup_failure_result = cleanup_failure.manifest_chunk(
+			{outer.session_id, outer.task_id, outer.manifest_digest, 0U, 0U, manifest.size()},
+			std::as_bytes(std::span{manifest.data(), manifest.size()}),
+			1U);
+		require(!cleanup_failure_result &&
+					cleanup_failure_result.error().code == "source-closure.cleanup-failed" &&
+					cleanup_failure_result.error().field == "cleanup" &&
+					cleanup_failure.state() == source_closure_transfer_state::rejected &&
+					cleanup_failure_sink.cleanup_calls == 1U,
+				"cleanup failure was hidden behind the original spool error");
 	}
 } // namespace
 

@@ -301,6 +301,50 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "revocation event"):
                 validate(root)
 
+    def test_terminal_receipts_are_one_shot_and_quarantine_blocks_unload(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"][
+                    "outer_join_receipt_profile"
+                ].update({"consumption": "reusable-capability"}),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "outer join receipt profile"):
+                validate(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"][
+                    "outer_join_terminal_profiles"
+                ].update({"unload_guard": "unload-after-quarantine"}),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "outer join profiles"):
+                validate(root)
+
+    def test_callback_transcript_cannot_omit_or_duplicate_read_effects(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_read_mapping"][
+                    "callback_transcript_profile"
+                ]["zero_effect_callbacks"].remove("resize"),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "callback transcript"):
+                validate(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_normalization_effect"][
+                    "effect_callback_transcript"
+                ]["effects"].append("close"),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "normalization effect callback transcript"):
+                validate(root)
+
     def test_revocation_event_cannot_jump_to_success(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
