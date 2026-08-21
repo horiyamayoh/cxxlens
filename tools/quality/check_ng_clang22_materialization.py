@@ -56,6 +56,9 @@ DF_0200_CORPUS_SCHEMA = pathlib.Path(
 DF_0200_CORPUS_DRIVER = pathlib.Path(
     "tests/adapter/clang22/df_0200_claim_batch_corpus_test.cpp"
 )
+DF_0200_PRODUCTION_COMPARISON_SOURCE = pathlib.Path(
+    "tests/adapter/clang22/materialization_claims_test.cpp"
+)
 TESTS_CMAKE = pathlib.Path("tests/CMakeLists.txt")
 DECISION_ADR = pathlib.Path(
     "docs/design/adr/0096-clang22-installed-materialization-boundary.md"
@@ -3512,9 +3515,10 @@ def validate_df_0200_claim_batch_corpus(
     artifact_bytes: bytes | None = None,
     corpus_schema: dict[str, Any] | None = None,
     driver_text: str | None = None,
+    production_path_text: str | None = None,
     cmake_text: str | None = None,
 ) -> dict[str, Any]:
-    """Validate the immutable D1 corpus, census, and executable public-API binding."""
+    """Validate the immutable D1 corpus and both independent executable bindings."""
 
     try:
         artifact_binding = binding["artifact"]
@@ -3529,6 +3533,10 @@ def validate_df_0200_claim_batch_corpus(
         corpus_schema = load(root / artifact_binding["schema"])
     if driver_text is None:
         driver_text = (root / public_reference["driver"]).read_text(encoding="utf-8")
+    if production_path_text is None:
+        production_path_text = (
+            root / DF_0200_PRODUCTION_COMPARISON_SOURCE
+        ).read_text(encoding="utf-8")
     if cmake_text is None:
         cmake_text = (root / TESTS_CMAKE).read_text(encoding="utf-8")
 
@@ -3785,11 +3793,38 @@ def validate_df_0200_claim_batch_corpus(
     ]
     if any(marker not in driver_text for marker in required_driver_markers):
         fail("materialization.claim-invalid", "DF-0200 C++ driver binding differs")
+
+    if binding.get("production_path_comparison") != (
+        "required-as-accepted-activation-step-before-production"
+    ):
+        fail(
+            "materialization.claim-invalid",
+            "DF-0200 production-path comparison disposition differs",
+        )
+    required_production_markers = [
+        "void check_production_path_claim_batch_equivalence(",
+        "construct_materialization_claims(request, results, producer, guarantee)",
+        "materialization_bounded_claim_source::begin(request)",
+        "construct_materialization_bounded_task_claims(",
+        "production_source->consume_task(std::move(*task))",
+        "std::move(*production_source).finalize()",
+        "run_materialization_incremental_coordinator_v2_1(",
+        "*production_encoding == *reference_encoding",
+        "check_production_path_claim_batch_equivalence(request, producer, root);",
+    ]
+    if any(marker not in production_path_text for marker in required_production_markers):
+        fail(
+            "materialization.claim-invalid",
+            "DF-0200 production-path comparison binding differs",
+        )
+
     required_cmake_markers = [
         public_reference["cmake_target"],
         public_reference["ctest"],
         artifact_binding["path"],
         "cxxlens::clang22_provider_sdk",
+        str(DF_0200_PRODUCTION_COMPARISON_SOURCE).removeprefix("tests/"),
+        "adapter.clang22-materialization-claims",
     ]
     if any(marker not in cmake_text for marker in required_cmake_markers):
         fail("materialization.claim-invalid", "DF-0200 CMake/CTest binding differs")

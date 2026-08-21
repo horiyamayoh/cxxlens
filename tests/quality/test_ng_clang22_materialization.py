@@ -6367,6 +6367,25 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 driver_text=driver.replace("commit(*engine, existing)", "commit(engine)"),
             )
 
+        production_path = (
+            ROOT / materialization.DF_0200_PRODUCTION_COMPARISON_SOURCE
+        ).read_text(encoding="utf-8")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "DF-0200 production-path comparison binding differs",
+        ):
+            materialization.validate_df_0200_claim_batch_corpus(
+                ROOT,
+                copy.deepcopy(binding),
+                artifact_bytes=artifact,
+                corpus_schema=copy.deepcopy(schema),
+                driver_text=driver,
+                production_path_text=production_path.replace(
+                    "std::move(*production_source).finalize()",
+                    "std::move(*production_source).commit()",
+                ),
+            )
+
         cmake = (ROOT / materialization.TESTS_CMAKE).read_text(encoding="utf-8")
         with self.assertRaisesRegex(
             materialization.MaterializationError, "DF-0200 CMake/CTest binding differs"
