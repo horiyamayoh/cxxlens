@@ -34,6 +34,21 @@ namespace cxxlens::sdk::provider::detail
 				output.termination_signal == 0 && output.failure_code.empty() &&
 				output.sandbox.validate().has_value();
 		}
+
+		[[nodiscard]] result<std::uint64_t> retained_frame_bytes(const frame& value)
+		{
+			constexpr auto fixed_bytes = static_cast<std::uint64_t>(sizeof(frame));
+			const auto control_bytes = static_cast<std::uint64_t>(value.control.size());
+			const auto payload_bytes = static_cast<std::uint64_t>(value.payload.size());
+			if (control_bytes > std::numeric_limits<std::uint64_t>::max() - fixed_bytes)
+				return cxxlens::sdk::unexpected(
+					error{"provider.output-limit", "ng1-live", "retained-frame-bytes-overflow"});
+			const auto with_control = fixed_bytes + control_bytes;
+			if (payload_bytes > std::numeric_limits<std::uint64_t>::max() - with_control)
+				return cxxlens::sdk::unexpected(
+					error{"provider.output-limit", "ng1-live", "retained-frame-bytes-overflow"});
+			return with_control + payload_bytes;
+		}
 	} // namespace
 
 	result<ng1_live_session_driver>
@@ -47,6 +62,9 @@ namespace cxxlens::sdk::provider::detail
 			configuration.maximum_retained_frames > std::numeric_limits<std::size_t>::max())
 			return cxxlens::sdk::unexpected(
 				error{"provider.output-limit", "ng1-live", "frame-count"});
+		if (configuration.maximum_retained_bytes < sizeof(frame))
+			return cxxlens::sdk::unexpected(
+				error{"provider.output-limit", "ng1-live", "frame-bytes"});
 		if (configuration.limits.protocol_major != 1U || configuration.limits.minimum_minor != 1U ||
 			configuration.limits.maximum_minor != 1U)
 			return cxxlens::sdk::unexpected(
@@ -113,7 +131,8 @@ namespace cxxlens::sdk::provider::detail
 									   std::move(*process),
 									   std::move(configuration.clock),
 									   std::move(configuration.observation),
-									   configuration.maximum_retained_frames};
+									   configuration.maximum_retained_frames,
+									   configuration.maximum_retained_bytes};
 	}
 
 	ng1_live_session_driver::ng1_live_session_driver(
@@ -121,10 +140,12 @@ namespace cxxlens::sdk::provider::detail
 		std::unique_ptr<ng1_duplex_process> process,
 		std::unique_ptr<ng1_monotonic_clock_port> clock,
 		std::unique_ptr<ng1_host_observation_port> observation,
-		const std::uint64_t maximum_retained_frames) noexcept
+		const std::uint64_t maximum_retained_frames,
+		const std::uint64_t maximum_retained_bytes) noexcept
 		: session_{std::move(session)}, adapter_{session_}, process_{std::move(process)},
 		  clock_{std::move(clock)}, observation_{std::move(observation)},
-		  maximum_retained_frames_{maximum_retained_frames}
+		  maximum_retained_frames_{maximum_retained_frames},
+		  maximum_retained_bytes_{maximum_retained_bytes}
 	{
 	}
 
@@ -134,7 +155,9 @@ namespace cxxlens::sdk::provider::detail
 		  observation_{std::move(other.observation_)},
 		  provider_frames_{std::move(other.provider_frames_)},
 		  last_provider_receipt_{std::move(other.last_provider_receipt_)},
-		  maximum_retained_frames_{other.maximum_retained_frames_}, ended_{other.ended_}
+		  maximum_retained_frames_{other.maximum_retained_frames_},
+		  maximum_retained_bytes_{other.maximum_retained_bytes_},
+		  retained_bytes_{other.retained_bytes_}, ended_{other.ended_}
 	{
 		other.ended_ = true;
 	}
@@ -238,11 +261,23 @@ namespace cxxlens::sdk::provider::detail
 		if (provider_frames_.size() >= maximum_retained_frames_)
 			return cxxlens::sdk::unexpected(
 				error{"provider.output-limit", "ng1-live", "retained-frame-count"});
+		auto frame_bytes = retained_frame_bytes(**value);
+		if (!frame_bytes)
+			return cxxlens::sdk::unexpected(std::move(frame_bytes.error()));
+		if (retained_bytes_ > maximum_retained_bytes_ ||
+			*frame_bytes > maximum_retained_bytes_ - retained_bytes_ ||
+			*frame_bytes > (maximum_retained_bytes_ - retained_bytes_) / 2U)
+			return cxxlens::sdk::unexpected(
+				error{"provider.output-limit", "ng1-live", "retained-frame-bytes"});
 
 		auto receipt = stamp_provider_frame(std::move(**value));
 		if (!receipt)
 			return cxxlens::sdk::unexpected(std::move(receipt.error()));
 		provider_frames_.push_back(receipt->value_);
+		// The latest receipt retains a second copy of the decoded frame in addition to
+		// the transcript vector. Count both copies so the bound covers all driver-owned
+		// decoded frame storage, not only the eventual transcript snapshot.
+		retained_bytes_ += *frame_bytes * 2U;
 		last_provider_receipt_ = *receipt;
 
 		if (is_ng1_heartbeat_message(receipt->value_.type) ||

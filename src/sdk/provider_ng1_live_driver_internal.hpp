@@ -103,6 +103,8 @@ namespace cxxlens::sdk::provider::detail
 		process_invocation invocation;
 		protocol_limits limits;
 		std::uint64_t maximum_retained_frames{};
+		/** Bound the resident decoded transcript bytes retained by the live driver. */
+		std::uint64_t maximum_retained_bytes{64U * 1024U * 1024U};
 		std::unique_ptr<ng1_monotonic_clock_port> clock;
 		std::unique_ptr<ng1_host_observation_port> observation;
 		std::unique_ptr<ng1_duplex_process_port> processes;
@@ -167,7 +169,8 @@ namespace cxxlens::sdk::provider::detail
 								std::unique_ptr<ng1_duplex_process> process,
 								std::unique_ptr<ng1_monotonic_clock_port> clock,
 								std::unique_ptr<ng1_host_observation_port> observation,
-								std::uint64_t maximum_retained_frames) noexcept;
+								std::uint64_t maximum_retained_frames,
+								std::uint64_t maximum_retained_bytes) noexcept;
 
 		[[nodiscard]] result<void> ensure_open(std::string_view operation) const;
 		/**
@@ -192,6 +195,8 @@ namespace cxxlens::sdk::provider::detail
 		std::vector<frame> provider_frames_;
 		std::optional<ng1_live_frame_receipt> last_provider_receipt_;
 		std::uint64_t maximum_retained_frames_{};
+		std::uint64_t maximum_retained_bytes_{};
+		std::uint64_t retained_bytes_{};
 		bool ended_{};
 	};
 } // namespace cxxlens::sdk::provider::detail

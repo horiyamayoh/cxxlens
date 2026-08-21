@@ -305,7 +305,8 @@ namespace
 					  std::shared_ptr<observation_state> observation,
 					  std::shared_ptr<process_state> process,
 					  const std::uint64_t maximum_retained_frames = 3U,
-					  std::shared_ptr<spill_state> spill_lifecycle = {}) const
+					  std::shared_ptr<spill_state> spill_lifecycle = {},
+					  const std::uint64_t maximum_retained_bytes = 64U * 1024U * 1024U) const
 		{
 			process_invocation invocation;
 			invocation.argv = {"fake-provider"};
@@ -322,6 +323,7 @@ namespace
 					invocation,
 					limits,
 					maximum_retained_frames,
+					maximum_retained_bytes,
 					std::make_unique<fake_clock>(std::move(clock)),
 					std::make_unique<fake_observation>(std::move(observation)),
 					std::make_unique<fake_process_port>(std::move(process))};
@@ -636,6 +638,48 @@ namespace
 		require(driver->cleanup(), "live-driver overflow session cleanup failed");
 	}
 
+	void test_live_driver_rejects_retention_byte_overflow()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		frame first{message_type::batch_begin,
+					7U,
+					0U,
+					{},
+					std::vector<std::byte>(32U, std::byte{0x2a}),
+					1U,
+					1U,
+					0U};
+		frame second = first;
+		second.sequence = 1U;
+		process->incoming.push_back(first);
+		process->incoming.push_back(std::move(second));
+
+		const auto one_frame_bytes = static_cast<std::uint64_t>(sizeof(frame)) +
+			static_cast<std::uint64_t>(first.payload.size());
+		const auto retained_bytes = one_frame_bytes * 2U;
+		auto driver = ng1_live_session_driver::start(
+			values.configuration(clock, observation, process, 8U, {}, retained_bytes), {});
+		require(driver, "live-driver byte-bound fixture start failed");
+		auto accepted = driver->receive_provider_frame({});
+		require(accepted && accepted->has_value(),
+				"live-driver byte-bound fixture rejected the first bounded frame");
+		auto rejected = driver->receive_provider_frame({});
+		require(!rejected && rejected.error().code == "provider.output-limit" &&
+					rejected.error().detail == "retained-frame-bytes",
+				"live-driver accepted a frame beyond the resident byte bound");
+		require(driver->provider_frames().size() == 1U,
+				"live-driver byte overflow mutated the retained transcript");
+		require(driver->terminate(process_status::output_limit),
+				"live-driver byte overflow cleanup did not terminate the process");
+		auto failed = driver->session().reject_output();
+		require(!failed && driver->session().state() == ng1_recovery_state::failed,
+				"live-driver byte overflow did not remain fail-closed");
+		require(driver->cleanup(), "live-driver byte overflow session cleanup failed");
+	}
+
 	void test_live_driver_rejects_host_resume_without_receipt()
 	{
 		fixture values;
@@ -883,6 +927,7 @@ int main()
 	test_live_driver_timeout_remains_unsealable();
 	test_live_control_bridge_and_bounded_retention();
 	test_live_driver_rejects_retention_overflow();
+	test_live_driver_rejects_retention_byte_overflow();
 	test_live_driver_rejects_host_resume_without_receipt();
 	test_live_driver_cleans_session_when_process_start_fails();
 	test_live_driver_cleans_session_when_process_start_throws();
