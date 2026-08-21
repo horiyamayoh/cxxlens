@@ -6,9 +6,95 @@
 #include <string_view>
 
 #include "sqlite_default_observation_internal.hpp"
+#include "sqlite_same_process_shm_reader_lifecycle_internal.hpp"
 
 namespace cxxlens::sdk
 {
+	/**
+	 * The source-family census captured before target SQLite xOpen/xShmMap.  Every flag is
+	 * evidence supplied by the observation port; an incomplete or positive effect flag can never
+	 * be interpreted as zero effect by the validator.
+	 */
+	struct sqlite_active_read_pre_effect_census
+	{
+		bool source_family_complete{};
+		bool source_family_unchanged{};
+		bool watch_loss_or_overflow_observed{};
+		bool runtime_drift_observed{};
+		bool vfs_drift_observed{};
+		bool process_drift_observed{};
+		bool fork_drift_observed{};
+		bool unload_requested{};
+		bool late_callback_observed{};
+		bool nested_mapping_started{};
+		bool create_observed{};
+		bool write_observed{};
+		bool truncate_observed{};
+		bool extend_observed{};
+		bool delete_observed{};
+		bool resize_observed{};
+	};
+
+	/** Inputs sealed by the #201 U201-R0 source-read preflight. */
+	struct sqlite_active_read_connection_request
+	{
+		std::string canonical_vfs_locator;
+		sqlite_backend_namespace_census source_census;
+		sqlite_source_shm_runtime_binding runtime;
+		const void* forwarding_vfs_identity{};
+		const void* pinned_underlying_vfs_identity{};
+		const void* pinned_underlying_vfs_app_data_identity{};
+		sqlite_backend_opaque_identity runtime_epoch;
+		sqlite_backend_opaque_identity vfs_epoch;
+		sqlite_backend_opaque_identity process_instance;
+		sqlite_backend_opaque_identity fork_generation;
+		sqlite_backend_opaque_identity connection_custody;
+		sqlite_backend_opaque_identity outer_custody;
+		sqlite_active_read_pre_effect_census pre_effect;
+		sqlite_backend_connection_observation connection;
+	};
+
+	/**
+	 * Authenticated U201-R0 evidence.  This is a move-independent evidence record, not a logical
+	 * read receipt and not a mapping/normalization capability.  In particular, no field in this
+	 * type represents decoded logical state or a zero-effect conclusion; those products require
+	 * the later #205/#201-R1 terminal barriers.
+	 */
+	struct sqlite_active_read_connection_receipt
+	{
+		std::string contract{"cxxlens.sqlite-active-read-connection.v1"};
+		detail::sqlite_active_read_connection_phase phase{
+			detail::sqlite_active_read_connection_phase::active_read_connection};
+		std::string canonical_vfs_locator;
+		std::string source_profile;
+		sqlite_backend_opaque_identity source_capability_token;
+		sqlite_backend_opaque_identity parent_namespace_identity;
+		sqlite_backend_opaque_identity source_guard_identity;
+		sqlite_backend_opaque_identity target_namespace_epoch_identity;
+		sqlite_backend_opaque_identity main_object_identity;
+		sqlite_backend_opaque_identity main_entry_identity;
+		sqlite_backend_opaque_identity wal_object_identity;
+		sqlite_backend_opaque_identity wal_entry_identity;
+		sqlite_backend_opaque_identity shm_object_identity;
+		sqlite_backend_opaque_identity shm_entry_identity;
+		sqlite_backend_opaque_identity filesystem_profile;
+		sqlite_backend_opaque_identity runtime_epoch;
+		sqlite_backend_opaque_identity vfs_epoch;
+		sqlite_backend_opaque_identity process_instance;
+		sqlite_backend_opaque_identity fork_generation;
+		sqlite_backend_opaque_identity connection_custody;
+		sqlite_backend_opaque_identity outer_custody;
+		sqlite_source_shm_open_callback_receipt source_open_callback;
+		sqlite_active_read_pre_effect_census pre_effect;
+		sqlite_backend_connection_observation connection;
+		std::shared_ptr<sqlite_source_shm_namespace_guard> source_namespace_guard;
+	};
+
+	/** Validate and seal the bounded #201 active-read connection product. */
+	[[nodiscard]] result<sqlite_active_read_connection_receipt>
+	validate_sqlite_active_read_connection(
+		const sqlite_active_read_connection_request& request);
+
 	/** Build the exact internal URI accepted by the readonly-SHM source profile. */
 	[[nodiscard]] result<std::string>
 	make_sqlite_source_shm_readonly_uri(std::string_view canonical_absolute_path);

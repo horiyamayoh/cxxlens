@@ -2989,4 +2989,239 @@ namespace cxxlens::sdk
 		return std::shared_ptr<sqlite_source_shm_readonly_port>{};
 #endif
 	}
+
+	result<sqlite_active_read_connection_receipt>
+	validate_sqlite_active_read_connection(
+		const sqlite_active_read_connection_request& request)
+	{
+		constexpr int sqlite_open_read_only = 0x00000001;
+		constexpr int sqlite_open_read_write = 0x00000002;
+		constexpr int sqlite_open_create = 0x00000004;
+		constexpr int sqlite_open_uri = 0x00000040;
+		constexpr int sqlite_open_main_database = 0x00000100;
+		constexpr int sqlite_open_full_mutex = 0x00010000;
+		constexpr int sqlite_open_private_cache = 0x00040000;
+		constexpr int sqlite_open_write_ahead_log = 0x00080000;
+		constexpr std::string_view source_profile{"sqlite-source-shm-readonly-unix-uri-v1"};
+		const auto reject = [](const std::string_view detail)
+			-> result<sqlite_active_read_connection_receipt>
+		{
+			return unexpected(error{"store.backend-unavailable",
+								"sqlite-active-read-connection",
+								std::string{detail}});
+		};
+		const auto valid_identity = [](const sqlite_backend_opaque_identity& identity) noexcept
+		{
+			return !identity.profile.empty() && !identity.bytes.empty();
+		};
+		const auto valid_runtime = [&]() noexcept
+		{
+			return request.runtime.runtime_identity != nullptr &&
+				request.runtime.runtime_image_identity != nullptr &&
+				request.runtime.runtime_lifetime_identity != nullptr &&
+				request.runtime.runtime_lifetime != nullptr && request.runtime.open_v2 != nullptr &&
+				request.runtime.close_v2 != nullptr && request.runtime.exec != nullptr &&
+				request.runtime.errmsg != nullptr && request.runtime.free_memory != nullptr &&
+				request.runtime.source_id != nullptr && request.runtime.uri_parameter != nullptr &&
+				request.runtime.uri_key != nullptr && request.runtime.vfs_find != nullptr &&
+				request.runtime.vfs_register != nullptr && request.runtime.vfs_unregister != nullptr;
+		};
+		const auto find_entry = [&](const sqlite_backend_file_role role)
+			-> const sqlite_backend_entry_observation*
+		{
+			const sqlite_backend_entry_observation* selected{};
+			for (const auto& entry : request.source_census.entries)
+			{
+				if (entry.role != role)
+					continue;
+				if (selected != nullptr)
+					return nullptr;
+				selected = &entry;
+			}
+			return selected;
+		};
+		const auto find_open = [&](const sqlite_backend_file_role role)
+			-> const sqlite_backend_open_observation*
+		{
+			const sqlite_backend_open_observation* selected{};
+			for (const auto& event : request.connection.open_events)
+			{
+				if (event.role != role)
+					continue;
+				if (selected != nullptr)
+					return nullptr;
+				selected = &event;
+			}
+			return selected;
+		};
+
+		try
+		{
+			if (request.canonical_vfs_locator.empty() ||
+				request.canonical_vfs_locator.front() != '/' ||
+				request.canonical_vfs_locator.contains('\0') || !valid_runtime() ||
+				request.forwarding_vfs_identity == nullptr ||
+				request.pinned_underlying_vfs_identity == nullptr ||
+				request.pinned_underlying_vfs_app_data_identity == nullptr ||
+				!valid_identity(request.runtime_epoch) || !valid_identity(request.vfs_epoch) ||
+				!valid_identity(request.process_instance) ||
+				!valid_identity(request.fork_generation) ||
+				!valid_identity(request.connection_custody) ||
+				!valid_identity(request.outer_custody))
+				return reject("runtime-or-custody-binding");
+
+			if (!request.pre_effect.source_family_complete ||
+				!request.pre_effect.source_family_unchanged ||
+				request.pre_effect.watch_loss_or_overflow_observed ||
+				request.pre_effect.runtime_drift_observed || request.pre_effect.vfs_drift_observed ||
+				request.pre_effect.process_drift_observed || request.pre_effect.fork_drift_observed ||
+				request.pre_effect.unload_requested || request.pre_effect.late_callback_observed ||
+				request.pre_effect.nested_mapping_started || request.pre_effect.create_observed ||
+				request.pre_effect.write_observed || request.pre_effect.truncate_observed ||
+				request.pre_effect.extend_observed || request.pre_effect.delete_observed ||
+				request.pre_effect.resize_observed)
+				return reject("pre-effect-census");
+
+			const auto& census = request.source_census;
+			if (census.profile.empty() || !valid_identity(census.capability_token) ||
+				!valid_identity(census.parent_namespace_identity) || !census.source_shm_guard ||
+				census.source_shm_guard->logical_main_locator() != request.canonical_vfs_locator ||
+				census.source_shm_guard->anchored_main_locator().empty() ||
+				!valid_identity(census.source_shm_guard->identity()) ||
+				!census.source_shm_guard->recheck())
+				return reject("source-namespace-preflight");
+
+			if (!valid_identity(request.connection.connection_token) ||
+				request.connection.connection_token != request.connection_custody ||
+				!valid_identity(request.connection.capability_token) ||
+				request.connection.capability_token != census.capability_token ||
+				request.connection.profile.empty() || request.connection.profile != census.profile ||
+				!request.connection.complete ||
+				!request.connection.main_handle_open || !request.connection.held_shm_locks.empty() ||
+				!request.connection.shm_map_events.empty())
+				return reject("connection-custody-or-pre-map-boundary");
+
+			const auto* main = find_entry(sqlite_backend_file_role::main_database);
+			const auto* wal = find_entry(sqlite_backend_file_role::write_ahead_log);
+			const auto* shm = find_entry(sqlite_backend_file_role::shared_memory);
+			const auto* journal = find_entry(sqlite_backend_file_role::rollback_journal);
+			if (main == nullptr || wal == nullptr || shm == nullptr || journal == nullptr ||
+				main->state != sqlite_backend_entry_state::held_regular ||
+				wal->state != sqlite_backend_entry_state::held_regular ||
+				shm->state != sqlite_backend_entry_state::held_regular ||
+				journal->state != sqlite_backend_entry_state::absent || main->held_object == nullptr ||
+				wal->held_object == nullptr || shm->held_object == nullptr ||
+				!main->direct_regular_entry || !wal->direct_regular_entry ||
+				!shm->direct_regular_entry || !main->object_identity ||
+				!main->directory_entry_identity || !wal->object_identity ||
+				!wal->directory_entry_identity || !shm->object_identity ||
+				!shm->directory_entry_identity || !main->object_filesystem_profile ||
+				!wal->object_filesystem_profile || !shm->object_filesystem_profile ||
+				!valid_identity(*main->object_filesystem_profile) ||
+				*main->object_filesystem_profile != *wal->object_filesystem_profile ||
+				*main->object_filesystem_profile != *shm->object_filesystem_profile)
+				return reject("source-family-shape");
+
+			for (const auto* entry : {main, wal, shm})
+			{
+				const auto replacement = entry->held_object->recheck_current_entry();
+				if (entry->held_object->role() != entry->role ||
+					entry->held_object->object_identity() != *entry->object_identity ||
+					entry->held_object->directory_entry_identity() != *entry->directory_entry_identity ||
+					!entry->held_object->object_mount_identity() ||
+					!valid_identity(*entry->held_object->object_mount_identity()) ||
+					!entry->held_object->recheck_retained_object() || !replacement ||
+					*replacement != sqlite_backend_replacement_state::exact_same_entry_and_object)
+					return reject("source-family-recheck");
+			}
+			if (*main->object_identity == *wal->object_identity ||
+				*main->object_identity == *shm->object_identity ||
+				*wal->object_identity == *shm->object_identity ||
+				*main->directory_entry_identity == *wal->directory_entry_identity ||
+				*main->directory_entry_identity == *shm->directory_entry_identity ||
+				*wal->directory_entry_identity == *shm->directory_entry_identity)
+				return reject("source-family-identity-alias");
+
+			const auto* main_open = find_open(sqlite_backend_file_role::main_database);
+			const auto* wal_open = find_open(sqlite_backend_file_role::write_ahead_log);
+			if (main_open == nullptr || wal_open == nullptr || request.connection.open_events.size() != 2U ||
+				main_open->outcome != sqlite_backend_open_outcome::succeeded ||
+				!main_open->returned_flags ||
+				(main_open->input_flags &
+				 (sqlite_open_read_only | sqlite_open_uri | sqlite_open_main_database |
+				  sqlite_open_full_mutex | sqlite_open_private_cache)) !=
+					(sqlite_open_read_only | sqlite_open_uri | sqlite_open_main_database |
+					 sqlite_open_full_mutex | sqlite_open_private_cache) ||
+				(main_open->input_flags & (sqlite_open_read_write | sqlite_open_create)) != 0 ||
+				(*main_open->returned_flags & sqlite_open_read_only) == 0 ||
+				(*main_open->returned_flags & (sqlite_open_read_write | sqlite_open_create)) != 0 ||
+				main_open->object_identity != main->object_identity ||
+				main_open->directory_entry_identity != main->directory_entry_identity ||
+				wal_open->outcome != sqlite_backend_open_outcome::succeeded ||
+				wal_open->input_flags !=
+					(sqlite_open_read_write | sqlite_open_create | sqlite_open_write_ahead_log) ||
+				!wal_open->returned_flags ||
+				(*wal_open->returned_flags & sqlite_open_read_only) == 0 ||
+				(*wal_open->returned_flags & sqlite_open_write_ahead_log) == 0 ||
+				(*wal_open->returned_flags & (sqlite_open_read_write | sqlite_open_create)) != 0 ||
+				wal_open->object_identity != wal->object_identity ||
+				wal_open->directory_entry_identity != wal->directory_entry_identity ||
+				request.connection.shared_memory_object_identity != shm->object_identity ||
+				request.connection.shared_memory_entry_identity != shm->directory_entry_identity)
+				return reject("readonly-connection-open");
+
+			if (!request.connection.source_shm_open_callback_receipt)
+				return reject("source-open-callback-missing");
+			const auto& callback = *request.connection.source_shm_open_callback_receipt;
+			if (callback.profile != source_profile ||
+				callback.connection_token != request.connection.connection_token ||
+				!valid_identity(callback.qualification_token) ||
+				!valid_identity(callback.target_namespace_epoch_identity) ||
+				callback.canonical_vfs_locator != request.canonical_vfs_locator ||
+				callback.delegated_vfs_locator.empty() || callback.application_generated_uri.empty() ||
+				callback.registered_vfs_name.empty() || callback.mode != "ro" ||
+				callback.cache != "private" || callback.readonly_shm != "1" ||
+				callback.input_flags != main_open->input_flags ||
+				callback.runtime_identity != request.runtime.runtime_identity ||
+				callback.forwarding_vfs_identity != request.forwarding_vfs_identity ||
+				callback.pinned_underlying_vfs_identity != request.pinned_underlying_vfs_identity ||
+				callback.pinned_underlying_vfs_app_data_identity !=
+					request.pinned_underlying_vfs_app_data_identity)
+				return reject("source-open-callback-binding");
+
+			sqlite_active_read_connection_receipt receipt;
+			receipt.canonical_vfs_locator = request.canonical_vfs_locator;
+			receipt.source_profile = census.profile;
+			receipt.source_capability_token = census.capability_token;
+			receipt.parent_namespace_identity = census.parent_namespace_identity;
+			receipt.source_guard_identity = census.source_shm_guard->identity();
+			receipt.target_namespace_epoch_identity = callback.target_namespace_epoch_identity;
+			receipt.main_object_identity = *main->object_identity;
+			receipt.main_entry_identity = *main->directory_entry_identity;
+			receipt.wal_object_identity = *wal->object_identity;
+			receipt.wal_entry_identity = *wal->directory_entry_identity;
+			receipt.shm_object_identity = *shm->object_identity;
+			receipt.shm_entry_identity = *shm->directory_entry_identity;
+			receipt.filesystem_profile = *main->object_filesystem_profile;
+			receipt.runtime_epoch = request.runtime_epoch;
+			receipt.vfs_epoch = request.vfs_epoch;
+			receipt.process_instance = request.process_instance;
+			receipt.fork_generation = request.fork_generation;
+			receipt.connection_custody = request.connection_custody;
+			receipt.outer_custody = request.outer_custody;
+			receipt.source_open_callback = callback;
+			receipt.pre_effect = request.pre_effect;
+			receipt.connection = request.connection;
+			receipt.source_namespace_guard = census.source_shm_guard;
+			return receipt;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return reject("allocation");
+		}
+		catch (const std::length_error&)
+		{
+			return reject("length");
+		}
+	}
 } // namespace cxxlens::sdk

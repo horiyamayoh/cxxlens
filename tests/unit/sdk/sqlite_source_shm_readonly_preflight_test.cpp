@@ -1,8 +1,14 @@
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -23,6 +29,352 @@ namespace
 			std::exit(1);
 		}
 	}
+
+	[[nodiscard]] sqlite_backend_opaque_identity active_read_identity(const std::string_view label)
+	{
+		sqlite_backend_opaque_identity output{"test.active-read.identity.v1", {}};
+		for (const auto byte : label)
+			output.bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+		return output;
+	}
+
+	class active_read_held_object final : public sqlite_backend_held_object
+	{
+	  public:
+		active_read_held_object(const sqlite_backend_file_role role,
+								 const std::string_view label,
+								 const sqlite_backend_opaque_identity& filesystem,
+								 const sqlite_backend_opaque_identity& mount)
+			: role_{role}, object_{active_read_identity(std::string{label} + ".object")},
+			  entry_{active_read_identity(std::string{label} + ".entry")}, filesystem_{filesystem},
+			  mount_{mount}
+		{
+		}
+
+		[[nodiscard]] sqlite_backend_file_role role() const noexcept override
+		{
+			return role_;
+		}
+
+		[[nodiscard]] const sqlite_backend_opaque_identity& object_identity() const noexcept override
+		{
+			return object_;
+		}
+
+		[[nodiscard]] const sqlite_backend_opaque_identity& directory_entry_identity() const noexcept override
+		{
+			return entry_;
+		}
+
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		object_filesystem_profile() const noexcept override
+		{
+			return filesystem_;
+		}
+
+		[[nodiscard]] const std::optional<sqlite_backend_opaque_identity>&
+		object_mount_identity() const noexcept override
+		{
+			return mount_;
+		}
+
+		[[nodiscard]] result<void> recheck_retained_object() const override
+		{
+			return retained_recheck_ok ? result<void>{} : unexpected(active_read_error("retained-recheck"));
+		}
+
+		[[nodiscard]] result<std::uint64_t> size() const override
+		{
+			return 4096U;
+		}
+
+		[[nodiscard]] result<void> read_exact(const std::uint64_t,
+										  const std::span<std::byte>) const override
+		{
+			return {};
+		}
+
+		[[nodiscard]] result<std::string> sha256() const override
+		{
+			return std::string{"sha256:"} + std::string(64U, 'a');
+		}
+
+		[[nodiscard]] result<std::shared_ptr<sqlite_backend_private_snapshot>>
+		copy_exact(sqlite_backend_private_snapshot_builder&, const std::span<std::byte>) const override
+		{
+			return unexpected(active_read_error("unexpected-copy"));
+		}
+
+		[[nodiscard]] result<sqlite_backend_replacement_state>
+		recheck_current_entry() const override
+		{
+			return replacement;
+		}
+
+		bool retained_recheck_ok{true};
+		sqlite_backend_replacement_state replacement{
+			sqlite_backend_replacement_state::exact_same_entry_and_object};
+
+	  private:
+		static error active_read_error(const std::string_view detail)
+		{
+			return {"test.failure", "sqlite-active-read", std::string{detail}};
+		}
+
+		sqlite_backend_file_role role_{};
+		sqlite_backend_opaque_identity object_;
+		sqlite_backend_opaque_identity entry_;
+		std::optional<sqlite_backend_opaque_identity> filesystem_;
+		std::optional<sqlite_backend_opaque_identity> mount_;
+	};
+
+	class active_read_namespace_guard final : public sqlite_source_shm_namespace_guard
+	{
+	  public:
+		active_read_namespace_guard(std::string locator, sqlite_backend_opaque_identity identity)
+		: locator_{std::move(locator)}, identity_{std::move(identity)}
+		{
+		}
+
+		[[nodiscard]] std::string_view logical_main_locator() const noexcept override
+		{
+			return locator_;
+		}
+
+		[[nodiscard]] std::string_view anchored_main_locator() const noexcept override
+		{
+			return anchored_;
+		}
+
+		[[nodiscard]] const sqlite_backend_opaque_identity& identity() const noexcept override
+		{
+			return identity_;
+		}
+
+		[[nodiscard]] result<sqlite_backend_entry_observation>
+		retained_entry(const sqlite_backend_file_role) const override
+		{
+			return unexpected(error{"test.failure", "sqlite-active-read", "unexpected-retained-entry"});
+		}
+
+		[[nodiscard]] result<void> recheck() const override
+		{
+			return recheck_ok ? result<void>{} : unexpected(error{"test.failure", "sqlite-active-read", "guard-recheck"});
+		}
+
+		[[nodiscard]] result<void> claim_target_epoch() override
+		{
+			return {};
+		}
+
+		[[nodiscard]] result<void> finish() override
+		{
+			return {};
+		}
+
+		std::string anchored_{"/proc/self/fd/active-read/main.db"};
+		bool recheck_ok{true};
+
+	  private:
+		std::string locator_;
+		sqlite_backend_opaque_identity identity_;
+	};
+
+	class active_read_fixture
+	{
+	  public:
+		active_read_fixture()
+		{
+			const auto filesystem = active_read_identity("filesystem");
+			const auto mount = active_read_identity("mount");
+			main = std::make_shared<active_read_held_object>(
+				sqlite_backend_file_role::main_database, "main", filesystem, mount);
+			wal = std::make_shared<active_read_held_object>(
+				sqlite_backend_file_role::write_ahead_log, "wal", filesystem, mount);
+			shm = std::make_shared<active_read_held_object>(
+				sqlite_backend_file_role::shared_memory, "shm", filesystem, mount);
+			const auto parent = active_read_identity("parent");
+			guard = std::make_shared<active_read_namespace_guard>(
+				path, active_read_identity("continuous-guard"));
+			request.canonical_vfs_locator = path;
+			request.source_census.profile = "default-filesystem-v1";
+			request.source_census.capability_token = active_read_identity("capability");
+			request.source_census.parent_namespace_identity = parent;
+			request.source_census.source_shm_guard = guard;
+			request.source_census.entries = {
+				make_entry(sqlite_backend_file_role::main_database, main),
+				make_entry(sqlite_backend_file_role::write_ahead_log, wal),
+				make_entry(sqlite_backend_file_role::shared_memory, shm),
+				make_absent(sqlite_backend_file_role::rollback_journal),
+			};
+
+			int runtime_identity{};
+			int runtime_image_identity{};
+			runtime_identity_ = &runtime_identity;
+			runtime_image_identity_ = &runtime_image_identity;
+			runtime_lifetime_ = std::make_shared<int>(1);
+			request.runtime.runtime_identity = runtime_identity_;
+			request.runtime.runtime_image_identity = runtime_image_identity_;
+			request.runtime.runtime_lifetime_identity = runtime_lifetime_.get();
+			request.runtime.runtime_lifetime = runtime_lifetime_;
+			request.runtime.open_v2 = &fake_open;
+			request.runtime.close_v2 = &fake_close;
+			request.runtime.exec = &fake_exec;
+			request.runtime.errmsg = &fake_errmsg;
+			request.runtime.free_memory = &fake_free;
+			request.runtime.source_id = &fake_source_id;
+			request.runtime.uri_parameter = &fake_uri_parameter;
+			request.runtime.uri_key = &fake_uri_key;
+			request.runtime.vfs_find = &fake_vfs_find;
+			request.runtime.vfs_register = &fake_vfs_register;
+			request.runtime.vfs_unregister = &fake_vfs_unregister;
+			request.forwarding_vfs_identity = &forwarding_vfs_identity_;
+			request.pinned_underlying_vfs_identity = &underlying_vfs_identity_;
+			request.pinned_underlying_vfs_app_data_identity = &underlying_app_data_identity_;
+			request.runtime_epoch = active_read_identity("runtime-epoch");
+			request.vfs_epoch = active_read_identity("vfs-epoch");
+			request.process_instance = active_read_identity("process");
+			request.fork_generation = active_read_identity("fork");
+			request.outer_custody = active_read_identity("outer-custody");
+			request.pre_effect = sqlite_active_read_pre_effect_census{
+				true,  // source_family_complete
+				true,  // source_family_unchanged
+				false, // watch_loss_or_overflow_observed
+				false, // runtime_drift_observed
+				false, // vfs_drift_observed
+				false, // process_drift_observed
+				false, // fork_drift_observed
+				false, // unload_requested
+				false, // late_callback_observed
+				false, // nested_mapping_started
+				false, // create_observed
+				false, // write_observed
+				false, // truncate_observed
+				false, // extend_observed
+				false, // delete_observed
+				false, // resize_observed
+			};
+			request.connection.profile = "default-filesystem-v1";
+			request.connection.capability_token = request.source_census.capability_token;
+			request.connection.connection_token = active_read_identity("connection");
+			request.connection_custody = request.connection.connection_token;
+			request.connection.complete = true;
+			request.connection.main_handle_open = true;
+			constexpr int main_flags = 0x00000001 | 0x00000040 | 0x00000100 | 0x00010000 | 0x00040000;
+			request.connection.open_events = {
+				{sqlite_backend_file_role::main_database,
+				 main_flags,
+				 sqlite_backend_open_outcome::succeeded,
+				 main_flags,
+				 main->object_identity(),
+				 main->directory_entry_identity()},
+				{sqlite_backend_file_role::write_ahead_log,
+				 0x00000002 | 0x00000004 | 0x00080000,
+				 sqlite_backend_open_outcome::succeeded,
+				 0x00000001 | 0x00080000,
+				 wal->object_identity(),
+				 wal->directory_entry_identity()},
+			};
+			request.connection.shared_memory_object_identity = shm->object_identity();
+			request.connection.shared_memory_entry_identity = shm->directory_entry_identity();
+			request.connection.source_shm_open_callback_receipt = sqlite_source_shm_open_callback_receipt{
+				"sqlite-source-shm-readonly-unix-uri-v1",
+				request.connection.connection_token,
+				active_read_identity("qualification"),
+				active_read_identity("target-namespace-epoch"),
+				path,
+				std::string{guard->anchored_main_locator()},
+				"file:%2Ftmp%2Factive-read%2Fmain.db?mode=ro&cache=private&readonly_shm=1",
+				"cxxlens-test-forwarding-vfs",
+				"ro",
+				"private",
+				"1",
+				main_flags,
+				request.runtime.runtime_identity,
+				request.forwarding_vfs_identity,
+				request.pinned_underlying_vfs_identity,
+				request.pinned_underlying_vfs_app_data_identity,
+			};
+		}
+
+		[[nodiscard]] static sqlite_backend_entry_observation
+		make_entry(const sqlite_backend_file_role role,
+				   const std::shared_ptr<active_read_held_object>& object)
+		{
+			return {role,
+					 sqlite_backend_entry_state::held_regular,
+					 object->object_identity(),
+					 object->directory_entry_identity(),
+					 object,
+					 object->object_filesystem_profile().value(),
+					 true};
+		}
+
+		[[nodiscard]] static sqlite_backend_entry_observation
+		make_absent(const sqlite_backend_file_role role)
+		{
+			return {role, sqlite_backend_entry_state::absent, {}, {}, {}, {}, false};
+		}
+
+		std::string path{"/tmp/active-read/main.db"};
+		std::shared_ptr<active_read_held_object> main;
+		std::shared_ptr<active_read_held_object> wal;
+		std::shared_ptr<active_read_held_object> shm;
+		std::shared_ptr<active_read_namespace_guard> guard;
+		sqlite_active_read_connection_request request;
+
+	  private:
+		static int fake_open(const char*, void**, int, const char*)
+		{
+			return 0;
+		}
+		static int fake_close(void*)
+		{
+			return 0;
+		}
+		static int fake_exec(void*, const char*, sqlite_source_shm_runtime_binding::exec_callback, void*, char**)
+		{
+			return 0;
+		}
+		static const char* fake_errmsg(void*)
+		{
+			return "";
+		}
+		static void fake_free(void*)
+		{
+		}
+		static const char* fake_source_id()
+		{
+			return "test-sqlite";
+		}
+		static const char* fake_uri_parameter(const char*, const char*)
+		{
+			return nullptr;
+		}
+		static const char* fake_uri_key(const char*, int)
+		{
+			return nullptr;
+		}
+		static void* fake_vfs_find(const char*)
+		{
+			return nullptr;
+		}
+		static int fake_vfs_register(void*, int)
+		{
+			return 0;
+		}
+		static int fake_vfs_unregister(void*)
+		{
+			return 0;
+		}
+
+		const void* runtime_identity_{};
+		const void* runtime_image_identity_{};
+		std::shared_ptr<void> runtime_lifetime_;
+		int forwarding_vfs_identity_{};
+		int underlying_vfs_identity_{};
+		int underlying_app_data_identity_{};
+	};
 
 #if defined(__linux__) && defined(F_OFD_SETLK)
 	class scratch_family
@@ -127,6 +479,77 @@ namespace
 			sqlite_default_observation_binding{}, sqlite_backend_opaque_identity{});
 		require(optional_port.has_value() && !*optional_port,
 				"missing active-WAL callback dependency leaves baseline observation available");
+	}
+
+	void exercise_active_read_connection_receipt()
+	{
+		active_read_fixture fixture;
+		auto receipt = validate_sqlite_active_read_connection(fixture.request);
+		require(receipt.has_value(), "authenticated active-read connection preflight");
+		require(receipt->contract == "cxxlens.sqlite-active-read-connection.v1",
+				"active-read receipt contract");
+		require(receipt->phase == detail::sqlite_active_read_connection_phase::active_read_connection,
+				"active-read receipt terminates at active connection");
+		require(receipt->source_namespace_guard == fixture.guard,
+				"active-read receipt retains the source namespace guard");
+		require(receipt->source_guard_identity == fixture.guard->identity(),
+				"active-read receipt binds the continuous guard identity");
+		require(receipt->connection.shm_map_events.empty() && receipt->connection.held_shm_locks.empty(),
+				"active-read receipt is sealed before the first SHM map/lock");
+		require(receipt->pre_effect.source_family_unchanged && !receipt->pre_effect.write_observed,
+				"active-read receipt retains the authenticated pre-effect census");
+		require(detail::is_sqlite_active_read_connection_transition(
+					detail::sqlite_active_read_connection_phase::outer_custody_open,
+					detail::sqlite_active_read_connection_phase::active_read_connection),
+				"outer custody opens before active-read connection is sealed");
+		require(!detail::is_sqlite_active_read_connection_transition(
+					detail::sqlite_active_read_connection_phase::active_read_connection,
+					detail::sqlite_active_read_connection_phase::unopened),
+				"active-read connection cannot rewind to unopened");
+
+		auto mutated = fixture.request;
+		mutated.pre_effect.write_observed = true;
+		require(!validate_sqlite_active_read_connection(mutated),
+				"pre-effect write evidence rejects the active-read product");
+		mutated = fixture.request;
+		mutated.connection.shm_map_events.push_back(sqlite_backend_shm_map_observation{});
+		require(!validate_sqlite_active_read_connection(mutated),
+				"active-read product cannot be sealed after a first map");
+		mutated = fixture.request;
+		mutated.pre_effect.nested_mapping_started = true;
+		require(!validate_sqlite_active_read_connection(mutated),
+				"nested mapping cannot be smuggled into the active-read product");
+		mutated = fixture.request;
+		mutated.connection.open_events.front().input_flags |= 0x00000002;
+		require(!validate_sqlite_active_read_connection(mutated),
+				"read-write main open is rejected before active-read custody");
+		mutated = fixture.request;
+		mutated.connection.profile = "different-profile";
+		require(!validate_sqlite_active_read_connection(mutated),
+				"connection profile drift is rejected before active-read custody");
+		mutated = fixture.request;
+		mutated.source_census.entries[1].state = sqlite_backend_entry_state::absent;
+		require(!validate_sqlite_active_read_connection(mutated),
+				"missing WAL is not classified as an empty active read");
+		mutated = fixture.request;
+		fixture.wal->replacement = sqlite_backend_replacement_state::replaced;
+		require(!validate_sqlite_active_read_connection(mutated),
+				"source-family replacement fails closed");
+		fixture.wal->replacement = sqlite_backend_replacement_state::exact_same_entry_and_object;
+		for (const auto forbidden : {
+				 &sqlite_active_read_pre_effect_census::watch_loss_or_overflow_observed,
+				 &sqlite_active_read_pre_effect_census::runtime_drift_observed,
+				 &sqlite_active_read_pre_effect_census::vfs_drift_observed,
+				 &sqlite_active_read_pre_effect_census::process_drift_observed,
+				 &sqlite_active_read_pre_effect_census::fork_drift_observed,
+				 &sqlite_active_read_pre_effect_census::unload_requested,
+				 &sqlite_active_read_pre_effect_census::late_callback_observed})
+		{
+			mutated = fixture.request;
+			mutated.pre_effect.*forbidden = true;
+			require(!validate_sqlite_active_read_connection(mutated),
+					"runtime/lifetime revocation evidence fails closed before active-read custody");
+		}
 	}
 
 	void exercise_outer_read_phase_order()
@@ -310,6 +733,7 @@ int main()
 {
 	exercise_strict_uri();
 	exercise_branch_local_capability_absence();
+	exercise_active_read_connection_receipt();
 	exercise_outer_read_phase_order();
 	exercise_map_sequence_proof();
 #if defined(__linux__) && defined(F_OFD_SETLK)

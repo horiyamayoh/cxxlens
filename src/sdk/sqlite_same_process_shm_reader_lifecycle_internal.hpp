@@ -8,6 +8,53 @@
 namespace cxxlens::sdk::detail
 {
 	/**
+	 * The bounded #201 U201-R0 active-read connection product.
+	 *
+	 * This is deliberately a smaller machine than the outer read/receipt machine below.  It
+	 * authenticates the source family and the read-only connection before the first SHM map.  It
+	 * carries no logical-read, mapping-lease, normalization, or zero-effect receipt authority.
+	 * Failures are returned by the source preflight validator as typed fail-closed errors rather
+	 * than being represented as a successful phase.
+	 */
+	enum class sqlite_active_read_connection_phase : std::uint8_t
+	{
+		unopened,
+		source_family_sealed,
+		readonly_profile_selected,
+		outer_custody_open,
+		active_read_connection,
+	};
+
+	inline constexpr std::array sqlite_active_read_connection_phases{
+		sqlite_active_read_connection_phase::unopened,
+		sqlite_active_read_connection_phase::source_family_sealed,
+		sqlite_active_read_connection_phase::readonly_profile_selected,
+		sqlite_active_read_connection_phase::outer_custody_open,
+		sqlite_active_read_connection_phase::active_read_connection,
+	};
+
+	[[nodiscard]] constexpr bool is_sqlite_active_read_connection_transition(
+		const sqlite_active_read_connection_phase origin,
+		const sqlite_active_read_connection_phase destination) noexcept
+	{
+		using phase = sqlite_active_read_connection_phase;
+		switch (origin)
+		{
+			case phase::unopened:
+				return destination == phase::source_family_sealed;
+			case phase::source_family_sealed:
+				return destination == phase::readonly_profile_selected;
+			case phase::readonly_profile_selected:
+				return destination == phase::outer_custody_open;
+			case phase::outer_custody_open:
+				return destination == phase::active_read_connection;
+			case phase::active_read_connection:
+				return false;
+		}
+		return false;
+	}
+
+	/**
 	 * The #201 outer zero-effect read success phases in the proposed, production-inactive
 	 * state-only graph.
 	 *
