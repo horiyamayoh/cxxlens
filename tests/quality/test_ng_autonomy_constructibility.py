@@ -152,6 +152,20 @@ class ConstructibilityTest(unittest.TestCase):
             with self.assertRaisesRegex(ConstructibilityError, "normalization entry"):
                 validate(root)
 
+    def test_normalization_entry_must_bind_to_closed_logical_read_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["sqlite_normalization_effect"].__setitem__(
+                    "entry_source_state", "typed-family-census"
+                ),
+            )
+            with self.assertRaisesRegex(
+                ConstructibilityError, "normalization entry source state|schema validation"
+            ):
+                validate(root)
+
     def test_missing_zero_effect_barrier_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

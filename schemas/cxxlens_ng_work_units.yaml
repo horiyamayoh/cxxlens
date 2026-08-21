@@ -34,7 +34,7 @@ entries:
     conflict_class: provider-protocol
     integration_owner: '#261'
     authority_sources: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:8a5fae35e9d780a637a9800b6f60cc3141a91a4f6ca9bbc42707568a8ba4e98f
+    authority_digest: sha256:6e019b8e2a0becbb797d0c4a39c7ad98a1ac9eb03356e43e229c8595175446b9
     completion_class: bounded-implementation
     residual_qualification: installed static/shared and cxxmonster E2E remain explicit later evidence
     units:
@@ -55,7 +55,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6f3c2b81ffd606e9949c4a771dbc116f242bdd0dfa4666d960ec11e992d17da6
+    authority_digest: sha256:28c0faf98e14ae9acadbb3b9e98aa86f3098a7d8a42b11bdb3949d14cddfdc57
     completion_class: bounded-implementation
     residual_qualification: platform native SQLite tuples remain with integration and release gates
     units:
@@ -92,7 +92,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6f3c2b81ffd606e9949c4a771dbc116f242bdd0dfa4666d960ec11e992d17da6
+    authority_digest: sha256:28c0faf98e14ae9acadbb3b9e98aa86f3098a7d8a42b11bdb3949d14cddfdc57
     completion_class: bounded-implementation
     residual_qualification: multi-Store and platform qualification remain separate
     units:
@@ -115,7 +115,7 @@ entries:
     conflict_class: sqlite-lifecycle
     integration_owner: '#205'
     authority_sources: [docs/design/adr/0104-unified-sqlite-source-lifecycle.md, schemas/cxxlens_ng_sqlite_store_contract.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6f3c2b81ffd606e9949c4a771dbc116f242bdd0dfa4666d960ec11e992d17da6
+    authority_digest: sha256:28c0faf98e14ae9acadbb3b9e98aa86f3098a7d8a42b11bdb3949d14cddfdc57
     completion_class: bounded-implementation
     residual_qualification: production canonical and user-source activation remains prohibited pending separate review
     units:
@@ -136,7 +136,7 @@ entries:
     conflict_class: materialization-store
     integration_owner: '#200'
     authority_sources: [docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0103-bounded-store-candidate-and-report.md, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:63d543ede2afcbf18c9a2e21376d089ea696b7a6b8790ca717654aed35694d2c
+    authority_digest: sha256:81dad03a5949e651701832696d5e39bda240b4621195c876279423f940f1d85e
     completion_class: bounded-implementation
     residual_qualification: scale parity and SQLite lazy-read residency are tracked separately
     units:

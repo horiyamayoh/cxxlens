@@ -475,6 +475,11 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     effect = machines["sqlite_normalization_effect"]
     require_exact(effect["separate_from_zero_effect_read"], True, "normalization isolation")
     require_exact(effect["entry"], "logical-read-receipt-exact-empty-after-connection-closed-zero-custody-zero-effect", "normalization entry")
+    require_exact(
+        effect["entry_source_state"],
+        mapping["outer_states"][-1],
+        "normalization entry source state",
+    )
     effect_states = ["logical-read-receipt", "receipt-revalidated", "effect-profile-capability-sealed", "exclusive-normalization-owner", "pre-effect-sealed", "effect-journal-open", "permitted-callback-effects", "file-and-parent-durable", "confirmed-close", "post-close-census", "normalization-receipt", "ordinary-fresh-init", "recoverable-interruption", "cold-reclassified", "seven-family-classified", "cold-family-authority-selected"]
     require_exact(effect["states"], effect_states, "normalization effect states")
     expected_effect_graph = {

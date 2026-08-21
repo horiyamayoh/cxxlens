@@ -45,8 +45,8 @@ $defs:
   sqlite_effect_machine:
     type: object
     additionalProperties: false
-    required: [owner, authority, separate_from_zero_effect_read, entry, states, transition_graph, interruption_edges, admission_guard, cold_family_routes, fixture_partition_machine, recrash_transition, production_activation_predicate, canonical_user_source_activation, parent_sync_after_each_delete]
-    properties: {owner: {type: string}, authority: {type: string}, separate_from_zero_effect_read: {type: boolean}, entry: {type: string}, states: {$ref: '#/$defs/nonempty_strings'}, transition_graph: {$ref: '#/$defs/closed_graph'}, interruption_edges: {type: object}, admission_guard: {type: object}, cold_family_routes: {type: object}, fixture_partition_machine: {type: object, minProperties: 7, maxProperties: 7, additionalProperties: {$ref: '#/$defs/effect_family'}}, recrash_transition: {type: string}, production_activation_predicate: {$ref: '#/$defs/nonempty_strings'}, canonical_user_source_activation: {type: string}, parent_sync_after_each_delete: {type: string}}
+    required: [owner, authority, separate_from_zero_effect_read, entry, entry_source_state, states, transition_graph, interruption_edges, admission_guard, cold_family_routes, fixture_partition_machine, recrash_transition, production_activation_predicate, canonical_user_source_activation, parent_sync_after_each_delete]
+    properties: {owner: {type: string}, authority: {type: string}, separate_from_zero_effect_read: {type: boolean}, entry: {type: string}, entry_source_state: {const: logical-read-receipt}, states: {$ref: '#/$defs/nonempty_strings'}, transition_graph: {$ref: '#/$defs/closed_graph'}, interruption_edges: {type: object}, admission_guard: {type: object}, cold_family_routes: {type: object}, fixture_partition_machine: {type: object, minProperties: 7, maxProperties: 7, additionalProperties: {$ref: '#/$defs/effect_family'}}, recrash_transition: {type: string}, production_activation_predicate: {$ref: '#/$defs/nonempty_strings'}, canonical_user_source_activation: {type: string}, parent_sync_after_each_delete: {type: string}}
   effect_family:
     type: object
     additionalProperties: false
