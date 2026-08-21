@@ -312,6 +312,34 @@ class ReleaseEvidenceBundleTest(unittest.TestCase):
         with self.assertRaisesRegex(ReleaseEvidenceError, "schema validation failed"):
             validate_selection(selected, ROOT)
 
+    def test_latest_run_discovery_marker_is_rejected(self) -> None:
+        selected = selection()
+        selected["roles"]["nightly"]["latest_run"] = True
+        with self.assertRaisesRegex(ReleaseEvidenceError, "schema validation failed"):
+            validate_selection(selected, ROOT)
+
+    def test_run_id_cannot_be_reused_across_roles(self) -> None:
+        selected = selection()
+        selected["roles"]["terminal_scope"]["run_id"] = RUN_IDS["gr"]
+        with self.assertRaisesRegex(ReleaseEvidenceError, "run ID is selected"):
+            validate_selection(selected, ROOT)
+
+    def test_workflow_id_cannot_be_reused_across_roles(self) -> None:
+        selected = selection()
+        selected["roles"]["terminal_scope"]["workflow_id"] = WORKFLOW_IDS["gr"]
+        with self.assertRaisesRegex(ReleaseEvidenceError, "workflow ID is selected"):
+            validate_selection(selected, ROOT)
+
+    def test_gr_and_terminal_scope_receipts_bind_the_complete_selection(self) -> None:
+        selected = selection()
+        candidate = bundle(selected)
+        selected["selected_at"] = "2026-08-21T03:01:00Z"
+        candidate["selection_digest"] = selection_digest(selected)
+        with self.assertRaisesRegex(
+            ReleaseEvidenceError, "gr input selection digest differs"
+        ):
+            validate_bundle(candidate, selected, ROOT, ARCHIVE_ROOT)
+
     def test_artifact_archive_digest_must_match_api_digest(self) -> None:
         selected = selection()
         candidate = bundle(selected)

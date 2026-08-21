@@ -235,13 +235,31 @@ def validate_selection(
         load_schema(root, SELECTION_SCHEMA),
         "release evidence selection",
     )
-    seen: set[int] = set()
+    seen_artifacts: set[int] = set()
+    seen_runs: dict[int, str] = {}
+    seen_workflows: dict[int, str] = {}
     for role_name in ROLE_SPECS:
         role = selection["roles"][role_name]
+        run_id = role["run_id"]
+        prior_role = seen_runs.get(run_id)
+        if prior_role is not None:
+            fail(
+                "run ID is selected for multiple roles: "
+                f"{run_id} ({prior_role}, {role_name})"
+            )
+        seen_runs[run_id] = role_name
+        workflow_id = role["workflow_id"]
+        prior_role = seen_workflows.get(workflow_id)
+        if prior_role is not None:
+            fail(
+                "workflow ID is selected for multiple roles: "
+                f"{workflow_id} ({prior_role}, {role_name})"
+            )
+        seen_workflows[workflow_id] = role_name
         for artifact_id in role["artifact_ids"]:
-            if artifact_id in seen:
+            if artifact_id in seen_artifacts:
                 fail(f"artifact ID is selected for multiple roles: {artifact_id}")
-            seen.add(artifact_id)
+            seen_artifacts.add(artifact_id)
     return selection
 
 
