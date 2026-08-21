@@ -46,7 +46,7 @@ entries:
         owned_products: []
         consumed_products: []
         owned_paths: [docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_source_closure_transport.schema.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_provider_protocol.schema.yaml, schemas/cxxlens_ng_provider_task_v4.schema.yaml, schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml, tools/quality/check_ng_source_closure_transport.py, tests/quality/test_ng_source_closure_transport.py]
-        consumed_paths: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md]
+        consumed_paths: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, tools/quality/check_ng_provider_protocol.py]
         generated_surfaces: [docs/design/SHA256SUMS, schemas/cxxlens_asset_migration_ledger.json]
         forbidden_shortcuts: [ambient-filesystem, request-2.1-container-reuse, cross-task-cache-v1, protocol-downgrade, message-id-overlap]
         evidence_commands: [python3 tools/quality/check_ng_source_closure_transport.py check --root ., python3 -m unittest tests.quality.test_ng_source_closure_transport]

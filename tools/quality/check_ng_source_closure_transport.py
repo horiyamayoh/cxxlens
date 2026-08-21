@@ -16,6 +16,8 @@ from typing import Any
 import jsonschema
 import yaml
 
+from check_ng_provider_protocol import cbor_encode
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CONTRACT = pathlib.Path("schemas/cxxlens_ng_source_closure_transport.yaml")
@@ -976,6 +978,55 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "sequence"
     ) != "contiguous-shared-session-sequence":
         raise SourceClosureTransportError("wire canonical encoding or sequence drift")
+
+    maximum_receipts = [
+        {
+            "blob_ordinal": index,
+            "blob_digest": "sha256:" + f"{index:064x}",
+            "size_bytes": 1,
+        }
+        for index in range(contract["limits"]["maximum_unique_blobs"])
+    ]
+    maximum_session_id = "provider-session:sha256:" + "f" * 64
+    maximum_task_id = "task:semantic-v2:sha256:" + "e" * 64
+    maximum_task_digest = "semantic-v2:sha256:" + "d" * 64
+    maximum_manifest_digest = "semantic-v2:sha256:" + "c" * 64
+    maximum_closure_digest = "semantic-v2:sha256:" + "b" * 64
+    maximum_receipts_digest = blob_receipts_digest(maximum_receipts)
+    maximum_seal = {
+        "session_id": maximum_session_id,
+        "task_id": maximum_task_id,
+        "task_v4_digest": maximum_task_digest,
+        "manifest_digest": maximum_manifest_digest,
+        "blob_receipts_digest": maximum_receipts_digest,
+        "blob_count": contract["limits"]["maximum_unique_blobs"],
+        "total_bytes": contract["limits"]["maximum_unique_blob_bytes"],
+        "closure_digest": maximum_closure_digest,
+    }
+    maximum_seal["transfer_digest"] = transfer_digest(
+        {
+            "session_id": maximum_session_id,
+            "task_id": maximum_task_id,
+            "task_v4_digest": maximum_task_digest,
+            "manifest_digest": maximum_manifest_digest,
+            "blob_receipts_digest": maximum_receipts_digest,
+            "blob_count": maximum_seal["blob_count"],
+            "total_bytes": maximum_seal["total_bytes"],
+            "closure_digest": maximum_closure_digest,
+        }
+    )
+    encoded_seal_bytes = len(cbor_encode(maximum_seal))
+    if encoded_seal_bytes > common["control_bytes"]:
+        raise SourceClosureTransportError(
+            "maximum message-27 control exceeds deterministic CBOR control bound"
+        )
+    if (
+        encoded_seal_bytes + protocol["wire"]["fixed_header_bytes"]
+        > protocol["wire"]["limits"]["frame_bytes"]
+    ):
+        raise SourceClosureTransportError(
+            "maximum message-27 frame exceeds fixed-header frame bound"
+        )
 
     success = contract["state_machine"]["success_path"]
     required_states = [

@@ -31,6 +31,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     TransferStateWitness,
     blob_receipts_digest,
     canonical_json,
+    cbor_encode,
     closure_digest,
     complete_request_witness,
     content_projection_digest,
@@ -694,17 +695,22 @@ class SourceClosureTransportTest(unittest.TestCase):
         request = self.bound_request()
         receipts_digest = blob_receipts_digest(receipts)
         projection = {
-            "session_id": "session:1",
+            "session_id": SESSION_ID,
             "task_id": request["task_extensions"][0]["task_id"],
             "task_v4_digest": request["task_extensions"][0]["task_v4_digest"],
             "manifest_digest": "semantic-v2:sha256:" + "7" * 64,
             "blob_receipts_digest": receipts_digest,
             "blob_count": 4096,
-            "total_bytes": 4096,
+            "total_bytes": 50331648,
             "closure_digest": "semantic-v2:sha256:" + "1" * 64,
         }
+        encoded_seal = cbor_encode(
+            {**projection, "transfer_digest": transfer_digest(projection)}
+        )
         self.assertRegex(receipts_digest, r"^semantic-v2:sha256:[0-9a-f]{64}$")
         self.assertRegex(transfer_digest(projection), r"^semantic-v2:sha256:[0-9a-f]{64}$")
+        self.assertLessEqual(len(encoded_seal), 65536)
+        self.assertLessEqual(len(encoded_seal) + 104, 16842856)
 
     def test_message_collision_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
