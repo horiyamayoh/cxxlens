@@ -6,13 +6,17 @@ on:
       - fix/261-task-transfer-authority-binding
     paths:
       - .github/workflows/temporary-issue-261-blocker-fix.yml
+      - tools/dev/temporary_issue261_patch.py
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   patch-and-test:
-    if: github.event.head_commit.message == 'Bootstrap exact issue 261 blocker fix'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
