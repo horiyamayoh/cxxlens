@@ -1,5 +1,5 @@
 {
-  "asset_count": 783,
+  "asset_count": 787,
   "assets": [
     {
       "authority": "active",
@@ -1543,7 +1543,35 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/work-unit-evidence/sqlite-logical-read-receipt.json",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/work-unit-evidence/sqlite-nested-mapping-terminal.json",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/development/work-unit-products/sqlite-active-read-connection.json",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/work-unit-products/sqlite-logical-read-receipt.json",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/work-unit-products/sqlite-nested-mapping-terminal.json",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -5484,7 +5512,7 @@
     }
   ],
   "classifications": {
-    "active": 747,
+    "active": 751,
     "archived": 35,
     "generated": 1
   },
