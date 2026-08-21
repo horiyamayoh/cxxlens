@@ -3,12 +3,43 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-work-unit.v1
 title: cxxlens autonomous bounded work-unit inventory
 type: object
 additionalProperties: false
-required: [schema, document_version, aggregate_owner, open_issue_inventory, closed_contract_owners, generated_surface_policy, product_receipts, entries]
+required: [schema, document_version, aggregate_owner, open_issue_inventory, completed_issue_inventory, closed_contract_owners, generated_surface_policy, product_receipts, entries]
 properties:
   schema: {const: cxxlens.ng-work-unit.v1}
   document_version: {const: 1.0.0}
   aggregate_owner: {const: '#173'}
-  open_issue_inventory: {type: array, minItems: 9, maxItems: 9, uniqueItems: true, items: {$ref: '#/$defs/issue'}}
+  open_issue_inventory: {type: array, minItems: 8, maxItems: 8, uniqueItems: true, items: {$ref: '#/$defs/issue'}}
+  completed_issue_inventory:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [issue, status, completion_class, completion_commit, completion_tree, evidence, residual_qualification]
+      properties:
+        issue: {$ref: '#/$defs/issue'}
+        status: {const: completed}
+        completion_class: {enum: [bounded-implementation, autonomy-readiness]}
+        completion_commit: {$ref: '#/$defs/git_oid'}
+        completion_tree: {$ref: '#/$defs/git_oid'}
+        evidence:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: object
+            additionalProperties: false
+            required: [kind, workflow_path, run_id, run_url, commit, tree, conclusion]
+            properties:
+              kind: {enum: [exact-main-nightly, exact-main-heavy, exact-main-fast]}
+              workflow_path: {$ref: '#/$defs/path'}
+              run_id: {type: integer, minimum: 1}
+              run_url: {type: string, pattern: '^https://github\.com/horiyamayoh/cxxlens/actions/runs/[1-9][0-9]*$'}
+              commit: {$ref: '#/$defs/git_oid'}
+              tree: {$ref: '#/$defs/git_oid'}
+              conclusion: {const: success}
+        residual_qualification: {type: string, minLength: 1}
   closed_contract_owners: {const: ['#167', '#179']}
   generated_surface_policy: {const: integration-owner-regenerates-and-commits}
   product_receipts:
@@ -17,8 +48,8 @@ properties:
     additionalProperties: {$ref: '#/$defs/product_receipt'}
   entries:
     type: array
-    minItems: 9
-    maxItems: 9
+    minItems: 8
+    maxItems: 8
     uniqueItems: true
     items:
       type: object
@@ -39,11 +70,25 @@ properties:
           items:
             type: object
             additionalProperties: false
-            required: [id, risk, state, depends_on, serialized_with, owned_products, consumed_products, owned_paths, consumed_paths, generated_surfaces, forbidden_shortcuts, evidence_commands, completion_plan]
+            required: [id, risk, state, dependency_completion, readiness, depends_on, serialized_with, owned_products, consumed_products, owned_paths, consumed_paths, generated_surfaces, forbidden_shortcuts, evidence_commands, completion_plan]
             properties:
               id: {type: string, pattern: '^wu-[1-9][0-9]*-[a-z0-9-]+$'}
               risk: {enum: [local, contract, invariant, security, compatibility, irreversible, resource-bound]}
               state: {enum: [ready, review-required, blocked-by-authority]}
+              dependency_completion:
+                oneOf:
+                  - type: object
+                    additionalProperties: false
+                    required: [status]
+                    properties: {status: {const: pending}}
+                  - type: object
+                    additionalProperties: false
+                    required: [status, decision_id, receipt_id]
+                    properties:
+                      status: {const: accepted}
+                      decision_id: {type: string, pattern: '^decision\.[a-z][a-z0-9.-]+$'}
+                      receipt_id: {type: string, pattern: '^review-receipt\.[a-z0-9.-]+\.v[0-9]+$'}
+              readiness: {enum: [blocked, executable]}
               depends_on: {type: array, uniqueItems: true, items: {$ref: '#/$defs/unit'}}
               serialized_with: {type: array, uniqueItems: true, items: {$ref: '#/$defs/unit'}}
               owned_products: {type: array, uniqueItems: true, items: {$ref: '#/$defs/product'}}

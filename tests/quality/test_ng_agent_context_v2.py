@@ -158,7 +158,7 @@ class AgentContextV2Test(unittest.TestCase):
         manifest = work_units.validate(ROOT)
         governance_entry, governance = _select(manifest, "#173", "wu-173-governance")
         governance["state"] = "ready"
-        entry, unit = _select(manifest, "#185", "wu-185-timeout-readiness-fixture")
+        entry, unit = _select(manifest, "#277", "wu-277-context-v2")
         from check_ng_agent_context_v2 import _packet
         packet = _packet(ROOT, manifest, entry, unit, synthetic=True)
         self.assertEqual(packet["execution_disposition"], "stop-blocked-by-dependency")

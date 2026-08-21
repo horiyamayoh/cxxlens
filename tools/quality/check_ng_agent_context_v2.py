@@ -164,8 +164,15 @@ def _resolve_execution(
             continue
         seen.add(dependency)
         dependency_unit = all_units[dependency]
-        if dependency_unit["state"] != "ready":
+        if (
+            dependency_unit["state"] != "ready"
+            and dependency_unit["dependency_completion"]["status"] != "accepted"
+        ):
             blocked_dependencies.append(f"dependency:{dependency}:{dependency_unit['state']}")
+        if dependency_unit["dependency_completion"]["status"] != "accepted":
+            blocked_dependencies.append(
+                f"dependency:{dependency}:completion:{dependency_unit['dependency_completion']['status']}"
+            )
         blocked_dependencies.extend(
             f"dependency:{dependency}:{blocker}"
             for blocker in _decision_blockers(
@@ -187,9 +194,14 @@ def _resolve_execution(
         for product in unit["consumed_products"]
         if manifest["product_receipts"][product]["status"] != "available"
     ]
-    if unit["state"] == "ready" and (blocked_dependencies or authority_blockers or product_blockers):
+    readiness_blockers = [] if unit["readiness"] == "executable" else [
+        f"readiness:{unit['readiness']}"
+    ]
+    if unit["state"] == "ready" and (
+        blocked_dependencies or authority_blockers or product_blockers or readiness_blockers
+    ):
         return "stop-blocked-by-dependency", sorted(
-            [*blocked_dependencies, *authority_blockers, *product_blockers]
+            [*blocked_dependencies, *authority_blockers, *product_blockers, *readiness_blockers]
         )
     disposition = {
         "ready": "ready",
@@ -201,6 +213,7 @@ def _resolve_execution(
         *sorted(blocked_dependencies),
         *sorted(authority_blockers),
         *sorted(product_blockers),
+        *sorted(readiness_blockers),
     ]
     return disposition, blockers
 

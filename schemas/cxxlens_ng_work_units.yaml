@@ -1,7 +1,22 @@
 schema: cxxlens.ng-work-unit.v1
 document_version: 1.0.0
 aggregate_owner: '#173'
-open_issue_inventory: ['#173', '#183', '#185', '#200', '#201', '#202', '#205', '#261', '#277']
+open_issue_inventory: ['#173', '#183', '#200', '#201', '#202', '#205', '#261', '#277']
+completed_issue_inventory:
+  - issue: '#185'
+    status: completed
+    completion_class: bounded-implementation
+    completion_commit: 2f7006612eec063d83f34f72580c87575226395e
+    completion_tree: 7a493ea1cc8e1a21bd11daee6d6edddbc17676fe
+    evidence:
+      - kind: exact-main-nightly
+        workflow_path: .github/workflows/nightly.yml
+        run_id: 32498517038
+        run_url: https://github.com/horiyamayoh/cxxlens/actions/runs/32498517038
+        commit: 2f7006612eec063d83f34f72580c87575226395e
+        tree: 7a493ea1cc8e1a21bd11daee6d6edddbc17676fe
+        conclusion: success
+    residual_qualification: 'exact-main Nightly evidence is retained for #173 aggregate release and does not claim production qualification by itself'
 closed_contract_owners: ['#167', '#179']
 generated_surface_policy: integration-owner-regenerates-and-commits
 product_receipts:
@@ -13,13 +28,15 @@ entries:
     conflict_class: governance-global
     integration_owner: '#173'
     authority_sources: [AGENTS.md, .github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml, .github/workflows/nightly.yml, .github/workflows/quality.yml, docs/design/adr/0094-risk-tiered-goal-authorization.md, docs/design/adr/0105-direct-main-review-and-release-governance.md, docs/development/decision-review-register.md, schemas/cxxlens_ng_autonomy_ci.schema.yaml, schemas/cxxlens_ng_autonomy_ci.yaml, schemas/cxxlens_ng_autonomy_constructibility.schema.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml, schemas/cxxlens_ng_development_decision_register.schema.yaml, schemas/cxxlens_ng_development_decision_register.yaml, schemas/cxxlens_ng_development_review_receipts.schema.yaml, schemas/cxxlens_ng_development_review_receipts.yaml, schemas/cxxlens_ng_release_evidence_bundle.schema.yaml, schemas/cxxlens_ng_release_evidence_selection.schema.yaml, schemas/cxxlens_ng_release_qualification.yaml, schemas/cxxlens_ng_wip_inventory.schema.yaml, schemas/cxxlens_ng_wip_inventory.yaml, schemas/cxxlens_ng_work_units.schema.yaml, tools/quality/check_ng_autonomy_ci.py, tools/quality/check_ng_autonomy_constructibility.py, tools/quality/check_ng_development_decisions.py, tools/quality/check_ng_release_evidence_bundle.py, tools/quality/check_ng_wip_inventory.py, tools/quality/check_ng_work_units.py]
-    authority_digest: sha256:ce05c1a1ce6bf0ab861a7261f9039489cab621323fc3dff54b84280f8299c88f
+    authority_digest: sha256:0c57fb8f937a057d57879f585bb299a95f8b8fc3f0770d986dd82b92c093076c
     completion_class: autonomy-readiness
     residual_qualification: '#173 remains open for aggregate release; production qualification not claimed'
     units:
       - id: wu-173-governance
         risk: contract
         state: review-required
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: []
         serialized_with: []
         owned_products: []
@@ -33,6 +50,8 @@ entries:
       - id: wu-173-authenticated-release-evidence-handoff
         risk: security
         state: review-required
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-173-governance]
         serialized_with: []
         owned_products: []
@@ -60,6 +79,8 @@ entries:
       - id: wu-261-source-closure-authority
         risk: security
         state: review-required
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-173-governance]
         serialized_with: []
         owned_products: []
@@ -81,6 +102,8 @@ entries:
       - id: wu-201-zero-effect-active-read
         risk: irreversible
         state: review-required
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-173-governance]
         serialized_with: [wu-201-logical-read-receipt, wu-205-nested-mapping-lease, wu-202-normalization-effect]
         owned_products: [sqlite.active-read-connection]
@@ -96,6 +119,8 @@ entries:
       - id: wu-201-logical-read-receipt
         risk: irreversible
         state: blocked-by-authority
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-205-nested-mapping-lease]
         serialized_with: [wu-201-zero-effect-active-read, wu-205-nested-mapping-lease, wu-202-normalization-effect]
         owned_products: [sqlite.logical-read-receipt]
@@ -118,6 +143,8 @@ entries:
       - id: wu-205-nested-mapping-lease
         risk: irreversible
         state: blocked-by-authority
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-201-zero-effect-active-read]
         serialized_with: [wu-201-zero-effect-active-read, wu-201-logical-read-receipt, wu-202-normalization-effect]
         owned_products: [sqlite.nested-mapping-terminal]
@@ -141,6 +168,8 @@ entries:
       - id: wu-202-normalization-effect
         risk: irreversible
         state: blocked-by-authority
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-201-logical-read-receipt]
         serialized_with: [wu-201-zero-effect-active-read, wu-201-logical-read-receipt, wu-205-nested-mapping-lease]
         owned_products: []
@@ -162,6 +191,8 @@ entries:
       - id: wu-200-candidate-adoption-report
         risk: resource-bound
         state: review-required
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-173-governance]
         serialized_with: [wu-200-sqlite-lazy-read-residency]
         owned_products: []
@@ -175,6 +206,8 @@ entries:
       - id: wu-200-sqlite-lazy-read-residency
         risk: resource-bound
         state: blocked-by-authority
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-200-candidate-adoption-report, wu-201-logical-read-receipt]
         serialized_with: [wu-200-candidate-adoption-report]
         owned_products: []
@@ -196,8 +229,10 @@ entries:
       - id: wu-183-live-port-selection
         risk: contract
         state: blocked-by-authority
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-261-source-closure-authority]
-        serialized_with: [wu-185-timeout-readiness-fixture]
+        serialized_with: []
         owned_products: []
         consumed_products: []
         owned_paths: [src/sdk/provider_runtime.cpp, src/sdk/provider_runtime_internal.hpp, tests/unit/sdk/provider_runtime_test.cpp]
@@ -206,38 +241,19 @@ entries:
         forbidden_shortcuts: [blocking-execute-path, closure-receipt-as-resume-token, implicit-ng0-downgrade]
         evidence_commands: [ctest --preset dev-clang -R provider_runtime --output-on-failure]
         completion_plan: [select existing ng1_duplex_process_port in production runtime, then implement resume and rate boundaries, then spill and crash recovery, then platform qualification]
-  - issue: '#185'
-    conflict_class: qualification-global
-    integration_owner: '#185'
-    authority_sources: [schemas/cxxlens_ng_sanitizer_coverage.yaml, .github/workflows/nightly.yml, tests/unit/sdk/provider_runtime_test.cpp]
-    authority_digest: sha256:021447ce8701e71d0883631311b4b62ec2e444298d46e116138fa7611de17344
-    completion_class: bounded-implementation
-    residual_qualification: 'exact-main Nightly qualification remains evidence for #173 and is not claimed by fixture repair'
-    units:
-      - id: wu-185-timeout-readiness-fixture
-        risk: local
-        state: ready
-        depends_on: [wu-173-governance]
-        serialized_with: [wu-183-live-port-selection]
-        owned_products: []
-        consumed_products: []
-        owned_paths: [tests/fixtures/provider_process_fixture.cpp, tests/unit/sdk/provider_runtime_test.cpp]
-        consumed_paths: [src/sdk/provider_runtime.cpp, .github/workflows/nightly.yml]
-        generated_surfaces: []
-        forbidden_shortcuts: [fixed-marker-sleep-as-readiness, timeout-clock-including-executable-verification, cleanup-inferred-from-timeout]
-        evidence_commands: [ctest --preset dev-clang -R '^unit\\.sdk-provider-runtime-timeout$' --repeat until-fail:20 --output-on-failure]
-        completion_plan: [add child readiness handshake, start runtime timeout after readiness, measure executable verification separately, record descendant cleanup independently, repeat under CPU contention]
   - issue: '#277'
     conflict_class: agent-ux
     integration_owner: '#277'
     authority_sources: [schemas/cxxlens_ng_work_units.schema.yaml, schemas/cxxlens_ng_api_development_readiness.yaml, schemas/cxxlens_ng_agent_context.schema.yaml]
-    authority_digest: sha256:a0fcac9a51a42475c02de12286eb4498dbbd6f03e48d050445e3df06aaf234ac
+    authority_digest: sha256:39df5d6380c8b20408db802dc6d7c7ccaf96e1218f137d843bd9c27c3ecec71e
     completion_class: autonomy-readiness
     residual_qualification: generic golden paths and missing --project remain later milestones
     units:
       - id: wu-277-context-v2
         risk: compatibility
         state: ready
+        dependency_completion: {status: pending}
+        readiness: blocked
         depends_on: [wu-173-governance]
         serialized_with: []
         owned_products: []

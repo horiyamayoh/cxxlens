@@ -45,8 +45,10 @@ resource-bound changes use two non-rewriting commits:
 3. record a canonical #owner-issue comment naming the exact SHA, reviewer identity/session, verdict,
    findings, verification limits, and qualification boundary;
 4. commit a review receipt containing the comment URL, canonical comment-body SHA-256, reviewed
-   commit/tree, candidate GitHub login, distinct reviewer GitHub login/identity/session, and explicit
-   accept/reject;
+   commit/tree, candidate GitHub login, distinct reviewer GitHub login, reviewer process
+   identity/session/context digest, and explicit accept/reject. The reviewer GitHub login must be
+   distinct from the candidate author and committer; process/session independence is additionally
+   established by the isolated read-only reviewer execution and its bound context digest;
 5. only an `accept` receipt with no unresolved P0/P1 may accompany a follow-up Accepted commit and
    corresponding machine-authority activation.
 
@@ -60,7 +62,7 @@ first descendant commit whose receipt registry contains the receipt ID, then ver
 The receipt registry is append-only at its canonical semantic projection: an acceptance commit may
 add exactly the selected receipt and must preserve every earlier parsed receipt value. YAML
 presentation is not authority. Offline checking verifies Git identity, authority blobs, ancestry, allowlisted paths,
-identity separation, findings, activation and preserved WIP heads. Connected CI verifies GitHub
+process/session and GitHub-identity separation, findings, activation and preserved WIP heads. Connected CI verifies GitHub
 comment bytes/author and the exact-candidate successful run. It fetches the candidate commit from
 GitHub, binds the claimed candidate login to the authenticated commit author, and requires the
 reviewer login to differ from both authenticated author and committer. A run name is not authority: the
@@ -69,10 +71,11 @@ connected checker resolves the immutable workflow ID and requires the active wor
 
 The authenticated comment body is the canonical JSON projection of receipt ID, decision/owner,
 candidate commit/tree/Git author/candidate GitHub login, complete authority digest, author, isolated read-only Codex
-reviewer provenance and UUID session, the complete review output plus its digest, verdict, P0/P1/P2 census, and qualification boundary. The
+reviewer provenance, UUID session, invocation/context digest, the complete review output plus its digest, verdict, P0/P1/P2 census, and qualification boundary. The
 connected checker requires byte equality with that projection; a REJECT body cannot be represented
-as an accepted receipt. The comment must be authored by the reviewer GitHub login, and that login
-must differ from the candidate GitHub login. The authority file set must exactly equal the decision register closure and
+as an accepted receipt. The comment must be authored by the reviewer GitHub login; that login must
+differ from the candidate GitHub login, and the reviewer process identity/session must differ from
+the authoring session. The authority file set must exactly equal the decision register closure and
 the acceptance path set is checker-derived, never claimant-selected. The inferred acceptance must
 be the immediate direct-main child of the candidate on the ancestry path.
 
@@ -129,7 +132,7 @@ Heavy and Nightly, #167 GR execution, and #179 terminal scope closure before #17
 ## Counterexamples and acceptance
 
 Reject PR-number-as-evidence, branch-name-as-identity, review of an abbreviated or different SHA,
-self-review presented as independent, accepted status with unresolved P0/P1, stale CI from another
+self-review, reused reviewer sessions or review artifacts presented as independent, accepted status with unresolved P0/P1, stale CI from another
 tree, dirty-tree release evidence, Linux-to-native promotion, and reopening a bounded issue solely
 because aggregate release remains blocked.
 
