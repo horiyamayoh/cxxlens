@@ -371,6 +371,68 @@ def validate_wire_control(
 class TransferStateWitness:
     """Executable exact-binding witness for one manifest and its canonical blob stream."""
 
+    @classmethod
+    def for_task_extension(
+        cls,
+        *,
+        session_id: str,
+        task_extension: dict[str, Any],
+        manifest_schema: dict[str, Any],
+    ) -> "TransferStateWitness":
+        """Bind a transfer to the already-sealed outer task-v4 extension."""
+
+        if not isinstance(task_extension, dict):
+            raise SourceClosureTransportError(
+                "outer task-v4 extension transfer binding is missing"
+            )
+        task_id = task_extension.get("task_id")
+        task_v4_digest = task_extension.get("task_v4_digest")
+        source_closure = task_extension.get("source_closure")
+        if not isinstance(source_closure, dict):
+            raise SourceClosureTransportError(
+                "outer task-v4 extension source closure binding is missing"
+            )
+        closure_id = source_closure.get("id")
+        closure_digest = source_closure.get("digest")
+        sealed_manifest_digest = source_closure.get("manifest_digest")
+        validate_wire_id("task_id", task_id)
+        if (
+            not isinstance(task_v4_digest, str)
+            or re.fullmatch(r"semantic-v2:sha256:[0-9a-f]{64}", task_v4_digest)
+            is None
+            or task_id != "task:" + task_v4_digest
+            or not isinstance(closure_id, str)
+            or re.fullmatch(
+                r"source-closure:semantic-v2:sha256:[0-9a-f]{64}",
+                closure_id,
+            )
+            is None
+            or not isinstance(closure_digest, str)
+            or re.fullmatch(
+                r"semantic-v2:sha256:[0-9a-f]{64}", closure_digest
+            )
+            is None
+            or closure_id != "source-closure:" + closure_digest
+            or not isinstance(sealed_manifest_digest, str)
+            or re.fullmatch(
+                r"semantic-v2:sha256:[0-9a-f]{64}",
+                sealed_manifest_digest,
+            )
+            is None
+        ):
+            raise SourceClosureTransportError(
+                "outer task-v4 extension transfer identity is invalid"
+            )
+        return cls(
+            session_id=session_id,
+            task_id=task_id,
+            task_v4_digest=task_v4_digest,
+            closure_id=closure_id,
+            closure_digest=closure_digest,
+            manifest_digest=sealed_manifest_digest,
+            manifest_schema=manifest_schema,
+        )
+
     def __init__(self, *, session_id: str, task_id: str, task_v4_digest: str,
                  closure_id: str, closure_digest: str, manifest_digest: str,
                  manifest_schema: dict[str, Any]) -> None:
@@ -883,6 +945,53 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         raise SourceClosureTransportError(
             f"complete request 2.2 constructibility witness failed: {message}"
         ) from error
+
+    outer_extension = witness["task_extensions"][0]
+    outer_manifest_bytes = canonical_json(witness_manifest)
+    outer_descriptor = {
+        "kind": "descriptor",
+        "session_id": "provider-session:sha256:" + "4" * 64,
+        "task_id": outer_extension["task_id"],
+        "task_v4_digest": outer_extension["task_v4_digest"],
+        "closure_id": outer_extension["source_closure"]["id"],
+        "closure_digest": outer_extension["source_closure"]["digest"],
+        "manifest_digest": outer_extension["source_closure"]["manifest_digest"],
+        "total_bytes": len(outer_manifest_bytes),
+        "chunk_bytes": len(outer_manifest_bytes),
+        "chunk_count": 1,
+    }
+    outer_transfer = TransferStateWitness.for_task_extension(
+        session_id=outer_descriptor["session_id"],
+        task_extension=outer_extension,
+        manifest_schema=manifest_schema,
+    )
+    outer_transfer.apply(
+        "source_closure_manifest", outer_descriptor, b"", contract
+    )
+    if outer_transfer.state != "manifest-open":
+        raise SourceClosureTransportError(
+            "outer task-v4 extension did not admit its exact transfer descriptor"
+        )
+    foreign_descriptor = dict(outer_descriptor)
+    foreign_descriptor["task_id"] = (
+        "task:semantic-v2:sha256:" + "f" * 64
+    )
+    foreign_transfer = TransferStateWitness.for_task_extension(
+        session_id=outer_descriptor["session_id"],
+        task_extension=outer_extension,
+        manifest_schema=manifest_schema,
+    )
+    try:
+        foreign_transfer.apply(
+            "source_closure_manifest", foreign_descriptor, b"", contract
+        )
+    except SourceClosureTransportError as error:
+        if "identity binding mismatch" not in str(error):
+            raise
+    else:
+        raise SourceClosureTransportError(
+            "wire transfer accepted cross-task rebinding"
+        )
     adr = (root / ADR).read_text(encoding="utf-8")
 
     legacy_ids = [entry["id"] for entry in protocol["message_types"]["registry"]]
@@ -1095,6 +1204,12 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "semantic-digest-of-canonical-complete-receipt-array-streamed"
     ):
         raise SourceClosureTransportError("manifest or bounded seal projection drift")
+    if contract["request_task_binding"].get("wire_transfer_identity") != (
+        "exact-outer-task-extension-task-id-task-v4-digest-and-source-closure-reference-before-first-transfer-frame"
+    ):
+        raise SourceClosureTransportError(
+            "outer task-v4 extension/wire transfer binding drift"
+        )
     failures = set(contract["failures"])
     matrix = contract["failure_phase_matrix"]
     matrix_failures = {reason for phase in matrix.values() for reason in phase["allowed"]}
@@ -1149,13 +1264,17 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         ("source_closure_seal", {"session_id": session_witness, "task_id": task_witness, "task_v4_digest": semantic_witness, "manifest_digest": manifest_witness, "blob_receipts_digest": receipt_witness, "blob_count": 1, "total_bytes": 1, "closure_digest": semantic, "transfer_digest": transfer_witness_digest}, b""),
         ("source_closure_ack", {"session_id": session_witness, "task_id": task_witness, "closure_digest": semantic, "transfer_digest": transfer_witness_digest, "spool_receipt": "spool-receipt:" + semantic_witness, "cleanup_owner": "cleanup-owner:" + semantic_witness}, b""),
     ]
-    transfer_witness = TransferStateWitness(
+    transfer_witness = TransferStateWitness.for_task_extension(
         session_id=session_witness,
-        task_id=task_witness,
-        task_v4_digest=semantic_witness,
-        closure_id="source-closure:" + semantic,
-        closure_digest=semantic,
-        manifest_digest=manifest_witness,
+        task_extension={
+            "task_id": task_witness,
+            "task_v4_digest": semantic_witness,
+            "source_closure": {
+                "id": "source-closure:" + semantic,
+                "digest": semantic,
+                "manifest_digest": manifest_witness,
+            },
+        },
         manifest_schema=manifest_schema,
     )
     for control_name, control_value, control_payload in controls_witness:

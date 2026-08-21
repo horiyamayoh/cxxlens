@@ -1,5 +1,5 @@
 schema: cxxlens.source-closure-transport.v1
-document_version: 1.1.0
+document_version: 1.1.1
 maturity: proposed
 authority:
   adr: docs/design/adr/0102-dedicated-source-closure-transport.md
@@ -184,6 +184,7 @@ request_task_binding:
   closure_ids: unique
   task_ids: unique-and-exact-index-parity-with-base-v2-1-tasks
   task_reference: resolves-exactly-one-request-closure
+  wire_transfer_identity: exact-outer-task-extension-task-id-task-v4-digest-and-source-closure-reference-before-first-transfer-frame
   base_task_v3_digest: recompute-from-complete-v2-2-base-task-projection-before-v4-identity-not-legacy-v3-digest
   open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests
   logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation
@@ -262,7 +263,7 @@ crash_effects:
   acknowledged-before-execution: {effect: task-local-sealed-spool, recovery: cancel-removes-no-cache}
   worker-crash: {effect: no-publication-or-ambient-mutation, recovery: authenticated-orphan-cleanup}
   resource-failure: {effect: no-task-acceptance, recovery: typed-reject-and-cleanup-receipt}
-counterexamples: [missing, duplicate, reordered, overlap, gap, extra, post-seal, tamper, limit-overflow, orphan-blob, missing-blob, cross-task, cross-session, stale-ack, foreign-replay, cancel-then-content, capability-absent, downgrade, message-id-collision, ambient-shadow, ng1-resume-alias]
+counterexamples: [missing, duplicate, reordered, overlap, gap, extra, post-seal, tamper, limit-overflow, orphan-blob, missing-blob, cross-task, cross-session, stale-ack, foreign-replay, cancel-then-content, capability-absent, downgrade, message-id-collision, ambient-shadow, ng1-resume-alias, valid-transfer-rebound-to-different-outer-task]
 qualification:
   implementation: not-claimed
   production: not-claimed

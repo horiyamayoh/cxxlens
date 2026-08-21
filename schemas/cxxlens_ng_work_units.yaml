@@ -33,8 +33,8 @@ entries:
   - issue: '#261'
     conflict_class: provider-protocol
     integration_owner: '#261'
-    authority_sources: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:6e019b8e2a0becbb797d0c4a39c7ad98a1ac9eb03356e43e229c8595175446b9
+    authority_sources: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
+    authority_digest: sha256:8f0807c142dcc17506fa0cade6b1b6ed43729da953030a6d26ec41a36eb2c34e
     completion_class: bounded-implementation
     residual_qualification: installed static/shared and cxxmonster E2E remain explicit later evidence
     units:
@@ -45,7 +45,7 @@ entries:
         serialized_with: []
         owned_products: []
         consumed_products: []
-        owned_paths: [docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_source_closure_transport.schema.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_provider_protocol.schema.yaml, schemas/cxxlens_ng_provider_task_v4.schema.yaml, schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml, tools/quality/check_ng_source_closure_transport.py, tests/quality/test_ng_source_closure_transport.py]
+        owned_paths: [docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_source_closure_transport.schema.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_provider_protocol.schema.yaml, schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml, schemas/cxxlens_ng_provider_task_v4.schema.yaml, schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml, tools/quality/check_ng_source_closure_transport.py, tests/quality/test_ng_source_closure_transport.py]
         consumed_paths: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, tools/quality/check_ng_provider_protocol.py]
         generated_surfaces: [docs/design/SHA256SUMS, schemas/cxxlens_asset_migration_ledger.json]
         forbidden_shortcuts: [ambient-filesystem, request-2.1-container-reuse, cross-task-cache-v1, protocol-downgrade, message-id-overlap]

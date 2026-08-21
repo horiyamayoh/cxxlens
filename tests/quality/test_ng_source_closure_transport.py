@@ -587,6 +587,49 @@ class SourceClosureTransportTest(unittest.TestCase):
         with self.assertRaisesRegex(SourceClosureTransportError, "typed ID"):
             validate_reject_control(control, contract)
 
+    def test_transfer_state_witness_binds_outer_task_before_first_frame(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        schema = yaml.safe_load(
+            (ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8")
+        )
+        request = self.bound_request()
+        manifest = self.bind_manifest(request)
+        extension = request["task_extensions"][0]
+        payload = canonical_json(manifest)
+        descriptor = {
+            "kind": "descriptor",
+            "session_id": SESSION_ID,
+            "task_id": extension["task_id"],
+            "task_v4_digest": extension["task_v4_digest"],
+            "closure_id": extension["source_closure"]["id"],
+            "closure_digest": extension["source_closure"]["digest"],
+            "manifest_digest": extension["source_closure"]["manifest_digest"],
+            "total_bytes": len(payload),
+            "chunk_bytes": len(payload),
+            "chunk_count": 1,
+        }
+        exact = TransferStateWitness.for_task_extension(
+            session_id=SESSION_ID,
+            task_extension=extension,
+            manifest_schema=schema,
+        )
+        exact.apply("source_closure_manifest", descriptor, b"", contract)
+        self.assertEqual(exact.state, "manifest-open")
+
+        foreign = dict(descriptor)
+        foreign["task_id"] = "task:semantic-v2:sha256:" + "f" * 64
+        rebound = TransferStateWitness.for_task_extension(
+            session_id=SESSION_ID,
+            task_extension=extension,
+            manifest_schema=schema,
+        )
+        with self.assertRaisesRegex(
+            SourceClosureTransportError, "identity binding mismatch"
+        ):
+            rebound.apply(
+                "source_closure_manifest", foreign, b"", contract
+            )
+
     def test_transfer_state_witness_rejects_foreign_gap_and_zero_manifest(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         witness = TransferStateWitness(

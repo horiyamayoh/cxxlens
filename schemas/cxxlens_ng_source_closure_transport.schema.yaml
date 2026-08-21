@@ -5,7 +5,7 @@ additionalProperties: false
 required: [schema, document_version, maturity, authority, review_findings, versions, capability, message_registry, wire_controls, state_machine, phase_fields, limits, resource_policy, identity, request_task_binding, cache, compatibility, failures, failure_phase_matrix, protocol_activation, crash_effects, counterexamples, qualification]
 properties:
   schema: {const: cxxlens.source-closure-transport.v1}
-  document_version: {const: 1.1.0}
+  document_version: {const: 1.1.1}
   maturity: {enum: [proposed, accepted]}
   authority:
     type: object
@@ -121,7 +121,7 @@ properties:
       seal_fields: {const: [session-id, task-id, task-v4-digest, manifest-digest, blob-receipts-digest, blob-count, total-bytes, closure-digest]}
       ambient_filesystem: {const: forbidden}
   request_task_binding:
-    const: {request_shape: exact-v2-1-authority-envelope-plus-closure-extensions, closure_identity: source-closure-id-equals-source-closure-prefix-plus-semantic-closure-digest, closure_ids: unique, task_ids: unique-and-exact-index-parity-with-base-v2-1-tasks, task_reference: resolves-exactly-one-request-closure, base_task_v3_digest: recompute-from-complete-v2-2-base-task-projection-before-v4-identity-not-legacy-v3-digest, open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests, logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation, blob_bytes_in_request_or_task: forbidden}
+    const: {request_shape: exact-v2-1-authority-envelope-plus-closure-extensions, closure_identity: source-closure-id-equals-source-closure-prefix-plus-semantic-closure-digest, closure_ids: unique, task_ids: unique-and-exact-index-parity-with-base-v2-1-tasks, task_reference: resolves-exactly-one-request-closure, wire_transfer_identity: exact-outer-task-extension-task-id-task-v4-digest-and-source-closure-reference-before-first-transfer-frame, base_task_v3_digest: recompute-from-complete-v2-2-base-task-projection-before-v4-identity-not-legacy-v3-digest, open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests, logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation, blob_bytes_in_request_or_task: forbidden}
   cache:
     const: {cross_task_v1: forbidden, transfer: complete-per-task, future_activation: separate-accepted-capability-and-adr}
   compatibility:
