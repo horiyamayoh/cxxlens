@@ -33,30 +33,31 @@ jobs:
 
           source = Path('tools/quality/check_ng_source_closure_transport.py')
           text = source.read_text(encoding='utf-8')
-          old = '''    foreign_descriptor["task_id"] = (
-              "task:semantic-v2:sha256:" + "f" * 64
+          old = (
+              '    foreign_descriptor["task_id"] = (\n'
+              '        "task:semantic-v2:sha256:" + "f" * 64\n'
+              '    )\n'
           )
-          '''
-          new = '''    foreign_descriptor["task_id"] = (
-              "task:semantic-v2:sha256:" + "f" * 64
+          new = old + (
+              '    foreign_descriptor["task_v4_digest"] = (\n'
+              '        "semantic-v2:sha256:" + "f" * 64\n'
+              '    )\n'
           )
-              foreign_descriptor["task_v4_digest"] = (
-                  "semantic-v2:sha256:" + "f" * 64
-              )
-          '''
           if text.count(old) != 1:
               raise SystemExit(f'source anchor count: {text.count(old)}')
           source.write_text(text.replace(old, new, 1), encoding='utf-8')
 
           tests = Path('tests/quality/test_ng_source_closure_transport.py')
           text = tests.read_text(encoding='utf-8')
-          old = '''        foreign["task_id"] = "task:semantic-v2:sha256:" + "f" * 64
-              rebound = TransferStateWitness.for_task_extension(
-          '''
-          new = '''        foreign["task_id"] = "task:semantic-v2:sha256:" + "f" * 64
-              foreign["task_v4_digest"] = "semantic-v2:sha256:" + "f" * 64
-              rebound = TransferStateWitness.for_task_extension(
-          '''
+          old = (
+              '        foreign["task_id"] = "task:semantic-v2:sha256:" + "f" * 64\n'
+              '        rebound = TransferStateWitness.for_task_extension(\n'
+          )
+          new = (
+              '        foreign["task_id"] = "task:semantic-v2:sha256:" + "f" * 64\n'
+              '        foreign["task_v4_digest"] = "semantic-v2:sha256:" + "f" * 64\n'
+              '        rebound = TransferStateWitness.for_task_extension(\n'
+          )
           if text.count(old) != 1:
               raise SystemExit(f'test anchor count: {text.count(old)}')
           tests.write_text(text.replace(old, new, 1), encoding='utf-8')
