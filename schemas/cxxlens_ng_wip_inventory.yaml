@@ -386,6 +386,11 @@ worktrees:
   branch: null
   disposition: historical-unreviewed
 - prunable: false
+  path: /tmp/cxxlens-next-production-ng1
+  head: 1da733af550eb27207accc923345bd7d7d456af9
+  branch: null
+  disposition: historical-unreviewed
+- prunable: false
   path: /tmp/cxxlens-ng1-runtime-reaudit
   head: c264288d9b4c1f578ade2bcc4f15aa37082770ab
   branch: agent/issue-183-runtime
