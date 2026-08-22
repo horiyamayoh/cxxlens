@@ -572,6 +572,63 @@ namespace
 		}
 	}
 
+	void exercise_active_read_identity_and_pre_effect_matrix()
+	{
+		active_read_fixture fixture;
+
+		using identity_member =
+			sqlite_backend_opaque_identity sqlite_active_read_connection_request::*;
+		constexpr std::array custody_identities{
+			identity_member{&sqlite_active_read_connection_request::runtime_epoch},
+			identity_member{&sqlite_active_read_connection_request::vfs_epoch},
+			identity_member{&sqlite_active_read_connection_request::process_instance},
+			identity_member{&sqlite_active_read_connection_request::fork_generation},
+			identity_member{&sqlite_active_read_connection_request::connection_custody},
+			identity_member{&sqlite_active_read_connection_request::outer_custody},
+		};
+		for (const auto member : custody_identities)
+		{
+			auto mutated = fixture.request;
+			mutated.*member = {};
+			require(!validate_sqlite_active_read_connection(mutated),
+					"missing runtime, process, fork, or custody identity fails closed");
+		}
+
+		using census_flag = bool sqlite_active_read_pre_effect_census::*;
+		constexpr std::array forbidden_flags{
+			census_flag{&sqlite_active_read_pre_effect_census::watch_loss_or_overflow_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::runtime_drift_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::vfs_drift_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::process_drift_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::fork_drift_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::unload_requested},
+			census_flag{&sqlite_active_read_pre_effect_census::late_callback_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::nested_mapping_started},
+			census_flag{&sqlite_active_read_pre_effect_census::create_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::write_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::truncate_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::extend_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::delete_observed},
+			census_flag{&sqlite_active_read_pre_effect_census::resize_observed},
+		};
+		for (const auto member : forbidden_flags)
+		{
+			auto mutated = fixture.request;
+			mutated.pre_effect.*member = true;
+			require(!validate_sqlite_active_read_connection(mutated),
+					"every pre-map effect, drift, unload, and nested-map marker fails closed");
+		}
+
+		for (const auto member : {&sqlite_active_read_pre_effect_census::source_family_complete,
+								  &sqlite_active_read_pre_effect_census::source_family_unchanged})
+		{
+			auto mutated = fixture.request;
+			mutated.pre_effect.*member = false;
+			require(!validate_sqlite_active_read_connection(mutated),
+					"incomplete or changed source-family census fails closed");
+		}
+	}
+
 	void exercise_outer_read_phase_order()
 	{
 		// DF-0201 scope is state/test-only; this does not authorize runtime binding or activation.
@@ -924,6 +981,69 @@ namespace
 		require(!detail::validate_sqlite_nested_mapping_terminal_path(cleanup_before_hide),
 				"cleanup cannot precede registry hide and callback drain");
 
+		constexpr std::array callbacks_before_hide{
+			nested::active_read_connection,
+			nested::attempt_pin_acquired,
+			nested::native_callback_entered,
+			nested::native_result_observed,
+			nested::pending_lease,
+			nested::published_reader_lease,
+			nested::revoke_intent,
+			nested::callbacks_drained,
+			nested::registry_hidden,
+			nested::native_cleanup_complete,
+			nested::nested_mapping_terminal,
+		};
+		require(!detail::validate_sqlite_nested_mapping_terminal_path(callbacks_before_hide),
+				"callback drain cannot precede registry hide");
+
+		constexpr std::array cleanup_before_drain{
+			nested::active_read_connection,
+			nested::attempt_pin_acquired,
+			nested::native_callback_entered,
+			nested::native_result_observed,
+			nested::pending_lease,
+			nested::published_reader_lease,
+			nested::revoke_intent,
+			nested::registry_hidden,
+			nested::native_cleanup_complete,
+			nested::callbacks_drained,
+			nested::nested_mapping_terminal,
+		};
+		require(!detail::validate_sqlite_nested_mapping_terminal_path(cleanup_before_drain),
+				"native cleanup cannot precede callback drain");
+
+		constexpr std::array hide_before_revoke{
+			nested::active_read_connection,
+			nested::attempt_pin_acquired,
+			nested::native_callback_entered,
+			nested::native_result_observed,
+			nested::pending_lease,
+			nested::published_reader_lease,
+			nested::registry_hidden,
+			nested::revoke_intent,
+			nested::callbacks_drained,
+			nested::native_cleanup_complete,
+			nested::nested_mapping_terminal,
+		};
+		require(!detail::validate_sqlite_nested_mapping_terminal_path(hide_before_revoke),
+				"registry hide cannot precede revoke intent");
+
+		constexpr std::array revoke_before_publish{
+			nested::active_read_connection,
+			nested::attempt_pin_acquired,
+			nested::native_callback_entered,
+			nested::native_result_observed,
+			nested::pending_lease,
+			nested::revoke_intent,
+			nested::registry_hidden,
+			nested::callbacks_drained,
+			nested::native_cleanup_complete,
+			nested::nested_mapping_terminal,
+		};
+		require(!detail::validate_sqlite_nested_mapping_terminal_path(revoke_before_publish),
+				"revoke cannot bypass pending and published lease states");
+
 		using logical = detail::sqlite_logical_read_receipt_phase;
 		constexpr std::array logical_success{
 			logical::active_read_connection,
@@ -980,6 +1100,7 @@ int main()
 	exercise_strict_uri();
 	exercise_branch_local_capability_absence();
 	exercise_active_read_connection_receipt();
+	exercise_active_read_identity_and_pre_effect_matrix();
 	exercise_outer_read_phase_order();
 	exercise_normalization_entry_phase_order();
 	exercise_map_sequence_proof();
