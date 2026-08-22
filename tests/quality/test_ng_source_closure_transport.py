@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import pathlib
 import shutil
@@ -23,6 +24,8 @@ from check_ng_source_closure_transport import (  # noqa: E402
     LEGACY_BINDINGS,
     PROTOCOL,
     PROTOCOL_SCHEMA,
+    PROVIDER_RUNTIME,
+    PROVIDER_RUNTIME_TEST,
     REQUEST,
     SCHEMA,
     TASK,
@@ -32,6 +35,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     blob_receipts_digest,
     canonical_json,
     cbor_encode,
+    cleanup_owner_for_transfer,
     closure_digest,
     complete_request_witness,
     content_projection_digest,
@@ -39,11 +43,13 @@ from check_ng_source_closure_transport import (  # noqa: E402
     request_v2_2_projection,
     semantic_digest,
     source_closure_file_id,
+    spool_receipt_for_transfer,
     task_v4_projection,
     trust_policy_digest,
     validate,
     validate_manifest,
     validate_reject_control,
+    validate_runtime_activation_boundary,
     validate_wire_control,
     validate_request_binding,
     transfer_digest,
@@ -222,6 +228,8 @@ class SourceClosureTransportTest(unittest.TestCase):
             SCHEMA,
             TASK,
             MANIFEST_SCHEMA,
+            PROVIDER_RUNTIME,
+            PROVIDER_RUNTIME_TEST,
             *legacy,
         ):
             destination = root / relative
@@ -238,6 +246,31 @@ class SourceClosureTransportTest(unittest.TestCase):
 
     def test_repository_contract_is_valid(self) -> None:
         validate(ROOT)
+
+    def test_proposed_authority_rejects_runtime_ng1_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            runtime = root / PROVIDER_RUNTIME
+            runtime.write_text(
+                runtime.read_text(encoding="utf-8")
+                + "\n// accidental production dispatch: make_system_ng1_duplex_process_port();\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SourceClosureTransportError, "factory escaped"):
+                validate_runtime_activation_boundary(root)
+
+    def test_proposed_authority_requires_prelaunch_negative_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            runtime_test = root / PROVIDER_RUNTIME_TEST
+            runtime_test.write_text(
+                runtime_test.read_text(encoding="utf-8").replace(
+                    "source_closure_processes.run_calls == 0U", "source_closure_processes.run_calls == 1U"
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SourceClosureTransportError, "negative evidence"):
+                validate_runtime_activation_boundary(root)
 
     def test_complete_v2_2_request_witness_is_schema_valid_and_bound(self) -> None:
         request, manifest = complete_request_witness(ROOT)
@@ -268,6 +301,39 @@ class SourceClosureTransportTest(unittest.TestCase):
             manifest, yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text())
         )
         validate_request_binding(request, [manifest])
+
+    def test_v2_2_binding_revalidates_inherited_v2_1_authority(self) -> None:
+        request, manifest = complete_request_witness(ROOT)
+        legacy_schema = yaml.safe_load(
+            (ROOT / LEGACY_BINDINGS["request_schema_sha256"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        validate_request_binding(
+            request, [manifest], legacy_request_schema=legacy_schema
+        )
+
+        for field, value in (
+            ("provider_id", "provider.foreign"),
+            ("tool_executable", "foreign-materializer"),
+            ("provider_task_id", "task:semantic-v2:" + "9" * 64),
+        ):
+            with self.subTest(field=field):
+                tampered = copy.deepcopy(request)
+                if field == "provider_id":
+                    tampered["worker"][field] = value
+                elif field == "tool_executable":
+                    tampered["tool"]["executable"] = value
+                else:
+                    tampered["tasks"][0][field] = value
+                with self.assertRaisesRegex(
+                    SourceClosureTransportError, "inherited v2.1 authority"
+                ):
+                    validate_request_binding(
+                        tampered,
+                        [manifest],
+                        legacy_request_schema=legacy_schema,
+                    )
 
     def test_maximum_manifest_constructibility_witness_is_within_transport_bound(self) -> None:
         members = []
@@ -451,6 +517,37 @@ class SourceClosureTransportTest(unittest.TestCase):
         with self.assertRaisesRegex(SourceClosureTransportError, "uint64"):
             validate_reject_control(control, contract)
 
+    def test_reject_counters_must_be_available_in_their_failure_phase(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        contract["failure_phase_matrix"]["before-manifest"]["counters"] = [
+            "received-manifest-bytes"
+        ]
+        control = {
+            "session_id": SESSION_ID,
+            "task_id": TASK_ID,
+            "failure_phase": "before-manifest",
+            "reason_code": "source-closure.protocol-state-invalid",
+            "observed_counters": {"received-manifest-bytes": 0},
+            "cleanup_receipt": CLEANUP_RECEIPT,
+        }
+        with self.assertRaisesRegex(SourceClosureTransportError, "unavailable"):
+            validate_reject_control(control, contract)
+
+    def test_toolchain_resource_authority_is_required_and_exact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                CONTRACT,
+                lambda value: value["resource_authority"]["toolchain_owned"].update(
+                    {"physical_root_identity": "semantic-host-path"}
+                ),
+            )
+            with self.assertRaisesRegex(
+                SourceClosureTransportError, "transport schema|resource authority"
+            ):
+                validate(root)
+
     def test_local_only_failure_cannot_be_emitted_as_wire_reject(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         control = {
@@ -491,6 +588,153 @@ class SourceClosureTransportTest(unittest.TestCase):
         descriptor = {"kind": "descriptor", "session_id": SESSION_ID, "task_id": TASK_ID, "task_v4_digest": semantic, "closure_id": "x", "closure_digest": semantic, "manifest_digest": semantic, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}
         with self.assertRaisesRegex(SourceClosureTransportError, "source closure ID"):
             validate_wire_control("source_closure_manifest", descriptor, b"", "task-v4-sealed", contract)
+
+        seal = {
+            "session_id": SESSION_ID,
+            "task_id": TASK_ID,
+            "task_v4_digest": semantic,
+            "manifest_digest": semantic,
+            "blob_receipts_digest": semantic,
+            "blob_count": contract["limits"]["maximum_unique_blobs"] + 1,
+            "total_bytes": 0,
+            "closure_digest": semantic,
+            "transfer_digest": semantic,
+        }
+        with self.assertRaisesRegex(SourceClosureTransportError, "seal census"):
+            validate_wire_control("source_closure_seal", seal, b"", "blob-sealed", contract)
+
+        with self.assertRaisesRegex(SourceClosureTransportError, "unknown"):
+            validate_wire_control("source_closure_unknown", {}, b"", "task-v4-sealed", contract)
+
+    def test_transfer_witness_rejects_aggregate_blob_chunk_frame_overflow(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        contract["limits"]["maximum_blob_chunk_frames"] = 1
+        schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
+        payload = b"xy"
+        content = "sha256:" + hashlib.sha256(payload).hexdigest()
+        member = {
+            "file_id": source_closure_file_id("project://src/main.cpp"),
+            "logical_path": "project://src/main.cpp",
+            "role": "main",
+            "encoding": "utf8",
+            "size_bytes": len(payload),
+            "content_digest": content,
+            "read_only": True,
+        }
+        blob = {"content_digest": content, "size_bytes": len(payload)}
+        digest = closure_digest([member], [blob])
+        manifest = {
+            "schema": "cxxlens.source-closure-manifest.v1",
+            "closure_id": "source-closure:" + digest,
+            "closure_digest": digest,
+            "members": [member],
+            "blobs": [blob],
+        }
+        manifest_payload = canonical_json(manifest)
+        manifest_digest_value = manifest_digest(manifest)
+        witness = TransferStateWitness(
+            session_id=SESSION_ID,
+            task_id=TASK_ID,
+            task_v4_digest=SEMANTIC,
+            closure_id=manifest["closure_id"],
+            closure_digest=digest,
+            manifest_digest=manifest_digest_value,
+            manifest_schema=schema,
+        )
+        witness.apply(
+            "source_closure_manifest",
+            {
+                "kind": "descriptor",
+                "session_id": SESSION_ID,
+                "task_id": TASK_ID,
+                "task_v4_digest": SEMANTIC,
+                "closure_id": manifest["closure_id"],
+                "closure_digest": digest,
+                "manifest_digest": manifest_digest_value,
+                "total_bytes": len(manifest_payload),
+                "chunk_bytes": len(manifest_payload),
+                "chunk_count": 1,
+            },
+            b"",
+            contract,
+        )
+        witness.apply(
+            "source_closure_manifest",
+            {
+                "kind": "chunk",
+                "session_id": SESSION_ID,
+                "task_id": TASK_ID,
+                "manifest_digest": manifest_digest_value,
+                "chunk_index": 0,
+                "offset": 0,
+                "byte_count": len(manifest_payload),
+            },
+            manifest_payload,
+            contract,
+        )
+        witness.apply(
+            "source_closure_blob",
+            {
+                "session_id": SESSION_ID,
+                "task_id": TASK_ID,
+                "closure_digest": digest,
+                "blob_ordinal": 0,
+                "blob_digest": content,
+                "total_bytes": len(payload),
+                "chunk_bytes": 1,
+                "chunk_count": 2,
+            },
+            b"",
+            contract,
+        )
+        witness.apply(
+            "source_closure_chunk",
+            {
+                "session_id": SESSION_ID,
+                "task_id": TASK_ID,
+                "blob_ordinal": 0,
+                "blob_digest": content,
+                "chunk_index": 0,
+                "offset": 0,
+                "byte_count": 1,
+            },
+            payload[:1],
+            contract,
+        )
+        with self.assertRaisesRegex(SourceClosureTransportError, "aggregate blob chunk frame"):
+            witness.apply(
+                "source_closure_chunk",
+                {
+                    "session_id": SESSION_ID,
+                    "task_id": TASK_ID,
+                    "blob_ordinal": 0,
+                    "blob_digest": content,
+                    "chunk_index": 1,
+                    "offset": 1,
+                    "byte_count": 1,
+                },
+                payload[1:],
+                contract,
+            )
+
+    def test_phase_and_counterexample_contract_is_exact(self) -> None:
+        for label, mutate in (
+            (
+                "phase-fields",
+                lambda value: value["phase_fields"]["before-manifest"].append(
+                    "received-closure-bytes"
+                ),
+            ),
+            (
+                "counterexamples",
+                lambda value: value["counterexamples"].remove("cross-task"),
+            ),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                root = self.copied_root(temporary)
+                self.rewrite(root, CONTRACT, mutate)
+                with self.assertRaisesRegex(Exception, "transport schema validation|counterexample"):
+                    validate(root)
 
     def test_zero_byte_blob_has_descriptor_only_wire_representation(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
@@ -752,8 +996,12 @@ class SourceClosureTransportTest(unittest.TestCase):
             "task_id": extension_a["task_id"],
             "closure_digest": closure_a["digest"],
             "transfer_digest": seal_a["transfer_digest"],
-            "spool_receipt": "spool-receipt:" + extension_a["task_v4_digest"],
-            "cleanup_owner": "cleanup-owner:" + extension_a["task_v4_digest"],
+            "spool_receipt": spool_receipt_for_transfer(
+                SESSION_ID, extension_a["task_id"], seal_a["transfer_digest"]
+            ),
+            "cleanup_owner": cleanup_owner_for_transfer(
+                SESSION_ID, extension_a["task_id"], seal_a["transfer_digest"]
+            ),
         }
         frames_a = [
             ("source_closure_manifest", descriptor_a, b""),
@@ -772,6 +1020,49 @@ class SourceClosureTransportTest(unittest.TestCase):
         for name, control, payload in frames_a:
             valid_a.apply(name, control, payload, contract)
         self.assertEqual(valid_a.state, "closure-acknowledged")
+
+        # A syntactically valid credential from another session, task, or
+        # terminal transfer must not authorize this sealed spool.
+        for field, session_id, task_id, transfer in (
+            (
+                "spool_receipt",
+                "provider-session:sha256:" + "9" * 64,
+                extension_a["task_id"],
+                seal_a["transfer_digest"],
+            ),
+            (
+                "cleanup_owner",
+                SESSION_ID,
+                "task:semantic-v2:sha256:" + "9" * 64,
+                seal_a["transfer_digest"],
+            ),
+            (
+                "spool_receipt",
+                SESSION_ID,
+                extension_a["task_id"],
+                "semantic-v2:sha256:" + "9" * 64,
+            ),
+        ):
+            with self.subTest(field=field, session_id=session_id, task_id=task_id):
+                rebound_credentials = TransferStateWitness.for_task_extension(
+                    session_id=SESSION_ID,
+                    task_extension=extension_a,
+                    manifest_schema=manifest_schema,
+                )
+                for name, control, payload in frames_a[:5]:
+                    rebound_credentials.apply(name, control, payload, contract)
+                forged_ack = dict(ack_a)
+                forged_ack[field] = (
+                    spool_receipt_for_transfer(session_id, task_id, transfer)
+                    if field == "spool_receipt"
+                    else cleanup_owner_for_transfer(session_id, task_id, transfer)
+                )
+                with self.assertRaisesRegex(
+                    SourceClosureTransportError, "credential binding"
+                ):
+                    rebound_credentials.apply(
+                        "source_closure_ack", forged_ack, b"", contract
+                    )
 
         rebound_b = TransferStateWitness.for_task_extension(
             session_id=SESSION_ID,
@@ -879,7 +1170,10 @@ class SourceClosureTransportTest(unittest.TestCase):
         transfer = transfer_digest({"session_id": SESSION_ID, "task_id": TASK_ID, "task_v4_digest": SEMANTIC, "manifest_digest": digest, "blob_receipts_digest": receipts, "blob_count": 1, "total_bytes": 1, "closure_digest": closure})
         witness.apply("source_closure_seal", {"session_id": SESSION_ID, "task_id": TASK_ID, "task_v4_digest": SEMANTIC, "manifest_digest": digest, "blob_receipts_digest": receipts, "blob_count": 1, "total_bytes": 1, "closure_digest": closure, "transfer_digest": transfer}, b"", contract)
         phase = contract["failure_phase_matrix"]["closure-sealed"]
-        witness.apply("source_closure_reject", {"session_id": SESSION_ID, "task_id": TASK_ID, "failure_phase": "closure-sealed", "reason_code": phase["allowed"][0], "observed_counters": {name: 0 for name in phase["counters"]}, "cleanup_receipt": CLEANUP_RECEIPT}, b"", contract)
+        forged_counters = {name: 0 for name in phase["counters"]}
+        with self.assertRaisesRegex(SourceClosureTransportError, "current-phase authentic"):
+            witness.apply("source_closure_reject", {"session_id": SESSION_ID, "task_id": TASK_ID, "failure_phase": "closure-sealed", "reason_code": phase["allowed"][0], "observed_counters": forged_counters, "cleanup_receipt": CLEANUP_RECEIPT}, b"", contract)
+        witness.apply("source_closure_reject", {"session_id": SESSION_ID, "task_id": TASK_ID, "failure_phase": "closure-sealed", "reason_code": phase["allowed"][0], "observed_counters": {"blob-count": 1, "total-bytes": 1}, "cleanup_receipt": CLEANUP_RECEIPT}, b"", contract)
         self.assertEqual(witness.state, "rejected")
 
         invalid_members = [
@@ -936,7 +1230,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             message_type=27,
             stream_id=1,
             sequence=29,
-            protocol_minor=1,
+            protocol_minor=2,
         )
         self.assertRegex(receipts_digest, r"^semantic-v2:sha256:[0-9a-f]{64}$")
         self.assertRegex(transfer_digest(projection), r"^semantic-v2:sha256:[0-9a-f]{64}$")

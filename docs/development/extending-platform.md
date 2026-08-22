@@ -224,13 +224,106 @@ unknown/foreign unit、authority drift は実行 packet を生成しません。
 v1 の #261 exact packet `plan`/`check` を一時 clean-HEAD clone と一時出力ディレクトリで実行した measurable evidence を
 `v1_issue_261_compatibility_evidence` に保持します。v1 producer/schema は変更しません。
 
-静的 relation inventory を残す場合の契約名は `relation-presence` です。これは use-case/capability graph、support tuple、
-input/model/evidence gap と dependency-ordered plan を読む将来の `missing --project` とは別機能であり、相互代用しません。
+### Canonical capability resolution and SDK doctor
+
+`cxxlens.agent-capability-resolution.v1` is the canonical result contract consumed by v2 packets
+and by SDK-doctor evaluation. It is produced by
+`tools/quality/check_ng_agent_capability_resolution.py` from the exact source-bound corpus in
+`schemas/cxxlens_ng_agent_capability_resolution.yaml`; relation presence alone is never used to
+infer a use-case capability. Every result preserves the closed state set
+`proved`/`disproved`/`unknown`/`partial`/`conflicting`, a typed missing reason, and a
+dependency-ordered completion plan. Unknown results are safe stops, not empty success.
+
+When checking a saved resolution with `check --input-json`, the checker binds the document to the
+current revision/tree and every catalog source digest. A self-consistent packet from an older tree
+is rejected as stale; `--synthetic` is reserved for the corpus's zero-authority fixtures and is not
+execution evidence. The installed SDK doctor follows the same boundary: an input without an exact
+authority object is reported as `unbound`, while a bound input must match the compiled authority.
+
+The installed `cxxlens-sdk-doctor` exposes the same consumer-facing boundary:
+
+```sh
+cxxlens-sdk-doctor capability <use-case-id> [--format json|markdown]
+cxxlens-sdk-doctor explain <resolution.json> [--format json|markdown]
+cxxlens-sdk-doctor missing --project <project.json> [--format json|markdown]
+```
+
+JSON is the default output. Markdown is a deterministic projection of the same canonical
+resolution and may not introduce or remove a result, reason, evidence, or completion step. The
+doctor also emits an `authority` binding on capability, explain, and project-missing outputs.
+When an input carries an authority object, the installed executable requires the exact
+`revision`, `tree`, catalog `source`/`source_digest`, and aggregate `authority_digest` compiled
+from the shipped readiness/catalog bytes; a mismatch returns the stable
+`sdk.capability-authority-stale` failure. Legacy project inputs without that object are reported
+as `status: unbound` and are never promoted to canonical capability evidence. This binding is
+content/revision integrity only: it does not authenticate an agent invocation, evaluate semantic
+execution, or qualify a release.
+nine-path corpus covers relation, recipe, analysis, model, portable provider, native provider,
+query operator, support tuple, and actionable unknown consumers. The corpus requires a 100%
+safe-stop rate and exercises every result state; it is readiness evidence and does not by itself
+promote a provider or platform tuple to production qualification. The legacy v1 producer remains
+unchanged and v2 packets retain the exact v1 compatibility evidence.
+
+Each golden path also carries an explicit demand edge to the admitted `agent-guided-extension`
+family and its declared #277 capabilities. The checker reads that family from the #275 readiness
+projection and rejects an unknown family or capability edge, so the evaluation corpus cannot
+become a parallel handwritten demand authority.
+
+The separate `agent-autonomous-completion-rate` metric is receipt-bound. Running
+`tools/quality/check_ng_agent_autonomous_completion.py report` without an execution-evidence
+file deliberately returns the exact nine-scenario population as `not-evaluated` with a null
+rate. A numeric rate is emitted only when every scenario has an exact current revision/tree and
+catalog digest, a bounded-completion witness, and typed receipt/context/command digests. Failed
+and safe-stop outcomes remain in the denominator. Evidence v2 additionally requires each evaluated
+outcome to carry the current canonical capability-resolution context, an argv/environment command
+receipt, a closed process terminal/stdout/stderr receipt, and a typed result receipt. The checker
+recomputes the context, command, completion-plan, and whole-witness digests and applies the same
+cross-binding when checking a saved report; digest-shaped placeholders alone are rejected. These
+fields prove internal content binding, not that the observer is authenticated or that the reported
+execution is semantically correct. This metric reports evaluation state only;
+`qualification: not-qualification-evidence` is fixed by schema and it cannot promote a provider,
+consumer, support tuple, constructibility gate, or release.
+An input file containing only `not-evaluated` rows remains `not-evaluated` and is recorded with
+`evidence_source: none`; no digest-shaped or synthetic row can promote the metric to `evaluated`.
+
+The bounded command runner is `tools/quality/run_ng_agent_autonomous_completion.py`. It accepts the
+versioned `cxxlens.agent-autonomous-completion-runner-input.v1` manifest, requires the exact current
+revision/tree/catalog digest and the canonical nine-scenario order, then executes each declared argv
+without a shell in one temporary clean clone reset to the exact revision before every scenario. The
+runner uses a source-bound 900-second timeout, records byte-exact stdout/stderr and terminal status,
+and accepts `completed` only when the command emits an exact
+`cxxlens.agent-autonomous-completion-result.v1` JSON receipt for that scenario. Invalid output,
+non-zero exit, launch failure, signal, or timeout remains a typed `failed`/`safe-stop` outcome with
+the real process receipt and completion plan. The temporary clone is discarded; no command can
+modify the authority checkout. For example:
+
+```sh
+python3 tools/quality/run_ng_agent_autonomous_completion.py run \
+  --root . \
+  --input-json runner-input.json \
+  --output-evidence agent-completion-evidence.json \
+  --output-report agent-completion-report.json
+```
+
+This runner supplies executable process and content-binding evidence, but does not authenticate the
+invoked agent or prove semantic correctness of a claimed bounded change. The resulting metric remains
+evaluation-only and cannot satisfy constructibility, review, provider, platform, or release
+qualification. A caller without a real command/result receipt must leave the metric `not-evaluated`.
+
+The `quality` workflow publishes the current metric state as
+`cxxlens-ng-agent-autonomous-completion-${revision}` after rechecking the report against the
+checkout's exact revision and tree. This artifact improves provenance for the #277 readiness
+audit; it is still evaluation-only, and a report without real execution receipts remains
+`not-evaluated` with a null rate.
+
+静的 relation inventory を残す場合の契約名は `relation-presence` です。これは canonical capability resolution の
+use-case/capability graph、support tuple、input/model/evidence gap と dependency-ordered plan を読む `missing --project`
+とは別機能であり、相互代用しません。
 
 legacy v1 projection の producer は引き続き `check_ng_agent_context.py` だけです。`check_ng_api_development_readiness.py`
 は #261 readiness artifact の authority/generator であり、readiness document と workflow を検証します。#277 projection の出力は
 Issue #261 の source-closure implementation や #276 の constructibility acceptance を進めるものではなく、
-source-closure/VFS、provider qualification、real-project evidence、golden path 評価、`agent-autonomous-completion-rate`
+source-closure/VFS、provider qualification、real-project evidence、aggregate qualification、`agent-autonomous-completion-rate`
 の測定、Nightly の release qualification は別の accepted slice が必要です。この generator の出力だけで constructible、
 qualified、production-ready を主張してはいけません。
 

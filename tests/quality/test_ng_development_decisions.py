@@ -25,8 +25,10 @@ from check_ng_development_decisions import (  # noqa: E402
     RECEIPT_SCHEMA,
     REGISTER,
     SCHEMA,
+    _validate_rejected_receipt_history,
     authority_digest,
     canonical_review_comment,
+    reviewer_context_digest,
     _validate_current_authority_projection,
     _verify_connected_receipt,
     validate,
@@ -69,6 +71,7 @@ class DevelopmentDecisionTest(unittest.TestCase):
         allowed.update(path for path in decision["authority_refs"] if path.startswith("docs/design/adr/") or path.startswith("schemas/"))
         review_output = "ACCEPT\nP0=0 P1=0 P2=1\nP2-DOC-LIMIT"
         receipt = {"id": receipt_id, "decision_id": decision["id"], "owner_issue": "#261", "candidate_commit": "b" * 40, "candidate_tree": "c" * 40, "candidate_git_author_email": "owner@example.com", "candidate_github_login": "candidate-owner", "authority_files": files, "authority_digest": authority_digest(files), "comment_url": "https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-1", "comment_body_sha256": "sha256:" + "d" * 64, "comment_author_login": "independent-reviewer", "author": "repository-owner", "reviewer": "codex-independent-source", "reviewer_github_login": "independent-reviewer", "reviewer_provenance": "isolated-read-only-codex-exec", "reviewer_session": "12345678-1234-1234-1234-123456789abc", "reviewer_invocation": "codex-exec-ephemeral-sandbox-read-only", "review_output": review_output, "review_output_sha256": "sha256:" + hashlib.sha256(review_output.encode()).hexdigest(), "verdict": "accepted", "findings": {"p0": 0, "p1": 0, "p2": 1}, "finding_ids": ["P2-DOC-LIMIT"], "verification_limits": ["production qualification not executed"], "connected_verification": {"status": "verified", "run_id": 1, "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1", "run_commit": "b" * 40, "workflow_id": 1, "workflow_path": ".github/workflows/autonomy-fast.yml", "workflow_name": "Autonomy fast", "event": "push", "conclusion": "success"}, "acceptance": {"status": "committed", "derivation": "first-descendant-containing-receipt", "allowed_changed_paths": sorted(allowed)}}
+        receipt["reviewer_context_sha256"] = reviewer_context_digest(receipt)
         (root / REGISTER).write_text(yaml.safe_dump(register, sort_keys=False), encoding="utf-8")
         document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
         document["receipts"] = [receipt]
@@ -135,6 +138,205 @@ class DevelopmentDecisionTest(unittest.TestCase):
             self.rewrite(root, lambda value: value["decisions"].append(copy.deepcopy(value["decisions"][0])))
             with self.assertRaisesRegex(DecisionRegisterError, "duplicate decision IDs"):
                 validate(root, verify_git=False)
+
+    def test_reviewer_session_and_artifact_reuse_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            duplicate = copy.deepcopy(receipt)
+            duplicate["id"] = "review-receipt.source-closure-duplicate-session.v1"
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [receipt, duplicate]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(DecisionRegisterError, "duplicate reviewer session"):
+                validate(root, verify_git=False)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            duplicate = copy.deepcopy(receipt)
+            duplicate["id"] = "review-receipt.source-closure-duplicate-artifact.v1"
+            duplicate["reviewer_session"] = "22345678-1234-1234-1234-123456789abc"
+            duplicate["reviewer_context_sha256"] = reviewer_context_digest(duplicate)
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [receipt, duplicate]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(DecisionRegisterError, "duplicate review artifact"):
+                validate(root, verify_git=False)
+
+    def test_rejected_receipt_history_is_preserved_when_a_new_receipt_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            previous = copy.deepcopy(receipt)
+            previous["id"] = "review-receipt.source-closure-rejected-history.v1"
+            previous["comment_url"] = "https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-2"
+            previous["comment_body_sha256"] = "sha256:" + "e" * 64
+            previous["reviewer"] = "codex-independent-previous"
+            previous["reviewer_github_login"] = "previous-reviewer"
+            previous["comment_author_login"] = "previous-reviewer"
+            previous["reviewer_session"] = "22345678-1234-1234-1234-123456789abc"
+            previous["review_output"] = "REJECT\nP0=0 P1=1 P2=0\nP1-PRIOR"
+            previous["review_output_sha256"] = "sha256:" + hashlib.sha256(
+                previous["review_output"].encode()
+            ).hexdigest()
+            previous["verdict"] = "rejected"
+            previous["findings"] = {"p0": 0, "p1": 1, "p2": 0}
+            previous["finding_ids"] = ["P1-PRIOR"]
+            previous["connected_verification"] = {
+                "status": "pending",
+                "run_id": None,
+                "run_url": None,
+                "run_commit": None,
+                "workflow_id": None,
+                "workflow_path": "pending",
+                "workflow_name": "pending",
+                "event": "pending",
+                "conclusion": "pending",
+            }
+            previous["acceptance"] = {
+                "status": "not-applicable",
+                "derivation": "not-applicable",
+                "allowed_changed_paths": [],
+            }
+            previous["reviewer_context_sha256"] = reviewer_context_digest(previous)
+
+            register = yaml.safe_load((root / REGISTER).read_text(encoding="utf-8"))
+            decision = next(
+                item for item in register["decisions"] if item["id"] == receipt["decision_id"]
+            )
+            decision["review"]["receipt_ids"] = [previous["id"], receipt["id"]]
+            decision["review"]["references"] = [
+                previous["comment_url"], receipt["comment_url"]
+            ]
+            (root / REGISTER).write_text(
+                yaml.safe_dump(register, sort_keys=False), encoding="utf-8"
+            )
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [previous, receipt]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            validate(root, verify_git=False)
+
+    def test_finding_ids_must_use_p0_p1_or_p2_severity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            receipt["finding_ids"].append("P3-UNKNOWN")
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [receipt]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(DecisionRegisterError, "review receipt schema validation failed"):
+                validate(root, verify_git=False)
+
+    def test_finding_ids_require_strict_segmented_grammar(self) -> None:
+        for invalid in ("P0-", "P1--MISSING", "P2-lower-case"):
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as temporary:
+                root, receipt = self.accepted_receipt_root(temporary)
+                receipt["finding_ids"] = [invalid]
+                receipt["findings"] = {"p0": 0, "p1": 0, "p2": 1}
+                document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+                document["receipts"] = [receipt]
+                (root / RECEIPTS).write_text(
+                    yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+                )
+                with self.assertRaisesRegex(
+                    DecisionRegisterError, "review receipt schema validation failed"
+                ):
+                    validate(root, verify_git=False)
+
+    def test_connected_verification_fields_are_phase_authentic(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            receipt["connected_verification"].update(
+                {
+                    "status": "pending",
+                    "run_url": None,
+                    "run_commit": None,
+                    "workflow_id": None,
+                    "workflow_path": "pending",
+                    "workflow_name": "pending",
+                    "event": "pending",
+                    "conclusion": "pending",
+                }
+            )
+            receipt["connected_verification"]["run_id"] = 1
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [receipt]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                DecisionRegisterError, "review receipt schema validation failed"
+            ):
+                validate(root, verify_git=False)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            receipt["connected_verification"]["workflow_path"] = "pending"
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [receipt]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                DecisionRegisterError, "review receipt schema validation failed"
+            ):
+                validate(root, verify_git=False)
+
+    def test_comment_author_must_equal_reviewer_login(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            receipt["comment_author_login"] = "different-reviewer"
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [receipt]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                DecisionRegisterError, "comment author is not the reviewer"
+            ):
+                validate(root, verify_git=False)
+
+    def test_rejected_receipt_history_rewrite_is_rejected(self) -> None:
+        rejected = {
+            "id": "review-receipt.source-closure-rejected.v1",
+            "verdict": "rejected",
+            "review_output": "REJECT",
+        }
+        rewritten = copy.deepcopy(rejected)
+        rewritten["review_output"] = "REJECT WITH REWRITE"
+        snapshots = {
+            "c1": yaml.safe_dump({"receipts": [rejected]}, sort_keys=False),
+            "c2": yaml.safe_dump({"receipts": [rewritten]}, sort_keys=False),
+        }
+
+        def fake_git(_root: pathlib.Path, *arguments: str) -> str:
+            if arguments == (
+                "log",
+                "--first-parent",
+                "--reverse",
+                "--format=%H",
+                "--",
+                str(RECEIPTS),
+            ):
+                return "c1\nc2"
+            if arguments == ("show", f"c1:{RECEIPTS}"):
+                return snapshots["c1"]
+            if arguments == ("show", f"c2:{RECEIPTS}"):
+                return snapshots["c2"]
+            raise AssertionError(arguments)
+
+        with mock.patch(
+            "check_ng_development_decisions._git", side_effect=fake_git
+        ):
+            with self.assertRaisesRegex(
+                DecisionRegisterError, "rejected review receipt was rewritten"
+            ):
+                _validate_rejected_receipt_history(pathlib.Path("/tmp/governance-test"))
 
     def test_high_risk_self_review_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -229,6 +431,30 @@ class DevelopmentDecisionTest(unittest.TestCase):
             with self.assertRaisesRegex(DecisionRegisterError, "unaccepted authority is active"):
                 validate(root, verify_git=False)
 
+    def test_accepted_review_requires_connected_exact_candidate_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            receipt["connected_verification"] = {
+                "status": "pending",
+                "run_id": None,
+                "run_url": None,
+                "run_commit": None,
+                "workflow_id": None,
+                "workflow_path": "pending",
+                "workflow_name": "pending",
+                "event": "pending",
+                "conclusion": "pending",
+            }
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [receipt]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                DecisionRegisterError, "connected exact-candidate verification"
+            ):
+                validate(root, verify_git=False)
+
     def test_qualification_before_implementation_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -268,6 +494,19 @@ class DevelopmentDecisionTest(unittest.TestCase):
                 yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
             )
             with self.assertRaisesRegex(DecisionRegisterError, "GitHub identities"):
+                validate(root, verify_git=False)
+
+    def test_reviewer_process_identity_must_differ(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, receipt = self.accepted_receipt_root(temporary)
+            receipt["reviewer"] = receipt["author"]
+            receipt["reviewer_context_sha256"] = reviewer_context_digest(receipt)
+            document = yaml.safe_load((root / RECEIPTS).read_text(encoding="utf-8"))
+            document["receipts"] = [receipt]
+            (root / RECEIPTS).write_text(
+                yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(DecisionRegisterError, "schema validation failed|process-independent"):
                 validate(root, verify_git=False)
 
     def test_connected_verifier_authenticates_candidate_and_workflow_objects(self) -> None:
@@ -315,6 +554,22 @@ class DevelopmentDecisionTest(unittest.TestCase):
                 side_effect=responses,
             ):
                 with self.assertRaisesRegex(DecisionRegisterError, "candidate identity"):
+                    _verify_connected_receipt(receipt, "token")
+            responses[1]["author"]["login"] = receipt["candidate_github_login"]
+            responses[1]["committer"]["login"] = receipt["reviewer_github_login"]
+            with mock.patch(
+                "check_ng_development_decisions._github_json",
+                side_effect=responses,
+            ):
+                with self.assertRaisesRegex(DecisionRegisterError, "candidate identity"):
+                    _verify_connected_receipt(receipt, "token")
+            responses[1]["committer"]["login"] = receipt["candidate_github_login"]
+            responses[0]["user"]["login"] = "different-reviewer"
+            with mock.patch(
+                "check_ng_development_decisions._github_json",
+                side_effect=responses,
+            ):
+                with self.assertRaisesRegex(DecisionRegisterError, "comment identity"):
                     _verify_connected_receipt(receipt, "token")
 
 

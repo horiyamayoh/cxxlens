@@ -18,6 +18,50 @@
 
 namespace cxxlens::detail::clang22::materialization
 {
+	/**
+	 * Explicit private-spool budgets for the bounded Store ingress.
+	 *
+	 * These limits cover only source-owned staging bytes; they are not a residency or production
+	 * qualification receipt.  In particular, a backend must still prove its own one-partition
+	 * decode window and final-payload ownership before this source can be used for qualification.
+	 * The default total is a finite four-times amplification envelope over the 512 MiB aggregate
+	 * witness in ADR 0103.  A caller may select a smaller profile for a bounded fixture.
+	 */
+	inline constexpr std::uint64_t default_materialization_bounded_claim_source_aggregate_bytes =
+		512U * 1024U * 1024U;
+	inline constexpr std::uint64_t default_materialization_bounded_claim_source_max_spool_bytes =
+		default_materialization_bounded_claim_source_aggregate_bytes * 4U;
+	inline constexpr std::uint64_t
+		default_materialization_bounded_claim_source_max_partition_spool_bytes =
+			64U * 1024U * 1024U;
+	inline constexpr std::uint64_t default_materialization_bounded_claim_source_max_record_bytes =
+		1U * 1024U * 1024U;
+
+	struct materialization_bounded_claim_source_limits
+	{
+		std::uint64_t maximum_total_spool_bytes{
+			default_materialization_bounded_claim_source_max_spool_bytes};
+		std::uint64_t maximum_partition_spool_bytes{
+			default_materialization_bounded_claim_source_max_partition_spool_bytes};
+		std::uint64_t maximum_record_bytes{
+			default_materialization_bounded_claim_source_max_record_bytes};
+		std::uint64_t maximum_partition_count{4096U};
+
+		[[nodiscard]] bool
+		operator==(const materialization_bounded_claim_source_limits&) const = default;
+	};
+
+	/** A source-owned resource census; it is evidence of staging limits, not qualification. */
+	struct materialization_bounded_claim_source_resource_census
+	{
+		std::uint64_t spool_bytes{};
+		std::uint64_t partition_count{};
+		materialization_bounded_claim_source_limits limits;
+
+		[[nodiscard]] bool
+		operator==(const materialization_bounded_claim_source_resource_census&) const = default;
+	};
+
 	/** Bounded report metadata for one replayable Store partition. */
 	struct materialization_bounded_partition_metadata
 	{
@@ -68,11 +112,13 @@ namespace cxxlens::detail::clang22::materialization
 		~materialization_bounded_claim_source() override = default;
 
 		[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
-		begin(const validated_materialization_request& request);
+		begin(const validated_materialization_request& request,
+			  materialization_bounded_claim_source_limits limits = {});
 
 		/** Begin a bounded source using v2.1 request authority without a legacy task vector. */
 		[[nodiscard]] static sdk::result<materialization_bounded_claim_source>
-		begin(const materialization_v2_1_claim_authority& authority);
+		begin(const materialization_v2_1_claim_authority& authority,
+			  materialization_bounded_claim_source_limits limits = {});
 
 		/** Consume exactly one bounded task window before the cursor advances. */
 		[[nodiscard]] sdk::result<void> consume_task(materialization_bounded_task_claims task);
@@ -152,6 +198,13 @@ namespace cxxlens::detail::clang22::materialization
 			return sealed_ && !failed_ && exact_publication_ready_;
 		}
 
+		/** Return source-owned staging bytes and the selected finite limits. */
+		[[nodiscard]] materialization_bounded_claim_source_resource_census
+		resource_census() const noexcept
+		{
+			return {spool_bytes_, static_cast<std::uint64_t>(partitions_.size()), limits_};
+		}
+
 	  private:
 		struct partition_state
 		{
@@ -162,6 +215,7 @@ namespace cxxlens::detail::clang22::materialization
 			std::set<std::string, std::less<>> stored_claim_refs;
 			std::set<std::string, std::less<>> claim_content_ids;
 			std::uint64_t origin_association_count{};
+			std::uint64_t claim_spool_bytes{};
 			bool empty{};
 			std::uint64_t appended_claim_count{};
 		};
@@ -171,12 +225,14 @@ namespace cxxlens::detail::clang22::materialization
 											 const sdk::relation_engine& engine,
 											 std::uint64_t expected_task_count,
 											 std::function<sdk::result<std::string>(std::size_t)>
-												 selected_request_entry_binding_resolver)
+												 selected_request_entry_binding_resolver,
+											 materialization_bounded_claim_source_limits limits)
 			: request_{request}, request_binding_{std::move(request_binding)},
 			  materialization_request_id_{request_binding_.materialization_request_id},
 			  engine_{&engine}, expected_task_count_{expected_task_count},
 			  selected_request_entry_binding_resolver_{
-				  std::move(selected_request_entry_binding_resolver)}
+				  std::move(selected_request_entry_binding_resolver)},
+			  limits_{limits}
 		{
 		}
 
@@ -190,6 +246,7 @@ namespace cxxlens::detail::clang22::materialization
 		std::uint64_t consumed_task_count_{};
 		std::function<sdk::result<std::string>(std::size_t)>
 			selected_request_entry_binding_resolver_;
+		materialization_bounded_claim_source_limits limits_;
 		std::map<std::string, partition_state, std::less<>> partitions_;
 		std::string materializer_semantics_digest_;
 		std::string direct_basis_digest_;
@@ -202,6 +259,7 @@ namespace cxxlens::detail::clang22::materialization
 		bool sealed_{};
 		bool failed_{};
 		bool exact_publication_ready_{};
+		std::uint64_t spool_bytes_{};
 		std::uint64_t conflict_count_{};
 		std::uint64_t differential_disagreement_count_{};
 	};

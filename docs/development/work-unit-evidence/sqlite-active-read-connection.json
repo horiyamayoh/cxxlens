@@ -1,0 +1,45 @@
+{
+  "schema": "cxxlens.work-unit-evidence.v1",
+  "product": "sqlite.active-read-connection",
+  "unit_id": "wu-201-zero-effect-active-read",
+  "contract": "cxxlens.sqlite-active-read-connection.v1",
+  "status": "local-focused-evidence",
+  "production_qualification": "not-claimed",
+  "candidate_revision": "bound-by-the-coordinating-main-commit",
+  "checks": [
+    {
+      "command": "cmake --build --preset dev-clang --target cxxlens-unit-sdk-sqlite-source-shm-readonly-preflight -j2",
+      "result": "pass"
+    },
+    {
+      "command": "ctest --preset dev-clang -R '^unit\\.sdk-sqlite-source-shm-readonly-preflight$' --output-on-failure",
+      "result": "pass"
+    }
+  ],
+  "positive_witness": [
+    "exact source family with distinct main/WAL/SHM identities",
+    "continuous namespace guard recheck",
+    "open callback transcript with exact main/WAL flags, outcomes, and identities",
+    "strict readonly URI/open callback binding",
+    "read-only main and downgraded WAL open observations",
+    "authenticated runtime/VFS/process/fork/connection/outer custody identities",
+    "pre-effect census before any SHM map or lock",
+    "pre-map custody census with complete connection and live main-handle evidence"
+  ],
+  "negative_witness": [
+    "pre-effect write flag",
+    "first SHM map already observed",
+    "nested mapping start marker",
+    "watch/runtime/VFS/process/fork drift, unload request, and late callback markers",
+    "read-write main open",
+    "missing WAL treated as empty",
+    "source-family replacement"
+  ],
+  "limitations": [
+    "native SQLite runtime activation remains disabled",
+    "#205 mapping terminal is not implemented by this unit",
+    "nested-map native outcome, unload causal path, fork quarantine, and late-callback terminal witnesses are deferred to #205/U201-R1",
+    "#201 logical-read receipt remains blocked until #205 terminal and outer custody closure",
+    "#202 normalization is not entered"
+  ]
+}

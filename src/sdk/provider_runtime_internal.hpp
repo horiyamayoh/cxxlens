@@ -9,10 +9,44 @@
 
 #include <cxxlens/sdk/provider.hpp>
 
+#include "provider_ng1_process_internal.hpp"
 #include "provider_validation_internal.hpp"
 
 namespace cxxlens::sdk::provider::detail
 {
+	/**
+	 * Source-closure authority state required before an NG1 live process can be selected.
+	 *
+	 * The source-closure registry is deliberately not represented by a boolean in a production
+	 * caller.  This small source-private gate exists while the registry acceptance work is still
+	 * in flight: only the accepted value may cross into the live-port factory, and no caller may
+	 * turn a rejected NG1 request into the blocking NG0 process path.
+	 */
+	enum class ng1_source_closure_authority_status : std::uint8_t
+	{
+		not_accepted,
+		accepted,
+	};
+
+	/** Exact P0 inputs for selecting the source-private NG1 duplex process port. */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_live_port_selection_request
+	{
+		bool explicit_ng1_request{};
+		std::uint16_t protocol_major{};
+		std::uint16_t protocol_minor{};
+		ng1_source_closure_authority_status source_closure_authority =
+			ng1_source_closure_authority_status::not_accepted;
+	};
+
+	/**
+	 * Select the nonblocking NG1 process port only after source-closure authority acceptance.
+	 *
+	 * This selector has no NG0 fallback and does not start a process.  The accepted registry
+	 * validator will replace the source-private status input before capability activation.
+	 */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::unique_ptr<ng1_duplex_process_port>>
+	select_ng1_live_process_port(const ng1_live_port_selection_request& request);
+
 	/**
 	 * Source-private identity carried by a shared runtime validation pass.  Empty optional
 	 * projections are permitted for the generic NG0 runtime, but the NG1 replay bridge requires

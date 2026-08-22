@@ -348,7 +348,9 @@ namespace
 		require(!observed.first_issue && observed.writer_begin_call_count == 1U &&
 					observed.publication_attempted && observed.publish_call_count == 1U &&
 					observed.publish_returned_handle && observed.publish_returned_record &&
-					observed.verification_store,
+					observed.verification_store &&
+					observed.semantic_graph_validation ==
+						materialization_store_semantic_graph_validation::candidate,
 				"memory genesis did not cross exactly one publication boundary");
 		require(observed.head_observation.status ==
 						materialization_store_receipt_status::sdk_error &&
@@ -411,6 +413,8 @@ namespace
 			value, genesis_request, plan(value, genesis_request), opener);
 		require(!genesis.first_issue && genesis.publish_call_count == 1U &&
 					genesis.publish_returned_record && opener.sqlite_call_count == 2U &&
+					genesis.semantic_graph_validation ==
+						materialization_store_semantic_graph_validation::reopened &&
 					opener.sqlite_paths ==
 						std::vector<std::string>{"positive.sqlite", "positive.sqlite"},
 				"SQLite genesis did not use one publish and exact close/reopen path");
@@ -645,9 +649,70 @@ namespace
 		require(!streamed.first_issue && streamed.publish_returned_record &&
 					streamed.candidate_manifest && source.replay_count == 2U,
 				"streaming Store did not complete the two replay publication boundary");
+		require(streamed.semantic_graph_validation ==
+					materialization_store_semantic_graph_validation::candidate,
+				"streaming Store did not retain the SDK candidate graph-validation phase");
 		require(*streamed.publish_returned_record == *expected.publish_returned_record &&
 					*streamed.candidate_manifest == *expected.candidate_manifest,
 				"streaming Store changed the exact publication or manifest identity");
+	}
+
+	void sqlite_streaming_store_reopens_and_revalidates_graph()
+	{
+		temporary_working_directory working_directory;
+		const auto value = engine();
+		const auto selector_value = selector(value);
+		const auto publication =
+			publication_request(selector_value, "sqlite", std::nullopt, "streaming.sqlite");
+		const auto draft =
+			partition(value, "item:streaming-sqlite", "compile-unit-streaming-sqlite");
+		replayable_partition_source source{{draft}};
+		recording_opener opener;
+		streaming_prepared_store_transaction prepared{
+			{publication.selector,
+			 {1U, 0U, 0U},
+			 "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+			 publication.expected_parent_publication},
+			{},
+			{}};
+		auto streamed = execute_materialization_store_streaming(
+			value, publication, std::move(prepared), source, opener);
+		require(!streamed.first_issue && streamed.publish_returned_record &&
+					streamed.verification_store && source.replay_count == 2U &&
+					opener.sqlite_call_count == 2U &&
+					streamed.semantic_graph_validation ==
+						materialization_store_semantic_graph_validation::reopened,
+				"SQLite streaming Store did not complete close/reopen semantic validation");
+		require_three_present_paths(streamed);
+		auto relation = value.require_id(descriptor().id);
+		require(relation.has_value(), "SQLite streaming query relation was not admitted");
+		const auto expected_row = row("item:streaming-sqlite", "payload").canonical_form();
+		for (const auto& receipt : streamed.verification_receipts)
+		{
+			require(receipt.handle->query_annotations_available(),
+					"SQLite streaming reopen lost v5 query annotations");
+			require(receipt.handle->input_coverage().size() == 1U &&
+						receipt.handle->partition_bindings().size() == 1U &&
+						receipt.handle->unresolved_items().empty(),
+					"SQLite streaming reopen lost semantic graph side projections");
+			auto claims = receipt.handle->open_claims(descriptor().id);
+			require(claims.has_value(), "SQLite streaming reopen lost claim annotations");
+			auto claim = claims->next();
+			require(claim && claim->has_value() && (*claim)->copy(),
+					"SQLite streaming reopen lost the persisted claim occurrence");
+			auto claim_end = claims->next();
+			require(claim_end && !*claim_end,
+					"SQLite streaming reopen claim cursor was not finite");
+			auto rows = receipt.handle->open(*relation);
+			require(rows.has_value(), "SQLite streaming reopen lost row query");
+			auto first = rows->next();
+			require(first && first->has_value(), "SQLite streaming reopen lost the persisted row");
+			auto copied = (*first)->copy();
+			require(copied && copied->canonical_form() == expected_row,
+					"SQLite streaming reopen changed the persisted row projection");
+			auto row_end = rows->next();
+			require(row_end && !*row_end, "SQLite streaming reopen row cursor was not finite");
+		}
 	}
 
 	void sqlite_reopen_failure_retains_commit()
@@ -667,6 +732,8 @@ namespace
 		require(reopen_error &&
 					reopen_error->operation == materialization_store_operation::store_reopen &&
 					reopen_error->error == opener.injected_error &&
+					observed.semantic_graph_validation ==
+						materialization_store_semantic_graph_validation::candidate &&
 					observed.publication_attempted && observed.publish_call_count == 1U &&
 					observed.publish_returned_record && !observed.verification_store &&
 					std::ranges::all_of(observed.verification_receipts,
@@ -746,6 +813,72 @@ namespace
 		require(after == before,
 				"v2 materializer writer_begin implicitly migrated or changed source bytes");
 	}
+
+	void bounded_projection_streams_compare_without_resident_graph()
+	{
+		const materialization_store_projection_limits limits{256U, 64U};
+		auto actual = materialization_store_projection_writer::create(limits);
+		auto expected = materialization_store_projection_writer::create(limits);
+		require(actual && expected, "projection writer creation failed");
+		const auto append = [](materialization_store_projection_writer& writer,
+							   const std::string_view value) -> sdk::result<void>
+		{
+			return writer.append(std::as_bytes(std::span{value.data(), value.size()}));
+		};
+		require(append(*actual, "record:a") && append(*actual, "record:b") &&
+					append(*expected, "record:a") && append(*expected, "record:b"),
+				"projection record append failed");
+		auto actual_receipt = actual->seal();
+		auto expected_receipt = expected->seal();
+		require(actual_receipt && expected_receipt && actual->sealed() && expected->sealed() &&
+					actual_receipt->record_count == 2U && expected_receipt->record_count == 2U &&
+					actual_receipt->payload_bytes == expected_receipt->payload_bytes,
+				"projection stream seal receipt was not exact");
+		auto equal = compare_materialization_store_projections(*actual, *expected);
+		require(equal && equal->equal && equal->actual_record_count == 2U &&
+					equal->expected_record_count == 2U && !equal->first_mismatch_offset,
+				"identical independent projection streams did not compare equal");
+
+		auto reordered = materialization_store_projection_writer::create(limits);
+		require(reordered && append(*reordered, "record:b") && append(*reordered, "record:a"),
+				"reordered projection append failed");
+		const auto reordered_receipt = reordered->seal();
+		require(static_cast<bool>(reordered_receipt), "reordered projection seal failed");
+		auto mismatch = compare_materialization_store_projections(*actual, *reordered);
+		require(mismatch && !mismatch->equal && mismatch->actual_record_count == 2U &&
+					mismatch->expected_record_count == 2U && mismatch->first_mismatch_offset,
+				"record reordering was not retained as a byte-level projection mismatch");
+
+		auto oversized = materialization_store_projection_writer::create(limits);
+		require(static_cast<bool>(oversized), "oversized projection writer creation failed");
+		const std::string oversized_record(65U, 'x');
+		require(!append(*oversized, oversized_record) && !oversized->seal(),
+				"projection writer accepted a record beyond its declared bound");
+
+		const materialization_store_projection_limits aggregate_limits{32U, 24U};
+		auto aggregate = materialization_store_projection_writer::create(aggregate_limits);
+		require(aggregate && append(*aggregate, std::string(24U, 'a')) &&
+					!append(*aggregate, "b") && !aggregate->seal(),
+				"projection writer crossed its aggregate framed-byte bound");
+
+		const materialization_store_projection_limits window_limits{256U * 1024U, 128U * 1024U};
+		auto window_actual = materialization_store_projection_writer::create(window_limits);
+		auto window_expected = materialization_store_projection_writer::create(window_limits);
+		require(window_actual && window_expected, "large projection writer creation failed");
+		std::string large_record(96U * 1024U, 'p');
+		std::string altered_record = large_record;
+		altered_record[80U * 1024U] = 'q';
+		require(append(*window_actual, large_record) && append(*window_expected, altered_record),
+				"large projection record append failed");
+		require(window_actual->seal() && window_expected->seal(),
+				"large projection stream seal failed");
+		auto window_mismatch =
+			compare_materialization_store_projections(*window_actual, *window_expected);
+		require(window_mismatch && !window_mismatch->equal &&
+					window_mismatch->first_mismatch_offset &&
+					*window_mismatch->first_mismatch_offset == 8U + 80U * 1024U,
+				"multi-window projection mismatch was not byte-exact");
+	}
 } // namespace
 
 int main()
@@ -757,6 +890,8 @@ int main()
 	sqlite_publish_race_recovers_exact_receipts();
 	typed_prepublication_failures();
 	streaming_store_replays_and_rechecks_exact_partitions();
+	sqlite_streaming_store_reopens_and_revalidates_graph();
 	sqlite_reopen_failure_retains_commit();
+	bounded_projection_streams_compare_without_resident_graph();
 	return 0;
 }

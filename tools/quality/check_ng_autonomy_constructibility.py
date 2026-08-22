@@ -16,6 +16,12 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MODEL = pathlib.Path("schemas/cxxlens_ng_autonomy_constructibility.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_autonomy_constructibility.schema.yaml")
+EXPECTED_AUTHORITIES = {
+    "source_closure": "docs/design/adr/0102-dedicated-source-closure-transport.md",
+    "store_candidate_report": "docs/design/adr/0103-bounded-store-candidate-and-report.md",
+    "sqlite_read_mapping": "docs/design/adr/0104-unified-sqlite-source-lifecycle.md",
+    "sqlite_normalization_effect": "docs/design/adr/0104-unified-sqlite-source-lifecycle.md",
+}
 
 
 class ConstructibilityError(ValueError):
@@ -320,6 +326,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     machines = model["machines"]
     for name, machine in machines.items():
         authority = machine.get("authority")
+        if authority != EXPECTED_AUTHORITIES.get(name):
+            raise ConstructibilityError(f"constructibility authority drift: {name}")
         if not isinstance(authority, str) or not (root / authority).is_file():
             raise ConstructibilityError(f"missing authority: {name}")
 
@@ -421,24 +429,33 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     require_exact(mapping["retirement_join"], expected_join, "SQLite scoped retirement join")
     custody_kinds = ["connection", "callback-attempt", "reservation", "mapping-lease", "reader-attachment", "use-owner", "cleanup-owner", "close-owner", "uncertainty-owner"]
     require_exact(mapping["outer_custody_kinds"], custody_kinds, "SQLite outer custody kinds")
-    require_exact(mapping["outer_join_terminal_profiles"], {"retired": "authenticated-terminal-receipt", "quarantined": "permanent-tombstone-with-retained-custody", "enrollment": "atomically-sealed-before-join", "duplicate_or_late": "reject"}, "SQLite outer join profiles")
-    require_exact(mapping["outer_join_receipt_profile"], {"enrollment_key": "kind-plus-instance-id", "enrollment_binding": "sha256-kind-instance-outer-connection-generation", "terminal_binding": "issuer-minted-nonserializable-capability-plus-enrollment-and-terminal", "join_predicate": "exact-enrolled-instance-set-equals-issuer-authenticated-terminal-receipt-set"}, "SQLite outer join receipt profile")
+    require_exact(mapping["outer_join_terminal_profiles"], {"retired": "authenticated-terminal-receipt", "quarantined": "permanent-tombstone-with-retained-custody", "enrollment": "atomically-sealed-before-join", "duplicate_or_late": "reject", "unload_guard": "retained-quarantine-custody-never-authorizes-unload"}, "SQLite outer join profiles")
+    require_exact(mapping["outer_join_receipt_profile"], {"enrollment_key": "kind-plus-instance-id", "enrollment_binding": "sha256-kind-instance-outer-connection-generation", "terminal_binding": "issuer-minted-nonserializable-capability-plus-enrollment-and-terminal", "issuance": "one-terminal-capability-per-enrolled-instance", "consumption": "one-shot-consume-on-successful-outer-join", "join_predicate": "exact-enrolled-instance-set-equals-issuer-authenticated-terminal-receipt-set"}, "SQLite outer join receipt profile")
+    require_exact(mapping["callback_transcript_profile"], {"zero_effect_callbacks": ["initialize", "create", "write", "truncate", "extend", "delete", "resize"], "writer_effect_callbacks": ["initialize", "create", "write", "truncate", "extend", "delete", "resize"], "coverage": "exact-one-receipt-per-callback-kind-no-omission-no-duplicate-no-extra", "reader_rule": "every-read-callback-carries-zero-effect-receipt", "writer_rule": "every-writer-callback-carries-effect-pair-and-store-gate-receipt"}, "SQLite callback transcript profile")
 
     def enrollment_digest(kind: str, identifier: str) -> str:
         body = b"cxxlens.sqlite-outer-custody-enrollment.v1\0" + kind.encode() + b"\0" + identifier.encode() + b"\0outer-generation-7"
         return "sha256:" + hashlib.sha256(body).hexdigest()
 
     minted_receipts: dict[object, tuple[str, str, str, str]] = {}
+    issued_enrollments: set[tuple[str, str]] = set()
+    consumed_receipts: set[object] = set()
 
     def mint_terminal_receipt(enrollment: dict[str, str], terminal: str) -> object:
         if terminal not in {"retired", "quarantined"}:
             raise ConstructibilityError("SQLite terminal issuer received unknown terminal")
+        key = (enrollment["kind"], enrollment["identifier"])
+        if key in issued_enrollments:
+            raise ConstructibilityError("SQLite terminal issuer minted more than one receipt for an enrollment")
         capability = object()
         minted_receipts[capability] = (enrollment["kind"], enrollment["identifier"], enrollment["enrollment_digest"], terminal)
+        issued_enrollments.add(key)
         return capability
 
     def seals_outer_join(enrolled: list[dict[str, str]], receipts: list[object], *, enrollment_sealed: bool) -> bool:
         enrolled_by_key = {(row["kind"], row["identifier"]): row for row in enrolled}
+        if len(receipts) != len(set(receipts)) or any(receipt in consumed_receipts for receipt in receipts):
+            return False
         authenticated = [minted_receipts.get(receipt) for receipt in receipts]
         if any(row is None for row in authenticated):
             return False
@@ -453,6 +470,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
             if (enrollment["enrollment_digest"] != expected_enrollment or
                     receipt[2] != expected_enrollment or receipt[3] not in {"retired", "quarantined"}):
                 return False
+        consumed_receipts.update(receipts)
         return True
 
     enrolled = [
@@ -475,7 +493,59 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         raise ConstructibilityError("SQLite outer custody join accepted non-issued terminal")
     if seals_outer_join(enrolled, complete_custody, enrollment_sealed=False):
         raise ConstructibilityError("SQLite outer custody join accepted late enrollment window")
+    try:
+        mint_terminal_receipt(enrolled[0], "retired")
+    except ConstructibilityError:
+        pass
+    else:
+        raise ConstructibilityError("SQLite terminal issuer accepted a second receipt for one enrollment")
+    if seals_outer_join(enrolled, complete_custody, enrollment_sealed=True):
+        raise ConstructibilityError("SQLite outer custody join replayed one-shot terminal receipts")
+
+    quarantine_enrolled = [
+        {"kind": kind, "identifier": f"quarantine-owner-{index}", "enrollment_digest": enrollment_digest(kind, f"quarantine-owner-{index}")}
+        for index, kind in enumerate(custody_kinds)
+    ]
+    quarantine_enrolled.append({"kind": "mapping-lease", "identifier": "quarantine-owner-extra", "enrollment_digest": enrollment_digest("mapping-lease", "quarantine-owner-extra")})
+    quarantined_custody = [mint_terminal_receipt(row, "quarantined") for row in quarantine_enrolled]
+    if not seals_outer_join(quarantine_enrolled, quarantined_custody, enrollment_sealed=True):
+        raise ConstructibilityError("SQLite outer custody join rejected authenticated quarantine census")
+
+    def unload_permitted(enrolled_rows: list[dict[str, str]], receipts: list[object]) -> bool:
+        authenticated = [minted_receipts.get(receipt) for receipt in receipts]
+        if len(receipts) != len(set(receipts)) or any(row is None for row in authenticated):
+            return False
+        keys = {(row["kind"], row["identifier"]) for row in enrolled_rows}
+        receipt_keys = {(row[0], row[1]) for row in authenticated if row is not None}
+        return keys == receipt_keys and all(row[3] == "retired" for row in authenticated if row is not None)
+
+    if not unload_permitted(enrolled, complete_custody):
+        raise ConstructibilityError("SQLite unload guard rejected an all-retired custody census")
+    if unload_permitted(quarantine_enrolled, quarantined_custody):
+        raise ConstructibilityError("SQLite unload guard authorized retained quarantine custody")
     require_exact(mapping["zero_effect_receipt"], ["initialize", "create", "write", "truncate", "extend", "delete", "resize"], "SQLite zero-effect receipt")
+    callback_kinds = mapping["callback_transcript_profile"]["zero_effect_callbacks"]
+    if callback_kinds != mapping["zero_effect_receipt"] or len(callback_kinds) != len(set(callback_kinds)):
+        raise ConstructibilityError("SQLite callback transcript omitted or duplicated a callback kind")
+    def require_complete_callback_transcript(events: list[tuple[str, str]]) -> None:
+        expected = [(kind, "zero-effect") for kind in callback_kinds]
+        if (events != expected or len(events) != len(set(events)) or
+                {kind for kind, _ in events} != set(callback_kinds)):
+            raise ConstructibilityError("SQLite zero-effect callback transcript is incomplete")
+
+    read_transcript = [(kind, "zero-effect") for kind in callback_kinds]
+    require_complete_callback_transcript(read_transcript)
+    for invalid_transcript in (
+        read_transcript[:-1],
+        [*read_transcript[:-1], ("write", "zero-effect")],
+        [*read_transcript[:-1], ("unknown", "unclassified")],
+    ):
+        try:
+            require_complete_callback_transcript(invalid_transcript)
+        except ConstructibilityError:
+            pass
+        else:
+            raise ConstructibilityError("SQLite callback transcript counterexample accepted")
     require_exact(mapping["read_receipt_barrier"], ["outer-custody-join-sealed", "connection-closed", "outer-scoped-zero-live-callbacks-leases-and-use-owners", "zero-effect-callback-receipt-sealed"], "SQLite read receipt barrier")
     fork_graph = mapping["fork_transition_graph"]
     require_exact(fork_graph, {"running": "atfork-prepare-seal-admission-and-census", "atfork-prepare-seal-admission-and-census": ["parent-revalidate-process-and-fork-generation", "child-transfer-all-inherited-custody"], "parent-revalidate-process-and-fork-generation": "running", "child-transfer-all-inherited-custody": "child-inherited-custody-quarantine", "child-inherited-custody-quarantine": ["child-exec", "child-exit"], "child-exec": [], "child-exit": []}, "SQLite fork transition graph")
@@ -517,6 +587,14 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     )
     effect_states = ["logical-read-receipt", "receipt-revalidated", "effect-profile-capability-sealed", "exclusive-normalization-owner", "pre-effect-sealed", "effect-journal-open", "permitted-callback-effects", "file-and-parent-durable", "confirmed-close", "post-close-census", "normalization-receipt", "ordinary-fresh-init", "recoverable-interruption", "cold-reclassified", "seven-family-classified", "cold-family-authority-selected"]
     require_exact(effect["states"], effect_states, "normalization effect states")
+    require_exact(effect["effect_callback_transcript"], {"stages": ["effect-journal-open", "permitted-callback-effects", "file-and-parent-durable", "confirmed-close", "post-close-census"], "effects": ["journal-create", "parent-fsync-before-journal", "main-write", "parent-fsync-after-main", "journal-delete", "parent-fsync-after-delete", "close"], "coverage": "exact-ordered-transcript-no-omission-no-duplicate-no-unclassified-effect", "success_requires": "complete-transcript-before-normalization-receipt"}, "normalization effect callback transcript")
+    transcript = effect["effect_callback_transcript"]
+    if len(transcript["stages"]) != len(set(transcript["stages"])) or len(transcript["effects"]) != len(set(transcript["effects"])):
+        raise ConstructibilityError("normalization effect callback transcript contains duplicate coverage")
+    if not set(transcript["stages"]).issubset(set(effect_states)) or "normalization-receipt" in transcript["stages"]:
+        raise ConstructibilityError("normalization effect callback transcript crosses its terminal boundary")
+    if len(transcript["effects"]) != 7:
+        raise ConstructibilityError("normalization effect callback transcript is incomplete")
     expected_effect_graph = {
         "logical-read-receipt": "receipt-revalidated",
         "receipt-revalidated": "effect-profile-capability-sealed",
@@ -588,8 +666,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     require_exact(effect["production_activation_predicate"], ["tracked-exact-harness", "static-shared-loaded-sqlite-dso-source-id-hash-build-toolchain-identity", "runtime-vfs-device-filesystem-profile", "all-callback-boundaries", "parameterized-sector-page-record-set", "authenticated-coordination-wal-delete", "parent-sync-after-each-delete", "rebind-at-unlink", "seven-family-recrash-idempotence", "post-normalization-fresh-transition", "canonical-report-digest", "distinct-implementation-review", "explicit-accepted-effect-profile", "connected-main-ci-and-platform-qualification"], "normalization production predicate")
     require_exact(effect["canonical_user_source_activation"], "prohibited", "production normalization activation")
     require_exact(effect["parent_sync_after_each_delete"], "required", "normalization parent sync")
-    require_exact(model["counterexample_sets"]["sqlite_read_mapping"], ["first-map-mutation", "writer-predelegation-lease", "reader-without-predelegation-writer-lease-pin", "writer-effect-conflated-with-reader-zero-effect", "writer-invalid-extend-pair", "writer-effect-without-store-gate", "writer-effect-leaked-into-outer-zero-effect-read", "missing-zero-effect-receipt", "nonzero-unmap-deleteFlag", "ok-null", "pointer-substitution", "aba", "fork-ordinary-drain", "unload-before-revoke", "callback-retry"], "SQLite mapping counterexamples")
-    require_exact(model["counterexample_sets"]["sqlite_normalization_effect"], ["physical-census-entry", "fixture-production-promotion", "missing-parent-sync", "nonempty", "sidecar-ambiguous"], "SQLite effect counterexamples")
+    require_exact(model["counterexample_sets"]["sqlite_read_mapping"], ["first-map-mutation", "writer-predelegation-lease", "reader-without-predelegation-writer-lease-pin", "writer-effect-conflated-with-reader-zero-effect", "writer-invalid-extend-pair", "writer-effect-without-store-gate", "writer-effect-leaked-into-outer-zero-effect-read", "missing-zero-effect-receipt", "terminal-receipt-replay", "quarantine-retained-custody-unload", "callback-transcript-incomplete", "nonzero-unmap-deleteFlag", "ok-null", "pointer-substitution", "aba", "fork-ordinary-drain", "unload-before-revoke", "callback-retry"], "SQLite mapping counterexamples")
+    require_exact(model["counterexample_sets"]["sqlite_normalization_effect"], ["physical-census-entry", "fixture-production-promotion", "missing-parent-sync", "effect-transcript-incomplete", "nonempty", "sidecar-ambiguous"], "SQLite effect counterexamples")
     return model
 
 

@@ -88,6 +88,50 @@ if(NOT CXXLENS_SOURCE_REVISION MATCHES "^[0-9a-f]+$"
       "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be exact 40-hex identities"
   )
 endif()
+
+# The installed SDK-doctor executable exposes an authority binding for the
+# canonical capability-resolution projection.  Keep these values derived from
+# the exact bytes that are shipped with the build; a path-only or source-name
+# digest would let a stale catalog masquerade as the current authority.
+set(_cxxlens_agent_capability_authority_sources
+    schemas/cxxlens_ng_api_development_readiness.yaml
+    schemas/cxxlens_ng_agent_capability_resolution.yaml
+    schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml
+    schemas/cxxlens_ng_relation_registry.yaml
+    schemas/cxxlens_ng_provider_support_matrix.yaml)
+set(_cxxlens_agent_capability_authority_json "[")
+list(SORT _cxxlens_agent_capability_authority_sources)
+list(LENGTH _cxxlens_agent_capability_authority_sources
+     _cxxlens_agent_capability_authority_source_count)
+set(_cxxlens_agent_capability_authority_source_index 0)
+foreach(_cxxlens_agent_capability_authority_source IN
+        LISTS _cxxlens_agent_capability_authority_sources)
+  file(
+    SHA256
+    "${CMAKE_CURRENT_SOURCE_DIR}/${_cxxlens_agent_capability_authority_source}"
+    _cxxlens_agent_capability_source_sha256)
+  if(_cxxlens_agent_capability_authority_source_index GREATER 0)
+    string(APPEND _cxxlens_agent_capability_authority_json ",")
+  endif()
+  string(
+    APPEND
+    _cxxlens_agent_capability_authority_json
+    "{\"path\":\"${_cxxlens_agent_capability_authority_source}\",\"sha256\":\"sha256:${_cxxlens_agent_capability_source_sha256}\"}"
+  )
+  math(EXPR _cxxlens_agent_capability_authority_source_index
+       "${_cxxlens_agent_capability_authority_source_index} + 1")
+endforeach()
+string(APPEND _cxxlens_agent_capability_authority_json "]")
+string(SHA256 _cxxlens_agent_capability_authority_sha256
+              "${_cxxlens_agent_capability_authority_json}")
+file(
+  SHA256
+  "${CMAKE_CURRENT_SOURCE_DIR}/schemas/cxxlens_ng_api_development_readiness.yaml"
+  _cxxlens_agent_capability_source_sha256)
+set(CXXLENS_AGENT_CAPABILITY_SOURCE_DIGEST
+    "sha256:${_cxxlens_agent_capability_source_sha256}")
+set(CXXLENS_AGENT_CAPABILITY_AUTHORITY_DIGEST
+    "sha256:${_cxxlens_agent_capability_authority_sha256}")
 if(CXXLENS_BUILD_SHARED)
   set(CXXLENS_OCCURRENCE_CONFIGURATION shared)
 else()
@@ -370,7 +414,10 @@ endif()
 # materialization, without importing the Clang parser implementation.
 add_library(
   cxxlens_clang22_materialization_codecs STATIC
+  src/llvm/clang22/materialization_json.cpp
   src/llvm/clang22/provider_task_v3.cpp
+  src/llvm/clang22/source_closure_transport.cpp
+  src/llvm/clang22/source_closure_task_v4.cpp
   src/llvm/clang22/observation_v2.cpp
   src/llvm/clang22/source_closure.cpp
   src/llvm/clang22/source_closure_invocation.cpp
@@ -393,6 +440,7 @@ add_library(
   cxxlens_clang22_worker_core STATIC
   src/llvm/clang22/provider_worker.cpp
   src/llvm/clang22/source_closure_native.cpp
+  src/llvm/clang22/source_closure_task_v4_worker.cpp
   src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_task_spool.cpp)
 target_link_libraries(
@@ -437,7 +485,6 @@ endif()
 # exported to SDK consumers.
 add_library(
   cxxlens_clang22_materializer_core STATIC
-  src/llvm/clang22/materialization_json.cpp
   src/llvm/clang22/materialization_identity.cpp
   src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_claims.cpp
@@ -456,6 +503,7 @@ add_library(
   src/llvm/clang22/materialization_claim_stream.cpp
   src/llvm/clang22/materialization_bounded_claim_source.cpp
   src/llvm/clang22/materialization_store.cpp
+  src/llvm/clang22/materialization_store_candidate.cpp
   src/llvm/clang22/materialization_store_outcome.cpp
   src/llvm/clang22/materialization_rooted_vfs.cpp
   src/llvm/clang22/materialization_occurrence.cpp
@@ -493,6 +541,14 @@ cxxlens_configure_installed_tool(cxxlens-provider-scaffold)
 add_executable(cxxlens-sdk-doctor tools/sdk/sdk_doctor_main.cpp)
 target_link_libraries(cxxlens-sdk-doctor PRIVATE cxxlens::provider_sdk)
 target_compile_features(cxxlens-sdk-doctor PRIVATE cxx_std_23)
+target_compile_definitions(
+  cxxlens-sdk-doctor
+  PRIVATE
+    CXXLENS_SOURCE_REVISION="${CXXLENS_SOURCE_REVISION}"
+    CXXLENS_SOURCE_TREE="${CXXLENS_SOURCE_TREE}"
+    CXXLENS_AGENT_CAPABILITY_SOURCE_DIGEST="${CXXLENS_AGENT_CAPABILITY_SOURCE_DIGEST}"
+    CXXLENS_AGENT_CAPABILITY_AUTHORITY_DIGEST="${CXXLENS_AGENT_CAPABILITY_AUTHORITY_DIGEST}"
+)
 cxxlens_set_project_warnings(cxxlens-sdk-doctor)
 cxxlens_enable_sanitizers(cxxlens-sdk-doctor)
 cxxlens_configure_installed_tool(cxxlens-sdk-doctor)
@@ -597,6 +653,8 @@ install(
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas"
   FILES_MATCHING
   PATTERN "cxxlens_ng_*")
+install(FILES schemas/cxxlens_ng_agent_capability_resolution.schema.yaml
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 # Explicit runtime authority evidence used by the provider-runtime contract
 # gate.
 install(

@@ -657,19 +657,33 @@ namespace cxxlens::sdk
 			aggregate_byte_count_.low != observed_byte_count_)
 		{
 			poisoned_ = true;
+			// The cursor contract makes the current row borrow valid only until the
+			// terminal cursor step. Drop the view before reporting a terminal census
+			// failure so a failed pass cannot retain a backend page beyond its lifetime.
+			current_chunk_ = {};
+			current_offset_ = 0U;
 			return unexpected(chunk_corrupt_error("payload-census"));
 		}
 		auto checksum = full_digest_.finish();
 		if (!checksum)
 		{
 			poisoned_ = true;
+			current_chunk_ = {};
+			current_offset_ = 0U;
 			return unexpected(std::move(checksum.error()));
 		}
 		if (expectation_.validate_full_checksum && *checksum != expectation_.full_checksum)
 		{
 			poisoned_ = true;
+			current_chunk_ = {};
+			current_offset_ = 0U;
 			return unexpected(chunk_corrupt_error("payload-checksum"));
 		}
+		// A successful EOF/finish is the terminal cursor step. Do not retain the
+		// last borrowed row view after that boundary; only the compact receipt is
+		// needed for later inspection.
+		current_chunk_ = {};
+		current_offset_ = 0U;
 		try
 		{
 			receipt_ = sqlite_payload_stream_receipt{observed_byte_count_,
@@ -717,11 +731,15 @@ namespace cxxlens::sdk
 			if (!extra)
 			{
 				poisoned_ = true;
+				current_chunk_ = {};
+				current_offset_ = 0U;
 				return unexpected(std::move(extra.error()));
 			}
 			if (*extra)
 			{
 				poisoned_ = true;
+				current_chunk_ = {};
+				current_offset_ = 0U;
 				return unexpected(chunk_corrupt_error("extra-chunk"));
 			}
 			source_eof_ = true;

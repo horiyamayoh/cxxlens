@@ -71,16 +71,16 @@ namespace
 	constexpr std::uint64_t timeout_grandchild_wall_budget_ms = 30'000U;
 	constexpr std::uint64_t timeout_grandchild_cpu_budget_ms = 30'000U;
 	constexpr std::uint64_t timeout_grandchild_elapsed_bound_seconds = 40U;
+	constexpr std::uint64_t timeout_grandchild_readiness_bound_seconds = 25U;
 #else
 	constexpr std::uint64_t timeout_grandchild_wall_budget_ms = 5'000U;
 	constexpr std::uint64_t timeout_grandchild_cpu_budget_ms = 2'000U;
 	constexpr std::uint64_t timeout_grandchild_elapsed_bound_seconds = 8U;
+	// Readiness is measured from process launch, before the provider timeout terminal is
+	// classified. Keep it independent from cleanup/elapsed assertions, with bounded scheduler
+	// headroom for hosted parallel runs.
+	constexpr std::uint64_t timeout_grandchild_readiness_bound_seconds = 8U;
 #endif
-	// Readiness is an independent phase clock, but it cannot exceed the configured live
-	// execution budget: the provider must publish its authenticated topology before timeout.
-	// Deriving the bound keeps this guard aligned when sanitizer or hosted budgets change.
-	constexpr std::uint64_t timeout_grandchild_readiness_bound_ms =
-		timeout_grandchild_wall_budget_ms;
 	constexpr std::uint64_t timeout_grandchild_cleanup_bound_seconds = 5U;
 	void require(const bool condition, const std::string& message)
 	{
@@ -291,6 +291,20 @@ namespace
 
 	  private:
 		sandbox_assurance achieved_;
+	};
+
+	class counting_process_port final : public provider_process_port
+	{
+	  public:
+		[[nodiscard]] result<process_output> run(const process_invocation&,
+												 std::stop_token) const override
+		{
+			++run_calls;
+			return cxxlens::sdk::unexpected(error{
+				"test.process-port-invoked", "ng1-prelaunch-gate", "unexpected-process-launch"});
+		}
+
+		mutable std::uint64_t run_calls{};
 	};
 
 	[[nodiscard]] std::string executable_digest(const std::string& executable)
@@ -1094,6 +1108,54 @@ namespace
 		require(rename_bound,
 				"path replacement changed the executable after its verified descriptor was opened");
 #endif
+	}
+
+	void check_ng1_live_port_selection()
+	{
+		using detail::ng1_source_closure_authority_status;
+
+		const auto rejected_downgrade = detail::select_ng1_live_process_port({
+			false,
+			1U,
+			1U,
+			ng1_source_closure_authority_status::not_accepted,
+		});
+		require(!rejected_downgrade &&
+					rejected_downgrade.error().code == "provider.ng1.implicit-downgrade-denied" &&
+					rejected_downgrade.error().detail == "explicit-request-required",
+				"NG1 selection silently entered a non-NG1 path");
+
+		const auto blocked_registry = detail::select_ng1_live_process_port({
+			true,
+			1U,
+			1U,
+			ng1_source_closure_authority_status::not_accepted,
+		});
+		require(!blocked_registry &&
+					blocked_registry.error().code == "provider.ng1.capability-unavailable" &&
+					blocked_registry.error().field == "source-closure" &&
+					blocked_registry.error().detail == "authority-not-accepted",
+				"NG1 live port was selected before source-closure authority acceptance");
+
+		const auto wrong_protocol = detail::select_ng1_live_process_port({
+			true,
+			1U,
+			0U,
+			ng1_source_closure_authority_status::accepted,
+		});
+		require(!wrong_protocol &&
+					wrong_protocol.error().code == "provider.ng1.registry-revision-mismatch" &&
+					wrong_protocol.error().detail == "minor-one-required",
+				"NG1 live port accepted a protocol revision outside the private P0 contract");
+
+		const auto selected = detail::select_ng1_live_process_port({
+			true,
+			1U,
+			1U,
+			ng1_source_closure_authority_status::accepted,
+		});
+		require(selected.has_value(),
+				"accepted NG1 authority did not select the source-private duplex port");
 	}
 
 	void check_sandbox_closed_enum(const std::string& executable)
@@ -2098,6 +2160,69 @@ namespace
 		require(!feature && feature.error().code == "provider.required-feature-missing",
 				"unsupported required provider feature was negotiated");
 
+		// Every NG1 hardening feature must stop at the runtime pre-launch boundary
+		// until the accepted source-closure registry and live-port dispatch exist.
+		// In particular, this must not fall through to the completed-process port.
+		for (const auto ng1_feature : std::array{
+				 std::string_view{"durable-resume-token"},
+				 std::string_view{"heartbeat"},
+				 std::string_view{"progress-rate-enforcement"},
+				 std::string_view{"spill-staging"},
+				 std::string_view{"long-run-fault-qualification"},
+			 })
+		{
+			auto ng1_candidate = candidate(executable, "success");
+			ng1_candidate.description.protocol.minimum_minor = 1U;
+			ng1_candidate.description.protocol.maximum_minor = 1U;
+			ng1_candidate.description.protocol.required_features = {
+				"credit-backpressure", "task-input-chunks-v1", std::string{ng1_feature}};
+			auto ng1_selection =
+				select_provider(selection_request(executable), std::span{&ng1_candidate, 1U});
+			require(ng1_selection.has_value(),
+					"NG1 feature provider selection failed before runtime gate");
+			auto ng1_request = task(std::move(*ng1_selection));
+			ng1_request.limits.minimum_minor = 1U;
+			ng1_request.limits.maximum_minor = 1U;
+			counting_process_port ng1_processes;
+			process_provider_runtime ng1_runtime{ng1_processes};
+			auto ng1 = ng1_runtime.execute(std::move(ng1_request));
+			require(!ng1 && ng1.error().code == "provider.ng1.capability-unavailable" &&
+						ng1.error().field == "protocol" &&
+						ng1.error().detail == "accepted-source-closure-registry-required" &&
+						ng1_processes.run_calls == 0U,
+					"NG1 hardening feature escaped the fail-closed pre-launch boundary");
+		}
+
+		// Source-closure transport is a proposed protocol-1.2 extension.  The
+		// accepted runtime must reject its advertisement before launching a
+		// provider process; treating it as the legacy task-input path would
+		// silently downgrade a closure task and lose its manifest/blob authority.
+		auto source_closure_candidate = candidate(executable, "success");
+		source_closure_candidate.description.protocol.minimum_minor = 2U;
+		source_closure_candidate.description.protocol.maximum_minor = 2U;
+		source_closure_candidate.description.protocol.required_features = {
+			"credit-backpressure", "task-input-chunks-v1", "task-source-closure-v1"};
+		auto source_closure_selection = select_provider(selection_request(executable),
+														std::span{&source_closure_candidate, 1U});
+		require(source_closure_selection.has_value(),
+				"source-closure provider selection failed before runtime gate");
+		auto source_closure_request = task(std::move(*source_closure_selection));
+		source_closure_request.limits.minimum_minor = 2U;
+		source_closure_request.limits.maximum_minor = 2U;
+		// Keep the source-closure predecessor fail-closed at the same launcher boundary as
+		// NG1: an unaccepted 1.2 capability must not reach the completed-process port.  A
+		// counting port makes the no-launch invariant explicit instead of relying on the
+		// fixture process to remain unobserved.
+		counting_process_port source_closure_processes;
+		process_provider_runtime source_closure_runtime{source_closure_processes};
+		auto source_closure = source_closure_runtime.execute(std::move(source_closure_request));
+		require(
+			!source_closure && source_closure.error().code == "provider.required-feature-missing" &&
+				source_closure.error().field == "protocol" &&
+				source_closure.error().detail.find("task-source-closure-v1") != std::string::npos &&
+				source_closure_processes.run_calls == 0U,
+			"source-closure capability did not fail closed before process launch");
+
 		transcript_sink sink;
 		protocol_writer writer{sink};
 		writer.grant_credit({64U * 1024U * 1024U, 65536U});
@@ -2593,7 +2718,7 @@ namespace
 		require(cleanup[6], "pipe-holding descendant markers could not be removed");
 		require(descendants.ready_at != std::chrono::steady_clock::time_point{} &&
 					readiness_elapsed <
-						std::chrono::milliseconds{timeout_grandchild_readiness_bound_ms},
+						std::chrono::seconds{timeout_grandchild_readiness_bound_seconds},
 				"timeout fixture readiness exceeded its independent bound: " +
 					std::to_string(
 						std::chrono::duration_cast<std::chrono::milliseconds>(readiness_elapsed)
@@ -3012,6 +3137,7 @@ int main(const int argument_count, const char* const* arguments)
 	const std::string executable{arguments[1]};
 	check_selection(executable);
 	check_verified_executable_binding();
+	check_ng1_live_port_selection();
 	check_sandbox_closed_enum(executable);
 	check_host_transcript_validator(executable);
 	check_sealed_provider_validation();

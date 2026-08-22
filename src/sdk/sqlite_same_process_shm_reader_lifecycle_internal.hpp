@@ -8,6 +8,53 @@
 namespace cxxlens::sdk::detail
 {
 	/**
+	 * The bounded #201 U201-R0 active-read connection product.
+	 *
+	 * This is deliberately a smaller machine than the outer read/receipt machine below.  It
+	 * authenticates the source family and the read-only connection before the first SHM map.  It
+	 * carries no logical-read, mapping-lease, normalization, or zero-effect receipt authority.
+	 * Failures are returned by the source preflight validator as typed fail-closed errors rather
+	 * than being represented as a successful phase.
+	 */
+	enum class sqlite_active_read_connection_phase : std::uint8_t
+	{
+		unopened,
+		source_family_sealed,
+		readonly_profile_selected,
+		outer_custody_open,
+		active_read_connection,
+	};
+
+	inline constexpr std::array sqlite_active_read_connection_phases{
+		sqlite_active_read_connection_phase::unopened,
+		sqlite_active_read_connection_phase::source_family_sealed,
+		sqlite_active_read_connection_phase::readonly_profile_selected,
+		sqlite_active_read_connection_phase::outer_custody_open,
+		sqlite_active_read_connection_phase::active_read_connection,
+	};
+
+	[[nodiscard]] constexpr bool is_sqlite_active_read_connection_transition(
+		const sqlite_active_read_connection_phase origin,
+		const sqlite_active_read_connection_phase destination) noexcept
+	{
+		using phase = sqlite_active_read_connection_phase;
+		switch (origin)
+		{
+			case phase::unopened:
+				return destination == phase::source_family_sealed;
+			case phase::source_family_sealed:
+				return destination == phase::readonly_profile_selected;
+			case phase::readonly_profile_selected:
+				return destination == phase::outer_custody_open;
+			case phase::outer_custody_open:
+				return destination == phase::active_read_connection;
+			case phase::active_read_connection:
+				return false;
+		}
+		return false;
+	}
+
+	/**
 	 * The #201 outer zero-effect read success phases in the proposed, production-inactive
 	 * state-only graph.
 	 *
@@ -116,6 +163,87 @@ namespace cxxlens::sdk::detail
 				return false;
 		}
 		return path.back() == sqlite_shm_reader_outer_read_phase::logical_read_receipt;
+	}
+
+	/** The #202 exact-empty normalization cutover graph (production-inactive). */
+	enum class sqlite_shm_reader_normalization_phase : std::uint8_t
+	{
+		no_authenticated_receipt,
+		logical_read_receipt_authenticated,
+		exclusive_source_revalidated,
+		pre_effect_receipt_sealed,
+		effect_armed,
+		/** Every allowed callback effect is present exactly once and in contract order. */
+		effect_transcript_sealed,
+		/** Coordination-WAL delete, journal creation, and terminal delete have parent-sync
+		 * receipts. */
+		durability_barrier_sealed,
+		effect_confirmed,
+		connection_closed,
+		post_effect_projection_validated,
+		terminal_quarantined,
+	};
+
+	inline constexpr std::array sqlite_shm_reader_normalization_phases{
+		sqlite_shm_reader_normalization_phase::no_authenticated_receipt,
+		sqlite_shm_reader_normalization_phase::logical_read_receipt_authenticated,
+		sqlite_shm_reader_normalization_phase::exclusive_source_revalidated,
+		sqlite_shm_reader_normalization_phase::pre_effect_receipt_sealed,
+		sqlite_shm_reader_normalization_phase::effect_armed,
+		sqlite_shm_reader_normalization_phase::effect_transcript_sealed,
+		sqlite_shm_reader_normalization_phase::durability_barrier_sealed,
+		sqlite_shm_reader_normalization_phase::effect_confirmed,
+		sqlite_shm_reader_normalization_phase::connection_closed,
+		sqlite_shm_reader_normalization_phase::post_effect_projection_validated,
+		sqlite_shm_reader_normalization_phase::terminal_quarantined,
+	};
+
+	[[nodiscard]] constexpr bool is_sqlite_shm_reader_normalization_transition(
+		const sqlite_shm_reader_normalization_phase origin,
+		const sqlite_shm_reader_normalization_phase destination) noexcept
+	{
+		using phase = sqlite_shm_reader_normalization_phase;
+		if (destination == phase::terminal_quarantined &&
+			origin != phase::post_effect_projection_validated &&
+			origin != phase::terminal_quarantined)
+			return true;
+		switch (origin)
+		{
+			case phase::no_authenticated_receipt:
+				return destination == phase::logical_read_receipt_authenticated;
+			case phase::logical_read_receipt_authenticated:
+				return destination == phase::exclusive_source_revalidated;
+			case phase::exclusive_source_revalidated:
+				return destination == phase::pre_effect_receipt_sealed;
+			case phase::pre_effect_receipt_sealed:
+				return destination == phase::effect_armed;
+			case phase::effect_armed:
+				return destination == phase::effect_transcript_sealed;
+			case phase::effect_transcript_sealed:
+				return destination == phase::durability_barrier_sealed;
+			case phase::durability_barrier_sealed:
+				return destination == phase::effect_confirmed;
+			case phase::effect_confirmed:
+				return destination == phase::connection_closed;
+			case phase::connection_closed:
+				return destination == phase::post_effect_projection_validated;
+			case phase::post_effect_projection_validated:
+			case phase::terminal_quarantined:
+				return false;
+		}
+		return false;
+	}
+
+	[[nodiscard]] constexpr bool validate_sqlite_shm_reader_normalization_path(
+		const std::span<const sqlite_shm_reader_normalization_phase> path) noexcept
+	{
+		using phase = sqlite_shm_reader_normalization_phase;
+		if (path.empty() || path.front() != phase::no_authenticated_receipt)
+			return false;
+		for (std::size_t index = 1U; index < path.size(); ++index)
+			if (!is_sqlite_shm_reader_normalization_transition(path[index - 1U], path[index]))
+				return false;
+		return path.back() == phase::post_effect_projection_validated;
 	}
 
 	/**
@@ -550,5 +678,198 @@ namespace cxxlens::sdk::detail
 				return false;
 		}
 		return false;
+	}
+
+	/**
+	 * The bounded #205 nested-mapping handoff terminal.
+	 *
+	 * This is a state-only composition witness.  It describes the order in which an
+	 * authenticated #201 active-read connection may enter the #205 callback protocol and
+	 * retire its callback custody.  No state in this graph enables the native
+	 * `SQLITE_OK` projection or mints a public mapping lease.  In particular, the pending
+	 * and published states are only reachable after the native result has been observed;
+	 * ambiguous callbacks terminate in a permanent quarantine.
+	 */
+	enum class sqlite_nested_mapping_terminal_phase : std::uint8_t
+	{
+		active_read_connection,
+		attempt_pin_acquired,
+		native_callback_entered,
+		native_result_observed,
+		nonpromotable_outcome,
+		pending_lease,
+		published_reader_lease,
+		revoke_intent,
+		registry_hidden,
+		callbacks_drained,
+		native_cleanup_complete,
+		nested_mapping_terminal,
+		terminal_quarantined,
+	};
+
+	inline constexpr std::array sqlite_nested_mapping_terminal_phases{
+		sqlite_nested_mapping_terminal_phase::active_read_connection,
+		sqlite_nested_mapping_terminal_phase::attempt_pin_acquired,
+		sqlite_nested_mapping_terminal_phase::native_callback_entered,
+		sqlite_nested_mapping_terminal_phase::native_result_observed,
+		sqlite_nested_mapping_terminal_phase::nonpromotable_outcome,
+		sqlite_nested_mapping_terminal_phase::pending_lease,
+		sqlite_nested_mapping_terminal_phase::published_reader_lease,
+		sqlite_nested_mapping_terminal_phase::revoke_intent,
+		sqlite_nested_mapping_terminal_phase::registry_hidden,
+		sqlite_nested_mapping_terminal_phase::callbacks_drained,
+		sqlite_nested_mapping_terminal_phase::native_cleanup_complete,
+		sqlite_nested_mapping_terminal_phase::nested_mapping_terminal,
+		sqlite_nested_mapping_terminal_phase::terminal_quarantined,
+	};
+
+	[[nodiscard]] constexpr bool is_sqlite_nested_mapping_terminal_transition(
+		const sqlite_nested_mapping_terminal_phase origin,
+		const sqlite_nested_mapping_terminal_phase destination) noexcept
+	{
+		using phase = sqlite_nested_mapping_terminal_phase;
+		switch (origin)
+		{
+			case phase::active_read_connection:
+				return destination == phase::attempt_pin_acquired ||
+					destination == phase::terminal_quarantined;
+			case phase::attempt_pin_acquired:
+				return destination == phase::native_callback_entered ||
+					destination == phase::terminal_quarantined;
+			case phase::native_callback_entered:
+				return destination == phase::native_result_observed ||
+					destination == phase::terminal_quarantined;
+			case phase::native_result_observed:
+				return destination == phase::nonpromotable_outcome ||
+					destination == phase::pending_lease ||
+					destination == phase::terminal_quarantined;
+			case phase::nonpromotable_outcome:
+				return destination == phase::revoke_intent ||
+					destination == phase::terminal_quarantined;
+			case phase::pending_lease:
+				return destination == phase::published_reader_lease ||
+					destination == phase::terminal_quarantined;
+			case phase::published_reader_lease:
+				return destination == phase::revoke_intent;
+			case phase::revoke_intent:
+				return destination == phase::registry_hidden;
+			case phase::registry_hidden:
+				return destination == phase::callbacks_drained;
+			case phase::callbacks_drained:
+				return destination == phase::native_cleanup_complete ||
+					destination == phase::terminal_quarantined;
+			case phase::native_cleanup_complete:
+				return destination == phase::nested_mapping_terminal;
+			case phase::nested_mapping_terminal:
+			case phase::terminal_quarantined:
+				return false;
+		}
+		return false;
+	}
+
+	/**
+	 * Validate a nested terminal candidate without granting production authority.
+	 *
+	 * The positive path must consume the active connection, observe the native callback before
+	 * promotion, and hide/revoke before cleanup.  A quarantine path is accepted only as a
+	 * fail-closed terminal and can never be mistaken for the successful nested terminal.
+	 */
+	[[nodiscard]] constexpr bool validate_sqlite_nested_mapping_terminal_path(
+		const std::span<const sqlite_nested_mapping_terminal_phase> path) noexcept
+	{
+		using phase = sqlite_nested_mapping_terminal_phase;
+		if (path.empty() || path.front() != phase::active_read_connection)
+			return false;
+		for (std::size_t index = 1U; index < path.size(); ++index)
+			if (!is_sqlite_nested_mapping_terminal_transition(path[index - 1U], path[index]))
+				return false;
+		return path.back() == phase::nested_mapping_terminal ||
+			path.back() == phase::terminal_quarantined;
+	}
+
+	/**
+	 * The #201 logical-read receipt barrier after the nested #205 terminal is consumed.
+	 *
+	 * This graph deliberately carries no source bytes, pointer, lease, or SQLite result.  It
+	 * only proves the order needed before a future authenticated product can be issued: eager
+	 * decode, exact nested terminal, outer revoke/close, zero live custody, and an independent
+	 * zero-effect census.  Any missing terminal or ambiguous custody is fail-closed.
+	 */
+	enum class sqlite_logical_read_receipt_phase : std::uint8_t
+	{
+		active_read_connection,
+		eager_logical_read,
+		nested_terminal_consumed,
+		outer_connection_revoking,
+		outer_custody_join_pending,
+		outer_custody_join_sealed,
+		outer_connection_closed,
+		zero_effect_census_sealed,
+		logical_read_receipt,
+		terminal_quarantined,
+	};
+
+	inline constexpr std::array sqlite_logical_read_receipt_phases{
+		sqlite_logical_read_receipt_phase::active_read_connection,
+		sqlite_logical_read_receipt_phase::eager_logical_read,
+		sqlite_logical_read_receipt_phase::nested_terminal_consumed,
+		sqlite_logical_read_receipt_phase::outer_connection_revoking,
+		sqlite_logical_read_receipt_phase::outer_custody_join_pending,
+		sqlite_logical_read_receipt_phase::outer_custody_join_sealed,
+		sqlite_logical_read_receipt_phase::outer_connection_closed,
+		sqlite_logical_read_receipt_phase::zero_effect_census_sealed,
+		sqlite_logical_read_receipt_phase::logical_read_receipt,
+		sqlite_logical_read_receipt_phase::terminal_quarantined,
+	};
+
+	[[nodiscard]] constexpr bool is_sqlite_logical_read_receipt_transition(
+		const sqlite_logical_read_receipt_phase origin,
+		const sqlite_logical_read_receipt_phase destination) noexcept
+	{
+		using phase = sqlite_logical_read_receipt_phase;
+		switch (origin)
+		{
+			case phase::active_read_connection:
+				return destination == phase::eager_logical_read ||
+					destination == phase::terminal_quarantined;
+			case phase::eager_logical_read:
+				return destination == phase::nested_terminal_consumed ||
+					destination == phase::terminal_quarantined;
+			case phase::nested_terminal_consumed:
+				return destination == phase::outer_connection_revoking ||
+					destination == phase::terminal_quarantined;
+			case phase::outer_connection_revoking:
+				return destination == phase::outer_custody_join_pending ||
+					destination == phase::terminal_quarantined;
+			case phase::outer_custody_join_pending:
+				return destination == phase::outer_custody_join_sealed ||
+					destination == phase::terminal_quarantined;
+			case phase::outer_custody_join_sealed:
+				return destination == phase::outer_connection_closed ||
+					destination == phase::terminal_quarantined;
+			case phase::outer_connection_closed:
+				return destination == phase::zero_effect_census_sealed ||
+					destination == phase::terminal_quarantined;
+			case phase::zero_effect_census_sealed:
+				return destination == phase::logical_read_receipt;
+			case phase::logical_read_receipt:
+			case phase::terminal_quarantined:
+				return false;
+		}
+		return false;
+	}
+
+	/** Validate a successful logical-read receipt barrier or its fail-closed quarantine path. */
+	[[nodiscard]] constexpr bool validate_sqlite_logical_read_receipt_path(
+		const std::span<const sqlite_logical_read_receipt_phase> path) noexcept
+	{
+		using phase = sqlite_logical_read_receipt_phase;
+		if (path.empty() || path.front() != phase::active_read_connection)
+			return false;
+		for (std::size_t index = 1U; index < path.size(); ++index)
+			if (!is_sqlite_logical_read_receipt_transition(path[index - 1U], path[index]))
+				return false;
+		return path.back() == phase::logical_read_receipt ||
+			path.back() == phase::terminal_quarantined;
 	}
 } // namespace cxxlens::sdk::detail

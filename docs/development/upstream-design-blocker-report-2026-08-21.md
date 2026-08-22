@@ -35,7 +35,7 @@ authority は Nightly の有効 event を `schedule` と `workflow_dispatch`、`
 
 ### #173: aggregate release qualification
 
-#173 は aggregate decision の owner であり、#167 の release report と #179 の terminal production-scope report を代作してはならない。
+Issue #173 は aggregate decision の owner であり、issue #167 の release report と issue #179 の terminal production-scope report を代作してはならない。
 
 本当の設計課題は、別 workflow で生成された Heavy/Nightly と、別 owner の #167/#179 report を、current `origin/main` の SHA/tree/toolchain に対して認証付きで一つの release bundle に結合することである。単に artifact をコピーするだけでは provenance が足りない。
 
@@ -85,7 +85,7 @@ digest 一致、既存 bulk test、provider replay だけでこの issue を完�
 
 `3adec3646db741fc39e1d4236979030cc6c38a15` は replay provenance の5つの意味 digest を `semantic-v2:sha256:<64 hex>` として検証する bounded slice である。NG1 maturity は Proposed のままで、live process port、resume/rate boundary、spill、crash/hang recovery、long-run/static/shared qualification は未完了である。
 
-#261 の source-closure registry acceptance が先行依存である。closure receipt を resume token として使うこと、implicit NG0 downgrade、blocking execute path は禁止する。
+Issue #261 の source-closure registry acceptance が先行依存である。closure receipt を resume token として使うこと、implicit NG0 downgrade、blocking execute path は禁止する。
 
 ### #185: exact-main Nightly qualification
 

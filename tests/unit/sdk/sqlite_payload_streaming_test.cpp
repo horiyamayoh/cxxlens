@@ -300,6 +300,8 @@ namespace
 		auto receipt = (*source)->finish();
 		require(replay == input && receipt && receipt->full_checksum == expected.full_checksum,
 				"validating chunk source changed payload bytes or checksum");
+		require((*source)->resident_payload_byte_count() == 0U,
+				"validating source retained its borrowed row after terminal finish");
 
 		auto replay_rows = std::make_shared<memory_replay_source>(chunks);
 		sqlite_validated_replayable_payload_source replayable{replay_rows, expected};
@@ -336,6 +338,8 @@ namespace
 		auto empty_read = (*empty)->read(buffer);
 		require(empty_read && *empty_read == 0U,
 				"empty validating source did not reach canonical EOF");
+		require((*empty)->resident_payload_byte_count() == 0U,
+				"empty validating source retained a row after terminal EOF");
 	}
 
 	void verify_resident_observation_scope()

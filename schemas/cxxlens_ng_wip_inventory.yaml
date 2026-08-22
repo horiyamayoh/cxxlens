@@ -316,10 +316,11 @@ worktrees:
   branch: issue-183-ng1-session-main
   prunable_reason: gitdir file points to non-existent location
   disposition: prunable-registration
-- prunable: false
+- prunable: true
   path: /tmp/cxxlens-pr346-repair.rfpcqg
   head: bf585acf185b559ee67833a6c8ddedd4e3302cf4
   branch: null
+  prunable_reason: historical object is unavailable and the worktree is not registered
   disposition: historical-unreviewed
 - prunable: true
   path: /tmp/cxxlens-quality-SwHoxb
@@ -339,6 +340,106 @@ worktrees:
   branch: issue-179-production-scope-main
   prunable_reason: gitdir file points to non-existent location
   disposition: prunable-registration
+- prunable: false
+  path: /tmp/cxxlens-277-doctor
+  head: 5cf13410753ef33d26beffedaad5d1d7662f44e6
+  branch: agent/issue277-doctor-authority
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-277-metric-hardening
+  head: dd63c5bd14529a0bb954b5e475e08215b13dcbbd
+  branch: agent/issue-277-metric-hardening
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-issue-202-normalization-slice
+  head: effc1fc45fbe6e1b8565207152bacb3c51c0b75d
+  branch: agent/issue-202-normalization-slice
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-issue-261-current
+  head: 612a3d0a7c9426984a77eb453e778bfdaf265d6c
+  branch: agent/issue-261-current-v2
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-issue173-release-slice
+  head: f6817707df9aa428f647c4a342ccd8901dd49759
+  branch: agent/issue173-release-slice
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-issue200-production-candidate-seam
+  head: 060f0d1c7063cea32b403759f15721d51d40b070
+  branch: agent/issue200-production-candidate-seam
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-issue200-residency-slice
+  head: ffa005b52dfd230ef17ec831474484076b00ae8b
+  branch: agent/issue-200-residency-slice
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-issue261-production-codec
+  head: 0b49ea6ca675c3e610b414271d22ecf16d9c3405
+  branch: agent/issue261-production-codec
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-ng1-longrun
+  head: c0169ebc7ecbbb0f46bf7375a81952d6fe3d58b4
+  branch: null
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-next-production-ng1
+  head: 1da733af550eb27207accc923345bd7d7d456af9
+  branch: null
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-ng1-runtime-reaudit
+  head: c264288d9b4c1f578ade2bcc4f15aa37082770ab
+  branch: agent/issue-183-runtime
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-release-producer-apply
+  head: d5d34bcd24a0f03ef5e5e98c937d7fc02b9e7c81
+  branch: null
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-release-producer-audit
+  head: 465ee0c18288b1412cb1cbf367d54b6a261eb9aa
+  branch: null
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-source-closure-P1un27
+  head: cc41197b86d5ae4a909e4acf9ea91f67d522ec37
+  branch: null
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-source-closure-worker-wiring
+  head: 755ade4693a3193e53851e8cbb3f252b4ac181f8
+  branch: agent/issue-261-worker-wiring
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-sqlite-lifecycle-matrix-hardening
+  head: 39682489a4fc8fe219214b8146e7a8d31de1304b
+  branch: agent/sqlite-lifecycle-matrix-hardening
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-store-candidate
+  head: e4d9b6afe1b650d4bc2b58dc993d6c13f39886e2
+  branch: codex/store-candidate-200
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-final-gap-277
+  head: 1c95432c819da35ba8b5a488adcc2d2a07a2881e
+  branch: null
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-final-sqlite-gap
+  head: ceec7626af18153360032d60bd016ae489acc623
+  branch: codex/final-sqlite-gap
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-final173
+  head: 5ac51773b05b70a608e5f9f5d575cb4dbcb97c93
+  branch: null
+  disposition: historical-unreviewed
 refs:
 - ref: agent/176-standing-authorization
   head: 15698da61901b3077329d465f2b933ea518d33c3

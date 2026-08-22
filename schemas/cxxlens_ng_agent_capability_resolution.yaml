@@ -1,0 +1,273 @@
+schema: cxxlens.agent-capability-resolution.v1
+document_version: 1.0.0
+role: evaluation-corpus-authority
+authority:
+  readiness_path: schemas/cxxlens_ng_api_development_readiness.yaml
+  readiness_contract: product.demand-closure.v1
+  tracking_issue: '#277'
+  source_paths:
+    - schemas/cxxlens_ng_api_development_readiness.yaml
+    - schemas/cxxlens_ng_agent_capability_resolution.yaml
+    - schemas/cxxlens_ng_use_case_capability_catalog.schema.yaml
+    - schemas/cxxlens_ng_relation_registry.yaml
+    - schemas/cxxlens_ng_provider_support_matrix.yaml
+  stale_policy: reject
+result_contract:
+  states: [proved, disproved, unknown, partial, conflicting]
+  required_explanations: [why-proved, why-disproved, why-unknown, what-is-missing, what-would-upgrade-the-result]
+  missing_reason_codes: [missing-input, missing-capability, missing-model, missing-evidence, blocked-dependency, unsupported-consumer, unknown-use-case, stale-authority, conflicting-evidence, invalid-request]
+  preserved_semantics: [coverage, closure, unresolved, conflict, differential-disagreement, guarantee, provenance, logical-explain, physical-explain]
+golden_paths:
+  - id: agent.golden-relation.v1
+    use_case_id: agent.golden-relation.v1
+    consumer: relation-inspector
+    question: Can the admitted relation be queried with its identity and provenance intact?
+    expected_result_states: [proved, disproved, unknown, partial, conflicting]
+    state: proved
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
+    capability_path:
+      - id: input.source-snapshot.v1
+        kind: input
+        requires: []
+        disposition: implemented
+        state: proved
+        owner_issue: '#261'
+        evidence: [source-closure-capture]
+      - id: relation.cc-call-site.v1
+        kind: relation
+        requires: [input.source-snapshot.v1]
+        disposition: implemented
+        state: proved
+        owner_issue: '#66'
+        evidence: [relation-registry, sdk-query]
+      - id: evidence.relation-provenance.v1
+        kind: evidence
+        requires: [relation.cc-call-site.v1]
+        disposition: implemented
+        state: proved
+        owner_issue: '#66'
+        evidence: [coverage, provenance]
+    completion_plan: []
+  - id: agent.golden-recipe.v1
+    use_case_id: agent.golden-recipe.v1
+    consumer: recipe-author
+    question: Can a versioned recipe produce a deterministic, evidence-backed explanation?
+    expected_result_states: [proved, disproved, unknown, partial, conflicting]
+    state: disproved
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
+    capability_path:
+      - id: input.effective-invocation.v1
+        kind: input
+        requires: []
+        disposition: partial
+        state: partial
+        owner_issue: '#261'
+        evidence: [compile-command-binding]
+      - id: provider.clang22-materialization.v2_1
+        kind: provider
+        requires: [input.effective-invocation.v1]
+        disposition: partial
+        state: partial
+        owner_issue: '#261'
+        evidence: [provider-task, materialization-report]
+      - id: recipe.explain-translation-unit.v1
+        kind: recipe
+        requires: [provider.clang22-materialization.v2_1]
+        disposition: implemented
+        state: disproved
+        owner_issue: '#261'
+        evidence: [recipe-plan, logical-explain]
+    completion_plan: []
+  - id: agent.golden-analysis.v1
+    use_case_id: agent.golden-analysis.v1
+    consumer: analysis-author
+    question: Can an analysis retain partiality and unresolved findings instead of collapsing them to success?
+    expected_result_states: [proved, disproved, unknown, partial, conflicting]
+    state: conflicting
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
+    capability_path:
+      - id: artifact.semantic-snapshot.v1
+        kind: input
+        requires: []
+        disposition: implemented
+        state: proved
+        owner_issue: '#181'
+        evidence: [snapshot-identity]
+      - id: analysis.coverage-aware.v1
+        kind: analysis
+        requires: [artifact.semantic-snapshot.v1]
+        disposition: implementation-tracked
+        state: conflicting
+        owner_issue: '#277'
+        evidence: [coverage, unresolved]
+    completion_plan:
+      - id: completion.analysis-corpus.v1
+        depends_on: []
+        action: Add an accepted analysis implementation and negative corpus for every partial branch.
+        owner_issue: '#277'
+        unlocks: [analysis.coverage-aware.v1]
+  - id: agent.golden-model.v1
+    use_case_id: agent.golden-model.v1
+    consumer: model-pack-author
+    question: Is the requested model pack available for this analysis and toolchain context?
+    expected_result_states: [proved, disproved, unknown, partial, conflicting]
+    state: unknown
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
+    capability_path:
+      - id: input.toolchain-context.v1
+        kind: input
+        requires: []
+        disposition: implemented
+        state: proved
+        owner_issue: '#66'
+        evidence: [toolchain-context]
+      - id: model.assumption-pack.v1
+        kind: model
+        requires: [input.toolchain-context.v1]
+        disposition: missing
+        state: unknown
+        owner_issue: '#257'
+        evidence: []
+    completion_plan:
+      - id: completion.model-pack.v1
+        depends_on: []
+        action: Register the exact model pack, assumptions, version, and qualification evidence.
+        owner_issue: '#257'
+        unlocks: [model.assumption-pack.v1]
+  - id: agent.golden-portable-provider.v1
+    use_case_id: agent.golden-portable-provider.v1
+    consumer: portable-provider-author
+    question: Can a portable provider publish typed observations through the versioned protocol?
+    expected_result_states: [proved, disproved, unknown, partial, conflicting]
+    state: proved
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
+    capability_path:
+      - id: input.portable-task.v1
+        kind: input
+        requires: []
+        disposition: implemented
+        state: proved
+        owner_issue: '#66'
+        evidence: [portable-provider-task]
+      - id: provider.portable-sdk.v1
+        kind: provider
+        requires: [input.portable-task.v1]
+        disposition: implemented
+        state: proved
+        owner_issue: '#66'
+        evidence: [provider-protocol, sdk-contract]
+      - id: evidence.provider-transcript.v1
+        kind: evidence
+        requires: [provider.portable-sdk.v1]
+        disposition: implemented
+        state: proved
+        owner_issue: '#66'
+        evidence: [typed-transcript, deterministic-output]
+    completion_plan: []
+  - id: agent.golden-native-provider.v1
+    use_case_id: agent.golden-native-provider.v1
+    consumer: native-provider-author
+    question: Is the native provider path qualified for the requested toolchain and platform tuple?
+    expected_result_states: [proved, disproved, unknown, partial, conflicting]
+    state: partial
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
+    capability_path:
+      - id: input.native-toolchain.v1
+        kind: input
+        requires: []
+        disposition: partial
+        state: partial
+        owner_issue: '#261'
+        evidence: [toolchain-provenance]
+      - id: provider.clang22-native.v1
+        kind: provider
+        requires: [input.native-toolchain.v1]
+        disposition: partial
+        state: partial
+        owner_issue: '#261'
+        evidence: [native-provider, source-closure-vfs]
+      - id: evidence.native-install-qualified.v1
+        kind: evidence
+        requires: [provider.clang22-native.v1]
+        disposition: tracked-gap
+        state: unknown
+        owner_issue: '#173'
+        evidence: []
+    completion_plan:
+      - id: completion.native-installed-e2e.v1
+        depends_on: []
+        action: Produce exact installed static/shared real-project evidence for the selected tuple.
+        owner_issue: '#173'
+        unlocks: [evidence.native-install-qualified.v1]
+  - id: agent.golden-query-operator.v1
+    use_case_id: agent.golden-query-operator.v1
+    consumer: query-author
+    question: Can the query operator preserve typed identity, order, and static/dynamic parity?
+    expected_result_states: [proved, disproved, unknown, partial, conflicting]
+    state: proved
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
+    capability_path:
+      - id: relation.queryable.v1
+        kind: relation
+        requires: []
+        disposition: implemented
+        state: proved
+        owner_issue: '#66'
+        evidence: [relation-registry]
+      - id: query.operator.v1
+        kind: query
+        requires: [relation.queryable.v1]
+        disposition: implemented
+        state: proved
+        owner_issue: '#66'
+        evidence: [logical-query-ir, static-dynamic-parity]
+    completion_plan: []
+  - id: agent.golden-support-tuple.v1
+    use_case_id: agent.golden-support-tuple.v1
+    consumer: package-selector
+    question: Is this provider/relation/toolchain/platform tuple explicitly supported and qualified?
+    expected_result_states: [proved, disproved, unknown, partial, conflicting]
+    state: unknown
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
+    capability_path:
+      - id: support.provider-tuple.v1
+        kind: support
+        requires: []
+        disposition: conformance-only
+        state: unknown
+        owner_issue: '#173'
+        evidence: [support-matrix]
+    completion_plan:
+      - id: completion.support-gr-tuple.v1
+        depends_on: []
+        action: Bind the exact provider, relation, toolchain, platform, binary, and evidence digests to a GR report.
+        owner_issue: '#173'
+        unlocks: [support.provider-tuple.v1]
+  - id: agent.golden-actionable-unknown.v1
+    use_case_id: agent.golden-actionable-unknown.v1
+    consumer: autonomous-coding-agent
+    question: If completion is unavailable, can the agent receive an actionable typed reason and dependency-ordered upgrade plan?
+    expected_result_states: [proved, disproved, unknown, partial, conflicting]
+    state: unknown
+    demand: {family_id: agent-guided-extension, capabilities: [use-case-capability-trace, authority-slice, exact-write-scope, evidence-plan]}
+    capability_path:
+      - id: input.admitted-use-case.v1
+        kind: input
+        requires: []
+        disposition: implemented
+        state: proved
+        owner_issue: '#277'
+        evidence: [use-case-catalog]
+      - id: capability.dependency-graph.v1
+        kind: evidence
+        requires: [input.admitted-use-case.v1]
+        disposition: blocked
+        state: unknown
+        owner_issue: '#173'
+        evidence: [work-unit-registry]
+    completion_plan:
+      - id: completion.governance-receipt.v1
+        depends_on: []
+        action: Accept the exact governance receipt and complete predecessor work units before selecting execution.
+        owner_issue: '#173'
+        unlocks: [capability.dependency-graph.v1]

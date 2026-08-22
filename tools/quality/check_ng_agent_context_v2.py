@@ -14,6 +14,7 @@ from typing import Any
 
 import jsonschema
 
+import check_ng_agent_capability_resolution as capability_resolution
 import check_ng_work_units as work_units
 
 
@@ -164,8 +165,15 @@ def _resolve_execution(
             continue
         seen.add(dependency)
         dependency_unit = all_units[dependency]
-        if dependency_unit["state"] != "ready":
+        if (
+            dependency_unit["state"] != "ready"
+            and dependency_unit["dependency_completion"]["status"] != "accepted"
+        ):
             blocked_dependencies.append(f"dependency:{dependency}:{dependency_unit['state']}")
+        if dependency_unit["dependency_completion"]["status"] != "accepted":
+            blocked_dependencies.append(
+                f"dependency:{dependency}:completion:{dependency_unit['dependency_completion']['status']}"
+            )
         blocked_dependencies.extend(
             f"dependency:{dependency}:{blocker}"
             for blocker in _decision_blockers(
@@ -187,9 +195,14 @@ def _resolve_execution(
         for product in unit["consumed_products"]
         if manifest["product_receipts"][product]["status"] != "available"
     ]
-    if unit["state"] == "ready" and (blocked_dependencies or authority_blockers or product_blockers):
+    readiness_blockers = [] if unit["readiness"] == "executable" else [
+        f"readiness:{unit['readiness']}"
+    ]
+    if unit["state"] == "ready" and (
+        blocked_dependencies or authority_blockers or product_blockers or readiness_blockers
+    ):
         return "stop-blocked-by-dependency", sorted(
-            [*blocked_dependencies, *authority_blockers, *product_blockers]
+            [*blocked_dependencies, *authority_blockers, *product_blockers, *readiness_blockers]
         )
     disposition = {
         "ready": "ready",
@@ -201,6 +214,7 @@ def _resolve_execution(
         *sorted(blocked_dependencies),
         *sorted(authority_blockers),
         *sorted(product_blockers),
+        *sorted(readiness_blockers),
     ]
     return disposition, blockers
 
@@ -224,6 +238,18 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         worktree = "clean"
     decision_register = work_units.load(root / DECISIONS)
     disposition, blockers = _resolve_execution(manifest, unit, decision_register)
+    try:
+        canonical_resolution = capability_resolution.build_work_unit_resolution(
+            root,
+            issue=entry["issue"],
+            unit_id=unit["id"],
+            state=unit["state"],
+            blockers=blockers,
+            completion_plan=unit["completion_plan"],
+            synthetic=synthetic,
+        )
+    except capability_resolution.CapabilityResolutionError as error:
+        raise AgentContextV2Error(f"capability resolution unavailable: {error}") from error
     reading_paths = sorted(set(entry["authority_sources"] + unit["consumed_paths"] + [str(DECISIONS)]))
     reading_set = [{"path": value, "sha256": _file_digest(root / value)} for value in reading_paths]
     return {
@@ -259,6 +285,7 @@ def _packet(root: pathlib.Path, manifest: dict[str, Any], entry: dict[str, Any],
         "evidence_commands": unit["evidence_commands"],
         "completion_plan": unit["completion_plan"],
         "residual_qualification": entry["residual_qualification"],
+        "capability_resolution": canonical_resolution,
     }
 
 
@@ -270,6 +297,10 @@ def validate_packet(root: pathlib.Path, packet: dict[str, Any]) -> None:
     except (jsonschema.SchemaError, jsonschema.ValidationError) as error:
         raise AgentContextV2Error(f"agent context v2 schema validation failed: {error.message}") from error
     _validate_packet_paths(packet)
+    try:
+        capability_resolution.validate_resolution(root, packet["capability_resolution"])
+    except capability_resolution.CapabilityResolutionError as error:
+        raise AgentContextV2Error(f"capability resolution validation failed: {error}") from error
 
 
 def _expected_reading_set(
@@ -355,6 +386,22 @@ def _validate_packet_semantics(
     for field in exact_fields:
         if packet[field] != expected_fields[field]:
             raise AgentContextV2Error(f"packet authority projection drift: {field}")
+
+    decision_register = work_units.load(root / DECISIONS)
+    try:
+        expected_resolution = capability_resolution.build_work_unit_resolution(
+            root,
+            issue=entry["issue"],
+            unit_id=unit["id"],
+            state=unit["state"],
+            blockers=_resolve_execution(manifest, unit, decision_register)[1],
+            completion_plan=unit["completion_plan"],
+            synthetic=synthetic,
+        )
+    except capability_resolution.CapabilityResolutionError as error:
+        raise AgentContextV2Error(f"capability resolution unavailable: {error}") from error
+    if packet["capability_resolution"] != expected_resolution:
+        raise AgentContextV2Error("packet capability resolution projection drift")
 
     expected_product_receipts = {
         product: manifest["product_receipts"][product]

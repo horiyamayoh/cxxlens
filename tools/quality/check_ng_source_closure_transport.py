@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import pathlib
@@ -28,6 +29,8 @@ REQUEST = pathlib.Path("schemas/cxxlens_ng_clang22_materialization_request_v2_2.
 TASK = pathlib.Path("schemas/cxxlens_ng_provider_task_v4.schema.yaml")
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml")
 ADR = pathlib.Path("docs/design/adr/0102-dedicated-source-closure-transport.md")
+PROVIDER_RUNTIME = pathlib.Path("src/sdk/provider_runtime.cpp")
+PROVIDER_RUNTIME_TEST = pathlib.Path("tests/unit/sdk/provider_runtime_test.cpp")
 LEGACY_BINDINGS = {
     "request_schema_sha256": pathlib.Path(
         "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
@@ -46,9 +49,97 @@ REVIEW_REF = re.compile(
 PROJECT_PATH_PREFIX = "project://"
 MAXIMUM_LOGICAL_PATH_UTF8_BYTES = 4096
 
+EXPECTED_RESOURCE_AUTHORITY = {
+    "closure_owned": {
+        "logical_prefix": "project://",
+        "member_roles": ["main", "header", "generated", "forced-include", "macro-file"],
+        "fallback": "forbidden",
+    },
+    "toolchain_owned": {
+        "capability": "cxxlens.clang22.toolchain-profile.v1",
+        "inputs": [
+            "clang-resource-directory-and-builtin-headers",
+            "admitted-sysroot",
+            "qualified-platform-system-header-roots",
+            "exact-compiler-runtime-vfs-profile",
+        ],
+        "identity_fields": [
+            "toolchain_context_id",
+            "family",
+            "exact_version",
+            "target_triple",
+            "builtin_headers_digest",
+            "sysroot",
+            "abi_digest",
+            "plugin_spec_digest",
+        ],
+        "root_binding": "selected-pinned-profile-qualified-read-roots",
+        "physical_root_identity": "execution-only-not-semantic-identity",
+    },
+    "unqualified": {
+        "path_effect": "enoent",
+        "publication": "reject-before-publication",
+    },
+}
+
 
 class SourceClosureTransportError(ValueError):
     """A fail-closed source-closure transport contract violation."""
+
+
+def validate_runtime_activation_boundary(root: pathlib.Path) -> None:
+    """Keep proposed closure/NG1 authority out of the completed-process runtime.
+
+    The source-private duplex port is useful for bounded transport testing, but ADR 0102
+    deliberately leaves protocol 1.2 and its capability unaccepted.  A future accepted
+    authority must add an explicit implementation/checker transition; an incidental call
+    from the generic provider runtime would otherwise silently downgrade a closure task or
+    treat an NG1 provider as an NG0 completed-process provider.
+    """
+
+    runtime_path = root / PROVIDER_RUNTIME
+    test_path = root / PROVIDER_RUNTIME_TEST
+    if not runtime_path.is_file() or not test_path.is_file():
+        raise SourceClosureTransportError(
+            "runtime activation boundary evidence is missing"
+        )
+    runtime = runtime_path.read_text(encoding="utf-8")
+    runtime_test = test_path.read_text(encoding="utf-8")
+
+    required_runtime_markers = (
+        "accepted-source-closure-registry-required",
+        "task-source-closure-v1 requires accepted provider protocol 1.2",
+        "provider.ng1.capability-unavailable",
+        "source_closure_feature",
+    )
+    missing = [marker for marker in required_runtime_markers if marker not in runtime]
+    if missing:
+        raise SourceClosureTransportError(
+            f"runtime activation boundary markers are missing: {missing}"
+        )
+
+    # Exactly one occurrence is the source-private selector definition.  Any additional
+    # occurrence in src/sdk/provider_runtime.cpp would be a production dispatch call before
+    # the accepted source-closure registry and bounded live implementation exist.
+    if len(re.findall(r"\bselect_ng1_live_process_port\s*\(", runtime)) != 1:
+        raise SourceClosureTransportError(
+            "NG1 live-port selector escaped its source-private definition"
+        )
+    if len(re.findall(r"\bmake_system_ng1_duplex_process_port\s*\(\s*\)", runtime)) != 1:
+        raise SourceClosureTransportError(
+            "NG1 duplex process factory escaped the source-private selector"
+        )
+
+    required_negative_test_markers = (
+        "accepted-source-closure-registry-required",
+        "source_closure_processes.run_calls == 0U",
+        "source-closure capability did not fail closed before process launch",
+    )
+    missing = [marker for marker in required_negative_test_markers if marker not in runtime_test]
+    if missing:
+        raise SourceClosureTransportError(
+            f"runtime activation negative evidence is missing: {missing}"
+        )
 
 
 def canonical_json(value: Any) -> bytes:
@@ -277,6 +368,11 @@ def validate_reject_control(control: dict[str, Any], contract: dict[str, Any]) -
             "local-only failure cannot be serialized as source-closure_reject"
         )
     counters = control.get("observed_counters")
+    phase_fields = contract.get("phase_fields", {}).get(phase, [])
+    if not set(row["counters"]).issubset(set(phase_fields)):
+        raise SourceClosureTransportError(
+            "failure phase counters are unavailable in the current phase"
+        )
     if not isinstance(counters, dict) or set(counters) != set(row["counters"]):
         raise SourceClosureTransportError("reject counters are not phase-authentic")
     if not all(type(value) is int and 0 <= value <= (1 << 64) - 1 for value in counters.values()):
@@ -293,11 +389,75 @@ WIRE_ID_PATTERNS = {
     "cleanup_receipt": re.compile(r"^cleanup-receipt:semantic-v2:sha256:[0-9a-f]{64}$"),
 }
 
+SPOOL_RECEIPT_DOMAIN = "cxxlens.source-closure-spool-receipt.v1"
+CLEANUP_OWNER_DOMAIN = "cxxlens.source-closure-cleanup-owner.v1"
+
 
 def validate_wire_id(field: str, value: Any) -> None:
     pattern = WIRE_ID_PATTERNS[field]
     if not isinstance(value, str) or pattern.fullmatch(value) is None:
         raise SourceClosureTransportError(f"wire control {field} is not a typed ID")
+
+
+def _bound_cleanup_credential(
+    *,
+    field: str,
+    domain: str,
+    session_id: str,
+    task_id: str,
+    transfer_digest_value: str,
+) -> str:
+    """Derive the v1 witness credential from its complete transfer binding.
+
+    The proposed transport has no cache or resume authority.  Consequently an
+    ACK credential must not be reusable when any of the session, task, or
+    terminal transfer identity changes.  Keep the projection closed and
+    explicit instead of treating the transfer digest as an opaque alias: this
+    makes each binding edge independently testable by the witness.
+    """
+
+    validate_wire_id("session_id", session_id)
+    validate_wire_id("task_id", task_id)
+    if re.fullmatch(r"semantic-v2:sha256:[0-9a-f]{64}", transfer_digest_value) is None:
+        raise SourceClosureTransportError(
+            f"{field} transfer binding is not a typed digest"
+        )
+    return field.replace("_", "-") + ":" + semantic_digest(
+        domain,
+        {
+            "session_id": session_id,
+            "task_id": task_id,
+            "transfer_digest": transfer_digest_value,
+        },
+    )
+
+
+def spool_receipt_for_transfer(
+    session_id: str, task_id: str, transfer_digest_value: str
+) -> str:
+    """Return the task/session/transfer-bound proposed spool receipt."""
+
+    return _bound_cleanup_credential(
+        field="spool_receipt",
+        domain=SPOOL_RECEIPT_DOMAIN,
+        session_id=session_id,
+        task_id=task_id,
+        transfer_digest_value=transfer_digest_value,
+    )
+
+
+def cleanup_owner_for_transfer(
+    session_id: str, task_id: str, transfer_digest_value: str
+) -> str:
+    """Return the task/session/transfer-bound proposed cleanup owner."""
+
+    return _bound_cleanup_credential(
+        field="cleanup_owner",
+        domain=CLEANUP_OWNER_DOMAIN,
+        session_id=session_id,
+        task_id=task_id,
+        transfer_digest_value=transfer_digest_value,
+    )
 
 
 def validate_wire_control(
@@ -311,6 +471,8 @@ def validate_wire_control(
     if type(payload) is not bytes:
         raise SourceClosureTransportError("wire payload is not an exact byte string")
     controls = contract["wire_controls"]
+    if name not in controls:
+        raise SourceClosureTransportError(f"unknown source-closure wire control: {name}")
     if name == "source_closure_reject":
         if payload:
             raise SourceClosureTransportError("reject control payload must be empty")
@@ -347,6 +509,13 @@ def validate_wire_control(
                 raise SourceClosureTransportError("wire control closure_id is not a source closure ID")
         elif field in {"session_id", "task_id", "spool_receipt", "cleanup_owner"}:
             validate_wire_id(field, value)
+    if name == "source_closure_blob" and control["blob_ordinal"] >= contract["limits"]["maximum_unique_blobs"]:
+        raise SourceClosureTransportError("wire blob ordinal exceeds closure bound")
+    if name == "source_closure_seal" and (
+        control["blob_count"] > contract["limits"]["maximum_unique_blobs"]
+        or control["total_bytes"] > contract["limits"]["maximum_unique_blob_bytes"]
+    ):
+        raise SourceClosureTransportError("wire seal census exceeds closure bound")
     if spec["payload"] == "empty" and payload:
         raise SourceClosureTransportError("wire control payload must be empty")
     if spec["payload"] == "exact-byte-count-frame-digest":
@@ -458,8 +627,52 @@ class TransferStateWitness:
         self.manifest: dict[str, Any] | None = None
         self.blob_receipts: list[dict[str, Any]] = []
         self.completed_blobs = 0
+        self.blob_chunk_frames = 0
         self.total_blob_bytes = 0
         self.transfer_digest: str | None = None
+
+    def _phase_counters(self) -> dict[str, int]:
+        """Return the counters that are actually observable in the current phase.
+
+        A reject is a report of the live transfer state, not a free-form diagnostic.
+        Keep this executable witness aligned with the C++ validator so a forged
+        counter value cannot be accepted by the checker while the implementation
+        rejects it.
+        """
+
+        if self.state == "task-v4-sealed":
+            return {"observed-control-frame-count": 0}
+        if self.state in {"manifest-open", "manifest-streaming"}:
+            return {
+                "declared-manifest-bytes": self.declared_bytes,
+                "next-chunk-index": self.next_index,
+                "received-manifest-bytes": self.next_offset,
+            }
+        if self.state == "manifest-validated":
+            if self.manifest is None:
+                raise SourceClosureTransportError(
+                    "phase counters require a validated manifest"
+                )
+            return {
+                "blob-count": len(self.manifest["blobs"]),
+                "member-count": len(self.manifest["members"]),
+                "total-blob-bytes": sum(
+                    blob["size_bytes"] for blob in self.manifest["blobs"]
+                ),
+            }
+        if self.state in {"blob-open", "blob-streaming", "blob-sealed"}:
+            return {
+                "blob-ordinal": self.current_blob_ordinal,
+                "declared-blob-bytes": self.declared_bytes,
+                "next-chunk-index": self.next_index,
+                "received-blob-bytes": self.next_offset,
+            }
+        if self.state == "closure-sealed":
+            return {
+                "blob-count": self.completed_blobs,
+                "total-bytes": self.total_blob_bytes,
+            }
+        return {}
 
     def _bind(self, control: dict[str, Any], fields: tuple[str, ...]) -> None:
         if any(control.get(field) != self.expected[field] for field in fields):
@@ -484,6 +697,10 @@ class TransferStateWitness:
             }
             if control["failure_phase"] != phase_by_state.get(self.state):
                 raise SourceClosureTransportError("reject phase is not current-state authentic")
+            if control["observed_counters"] != self._phase_counters():
+                raise SourceClosureTransportError(
+                    "reject counters are not current-phase authentic"
+                )
             self.state = "rejected"
             return
         if name == "source_closure_manifest" and control["kind"] == "descriptor":
@@ -570,11 +787,21 @@ class TransferStateWitness:
                 observed_digest = "sha256:" + hashlib.sha256(self.blob_bytes).hexdigest()
                 if observed_digest != self.current_blob_digest:
                     raise SourceClosureTransportError("wire blob content digest mismatch")
+                if self.blob_chunk_frames >= contract["limits"]["maximum_blob_chunk_frames"]:
+                    raise SourceClosureTransportError(
+                        "wire aggregate blob chunk frame bound exceeded"
+                    )
+                self.blob_chunk_frames += 1
                 self.blob_receipts.append({"blob_ordinal": self.current_blob_ordinal, "blob_digest": observed_digest, "size_bytes": self.declared_bytes})
                 self.completed_blobs += 1
                 self.total_blob_bytes += self.declared_bytes
                 self.state = "blob-sealed"
             else:
+                if self.blob_chunk_frames + 1 > contract["limits"]["maximum_blob_chunk_frames"]:
+                    raise SourceClosureTransportError(
+                        "wire aggregate blob chunk frame bound exceeded"
+                    )
+                self.blob_chunk_frames += 1
                 self.state = "blob-streaming"
         elif name == "source_closure_seal":
             self._bind(control, ("task_v4_digest", "manifest_digest", "closure_digest"))
@@ -602,6 +829,23 @@ class TransferStateWitness:
             self._bind(control, ("closure_digest",))
             if control["transfer_digest"] != self.transfer_digest:
                 raise SourceClosureTransportError("wire ack transfer binding mismatch")
+            if (
+                control["spool_receipt"]
+                != spool_receipt_for_transfer(
+                    self.expected["session_id"],
+                    self.expected["task_id"],
+                    self.transfer_digest,
+                )
+                or control["cleanup_owner"]
+                != cleanup_owner_for_transfer(
+                    self.expected["session_id"],
+                    self.expected["task_id"],
+                    self.transfer_digest,
+                )
+            ):
+                raise SourceClosureTransportError(
+                    "wire ack credential binding mismatch"
+                )
             self.state = "closure-acknowledged"
 
 
@@ -641,14 +885,80 @@ def load(path: pathlib.Path) -> dict[str, Any]:
     return value
 
 
+def validate_inherited_v2_1_authority(
+    request: dict[str, Any], legacy_request_schema: dict[str, Any]
+) -> None:
+    """Revalidate the retained request envelope against the v2.1 authority.
+
+    Request v2.2 intentionally removes source bytes and adds closure
+    extensions.  The remaining envelope must still be accepted by the exact
+    legacy schema after those two versioned adaptations.  This is a structural
+    revalidation only: source byte/content-digest equality remains owned by
+    the closure manifest and transfer witness, never by an invented byte
+    placeholder here.
+    """
+
+    inherited = copy.deepcopy(request)
+    inherited.pop("request_id", None)
+    inherited.pop("required_features", None)
+    inherited.pop("source_closures", None)
+    inherited.pop("task_extensions", None)
+    inherited["schema"] = "cxxlens.clang22-materialization-request.v2"
+    inherited["request_version"] = "2.1.0"
+    if not isinstance(inherited.get("worker"), dict) or not isinstance(
+        inherited.get("trust_policy"), dict
+    ):
+        raise SourceClosureTransportError(
+            "inherited v2.1 authority revalidation failed: worker/trust authority missing"
+        )
+    inherited["worker"]["protocol_minor"] = 1
+    inherited["worker"]["required_features"] = ["task-input-chunks-v1"]
+    inherited["trust_policy"]["protocol_minor"] = 1
+    inherited["trust_policy"]["required_features"] = ["task-input-chunks-v1"]
+    for task in inherited.get("tasks", []):
+        if not isinstance(task, dict):
+            raise SourceClosureTransportError(
+                "inherited v2.1 authority revalidation failed: task is not an object"
+            )
+        source = task.get("source")
+        if isinstance(source, dict):
+            # The legacy schema checks canonical spelling and presence.  The
+            # actual bytes are deliberately unavailable at this projection;
+            # closure transfer validation owns their digest/size proof.
+            source["content_base64"] = ""
+    try:
+        jsonschema.Draft202012Validator(legacy_request_schema).validate(inherited)
+    except jsonschema.ValidationError as error:
+        raise SourceClosureTransportError(
+            f"inherited v2.1 authority revalidation failed: {error.message}"
+        ) from error
+    sys.path.insert(0, str(ROOT / "tools" / "quality"))
+    import check_ng_clang22_materialization as materialization  # noqa: PLC0415
+
+    for task in inherited["tasks"]:
+        expected_provider_task_id = materialization.expected_provider_task_id(
+            inherited, task
+        )
+        if task["provider_task_id"] != expected_provider_task_id:
+            raise SourceClosureTransportError(
+                "inherited v2.1 authority revalidation failed: provider task identity mismatch"
+            )
+
+
 def _validate_logical_path(value: Any) -> None:
     _validated_logical_path(value, subject="task v4 logical path")
 
 
 def validate_request_binding(
-    request: dict[str, Any], manifests: list[dict[str, Any]]
+    request: dict[str, Any],
+    manifests: list[dict[str, Any]],
+    *,
+    legacy_request_schema: dict[str, Any] | None = None,
 ) -> None:
-    """Validate cross-document v2.2 relationships JSON Schema cannot express."""
+    """Validate v2.2 binding and optionally revalidate retained v2.1 authority."""
+
+    if legacy_request_schema is not None:
+        validate_inherited_v2_1_authority(request, legacy_request_schema)
 
     base_tasks = request.get("tasks")
     closures = request.get("source_closures")
@@ -935,7 +1245,11 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
             witness
         )
         validate_manifest(witness_manifest, manifest_schema)
-        validate_request_binding(witness, [witness_manifest])
+        validate_request_binding(
+            witness,
+            [witness_manifest],
+            legacy_request_schema=legacy_request_schema,
+        )
     except (jsonschema.ValidationError, SourceClosureTransportError) as error:
         message = (
             error.message
@@ -1210,13 +1524,55 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         raise SourceClosureTransportError(
             "outer task-v4 extension/wire transfer binding drift"
         )
+    if contract.get("resource_authority") != EXPECTED_RESOURCE_AUTHORITY:
+        raise SourceClosureTransportError(
+            "source/toolchain resource authority is not exact and fail-closed"
+        )
     failures = set(contract["failures"])
     matrix = contract["failure_phase_matrix"]
+    phase_fields = contract["phase_fields"]
+    expected_phase_names = {
+        "before-manifest",
+        "manifest-streaming",
+        "manifest-validated",
+        "blob-streaming",
+        "closure-sealed",
+        "acknowledged",
+        "rejected",
+    }
+    if set(phase_fields) != expected_phase_names:
+        raise SourceClosureTransportError(
+            "phase field authority has an unexpected phase census"
+        )
+    if any(
+        not isinstance(fields, list)
+        or not fields
+        or len(fields) != len(set(fields))
+        or not all(isinstance(field, str) and field for field in fields)
+        for fields in phase_fields.values()
+    ):
+        raise SourceClosureTransportError(
+            "phase field authority is not a closed ordered field list"
+        )
+    if phase_fields["rejected"] != [
+        "failure-phase",
+        "reason-code",
+        "observed-counters",
+        "cleanup-receipt",
+    ]:
+        raise SourceClosureTransportError("rejected phase fields are not exact")
     matrix_failures = {reason for phase in matrix.values() for reason in phase["allowed"]}
     if matrix_failures != failures or any(
         set(phase) != {"allowed", "counters"} for phase in matrix.values()
     ):
         raise SourceClosureTransportError("failure phase/field matrix is incomplete")
+    for phase, row in matrix.items():
+        if phase == "local-only":
+            continue
+        if not set(row["counters"]).issubset(set(phase_fields[phase])):
+            raise SourceClosureTransportError(
+                f"failure phase counters are unavailable in {phase}"
+            )
     blob_payload = b"x"
     content = "sha256:" + hashlib.sha256(blob_payload).hexdigest()
     witness_path = "project://src/main.cpp"
@@ -1262,7 +1618,22 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         ("source_closure_blob", {"session_id": session_witness, "task_id": task_witness, "closure_digest": semantic, "blob_ordinal": 0, "blob_digest": content_witness, "total_bytes": 1, "chunk_bytes": 1, "chunk_count": 1}, b""),
         ("source_closure_chunk", {"session_id": session_witness, "task_id": task_witness, "blob_ordinal": 0, "blob_digest": content_witness, "chunk_index": 0, "offset": 0, "byte_count": 1}, blob_payload),
         ("source_closure_seal", {"session_id": session_witness, "task_id": task_witness, "task_v4_digest": semantic_witness, "manifest_digest": manifest_witness, "blob_receipts_digest": receipt_witness, "blob_count": 1, "total_bytes": 1, "closure_digest": semantic, "transfer_digest": transfer_witness_digest}, b""),
-        ("source_closure_ack", {"session_id": session_witness, "task_id": task_witness, "closure_digest": semantic, "transfer_digest": transfer_witness_digest, "spool_receipt": "spool-receipt:" + semantic_witness, "cleanup_owner": "cleanup-owner:" + semantic_witness}, b""),
+        (
+            "source_closure_ack",
+            {
+                "session_id": session_witness,
+                "task_id": task_witness,
+                "closure_digest": semantic,
+                "transfer_digest": transfer_witness_digest,
+                "spool_receipt": spool_receipt_for_transfer(
+                    session_witness, task_witness, transfer_witness_digest
+                ),
+                "cleanup_owner": cleanup_owner_for_transfer(
+                    session_witness, task_witness, transfer_witness_digest
+                ),
+            },
+            b"",
+        ),
     ]
     transfer_witness = TransferStateWitness.for_task_extension(
         session_id=session_witness,
@@ -1299,6 +1670,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         }, contract)
 
     maturity = contract["maturity"]
+    validate_runtime_activation_boundary(root)
     review = contract["authority"]["review"]
     review_findings = contract["review_findings"]
     adr_status = "Accepted" if "- Status: Accepted" in adr else "Proposed"

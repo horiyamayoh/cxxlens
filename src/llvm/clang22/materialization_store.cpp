@@ -14,6 +14,81 @@ namespace cxxlens::detail::clang22::materialization
 {
 	namespace
 	{
+		constexpr std::size_t projection_compare_window_bytes = 32U * 1024U;
+
+		[[nodiscard]] sdk::error projection_error(const std::string_view field,
+												  const std::string_view detail)
+		{
+			return sdk::error{"store.projection", std::string{field}, std::string{detail}};
+		}
+
+		[[nodiscard]] std::array<std::byte, 8U>
+		encode_projection_length(const std::uint64_t value) noexcept
+		{
+			std::array<std::byte, 8U> bytes{};
+			for (std::size_t index{}; index < bytes.size(); ++index)
+				bytes[index] = static_cast<std::byte>((value >> (56U - index * 8U)) & 0xffU);
+			return bytes;
+		}
+
+		[[nodiscard]] std::uint64_t
+		decode_projection_length(const std::array<std::byte, 8U>& bytes) noexcept
+		{
+			std::uint64_t value{};
+			for (const auto byte : bytes)
+				value = (value << 8U) | std::to_integer<unsigned char>(byte);
+			return value;
+		}
+
+		[[nodiscard]] sdk::result<void>
+		read_projection_bytes(materialization_replayable_spool& spool,
+							  const std::uint64_t offset,
+							  const std::span<std::byte> destination)
+		{
+			std::size_t copied{};
+			while (copied < destination.size())
+			{
+				auto read = spool.read_at(offset + copied, destination.subspan(copied));
+				if (!read || *read == 0U || *read > destination.size() - copied)
+					return sdk::unexpected(projection_error("read", "short-read"));
+				copied += *read;
+			}
+			return {};
+		}
+
+		struct projection_frame_header
+		{
+			bool present{};
+			std::uint64_t payload_offset{};
+			std::uint64_t payload_bytes{};
+		};
+
+		[[nodiscard]] sdk::result<projection_frame_header>
+		read_projection_frame_header(materialization_replayable_spool& spool,
+									 const std::uint64_t offset)
+		{
+			const auto size = spool.size_bytes();
+			if (offset == size)
+				return projection_frame_header{};
+			if (offset > size || size - offset < 8U)
+				return sdk::unexpected(projection_error("frame", "truncated-header"));
+			std::array<std::byte, 8U> encoded{};
+			if (auto read = read_projection_bytes(spool, offset, encoded); !read)
+				return sdk::unexpected(std::move(read.error()));
+			const auto payload_bytes = decode_projection_length(encoded);
+			if (payload_bytes > size - offset - 8U)
+				return sdk::unexpected(projection_error("frame", "truncated-record"));
+			return projection_frame_header{true, offset + 8U, payload_bytes};
+		}
+
+		[[nodiscard]] std::optional<std::uint64_t>
+		first_mismatch(std::optional<std::uint64_t> current, const std::uint64_t candidate) noexcept
+		{
+			if (!current || candidate < *current)
+				return candidate;
+			return current;
+		}
+
 		class sdk_store_opener final : public materialization_store_opener
 		{
 		  public:
@@ -515,6 +590,193 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	} // namespace
 
+	sdk::result<materialization_store_projection_writer>
+	materialization_store_projection_writer::create(
+		const materialization_store_projection_limits limits)
+	{
+		if (limits.maximum_framed_bytes < 8U || limits.maximum_record_bytes == 0U ||
+			limits.maximum_record_bytes > limits.maximum_framed_bytes - 8U)
+			return sdk::unexpected(projection_error("limits", "invalid"));
+		auto storage = make_materialization_private_spool();
+		if (!storage)
+			return sdk::unexpected(projection_error("storage", "create"));
+		return materialization_store_projection_writer{std::move(*storage), limits};
+	}
+
+	sdk::result<void>
+	materialization_store_projection_writer::append(const std::span<const std::byte> record)
+	{
+		if (sealed_ || failed_ || !storage_)
+			return sdk::unexpected(projection_error("lifecycle", "sealed-or-empty"));
+		if (record.size() > std::numeric_limits<std::uint64_t>::max() ||
+			static_cast<std::uint64_t>(record.size()) > limits_.maximum_record_bytes)
+		{
+			failed_ = true;
+			return sdk::unexpected(projection_error("record", "limit"));
+		}
+		const auto payload_bytes = static_cast<std::uint64_t>(record.size());
+		if (payload_bytes > std::numeric_limits<std::uint64_t>::max() - 8U ||
+			framed_bytes_ > limits_.maximum_framed_bytes - (8U + payload_bytes))
+		{
+			failed_ = true;
+			return sdk::unexpected(projection_error("stream", "limit"));
+		}
+		if (record_count_ == std::numeric_limits<std::uint64_t>::max() ||
+			payload_bytes_ > std::numeric_limits<std::uint64_t>::max() - payload_bytes)
+		{
+			failed_ = true;
+			return sdk::unexpected(projection_error("stream", "counter-overflow"));
+		}
+		const auto encoded_length = encode_projection_length(payload_bytes);
+		if (auto appended = storage_->append(encoded_length); !appended)
+		{
+			failed_ = true;
+			return sdk::unexpected(projection_error("stream", "frame-write"));
+		}
+		if (auto appended = storage_->append(record); !appended)
+		{
+			failed_ = true;
+			return sdk::unexpected(projection_error("stream", "record-write"));
+		}
+		framed_bytes_ += 8U + payload_bytes;
+		payload_bytes_ += payload_bytes;
+		++record_count_;
+		return {};
+	}
+
+	sdk::result<materialization_store_projection_receipt>
+	materialization_store_projection_writer::seal()
+	{
+		if (sealed_ && storage_ && storage_->sealed())
+			return receipt_;
+		if (sealed_ || failed_ || !storage_)
+			return sdk::unexpected(projection_error("lifecycle", "sealed-or-empty"));
+		if (auto sealed = storage_->seal(); !sealed)
+		{
+			failed_ = true;
+			return sdk::unexpected(projection_error("storage", "seal"));
+		}
+		if (!storage_->sealed() || storage_->size_bytes() != framed_bytes_)
+		{
+			failed_ = true;
+			return sdk::unexpected(projection_error("storage", "size-mismatch"));
+		}
+		auto digest = digest_materialization_spool(*storage_);
+		if (!digest)
+		{
+			failed_ = true;
+			return sdk::unexpected(projection_error("storage", "digest"));
+		}
+		receipt_ = {record_count_, payload_bytes_, framed_bytes_, std::move(*digest)};
+		sealed_ = true;
+		return receipt_;
+	}
+
+	sdk::result<materialization_store_projection_comparison>
+	compare_materialization_store_projections(materialization_store_projection_writer& actual,
+											  materialization_store_projection_writer& expected)
+	{
+		if (!actual.sealed() || !expected.sealed())
+			return sdk::unexpected(projection_error("lifecycle", "streams-not-sealed"));
+
+		materialization_store_projection_comparison output;
+		output.equal = true;
+		std::uint64_t actual_offset{};
+		std::uint64_t expected_offset{};
+		std::array<std::byte, projection_compare_window_bytes> actual_buffer{};
+		std::array<std::byte, projection_compare_window_bytes> expected_buffer{};
+		for (;;)
+		{
+			auto actual_header = read_projection_frame_header(actual.storage(), actual_offset);
+			auto expected_header =
+				read_projection_frame_header(expected.storage(), expected_offset);
+			if (!actual_header || !expected_header)
+				return sdk::unexpected(!actual_header ? std::move(actual_header.error())
+													  : std::move(expected_header.error()));
+			if (!actual_header->present && !expected_header->present)
+				break;
+
+			if (!actual_header->present || !expected_header->present)
+			{
+				output.equal = false;
+				const auto offset = actual_header->present ? actual_offset : expected_offset;
+				output.first_mismatch_offset = first_mismatch(output.first_mismatch_offset, offset);
+				if (actual_header->present)
+				{
+					if (output.actual_record_count == std::numeric_limits<std::uint64_t>::max() ||
+						actual_header->payload_bytes >
+							std::numeric_limits<std::uint64_t>::max() - output.actual_payload_bytes)
+						return sdk::unexpected(projection_error("actual", "counter-overflow"));
+					++output.actual_record_count;
+					output.actual_payload_bytes += actual_header->payload_bytes;
+					actual_offset = actual_header->payload_offset + actual_header->payload_bytes;
+				}
+				if (expected_header->present)
+				{
+					if (output.expected_record_count == std::numeric_limits<std::uint64_t>::max() ||
+						expected_header->payload_bytes > std::numeric_limits<std::uint64_t>::max() -
+								output.expected_payload_bytes)
+						return sdk::unexpected(projection_error("expected", "counter-overflow"));
+					++output.expected_record_count;
+					output.expected_payload_bytes += expected_header->payload_bytes;
+					expected_offset =
+						expected_header->payload_offset + expected_header->payload_bytes;
+				}
+				continue;
+			}
+
+			if (output.actual_record_count == std::numeric_limits<std::uint64_t>::max() ||
+				output.expected_record_count == std::numeric_limits<std::uint64_t>::max() ||
+				actual_header->payload_bytes >
+					std::numeric_limits<std::uint64_t>::max() - output.actual_payload_bytes ||
+				expected_header->payload_bytes >
+					std::numeric_limits<std::uint64_t>::max() - output.expected_payload_bytes)
+				return sdk::unexpected(projection_error("stream", "counter-overflow"));
+			++output.actual_record_count;
+			++output.expected_record_count;
+			output.actual_payload_bytes += actual_header->payload_bytes;
+			output.expected_payload_bytes += expected_header->payload_bytes;
+			if (actual_header->payload_bytes != expected_header->payload_bytes)
+			{
+				output.equal = false;
+				output.first_mismatch_offset =
+					first_mismatch(output.first_mismatch_offset, actual_offset);
+			}
+
+			const auto common_bytes =
+				std::min(actual_header->payload_bytes, expected_header->payload_bytes);
+			std::uint64_t compared{};
+			while (compared < common_bytes)
+			{
+				const auto chunk = static_cast<std::size_t>(std::min<std::uint64_t>(
+					common_bytes - compared, projection_compare_window_bytes));
+				if (auto read = read_projection_bytes(actual.storage(),
+													  actual_header->payload_offset + compared,
+													  std::span{actual_buffer}.first(chunk));
+					!read)
+					return sdk::unexpected(std::move(read.error()));
+				if (auto read = read_projection_bytes(expected.storage(),
+													  expected_header->payload_offset + compared,
+													  std::span{expected_buffer}.first(chunk));
+					!read)
+					return sdk::unexpected(std::move(read.error()));
+				for (std::size_t index{}; index < chunk; ++index)
+					if (actual_buffer[index] != expected_buffer[index])
+					{
+						output.equal = false;
+						output.first_mismatch_offset =
+							first_mismatch(output.first_mismatch_offset,
+										   actual_header->payload_offset + compared + index);
+						break;
+					}
+				compared += chunk;
+			}
+			actual_offset = actual_header->payload_offset + actual_header->payload_bytes;
+			expected_offset = expected_header->payload_offset + expected_header->payload_bytes;
+		}
+		return output;
+	}
+
 	sdk::result<void> validate_materialization_store_external_authority(
 		const materialization_store_external_authority& authority)
 	{
@@ -604,7 +866,9 @@ namespace cxxlens::detail::clang22::materialization
 	bool materialization_store_preparation::ready_for_publish() const noexcept
 	{
 		return state_ && state_->writer && !state_->observation.first_issue &&
-			!state_->observation.publication_attempted;
+			!state_->observation.publication_attempted &&
+			state_->observation.semantic_graph_validation !=
+			materialization_store_semantic_graph_validation::not_attempted;
 	}
 
 	const materialization_store_observation&
@@ -749,6 +1013,10 @@ namespace cxxlens::detail::clang22::materialization
 			state_value->writer.reset();
 			return materialization_store_preparation{std::move(state_value)};
 		}
+		// SDK validation reconstructs the independent semantic graph before the candidate can
+		// become visible.  Retain the phase as evidence; the SQLite reopen below upgrades it.
+		output.semantic_graph_validation =
+			materialization_store_semantic_graph_validation::candidate;
 		if (!candidate_manifest)
 		{
 			retain_sdk_failure(output,
@@ -1019,6 +1287,10 @@ namespace cxxlens::detail::clang22::materialization
 			state_value->writer.reset();
 			return materialization_store_preparation{std::move(state_value)};
 		}
+		// The streaming adapter has the same SDK-owned independent graph validation as the
+		// compatibility bulk adapter.  No publication is allowed without this phase.
+		output.semantic_graph_validation =
+			materialization_store_semantic_graph_validation::candidate;
 
 		output.candidate_manifest = std::move(indexed->manifest);
 		if (!prior_sequence || *prior_sequence != std::numeric_limits<std::uint64_t>::max())
@@ -1177,6 +1449,10 @@ namespace cxxlens::detail::clang22::materialization
 				return std::move(output);
 			}
 			state_value->store.emplace(std::move(*reopened));
+			// open_sqlite_snapshot_store performs ADR-0033 v5 envelope reconstruction and exact
+			// semantic-projection comparison before returning the reopened store.
+			output.semantic_graph_validation =
+				materialization_store_semantic_graph_validation::reopened;
 		}
 
 		output.verification_receipts[1U].id_lookup = record.publication_id;

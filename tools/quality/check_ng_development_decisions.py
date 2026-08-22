@@ -26,6 +26,25 @@ RECEIPT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_development_review_receipts.sc
 WIP_INVENTORY = pathlib.Path("schemas/cxxlens_ng_wip_inventory.yaml")
 HIGH_RISK = {"contract", "invariant", "security", "compatibility", "irreversible", "resource-bound"}
 REVIEW_REF = re.compile(r"^https://github\.com/horiyamayoh/cxxlens/issues/([1-9][0-9]*)#issuecomment-([1-9][0-9]*)$")
+FINDING_ID = re.compile(r"^P[0-2]-[A-Z0-9]+(?:-[A-Z0-9]+)*$")
+CONNECTED_VERIFICATION_PENDING = {
+    "status": "pending",
+    "run_id": None,
+    "run_url": None,
+    "run_commit": None,
+    "workflow_id": None,
+    "workflow_path": "pending",
+    "workflow_name": "pending",
+    "event": "pending",
+    "conclusion": "pending",
+}
+CONNECTED_VERIFICATION_SUCCESS = {
+    "status": "verified",
+    "workflow_path": ".github/workflows/autonomy-fast.yml",
+    "workflow_name": "Autonomy fast",
+    "event": "push",
+    "conclusion": "success",
+}
 DIRECT_MAIN_DECISION_ID = "decision.delivery.direct-main"
 DIRECT_MAIN_OWNER_ISSUES = frozenset({"#173"})
 DIRECT_MAIN_CONTRACT_IDS = frozenset(
@@ -175,6 +194,94 @@ def _validate_receipt_git(root: pathlib.Path, receipt: dict[str, Any]) -> None:
         raise DecisionRegisterError(f"review receipt authority digest mismatch: {receipt['id']}")
 
 
+def _validate_receipt_semantics(receipt: dict[str, Any]) -> None:
+    """Validate identity and phase invariants that JSON Schema cannot express."""
+    if receipt["candidate_github_login"] == receipt["reviewer_github_login"]:
+        raise DecisionRegisterError(
+            f"review receipt GitHub identities are not independent: {receipt['id']}"
+        )
+    if receipt["comment_author_login"] != receipt["reviewer_github_login"]:
+        raise DecisionRegisterError(
+            f"review receipt comment author is not the reviewer: {receipt['id']}"
+        )
+    if receipt["reviewer"] in {receipt["author"], receipt["candidate_git_author_email"]}:
+        raise DecisionRegisterError(
+            f"review receipt reviewer is not process-independent: {receipt['id']}"
+        )
+    connected = receipt["connected_verification"]
+    if connected == CONNECTED_VERIFICATION_PENDING:
+        return
+    if connected.get("status") != "verified":
+        raise DecisionRegisterError(
+            f"connected verification phase is not authentic: {receipt['id']}"
+        )
+    for key, expected in CONNECTED_VERIFICATION_SUCCESS.items():
+        if connected.get(key) != expected:
+            raise DecisionRegisterError(
+                f"connected verification phase field is not authentic: {receipt['id']}:{key}"
+            )
+    if any(
+        connected.get(key) is None
+        for key in ("run_id", "run_url", "run_commit", "workflow_id")
+    ):
+        raise DecisionRegisterError(
+            f"verified connected verification is missing run identity: {receipt['id']}"
+        )
+
+
+def _receipt_projection(receipt: dict[str, Any]) -> str:
+    """Return a formatting-independent representation of a receipt."""
+    return json.dumps(receipt, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _validate_rejected_receipt_history(root: pathlib.Path) -> None:
+    """Reject rewriting or removing a rejected receipt on first-parent history."""
+    revisions = _git(
+        root,
+        "log",
+        "--first-parent",
+        "--reverse",
+        "--format=%H",
+        "--",
+        str(RECEIPTS),
+    ).splitlines()
+    rejected: dict[str, str] = {}
+    for revision in revisions:
+        try:
+            snapshot = yaml.load(
+                _git(root, "show", f"{revision}:{RECEIPTS}"),
+                Loader=UniqueKeyLoader,
+            )
+        except DecisionRegisterError as error:
+            raise DecisionRegisterError(
+                f"cannot read review receipt history: {revision}"
+            ) from error
+        if not isinstance(snapshot, dict) or not isinstance(snapshot.get("receipts"), list):
+            raise DecisionRegisterError(
+                f"review receipt history is not a registry: {revision}"
+            )
+        current: dict[str, dict[str, Any]] = {}
+        for receipt in snapshot["receipts"]:
+            if not isinstance(receipt, dict) or not isinstance(receipt.get("id"), str):
+                raise DecisionRegisterError(
+                    f"review receipt history contains an invalid entry: {revision}"
+                )
+            if receipt["id"] in current:
+                raise DecisionRegisterError(
+                    f"duplicate historical review receipt ID: {receipt['id']}"
+                )
+            current[receipt["id"]] = receipt
+        for receipt_id, projection in rejected.items():
+            receipt = current.get(receipt_id)
+            if receipt is None or _receipt_projection(receipt) != projection:
+                raise DecisionRegisterError(
+                    f"rejected review receipt was rewritten or removed: {receipt_id}"
+                )
+        for receipt_id, receipt in current.items():
+            if receipt.get("verdict") == "rejected" and receipt_id not in rejected:
+                rejected[receipt_id] = _receipt_projection(receipt)
+
+
 def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> str | None:
     acceptance = receipt["acceptance"]
     if acceptance["status"] != "committed":
@@ -259,14 +366,16 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
         if len(targets) != 1:
             return False
         target = targets[0]
+        prior_receipt_ids = list(target["review"].get("receipt_ids", []))
+        prior_references = list(target["review"].get("references", []))
         target["authority_status"] = "accepted"
         target["review"] = {
             "mode": "independent",
             "outcome": "accepted",
             "author": receipt["author"],
             "reviewer": receipt["reviewer"],
-            "receipt_ids": [receipt["id"]],
-            "references": [receipt["comment_url"]],
+            "receipt_ids": [*prior_receipt_ids, receipt["id"]],
+            "references": [*prior_references, receipt["comment_url"]],
         }
         return expected == after_value
 
@@ -276,6 +385,54 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
             if set(entry.get("authority_sources", [])).intersection(authority_paths):
                 entry.pop("authority_digest", None)
         return result
+
+    def accepted_work_unit_projection(value: dict[str, Any]) -> dict[str, Any]:
+        """Derive only the governance receipt transition for work-unit readiness.
+
+        The acceptance child is allowed to bind the governance unit to its exact
+        receipt.  Ready units whose complete dependency chain is thereby
+        authenticated become executable; no implementation state, ownership,
+        path, or unrelated unit field may change in the same commit.
+        """
+        expected = work_unit_projection(value)
+        if receipt["decision_id"] != DIRECT_MAIN_DECISION_ID or receipt["owner_issue"] != "#173":
+            return expected
+        governance = next(
+            unit
+            for entry in expected.get("entries", [])
+            if entry.get("issue") == "#173"
+            for unit in entry.get("units", [])
+            if unit.get("id") == "wu-173-governance"
+        )
+        if governance.get("dependency_completion") != {"status": "pending"}:
+            raise DecisionRegisterError(
+                f"governance dependency receipt is not pending: {receipt['id']}"
+            )
+        if governance.get("state") != "review-required" or governance.get("readiness") != "blocked":
+            raise DecisionRegisterError(
+                f"governance readiness is not pending: {receipt['id']}"
+            )
+        governance["state"] = "ready"
+        governance["readiness"] = "executable"
+        governance["dependency_completion"] = {
+            "status": "accepted",
+            "decision_id": receipt["decision_id"],
+            "receipt_id": receipt["id"],
+        }
+        all_units = {
+            unit["id"]: unit
+            for entry in expected.get("entries", [])
+            for unit in entry.get("units", [])
+        }
+        for unit in all_units.values():
+            if unit.get("state") != "ready" or unit.get("readiness") != "blocked":
+                continue
+            if all(
+                all_units[dependency]["dependency_completion"]["status"] == "accepted"
+                for dependency in unit.get("depends_on", [])
+            ):
+                unit["readiness"] = "executable"
+        return expected
 
     def receipt_registry_transition(
         before_value: dict[str, Any], after_value: dict[str, Any]
@@ -308,7 +465,10 @@ def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> 
                 raise DecisionRegisterError(f"acceptance changes decision semantics: {receipt['id']}")
             continue
         if path == "schemas/cxxlens_ng_work_units.yaml":
-            if work_unit_projection(yaml.load(before, Loader=UniqueKeyLoader)) != work_unit_projection(yaml.load(after, Loader=UniqueKeyLoader)):
+            before_value = yaml.load(before, Loader=UniqueKeyLoader)
+            after_value = yaml.load(after, Loader=UniqueKeyLoader)
+            expected = accepted_work_unit_projection(before_value)
+            if expected != work_unit_projection(after_value):
                 raise DecisionRegisterError(f"acceptance changes work-unit semantics: {receipt['id']}")
             continue
         if path not in authority_paths:
@@ -372,6 +532,17 @@ def _github_json(url: str, token: str) -> dict[str, Any]:
     return value
 
 
+def reviewer_context_digest(receipt: dict[str, Any]) -> str:
+    context = {
+        "reviewer": receipt["reviewer"],
+        "reviewer_provenance": receipt["reviewer_provenance"],
+        "reviewer_session": receipt["reviewer_session"],
+        "reviewer_invocation": receipt["reviewer_invocation"],
+    }
+    encoded = json.dumps(context, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def canonical_review_comment(receipt: dict[str, Any]) -> str:
     value = {
         "schema": "cxxlens.authenticated-review-comment.v1",
@@ -381,7 +552,7 @@ def canonical_review_comment(receipt: dict[str, Any]) -> str:
         "candidate_github_login": receipt["candidate_github_login"],
         "authority_digest": receipt["authority_digest"], "author": receipt["author"],
         "reviewer": receipt["reviewer"], "reviewer_github_login": receipt["reviewer_github_login"], "reviewer_provenance": receipt["reviewer_provenance"],
-        "reviewer_session": receipt["reviewer_session"], "reviewer_invocation": receipt["reviewer_invocation"],
+        "reviewer_session": receipt["reviewer_session"], "reviewer_invocation": receipt["reviewer_invocation"], "reviewer_context_sha256": receipt["reviewer_context_sha256"],
         "review_output": receipt["review_output"],
         "review_output_sha256": receipt["review_output_sha256"], "verdict": receipt["verdict"],
         "findings": receipt["findings"], "finding_ids": receipt["finding_ids"],
@@ -392,6 +563,7 @@ def canonical_review_comment(receipt: dict[str, Any]) -> str:
 
 
 def _verify_connected_receipt(receipt: dict[str, Any], token: str) -> None:
+    _validate_receipt_semantics(receipt)
     connected = receipt["connected_verification"]
     match = REVIEW_REF.fullmatch(receipt["comment_url"])
     if match is None or f"#{match.group(1)}" != receipt["owner_issue"]:
@@ -466,6 +638,8 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
             raise DecisionRegisterError("duplicate review receipt IDs")
     _schema_validate(register, schema, "decision register")
     _schema_validate(receipt_document, receipt_schema, "review receipt")
+    if verify_git:
+        _validate_rejected_receipt_history(root)
 
     decisions = register["decisions"]
     identifiers = [entry["id"] for entry in decisions]
@@ -489,6 +663,25 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
     receipt_ids = [entry["id"] for entry in receipts]
     if len(receipt_ids) != len(set(receipt_ids)):
         raise DecisionRegisterError("duplicate review receipt IDs")
+    reviewer_sessions: dict[str, str] = {}
+    review_artifacts: dict[tuple[str, str], str] = {}
+    for receipt in receipts:
+        session = receipt["reviewer_session"]
+        prior_session_receipt = reviewer_sessions.get(session)
+        if prior_session_receipt is not None:
+            raise DecisionRegisterError(
+                "duplicate reviewer session: "
+                f"{prior_session_receipt}:{receipt['id']}"
+            )
+        reviewer_sessions[session] = receipt["id"]
+        artifact = (receipt["candidate_commit"], receipt["review_output_sha256"])
+        prior_artifact_receipt = review_artifacts.get(artifact)
+        if prior_artifact_receipt is not None:
+            raise DecisionRegisterError(
+                "duplicate review artifact: "
+                f"{prior_artifact_receipt}:{receipt['id']}"
+            )
+        review_artifacts[artifact] = receipt["id"]
     by_receipt = {entry["id"]: entry for entry in receipts}
     referenced_receipts: set[str] = set()
 
@@ -510,6 +703,7 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                     f"surface: {','.join(sorted(missing))}"
                 )
         review = entry["review"]
+        latest_receipt_id = review["receipt_ids"][-1] if review["receipt_ids"] else None
         if verify_git and review["outcome"] == "pending":
             for commit in _git(root, "log", "--first-parent", "--format=%H", "--", str(REGISTER)).splitlines()[1:]:
                 historical = yaml.load(_git(root, "show", f"{commit}:{REGISTER}"), Loader=UniqueKeyLoader)
@@ -552,12 +746,16 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                 raise DecisionRegisterError(f"review receipt owner issue mismatch: {receipt_id}")
             if {authority["path"] for authority in receipt["authority_files"]} != set(entry["authority_refs"]):
                 raise DecisionRegisterError(f"review receipt authority closure mismatch: {receipt_id}")
-            if receipt["author"] != review["author"] or receipt["reviewer"] != review["reviewer"]:
+            if receipt_id == latest_receipt_id and (
+                receipt["author"] != review["author"]
+                or receipt["reviewer"] != review["reviewer"]
+            ):
                 raise DecisionRegisterError(f"review receipt identity mismatch: {receipt_id}")
-            if receipt["candidate_github_login"] == receipt["reviewer_github_login"]:
-                raise DecisionRegisterError(f"review receipt GitHub identities are not independent: {receipt_id}")
-            if receipt["reviewer"] in {receipt["author"], receipt["candidate_git_author_email"]}:
-                raise DecisionRegisterError(f"review receipt reviewer is not process-independent: {receipt_id}")
+            _validate_receipt_semantics(receipt)
+            if receipt["reviewer_context_sha256"] != reviewer_context_digest(receipt):
+                raise DecisionRegisterError(f"reviewer context digest mismatch: {receipt_id}")
+            if any(not FINDING_ID.fullmatch(item) for item in receipt["finding_ids"]):
+                raise DecisionRegisterError(f"review finding ID grammar is invalid: {receipt_id}")
             expected_output_digest = "sha256:" + hashlib.sha256(
                 receipt["review_output"].encode("utf-8")
             ).hexdigest()
@@ -565,12 +763,22 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                 raise DecisionRegisterError(f"review output digest mismatch: {receipt_id}")
             static_allowed = {str(REGISTER), str(RECEIPTS), "docs/design/SHA256SUMS", "schemas/cxxlens_ng_work_units.yaml"}
             static_allowed.update(path for path in entry["authority_refs"] if path.startswith("docs/design/adr/") or path.startswith("schemas/"))
-            if set(receipt["acceptance"]["allowed_changed_paths"]) != static_allowed:
+            if (
+                receipt["acceptance"]["status"] == "committed"
+                and set(receipt["acceptance"]["allowed_changed_paths"]) != static_allowed
+            ):
                 raise DecisionRegisterError(f"review receipt acceptance allowlist mismatch: {receipt_id}")
-            severity_ids = {severity: [item for item in receipt["finding_ids"] if item.startswith(severity.upper() + "-")] for severity in ("p0", "p1", "p2")}
+            severity_ids = {
+                severity: [
+                    item
+                    for item in receipt["finding_ids"]
+                    if item.startswith(severity.upper() + "-")
+                ]
+                for severity in ("p0", "p1", "p2")
+            }
             if any(len(severity_ids[severity]) != receipt["findings"][severity] for severity in severity_ids):
                 raise DecisionRegisterError(f"review finding census/detail mismatch: {receipt_id}")
-            if review["outcome"] == "accepted":
+            if review["outcome"] == "accepted" and receipt_id == latest_receipt_id:
                 if receipt["acceptance"]["status"] != "committed":
                     raise DecisionRegisterError(f"accepted review bypasses acceptance commit: {receipt_id}")
                 if receipt["verdict"] != "accepted" or receipt["findings"]["p0"] or receipt["findings"]["p1"]:
@@ -581,7 +789,7 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
             if verify_git:
                 _validate_receipt_git(root, receipt)
                 accepted_commit = _validate_acceptance_commit(root, receipt)
-                if review["outcome"] == "accepted":
+                if review["outcome"] == "accepted" and receipt_id == latest_receipt_id:
                     if accepted_commit is None:
                         raise DecisionRegisterError(
                             f"accepted review has no accepted authority projection: {receipt_id}"

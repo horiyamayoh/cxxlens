@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-agent-context.v2
 title: cxxlens exact work-unit agent context v2
 type: object
 additionalProperties: false
-required: [schema, document_version, role, issue, unit_id, conflict_class, integration_owner, risk, execution_disposition, blockers, dependencies, owned_products, consumed_products, required_product_receipts, authority, reading_set, allowed_write_paths, integration_generated_surfaces, forbidden_shortcuts, completion_class, evidence_commands, completion_plan, residual_qualification]
+required: [schema, document_version, role, issue, unit_id, conflict_class, integration_owner, risk, execution_disposition, blockers, dependencies, owned_products, consumed_products, required_product_receipts, authority, reading_set, allowed_write_paths, integration_generated_surfaces, forbidden_shortcuts, completion_class, evidence_commands, completion_plan, residual_qualification, capability_resolution]
 allOf:
   - if:
       properties: {execution_disposition: {const: ready}}
@@ -73,9 +73,31 @@ properties:
   evidence_commands: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/actionable_string'}}
   completion_plan: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/actionable_string'}}
   residual_qualification: {$ref: '#/$defs/actionable_string'}
+  capability_resolution: {$ref: '#/$defs/capability_resolution'}
 $defs:
   hex40: {type: string, pattern: '^[0-9a-f]{40}$'}
   digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   path: {type: string, minLength: 1, pattern: '^(?!/)(?!.*\\)(?!.*\u0000)(?!.*(?:^|/)(?:\.{0,2}|\.git)(?:/|$)).+$'}
   product: {type: string, pattern: '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$'}
   actionable_string: {type: string, minLength: 1, pattern: '.*\S.*'}
+  capability_resolution:
+    type: object
+    additionalProperties: false
+    required: [schema, document_version, role, authority, use_case_id, consumer, question, expected_result_states, result, capability_path, missing, completion_plan, preserved_semantics, evidence, provenance, canonical_digest]
+    properties:
+      schema: {const: cxxlens.agent-capability-resolution.v1}
+      document_version: {const: 1.0.0}
+      role: {enum: [canonical-capability-resolution, evaluation-corpus-resolution]}
+      authority: {type: object}
+      use_case_id: {type: string, minLength: 1}
+      consumer: {type: string, minLength: 1}
+      question: {type: string, minLength: 1}
+      expected_result_states: {type: array, minItems: 1, items: {enum: [proved, disproved, unknown, partial, conflicting]}}
+      result: {type: object}
+      capability_path: {type: array, minItems: 1}
+      missing: {type: array}
+      completion_plan: {type: array}
+      preserved_semantics: {type: object}
+      evidence: {type: object}
+      provenance: {type: object}
+      canonical_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}

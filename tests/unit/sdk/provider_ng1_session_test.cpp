@@ -633,6 +633,47 @@ namespace
 		require(corrupted->cleanup(), "corrupted-receipt cleanup failed");
 	}
 
+	void test_session_cancellation_preserves_order_and_terminality()
+	{
+		const fixture values;
+		auto acknowledged = ng1_session_coordinator::create(values.configuration());
+		require(acknowledged, "session cancellation acknowledgement setup failed");
+		require(acknowledged->request_cancel(), "session cancellation request was rejected");
+		require(acknowledged->state() == ng1_recovery_state::cancel_requested,
+				"session cancellation request skipped explicit state");
+		require(acknowledged->acknowledge_cancel(),
+				"session cancellation acknowledgement was rejected");
+		require(acknowledged->state() == ng1_recovery_state::failed,
+				"acknowledged session cancellation was not terminal failure");
+		auto post_ack = acknowledged->timeout_cancel();
+		require(!post_ack && post_ack.error().code == "provider.recovery-failed",
+				"acknowledged session cancellation remained restartable");
+		require(acknowledged->cleanup(), "acknowledged cancellation cleanup failed");
+
+		auto timed_out = ng1_session_coordinator::create(values.configuration());
+		require(timed_out, "session cancellation timeout setup failed");
+		require(timed_out->request_cancel(), "session cancellation timeout request was rejected");
+		require(timed_out->timeout_cancel(), "session cancellation timeout was rejected");
+		require(timed_out->state() == ng1_recovery_state::worker_killed,
+				"session cancellation timeout bypassed worker-kill boundary");
+		auto rejected_resume = timed_out->accept_durable_resume(
+			values.resume_control(), ng1_spill_fsync_receipt{}, false, false, 0U);
+		require(!rejected_resume && timed_out->state() == ng1_recovery_state::failed,
+				"cancel-timeout session admitted resume without a coordinator receipt");
+		require(timed_out->cleanup(), "cancellation timeout cleanup failed");
+
+		auto before_request = ng1_session_coordinator::create(values.configuration());
+		require(before_request, "session out-of-order cancellation setup failed");
+		auto premature_ack = before_request->acknowledge_cancel();
+		require(!premature_ack && premature_ack.error().code == "provider.recovery-failed",
+				"session accepted cancellation acknowledgement before request");
+		require(before_request->state() == ng1_recovery_state::running,
+				"rejected session cancellation acknowledgement mutated state");
+		require(before_request->request_cancel(), "session cleanup cancellation request failed");
+		require(before_request->acknowledge_cancel(), "session cleanup cancellation failed");
+		require(before_request->cleanup(), "out-of-order cancellation cleanup failed");
+	}
+
 	void test_fresh_coordinator_rehydrates_durable_prefix()
 	{
 		const fixture values;
@@ -984,6 +1025,7 @@ int main()
 	test_complete_session_requires_progress_and_cleans_spill();
 	test_live_frame_adapter_binds_wire_controls_to_host_receipts();
 	test_timeout_kill_resume_checks_local_spill_prefix();
+	test_session_cancellation_preserves_order_and_terminality();
 	test_fresh_coordinator_rehydrates_durable_prefix();
 	test_fresh_coordinator_resume_requires_exit_and_exact_receipt();
 	test_session_rejects_unbound_or_nonmonotonic_observations();

@@ -1,0 +1,79 @@
+{
+  "schema": "cxxlens.work-unit-product.v1",
+  "product": "sqlite.active-read-connection",
+  "contract": "cxxlens.sqlite-active-read-connection.v1",
+  "unit_id": "wu-201-zero-effect-active-read",
+  "owner": "#201",
+  "status": "bounded-internal-candidate",
+  "production_activation": "prohibited",
+  "qualification": "not-claimed",
+  "success_phases": [
+    "unopened",
+    "source_family_sealed",
+    "readonly_profile_selected",
+    "outer_custody_open",
+    "active_read_connection"
+  ],
+  "validator": "cxxlens::sdk::validate_sqlite_active_read_connection",
+  "bound_inputs": [
+    "exact main/WAL/SHM held object and directory identities",
+    "retained parent namespace and continuous guard identity",
+    "runtime image and lifetime binding",
+    "forwarding VFS and pinned underlying VFS identities",
+    "process instance and fork generation",
+    "connection and outer custody identities",
+    "read-only main/WAL callback open observations",
+    "pre-effect census"
+  ],
+  "pre_effect_census": {
+    "required": [
+      "source_family_complete",
+      "source_family_unchanged",
+      "callback_transcript",
+      "pre_map_custody_census"
+    ],
+    "forbidden_observations": [
+      "watch-loss-or-overflow",
+      "runtime-drift",
+      "vfs-drift",
+      "process-drift",
+      "fork-drift",
+      "unload-request",
+      "late-callback",
+      "nested-mapping-start",
+      "create",
+      "write",
+      "truncate",
+      "extend",
+      "delete",
+      "resize"
+    ]
+  },
+  "first_mapping_boundary": {
+    "receipt_position": "before-first-xShmMap",
+    "map_events_in_receipt": 0,
+    "held_shm_locks_in_receipt": 0,
+    "next_authority": "cxxlens.sqlite-nested-mapping-terminal.v1"
+  },
+  "deferred_terminal_witnesses": {
+    "status": "blocked-by-#205-and-U201-R1",
+    "required_before_logical_read_receipt": [
+      "nested-map-native-outcome-and-effect-transcript",
+      "revoke-drain-close-custody-join-terminal",
+      "vfs-unload-causal-revoke-join-witness",
+      "fork-child-custody-quarantine-witness",
+      "late-callback-cut-and-permanent-quarantine-witness"
+    ],
+    "reason": "U201-R0 cannot mint or imply these later lifecycle authorities"
+  },
+  "forbidden_products": [
+    "store.sqlite-logical-read-receipt.v1",
+    "cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1",
+    "cxxlens.sqlite.reader-shm-native-attachment.v1",
+    "store.sqlite-exact-empty-normalization-effect.v1",
+    "native-SQLITE_OK-projection",
+    "public-Store-success"
+  ],
+  "failure_policy": "typed-fail-closed-before-receipt",
+  "focused_test": "unit.sdk-sqlite-source-shm-readonly-preflight"
+}

@@ -58,7 +58,7 @@ properties:
     properties:
       files:
         type: array
-        const: [.github/workflows/quality.yml, .github/workflows/nightly.yml, .github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml]
+        const: [.github/workflows/quality.yml, .github/workflows/nightly.yml, .github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-gr.yml, .github/workflows/autonomy-production-scope.yml, .github/workflows/autonomy-release-evaluation.yml]
       action_revision: {const: full-commit-sha}
       local_workflow_digest: {const: sha256-from-supply-chain-lock}
       runner_label: {const: ubuntu-24.04}

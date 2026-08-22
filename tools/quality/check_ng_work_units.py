@@ -20,6 +20,8 @@ from check_ng_development_decisions import GOVERNANCE_ENFORCEMENT_SURFACES
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = pathlib.Path("schemas/cxxlens_ng_work_units.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_work_units.schema.yaml")
+DECISION_REGISTER = pathlib.Path("schemas/cxxlens_ng_development_decision_register.yaml")
+REVIEW_RECEIPTS = pathlib.Path("schemas/cxxlens_ng_development_review_receipts.yaml")
 # The manifest is the projection being digested, so including it in its own
 # authority source set would create a self-referential digest.  The decision
 # register still covers the manifest itself; this set covers the remaining
@@ -27,7 +29,8 @@ SCHEMA = pathlib.Path("schemas/cxxlens_ng_work_units.schema.yaml")
 GOVERNANCE_WORK_UNIT_AUTHORITY_SURFACES = frozenset(
     path for path in GOVERNANCE_ENFORCEMENT_SURFACES if path != str(MANIFEST)
 )
-EXPECTED_ISSUES = {"#173", "#183", "#185", "#200", "#201", "#202", "#205", "#261", "#277"}
+EXPECTED_ISSUES = {"#173", "#183", "#200", "#201", "#202", "#205", "#261", "#277"}
+COMPLETED_ISSUES = {"#185"}
 REQUIRED_SQLITE_PRODUCTS = {
     "sqlite.active-read-connection",
     "sqlite.nested-mapping-terminal",
@@ -199,6 +202,21 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
         raise WorkUnitError("open issues must be registered exactly once")
     if set(manifest["open_issue_inventory"]) != EXPECTED_ISSUES:
         raise WorkUnitError("open issue inventory drift")
+    completed = manifest["completed_issue_inventory"]
+    completed_issues = [entry["issue"] for entry in completed]
+    if len(completed_issues) != len(set(completed_issues)) or set(completed_issues) != COMPLETED_ISSUES:
+        raise WorkUnitError("completed issue inventory drift")
+    if set(completed_issues) & set(manifest["open_issue_inventory"]):
+        raise WorkUnitError("issue is both open and completed")
+    for completion in completed:
+        for evidence in completion["evidence"]:
+            if (
+                evidence["commit"] != completion["completion_commit"]
+                or evidence["tree"] != completion["completion_tree"]
+            ):
+                raise WorkUnitError(
+                    f"completed issue evidence commit mismatch: {completion['issue']}"
+                )
     if set(issues) & set(manifest["closed_contract_owners"]):
         raise WorkUnitError("closed contract owner owns an active work unit")
     known_integration_owners = EXPECTED_ISSUES | set(manifest["closed_contract_owners"])
@@ -260,7 +278,51 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
                 if any(path_conflicts(generated, owned) for owned in unit["owned_paths"]):
                     raise WorkUnitError(f"generated surface must remain integration-owned: {identifier}:{generated}")
 
+    accepted_decisions: dict[str, dict[str, Any]] | None = None
+    accepted_receipts: dict[str, dict[str, Any]] | None = None
     for identifier, unit in units.items():
+        completion = unit["dependency_completion"]
+        if completion["status"] == "accepted":
+            if accepted_decisions is None or accepted_receipts is None:
+                accepted_decisions = {
+                    entry["id"]: entry
+                    for entry in load(root / DECISION_REGISTER).get("decisions", [])
+                }
+                accepted_receipts = {
+                    entry["id"]: entry
+                    for entry in load(root / REVIEW_RECEIPTS).get("receipts", [])
+                }
+            decision = accepted_decisions.get(completion["decision_id"])
+            receipt = accepted_receipts.get(completion["receipt_id"])
+            if (
+                decision is None
+                or decision.get("authority_status") != "accepted"
+                or decision.get("review", {}).get("outcome") != "accepted"
+            ):
+                raise WorkUnitError(
+                    f"dependency completion decision is not accepted: {identifier}"
+                )
+            if unit_issue[identifier] not in decision.get("owner_issues", []):
+                raise WorkUnitError(
+                    f"dependency completion owner mismatch: {identifier}"
+                )
+            if (
+                receipt is None
+                or receipt.get("decision_id") != completion["decision_id"]
+                or receipt.get("owner_issue") != unit_issue[identifier]
+                or completion["receipt_id"] not in decision.get("review", {}).get("receipt_ids", [])
+                or receipt.get("verdict") != "accepted"
+                or receipt.get("acceptance", {}).get("status") != "committed"
+                or receipt.get("connected_verification", {}).get("status") != "verified"
+                or receipt.get("connected_verification", {}).get("conclusion") != "success"
+            ):
+                raise WorkUnitError(
+                    f"dependency completion receipt is not accepted: {identifier}"
+                )
+        if completion["status"] == "accepted" and unit["state"] != "ready":
+            raise WorkUnitError(f"accepted dependency gate is not ready: {identifier}")
+        if unit["readiness"] == "executable" and unit["state"] != "ready":
+            raise WorkUnitError(f"non-ready unit is executable: {identifier}")
         for dependency in unit["depends_on"]:
             if dependency not in units:
                 raise WorkUnitError(f"unknown dependency: {identifier}:{dependency}")
@@ -270,6 +332,15 @@ def validate(root: pathlib.Path, *, allow_placeholder: bool = False) -> dict[str
             if identifier not in units[peer]["serialized_with"]:
                 raise WorkUnitError(f"asymmetric serialization: {identifier}:{peer}")
     _acyclic(units)
+    for identifier, unit in units.items():
+        if unit["readiness"] != "executable":
+            continue
+        for dependency in unit["depends_on"]:
+            dependency_unit = units[dependency]
+            if dependency_unit["dependency_completion"]["status"] != "accepted":
+                raise WorkUnitError(
+                    f"executable unit has incomplete dependency: {identifier}:{dependency}"
+                )
     if not REQUIRED_SQLITE_PRODUCTS.issubset(product_owners):
         raise WorkUnitError("required SQLite product owner is missing")
     if set(manifest["product_receipts"]) != set(product_owners):

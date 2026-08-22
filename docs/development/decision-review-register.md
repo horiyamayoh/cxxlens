@@ -18,7 +18,7 @@ verdict. `decided` therefore never implies Accepted, implemented, qualified, or 
 Accepted authority references a receipt in
 `schemas/cxxlens_ng_development_review_receipts.yaml`. The receipt binds the candidate commit and
 tree, authority blobs and normalized digest, owner issue and canonical comment body, distinct
-candidate/reviewer GitHub logins plus reviewer identity/session, verdict and P0/P1/P2 census, and an
+candidate/reviewer GitHub logins plus an isolated reviewer process identity/session/context digest, verdict and P0/P1/P2 census, and an
 exact-candidate connected CI run bound to the immutable active workflow ID/path. The
 acceptance commit may change only declared status/receipt paths and must descend from the candidate.
 To avoid a self-referential commit hash, it is derived as the first descendant commit whose receipt
@@ -27,7 +27,9 @@ projection: the selected receipt is added exactly once and every existing parsed
 identical; YAML formatting is not authority. The canonical comment contains the complete review
 output and binds its digest, making the claimed review evidence replayable. Connected verification
 binds the claimed candidate GitHub login to the authenticated candidate commit author and requires
-the reviewer login to differ from both authenticated author and committer.
+the reviewer login to differ from both authenticated author and committer. Process/session
+independence is additionally verified from the isolated reviewer provenance, UUID/context digest,
+and author/session boundary.
 
 Delivery uses atomic fast-forward commits on `main`. A pull request can remain useful review or
 external-contribution evidence, but its existence, review state, or branch status is not correctness
@@ -35,7 +37,8 @@ authority. Proposed high-risk authority is committed first, independently review
 commit, and accepted only by a later non-rewriting `main` commit.
 
 The offline checker rejects duplicate or orphan receipts, foreign owner issues, wrong commit/tree/blob
-or normalized authority digests, self-review, accepted verdicts with P0/P1, missing exact-candidate
+or normalized authority digests, reused reviewer sessions or review artifacts, self-review, or
+reviewer/candidate GitHub identity equality, accepted verdicts with P0/P1, missing exact-candidate
 connected verification, activation before acceptance, qualification before implementation, and
 replacement of a preserved WIP ref. Connected CI additionally authenticates GitHub comment bytes,
 author identity, and the named CI run plus active workflow object; a spoofed workflow name is not

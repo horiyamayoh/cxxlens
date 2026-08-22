@@ -49,6 +49,21 @@ namespace cxxlens::sdk::provider::detail
 		return transition(ng1_recovery_event::progress_rate_failure);
 	}
 
+	result<void> ng1_recovery_adapter::request_cancel()
+	{
+		return transition(ng1_recovery_event::cancel_requested);
+	}
+
+	result<void> ng1_recovery_adapter::acknowledge_cancel()
+	{
+		return transition(ng1_recovery_event::cancel_acknowledged);
+	}
+
+	result<void> ng1_recovery_adapter::timeout_cancel()
+	{
+		return transition(ng1_recovery_event::cancel_timeout);
+	}
+
 	result<void> ng1_recovery_adapter::confirm_worker_kill()
 	{
 		return transition(ng1_recovery_event::worker_kill_confirmed);

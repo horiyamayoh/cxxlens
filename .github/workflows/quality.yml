@@ -297,6 +297,35 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # Publish the receipt-bound #277 metric state separately from the advisory
+  # context projection. The report is exact-SHA evidence, but it remains
+  # evaluation-only and cannot qualify an agent, provider, or release.
+  agent-autonomous-completion-metric:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: none
+      - name: Generate and revalidate exact-SHA #277 metric state
+        run: |
+          set -euo pipefail
+          python tools/quality/check_ng_agent_autonomous_completion.py report \
+            --root . \
+            --output "${RUNNER_TEMP}/cxxlens-ng-agent-autonomous-completion-${GITHUB_SHA}.json"
+          python tools/quality/check_ng_agent_autonomous_completion.py check \
+            --root . \
+            --input-json "${RUNNER_TEMP}/cxxlens-ng-agent-autonomous-completion-${GITHUB_SHA}.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-ng-agent-autonomous-completion-${{ github.sha }}
+          path: ${{ runner.temp }}/cxxlens-ng-agent-autonomous-completion-${{ github.sha }}.json
+          if-no-files-found: error
+          retention-days: 90
+
   install-consumer:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
@@ -348,6 +377,39 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  linux-static-shared-materialization-matrix:
+    # This is a candidate evidence producer, not the distribution 1.0 release
+    # authority.  The latter remains the exact-main #173 evaluator, which also
+    # authenticates the #167/#179 owner handoffs and current-origin-main fence.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: [install-consumer]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: none
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
+        with:
+          pattern: cxxlens-install-*-${{ github.sha }}
+          path: build/install-matrix-input
+      - name: Validate exact Linux static/shared materialization matrix
+        run: |
+          python tools/quality/check_ng_clang22_install_matrix.py \
+            --root . \
+            --evidence-dir build/install-matrix-input \
+            --require-exact-matrix \
+            --output "${RUNNER_TEMP}/cxxlens-ng-clang22-install-matrix-evidence.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-ng-clang22-install-matrix-${{ github.sha }}
+          path: ${{ runner.temp }}/cxxlens-ng-clang22-install-matrix-evidence.json
+          if-no-files-found: error
+          retention-days: 365
+
   gcc-public-headers:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
@@ -382,7 +444,7 @@ jobs:
 
   quality-evidence:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    needs: [build-test, quality-contracts, agent-context, install-consumer, gcc-public-headers]
+    needs: [build-test, quality-contracts, agent-context, agent-autonomous-completion-metric, install-consumer, linux-static-shared-materialization-matrix, gcc-public-headers]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

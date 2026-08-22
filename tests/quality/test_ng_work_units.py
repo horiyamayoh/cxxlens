@@ -165,6 +165,50 @@ class WorkUnitTest(unittest.TestCase):
             with self.assertRaisesRegex(WorkUnitError, "unknown integration owner"):
                 validate(root)
 
+    def test_closed_issue_is_kept_as_exact_completion_receipt(self) -> None:
+        manifest = validate(ROOT)
+        self.assertEqual(manifest["open_issue_inventory"], [
+            "#173", "#183", "#200", "#201", "#202", "#205", "#261", "#277"
+        ])
+        completion = manifest["completed_issue_inventory"][0]
+        self.assertEqual(completion["issue"], "#185")
+        self.assertEqual(completion["status"], "completed")
+        self.assertEqual(completion["completion_commit"], completion["evidence"][0]["commit"])
+        self.assertEqual(completion["completion_tree"], completion["evidence"][0]["tree"])
+
+    def test_executable_unit_requires_authenticated_dependency_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+
+            def mutate(value) -> None:
+                entry = next(item for item in value["entries"] if item["issue"] == "#277")
+                entry["units"][0]["readiness"] = "executable"
+
+            self.rewrite(root, mutate)
+            with self.assertRaisesRegex(WorkUnitError, "incomplete dependency"):
+                validate(root)
+
+    def test_accepted_dependency_gate_requires_accepted_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+
+            def mutate(value) -> None:
+                entry = next(item for item in value["entries"] if item["issue"] == "#173")
+                unit = entry["units"][0]
+                unit["state"] = "ready"
+                unit["readiness"] = "executable"
+                unit["dependency_completion"] = {
+                    "status": "accepted",
+                    "decision_id": "decision.delivery.direct-main",
+                    "receipt_id": "review-receipt.fake.v1",
+                }
+
+            self.rewrite(root, mutate)
+            with self.assertRaisesRegex(
+                WorkUnitError, "dependency completion decision is not accepted"
+            ):
+                validate(root)
+
     def test_undeclared_owned_overlap_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

@@ -72,6 +72,23 @@ class AgentContextV2Test(unittest.TestCase):
                 with self.assertRaisesRegex(AgentContextV2Error, message):
                     _is_bounded_completion(ROOT, manifest, entry, unit, candidate, synthetic=True)
 
+    def test_packet_consumes_canonical_capability_resolution(self) -> None:
+        packet = build(ROOT, "#277", "wu-277-context-v2", synthetic=True)
+        resolution = packet["capability_resolution"]
+        self.assertEqual(resolution["schema"], "cxxlens.agent-capability-resolution.v1")
+        self.assertEqual(resolution["result"]["state"], "unknown")
+        self.assertTrue(resolution["missing"])
+        candidate = copy.deepcopy(packet)
+        candidate["capability_resolution"]["result"]["reason_code"] = "none"
+        with self.assertRaisesRegex(AgentContextV2Error, "capability resolution projection drift"):
+            from check_ng_agent_context_v2 import _validate_packet_semantics
+
+            manifest = work_units.validate(ROOT)
+            entry, unit = _select(manifest, "#277", "wu-277-context-v2")
+            _validate_packet_semantics(
+                ROOT, manifest, entry, unit, candidate, synthetic=True
+            )
+
     def test_unknown_work_unit_reference_cannot_enter_corpus_registry(self) -> None:
         manifest = work_units.validate(ROOT)
         mutated = copy.deepcopy(manifest)
@@ -158,7 +175,7 @@ class AgentContextV2Test(unittest.TestCase):
         manifest = work_units.validate(ROOT)
         governance_entry, governance = _select(manifest, "#173", "wu-173-governance")
         governance["state"] = "ready"
-        entry, unit = _select(manifest, "#185", "wu-185-timeout-readiness-fixture")
+        entry, unit = _select(manifest, "#277", "wu-277-context-v2")
         from check_ng_agent_context_v2 import _packet
         packet = _packet(ROOT, manifest, entry, unit, synthetic=True)
         self.assertEqual(packet["execution_disposition"], "stop-blocked-by-dependency")

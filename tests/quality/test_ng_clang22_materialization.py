@@ -64,6 +64,38 @@ class NgClang22MaterializationTests(unittest.TestCase):
                             unsafe_suffix,
                         )
 
+    def test_install_matrix_ignores_prefix_occurrence_manifest(self) -> None:
+        """Package metadata must not be mistaken for a second evidence tuple."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            tuple_parent = (
+                evidence
+                / "cxxlens-install-shared"
+                / "materialization-evidence/shared/memory"
+            )
+            tuple_parent.mkdir(parents=True)
+            for name in (
+                install_matrix.REQUEST_FILENAME,
+                install_matrix.REPORT_FILENAME,
+                install_matrix.EXECUTION_RECEIPT_FILENAME,
+                install_matrix.OCCURRENCE_FILENAME,
+                install_matrix.RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME,
+            ):
+                (tuple_parent / name).write_bytes(b"{}")
+            prefix_occurrence = (
+                evidence
+                / "cxxlens-install-shared"
+                / "tests/install-consumer/relocated-prefix/share/cxxlens/materialization/clang22"
+                / install_matrix.OCCURRENCE_FILENAME
+            )
+            prefix_occurrence.parent.mkdir(parents=True)
+            prefix_occurrence.write_bytes(b"package occurrence")
+
+            paths = install_matrix.artifact_paths(evidence)
+
+            self.assertEqual(set(paths), {tuple_parent})
+
     def test_clang22_worker_kernel_source_closure_matches_kernel(self) -> None:
         root_cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
         worker_cmake = (
@@ -5637,7 +5669,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "auto fail_after_publication =", publication
         )
         guarded_setup = source.index(
-            "\n\ttry\n\t{\n\t\tpublic_materialization_success_report_input public_input;",
+            "\n\t\tpublic_materialization_success_report_input public_input;",
             recovery_helper,
         )
         bad_alloc_catch = source.index(

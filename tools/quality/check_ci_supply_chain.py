@@ -30,6 +30,8 @@ WORKFLOWS = (
     pathlib.Path(".github/workflows/pr-integration.yml"),
     pathlib.Path(".github/workflows/autonomy-fast.yml"),
     pathlib.Path(".github/workflows/autonomy-heavy.yml"),
+    pathlib.Path(".github/workflows/autonomy-gr.yml"),
+    pathlib.Path(".github/workflows/autonomy-production-scope.yml"),
     pathlib.Path(".github/workflows/autonomy-release-evaluation.yml"),
 )
 REQUIREMENT = re.compile(

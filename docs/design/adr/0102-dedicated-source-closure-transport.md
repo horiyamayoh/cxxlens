@@ -63,15 +63,25 @@ Field availability is phase-authentic:
 | Phase | Available authority | Forbidden claims |
 | --- | --- | --- |
 | before manifest | task/session, task-v4 digest, expected closure/manifest identity, and bounded invalid-control frame count | member/blob census or received closure/payload bytes |
-| manifest streaming | declared manifest size, observed bytes, offset, streaming digest | member/blob authority or terminal digest |
+| manifest streaming | declared/received manifest bytes, observed offset, next chunk, streaming digest | member/blob authority or terminal digest |
 | manifest validated | closure/member/blob census and declared digests | blob bytes or terminal digest |
-| blob streaming | current blob ordinal, offset, observed bytes, streaming digest | later blobs or closure completeness |
+| blob streaming | current blob ordinal/digest, declared/received bytes, observed offset, next chunk, streaming digest | later blobs or closure completeness |
 | closure sealed | recomputed blob/manifest/closure transfer digests | VFS mount or compiler outcome |
-| acknowledged | task-local spool receipt and cleanup owner | execution/output success |
+| acknowledged | task-local spool receipt, cleanup owner, bounded blob/byte counters | execution/output success |
 | rejected | failure phase, typed reason, observed bounded counters, cleanup receipt | values belonging to later phases |
 
 `source_closure_ack` is not a compiler or publication success. `task_accepted` remains impossible
 until task v4, manifest, all blobs, and the terminal seal validate.
+
+The proposed machine contract also keeps input authority explicit. Closure-owned members are
+limited to the `project://` namespace and the five ADR 0101 member roles; a missing closure member
+never falls through to ambient content. Toolchain-owned inputs are admitted only through the
+selected, pinned profile's qualified read roots, whose semantic identity is represented by the
+toolchain context fields rather than by host filesystem path strings. Unqualified paths observe
+`ENOENT` and publication is rejected before any success claim. The `phase_fields` table is the
+closed field census for each lifecycle phase, and every reject counter must be a member of the
+current phase's census; later-phase counters are therefore not merely discouraged, but fail the
+constructibility validator.
 
 ### Identity, canonicality, and replay
 

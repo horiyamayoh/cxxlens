@@ -210,6 +210,12 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void> observe_worker_exit();
 		[[nodiscard]] result<void> observe_heartbeat_timeout();
 		[[nodiscard]] result<void> observe_progress_rate_failure();
+		/** Request cancellation without treating it as a worker exit or durable resume. */
+		[[nodiscard]] result<void> request_cancel();
+		/** Consume a provider cancellation acknowledgement as a terminal failure. */
+		[[nodiscard]] result<void> acknowledge_cancel();
+		/** Escalate an unacknowledged cancellation to the worker-kill boundary. */
+		[[nodiscard]] result<void> timeout_cancel();
 		[[nodiscard]] result<void> confirm_worker_kill();
 		/**
 		 * Close a session whose worker was never created because the process port rejected launch.

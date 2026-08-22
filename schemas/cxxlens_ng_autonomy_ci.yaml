@@ -20,13 +20,27 @@ nightly:
   ineligible_events: [workflow_call]
   candidate: latest-origin-main-at-start
   evidence: [asan-ubsan, tsan, static-analysis, scale]
+gr:
+  workflow: .github/workflows/autonomy-gr.yml
+  owner_issue: '#167'
+  event: workflow_dispatch-only
+  source_workflow: .github/workflows/quality.yml
+  handoff: explicit-source-run-and-artifact-id-direct-download
+  evidence: [exact-report, source-workflow-id, source-run, archive-digest, selection-digest]
+terminal_scope:
+  workflow: .github/workflows/autonomy-production-scope.yml
+  owner_issue: '#179'
+  event: workflow_dispatch-only
+  source_workflow: .github/workflows/quality.yml
+  handoff: explicit-source-run-and-artifact-id-direct-download
+  evidence: [exact-report, source-workflow-id, source-run, archive-digest, selection-digest]
 release:
   workflow: .github/workflows/autonomy-release-evaluation.yml
   event: workflow_dispatch-only
   candidate_rule: candidate-equals-current-origin-main
   cancellation: forbidden
   composition: {aggregate_decision: '#173', gr_execution_contract: '#167', scope_closure_contract: '#179'}
-  current_capability: not-qualified-evaluation-only-no-gr
+  current_capability: authenticated-evidence-handoff-no-gr
   required_future_inputs: [exact-successful-heavy, exact-successful-nightly, authenticated-gr-report, authenticated-terminal-scope-report]
 legacy:
   workflow: .github/workflows/quality.yml

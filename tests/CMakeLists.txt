@@ -43,6 +43,15 @@ add_test(
 set_tests_properties(unit.sdk.registration PROPERTIES LABELS
                                                       "unit;sdk;registration")
 
+add_test(
+  NAME tool.sdk-doctor-capability
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_capability.py"
+    "$<TARGET_FILE:cxxlens-sdk-doctor>")
+set_tests_properties(tool.sdk-doctor-capability
+                     PROPERTIES LABELS "tool;sdk;doctor;capability")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
                                                      "${CMAKE_DL_LIBS}")
@@ -761,6 +770,19 @@ set_tests_properties(
 )
 
 cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-store-candidate
+  adapter/clang22/materialization_store_candidate_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-store-candidate
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-store-candidate
+         COMMAND cxxlens-clang22-materialization-store-candidate)
+set_tests_properties(
+  adapter.clang22-materialization-store-candidate
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;store;candidate;bounded;security")
+
+cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-outcome
   adapter/clang22/materialization_store_outcome_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-store-outcome
@@ -902,6 +924,50 @@ set_tests_properties(
   adapter.clang22-source-closure
   PROPERTIES
     LABELS "adapter;provider;clang22;source-closure;security;identity;contract")
+
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-transport
+                            adapter/clang22/source_closure_transport_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-transport
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure-transport
+         COMMAND cxxlens-clang22-source-closure-transport)
+set_tests_properties(
+  adapter.clang22-source-closure-transport
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;source-closure;transport;security;contract")
+
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4
+                            adapter/clang22/source_closure_task_v4_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-task-v4
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure-task-v4
+         COMMAND cxxlens-clang22-source-closure-task-v4)
+set_tests_properties(
+  adapter.clang22-source-closure-task-v4
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;source-closure;task-v4;identity;security;contract"
+)
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-source-closure-task-v4-worker
+  adapter/clang22/source_closure_task_v4_worker_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-task-v4-worker
+                      PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  # The shared worker core embeds the private provider runtime as object files;
+  # source-private fixtures must carry that exact closure on their final link.
+  target_sources(cxxlens-clang22-source-closure-task-v4-worker
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+add_test(NAME adapter.clang22-source-closure-task-v4-worker
+         COMMAND cxxlens-clang22-source-closure-task-v4-worker)
+set_tests_properties(
+  adapter.clang22-source-closure-task-v4-worker
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;source-closure;task-v4;vfs;security;contract")
 
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-vfs
                             adapter/clang22/source_closure_vfs_test.cpp)
@@ -1144,6 +1210,9 @@ foreach(
         api_development_readiness_wave0_baseline
         use_case_capability_catalog
         agent_context
+        agent_capability_resolution
+        agent_autonomous_completion
+        agent_autonomous_completion_runner
         design_feedback
         public_callable_inventory
         g5_qualification)
@@ -1153,6 +1222,13 @@ foreach(
   set_tests_properties("quality.ng-${contract}"
                        PROPERTIES LABELS "quality;ng;contract")
 endforeach()
+
+add_test(
+  NAME quality.ng-store-candidate
+  COMMAND "${Python3_EXECUTABLE}"
+          "${PROJECT_SOURCE_DIR}/tests/quality/test_ng_store_candidate.py")
+set_tests_properties(quality.ng-store-candidate
+                     PROPERTIES LABELS "quality;ng;store;candidate")
 
 add_test(
   NAME quality.ownership
@@ -1243,6 +1319,7 @@ add_dependencies(
   cxxlens-clang22-materialization-claims
   cxxlens-clang22-materialization-seal
   cxxlens-clang22-materialization-store
+  cxxlens-clang22-materialization-store-candidate
   cxxlens-clang22-materialization-store-outcome
   cxxlens-clang22-materialization-request-stream
   cxxlens-clang22-materialization-request-identity
@@ -1254,6 +1331,7 @@ add_dependencies(
   cxxlens-clang22-observation-v2
   cxxlens-clang22-unicode-nfc
   cxxlens-clang22-source-closure
+  cxxlens-clang22-source-closure-transport
   cxxlens-clang22-source-closure-vfs
   cxxlens-clang22-source-closure-invocation
   cxxlens-clang22-source-closure-native
@@ -1263,6 +1341,7 @@ add_dependencies(
   cxxlens-public-header-provider-clang22
   cxxlens-public-api-provider-clang22-translation-unit-input
   cxxlens-public-header-sdk
+  cxxlens-sdk-doctor
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
   cxxlens-unit-sdk-provider-ng1-validation

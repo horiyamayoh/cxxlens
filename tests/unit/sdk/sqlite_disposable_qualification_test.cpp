@@ -1036,6 +1036,98 @@ namespace
 		}
 	}
 
+	void exercise_normalization_recovery_boundary()
+	{
+		using phase = sqlite_disposable_normalization_recovery_phase;
+		constexpr std::array uninterrupted{
+			phase::effect_pre_sealed,
+			phase::effect_admitted,
+			phase::effect_transcript_sealed,
+			phase::durability_barrier_sealed,
+			phase::normalization_receipt,
+			phase::fresh_init_handoff_candidate,
+		};
+		require(
+			validate_sqlite_disposable_normalization_recovery_path(uninterrupted),
+			"uninterrupted normalization candidate reaches only the fresh-init handoff boundary");
+
+		constexpr std::array interrupted_during_effect{
+			phase::effect_pre_sealed,
+			phase::effect_admitted,
+			phase::recoverable_interruption,
+			phase::original_receipt_discarded,
+			phase::cold_reclassification_required,
+			phase::reclassified_other_family,
+		};
+		require(validate_sqlite_disposable_normalization_recovery_path(interrupted_during_effect),
+				"effect interruption discards the original receipt before cold reclassification");
+
+		constexpr std::array interrupted_after_durability{
+			phase::effect_pre_sealed,
+			phase::effect_admitted,
+			phase::effect_transcript_sealed,
+			phase::durability_barrier_sealed,
+			phase::recoverable_interruption,
+			phase::original_receipt_discarded,
+			phase::cold_reclassification_required,
+			phase::reclassified_fz_post,
+		};
+		require(
+			validate_sqlite_disposable_normalization_recovery_path(interrupted_after_durability),
+			"post-durability interruption reclassifies FZ-post without resuming the effect");
+
+		constexpr std::array interrupted_before_fresh_init{
+			phase::effect_pre_sealed,
+			phase::effect_admitted,
+			phase::effect_transcript_sealed,
+			phase::durability_barrier_sealed,
+			phase::normalization_receipt,
+			phase::fresh_init_handoff_candidate,
+			phase::recoverable_interruption,
+			phase::original_receipt_discarded,
+			phase::cold_reclassification_required,
+			phase::reclassified_fz_post,
+		};
+		require(
+			validate_sqlite_disposable_normalization_recovery_path(interrupted_before_fresh_init),
+			"a crash before fresh initialization discards the sealed receipt and reclassifies "
+			"cold");
+
+		constexpr std::array quarantined{
+			phase::effect_pre_sealed,
+			phase::effect_admitted,
+			phase::effect_transcript_sealed,
+			phase::terminal_quarantined,
+		};
+		require(validate_sqlite_disposable_normalization_recovery_path(quarantined),
+				"opaque normalization interruption has a fail-closed terminal");
+
+		constexpr std::array resumes_from_interruption{
+			phase::effect_pre_sealed,
+			phase::effect_admitted,
+			phase::recoverable_interruption,
+			phase::normalization_receipt,
+		};
+		require(!validate_sqlite_disposable_normalization_recovery_path(resumes_from_interruption),
+				"interrupted normalization cannot mint the original success receipt");
+
+		constexpr std::array skips_receipt_discard{
+			phase::effect_pre_sealed,
+			phase::effect_admitted,
+			phase::recoverable_interruption,
+			phase::cold_reclassification_required,
+			phase::reclassified_fz_post,
+		};
+		require(!validate_sqlite_disposable_normalization_recovery_path(skips_receipt_discard),
+				"cold reclassification requires explicit original-receipt discard");
+		require(!is_sqlite_disposable_normalization_recovery_transition(
+					phase::reclassified_fz_post, phase::normalization_receipt),
+				"FZ-post reclassification cannot transition back to normalization success");
+		require(is_sqlite_disposable_normalization_recovery_transition(
+					phase::normalization_receipt, phase::recoverable_interruption),
+				"a crash after receipt sealing still enters fail-closed cold recovery");
+	}
+
 	[[nodiscard]] sqlite_disposable_empty_family_observation
 	family_observation(const sqlite_disposable_main_header_state header,
 					   const sqlite_disposable_wal_state wal,
@@ -1217,6 +1309,7 @@ int main()
 	exercise_retained_parent_lifetime_and_destructor();
 	exercise_raw_empty_family_observation();
 	exercise_fz_post_fixture_cleanup();
+	exercise_normalization_recovery_boundary();
 	exercise_receiptless_family_partition_and_routes();
 #else
 	auto unavailable = duplicate_sqlite_disposable_parent_directory(-1);

@@ -27,14 +27,14 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:3505e2a08d84b4b365a6a45145c9f6ca1cca29843237359135abcd55688ca2e5"
+    "sha256:ec745cd3dbd591886d29c9d2a727f2eb9158ec5456ca72f5975a3ffc2bbb670f"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:289dc3afc574126b6f99c33ba02277fc70983aba58b8d44c213ce68a2e883957"
+    "sha256:2a6767fe46244debe132c50df64ae413f93a014289d9c0e32e0437885b735c3c"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:9c8c9ca5a1216e17d76c771d3a6b20166867bcf8ce32dcca1aa2d0f672c832ce"
+    "sha256:b1f84842e7a3b555066c727219bbf3eceabcdd86a60f7cabd19d0729764382f4"
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
@@ -268,6 +268,7 @@ ACCEPTED_EMPTY_NORMALIZATION_SOURCE_ANCHOR_RECEIPT = [
     "pinned-sqlite-runtime-identity-and-version",
     "exact-normalization-effect-grammar-profile-receipt",
     "accepted-empty-private-recovery-stable-source-receipt",
+    "exact-authenticated-logical-read-receipt-v1-after-connection-closed-zero-custody-and-zero-effect-callback-receipt",
     "preinit-exact-empty-wal-header-anchor",
     "pre-coordination-zero-wal-branch-absent-create-or-preexisting-bound-size-zero-open",
     "actual-normalizer-main-open-file-instance-identity-and-directory-entry-binding",

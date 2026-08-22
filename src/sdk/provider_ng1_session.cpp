@@ -457,6 +457,27 @@ namespace cxxlens::sdk::provider::detail
 		return recovery_.observe_progress_rate_failure();
 	}
 
+	result<void> ng1_session_coordinator::request_cancel()
+	{
+		if (auto open = ensure_open("cancel-request"); !open)
+			return open;
+		return recovery_.request_cancel();
+	}
+
+	result<void> ng1_session_coordinator::acknowledge_cancel()
+	{
+		if (auto open = ensure_open("cancel-acknowledgement"); !open)
+			return open;
+		return recovery_.acknowledge_cancel();
+	}
+
+	result<void> ng1_session_coordinator::timeout_cancel()
+	{
+		if (auto open = ensure_open("cancel-timeout"); !open)
+			return open;
+		return recovery_.timeout_cancel();
+	}
+
 	result<void> ng1_session_coordinator::confirm_worker_kill()
 	{
 		if (auto open = ensure_open("worker-kill"); !open)
