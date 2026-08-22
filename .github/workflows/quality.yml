@@ -444,7 +444,7 @@ jobs:
 
   quality-evidence:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    needs: [build-test, quality-contracts, agent-context, install-consumer, linux-static-shared-materialization-matrix, gcc-public-headers]
+    needs: [build-test, quality-contracts, agent-context, agent-autonomous-completion-metric, install-consumer, linux-static-shared-materialization-matrix, gcc-public-headers]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
