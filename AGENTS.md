@@ -101,5 +101,35 @@ ctest --preset dev-clang --output-on-failure
 cmake --build --preset dev-clang --target cxxlens-quality
 ```
 
+## LLVM/Clang 22 development installation
+
+この開発環境には exact LLVM/Clang 22.1.0 の release 配布物がユーザー領域へ導入済みで
+ある。標準の場所は `/home/dhuru/.local/opt/LLVM-22.1.0-Linux-X64`、実行ファイルの
+versioned wrapper は `/home/dhuru/.local/bin/clang++-22` と
+`/home/dhuru/.local/bin/clang-format-22` である。`apt` の `llvm-*` package 一覧だけを
+見て development package がないと判断してはならない。まず次を確認する。
+
+```sh
+LLVM22_ROOT=/home/dhuru/.local/opt/LLVM-22.1.0-Linux-X64
+"$LLVM22_ROOT/bin/llvm-config" --version
+test -f "$LLVM22_ROOT/lib/cmake/llvm/LLVMConfig.cmake"
+test -f "$LLVM22_ROOT/lib/cmake/clang/ClangConfig.cmake"
+```
+
+exact adapter を構成するときは CMake に両方の package directory を明示する。
+
+```sh
+cmake -S . -B build/dev-clang-native -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
+  -DCXXLENS_BUILD_QUALITY_TOOLS=ON -DCXXLENS_CLANG_ADAPTER=ON \
+  -DCMAKE_CXX_COMPILER="$LLVM22_ROOT/bin/clang++" \
+  -DCXXLENS_CLANG_FORMAT="$LLVM22_ROOT/bin/clang-format" \
+  -DLLVM_DIR="$LLVM22_ROOT/lib/cmake/llvm" \
+  -DClang_DIR="$LLVM22_ROOT/lib/cmake/clang"
+```
+
+`Enabled exact LLVM/Clang 22.1.0 adapter` が構成出力に現れることを確認する。上記の
+場所が存在しない場合だけ、同じ version の release 配布物を導入してから再試行する。
+
 `cxxlens-quality` は契約を直接 assert し、終了コードだけを返す。変更固有試験と main
 全件が green であることが実装完了であり、別の evidence/report/checkpoint は作らない。

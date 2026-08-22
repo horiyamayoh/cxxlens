@@ -46,8 +46,11 @@ ctest --preset dev-clang
 cmake --build --preset dev-clang --target cxxlens-quality
 ```
 
-Clang 22 development package がない環境では native provider は structured unavailable 実装になります。
-exact Clang 22 を必須にする場合は `-DCXXLENS_CLANG_ADAPTER=ON` を指定します。
+この環境の exact LLVM/Clang 22.1.0 development installation は
+`/home/dhuru/.local/opt/LLVM-22.1.0-Linux-X64` にある。CMake config を明示して native
+provider を有効化する場合は、`docs/development/build-and-test.md` の
+`LLVM_DIR`/`Clang_DIR` 指定例を使い、`-DCXXLENS_CLANG_ADAPTER=ON` を指定する。
+その install root が存在しない環境だけは structured unavailable 実装になる。
 
 ## Packages and targets
 

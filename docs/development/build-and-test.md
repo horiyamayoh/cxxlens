@@ -17,6 +17,29 @@ cmake --build --preset dev-clang --target cxxlens-quality
 を実行し、失敗時は非ゼロ終了するだけです。`ctest` は label 選択なしで登録された決定的
 試験を全件実行します。変更時は affected test を先に実行し、最後に全件を実行します。
 
+## Exact LLVM/Clang 22 native adapter
+
+この環境の exact LLVM/Clang 22.1.0 development installation は
+`/home/dhuru/.local/opt/LLVM-22.1.0-Linux-X64` にある。`llvm-22` の system package が
+見つからない場合でも、この配布物を先に確認する。CMake config と library が同梱されて
+いるため、`LLVM_DIR` と `Clang_DIR` を明示すれば native adapter を有効化できる。
+
+```sh
+LLVM22_ROOT=/home/dhuru/.local/opt/LLVM-22.1.0-Linux-X64
+cmake -S . -B build/dev-clang-native -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
+  -DCXXLENS_BUILD_QUALITY_TOOLS=ON -DCXXLENS_CLANG_ADAPTER=ON \
+  -DCMAKE_CXX_COMPILER="$LLVM22_ROOT/bin/clang++" \
+  -DCXXLENS_CLANG_FORMAT="$LLVM22_ROOT/bin/clang-format" \
+  -DLLVM_DIR="$LLVM22_ROOT/lib/cmake/llvm" \
+  -DClang_DIR="$LLVM22_ROOT/lib/cmake/clang"
+cmake --build build/dev-clang-native -j2
+ctest --test-dir build/dev-clang-native --output-on-failure
+```
+
+構成ログに `Enabled exact LLVM/Clang 22.1.0 adapter` が必要である。`CXXLENS_CLANG_ADAPTER=ON`
+で package 未検出になる場合は、まずこの install root と二つの CMake directory を指定する。
+
 ## Main workflow
 
 `.github/workflows/quality.yml` は次を実行します。
