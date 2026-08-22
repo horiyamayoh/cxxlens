@@ -135,6 +135,12 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         for ref, entry in captured_refs.items()
     )
     for ref, entry in captured_refs.items():
+        # Remote-tracking refs are mutable fetch views, not locally preserved
+        # branches.  Selected remote provenance is checked by verify-connected
+        # against GitHub; requiring every fetched origin/* SHA to remain equal
+        # to an old snapshot makes an ordinary fetch look like branch loss.
+        if ref.startswith("origin/"):
+            continue
         if entry["disposition"] == "moving-canonical":
             continue
         if strict_live_repository and current_refs.get(ref) != entry["head"]:
@@ -149,7 +155,15 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         if entry["prunable"]:
             raise WipInventoryError(f"prunable registration remains after normalization: {entry['path']}")
     for entry in inventory["worktrees"]:
-        if strict_live_repository and entry["disposition"] != "moving-canonical":
+        # A prunable registration is an explicit record of a worktree whose
+        # gitdir/evidence may already be gone; requiring its historical object
+        # to remain reachable would make the normalization state impossible to
+        # represent after safe pruning.
+        if (
+            strict_live_repository
+            and entry["disposition"] != "moving-canonical"
+            and not entry.get("prunable", False)
+        ):
             git(root, "cat-file", "-e", f"{entry['head']}^{{commit}}")
     return inventory
 

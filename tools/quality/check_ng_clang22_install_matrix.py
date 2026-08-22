@@ -642,22 +642,61 @@ def artifact_paths(evidence_dir: pathlib.Path) -> dict[pathlib.Path, dict[str, p
             "installed materialization evidence is missing required artifacts: "
             + ", ".join(missing)
         )
+    # The install artifact intentionally contains both the retained package
+    # prefix and the evidence directory.  The prefix also contains its
+    # immutable occurrence manifest, so collecting every `occurrence-v1.json`
+    # under the artifact would mix package-layout metadata with the
+    # request-bound evidence tuples.  Derive tuple parents from the request,
+    # report, receipt, and raw-manifest files, then require an occurrence at
+    # each of those exact parents.
+    tuple_parents = {
+        path.parent
+        for name in (
+            REQUEST_FILENAME,
+            REPORT_FILENAME,
+            EXECUTION_RECEIPT_FILENAME,
+            RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME,
+        )
+        for path in paths[name]
+    }
+    if not tuple_parents:
+        raise InstallMatrixError("installed materialization evidence has no tuples")
+    for parent in tuple_parents:
+        missing = [
+            name
+            for name in (
+                REQUEST_FILENAME,
+                REPORT_FILENAME,
+                EXECUTION_RECEIPT_FILENAME,
+                OCCURRENCE_FILENAME,
+                RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME,
+            )
+            if not (parent / name).is_file()
+        ]
+        if missing:
+            raise InstallMatrixError(
+                "request/report/receipt/occurrence artifacts are not co-located one-for-one: "
+                f"{parent} missing {', '.join(missing)}"
+            )
     parents = {
-        name: {path.parent for path in values}
-        for name, values in paths.items()
+        name: {parent for parent in tuple_parents if (parent / name).is_file()}
+        for name in (
+            REQUEST_FILENAME,
+            REPORT_FILENAME,
+            EXECUTION_RECEIPT_FILENAME,
+            OCCURRENCE_FILENAME,
+            RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME,
+        )
     }
     if not (
         parents[REQUEST_FILENAME]
         == parents[REPORT_FILENAME]
         == parents[EXECUTION_RECEIPT_FILENAME]
         == parents[OCCURRENCE_FILENAME]
+        == parents[RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME]
     ):
         raise InstallMatrixError(
             "request/report/receipt/occurrence artifacts are not co-located one-for-one"
-        )
-    if parents[RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME] != parents[REQUEST_FILENAME]:
-        raise InstallMatrixError(
-            "raw provider evidence manifest is not co-located with its request/report"
         )
     return {
         parent: {

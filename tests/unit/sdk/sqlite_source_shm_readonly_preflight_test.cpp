@@ -508,59 +508,72 @@ namespace
 				"active-read receipt is sealed before the first SHM map/lock");
 		require(receipt->pre_effect.source_family_unchanged && !receipt->pre_effect.write_observed,
 				"active-read receipt retains the authenticated pre-effect census");
-		require(revalidate_sqlite_active_read_connection(
-					*receipt, fixture.request.source_census, fixture.request.connection,
-					fixture.request.pre_effect)
+		require(revalidate_sqlite_active_read_connection(*receipt,
+														 fixture.request.source_census,
+														 fixture.request.connection,
+														 fixture.request.pre_effect)
 					.has_value(),
 				"active-read receipt revalidates with unchanged namespace and callback custody");
 
 		{
 			auto current_census = fixture.request.source_census;
 			current_census.entries[0].object_identity = active_read_identity("replacement");
-			require(!revalidate_sqlite_active_read_connection(
-					*receipt, current_census, fixture.request.connection, fixture.request.pre_effect),
-				"revalidation rejects main-object replacement before the next lifecycle phase");
+			require(!revalidate_sqlite_active_read_connection(*receipt,
+															  current_census,
+															  fixture.request.connection,
+															  fixture.request.pre_effect),
+					"revalidation rejects main-object replacement before the next lifecycle phase");
 		}
 		{
 			auto current_connection = fixture.request.connection;
 			current_connection.shm_map_events.push_back(sqlite_backend_shm_map_observation{});
-			require(!revalidate_sqlite_active_read_connection(
-					*receipt, fixture.request.source_census, current_connection, fixture.request.pre_effect),
-				"revalidation rejects a first SHM map after the sealed pre-map cut");
+			require(!revalidate_sqlite_active_read_connection(*receipt,
+															  fixture.request.source_census,
+															  current_connection,
+															  fixture.request.pre_effect),
+					"revalidation rejects a first SHM map after the sealed pre-map cut");
 		}
 		{
 			auto current_pre_effect = fixture.request.pre_effect;
 			current_pre_effect.runtime_drift_observed = true;
-			require(!revalidate_sqlite_active_read_connection(
-					*receipt, fixture.request.source_census, fixture.request.connection, current_pre_effect),
-				"revalidation rejects runtime drift instead of reusing the old receipt");
+			require(!revalidate_sqlite_active_read_connection(*receipt,
+															  fixture.request.source_census,
+															  fixture.request.connection,
+															  current_pre_effect),
+					"revalidation rejects runtime drift instead of reusing the old receipt");
 		}
 		{
 			auto current_connection = fixture.request.connection;
 			current_connection.open_events.front().input_flags |= 0x00000002;
-			require(!revalidate_sqlite_active_read_connection(
-					*receipt, fixture.request.source_census, current_connection, fixture.request.pre_effect),
-				"revalidation rejects an altered read-only open tuple");
+			require(!revalidate_sqlite_active_read_connection(*receipt,
+															  fixture.request.source_census,
+															  current_connection,
+															  fixture.request.pre_effect),
+					"revalidation rejects an altered read-only open tuple");
 		}
 		{
 			auto current_connection = fixture.request.connection;
 			current_connection.source_shm_open_callback_receipt.reset();
-			require(!revalidate_sqlite_active_read_connection(
-					*receipt, fixture.request.source_census, current_connection, fixture.request.pre_effect),
-				"revalidation rejects missing callback provenance");
+			require(!revalidate_sqlite_active_read_connection(*receipt,
+															  fixture.request.source_census,
+															  current_connection,
+															  fixture.request.pre_effect),
+					"revalidation rejects missing callback provenance");
 		}
 		{
 			auto stale_receipt = *receipt;
 			stale_receipt.phase = detail::sqlite_active_read_connection_phase::source_family_sealed;
-			require(!revalidate_sqlite_active_read_connection(
-					stale_receipt, fixture.request.source_census, fixture.request.connection,
-					fixture.request.pre_effect),
-				"revalidation rejects a receipt from an earlier phase");
+			require(!revalidate_sqlite_active_read_connection(stale_receipt,
+															  fixture.request.source_census,
+															  fixture.request.connection,
+															  fixture.request.pre_effect),
+					"revalidation rejects a receipt from an earlier phase");
 		}
 		fixture.guard->recheck_ok = false;
-		require(!revalidate_sqlite_active_read_connection(
-				*receipt, fixture.request.source_census, fixture.request.connection,
-				fixture.request.pre_effect),
+		require(!revalidate_sqlite_active_read_connection(*receipt,
+														  fixture.request.source_census,
+														  fixture.request.connection,
+														  fixture.request.pre_effect),
 				"revalidation rejects namespace-watch loss before nested mapping");
 		fixture.guard->recheck_ok = true;
 		require(detail::is_sqlite_active_read_connection_transition(

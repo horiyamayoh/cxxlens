@@ -947,12 +947,20 @@ set_tests_properties(
   adapter.clang22-source-closure-task-v4
   PROPERTIES
     LABELS
-    "adapter;provider;clang22;source-closure;task-v4;identity;security;contract")
+    "adapter;provider;clang22;source-closure;task-v4;identity;security;contract"
+)
 
-cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4-worker
-                            adapter/clang22/source_closure_task_v4_worker_test.cpp)
+cxxlens_add_test_executable(
+  cxxlens-clang22-source-closure-task-v4-worker
+  adapter/clang22/source_closure_task_v4_worker_test.cpp)
 target_link_libraries(cxxlens-clang22-source-closure-task-v4-worker
                       PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  # The shared worker core embeds the private provider runtime as object files;
+  # source-private fixtures must carry that exact closure on their final link.
+  target_sources(cxxlens-clang22-source-closure-task-v4-worker
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 add_test(NAME adapter.clang22-source-closure-task-v4-worker
          COMMAND cxxlens-clang22-source-closure-task-v4-worker)
 set_tests_properties(
